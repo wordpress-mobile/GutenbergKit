@@ -1,0 +1,1 @@
+<?php return array('dependencies' => array('wp-a11y', 'wp-compose', 'wp-data', 'wp-deprecated', 'wp-element', 'wp-escape-html', 'wp-i18n', 'wp-keycodes', 'wp-polyfill'), 'version' => 'aea40350780cca3d1a3f');
