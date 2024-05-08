@@ -12,8 +12,10 @@ final class GutenbergViewController: UIViewController, WKNavigationDelegate{
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        title = "Editor"
+
         buttonOpenEditor.setTitle("Launch Editor", for: [])
-        
+
 
         reactAppURL = Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "build")
 

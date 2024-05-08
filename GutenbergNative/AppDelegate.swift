@@ -6,14 +6,28 @@
 //
 
 import UIKit
+import SwiftUI
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
-
+    var window: UIWindow?
 
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        self.window = UIWindow(frame: UIScreen.main.bounds)
+
+
+//
+
+        // TODO: add list
+        let storyboard = UIStoryboard(name: "Main", bundle: nil)
+        let initialViewController = storyboard.instantiateViewController(withIdentifier: "Gutenberg")
+
+        let navigation = UINavigationController(rootViewController: initialViewController)
+
+        self.window?.rootViewController = navigation
+        self.window?.makeKeyAndVisible()
+
         return true
     }
 
