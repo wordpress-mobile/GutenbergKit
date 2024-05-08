@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0CE9D5BE2BEBB12100B0E710 /* build in Resources */ = {isa = PBXBuildFile; fileRef = 0CE9D5BD2BEBB12100B0E710 /* build */; };
 		0CF66A612BEAA85000118A26 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CF66A602BEAA85000118A26 /* AppDelegate.swift */; };
 		0CF66A632BEAA85000118A26 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CF66A622BEAA85000118A26 /* SceneDelegate.swift */; };
 		0CF66A682BEAA85000118A26 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 0CF66A662BEAA85000118A26 /* Main.storyboard */; };
@@ -16,6 +17,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0CE9D5BD2BEBB12100B0E710 /* build */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; name = build; path = "editor-app/build"; sourceTree = SOURCE_ROOT; };
 		0CF66A5D2BEAA85000118A26 /* GutenbergNative.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GutenbergNative.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0CF66A602BEAA85000118A26 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		0CF66A622BEAA85000118A26 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
@@ -62,6 +64,7 @@
 				0CF66A662BEAA85000118A26 /* Main.storyboard */,
 				0CF66A692BEAA85200118A26 /* Assets.xcassets */,
 				0CF66A6B2BEAA85200118A26 /* LaunchScreen.storyboard */,
+				0CE9D5BD2BEBB12100B0E710 /* build */,
 				0CF66A6E2BEAA85200118A26 /* Info.plist */,
 			);
 			path = GutenbergNative;
@@ -126,6 +129,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				0CF66A6D2BEAA85200118A26 /* LaunchScreen.storyboard in Resources */,
+				0CE9D5BE2BEBB12100B0E710 /* build in Resources */,
 				0CF66A6A2BEAA85200118A26 /* Assets.xcassets in Resources */,
 				0CF66A682BEAA85000118A26 /* Main.storyboard in Resources */,
 			);
