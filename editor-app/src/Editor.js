@@ -5,6 +5,7 @@ import { useEffect, useState } from '@wordpress/element';
 import {
 	BlockEditorKeyboardShortcuts,
 	BlockEditorProvider,
+    BlockCanvas,
 	BlockList,
 	BlockTools,
 	BlockInspector,
@@ -19,7 +20,7 @@ import '@wordpress/format-library';
  * Internal dependencies
  */
 
-function App() {
+function Editor() {
 	const [ blocks, updateBlocks ] = useState( [] );
 
 	useEffect( () => {
@@ -27,33 +28,36 @@ function App() {
 	}, [] );
 
 	return (
-		<div className="playground">
-				<SlotFillProvider>
-					<BlockEditorProvider
-						value={ blocks }
-						onInput={ updateBlocks }
-						onChange={ updateBlocks }
-					>
-						<div className="playground__sidebar">
-							<BlockInspector />
-						</div>
-						<div className="playground__content">
-							<BlockTools>
-								<div className="editor-styles-wrapper">
-									<BlockEditorKeyboardShortcuts.Register />
-									<WritingFlow>
-										<ObserveTyping>
-											<BlockList />
-										</ObserveTyping>
-									</WritingFlow>
-								</div>
-							</BlockTools>
-						</div>
-						<Popover.Slot />
-					</BlockEditorProvider>
-				</SlotFillProvider>
-		</div>
+        <BlockEditorProvider><BlockCanvas/></BlockEditorProvider>
+
+		// <div className="playground">
+    
+        //     <SlotFillProvider>
+        //         <BlockEditorProvider
+        //             value={ blocks }
+        //             onInput={ updateBlocks }
+        //             onChange={ updateBlocks }
+        //         >
+        //             <div className="playground__sidebar">
+        //                 <BlockInspector />
+        //             </div>
+        //             <div className="playground__content">
+        //                 <BlockTools>
+        //                     <div className="editor-styles-wrapper">
+        //                         <BlockEditorKeyboardShortcuts.Register />
+        //                         <WritingFlow>
+        //                             <ObserveTyping>
+        //                                 <BlockList />
+        //                             </ObserveTyping>
+        //                         </WritingFlow>
+        //                     </div>
+        //                 </BlockTools>
+        //             </div>
+        //             <Popover.Slot />
+        //         </BlockEditorProvider>
+        //     </SlotFillProvider>
+		// </div>
 	);
 }
 
-export default App;
+export default Editor;
