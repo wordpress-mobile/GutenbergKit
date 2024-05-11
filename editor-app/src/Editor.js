@@ -1,20 +1,19 @@
 /**
  * WordPress dependencies
  */
-import { useEffect, useState } from '@wordpress/element';
+import { useEffect, useState } from 'react';
 import {
-	BlockEditorKeyboardShortcuts,
-	BlockEditorProvider,
     BlockCanvas,
-	BlockList,
-	BlockTools,
-	BlockInspector,
-	WritingFlow,
-	ObserveTyping,
+    BlockEditorProvider,
+    BlockList,
 } from '@wordpress/block-editor';
-import { Popover, SlotFillProvider } from '@wordpress/components';
 import { registerCoreBlocks } from '@wordpress/block-library';
-import '@wordpress/format-library';
+
+import '@wordpress/components/build-style/style.css';
+import '@wordpress/block-editor/build-style/style.css';
+import '@wordpress/block-library/build-style/style.css';
+import '@wordpress/block-library/build-style/editor.css';
+import '@wordpress/block-library/build-style/theme.css';
 
 /**
  * Internal dependencies
@@ -28,35 +27,9 @@ function Editor() {
 	}, [] );
 
 	return (
-        <BlockEditorProvider><BlockCanvas/></BlockEditorProvider>
-
-		// <div className="playground">
-    
-        //     <SlotFillProvider>
-        //         <BlockEditorProvider
-        //             value={ blocks }
-        //             onInput={ updateBlocks }
-        //             onChange={ updateBlocks }
-        //         >
-        //             <div className="playground__sidebar">
-        //                 <BlockInspector />
-        //             </div>
-        //             <div className="playground__content">
-        //                 <BlockTools>
-        //                     <div className="editor-styles-wrapper">
-        //                         <BlockEditorKeyboardShortcuts.Register />
-        //                         <WritingFlow>
-        //                             <ObserveTyping>
-        //                                 <BlockList />
-        //                             </ObserveTyping>
-        //                         </WritingFlow>
-        //                     </div>
-        //                 </BlockTools>
-        //             </div>
-        //             <Popover.Slot />
-        //         </BlockEditorProvider>
-        //     </SlotFillProvider>
-		// </div>
+        <BlockEditorProvider>
+            <BlockCanvas/>
+        </BlockEditorProvider>
 	);
 }
 
