@@ -81,7 +81,18 @@ final class GutenbergViewController: UIViewController, WKNavigationDelegate, WKS
 
     // TODO: it is a retain cycle, isn't it?
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        NSLog("message: \(message)")
+        guard let message = JSEditorMessage(message: message) else {
+            return NSLog("Unsupported message: \(message.body)")
+        }
+        do {
+            switch message.type {
+            case .onBlocksChanged:
+                let blocks = try message.decode([Block].self)
+                NSLog("onBlockChanged: \(blocks)")
+            }
+        } catch {
+            NSLog("Failed to decode message: \(error)")
+        }
     }
 }
 

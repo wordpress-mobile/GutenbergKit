@@ -6,6 +6,8 @@ import {
     BlockCanvas,
     BlockEditorProvider,
     BlockList,
+    BlockListBlock,
+    BlockEdit
 } from '@wordpress/block-editor';
 import { registerCoreBlocks } from '@wordpress/block-library';
 
@@ -17,9 +19,11 @@ import '@wordpress/block-library/build-style/theme.css';
 
 import './Editor.css';
 
-/**
- * Internal dependencies
- */
+function postMessage(message) {
+    if (window.webkit) {
+        window.webkit.messageHandlers.appMessageHandler.postMessage(message);
+    };
+};
 
 function Editor() {
 	const [ blocks, updateBlocks ] = useState( [] );
@@ -29,22 +33,15 @@ function Editor() {
 	}, [] );
 
     function onInput(blocks) {
-        console.log("onInput");
         updateBlocks(blocks);
-        // TODO: reuse this code
-        // if (window.webkit.messageHandlers) {
-        //     window.webkit.messageHandlers.appMessageHandler.postMessage(blocks);
-        // };
-        // console.log(blocks);
     };
 
     function onChange(blocks) {
-        console.log("onChange");
         updateBlocks(blocks);
-        // TODO: reuse this code
-        if (window.webkit) {
-            window.webkit.messageHandlers.appMessageHandler.postMessage(blocks);
-        };
+        postMessage({
+            "message": "onBlocksChanged",
+            "body": blocks
+        });
         console.log(blocks);
     };
 
@@ -54,7 +51,7 @@ function Editor() {
             onInput={onInput}
             onChange={onChange}
         >
-            <BlockCanvas/>
+            <BlockCanvas height="500px"/>
         </BlockEditorProvider>
 	);
 }
