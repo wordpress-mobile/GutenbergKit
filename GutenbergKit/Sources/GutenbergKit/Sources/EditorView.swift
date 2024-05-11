@@ -6,7 +6,11 @@ public struct EditorView: View {
     public init() {}
 
     public var body: some View {
-        _EditorView()
+        NavigationView {
+            _EditorView()
+                .navigationTitle("Gutenberg")
+                .navigationBarTitleDisplayMode(.inline)
+        }
     }
 }
 
@@ -20,7 +24,7 @@ struct _EditorView: UIViewControllerRepresentable {
     }
 }
 
-final class GutenbergViewController: UIViewController, WKNavigationDelegate{
+final class GutenbergViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHandler {
     private var reactAppURL: URL!
     private var webView: WKWebView!
 
@@ -31,12 +35,15 @@ final class GutenbergViewController: UIViewController, WKNavigationDelegate{
 
         reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")
 
-        // configuring the `WKWebView` is very important
-        // without doing this the local index.html will not be able to read
-        // the css or js files properly
+        // The `allowFileAccessFromFileURLs` allows the web view to access the
+        // files from the local filesystem.
         let config = WKWebViewConfiguration()
         config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
+
+        // Set-up communications with the editor.
+        config.userContentController.add(self, name: "appMessageHandler")
+
         // set the configuration on the `WKWebView`
         // don't worry about the frame: .zero, SwiftUI will resize the `WKWebView` to
         // fit the parent
@@ -60,12 +67,21 @@ final class GutenbergViewController: UIViewController, WKNavigationDelegate{
         webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.main.resourceURL!)
     }
 
+    // MARK: - WKNavigationDelegate
+
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         NSLog("didFailNavigation: \(error)")
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         NSLog("didFailProvisionalNavigation: \(error)")
+    }
+
+    // MARK: - WKScriptMessageHandler
+
+    // TODO: it is a retain cycle, isn't it?
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        NSLog("message: \(message)")
     }
 }
 

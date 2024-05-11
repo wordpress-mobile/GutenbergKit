@@ -28,8 +28,32 @@ function Editor() {
 		registerCoreBlocks();
 	}, [] );
 
+    function onInput(blocks) {
+        console.log("onInput");
+        updateBlocks(blocks);
+        // TODO: reuse this code
+        // if (window.webkit.messageHandlers) {
+        //     window.webkit.messageHandlers.appMessageHandler.postMessage(blocks);
+        // };
+        // console.log(blocks);
+    };
+
+    function onChange(blocks) {
+        console.log("onChange");
+        updateBlocks(blocks);
+        // TODO: reuse this code
+        if (window.webkit) {
+            window.webkit.messageHandlers.appMessageHandler.postMessage(blocks);
+        };
+        console.log(blocks);
+    };
+
 	return (
-        <BlockEditorProvider bodyPlaceholder="Test">
+        <BlockEditorProvider 
+            value={ blocks }
+            onInput={onInput}
+            onChange={onChange}
+        >
             <BlockCanvas/>
         </BlockEditorProvider>
 	);
