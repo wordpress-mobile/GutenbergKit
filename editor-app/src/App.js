@@ -1,4 +1,3 @@
-import logo from './logo.svg';
 import './App.css';
 import Editor from "./Editor";
 
@@ -7,7 +6,5 @@ function App() {
         <Editor/>
     );
 }
-
-
 
 export default App;
