@@ -15,6 +15,8 @@ import '@wordpress/block-library/build-style/style.css';
 import '@wordpress/block-library/build-style/editor.css';
 import '@wordpress/block-library/build-style/theme.css';
 
+import './Editor.css';
+
 /**
  * Internal dependencies
  */
@@ -27,7 +29,7 @@ function Editor() {
 	}, [] );
 
 	return (
-        <BlockEditorProvider>
+        <BlockEditorProvider bodyPlaceholder="Test">
             <BlockCanvas/>
         </BlockEditorProvider>
 	);
