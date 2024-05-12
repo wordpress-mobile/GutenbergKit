@@ -11,7 +11,16 @@ public struct EditorView: View {
 
     public var body: some View {
         NavigationView {
-            _EditorView()
+            VStack {
+                Image(uiImage: UIImage(named: "screenshot-editor", in: .module, with: .none) ?? UIImage())
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .padding(.leading, 8)
+                    .padding(.top, 8)
+                Spacer()
+            }
+
+//            _EditorView()
 
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarLeading) {
@@ -86,11 +95,33 @@ public struct EditorView: View {
                 .tint(Color.primary)
                 .sheet(isPresented: $isBlockInserterShown) {
                     NavigationView {
-                        BlockInserter()
+                        ScrollView {
+                            Image(uiImage: UIImage(named: "screenshot-settings", in: .module, with: .none) ?? UIImage())
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .padding(.top, 8)
+//                            Spacer()
+                        }
+                        .toolbar(content: {
+                            ToolbarItemGroup(placement: .topBarLeading) {
+                                Button("Close", action: {})
+                            }
+                        })
+                        .navigationTitle("Block Settings")
+                        .navigationBarTitleDisplayMode(.inline)
                     }
+                    .tint(Color.primary)
                     .presentationDetents([.height(540), .large])
                     .presentationCornerRadius(20)
                 }
+//
+//                .sheet(isPresented: $isBlockInserterShown) {
+//                    NavigationView {
+//                        BlockInserter()
+//                    }
+//                    .presentationDetents([.height(540), .large])
+//                    .presentationCornerRadius(20)
+//                }
         }
     }
 }
