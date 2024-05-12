@@ -2,7 +2,7 @@ import WebKit
 
 struct JSEditorMessage {
     let type: JSEditorMessageType
-    private let body: Any
+    let body: Any
 
     init?(message: WKScriptMessage) {
         guard let object = message.body as? [String: Any],

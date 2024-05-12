@@ -1,15 +1,96 @@
 import UIKit
 import SwiftUI
 import WebKit
+import Photos
+import PhotosUI
 
 public struct EditorView: View {
+    @State private var isBlockInserterShown = true
+
     public init() {}
 
     public var body: some View {
         NavigationView {
             _EditorView()
-                .navigationTitle("Gutenberg")
-                .navigationBarTitleDisplayMode(.inline)
+
+                .toolbar {
+                    ToolbarItemGroup(placement: .topBarLeading) {
+                        Button(action: {}, label: {
+                            Image(systemName: "xmark")
+                        })
+                    }
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        Button(action: {}, label: {
+                            Image(systemName: "arrow.uturn.backward")
+                        })
+                        Button(action: {}, label: {
+                            Image(systemName: "arrow.uturn.forward")
+                        }).disabled(true)
+                        Menu {
+                            Section {
+                                Button(action: {}, label: {
+                                    Label("Code Editor", systemImage: "curlybraces")
+                                })
+                                Button(action: {}, label: {
+                                    Label("Outline", systemImage: "list.bullet.indent")
+                                })
+                                Button(action: /*@START_MENU_TOKEN@*/{}/*@END_MENU_TOKEN@*/, label: {
+                                    Label("Preview", systemImage: "safari")
+                                })
+                            }
+                            Section {
+                                Button(action: /*@START_MENU_TOKEN@*/{}/*@END_MENU_TOKEN@*/, label: {
+                                    Label("Revisions (42)", systemImage: "clock.arrow.circlepath")
+                                })
+                                Button(action: /*@START_MENU_TOKEN@*/{}/*@END_MENU_TOKEN@*/, label: {
+                                    Label("Post Settings", systemImage: "gearshape")
+                                })
+
+                                Button(action: /*@START_MENU_TOKEN@*/{}/*@END_MENU_TOKEN@*/, label: {
+                                    Label("Help", systemImage: "questionmark.circle")
+                                })
+                            }
+                            Section {
+                                Text("Blocks: 4, Words: 8, Characters: 15")
+                            } header: {
+
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                        }
+
+//                        Button(action: {}, label: {
+//                            Text("Publish")
+//                        })
+////                        .font(.headline)
+
+//                            Button(action: {}, label: {
+//                                Image(systemName: "paperplane.fill")
+//                            })
+//                            .font(.headline)
+
+
+                        Button(action: {}, label: {
+                            Image(systemName: "arrow.up.circle.fill")
+                        })
+                        .font(.title2)
+
+//                        Button("Publish") {
+//
+//                        }
+//                        .buttonStyle(.bordered)
+                    }
+
+                }
+
+                .tint(Color.primary)
+                .sheet(isPresented: $isBlockInserterShown) {
+                    NavigationView {
+                        BlockInserter()
+                    }
+                    .presentationDetents([.height(540), .large])
+                    .presentationCornerRadius(20)
+                }
         }
     }
 }
@@ -30,8 +111,6 @@ final class GutenbergViewController: UIViewController, WKNavigationDelegate, WKS
 
     override func viewDidLoad() {
         super.viewDidLoad()
-
-        title = "Editor"
 
         reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")
 
