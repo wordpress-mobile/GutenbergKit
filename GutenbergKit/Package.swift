@@ -17,6 +17,7 @@ let package = Package(
                 .process("Resources/screenshot-editor.png"),
                 .process("Resources/screenshot-editor-2.png"),
                 .process("Resources/screenshot-settings.png"),
+                .process("Resources/screenshot-settings-2.png"),
             ]
         ),
         .testTarget(

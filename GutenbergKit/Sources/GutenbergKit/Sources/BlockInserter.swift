@@ -47,30 +47,43 @@ public struct BlockInserter: View {
 //                    .padding(.horizontal)
 //                    .padding(.bottom, 8)
 
-
             }
             .background(Color(uiColor: .secondarySystemBackground))
 
 
 
             List {
-
                 Section("Text") {
                     _Label("Paragraph", systemImage: "paragraphsign")
-                    _Label("Heading", systemImage: "bookmark.fill")
+                    _Label("Heading", systemImage: "bookmark")
                     _Label("List", systemImage: "list.triangle")
                     _Label("Quote", systemImage: "text.quote")
                     _Label("Table", systemImage: "tablecells")
                 }
                 Section("Media") {
                     _Label("Image", systemImage: "photo")
-                    _Label("Gallery", systemImage: "rectangle.3.group.fill")
+                    _Label("Gallery", systemImage: "rectangle.3.group")
                     _Label("Video", systemImage: "video")
                     _Label("Audio", systemImage: "waveform")
                 }
             }
             .listStyle(.insetGrouped)
         }
+//        .safeAreaInset(edge: .bottom) {
+//            HStack(spacing: 30) {
+//                Image(systemName: "paragraphsign")
+//                Image(systemName: "bookmark")
+//                Image(systemName: "photo")
+//                Image(systemName: "rectangle.3.group")
+//                Image(systemName: "video")
+//                Image(systemName: "link")
+//            }
+//            .padding()
+//            .background(Color.black.opacity(0.5))
+//            .background(Material.thick)
+//            .foregroundStyle(.white)
+//            .cornerRadius(16)
+//        }
 //        }
 //        .searchable(text: $searchText)//, placement: .navigationBarDrawer(displayMode: .always))
         .toolbar(content: {

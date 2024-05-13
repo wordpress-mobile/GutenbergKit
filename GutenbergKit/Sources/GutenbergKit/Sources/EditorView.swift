@@ -5,22 +5,22 @@ import Photos
 import PhotosUI
 
 public struct EditorView: View {
-    @State private var isBlockInserterShown = true
+    @State private var isBlockInserterShown = false
 
     public init() {}
 
     public var body: some View {
         NavigationView {
-            VStack {
-                Image(uiImage: UIImage(named: "screenshot-editor", in: .module, with: .none) ?? UIImage())
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .padding(.leading, 8)
-                    .padding(.top, 8)
-                Spacer()
-            }
+//            VStack {
+//                Image(uiImage: UIImage(named: "screenshot-editor-2", in: .module, with: .none) ?? UIImage())
+//                    .resizable()
+//                    .aspectRatio(contentMode: .fit)
+//                    .padding(.leading, 8)
+//                    .padding(.top, 8)
+//                Spacer()
+//            }
 
-//            _EditorView()
+            _EditorView()
 
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarLeading) {
@@ -35,6 +35,26 @@ public struct EditorView: View {
                         Button(action: {}, label: {
                             Image(systemName: "arrow.uturn.forward")
                         }).disabled(true)
+                    }
+
+//                    ToolbarItemGroup(placement: .topBarTrailing) {
+//                        HStack {
+//                                Divider()
+//                                .frame(width: 2, height: 20)
+//                            }
+//                    }
+
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+//                        Button(action: {}, label: {
+//                            Image(systemName: "curlybraces")
+//                        })
+//                        Button(action: {}, label: {
+//                            Image(systemName: "list.bullet.indent")
+//                        })
+                        Button(action: {}, label: {
+                            Image(systemName: "safari")
+                        })
+
                         Menu {
                             Section {
                                 Button(action: {}, label: {
@@ -67,6 +87,20 @@ public struct EditorView: View {
                         } label: {
                             Image(systemName: "ellipsis")
                         }
+                        .tint(Color.primary)
+                    }
+
+
+//                    ToolbarItemGroup(placement: .topBarTrailing) {
+//                        HStack {
+//                                Divider()
+//                                .frame(width: 2, height: 20)
+//                            }
+//                    }
+
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+
+
 
 //                        Button(action: {}, label: {
 //                            Text("Publish")
@@ -82,6 +116,10 @@ public struct EditorView: View {
                         Button(action: {}, label: {
                             Image(systemName: "arrow.up.circle.fill")
                         })
+//                        .buttonStyle(.borderedProminent)
+//                        .font(.body.weight(.medium))
+//                        .fixedSize()
+                        //.*fix*/
                         .font(.title2)
 
 //                        Button("Publish") {
@@ -96,10 +134,11 @@ public struct EditorView: View {
                 .sheet(isPresented: $isBlockInserterShown) {
                     NavigationView {
                         ScrollView {
-                            Image(uiImage: UIImage(named: "screenshot-settings", in: .module, with: .none) ?? UIImage())
+                            Image(uiImage: UIImage(named: "screenshot-settings-2", in: .module, with: .none) ?? UIImage())
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                                 .padding(.top, 8)
+                                .padding(.horizontal, 8)
 //                            Spacer()
                         }
                         .toolbar(content: {
@@ -123,6 +162,7 @@ public struct EditorView: View {
 //                    .presentationCornerRadius(20)
 //                }
         }
+        .navigationViewStyle(.stack)
     }
 }
 
@@ -174,7 +214,7 @@ final class GutenbergViewController: UIViewController, WKNavigationDelegate, WKS
     }
 
     private func loadEditor() {
-        webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.main.resourceURL!)
+        webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.module.resourceURL!)
     }
 
     // MARK: - WKNavigationDelegate
@@ -198,7 +238,7 @@ final class GutenbergViewController: UIViewController, WKNavigationDelegate, WKS
             switch message.type {
             case .onBlocksChanged:
                 let blocks = try message.decode([Block].self)
-                NSLog("onBlockChanged: \(blocks)")
+                // NSLog("onBlockChanged: \(blocks)")
             }
         } catch {
             NSLog("Failed to decode message: \(error)")
