@@ -9,6 +9,7 @@ The ReactJS app embeded in the native GutenbergKit module.
 To launch the app in the browser, run:
 
 ```
+cd ./GutenbergReactApp
 npm install // On first use
 npm start
 ```
