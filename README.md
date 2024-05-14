@@ -21,5 +21,5 @@ To build the app and incorporate the changes in the Swift module, run:
 
 ### GutenbergKit
 
-A Swift package with native wrappers for the editor JS app.
+A Swift package with native wrappers for the Gutenberg editor.
 
