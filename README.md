@@ -1,4 +1,4 @@
-A proof of concept for a Gutenberg editor as an embedded React app.
+A proof of concept for a Gutenberg editor as a React app embedded in a native iOS app.
 
 ## Development
 
