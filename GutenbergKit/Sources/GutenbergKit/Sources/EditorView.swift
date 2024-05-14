@@ -11,15 +11,6 @@ public struct EditorView: View {
 
     public var body: some View {
         NavigationView {
-//            VStack {
-//                Image(uiImage: UIImage(named: "screenshot-editor-2", in: .module, with: .none) ?? UIImage())
-//                    .resizable()
-//                    .aspectRatio(contentMode: .fit)
-//                    .padding(.leading, 8)
-//                    .padding(.top, 8)
-//                Spacer()
-//            }
-
             _EditorView()
 
                 .toolbar {
@@ -131,36 +122,14 @@ public struct EditorView: View {
                 }
 
                 .tint(Color.primary)
+
                 .sheet(isPresented: $isBlockInserterShown) {
                     NavigationView {
-                        ScrollView {
-                            Image(uiImage: UIImage(named: "screenshot-settings-2", in: .module, with: .none) ?? UIImage())
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .padding(.top, 8)
-                                .padding(.horizontal, 8)
-//                            Spacer()
-                        }
-                        .toolbar(content: {
-                            ToolbarItemGroup(placement: .topBarLeading) {
-                                Button("Close", action: {})
-                            }
-                        })
-                        .navigationTitle("Block Settings")
-                        .navigationBarTitleDisplayMode(.inline)
+                        BlockInserter()
                     }
-                    .tint(Color.primary)
                     .presentationDetents([.height(540), .large])
                     .presentationCornerRadius(20)
                 }
-//
-//                .sheet(isPresented: $isBlockInserterShown) {
-//                    NavigationView {
-//                        BlockInserter()
-//                    }
-//                    .presentationDetents([.height(540), .large])
-//                    .presentationCornerRadius(20)
-//                }
         }
         .navigationViewStyle(.stack)
     }

@@ -12,13 +12,7 @@ let package = Package(
     targets: [
         .target(
             name: "GutenbergKit",
-            resources: [
-                .copy("Gutenberg"),
-                .process("Resources/screenshot-editor.png"),
-                .process("Resources/screenshot-editor-2.png"),
-                .process("Resources/screenshot-settings.png"),
-                .process("Resources/screenshot-settings-2.png"),
-            ]
+            resources: [.copy("Gutenberg")]
         ),
         .testTarget(
             name: "GutenbergKitTests",
