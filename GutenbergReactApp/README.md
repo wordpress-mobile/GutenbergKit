@@ -1,11 +1,30 @@
-# React + Vite
+# GutenbergKit
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A proof of concept for a Gutenberg editor as a React app embedded in a native iOS app.
 
-Currently, two official plugins are available:
+## Development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+### GutenbergReactApp
+
+The ReactJS app embeded in the native GutenbergKit module.
+
+To launch the app in the browser, run:
+
+```
+cd ./GutenbergReactApp
+npm install // On first use
+npm start
+```
+
+To build the app and incorporate the changes in the Swift module, run:
+
+```
+./Scripts/build.sh
+```
+
+### GutenbergKit
+
+A Swift package with native wrappers for the Gutenberg editor.
 
 # Notes
 
