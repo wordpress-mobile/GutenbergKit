@@ -5,6 +5,7 @@
 build/
 DerivedData
 .swiftpm/
+UserInterfaceState.xcuserstate
 
 ## Various settings
 *.pbxuser
