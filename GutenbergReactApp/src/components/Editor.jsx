@@ -44,14 +44,16 @@ function Editor() {
     const settings = {};
 
     return (
-        <BlockEditorProvider
-            value={blocks}
-            onInput={onInput}
-            onChange={onChange}
-            settings={settings}
-        >
-            <BlockCanvas height="500px" styles={styles} />
-        </BlockEditorProvider>
+        // <div class="editor-styles-wrapper">
+            <BlockEditorProvider
+                value={blocks}
+                onInput={onInput}
+                onChange={onChange}
+                settings={settings}
+            >
+                <BlockCanvas height="600px" styles={styles} />
+            </BlockEditorProvider>
+        // </div>
     );
 }
 
