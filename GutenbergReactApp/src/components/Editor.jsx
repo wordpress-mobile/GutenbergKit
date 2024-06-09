@@ -16,11 +16,11 @@ function postMessage(message) {
 };
 
 function Editor() {
-	const [ blocks, updateBlocks ] = useState( [] );
+    const [blocks, updateBlocks] = useState([]);
 
-	useEffect( () => {
-		registerCoreBlocks();
-	}, []);
+    useEffect(() => {
+        registerCoreBlocks();
+    }, []);
 
     function onInput(blocks) {
         updateBlocks(blocks);
@@ -35,15 +35,30 @@ function Editor() {
         console.log(blocks);
     };
 
-	return (
-        <BlockEditorProvider 
-            value={ blocks }
-            onInput={ onInput }
-            onChange={ onChange }
+    const styles = `
+    <style>
+        body {
+            font-family: -apple-system;
+        }
+    </style>
+    `;
+
+    const settings = {
+        __unstableResolvedAssets: {
+            styles: styles,
+        },
+    }
+
+    return (
+        <BlockEditorProvider
+            value={blocks}
+            onInput={onInput}
+            onChange={onChange}
+            settings={settings}
         >
-            <BlockCanvas height="500px"/>
+            <BlockCanvas height="500px" />
         </BlockEditorProvider>
-	);
+    );
 }
 
 export default Editor;
