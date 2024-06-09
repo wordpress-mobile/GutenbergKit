@@ -37,19 +37,11 @@ function Editor() {
 
     // The problem with the editor canvas is that it gets embedded in an iframe
     // so there is no way to style it directly using CSS included in the project itself.
-    const styles = `
-    <style>
-        body {
-            font-family: -apple-system;
-        }
-    </style>
-    `;
+    const styles = [
+        { css: 'body { padding: 12px; font-family: -apple-system; }' },
+    ];
 
-    const settings = {
-        __unstableResolvedAssets: {
-            styles: styles,
-        },
-    }
+    const settings = {};
 
     return (
         <BlockEditorProvider
@@ -58,7 +50,7 @@ function Editor() {
             onChange={onChange}
             settings={settings}
         >
-            <BlockCanvas height="500px" />
+            <BlockCanvas height="500px" styles={styles} />
         </BlockEditorProvider>
     );
 }
