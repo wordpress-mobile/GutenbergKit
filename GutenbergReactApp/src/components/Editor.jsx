@@ -35,6 +35,8 @@ function Editor() {
         console.log(blocks);
     };
 
+    // The problem with the editor canvas is that it gets embedded in an iframe
+    // so there is no way to style it directly using CSS included in the project itself.
     const styles = `
     <style>
         body {
