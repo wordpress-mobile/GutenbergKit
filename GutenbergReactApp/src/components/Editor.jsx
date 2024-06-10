@@ -44,7 +44,7 @@ function Editor() {
     body { 
         padding: 12px; 
         font-family: -apple-system; 
-    } 
+    }
     .rich-text:focus { 
         outline: none; 
     }
@@ -53,7 +53,7 @@ function Editor() {
     // The problem with the editor canvas is that it gets embedded in an iframe
     // so there is no way to style it directly using CSS included in the project itself.
     const styles = [
-        { css: `style` },
+        { css: style },
     ];
 
     const settings = {};
