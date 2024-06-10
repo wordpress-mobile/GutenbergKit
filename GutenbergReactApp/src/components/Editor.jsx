@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 
-import { BlockEditorProvider, BlockCanvas } from "@wordpress/block-editor"
+import {
+    BlockEditorProvider,
+    BlockCanvas,
+    BlockBreadcrumb,
+    BlockInspector
+} from "@wordpress/block-editor"
 import { registerCoreBlocks } from '@wordpress/block-library';
 
 import '@wordpress/components/build-style/style.css';
@@ -35,25 +40,37 @@ function Editor() {
         console.log(blocks);
     };
 
+    const style = `
+    body { 
+        padding: 12px; 
+        font-family: -apple-system; 
+    } 
+    .rich-text:focus { 
+        outline: none; 
+    }
+    `
+
     // The problem with the editor canvas is that it gets embedded in an iframe
     // so there is no way to style it directly using CSS included in the project itself.
     const styles = [
-        { css: `body { padding: 12px; font-family: -apple-system; } .rich-text:focus { outline: none; }` },
+        { css: `style` },
     ];
 
     const settings = {};
 
     return (
-        // <div class="editor-styles-wrapper">
-            <BlockEditorProvider
-                value={blocks}
-                onInput={onInput}
-                onChange={onChange}
-                settings={settings}
-            >
-                <BlockCanvas height="600px" styles={styles} />
-            </BlockEditorProvider>
-        // </div>
+        <BlockEditorProvider
+            value={blocks}
+            onInput={onInput}
+            onChange={onChange}
+            settings={settings}
+        >
+            <BlockCanvas height="600px" styles={styles} />
+            <div className="block-inspector-siderbar">
+                <BlockInspector />
+            </div>
+            <BlockBreadcrumb />
+        </BlockEditorProvider>
     );
 }
 
