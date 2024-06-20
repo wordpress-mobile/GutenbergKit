@@ -24,7 +24,7 @@ function postMessage(message) {
 
 function Editor() {
     const [blocks, updateBlocks] = useState([]);
-    const {height, width} = useWindowDimensions();
+    const { height, width } = useWindowDimensions();
 
     useEffect(() => {
         registerCoreBlocks();
@@ -59,7 +59,9 @@ function Editor() {
         { css: style },
     ];
 
-    const settings = {};
+    const settings = {
+        maxWidth: 600,
+    };
 
     return (
         <BlockEditorProvider
@@ -68,11 +70,16 @@ function Editor() {
             onChange={onChange}
             settings={settings}
         >
-            <BlockCanvas height={`${height - 44}px`} styles={styles} />
-            <div className="block-inspector-siderbar">
-                <BlockInspector />
+            <div className='gbkit-main-container'>
+                <div className='gbkit-canvas-container'>
+                    <BlockCanvas height={`${height - 50}px`} styles={styles} />
+                    <BlockBreadcrumb />
+                </div>
+                <div className='gbkit-spacer'></div>
+                <div className="block-inspector-siderbar">
+                    <BlockInspector />
+                </div>
             </div>
-            <BlockBreadcrumb />
         </BlockEditorProvider>
     );
 }
