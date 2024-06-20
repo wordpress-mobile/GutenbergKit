@@ -7,6 +7,7 @@ import {
     BlockInspector
 } from "@wordpress/block-editor"
 import { registerCoreBlocks } from '@wordpress/block-library';
+import { parse, createBlock } from '@wordpress/blocks';
 
 import useWindowDimensions from '../misc/WindowsDimenstionsHook';
 
@@ -37,7 +38,7 @@ function Editor() {
             "message": "onBlocksChanged",
             "body": blocks
         });
-        console.log(blocks);
+        console.log("onChange", blocks);
     };
 
     useEffect(() => {
@@ -48,22 +49,65 @@ function Editor() {
     useEffect(() => {
         // Function to handle messages from the WebView
         const handleMessage = (event) => {
-          const message = event.data;
-          switch (message.event) {
-            case "toggleBlockSettingsInspector":
-                setBlockSettingsInspectorHidden(value => !value);
-                break;
-            case "setContent":
-                const htmlContent = `<h1>Title</h1><p>This is a paragraph.</p>`;
-          }
+            const message = event.data;
+            switch (message.event) {
+                case "toggleBlockSettingsInspector":
+                    setBlockSettingsInspectorHidden(value => !value);
+                    break;
+                case "setContent":
+                    console.log("setContent");
+
+                    const htmlContent = `
+                    <!-- wp:columns {"columns":3} -->
+                        <div class="wp-block-columns has-3-columns">
+                            <!-- wp:column -->
+                            <div class="wp-block-column">
+                                <!-- wp:paragraph -->
+                                <p>Left</p>
+                                <!-- /wp:paragraph -->
+                            </div>
+                            <!-- /wp:column -->
+
+                            <!-- wp:column -->
+                            <div class="wp-block-column">
+                                <!-- wp:paragraph -->
+                                <p><strong>Middle</strong></p>
+                                <!-- /wp:paragraph -->
+                            </div>
+                            <!-- /wp:column -->
+
+                            <!-- wp:column -->
+                            <div class="wp-block-column"></div>
+                            <!-- /wp:column -->
+                        </div>
+                        <!-- /wp:columns -->
+                    `;
+
+                    const convertParsedBlocksToBlockInstances = (parsedBlocks) => {
+                        return parsedBlocks.map(parsedBlock => {
+                            const { name, attributes, innerBlocks } = parsedBlock;
+                            const convertedInnerBlocks = convertParsedBlocksToBlockInstances(innerBlocks);
+                            return createBlock(name, attributes, convertedInnerBlocks);
+                        });
+                    };
+                    const parsedBlocks = parse(htmlContent); // Returns ParsedBlock[]
+                    const blockInstances = convertParsedBlocksToBlockInstances(parsedBlocks); // Returns BlockInstance[]
+
+                    console.log(blockInstances);
+
+                    updateBlocks(blockInstances);
+                    break;
+                default:
+                    break;
+            }
         };
-    
+
         // Add event listener for messages
         window.addEventListener('message', handleMessage);
-    
+
         // Clean up the event listener
         return () => {
-          window.removeEventListener('message', handleMessage);
+            window.removeEventListener('message', handleMessage);
         };
     }, []);
 
@@ -99,16 +143,19 @@ function Editor() {
                     <BlockCanvas height={`${height - 50}px`} styles={styles} />
                     <BlockBreadcrumb />
                     <div className='gbkit-debug-toolbar'>
-                        <button type="button" onClick={ window.postMessage({ event: "toggleBlockSettingsInspector" }) }>
+                        <button type="button" onClick={() => window.postMessage({ event: "toggleBlockSettingsInspector" })}>
                             Toogle Block Settings
+                        </button>
+                        <button type="button" onClick={() => window.postMessage({ event: "setContent" })}>
+                            Insert Test Content
                         </button>
                     </div>
                 </div>
                 <div className='gbkit-spacer'></div>
                 {!isBlockSettingsInspectorHidden &&
-                <div className="block-inspector-siderbar">
-                    <BlockInspector />
-                </div>}
+                    <div className="block-inspector-siderbar">
+                        <BlockInspector />
+                    </div>}
             </div>
         </BlockEditorProvider>
     );
