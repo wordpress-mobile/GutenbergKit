@@ -8,6 +8,8 @@ import {
 } from "@wordpress/block-editor"
 import { registerCoreBlocks } from '@wordpress/block-library';
 
+import useWindowDimensions from '../misc/WindowsDimenstionsHook';
+
 import '@wordpress/components/build-style/style.css';
 import '@wordpress/block-editor/build-style/style.css';
 import '@wordpress/block-library/build-style/style.css';
@@ -22,6 +24,7 @@ function postMessage(message) {
 
 function Editor() {
     const [blocks, updateBlocks] = useState([]);
+    const {height, width} = useWindowDimensions();
 
     useEffect(() => {
         registerCoreBlocks();
@@ -65,7 +68,7 @@ function Editor() {
             onChange={onChange}
             settings={settings}
         >
-            <BlockCanvas height="600px" styles={styles} />
+            <BlockCanvas height={`${height - 44}px`} styles={styles} />
             <div className="block-inspector-siderbar">
                 <BlockInspector />
             </div>
