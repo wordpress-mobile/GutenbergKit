@@ -25,10 +25,7 @@ function postMessage(message) {
 function Editor() {
     const [blocks, updateBlocks] = useState([]);
     const { height, width } = useWindowDimensions();
-
-    useEffect(() => {
-        registerCoreBlocks();
-    }, []);
+    const [isBlockSettingsInspectorHidden, setBlockSettingsInspectorHidden] = useState(false);
 
     function onInput(blocks) {
         updateBlocks(blocks);
@@ -43,6 +40,34 @@ function Editor() {
         console.log(blocks);
     };
 
+    useEffect(() => {
+        registerCoreBlocks();
+    }, []);
+
+    // Sets up communication with the iOS app.
+    useEffect(() => {
+        // Function to handle messages from the WebView
+        const handleMessage = (event) => {
+          const message = event.data;
+          switch (message.event) {
+            case "toggleBlockSettingsInspector":
+                setBlockSettingsInspectorHidden(value => !value);
+                break;
+            case "setContent":
+                const htmlContent = `<h1>Title</h1><p>This is a paragraph.</p>`;
+          }
+        };
+    
+        // Add event listener for messages
+        window.addEventListener('message', handleMessage);
+    
+        // Clean up the event listener
+        return () => {
+          window.removeEventListener('message', handleMessage);
+        };
+    }, []);
+
+    // Injects CSS styles in the canvas iframe.
     const style = `
     body { 
         padding: 12px; 
@@ -60,7 +85,6 @@ function Editor() {
     ];
 
     const settings = {
-        maxWidth: 600,
     };
 
     return (
@@ -74,11 +98,17 @@ function Editor() {
                 <div className='gbkit-canvas-container'>
                     <BlockCanvas height={`${height - 50}px`} styles={styles} />
                     <BlockBreadcrumb />
+                    <div className='gbkit-debug-toolbar'>
+                        <button type="button" onClick={ window.postMessage({ event: "toggleBlockSettingsInspector" }) }>
+                            Toogle Block Settings
+                        </button>
+                    </div>
                 </div>
                 <div className='gbkit-spacer'></div>
+                {!isBlockSettingsInspectorHidden &&
                 <div className="block-inspector-siderbar">
                     <BlockInspector />
-                </div>
+                </div>}
             </div>
         </BlockEditorProvider>
     );
