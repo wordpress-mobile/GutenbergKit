@@ -38,7 +38,19 @@ function Editor() {
             "message": "onBlocksChanged",
             "body": blocks
         });
-        console.log("onChange", blocks);
+    };
+
+    function setContent(content) {
+        const convertParsedBlocksToBlockInstances = (parsedBlocks) => {
+            return parsedBlocks.map(parsedBlock => {
+                const { name, attributes, innerBlocks } = parsedBlock;
+                const convertedInnerBlocks = convertParsedBlocksToBlockInstances(innerBlocks);
+                return createBlock(name, attributes, convertedInnerBlocks);
+            });
+        };
+        const parsedBlocks = parse(content); // Returns ParsedBlock[]
+        const blockInstances = convertParsedBlocksToBlockInstances(parsedBlocks); // Returns BlockInstance[]
+        updateBlocks(blockInstances);
     };
 
     useEffect(() => {
@@ -55,47 +67,7 @@ function Editor() {
                     setBlockSettingsInspectorHidden(value => !value);
                     break;
                 case "setContent":
-                    console.log("setContent");
-
-                    const htmlContent = `
-                    <!-- wp:columns {"columns":3} -->
-                        <div class="wp-block-columns has-3-columns">
-                            <!-- wp:column -->
-                            <div class="wp-block-column">
-                                <!-- wp:paragraph -->
-                                <p>Left</p>
-                                <!-- /wp:paragraph -->
-                            </div>
-                            <!-- /wp:column -->
-
-                            <!-- wp:column -->
-                            <div class="wp-block-column">
-                                <!-- wp:paragraph -->
-                                <p><strong>Middle</strong></p>
-                                <!-- /wp:paragraph -->
-                            </div>
-                            <!-- /wp:column -->
-
-                            <!-- wp:column -->
-                            <div class="wp-block-column"></div>
-                            <!-- /wp:column -->
-                        </div>
-                        <!-- /wp:columns -->
-                    `;
-
-                    const convertParsedBlocksToBlockInstances = (parsedBlocks) => {
-                        return parsedBlocks.map(parsedBlock => {
-                            const { name, attributes, innerBlocks } = parsedBlock;
-                            const convertedInnerBlocks = convertParsedBlocksToBlockInstances(innerBlocks);
-                            return createBlock(name, attributes, convertedInnerBlocks);
-                        });
-                    };
-                    const parsedBlocks = parse(htmlContent); // Returns ParsedBlock[]
-                    const blockInstances = convertParsedBlocksToBlockInstances(parsedBlocks); // Returns BlockInstance[]
-
-                    console.log(blockInstances);
-
-                    updateBlocks(blockInstances);
+                    setContent(message.content);
                     break;
                 default:
                     break;
@@ -145,9 +117,6 @@ function Editor() {
                     <div className='gbkit-debug-toolbar'>
                         <button type="button" onClick={() => window.postMessage({ event: "toggleBlockSettingsInspector" })}>
                             Toogle Block Settings
-                        </button>
-                        <button type="button" onClick={() => window.postMessage({ event: "setContent" })}>
-                            Insert Test Content
                         </button>
                     </div>
                 </div>
