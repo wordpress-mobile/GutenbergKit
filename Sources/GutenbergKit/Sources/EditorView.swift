@@ -185,7 +185,7 @@ public final class GutenbergEditorViewController: UIViewController, GutenbergEdi
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = controller
         if #available(iOS 16.4, *) {
-            webView.isInspectable = true
+            webView.isInspectable = true // TODO: should be diasble in production
         }
         self.webView = webView
 
