@@ -96,7 +96,6 @@ function Editor() {
     ];
 
     const settings = {
-        // maxWidth: 300
     };
 
     return (

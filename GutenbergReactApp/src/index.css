@@ -27,6 +27,6 @@
 }
 
 .block-editor-iframe__container {
-    width: 100% !important; /* Change this value to your desired width */
-    max-width: 1200px; /* Optional: Set a maximum width */
+    width: 100% !important;
+    max-width: 900px;
 }
