@@ -152,7 +152,6 @@ public final class GutenbergEditorViewController: UIViewController, GutenbergEdi
     private var content: String
     private var isEditorLoaded = false
     private let controller = GutenbergEditorController()
-    private var getContentContinuations: [String: UnsafeContinuation<String, Never>] = [:]
 
     /// Initalizes the editor with the initial content (Gutenberg).
     public init(content: String = "") {
@@ -221,20 +220,11 @@ public final class GutenbergEditorViewController: UIViewController, GutenbergEdi
         guard let data = content.data(using: .utf8)?.base64EncodedString() else {
             return // Should never happen
         }
-        webView.evaluateJavaScript("""
-        window.postMessage({ event: "setContent", content: atob('\(data)') });
-        """)
+        webView.evaluateJavaScript("editor.setContent(atob('\(data)'));")
     }
-
     /// Returns the current editor content.
-    public func getContent() async -> String {
-        await withUnsafeContinuation { continuation in
-            let requestID = UUID().uuidString
-            getContentContinuations[requestID] = continuation
-            webView.evaluateJavaScript("""
-            window.postMessage({ event: "getContent", requestID: "\(requestID)" });
-            """)
-        }
+    public func getContent() async throws -> String {
+        try await webView.evaluateJavaScript("editor.getContent();") as! String
     }
 
     // MARK: - GutenbergEditorControllerDelegate
@@ -244,16 +234,6 @@ public final class GutenbergEditorViewController: UIViewController, GutenbergEdi
             switch message.type {
             case .onEditorLoaded:
                 didLoadEditor()
-            case .onContentProvided:
-                let body = try message.decode(JSEditorMessageContentProvidedBody.self)
-                if let continuation = getContentContinuations.removeValue(forKey: body.requestID) {
-                     if let data = Data(base64Encoded: body.content),
-                        let string = String(data: data, encoding: .utf8) {
-                         continuation.resume(returning: string)
-                     } else {
-                         fatalError("invalid encoding")
-                     }
-                }
             }
         } catch {
             fatalError("failed to decode message: \(error)")
@@ -298,4 +278,8 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
         }
         delegate?.controller(self, didReceiveMessage: message)
     }
+}
+
+private extension WKWebView {
+
 }

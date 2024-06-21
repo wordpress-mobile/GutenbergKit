@@ -22,12 +22,6 @@ struct JSEditorMessage {
     }
 }
 
-struct JSEditorMessageContentProvidedBody: Decodable {
-    let requestID: String
-    let content: String
-}
-
 enum JSEditorMessageType: String {
     case onEditorLoaded
-    case onContentProvided
 }

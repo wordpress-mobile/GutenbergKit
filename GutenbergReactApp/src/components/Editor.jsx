@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
     BlockEditorProvider,
@@ -23,11 +23,13 @@ function postMessage(message) {
     };
 };
 
+// Current editor (assumes can be only one instance).
+let editor = {};
+
 function Editor() {
     const [blocks, updateBlocks] = useState([]);
     const { height, width } = useWindowDimensions();
     const [isBlockSettingsInspectorHidden, setBlockSettingsInspectorHidden] = useState(false);
-    const messageCallback = useRef();
 
     function onInput(blocks) {
         updateBlocks(blocks);
@@ -37,7 +39,7 @@ function Editor() {
         updateBlocks(blocks);
     };
 
-    function setContent(content) {
+    editor.setContent = (content) => {
         const convertParsedBlocksToBlockInstances = (parsedBlocks) => {
             return parsedBlocks.map(parsedBlock => {
                 const { name, attributes, innerBlocks } = parsedBlock;
@@ -50,45 +52,14 @@ function Editor() {
         updateBlocks(blockInstances);
     };
 
-    function getContent(requestID) {
-        postMessage({ 
-            message: "onContentProvided", 
-            body: { content: btoa(serialize(blocks)), requestID: requestID }
-        });
-    }
-
-    // Handles messages receives from the native app.
-    messageCallback.current = (event) => {
-        const message = event.data;
-        switch (message.event) {
-            case "toggleBlockSettingsInspector":
-                setBlockSettingsInspectorHidden(value => !value);
-                break;
-            case "setContent":
-                setContent(message.content);
-                break;
-            case "getContent":
-                getContent(message.requestID);
-                break;
-            default:
-                break;
-        }
-    };
+    editor.getContent = () => serialize(blocks);
 
     // Warning: `useEffect` and functions captured it in can't read the latest useState values,
     // and hence `useRef`.
     useEffect(() => {
+        window.editor = editor;
         registerCoreBlocks();
-
-        const handleMessage = (event) => messageCallback.current(event);
-        window.addEventListener('message', handleMessage);
-
         postMessage({ message: "onEditorLoaded" });
-
-        // Clean up the event listener
-        return () => {
-            window.removeEventListener('message', handleMessage);
-        };
     }, []);
 
     // Injects CSS styles in the canvas iframe.
@@ -126,9 +97,6 @@ function Editor() {
                     {/* <div className='gbkit-debug-toolbar'>
                         <button type="button" onClick={() => window.postMessage({ event: "toggleBlockSettingsInspector" })}>
                             Toogle Block Settings
-                        </button>
-                        <button type="button" onClick={() => window.postMessage({ event: "getContent", requestID: "1" })}>
-                            Send Content
                         </button>
                     </div> */}
                 </div>
