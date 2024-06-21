@@ -19,7 +19,7 @@ import '@wordpress/block-library/build-style/theme.css';
 
 function postMessage(message) {
     if (window.webkit) {
-        window.webkit.messageHandlers.appMessageHandler.postMessage(message);
+        window.webkit.messageHandlers.editorDelegate.postMessage(message);
     };
 };
 
@@ -34,10 +34,7 @@ function Editor() {
 
     function onChange(blocks) {
         updateBlocks(blocks);
-        postMessage({
-            "message": "onBlocksChanged",
-            "body": blocks
-        });
+        postMessage({ message: "onBlocksChanged", body: blocks });
     };
 
     function setContent(content) {
@@ -55,10 +52,7 @@ function Editor() {
 
     useEffect(() => {
         registerCoreBlocks();
-    }, []);
-
-    // Sets up communication with the iOS app.
-    useEffect(() => {
+        
         // Function to handle messages from the WebView
         const handleMessage = (event) => {
             const message = event.data;
@@ -73,9 +67,9 @@ function Editor() {
                     break;
             }
         };
-
-        // Add event listener for messages
         window.addEventListener('message', handleMessage);
+
+        postMessage({ message: "onEditorLoaded" });
 
         // Clean up the event listener
         return () => {

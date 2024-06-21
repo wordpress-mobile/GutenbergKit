@@ -148,12 +148,12 @@ struct _EditorView: UIViewControllerRepresentable {
 public final class GutenbergEditorViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHandler {
     private var reactAppURL: URL!
     private var webView: WKWebView!
-    private let content: String
+    private var content: String
+    private var isEditorLoaded = false
 
     /// Initalizes the editor with the initial content (Gutenberg).
     public init(content: String = "") {
         self.content = content
-
         super.init(nibName: nil, bundle: nil)
     }
     
@@ -173,13 +173,17 @@ public final class GutenbergEditorViewController: UIViewController, WKNavigation
         config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
 
         // Set-up communications with the editor.
-        config.userContentController.add(self, name: "appMessageHandler")
+        #warning("retain cycle?")
+        config.userContentController.add(self, name: "editorDelegate")
 
         // set the configuration on the `WKWebView`
         // don't worry about the frame: .zero, SwiftUI will resize the `WKWebView` to
         // fit the parent
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
+        if #available(iOS 16.4, *) {
+            webView.isInspectable = true
+        }
         self.webView = webView
 
         view.addSubview(webView)
@@ -192,8 +196,6 @@ public final class GutenbergEditorViewController: UIViewController, WKNavigation
         ])
 
         loadEditor()
-        #warning("TODO: called in the right place?")
-        setContent(content)
     }
 
     private func loadEditor() {
@@ -202,7 +204,16 @@ public final class GutenbergEditorViewController: UIViewController, WKNavigation
 
     // MARK: - Actions
 
+    // TODO: synchronize with the editor user-generated updates
+    // TODO: convert to a property?
     public func setContent(_ content: String) {
+        self.content = content
+        _setContent(content)
+    }
+
+    private func _setContent(_ content: String) {
+        guard isEditorLoaded else { return }
+
         guard let data = content.data(using: .utf8)?.base64EncodedString() else {
             return // Should never happen
         }
@@ -212,6 +223,10 @@ public final class GutenbergEditorViewController: UIViewController, WKNavigation
     }
 
     // MARK: - WKNavigationDelegate
+
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        NSLog("navigation: \(navigation)")
+    }
 
     public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         NSLog("didFailNavigation: \(error)")
@@ -231,12 +246,22 @@ public final class GutenbergEditorViewController: UIViewController, WKNavigation
         do {
             switch message.type {
             case .onBlocksChanged:
-                let blocks = try message.decode([Block].self)
+                let blocks = try message.decode([EditorBlock].self)
+                // TODO: encode and pass to delegate")
                 // NSLog("onBlockChanged: \(blocks)")
+            case .onEditorLoaded:
+                didLoadEditor()
             }
         } catch {
             NSLog("Failed to decode message: \(error)")
         }
+    }
+
+    private func didLoadEditor() {
+        guard !isEditorLoaded else { return }
+        isEditorLoaded = true
+
+        _setContent(content)
     }
 }
 

@@ -2,19 +2,21 @@ import WebKit
 
 struct JSEditorMessage {
     let type: JSEditorMessageType
-    let body: Any
+    let body: Any?
 
     init?(message: WKScriptMessage) {
         guard let object = message.body as? [String: Any],
-              let type = (object["message"] as? String).flatMap(JSEditorMessageType.init),
-              let body = object["body"] else {
+              let type = (object["message"] as? String).flatMap(JSEditorMessageType.init) else {
             return nil
         }
         self.type = type
-        self.body = body
+        self.body = object["body"]
     }
 
     func decode<T: Decodable>(_ type: T.Type) throws -> T {
+        guard let body else {
+            throw URLError(.unknown)
+        }
         let data = try JSONSerialization.data(withJSONObject: body, options: [])
         return try JSONDecoder().decode(T.self, from: data)
     }
@@ -22,4 +24,5 @@ struct JSEditorMessage {
 
 enum JSEditorMessageType: String {
     case onBlocksChanged
+    case onEditorLoaded
 }

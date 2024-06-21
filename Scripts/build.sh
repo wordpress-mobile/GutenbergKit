@@ -1,3 +1,3 @@
 (cd ./GutenbergReactApp && npm run build)
-rm -rf ./GutenbergKit/Sources/GutenbergKit/Gutenberg/
-cp -r ./GutenbergReactApp/dist/. ./GutenbergKit/Sources/GutenbergKit/Gutenberg/
+rm -rf ./Sources/GutenbergKit/Gutenberg/
+cp -r ./GutenbergReactApp/dist/. ./Sources/GutenbergKit/Gutenberg/
