@@ -8,7 +8,7 @@ public struct BlockInserter: View {
     @State private var searchText = ""
     @State private var group = "Blocks"
 
-    @State var selectedItems: [PhotosPickerItem] = []
+//    @State var selectedItems: [PhotosPickerItem] = []
 
 
     public var body: some View {

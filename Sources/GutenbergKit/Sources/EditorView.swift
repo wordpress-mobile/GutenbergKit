@@ -127,8 +127,8 @@ public struct EditorView: View {
                     NavigationView {
                         BlockInserter()
                     }
-                    .presentationDetents([.height(540), .large])
-                    .presentationCornerRadius(20)
+//                    .presentationDetents([.height(540), .large])
+//                    .presentationCornerRadius(20)
                 }
         }
         .navigationViewStyle(.stack)
@@ -136,20 +136,32 @@ public struct EditorView: View {
 }
 
 struct _EditorView: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> GutenbergViewController {
-        GutenbergViewController()
+    func makeUIViewController(context: Context) -> GutenbergEditorViewController {
+        GutenbergEditorViewController()
     }
 
-    func updateUIViewController(_ uiViewController: GutenbergViewController, context: Context) {
+    func updateUIViewController(_ uiViewController: GutenbergEditorViewController, context: Context) {
         // Do nothing
     }
 }
 
-final class GutenbergViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHandler {
+public final class GutenbergEditorViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHandler {
     private var reactAppURL: URL!
     private var webView: WKWebView!
+    private let content: String
 
-    override func viewDidLoad() {
+    /// Initalizes the editor with the initial content (Gutenberg).
+    public init(content: String = "") {
+        self.content = content
+
+        super.init(nibName: nil, bundle: nil)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    public override func viewDidLoad() {
         super.viewDidLoad()
 
         reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")
@@ -180,26 +192,39 @@ final class GutenbergViewController: UIViewController, WKNavigationDelegate, WKS
         ])
 
         loadEditor()
+        #warning("TODO: called in the right place?")
+        setContent(content)
     }
 
     private func loadEditor() {
         webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.module.resourceURL!)
     }
 
+    // MARK: - Actions
+
+    public func setContent(_ content: String) {
+        guard let data = content.data(using: .utf8)?.base64EncodedString() else {
+            return // Should never happen
+        }
+        webView.evaluateJavaScript("""
+        window.postMessage({ event: "setContent", content: atob('\(data)') });
+        """)
+    }
+
     // MARK: - WKNavigationDelegate
 
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+    public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         NSLog("didFailNavigation: \(error)")
     }
 
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+    public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         NSLog("didFailProvisionalNavigation: \(error)")
     }
 
     // MARK: - WKScriptMessageHandler
 
     // TODO: it is a retain cycle, isn't it?
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+    public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let message = JSEditorMessage(message: message) else {
             return NSLog("Unsupported message: \(message.body)")
         }
