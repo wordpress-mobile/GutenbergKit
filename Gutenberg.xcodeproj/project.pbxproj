@@ -16,11 +16,11 @@
 
 /* Begin PBXFileReference section */
 		0C4F598B2BEFF4970028BD96 /* Gutenberg.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Gutenberg.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0C61AA062C25109600FA7E46 /* GutenbergKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = GutenbergKit; sourceTree = "<group>"; };
 		0CF6E0402BEFF59600EDEE8A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		0CF6E0422BEFF59600EDEE8A /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		0CF6E0432BEFF59600EDEE8A /* GutenbergApp.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GutenbergApp.swift; sourceTree = "<group>"; };
 		0CF6E0442BEFF59600EDEE8A /* ContentView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		0CF6E0492BEFF5B100EDEE8A /* GutenbergKit */ = {isa = PBXFileReference; lastKnownFileType = text; path = GutenbergKit; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -38,7 +38,7 @@
 		0C4F59822BEFF4970028BD96 = {
 			isa = PBXGroup;
 			children = (
-				0CF6E0492BEFF5B100EDEE8A /* GutenbergKit */,
+				0C61AA062C25109600FA7E46 /* GutenbergKit */,
 				0CF6E03F2BEFF59600EDEE8A /* GutenbergDemo */,
 				0C4F598C2BEFF4970028BD96 /* Products */,
 				0CF6E04A2BEFF60E00EDEE8A /* Frameworks */,
