@@ -82,6 +82,7 @@ function Editor() {
     body { 
         padding: 12px; 
         font-family: -apple-system; 
+        line-height: 1.55;
     }
     .rich-text:focus { 
         outline: none; 
