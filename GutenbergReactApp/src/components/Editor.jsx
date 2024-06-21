@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 import {
     BlockEditorProvider,
@@ -7,7 +7,7 @@ import {
     BlockInspector
 } from "@wordpress/block-editor"
 import { registerCoreBlocks } from '@wordpress/block-library';
-import { parse, createBlock } from '@wordpress/blocks';
+import { parse, createBlock, serialize } from '@wordpress/blocks';
 
 import useWindowDimensions from '../misc/WindowsDimenstionsHook';
 
@@ -27,6 +27,7 @@ function Editor() {
     const [blocks, updateBlocks] = useState([]);
     const { height, width } = useWindowDimensions();
     const [isBlockSettingsInspectorHidden, setBlockSettingsInspectorHidden] = useState(false);
+    const messageCallback = useRef();
 
     function onInput(blocks) {
         updateBlocks(blocks);
@@ -34,7 +35,6 @@ function Editor() {
 
     function onChange(blocks) {
         updateBlocks(blocks);
-        postMessage({ message: "onBlocksChanged", body: blocks });
     };
 
     function setContent(content) {
@@ -50,23 +50,37 @@ function Editor() {
         updateBlocks(blockInstances);
     };
 
+    function getContent(requestID) {
+        postMessage({ 
+            message: "onContentProvided", 
+            body: { content: btoa(serialize(blocks)), requestID: requestID }
+        });
+    }
+
+    // Handles messages receives from the native app.
+    messageCallback.current = (event) => {
+        const message = event.data;
+        switch (message.event) {
+            case "toggleBlockSettingsInspector":
+                setBlockSettingsInspectorHidden(value => !value);
+                break;
+            case "setContent":
+                setContent(message.content);
+                break;
+            case "getContent":
+                getContent(message.requestID);
+                break;
+            default:
+                break;
+        }
+    };
+
+    // Warning: `useEffect` and functions captured it in can't read the latest useState values,
+    // and hence `useRef`.
     useEffect(() => {
         registerCoreBlocks();
-        
-        // Function to handle messages from the WebView
-        const handleMessage = (event) => {
-            const message = event.data;
-            switch (message.event) {
-                case "toggleBlockSettingsInspector":
-                    setBlockSettingsInspectorHidden(value => !value);
-                    break;
-                case "setContent":
-                    setContent(message.content);
-                    break;
-                default:
-                    break;
-            }
-        };
+
+        const handleMessage = (event) => messageCallback.current(event);
         window.addEventListener('message', handleMessage);
 
         postMessage({ message: "onEditorLoaded" });
@@ -108,10 +122,13 @@ function Editor() {
             <div className='gbkit-main-container'>
                 <div className='gbkit-canvas-container' style={{width: `${width}px`}}>
                     <BlockCanvas height={`${height}px`} styles={styles} />
-                    {/* <BlockBreadcrumb />
-                    <div className='gbkit-debug-toolbar'>
+                    {/* <BlockBreadcrumb /> */}
+                    {/* <div className='gbkit-debug-toolbar'>
                         <button type="button" onClick={() => window.postMessage({ event: "toggleBlockSettingsInspector" })}>
                             Toogle Block Settings
+                        </button>
+                        <button type="button" onClick={() => window.postMessage({ event: "getContent", requestID: "1" })}>
+                            Send Content
                         </button>
                     </div> */}
                 </div>
