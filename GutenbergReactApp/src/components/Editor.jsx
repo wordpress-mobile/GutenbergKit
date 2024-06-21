@@ -96,6 +96,7 @@ function Editor() {
     ];
 
     const settings = {
+        // maxWidth: 300
     };
 
     return (
@@ -106,20 +107,20 @@ function Editor() {
             settings={settings}
         >
             <div className='gbkit-main-container'>
-                <div className='gbkit-canvas-container'>
-                    <BlockCanvas height={`${height - 50}px`} styles={styles} />
-                    <BlockBreadcrumb />
+                <div className='gbkit-canvas-container' style={{width: `${width}px`}}>
+                    <BlockCanvas height={`${height}px`} styles={styles} />
+                    {/* <BlockBreadcrumb />
                     <div className='gbkit-debug-toolbar'>
                         <button type="button" onClick={() => window.postMessage({ event: "toggleBlockSettingsInspector" })}>
                             Toogle Block Settings
                         </button>
-                    </div>
+                    </div> */}
                 </div>
-                <div className='gbkit-spacer'></div>
+                {/* <div className='gbkit-spacer'></div>
                 {!isBlockSettingsInspectorHidden &&
                     <div className="block-inspector-siderbar">
                         <BlockInspector />
-                    </div>}
+                    </div>} */}
             </div>
         </BlockEditorProvider>
     );

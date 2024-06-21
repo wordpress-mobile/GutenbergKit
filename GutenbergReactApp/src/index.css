@@ -24,5 +24,9 @@
 
 .block-editor-iframe__scale-container {
 	height: 100%;
-	width: 600px;
+}
+
+.block-editor-iframe__container {
+    width: 100% !important; /* Change this value to your desired width */
+    max-width: 1200px; /* Optional: Set a maximum width */
 }
