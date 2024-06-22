@@ -200,6 +200,8 @@ public final class GutenbergEditorViewController: UIViewController, GutenbergEdi
             webView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
 
+        webView.alpha = 0
+
         loadEditor()
     }
 
@@ -216,7 +218,7 @@ public final class GutenbergEditorViewController: UIViewController, GutenbergEdi
         _setContent(content)
     }
 
-    private func _setContent(_ content: String) {
+    private func _setContent(_ content: String, _ completion: (() -> Void)? = nil) {
         guard isEditorLoaded else { return }
         guard let data = content.data(using: .utf8)?.base64EncodedString() else {
             return // Should never happen
@@ -224,6 +226,7 @@ public final class GutenbergEditorViewController: UIViewController, GutenbergEdi
         let start = CFAbsoluteTimeGetCurrent()
         webView.evaluateJavaScript("editor.setContent(atob('\(data)'));") { _, _ in
             print("gutenbergkit-set-content:", CFAbsoluteTimeGetCurrent() - start)
+            completion?()
         }
     }
     /// Returns the current editor content.
@@ -251,7 +254,11 @@ public final class GutenbergEditorViewController: UIViewController, GutenbergEdi
         let duration = CFAbsoluteTimeGetCurrent() - timestampInit
         print("gutenbergkit-measure_editor-loaded:", duration)
 
-        _setContent(content)
+        _setContent(content) {
+            UIView.animate(withDuration: 0.25, delay: 0.0, options: [.allowUserInteraction]) {
+                self.webView.alpha = 1
+            }
+        }
     }
 }
 
