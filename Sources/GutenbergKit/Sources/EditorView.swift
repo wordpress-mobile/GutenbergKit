@@ -146,12 +146,14 @@ struct _EditorView: UIViewControllerRepresentable {
     }
 }
 
+@MainActor
 public final class GutenbergEditorViewController: UIViewController, GutenbergEditorControllerDelegate {
     private var reactAppURL: URL!
     private var webView: WKWebView!
     private var content: String
     private var isEditorLoaded = false
     private let controller = GutenbergEditorController()
+    private let timestampInit = CFAbsoluteTimeGetCurrent()
 
     /// Initalizes the editor with the initial content (Gutenberg).
     public init(content: String = "") {
@@ -216,11 +218,13 @@ public final class GutenbergEditorViewController: UIViewController, GutenbergEdi
 
     private func _setContent(_ content: String) {
         guard isEditorLoaded else { return }
-
         guard let data = content.data(using: .utf8)?.base64EncodedString() else {
             return // Should never happen
         }
-        webView.evaluateJavaScript("editor.setContent(atob('\(data)'));")
+        let start = CFAbsoluteTimeGetCurrent()
+        webView.evaluateJavaScript("editor.setContent(atob('\(data)'));") { _, _ in
+            print("gutenbergkit-set-content:", CFAbsoluteTimeGetCurrent() - start)
+        }
     }
     /// Returns the current editor content.
     public func getContent() async throws -> String {
@@ -244,10 +248,14 @@ public final class GutenbergEditorViewController: UIViewController, GutenbergEdi
         guard !isEditorLoaded else { return }
         isEditorLoaded = true
 
+        let duration = CFAbsoluteTimeGetCurrent() - timestampInit
+        print("gutenbergkit-measure_editor-loaded:", duration)
+
         _setContent(content)
     }
 }
 
+@MainActor
 private protocol GutenbergEditorControllerDelegate: AnyObject {
     func controller(_ controller: GutenbergEditorController, didReceiveMessage message: JSEditorMessage)
 }
@@ -259,7 +267,7 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     // MARK: - WKNavigationDelegate
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        NSLog("navigation: \(navigation)")
+        NSLog("navigation: \(String(describing: navigation))")
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
@@ -276,7 +284,9 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
         guard let message = JSEditorMessage(message: message) else {
             return NSLog("Unsupported message: \(message.body)")
         }
-        delegate?.controller(self, didReceiveMessage: message)
+        MainActor.assumeIsolated {
+            delegate?.controller(self, didReceiveMessage: message)
+        }
     }
 }
 

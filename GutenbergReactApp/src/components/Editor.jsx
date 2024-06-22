@@ -4,7 +4,8 @@ import {
     BlockEditorProvider,
     BlockCanvas,
     BlockBreadcrumb,
-    BlockInspector
+    BlockInspector,
+    RichText
 } from "@wordpress/block-editor"
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { parse, createBlock, serialize } from '@wordpress/blocks';
