@@ -66,7 +66,7 @@ function Editor() {
     // Injects CSS styles in the canvas iframe.
     const style = `
     body { 
-        padding: 12px; 
+        padding: 16px; 
         font-family: -apple-system; 
         line-height: 1.55;
     }
