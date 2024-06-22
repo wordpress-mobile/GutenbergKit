@@ -7,6 +7,10 @@
 	padding: 0;
 }
 
+body {
+	background-color: transparent;
+}
+
 .block-inspector-siderbar {
 	background: #F6F6FBFF;
 	border-left: 0.5px solid #c8c7cc;
