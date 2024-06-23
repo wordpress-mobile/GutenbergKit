@@ -3,9 +3,7 @@ import { useEffect, useState } from 'react';
 import {
     BlockEditorProvider,
     BlockCanvas,
-    BlockBreadcrumb,
     BlockInspector,
-    RichText
 } from "@wordpress/block-editor"
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { serialize } from '@wordpress/blocks';
@@ -77,14 +75,13 @@ function Editor() {
     }
     .block-editor-block-list__block {
         overflow: hidden;
-
     }
     `
 
     // The problem with the editor canvas is that it gets embedded in an iframe
     // so there is no way to style it directly using CSS included in the project itself.
     const styles = [
-        { css: style },
+        { css: style }
     ];
 
     const settings = {
