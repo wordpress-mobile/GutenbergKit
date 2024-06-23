@@ -7,6 +7,7 @@ body {
 	padding: 16px; 
 	font-family: -apple-system; 
 	line-height: 1.55;
+	overflow-x: hidden;
 }
 
 .rich-text:focus { 
