@@ -13,7 +13,6 @@ body {
 
 .gbkit-main-container {
 	display: flex;
-	gap: 16px;
 }
 
 .gbkit-canvas-container {
