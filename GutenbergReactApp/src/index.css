@@ -6,9 +6,11 @@ body {
 	margin: 0;
 	padding: 16px;
 	padding-bottom: 46.5px;
-	;
 	font-family: -apple-system;
 	line-height: 1.55;
+}
+
+.editor-styles-wrapper {
 	overflow-x: hidden;
 }
 
@@ -29,12 +31,17 @@ body {
 	right: 0;
 	left: 0;
 	z-index: 999;
+	overflow-x: scroll;
+}
+
+.gbkit-editor-toolbar::-webkit-scrollbar {
+	display: none;
 }
 
 .block-editor-inserter__toggle {
 	background: black;
 	color: white;
-	margin: 5px 8px;
+	margin: 6px 8px;
 	border-radius: 6px;
 }
 

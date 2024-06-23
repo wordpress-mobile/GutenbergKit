@@ -224,6 +224,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         controller.delegate = self
         webView.navigationDelegate = controller
 
+        // FIXME: implement with CSS (bottom toolbar)
+        webView.scrollView.verticalScrollIndicatorInsets = UIEdgeInsets(top: 0, left: 0, bottom: 47, right: 0)
+
         view.addSubview(webView)
         webView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([

@@ -65,29 +65,25 @@ function Editor() {
     };
 
     return (
-        <ShortcutProvider>
-            <SlotFillProvider>
-                <BlockEditorProvider
-                    value={blocks}
-                    onInput={didChangeBlocks}
-                    onChange={didChangeBlocks}
-                    settings={settings}
-                >
-                    <BlockTools>
-                        <div className="editor-styles-wrapper">
-                            <BlockEditorKeyboardShortcuts.Register />
-                            <WritingFlow>
-                                <ObserveTyping>
-                                    <BlockList />
-                                </ObserveTyping>
-                            </WritingFlow>
-                        </div>
-                    </BlockTools>
-                    <Popover.Slot />
-                    <EditorToolbar />
-                </BlockEditorProvider>
-            </SlotFillProvider>
-        </ShortcutProvider>
+        <BlockEditorProvider
+            value={blocks}
+            onInput={didChangeBlocks}
+            onChange={didChangeBlocks}
+            settings={settings}
+        >
+            <BlockTools>
+                <div className="editor-styles-wrapper">
+                    <BlockEditorKeyboardShortcuts.Register />
+                    <WritingFlow>
+                        <ObserveTyping>
+                            <BlockList />
+                            <EditorToolbar /> { /* not sure if optimal placement */}
+                        </ObserveTyping>
+                    </WritingFlow>
+                </div>
+            </BlockTools>
+            <Popover.Slot />
+        </BlockEditorProvider>
     );
 }
 
