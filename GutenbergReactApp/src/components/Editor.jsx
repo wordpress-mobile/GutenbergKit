@@ -39,9 +39,9 @@ function Editor() {
     function onChange(blocks) {
         updateBlocks(blocks);
 
-      // TODO: this doesn't include everything
-      const isEmpty = blocks.length === 0 || (blocks[0].name == "core/paragraph" && blocks[0].attributes.content.trim() === "");
-      postMessage({ message: "onBlocksChanged", body: { isEmpty: isEmpty } });
+        // TODO: this doesn't include everything
+        const isEmpty = blocks.length === 0 || (blocks[0].name == "core/paragraph" && blocks[0].attributes.content.trim() === "");
+        postMessage({ message: "onBlocksChanged", body: { isEmpty: isEmpty } });
     };
 
     editor.setContent = (content) => {
@@ -50,7 +50,7 @@ function Editor() {
 
     editor.setInitialContent = (content) => {
         const blocks = instantiateBlocksFromContent(content);
-        updateBlocks(blocks);
+        onChange(blocks); // TODO: redesign this
         return serialize(blocks);
     }
 
@@ -93,7 +93,7 @@ function Editor() {
             settings={settings}
         >
             <div className='gbkit-main-container'>
-                <div className='gbkit-canvas-container' style={{width: `${width}px`}}>
+                <div className='gbkit-canvas-container' style={{ width: `${width}px` }}>
                     <BlockCanvas height={`${height}px`} styles={styles} />
                     {/* <BlockBreadcrumb /> */}
                     {/* <div className='gbkit-debug-toolbar'>

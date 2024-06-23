@@ -167,6 +167,9 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// - note: To get the latest content, call ``EditorViewController/getContent()``.
     /// Retrieving the content is a relatively expensive operation and should not
     /// be performed too frequently during editing.
+    ///
+    /// - warning: This is currently also called for the initial render, which
+    /// is probably not how it should be in the production design.
     func editor(_ viewController: EditorViewController, didUpdateContentWithState state: EditorState)
 }
 
@@ -305,7 +308,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 didLoadEditor()
             case .onBlocksChanged:
                 let body = try message.decode(JSEditorDidUpdateBlocksBody.self)
-                let state = EditorState(isEmpty: body.isEmpty)
+                self.state.isEmpty = body.isEmpty
                 delegate?.editor(self, didUpdateContentWithState: state)
             }
         } catch {
@@ -313,6 +316,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
+    // Only after this point it's safe to use JS `editor` API.
     private func didLoadEditor() {
         guard !_isEditorRendered else { return }
         _isEditorRendered = true
