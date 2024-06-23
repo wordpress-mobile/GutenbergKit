@@ -146,6 +146,11 @@ struct _EditorView: UIViewControllerRepresentable {
     }
 }
 
+public protocol GutenbergEditorViewControllerDelegate: AnyObject {
+    /// Gets called when the editor is loaded and the initial content is displayed.
+    func editorDidDisplayInitialContent(_ viewContoller: GutenbergEditorViewController)
+}
+
 @MainActor
 public final class GutenbergEditorViewController: UIViewController, GutenbergEditorControllerDelegate {
     private var reactAppURL: URL!
@@ -154,6 +159,8 @@ public final class GutenbergEditorViewController: UIViewController, GutenbergEdi
     private var isEditorLoaded = false
     private let controller = GutenbergEditorController()
     private let timestampInit = CFAbsoluteTimeGetCurrent()
+
+    public weak var delegate: GutenbergEditorViewControllerDelegate?
 
     /// Initalizes the editor with the initial content (Gutenberg).
     public init(content: String = "") {
@@ -220,13 +227,21 @@ public final class GutenbergEditorViewController: UIViewController, GutenbergEdi
 
     private func _setContent(_ content: String, _ completion: (() -> Void)? = nil) {
         guard isEditorLoaded else { return }
-        guard let data = content.data(using: .utf8)?.base64EncodedString() else {
-            return // Should never happen
-        }
+
         let start = CFAbsoluteTimeGetCurrent()
-        webView.evaluateJavaScript("editor.setContent(atob('\(data)'));") { _, _ in
+
+        // TODO: Find a faster and more reliable way to pass large strings to a web view
+        let escapedString = content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+
+        // TODO: Check errors and notify the delegate when the editor is loaded and the content got displaed
+        webView.evaluateJavaScript("""
+        editor.setContent(decodeURIComponent('\(escapedString)'));
+        """) { _, error in
             print("gutenbergkit-set-content:", CFAbsoluteTimeGetCurrent() - start)
             completion?()
+            if error == nil {
+                self.delegate?.editorDidDisplayInitialContent(self)
+            }
         }
     }
     /// Returns the current editor content.
