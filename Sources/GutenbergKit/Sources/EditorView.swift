@@ -237,7 +237,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             webView.topAnchor.constraint(equalTo: view.topAnchor),
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            webView.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
         ])
 
         webView.alpha = 0

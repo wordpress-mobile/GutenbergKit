@@ -31,6 +31,16 @@ body {
 	flex-grow: 1;
 }
 
+.gbkit-editor-toolbar {
+	border-top: 0.5px solid #c8c7cc;
+	width: 100%;
+	display: flex;
+	position: fixed;
+	bottom:0;
+	right:0;
+	left:0;
+}
+
 .block-editor-iframe__scale-container {
 	height: 100%;
 }

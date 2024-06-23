@@ -10,6 +10,7 @@ import {
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { serialize } from '@wordpress/blocks';
 
+import EditorToolbar from './EditorToolbar';
 import { instantiateBlocksFromContent, useWindowDimensions } from '../misc/Helpers';
 
 import '@wordpress/components/build-style/style.css';
@@ -87,6 +88,7 @@ function Editor() {
     ];
 
     const settings = {
+        hasFixedToolbar: true
     };
 
     return (
@@ -112,6 +114,7 @@ function Editor() {
                         <BlockInspector />
                     </div>} */}
             </div>
+            <EditorToolbar />
         </BlockEditorProvider>
     );
 }
