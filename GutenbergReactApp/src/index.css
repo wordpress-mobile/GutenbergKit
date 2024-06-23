@@ -51,16 +51,18 @@ body {
 .block-editor-inserter__toggle {
 	background: black;
 	color: white;
-	margin: 4px 8px;
+	margin: 5px 8px;
 	border-radius: 6px;
 }
+
+.block-editor-block-contextual-toolbar {
+	border-bottom: 0 !important; /* TODO: fixme */
+}
+
+/* Misc */
 
 .block-inspector-siderbar {
 	background: #F6F6FBFF;
 	border-left: 0.5px solid #c8c7cc;
 	width: 320px;
-}
-
-.block-editor-block-contextual-toolbar {
-	border-bottom: 0;
 }
