@@ -11,6 +11,22 @@ body {
 	background-color: transparent;
 }
 
+body { 
+	padding: 16px; 
+	font-family: -apple-system; 
+	line-height: 1.55;
+}
+
+.rich-text:focus { 
+	outline: none; 
+}
+
+.block-editor-block-list__block {
+	overflow: hidden;
+}
+
+/* Deprecated */
+
 .gbkit-main-container {
 	display: flex;
 }
