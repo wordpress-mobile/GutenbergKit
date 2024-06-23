@@ -224,6 +224,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         controller.delegate = self
         webView.navigationDelegate = controller
 
+        // TODO: fix. 
+        // The problem is that BlockCanvas uses iframe to display its content,
+        // which means it scrolls separately from the rest of the page. It has
+        // implications for edge appearance, scroll-to-top and maybe other
+        // native features.
+        webView.scrollView.isScrollEnabled = false
+
         view.addSubview(webView)
         webView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
