@@ -12,14 +12,23 @@ const EditorToolbar = (props) => {
             <>
                 <button onClick={() => setBlockInspectorShown(true)}>Open sheet</button>
 
-                <Sheet isOpen={isBlockInspectorShown} onClose={() => setBlockInspectorShown(false)}>
+                <Sheet
+                    isOpen={isBlockInspectorShown}
+                    onClose={() => setBlockInspectorShown(false)}
+                    snapPoints={[window.innerHeight - 20, 400, 0]}
+                    initialSnap={1}
+                    tweenConfig={{ ease: 'anticipate', duration: 0.5 }}
+                >
                     <Sheet.Container>
                         <Sheet.Header />
                         <Sheet.Content>
-                            <BlockInspector />
+                            <Sheet.Scroller>
+                            <div className="gbkit-sheet-container">
+                                <BlockInspector />
+                            </div>
+                            </Sheet.Scroller>
                         </Sheet.Content>
                     </Sheet.Container>
-                    <Sheet.Backdrop />
                 </Sheet>
             </>
 

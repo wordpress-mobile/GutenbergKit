@@ -32,7 +32,7 @@ let editor = {};
 function Editor() {
     const [blocks, setBlocks] = useState([]);
 
-    function didsetBlocks(blocks) {
+    function didChangeBlocks(blocks) {
         setBlocks(blocks);
 
         // TODO: this doesn't include everything
@@ -46,7 +46,7 @@ function Editor() {
 
     editor.setInitialContent = (content) => {
         const blocks = instantiateBlocksFromContent(content);
-        onChange(blocks); // TODO: redesign this
+        didChangeBlocks(blocks); // TODO: redesign this
         return serialize(blocks);
     }
 
@@ -69,8 +69,8 @@ function Editor() {
             <SlotFillProvider>
                 <BlockEditorProvider
                     value={blocks}
-                    onInput={didsetBlocks}
-                    onChange={didsetBlocks}
+                    onInput={didChangeBlocks}
+                    onChange={didChangeBlocks}
                     settings={settings}
                 >
                     <BlockTools>

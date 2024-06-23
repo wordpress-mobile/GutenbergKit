@@ -4,15 +4,16 @@
 
 body {
 	margin: 0;
-	padding: 16px; 
-	padding-bottom: 46.5px;;
-	font-family: -apple-system; 
+	padding: 16px;
+	padding-bottom: 46.5px;
+	;
+	font-family: -apple-system;
 	line-height: 1.55;
 	overflow-x: hidden;
 }
 
-.rich-text:focus { 
-	outline: none; 
+.rich-text:focus {
+	outline: none;
 }
 
 /* Toolbar */
@@ -24,9 +25,9 @@ body {
 	display: flex;
 	align-items: center;
 	position: fixed;
-	bottom:0;
-	right:0;
-	left:0;
+	bottom: 0;
+	right: 0;
+	left: 0;
 	z-index: 999;
 }
 
@@ -38,7 +39,32 @@ body {
 }
 
 .block-editor-block-contextual-toolbar {
-	border-bottom: 0 !important; /* TODO: fixme */
+	border-bottom: 0 !important;
+	/* TODO: fixme */
+}
+
+/* Sheet */
+
+.react-modal-sheet-backdrop {
+	/* custom styles */
+}
+
+.react-modal-sheet-container {
+	border-top-right-radius: 16px !important;
+	border-top-left-radius: 16px !important;
+	box-shadow: rgba(0, 0, 0, 0.07) 0px -2px 4px !important;
+}
+
+.react-modal-sheet-header {
+	/* custom styles */
+}
+
+.react-modal-sheet-drag-indicator {
+	/* custom styles */
+}
+
+.react-modal-sheet-content {
+	/* custom styles */
 }
 
 /* Misc */
