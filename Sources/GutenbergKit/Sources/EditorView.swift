@@ -269,7 +269,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             delegate?.editor(self, didDisplayInitialContent: serializedContent)
             print("gutenbergkit-set-initial-content:", CFAbsoluteTimeGetCurrent() - start)
 
-            UIView.animate(withDuration: 0.25, delay: 0.0, options: [.allowUserInteraction]) {
+            UIView.animate(withDuration: 0.2, delay: 0.0, options: [.allowUserInteraction]) {
                 self.webView.alpha = 1
             }
         } catch {
