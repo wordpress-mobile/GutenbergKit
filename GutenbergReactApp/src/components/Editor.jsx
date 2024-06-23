@@ -77,7 +77,7 @@ function Editor() {
                     onChange={onChange}
                     settings={settings}
                 >
-                    <BlockTools className="gbkit-canvas-container">
+                    <BlockTools>
                         <div className="editor-styles-wrapper">
                             <BlockEditorKeyboardShortcuts.Register />
                             <WritingFlow>

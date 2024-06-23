@@ -5,6 +5,7 @@
 body {
 	margin: 0;
 	padding: 16px; 
+	padding-bottom: 46.5px;;
 	font-family: -apple-system; 
 	line-height: 1.55;
 	overflow-x: hidden;
@@ -12,10 +13,6 @@ body {
 
 .rich-text:focus { 
 	outline: none; 
-}
-
-.gbkit-canvas-container {
-	padding-bottom: 46.5px; /* for toolbar */
 }
 
 /* Toolbar */
