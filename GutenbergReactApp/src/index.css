@@ -11,10 +11,23 @@ body {
 	background-color: transparent;
 }
 
+.block-editor-inserter__toggle {
+	background: black;
+	color: white;
+	/* margin: 8px;
+	margin-bottom: 0px; */
+	margin: 4px 8px;
+	border-radius: 6px;
+}
+
 .block-inspector-siderbar {
 	background: #F6F6FBFF;
 	border-left: 0.5px solid #c8c7cc;
 	width: 320px;
+}
+
+.block-editor-block-contextual-toolbar {
+	border-bottom: 0;
 }
 
 .gbkit-main-container {
@@ -35,6 +48,7 @@ body {
 	border-top: 0.5px solid #c8c7cc;
 	width: 100%;
 	display: flex;
+	align-items: center;
 	position: fixed;
 	bottom:0;
 	right:0;
