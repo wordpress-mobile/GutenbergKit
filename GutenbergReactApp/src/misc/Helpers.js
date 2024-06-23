@@ -1,7 +1,4 @@
-import { useState, useEffect } from 'react';
 import { parse, createBlock } from '@wordpress/blocks';
-
-// MARK: Misc
 
 // Returns BlockInstance[]
 export function instantiateBlocksFromContent(content) {
@@ -15,3 +12,10 @@ export function instantiateBlocksFromContent(content) {
     const parsedBlocks = parse(content); // Returns ParsedBlock[]
     return convertParsedBlocksToBlockInstances(parsedBlocks);
 }
+
+export function postMessage(message, parameters = {}) {
+    if (window.webkit) {
+        const value = { message: message, body: parameters }
+        window.webkit.messageHandlers.editorDelegate.postMessage(value);
+    };
+};

@@ -171,6 +171,11 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// - warning: This is currently also called for the initial render, which
     /// is probably not how it should be in the production design.
     func editor(_ viewController: EditorViewController, didUpdateContentWithState state: EditorState)
+
+    /// Gets called when one of the editor sheets is presented.
+    ///
+    /// - warning: Smoke and mirrors to make it look like a native sheet.
+    func editor(_ viewController: EditorViewController, didUpdateSheetVisibility isShown: Bool)
 }
 
 @MainActor
@@ -305,6 +310,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 let body = try message.decode(JSEditorDidUpdateBlocksBody.self)
                 self.state.isEmpty = body.isEmpty
                 delegate?.editor(self, didUpdateContentWithState: state)
+            case .onSheetVisibilityUpdated:
+                let body = try message.decode(JSEditorSheetVisibilityUpdatedBody.self)
+                delegate?.editor(self, didUpdateSheetVisibility: body.isShown)
             }
         } catch {
             fatalError("failed to decode message: \(error)")

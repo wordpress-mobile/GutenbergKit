@@ -23,7 +23,7 @@ import '@wordpress/block-library/build-style/theme.css';
 /* Internal */
 
 import EditorToolbar from './EditorToolbar';
-import { instantiateBlocksFromContent } from '../misc/Helpers';
+import { instantiateBlocksFromContent, postMessage } from '../misc/Helpers';
 
 // Current editor (assumes can be only one instance).
 let editor = {};
@@ -36,7 +36,7 @@ function Editor() {
 
         // TODO: this doesn't include everything
         const isEmpty = blocks.length === 0 || (blocks[0].name == "core/paragraph" && blocks[0].attributes.content.trim() === "");
-        postMessage({ message: "onBlocksChanged", body: { isEmpty: isEmpty } });
+        postMessage("onBlocksChanged", { isEmpty: isEmpty })
     }
 
     editor.setContent = (content) => {
@@ -56,7 +56,7 @@ function Editor() {
     useEffect(() => {
         window.editor = editor;
         registerCoreBlocks();
-        postMessage({ message: "onEditorLoaded" });
+        postMessage("onEditorLoaded");
     }, []);
 
     const settings = {
@@ -85,11 +85,5 @@ function Editor() {
         </BlockEditorProvider>
     );
 }
-
-function postMessage(message) {
-    if (window.webkit) {
-        window.webkit.messageHandlers.editorDelegate.postMessage(message);
-    };
-};
 
 export default Editor;

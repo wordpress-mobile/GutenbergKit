@@ -25,8 +25,14 @@ struct JSEditorMessage {
 enum JSEditorMessageType: String {
     case onEditorLoaded
     case onBlocksChanged
+    case onSheetVisibilityUpdated
 }
 
 struct JSEditorDidUpdateBlocksBody: Decodable {
     let isEmpty: Bool
+}
+
+
+struct JSEditorSheetVisibilityUpdatedBody: Decodable {
+    let isShown: Bool
 }

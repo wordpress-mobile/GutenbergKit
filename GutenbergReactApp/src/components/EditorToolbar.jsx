@@ -1,20 +1,26 @@
 import { BlockInspector, BlockToolbar, Inserter } from '@wordpress/block-editor/build/components'
 import { useState } from 'react';
 import { Sheet } from 'react-modal-sheet';
+import { postMessage } from '../misc/Helpers';
 
-const EditorToolbar = (props) => {
+const EditorToolbar = () => {
     const [isBlockInspectorShown, setBlockInspectorShown] = useState(false);
+
+    function _setBlockInspectorShown(isShown) {
+        postMessage("onSheetVisibilityUpdated", { isShown: isShown });
+        setBlockInspectorShown(isShown);
+    }
 
     return (
         <div className='gbkit-editor-toolbar'>
             <Inserter />
 
             <>
-                <button onClick={() => setBlockInspectorShown(true)}>Open sheet</button>
+                <button onClick={() => _setBlockInspectorShown(true)}>Settings</button>
 
                 <Sheet
                     isOpen={isBlockInspectorShown}
-                    onClose={() => setBlockInspectorShown(false)}
+                    onClose={() => _setBlockInspectorShown(false)}
                     snapPoints={[window.innerHeight - 20, 400, 0]}
                     initialSnap={1}
                     tweenConfig={{ ease: 'anticipate', duration: 0.5 }}
@@ -29,12 +35,10 @@ const EditorToolbar = (props) => {
                             </Sheet.Scroller>
                         </Sheet.Content>
                     </Sheet.Container>
+                    <Sheet.Backdrop />
                 </Sheet>
             </>
 
-            {/* <button type="button" onClick={props.onSettingsTapped}>
-            ⚙
-        </button> */}
             <BlockToolbar />
         </div>
     )
