@@ -30,22 +30,18 @@ import { instantiateBlocksFromContent } from '../misc/Helpers';
 let editor = {};
 
 function Editor() {
-    const [blocks, updateBlocks] = useState([]);
+    const [blocks, setBlocks] = useState([]);
 
-    function onInput(blocks) {
-        updateBlocks(blocks);
-    };
-
-    function onChange(blocks) {
-        updateBlocks(blocks);
+    function didsetBlocks(blocks) {
+        setBlocks(blocks);
 
         // TODO: this doesn't include everything
         const isEmpty = blocks.length === 0 || (blocks[0].name == "core/paragraph" && blocks[0].attributes.content.trim() === "");
         postMessage({ message: "onBlocksChanged", body: { isEmpty: isEmpty } });
-    };
+    }
 
     editor.setContent = (content) => {
-        updateBlocks(instantiateBlocksFromContent(content));
+        setBlocks(instantiateBlocksFromContent(content));
     };
 
     editor.setInitialContent = (content) => {
@@ -73,8 +69,8 @@ function Editor() {
             <SlotFillProvider>
                 <BlockEditorProvider
                     value={blocks}
-                    onInput={onInput}
-                    onChange={onChange}
+                    onInput={didsetBlocks}
+                    onChange={didsetBlocks}
                     settings={settings}
                 >
                     <BlockTools>
