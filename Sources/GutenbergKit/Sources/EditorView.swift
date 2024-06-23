@@ -137,30 +137,62 @@ public struct EditorView: View {
 }
 
 struct _EditorView: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> GutenbergEditorViewController {
-        GutenbergEditorViewController()
+    func makeUIViewController(context: Context) -> EditorViewController {
+        EditorViewController()
     }
 
-    func updateUIViewController(_ uiViewController: GutenbergEditorViewController, context: Context) {
+    func updateUIViewController(_ uiViewController: EditorViewController, context: Context) {
         // Do nothing
     }
 }
 
-public protocol GutenbergEditorViewControllerDelegate: AnyObject {
+public struct EditorState {
+    /// Set to `true` if the editor has non-empty content.
+    public var isEmpty = true
+}
+
+public protocol EditorViewControllerDelegate: AnyObject {
     /// Gets called when the editor is loaded and the initial content is displayed.
-    func editorDidDisplayInitialContent(_ viewContoller: GutenbergEditorViewController)
+    ///
+    /// - parameter content: Content serialized according to the editor's settings.
+    func editor(_ viewContoller: EditorViewController, didDisplayInitialContent content: String)
+
+    /// Editor encounterd a critical error and has to be stopped.
+    ///
+    /// - warning: Make sure not to update user content if that happens (it shouldn't)
+    func editor(_ viewContoller: EditorViewController, didEncounterCriticalError error: Error)
+
+    /// Notifies the client about the new edits.
+    ///
+    /// - note: To get the latest content, call ``EditorViewController/getContent()``.
+    /// Retrieving the content is a relatively expensive operation and should not
+    /// be performed too frequently during editing.
+    func editor(_ viewController: EditorViewController, didUpdateContentWithState state: EditorState)
 }
 
 @MainActor
-public final class GutenbergEditorViewController: UIViewController, GutenbergEditorControllerDelegate {
+public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
     private var reactAppURL: URL!
     private var webView: WKWebView!
     private var content: String
-    private var isEditorLoaded = false
+    private var _isEditorRendered = false
     private let controller = GutenbergEditorController()
     private let timestampInit = CFAbsoluteTimeGetCurrent()
 
-    public weak var delegate: GutenbergEditorViewControllerDelegate?
+    public private(set) var state = EditorState()
+
+    public weak var delegate: EditorViewControllerDelegate?
+
+    /// Returns `true` if the editor is loaded and the initial content is displayed.
+    public var isEditorLoaded: Bool { initialContent != nil }
+
+    /// The content that the editor was initialized with, serialized according
+    /// to the editor's settings.
+    ///
+    /// - warning: Checking raw `content` for equality is not a reliable operation
+    /// due to the various formatting choices Gutenberg and WordPress make when
+    /// saving the posts.
+    public private(set) var initialContent: String?
 
     /// Initalizes the editor with the initial content (Gutenberg).
     public init(content: String = "") {
@@ -225,8 +257,8 @@ public final class GutenbergEditorViewController: UIViewController, GutenbergEdi
         _setContent(content)
     }
 
-    private func _setContent(_ content: String, _ completion: (() -> Void)? = nil) {
-        guard isEditorLoaded else { return }
+    private func setInitialContent(_ content: String, _ completion: (() -> Void)? = nil) async {
+        guard _isEditorRendered else { fatalError("called too early") }
 
         let start = CFAbsoluteTimeGetCurrent()
 
@@ -234,16 +266,31 @@ public final class GutenbergEditorViewController: UIViewController, GutenbergEdi
         let escapedString = content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
 
         // TODO: Check errors and notify the delegate when the editor is loaded and the content got displaed
-        webView.evaluateJavaScript("""
-        editor.setContent(decodeURIComponent('\(escapedString)'));
-        """) { _, error in
-            print("gutenbergkit-set-content:", CFAbsoluteTimeGetCurrent() - start)
-            completion?()
-            if error == nil {
-                self.delegate?.editorDidDisplayInitialContent(self)
+        do {
+            let serializedContent = try await webView.evaluateJavaScript("""
+        editor.setInitialContent(decodeURIComponent('\(escapedString)'));
+        """) as! String
+            self.initialContent = serializedContent
+            delegate?.editor(self, didDisplayInitialContent: serializedContent)
+            print("gutenbergkit-set-initial-content:", CFAbsoluteTimeGetCurrent() - start)
+
+            UIView.animate(withDuration: 0.25, delay: 0.0, options: [.allowUserInteraction]) {
+                self.webView.alpha = 1
             }
+        } catch {
+            delegate?.editor(self, didEncounterCriticalError: error)
         }
     }
+
+    private func _setContent(_ content: String) {
+        guard _isEditorRendered else { return }
+
+        let escapedString = content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+        webView.evaluateJavaScript("""
+        editor.setContent(decodeURIComponent('\(escapedString)'));
+        """)
+    }
+
     /// Returns the current editor content.
     public func getContent() async throws -> String {
         try await webView.evaluateJavaScript("editor.getContent();") as! String
@@ -256,6 +303,10 @@ public final class GutenbergEditorViewController: UIViewController, GutenbergEdi
             switch message.type {
             case .onEditorLoaded:
                 didLoadEditor()
+            case .onBlocksChanged:
+                let body = try message.decode(JSEditorDidUpdateBlocksBody.self)
+                let state = EditorState(isEmpty: body.isEmpty)
+                delegate?.editor(self, didUpdateContentWithState: state)
             }
         } catch {
             fatalError("failed to decode message: \(error)")
@@ -263,16 +314,14 @@ public final class GutenbergEditorViewController: UIViewController, GutenbergEdi
     }
 
     private func didLoadEditor() {
-        guard !isEditorLoaded else { return }
-        isEditorLoaded = true
+        guard !_isEditorRendered else { return }
+        _isEditorRendered = true
 
         let duration = CFAbsoluteTimeGetCurrent() - timestampInit
-        print("gutenbergkit-measure_editor-loaded:", duration)
+        print("gutenbergkit-measure_editor-first-render:", duration)
 
-        _setContent(content) {
-            UIView.animate(withDuration: 0.25, delay: 0.0, options: [.allowUserInteraction]) {
-                self.webView.alpha = 1
-            }
+        Task {
+            await setInitialContent(content)
         }
     }
 }

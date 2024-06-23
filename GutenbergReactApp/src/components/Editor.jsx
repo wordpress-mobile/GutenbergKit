@@ -8,9 +8,9 @@ import {
     RichText
 } from "@wordpress/block-editor"
 import { registerCoreBlocks } from '@wordpress/block-library';
-import { parse, createBlock, serialize } from '@wordpress/blocks';
+import { serialize } from '@wordpress/blocks';
 
-import useWindowDimensions from '../misc/WindowsDimenstionsHook';
+import { instantiateBlocksFromContent, useWindowDimensions } from '../misc/Helpers';
 
 import '@wordpress/components/build-style/style.css';
 import '@wordpress/block-editor/build-style/style.css';
@@ -38,20 +38,21 @@ function Editor() {
 
     function onChange(blocks) {
         updateBlocks(blocks);
+
+      // TODO: this doesn't include everything
+      const isEmpty = blocks.length === 0 || (blocks[0].name == "core/paragraph" && blocks[0].attributes.content.trim() === "");
+      postMessage({ message: "onBlocksChanged", body: { isEmpty: isEmpty } });
     };
 
     editor.setContent = (content) => {
-        const convertParsedBlocksToBlockInstances = (parsedBlocks) => {
-            return parsedBlocks.map(parsedBlock => {
-                const { name, attributes, innerBlocks } = parsedBlock;
-                const convertedInnerBlocks = convertParsedBlocksToBlockInstances(innerBlocks);
-                return createBlock(name, attributes, convertedInnerBlocks);
-            });
-        };
-        const parsedBlocks = parse(content); // Returns ParsedBlock[]
-        const blockInstances = convertParsedBlocksToBlockInstances(parsedBlocks); // Returns BlockInstance[]
-        updateBlocks(blockInstances);
+        updateBlocks(instantiateBlocksFromContent(content));
     };
+
+    editor.setInitialContent = (content) => {
+        const blocks = instantiateBlocksFromContent(content);
+        updateBlocks(blocks);
+        return serialize(blocks);
+    }
 
     editor.getContent = () => serialize(blocks);
 
