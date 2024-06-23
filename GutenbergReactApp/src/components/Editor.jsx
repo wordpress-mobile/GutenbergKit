@@ -24,15 +24,13 @@ import '@wordpress/block-library/build-style/theme.css';
 /* Internal */
 
 import EditorToolbar from './EditorToolbar';
-import { instantiateBlocksFromContent, useWindowDimensions } from '../misc/Helpers';
+import { instantiateBlocksFromContent } from '../misc/Helpers';
 
 // Current editor (assumes can be only one instance).
 let editor = {};
 
 function Editor() {
     const [blocks, updateBlocks] = useState([]);
-    const { height, width } = useWindowDimensions();
-    const [isBlockInspectorShown, setBlockInspectorShown] = useState(false);
 
     function onInput(blocks) {
         updateBlocks(blocks);
