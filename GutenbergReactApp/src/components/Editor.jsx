@@ -10,8 +10,7 @@ import {
     WritingFlow,
     ObserveTyping,
 } from '@wordpress/block-editor';
-import { Popover, SlotFillProvider } from '@wordpress/components';
-import { ShortcutProvider } from '@wordpress/keyboard-shortcuts';
+import { Popover } from '@wordpress/components';
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { serialize } from '@wordpress/blocks';
 
