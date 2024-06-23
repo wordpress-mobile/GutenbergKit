@@ -74,6 +74,10 @@ function Editor() {
     .rich-text:focus { 
         outline: none; 
     }
+    .block-editor-block-list__block {
+        overflow: hidden;
+
+    }
     `
 
     // The problem with the editor canvas is that it gets embedded in an iframe
@@ -83,6 +87,7 @@ function Editor() {
     ];
 
     const settings = {
+        maxWidth: 300
     };
 
     return (
