@@ -175,8 +175,7 @@ public protocol EditorViewControllerDelegate: AnyObject {
 
 @MainActor
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
-    private var reactAppURL: URL!
-    private var webView: WKWebView!
+    public let webView: WKWebView
     private var content: String
     private var _isEditorRendered = false
     private let controller = GutenbergEditorController()
@@ -200,6 +199,18 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Initalizes the editor with the initial content (Gutenberg).
     public init(content: String = "") {
         self.content = content
+
+        // The `allowFileAccessFromFileURLs` allows the web view to access the
+        // files from the local filesystem.
+        let config = WKWebViewConfiguration()
+        config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+        config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
+
+        // Set-up communications with the editor.
+        config.userContentController.add(controller, name: "editorDelegate")
+
+        self.webView = WKWebView(frame: .zero, configuration: config)
+
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -211,27 +222,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         super.viewDidLoad()
 
         controller.delegate = self
-
-        reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")
-
-        // The `allowFileAccessFromFileURLs` allows the web view to access the
-        // files from the local filesystem.
-        let config = WKWebViewConfiguration()
-        config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
-        config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
-
-        // Set-up communications with the editor.
-        config.userContentController.add(controller, name: "editorDelegate")
-
-        // set the configuration on the `WKWebView`
-        // don't worry about the frame: .zero, SwiftUI will resize the `WKWebView` to
-        // fit the parent
-        let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = controller
-        if #available(iOS 16.4, *) {
-            webView.isInspectable = true // TODO: should be diasble in production
-        }
-        self.webView = webView
 
         view.addSubview(webView)
         webView.translatesAutoresizingMaskIntoConstraints = false
@@ -248,6 +239,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func loadEditor() {
+        let reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
         webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.module.resourceURL!)
     }
 

@@ -679,4 +679,8 @@ And breaking the golden lilies afloat
     .rich-text:focus { 
         outline: none; 
     }
-    `}],l={};return c.jsx(Zlt,{value:e,onInput:r,onChange:s,settings:l,children:c.jsx("div",{className:"gbkit-main-container",children:c.jsx("div",{className:"gbkit-canvas-container",style:{width:`${o}px`},children:c.jsx(Gmt,{height:`${n}px`,styles:a})})})})}function jXt(){return c.jsx(BXt,{})}X_.createRoot(document.getElementById("root")).render(c.jsx(C0.StrictMode,{children:c.jsx(jXt,{})}))});export default PXt();
+    .block-editor-block-list__block {
+        overflow: hidden;
+
+    }
+    `}],l={maxWidth:300};return c.jsx(Zlt,{value:e,onInput:r,onChange:s,settings:l,children:c.jsx("div",{className:"gbkit-main-container",children:c.jsx("div",{className:"gbkit-canvas-container",style:{width:`${o}px`},children:c.jsx(Gmt,{height:`${n}px`,styles:a})})})})}function jXt(){return c.jsx(BXt,{})}X_.createRoot(document.getElementById("root")).render(c.jsx(C0.StrictMode,{children:c.jsx(jXt,{})}))});export default PXt();
