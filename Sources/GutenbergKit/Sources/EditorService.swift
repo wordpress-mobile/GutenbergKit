@@ -4,7 +4,7 @@ import Foundation
 ///
 /// - note: The service can be instantiated and warmed-up before the editor
 /// is presented.
-public final class EditorService {
+public actor EditorService {
     private let client: EditorNetworkingClient
 
     // TODO: add type to represent block types
@@ -16,10 +16,9 @@ public final class EditorService {
         self.client = client
     }
 
-    public func warmup() {
-        Task {
-            _ = try? await refreshBlockTypes()
-        }
+    /// Prefetches the settings used by the editor.
+    public func warmup() async {
+        _ = try? await refreshBlockTypes()
     }
 
     func refreshBlockTypes() async throws -> [GutenbergBlockType] {

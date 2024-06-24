@@ -30,7 +30,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         self.content = content
         self.service = service
 
-        service.warmup()
+        Task {
+            await service.warmup()
+        }
 
         // The `allowFileAccessFromFileURLs` allows the web view to access the
         // files from the local filesystem.
