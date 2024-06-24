@@ -39,6 +39,10 @@ body {
 	display: none;
 }
 
+.lock-editor-block-toolbar {
+	overflow: hidden !important; /* Disable scrolling – scroll the wrapper div */
+}
+
 .block-editor-inserter__toggle {
 	background: black;
 	color: white;
@@ -51,28 +55,12 @@ body {
 	/* TODO: fixme */
 }
 
-/* Sheet */
-
-.react-modal-sheet-backdrop {
-	/* custom styles */
-}
+/* Modal Sheet */
 
 .react-modal-sheet-container {
 	border-top-right-radius: 16px !important;
 	border-top-left-radius: 16px !important;
 	box-shadow: rgba(0, 0, 0, 0.1) 0px -2px 10px !important;
-}
-
-.react-modal-sheet-header {
-	/* custom styles */
-}
-
-.react-modal-sheet-drag-indicator {
-	/* custom styles */
-}
-
-.react-modal-sheet-content {
-	/* custom styles */
 }
 
 /* Misc */
