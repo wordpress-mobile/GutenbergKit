@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Sheet } from 'react-modal-sheet';
 import { postMessage } from '../misc/Helpers';
 
-const EditorToolbar = () => {
+const EditorToolbar = (props) => {
     const [isBlockInspectorShown, setBlockInspectorShown] = useState(false);
 
     function _setBlockInspectorShown(isShown) {
@@ -11,9 +11,17 @@ const EditorToolbar = () => {
         setBlockInspectorShown(isShown);
     }
 
+    let addBlockButton;
+    if (props.registeredBlocks.length === 0) {
+        // TODO: use the native inserter
+        addBlockButton = <Inserter />;
+    } else {
+        addBlockButton = <button onClick={() => postMessage("showBlockInserter")}>+</button>
+    }
+
     return (
         <div className='gbkit-editor-toolbar'>
-            <Inserter />
+            {addBlockButton}
 
             <>
                 <button onClick={() => _setBlockInspectorShown(true)}>Settings</button>
@@ -29,9 +37,9 @@ const EditorToolbar = () => {
                         <Sheet.Header />
                         <Sheet.Content>
                             <Sheet.Scroller>
-                            <div className="gbkit-sheet-container">
-                                <BlockInspector />
-                            </div>
+                                <div className="gbkit-sheet-container">
+                                    <BlockInspector />
+                                </div>
                             </Sheet.Scroller>
                         </Sheet.Content>
                     </Sheet.Container>

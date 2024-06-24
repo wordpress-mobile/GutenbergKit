@@ -35,6 +35,7 @@ let editor = {};
 
 function Editor() {
     const [blocks, setBlocks] = useState([]);
+    const [registeredBlocks, setRegisteredBlocks] = useState([]);
 
     function didChangeBlocks(blocks) {
         setBlocks(blocks);
@@ -55,6 +56,8 @@ function Editor() {
     }
 
     editor.getContent = () => serialize(blocks);
+
+    editor.registerBlocks = (blockTypes) => setRegisteredBlocks(blockTypes);
 
     // Warning: `useEffect` and functions captured it in can't read the latest useState values,
     // and hence `useRef`.
@@ -81,7 +84,7 @@ function Editor() {
                     <WritingFlow>
                         <ObserveTyping>
                             <BlockList />
-                            <EditorToolbar /> { /* not sure if optimal placement */}
+                            <EditorToolbar registeredBlocks={registeredBlocks}/> { /* not sure if optimal placement */}
                         </ObserveTyping>
                     </WritingFlow>
                 </div>
