@@ -40,6 +40,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private var _isEditorRendered = false
     private let controller = GutenbergEditorController()
     private let timestampInit = CFAbsoluteTimeGetCurrent()
+    private let service: EditorService
 
     public private(set) var state = EditorState()
 
@@ -57,8 +58,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     public private(set) var initialContent: String?
 
     /// Initalizes the editor with the initial content (Gutenberg).
-    public init(content: String = "") {
+    public init(content: String = "", service: EditorService) {
         self.content = content
+        self.service = service
+
+        service.warmup()
 
         // The `allowFileAccessFromFileURLs` allows the web view to access the
         // files from the local filesystem.
@@ -129,7 +133,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         try await webView.evaluateJavaScript("editor.getContent();") as! String
     }
 
-    // MARK: - Internal
+    // MARK: - Internal (Block Inserter)
+
+    // TODO: wire with JS
+    private func showBlockInserter() {
+
+    }
+
+    // MARK: - Internal (Initial Content)
 
     private func setInitialContent(_ content: String, _ completion: (() -> Void)? = nil) async {
         guard _isEditorRendered else { fatalError("called too early") }

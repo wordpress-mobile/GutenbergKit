@@ -1,5 +1,6 @@
 import Foundation
 
+// TODO: hide any decodable
 final class EditorBlock: Decodable {
     /// The name of the block, e.g. `core/paragraph`.
     var name: String
