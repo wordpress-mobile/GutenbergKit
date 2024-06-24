@@ -1,7 +1,6 @@
-/* React */
 import { useEffect, useState } from 'react';
 
-/* WordPress */
+// WordPress
 import {
     BlockEditorKeyboardShortcuts,
     BlockEditorProvider,
@@ -14,8 +13,11 @@ import { Popover } from '@wordpress/components';
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { parse, serialize } from '@wordpress/blocks';
 
+// Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
 import '@wordpress/block-editor/build-style/style.css';
+
+// Default styles that are needed for the core blocks.
 import '@wordpress/block-library/build-style/style.css';
 import '@wordpress/block-library/build-style/editor.css';
 import '@wordpress/block-library/build-style/theme.css';
@@ -24,8 +26,7 @@ import '@wordpress/block-library/build-style/theme.css';
 import '@wordpress/format-library';
 import '@wordpress/format-library/build-style/style.css';
 
-/* Internal */
-
+// Internal imports
 import EditorToolbar from './EditorToolbar';
 import { postMessage } from '../misc/Helpers';
 
