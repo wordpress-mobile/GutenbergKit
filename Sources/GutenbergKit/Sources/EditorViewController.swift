@@ -4,7 +4,7 @@ import WebKit
 @MainActor
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
     public let webView: WKWebView
-    private var content: String
+    private var _initialRawContent: String
     private var _isEditorRendered = false
     private let controller = GutenbergEditorController()
     private let timestampInit = CFAbsoluteTimeGetCurrent()
@@ -27,7 +27,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Initalizes the editor with the initial content (Gutenberg).
     public init(content: String = "", service: EditorService) {
-        self.content = content
+        self._initialRawContent = content
         self.service = service
 
         Task {
@@ -85,7 +85,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // TODO: synchronize with the editor user-generated updates
     // TODO: convert to a property?
     public func setContent(_ content: String) {
-        self.content = content
         _setContent(content)
     }
 
@@ -166,7 +165,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         print("gutenbergkit-measure_editor-first-render:", duration)
 
         Task {
-            await setInitialContent(content)
+            await setInitialContent(_initialRawContent)
         }
     }
 }
