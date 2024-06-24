@@ -20,6 +20,10 @@ import '@wordpress/block-library/build-style/style.css';
 import '@wordpress/block-library/build-style/editor.css';
 import '@wordpress/block-library/build-style/theme.css';
 
+// Registers standard formatting options for RichText.
+import '@wordpress/format-library';
+import '@wordpress/format-library/build-style/style.css';
+
 /* Internal */
 
 import EditorToolbar from './EditorToolbar';
