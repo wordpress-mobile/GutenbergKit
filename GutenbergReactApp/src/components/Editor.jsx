@@ -12,7 +12,7 @@ import {
 } from '@wordpress/block-editor';
 import { Popover } from '@wordpress/components';
 import { registerCoreBlocks } from '@wordpress/block-library';
-import { serialize } from '@wordpress/blocks';
+import { parse, serialize } from '@wordpress/blocks';
 
 import '@wordpress/components/build-style/style.css';
 import '@wordpress/block-editor/build-style/style.css';
@@ -23,7 +23,7 @@ import '@wordpress/block-library/build-style/theme.css';
 /* Internal */
 
 import EditorToolbar from './EditorToolbar';
-import { instantiateBlocksFromContent, postMessage } from '../misc/Helpers';
+import { postMessage } from '../misc/Helpers';
 
 // Current editor (assumes can be only one instance).
 let editor = {};
@@ -40,13 +40,13 @@ function Editor() {
     }
 
     editor.setContent = (content) => {
-        setBlocks(instantiateBlocksFromContent(content));
+        setBlocks(parse(content));
     };
 
     editor.setInitialContent = (content) => {
-        const blocks = instantiateBlocksFromContent(content);
+        const blocks = parse(content)
         didChangeBlocks(blocks); // TODO: redesign this
-        return serialize(blocks);
+        return serialize(blocks); // It's used for tracking changes
     }
 
     editor.getContent = () => serialize(blocks);
