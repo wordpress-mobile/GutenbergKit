@@ -1,15 +1,8 @@
-import UIKit
 import SwiftUI
-import WebKit
-import Photos
-import PhotosUI
 
-public struct BlockInserter: View {
+public struct EditorBlockInserter: View {
     @State private var searchText = ""
     @State private var group = "Blocks"
-
-//    @State var selectedItems: [PhotosPickerItem] = []
-
 
     public var body: some View {
         _bodyBlocks

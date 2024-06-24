@@ -106,38 +106,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.module.resourceURL!)
     }
 
-    // MARK: - Actions
+    // MARK: - Public API
 
     // TODO: synchronize with the editor user-generated updates
     // TODO: convert to a property?
     public func setContent(_ content: String) {
         self.content = content
         _setContent(content)
-    }
-
-    private func setInitialContent(_ content: String, _ completion: (() -> Void)? = nil) async {
-        guard _isEditorRendered else { fatalError("called too early") }
-
-        let start = CFAbsoluteTimeGetCurrent()
-
-        // TODO: Find a faster and more reliable way to pass large strings to a web view
-        let escapedString = content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
-
-        // TODO: Check errors and notify the delegate when the editor is loaded and the content got displaed
-        do {
-            let serializedContent = try await webView.evaluateJavaScript("""
-        editor.setInitialContent(decodeURIComponent('\(escapedString)'));
-        """) as! String
-            self.initialContent = serializedContent
-            delegate?.editor(self, didDisplayInitialContent: serializedContent)
-            print("gutenbergkit-set-initial-content:", CFAbsoluteTimeGetCurrent() - start)
-
-            UIView.animate(withDuration: 0.2, delay: 0.1, options: [.allowUserInteraction]) {
-                self.webView.alpha = 1
-            }
-        } catch {
-            delegate?.editor(self, didEncounterCriticalError: error)
-        }
     }
 
     private func _setContent(_ content: String) {
@@ -154,19 +129,46 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         try await webView.evaluateJavaScript("editor.getContent();") as! String
     }
 
+    // MARK: - Internal
+
+    private func setInitialContent(_ content: String, _ completion: (() -> Void)? = nil) async {
+        guard _isEditorRendered else { fatalError("called too early") }
+
+        let start = CFAbsoluteTimeGetCurrent()
+
+        // TODO: Find a faster and more reliable way to pass large strings to a web view
+        let escapedString = content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+
+        // TODO: Check errors and notify the delegate when the editor is loaded and the content got displayed
+        do {
+            let serializedContent = try await webView.evaluateJavaScript("""
+        editor.setInitialContent(decodeURIComponent('\(escapedString)'));
+        """) as! String
+            self.initialContent = serializedContent
+            delegate?.editor(self, didDisplayInitialContent: serializedContent)
+            print("gutenbergkit-set-initial-content:", CFAbsoluteTimeGetCurrent() - start)
+
+            UIView.animate(withDuration: 0.2, delay: 0.1, options: [.allowUserInteraction]) {
+                self.webView.alpha = 1
+            }
+        } catch {
+            delegate?.editor(self, didEncounterCriticalError: error)
+        }
+    }
+
     // MARK: - GutenbergEditorControllerDelegate
 
-    fileprivate func controller(_ controller: GutenbergEditorController, didReceiveMessage message: JSEditorMessage) {
+    fileprivate func controller(_ controller: GutenbergEditorController, didReceiveMessage message: EditorJSMessage) {
         do {
             switch message.type {
             case .onEditorLoaded:
                 didLoadEditor()
             case .onBlocksChanged:
-                let body = try message.decode(JSEditorDidUpdateBlocksBody.self)
+                let body = try message.decode(EditorJSMessage.DidUpdateBlocksBody.self)
                 self.state.isEmpty = body.isEmpty
                 delegate?.editor(self, didUpdateContentWithState: state)
             case .onSheetVisibilityUpdated:
-                let body = try message.decode(JSEditorSheetVisibilityUpdatedBody.self)
+                let body = try message.decode(EditorJSMessage.SheetVisibilityUpdatedBody.self)
                 delegate?.editor(self, didUpdateSheetVisibility: body.isShown)
             }
         } catch {
@@ -190,7 +192,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
 @MainActor
 private protocol GutenbergEditorControllerDelegate: AnyObject {
-    func controller(_ controller: GutenbergEditorController, didReceiveMessage message: JSEditorMessage)
+    func controller(_ controller: GutenbergEditorController, didReceiveMessage message: EditorJSMessage)
 }
 
 /// Hiding the conformances, and breaking retain cycles.
@@ -214,7 +216,7 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     // MARK: - WKScriptMessageHandler
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard let message = JSEditorMessage(message: message) else {
+        guard let message = EditorJSMessage(message: message) else {
             return NSLog("Unsupported message: \(message.body)")
         }
         MainActor.assumeIsolated {
