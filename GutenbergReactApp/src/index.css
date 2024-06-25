@@ -96,3 +96,12 @@ body {
 	border-left: 0.5px solid #c8c7cc;
 	width: 320px;
 }
+
+/* The two selectors below hide the inline inserters shown inside the block list */
+.block-editor-block-list__layout .block-editor-inserter {
+	display: none;
+}
+
+.block-editor-block-list__block-side-inserter-popover {
+	display: none;
+}
