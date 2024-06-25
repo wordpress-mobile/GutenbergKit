@@ -21,31 +21,31 @@ const EditorToolbar = (props) => {
 
     return (
         <div className='gbkit-editor-toolbar'>
-            {addBlockButton}
+            <div className="gbkit-editor-toolbar_toolbar-group">
+                {addBlockButton}
 
-            <>
-                <button onClick={() => _setBlockInspectorShown(true)}>Settings</button>
+                <button onClick={() => _setBlockInspectorShown(true)} className="components-button gbkit-editor-toolbar_settings_icon "></button>
+            </div>
 
-                <Sheet
-                    isOpen={isBlockInspectorShown}
-                    onClose={() => _setBlockInspectorShown(false)}
-                    snapPoints={[window.innerHeight - 20, 400, 0]}
-                    initialSnap={1}
-                    tweenConfig={{ ease: 'anticipate', duration: 0.5 }}
-                >
-                    <Sheet.Container>
-                        <Sheet.Header />
-                        <Sheet.Content>
-                            <Sheet.Scroller>
-                                <div className="gbkit-sheet-container">
-                                    <BlockInspector />
-                                </div>
-                            </Sheet.Scroller>
-                        </Sheet.Content>
-                    </Sheet.Container>
-                    <Sheet.Backdrop />
-                </Sheet>
-            </>
+            <Sheet
+                isOpen={isBlockInspectorShown}
+                onClose={() => _setBlockInspectorShown(false)}
+                snapPoints={[window.innerHeight - 20, 400, 0]}
+                initialSnap={1}
+                tweenConfig={{ ease: 'anticipate', duration: 0.5 }}
+            >
+                <Sheet.Container>
+                    <Sheet.Header />
+                    <Sheet.Content>
+                        <Sheet.Scroller>
+                            <div className="gbkit-sheet-container">
+                                <BlockInspector />
+                            </div>
+                        </Sheet.Scroller>
+                    </Sheet.Content>
+                </Sheet.Container>
+                <Sheet.Backdrop />
+            </Sheet>
 
             <BlockToolbar />
         </div>
