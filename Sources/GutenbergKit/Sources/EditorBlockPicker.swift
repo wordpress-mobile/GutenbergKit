@@ -68,9 +68,9 @@ struct EditorBlockPicker: View {
     var _bodyBlocks: some View {
         VStack(spacing: 0) {
             VStack(spacing: 0) {
-                SearchView(text: $searchText)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 8)
+//                SearchView(text: $searchText)
+//                    .padding(.horizontal, 12)
+//                    .padding(.bottom, 8)
 //                 filters
 //                    .padding(.horizontal)
 //                    .padding(.bottom, 8)

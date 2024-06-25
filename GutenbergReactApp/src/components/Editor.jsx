@@ -11,7 +11,7 @@ import {
 } from '@wordpress/block-editor';
 import { Popover } from '@wordpress/components';
 import { registerCoreBlocks } from '@wordpress/block-library';
-import { parse, serialize } from '@wordpress/blocks';
+import { parse, serialize, registerBlockType } from '@wordpress/blocks';
 
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
@@ -57,7 +57,13 @@ function Editor() {
 
     editor.getContent = () => serialize(blocks);
 
-    editor.registerBlocks = (blockTypes) => setRegisteredBlocks(blockTypes);
+    editor.registerBlocks = (blockTypes) => {
+        // TODO: uncomment when the custom picker is ready (blocker: can't insert blocks)
+        // setRegisteredBlocks(blockTypes);
+        for (const blockType of blockTypes) {
+            registerBlockType(blockType.name, blockType);
+        }
+    }
 
     // Warning: `useEffect` and functions captured it in can't read the latest useState values,
     // and hence `useRef`.

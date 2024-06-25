@@ -76,19 +76,34 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         webView.alpha = 0
 
-        registerService()
+        // TODO: register it when editor is loaded
+//        service.$rawBlockTypesResponseData.compactMap({ $0 }).sink { [weak self] data in
+//            guard let self else { return }
+//            assert(Thread.isMainThread)
+//
+//        }.store(in: &cancellables)
+
         loadEditor()
     }
 
-    private func registerService() {
-        // TODO: pass block types
-        service.$blockTypes.filter({ !$0.isEmpty }).sink { [weak self] blockTypes in
-            guard let self else { return }
-            assert(Thread.isMainThread)
-            webView.evaluateJavaScript("""
-            editor.registerBlocks([{name:"paragraph"}]);
-            """)
-        }.store(in: &cancellables)
+    // TODO: move
+    private func registerBlockTypes(data: Data) async {
+        guard let string = String(data: data, encoding: .utf8),
+            let escapedString = string.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else {
+            assertionFailure("invalid block types")
+            return
+        }
+        do {
+            // TODO: simplify this
+            try await webView.evaluateJavaScript("""
+                const blockTypes = JSON.parse(decodeURIComponent('\(escapedString)'));
+                editor.registerBlocks(blockTypes);
+                "done";
+                """)
+        } catch {
+            NSLog("failed to register blocks \(error)")
+            // TOOD: relay to the client
+        }
     }
 
     private func loadEditor() {
@@ -187,7 +202,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let duration = CFAbsoluteTimeGetCurrent() - timestampInit
         print("gutenbergkit-measure_editor-first-render:", duration)
 
-        Task {
+        Task { @MainActor in
+            if let data = service.rawBlockTypesResponseData {
+                await registerBlockTypes(data: data)
+            }
             await setInitialContent(_initialRawContent)
         }
     }

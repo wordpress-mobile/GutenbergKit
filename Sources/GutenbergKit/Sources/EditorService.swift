@@ -9,6 +9,7 @@ public final class EditorService {
     private let client: EditorNetworkingClient
 
     @Published private(set) var blockTypes: [EditorBlockType] = []
+    @Published private(set) var rawBlockTypesResponseData: Data?
 
     private var refreshBlockTypesTask: Task<[EditorBlockType], Error>?
 
@@ -26,18 +27,15 @@ public final class EditorService {
             return try await task.value
         }
         let task = Task {
-            let blockTypes = try await self.send(EditorNetworkRequest(method: "GET", url: URL(string: "./wp-json/wp/v2/block-types")!), decoding: [EditorBlockType].self)
-            self.blockTypes = blockTypes
+            let request = EditorNetworkRequest(method: "GET", url: URL(string: "./wp-json/wp/v2/block-types")!)
+            let response = try await self.client.send(request)
+            try validate(response.urlResponse)
+            self.blockTypes = try await decode(response.data ?? Data())
+            self.rawBlockTypesResponseData = response.data ?? Data()
             return blockTypes
         }
         self.refreshBlockTypesTask = task
         return try await task.value
-    }
-
-    private func send<T>(_ request: EditorNetworkRequest, decoding: T.Type) async throws -> T where T: Decodable {
-        let response = try await client.send(request)
-        try validate(response.urlResponse)
-        return try await decode(response.data ?? Data())
     }
 }
 
