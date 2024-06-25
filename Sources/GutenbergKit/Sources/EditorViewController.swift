@@ -205,6 +205,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let duration = CFAbsoluteTimeGetCurrent() - timestampInit
         print("gutenbergkit-measure_editor-first-render:", duration)
 
+        // TODO: refactor (perform initial setup with a single JS call)
         Task { @MainActor in
             if let data = service.rawBlockTypesResponseData {
                 await registerBlockTypes(data: data)
