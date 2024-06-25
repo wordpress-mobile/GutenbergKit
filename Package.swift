@@ -9,13 +9,18 @@ let package = Package(
     products: [
         .library(name: "GutenbergKit", targets: ["GutenbergKit"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/envoy/Embassy.git", from: "4.0.0"),
+    ],
     targets: [
         .target(
             name: "GutenbergKit",
+            dependencies: [.product(name: "Embassy", package: "Embassy")],
             resources: [.copy("Gutenberg")]
         ),
         .testTarget(
             name: "GutenbergKitTests",
-            dependencies: ["GutenbergKit"]),
+            dependencies: ["GutenbergKit"]
+        )
     ]
 )

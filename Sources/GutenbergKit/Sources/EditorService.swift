@@ -7,6 +7,7 @@ import Foundation
 @MainActor
 public final class EditorService {
     private let client: EditorNetworkingClient
+    private let server: EditorLocalServer
 
     @Published private(set) var blockTypes: [EditorBlockType] = []
     @Published private(set) var rawBlockTypesResponseData: Data?
@@ -15,6 +16,11 @@ public final class EditorService {
 
     public init(client: EditorNetworkingClient) {
         self.client = client
+        self.server = EditorLocalServer()
+    }
+
+    func run() throws {
+        try server.run()
     }
 
     /// Prefetches the settings used by the editor.

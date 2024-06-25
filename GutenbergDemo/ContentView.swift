@@ -12,7 +12,10 @@ struct ContentView: View {
 
 struct EditorView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> EditorViewController {
-        EditorViewController(service: .init(client: Client()))
+        let viewController = EditorViewController(service: .init(client: Client()))
+        viewController.webView.isInspectable = true
+        return viewController
+
     }
 
     func updateUIViewController(_ uiViewController: EditorViewController, context: Context) {
