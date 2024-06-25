@@ -209,6 +209,28 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             await setInitialContent(_initialRawContent)
         }
     }
+
+    // MARK: - Warmup
+
+    /// Calls this at any moment before showing the actual editor. The warmup
+    /// shaves a couple of hundred milliseconds off the first load.
+    public static func warmup() {
+        struct MockClient: EditorNetworkingClient {
+            func send(_ request: EditorNetworkRequest) async throws -> EditorNetworkResponse {
+                throw URLError(.unknown) // Unsupported
+            }
+        }
+        let editorViewController = EditorViewController(
+            content: "",
+            service: EditorService(client: MockClient())
+        )
+        _ = editorViewController.view // Trigger viewDidLoad
+
+        // Retain for 5 seconds and let it prefetch stuff
+        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(5)) {
+            _ = editorViewController
+        }
+    }
 }
 
 @MainActor
