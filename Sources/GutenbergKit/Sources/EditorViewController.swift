@@ -47,6 +47,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // Set-up communications with the editor.
         config.userContentController.add(controller, name: "editorDelegate")
 
+        // This is important so they user can't select anything but text across blocks.
+        config.selectionGranularity = .character
+
         self.webView = WKWebView(frame: .zero, configuration: config)
 
         super.init(nibName: nil, bundle: nil)
