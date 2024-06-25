@@ -83,7 +83,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 //
 //        }.store(in: &cancellables)
 
-        loadEditor()
+        do {
+            try loadEditor()
+        } catch {
+            delegate?.editor(self, didEncounterCriticalError: error)
+        }
     }
 
     // TODO: move
@@ -106,9 +110,15 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
-    private func loadEditor() {
-        let reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
-        webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+    private func loadEditor() throws {
+        try service.run()
+
+        // FIXME: for some reason it adds 2 seconds delay
+        let localAppURL = URL(string: "http://localhost:\(EditorConstants.port)/\(EditorConstants.gutenbergLocalPath)/index.html")!
+        webView.load(URLRequest(url: localAppURL))
+
+//        let reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
+//        webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.module.resourceURL!)
     }
 
     // MARK: - Public API
