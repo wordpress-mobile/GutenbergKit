@@ -60,9 +60,11 @@ function Editor() {
     editor.registerBlocks = (blockTypes) => {
         // TODO: uncomment when the custom picker is ready (blocker: can't insert blocks)
         // setRegisteredBlocks(blockTypes);
-        for (const blockType of blockTypes) {
-            registerBlockType(blockType.name, blockType);
-        }
+
+        // TODO: uncomment to enable custom block registration
+        // for (const blockType of blockTypes) {
+        //     registerBlockType(blockType.name, blockType);
+        // }
     }
 
     // Warning: `useEffect` and functions captured it in can't read the latest useState values,
