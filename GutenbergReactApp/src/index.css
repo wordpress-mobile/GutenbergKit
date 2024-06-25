@@ -39,6 +39,11 @@ body {
 	display: none;
 }
 
+/* TODO: re-enable when we are ready to support Patterns and Media */
+.block-editor-inserter__tablist-and-close-button {
+	display: none !important;
+}
+
 .lock-editor-block-toolbar {
 	overflow: hidden !important; /* Disable scrolling – scroll the wrapper div */
 }
