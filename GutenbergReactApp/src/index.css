@@ -105,3 +105,10 @@ body {
 .block-editor-block-list__block-side-inserter-popover {
 	display: none;
 }
+
+/* FIXME: this is a workaround to ensure that the images don't grow beyond the screen bounds.
+There has to be a setting or any other better way of doing that.
+*/
+.wp-block-image div {
+	width: auto !important;
+}
