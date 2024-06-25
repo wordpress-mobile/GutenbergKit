@@ -1,4 +1,4 @@
-import { BlockInspector, BlockToolbar, Inserter } from '@wordpress/block-editor/build/components'
+import { BlockInspector, BlockToolbar, Inserter } from '@wordpress/block-editor';
 import { useState } from 'react';
 import { Sheet } from 'react-modal-sheet';
 import { postMessage } from '../misc/Helpers';
