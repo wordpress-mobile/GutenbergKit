@@ -16,7 +16,7 @@ const EditorToolbar = (props) => {
         // TODO: use the native inserter
         addBlockButton = <Inserter />;
     } else {
-        addBlockButton = <button onClick={() => postMessage("showBlockInserter")}>+</button>
+        addBlockButton = <button onClick={() => postMessage("showBlockPicker")}>+</button>
     }
 
     return (

@@ -1,5 +1,7 @@
 import UIKit
 import WebKit
+import SwiftUI
+import Combine
 
 @MainActor
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
@@ -24,6 +26,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// due to the various formatting choices Gutenberg and WordPress make when
     /// saving the posts.
     public private(set) var initialContent: String?
+
+    private var cancellables: [AnyCancellable] = []
 
     /// Initalizes the editor with the initial content (Gutenberg).
     public init(content: String = "", service: EditorService) {
@@ -72,7 +76,19 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         webView.alpha = 0
 
+        registerService()
         loadEditor()
+    }
+
+    private func registerService() {
+        // TODO: pass block types
+        service.$blockTypes.filter({ !$0.isEmpty }).sink { [weak self] blockTypes in
+            guard let self else { return }
+            assert(Thread.isMainThread)
+            webView.evaluateJavaScript("""
+            editor.registerBlocks([{name:"paragraph"}]);
+            """)
+        }.store(in: &cancellables)
     }
 
     private func loadEditor() {
@@ -104,9 +120,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     // MARK: - Internal (Block Inserter)
 
-    // TODO: wire with JS
+    // TODO: wire with JS and pass blocks
     private func showBlockInserter() {
-
+        let viewModel = EditorBlockPickerViewModel(blockTypes: service.blockTypes)
+        let view = NavigationView {
+            EditorBlockPicker(viewModel: viewModel)
+        }
+        let host = UIHostingController(rootView: view)
+        present(host, animated: true)
     }
 
     // MARK: - Internal (Initial Content)
@@ -150,6 +171,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             case .onSheetVisibilityUpdated:
                 let body = try message.decode(EditorJSMessage.SheetVisibilityUpdatedBody.self)
                 delegate?.editor(self, didUpdateSheetVisibility: body.isShown)
+            case .showBlockPicker:
+                showBlockInserter()
             }
         } catch {
             fatalError("failed to decode message: \(error)")

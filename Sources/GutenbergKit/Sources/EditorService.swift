@@ -4,13 +4,13 @@ import Foundation
 ///
 /// - note: The service can be instantiated and warmed-up before the editor
 /// is presented.
-public actor EditorService {
+@MainActor
+public final class EditorService {
     private let client: EditorNetworkingClient
 
-    // TODO: add type to represent block types
-    var blockTypes: [GutenbergBlockType] = []
+    @Published private(set) var blockTypes: [EditorBlockType] = []
 
-    private var refreshBlockTypesTask: Task<[GutenbergBlockType], Error>?
+    private var refreshBlockTypesTask: Task<[EditorBlockType], Error>?
 
     public init(client: EditorNetworkingClient) {
         self.client = client
@@ -21,12 +21,12 @@ public actor EditorService {
         _ = try? await refreshBlockTypes()
     }
 
-    func refreshBlockTypes() async throws -> [GutenbergBlockType] {
+    func refreshBlockTypes() async throws -> [EditorBlockType] {
         if let task = refreshBlockTypesTask {
             return try await task.value
         }
         let task = Task {
-            let blockTypes = try await self.send(EditorNetworkRequest(method: "GET", url: URL(string: "./wp-json/wp/v2/block-types")!), decoding: [GutenbergBlockType].self)
+            let blockTypes = try await self.send(EditorNetworkRequest(method: "GET", url: URL(string: "./wp-json/wp/v2/block-types")!), decoding: [EditorBlockType].self)
             self.blockTypes = blockTypes
             return blockTypes
         }
@@ -39,15 +39,6 @@ public actor EditorService {
         try validate(response.urlResponse)
         return try await decode(response.data ?? Data())
     }
-}
-
-// TODO: move (private OK)?
-struct GutenbergBlockType: Decodable {
-    let name: String
-    let title: String?
-    let description: String?
-    let category: String?
-    let keywords: [String]?
 }
 
 // MARK: - Helpers
