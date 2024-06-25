@@ -1,13 +1,15 @@
 import { BlockInspector, BlockToolbar, Inserter } from '@wordpress/block-editor';
+import { Popover } from '@wordpress/components';
 import { useState } from 'react';
-import { Sheet } from 'react-modal-sheet';
+// import { Sheet } from 'react-modal-sheet';
 import { postMessage } from '../misc/Helpers';
 
 const EditorToolbar = (props) => {
     const [isBlockInspectorShown, setBlockInspectorShown] = useState(false);
 
     function _setBlockInspectorShown(isShown) {
-        postMessage("onSheetVisibilityUpdated", { isShown: isShown });
+        // FIXME: this is the iteration that was using Sheet from 'react-modal-sheet'
+        // postMessage("onSheetVisibilityUpdated", { isShown: isShown });
         setBlockInspectorShown(isShown);
     }
 
@@ -27,7 +29,17 @@ const EditorToolbar = (props) => {
                 <button onClick={() => _setBlockInspectorShown(true)} className="components-button gbkit-editor-toolbar_settings_icon "></button>
             </div>
 
-            <Sheet
+            {isBlockInspectorShown && <Popover
+                expandOnMobile={true}
+                focusOnMount={false}
+                headerTitle="Block Settings"
+                onClose={() => { _setBlockInspectorShown(false) }}
+            >
+                <BlockInspector />
+            </Popover>}
+
+            {/* // FIXME: this is the iteration that was using Sheet from 'react-modal-sheet' */}
+            {/* <Sheet
                 isOpen={isBlockInspectorShown}
                 onClose={() => _setBlockInspectorShown(false)}
                 snapPoints={[window.innerHeight - 20, 400, 0]}
@@ -38,14 +50,14 @@ const EditorToolbar = (props) => {
                     <Sheet.Header />
                     <Sheet.Content>
                         <Sheet.Scroller>
-                            <div className="gbkit-sheet-container">
+                            
                                 <BlockInspector />
                             </div>
                         </Sheet.Scroller>
                     </Sheet.Content>
                 </Sheet.Container>
                 <Sheet.Backdrop />
-            </Sheet>
+            </Sheet> */}
 
             <BlockToolbar />
         </div>
