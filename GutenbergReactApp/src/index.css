@@ -4,7 +4,7 @@
 
 body {
 	margin: 0;
-	padding: 16px;
+	padding: 17px;
 	padding-top: 8px;
 	padding-bottom: 46.5px;
 	font-family: -apple-system;
@@ -46,7 +46,7 @@ body {
 	display: none !important;
 }
 
-.lock-editor-block-toolbar {
+.block-editor-block-toolbar {
 	overflow: hidden !important;
 	/* Disable scrolling – scroll the wrapper div */
 }
@@ -146,5 +146,38 @@ There has to be a setting or any other better way of doing that.
 
 .block-editor-block-types-list__item-title {
 	font-size: 17px;
+}
 
+/* Misc */
+
+.components-button {
+	border-radius: 8px;
+}
+
+.components-panel__body-title {
+	font-size: 15px;
+}
+
+.components-button {
+	font-size: 17px;
+}
+
+.block-editor-block-card__title {
+	font-size: 15px !important;
+}
+
+.components-toggle-control__label {
+	font-size: 17px;
+}
+
+.components-popover__content {
+	border-radius: 8px !important;
+}
+
+.components-menu-item__item span {
+	font-size: 17px !important;
+}
+
+.components-base-control__label {
+	font-size: 13px !important;
 }
