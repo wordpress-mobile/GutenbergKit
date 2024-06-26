@@ -33,6 +33,8 @@ body {
 	left: 0;
 	z-index: 999;
 	overflow-x: scroll;
+
+	transition: position 1.2s linear;
 }
 
 .gbkit-editor-toolbar::-webkit-scrollbar {
