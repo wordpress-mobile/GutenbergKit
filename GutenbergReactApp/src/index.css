@@ -258,14 +258,27 @@ There has to be a setting or any other better way of doing that.
 }
 
 .components-placeholder {
-	border-radius: 8px;
+	border-radius: 8px !important;
 }
 
 .components-placeholder__label {
-	font-size: 17px;
+	font-size: 17px !important;
 }
 
 .components-placeholder__input {
 	border-radius: 6px !important;
 	font-size: 17px !important;
+}
+
+.components-text-control__input {
+	border-radius: 6px !important;
+}
+
+.components-base-control__label {
+	color: gray;
+	font-size: 13px !important;
+}
+
+.blocks-table__placeholder-form {
+	gap: 16px !important;
 }
