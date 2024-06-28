@@ -122,7 +122,24 @@ There has to be a setting or any other better way of doing that.
 	width: auto !important;
 }
 
-/* Inserter (Mobile Desigh) */
+/* Inserter (Mobile Design) */
+
+.block-editor-inserter__menu {
+	/* Fixes vertical scrolling */
+	overflow-y: auto !important;
+}
+
+.block-editor-inserter__popover .block-editor-inserter__menu {
+	/* Fixes margins; the editor uses negative ones here */
+	margin-bottom: auto !important;
+	margin-top: auto !important;
+}
+
+.components-dropdown__content .components-popover__content {
+	padding: 0px !important;
+	padding-left: 8px !important;
+	padding-right: 8px !important;
+}
 
 .components-input-base {
 	border-radius: 8px !important;

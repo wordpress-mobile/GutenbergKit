@@ -22,7 +22,7 @@ const EditorToolbar = (props) => {
     }
 
     return (
-        <div className='gbkit-editor-toolbar'>
+        <div className='gbkit gbkit-editor-toolbar'>
             <div className="gbkit-editor-toolbar_toolbar-group">
                 {addBlockButton}
 
