@@ -154,10 +154,58 @@ There has to be a setting or any other better way of doing that.
 	font-size: 17px;
 }
 
-/* Misc */
+/* Settings and more */
+
+.block-editor-block-card__title {
+	font-size: 17px;
+	font-weight: 600;
+}
+
+.block-editor-block-card__description {
+	font-size: 15px !important;
+	margin-top: -4px !important;
+}
+
+.block-editor-block-inspector h2 {
+	font-size: 17px !important;
+	font-weight: 600 !important;
+}
+
+.block-editor-block-inspector .block-editor-block-icon {
+	padding-top: 4px;
+	/* padding-right: 0px; */
+	margin-right: 8px;
+}
+
+.components-base-control__help {
+	font-size: 13px !important;
+}
+
+.components-menu-group__label {
+	font-size: 13px;
+}
+
+.components-accessible-toolbar .components-button.is-pressed::before, .components-toolbar .components-button.is-pressed::before {
+	background-color: lightgray;
+	border-radius: 8px;
+}
+
+.components-button.is-pressed {
+	color: black !important;
+}
+
+/* More */
+
+.components-dropdown-menu__menu-item  {
+	min-height: 40px;
+}
 
 .block-editor-default-block-appender__content {
 	color: gray;
+}
+
+.components-text {
+	font-size: 17px;
 }
 
 .components-button {
