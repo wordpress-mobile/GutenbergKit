@@ -256,3 +256,16 @@ There has to be a setting or any other better way of doing that.
 .components-base-control__label {
 	font-size: 13px !important;
 }
+
+.components-placeholder {
+	border-radius: 8px;
+}
+
+.components-placeholder__label {
+	font-size: 17px;
+}
+
+.components-placeholder__input {
+	border-radius: 6px !important;
+	font-size: 17px !important;
+}
