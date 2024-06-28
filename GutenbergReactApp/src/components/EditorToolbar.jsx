@@ -31,7 +31,6 @@ const EditorToolbar = (props) => {
 
             {isBlockInspectorShown && <Popover
                 expandOnMobile={true}
-                // focusOnMount={false}
                 focusOnMount="container"
                 headerTitle="Block Settings"
                 onClose={() => { _setBlockInspectorShown(false) }}
