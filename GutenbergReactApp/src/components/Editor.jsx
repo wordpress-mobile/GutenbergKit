@@ -76,7 +76,8 @@ function Editor() {
     }, []);
 
     const settings = {
-        hasFixedToolbar: true
+        hasFixedToolbar: true,
+        bodyPlaceholder: "Start writing..."
     };
 
     return (

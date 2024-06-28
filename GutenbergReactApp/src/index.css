@@ -150,6 +150,10 @@ There has to be a setting or any other better way of doing that.
 
 /* Misc */
 
+.block-editor-default-block-appender__content {
+	color: gray;
+}
+
 .components-button {
 	border-radius: 8px;
 }
