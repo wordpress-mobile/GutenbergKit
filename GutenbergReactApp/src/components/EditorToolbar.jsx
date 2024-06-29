@@ -7,12 +7,6 @@ import { postMessage } from '../misc/Helpers';
 const EditorToolbar = (props) => {
     const [isBlockInspectorShown, setBlockInspectorShown] = useState(false);
 
-    function _setBlockInspectorShown(isShown) {
-        // FIXME: this is the iteration that was using Sheet from 'react-modal-sheet'
-        // postMessage("onSheetVisibilityUpdated", { isShown: isShown });
-        setBlockInspectorShown(isShown);
-    }
-
     let addBlockButton;
     if (props.registeredBlocks.length === 0) {
         // TODO: use the native inserter
@@ -41,7 +35,7 @@ const EditorToolbar = (props) => {
             {/* // FIXME: this is the iteration that was using Sheet from 'react-modal-sheet' */}
             {/* <Sheet
                 isOpen={isBlockInspectorShown}
-                onClose={() => _setBlockInspectorShown(false)}
+                onClose={() => setBlockInspectorShown(false)}
                 snapPoints={[window.innerHeight - 20, 400, 0]}
                 initialSnap={1}
                 tweenConfig={{ ease: 'anticipate', duration: 0.5 }}

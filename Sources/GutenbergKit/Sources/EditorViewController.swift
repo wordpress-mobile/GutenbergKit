@@ -212,9 +212,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 let body = try message.decode(EditorJSMessage.DidUpdateBlocksBody.self)
                 self.state.isEmpty = body.isEmpty
                 delegate?.editor(self, didUpdateContentWithState: state)
-            case .onSheetVisibilityUpdated:
-                let body = try message.decode(EditorJSMessage.SheetVisibilityUpdatedBody.self)
-                delegate?.editor(self, didUpdateSheetVisibility: body.isShown)
             case .showBlockPicker:
                 showBlockInserter()
             }

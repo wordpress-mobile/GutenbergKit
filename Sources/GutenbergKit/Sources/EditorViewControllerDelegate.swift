@@ -20,11 +20,6 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// - warning: This is currently also called for the initial render, which
     /// is probably not how it should be in the production design.
     func editor(_ viewController: EditorViewController, didUpdateContentWithState state: EditorState)
-
-    /// Gets called when one of the editor sheets is presented.
-    ///
-    /// - warning: Smoke and mirrors to make it look like a native sheet.
-    func editor(_ viewController: EditorViewController, didUpdateSheetVisibility isShown: Bool)
 }
 
 public struct EditorState {

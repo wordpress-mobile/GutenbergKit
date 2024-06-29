@@ -27,17 +27,11 @@ struct EditorJSMessage {
         case onEditorLoaded
         /// The editor content changed.
         case onBlocksChanged
-        /// The editor shown or hidden a modal sheet.
-        case onSheetVisibilityUpdated
         /// The user tapped the inserter button.
         case showBlockPicker
     }
 
     struct DidUpdateBlocksBody: Decodable {
         let isEmpty: Bool
-    }
-
-    struct SheetVisibilityUpdatedBody: Decodable {
-        let isShown: Bool
     }
 }
