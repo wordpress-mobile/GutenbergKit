@@ -108,7 +108,6 @@ function Editor() {
                     </div>
                 </BlockTools>
                 <Popover.Slot />
-                <button onClick={() => setCodeEditorEnabled(true)}>Code</button>
             </BlockEditorProvider>
         </div>
     );
