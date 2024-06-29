@@ -126,14 +126,40 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         guard _isEditorRendered else { return }
 
         let escapedString = content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
-        webView.evaluateJavaScript("""
-        editor.setContent(decodeURIComponent('\(escapedString)'));
-        """)
+        evaluate("editor.setContent(decodeURIComponent('\(escapedString)'));", isCritical: true)
     }
 
     /// Returns the current editor content.
     public func getContent() async throws -> String {
         try await webView.evaluateJavaScript("editor.getContent();") as! String
+    }
+
+    /// Enables code editor.
+    public var isCodeEditorEnabled: Bool = false {
+        didSet {
+            guard isCodeEditorEnabled != oldValue else { return }
+            evaluate("editor.setCodeEditorEnabled(\(isCodeEditorEnabled ? "true" : "false"));")
+        }
+    }
+
+    // MARK: - Internal (JavaScript)
+
+    private func evaluate(_ javascript: String, isCritical: Bool = false) {
+        webView.evaluateJavaScript(javascript) { [weak self] _, error in
+            guard let self, let error else { return }
+            self.handleError(error, isCritical: isCritical)
+        }
+    }
+
+    private func handleError(_ error: Error, isCritical: Bool) {
+        // These are non-critical errors but they might prevent certain features from working
+        let alert = UIAlertController(title: error.localizedDescription, message: "\(error)", preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
+            if isCritical {
+                self.delegate?.editor(self, didEncounterCriticalError: error)
+            }
+        })
+        present(alert, animated: true)
     }
 
     // MARK: - Internal (Block Inserter)
