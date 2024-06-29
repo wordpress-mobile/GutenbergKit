@@ -60,6 +60,7 @@ const EditorToolbar = (props) => {
             </Sheet> */}
 
             <BlockToolbar />
+
         </div>
     )
 }

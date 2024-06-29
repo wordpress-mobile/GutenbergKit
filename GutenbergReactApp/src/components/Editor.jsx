@@ -29,6 +29,7 @@ import '@wordpress/format-library/build-style/style.css';
 // Internal imports
 import EditorToolbar from './EditorToolbar';
 import { postMessage } from '../misc/Helpers';
+import CodeEditor from './CodeEditor';
 
 // Current editor (assumes can be only one instance).
 let editor = {};
@@ -36,6 +37,7 @@ let editor = {};
 function Editor() {
     const [blocks, setBlocks] = useState([]);
     const [registeredBlocks, setRegisteredBlocks] = useState([]);
+    const [isCodeEditorEnabled, setCodeEditorEnabled] = useState(false);
 
     function didChangeBlocks(blocks) {
         setBlocks(blocks);
@@ -56,6 +58,8 @@ function Editor() {
     }
 
     editor.getContent = () => serialize(blocks);
+
+    editor.setCodeEditorEnabled = (enabled) => setCodeEditorEnabled(enabled);
 
     editor.registerBlocks = (blockTypes) => {
         // TODO: uncomment when the custom picker is ready (blocker: can't insert blocks)
@@ -80,26 +84,33 @@ function Editor() {
         bodyPlaceholder: "Start writing..."
     };
 
+    if (isCodeEditorEnabled) {
+        return <CodeEditor value={serialize(blocks)} />;
+    }
+
     return (
-        <BlockEditorProvider
-            value={blocks}
-            onInput={didChangeBlocks}
-            onChange={didChangeBlocks}
-            settings={settings}
-        >
-            <BlockTools>
-                <div className="editor-styles-wrapper">
-                    <BlockEditorKeyboardShortcuts.Register />
-                    <WritingFlow>
-                        <ObserveTyping>
-                            <BlockList />
-                            <EditorToolbar registeredBlocks={registeredBlocks}/> { /* not sure if optimal placement */}
-                        </ObserveTyping>
-                    </WritingFlow>
-                </div>
-            </BlockTools>
-            <Popover.Slot />
-        </BlockEditorProvider>
+        <div className="gbkit-block-editor-provider">
+            <BlockEditorProvider
+                value={blocks}
+                onInput={didChangeBlocks}
+                onChange={didChangeBlocks}
+                settings={settings}
+            >
+                <BlockTools>
+                    <div className="editor-styles-wrapper">
+                        <BlockEditorKeyboardShortcuts.Register />
+                        <WritingFlow>
+                            <ObserveTyping>
+                                <BlockList />
+                                <EditorToolbar registeredBlocks={registeredBlocks} /> { /* not sure if optimal placement */}
+                            </ObserveTyping>
+                        </WritingFlow>
+                    </div>
+                </BlockTools>
+                <Popover.Slot />
+                <button onClick={() => setCodeEditorEnabled(true)}>Code</button>
+            </BlockEditorProvider>
+        </div>
     );
 }
 
