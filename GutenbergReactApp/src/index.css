@@ -139,7 +139,7 @@ There has to be a setting or any other better way of doing that.
 	margin-top: auto !important;
 }
 
-.components-dropdown__content .components-popover__content {
+.block-editor-inserter__popover .components-dropdown__content .components-popover__content {
 	padding: 0px !important;
 	padding-left: 8px !important;
 	padding-right: 8px !important;
