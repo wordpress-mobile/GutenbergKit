@@ -28,7 +28,7 @@ import '@wordpress/format-library/build-style/style.css';
 
 // Internal imports
 import EditorToolbar from './EditorToolbar';
-import { postMessage } from '../misc/Helpers';
+import { postMessage, removeHoverEffects } from '../misc/Helpers';
 import CodeEditor from './CodeEditor';
 
 // Current editor (assumes can be only one instance).
@@ -77,6 +77,10 @@ function Editor() {
         window.editor = editor;
         registerCoreBlocks();
         postMessage("onEditorLoaded");
+
+        // FIXME: this was an attempt to fix an existing issue in Gutenberg , but it does it only partially
+        // https://a8c.slack.com/archives/D0740HYKLUX/p1719841410651649
+        removeHoverEffects();
     }, []);
 
     const settings = {

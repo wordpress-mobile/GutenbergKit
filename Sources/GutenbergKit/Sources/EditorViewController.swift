@@ -89,6 +89,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         loadEditor()
     }
 
+
+
     // TODO: move
     private func registerBlockTypes(data: Data) async {
         guard let string = String(data: data, encoding: .utf8),
