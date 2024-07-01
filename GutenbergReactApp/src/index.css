@@ -230,13 +230,12 @@ There has to be a setting or any other better way of doing that.
 }
 
 .components-accessible-toolbar .components-button.is-pressed::before, .components-toolbar .components-button.is-pressed::before {
-	background-color: lightgray;
 	border-radius: 8px;
 }
 
-.components-button.is-pressed {
+/* .components-button.is-pressed {
 	color: black !important;
-}
+} */
 
 /* More */
 
