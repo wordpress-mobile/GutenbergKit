@@ -20,14 +20,14 @@ const EditorToolbar = (props) => {
             <div className="gbkit-editor-toolbar_toolbar-group">
                 {addBlockButton}
 
-                <button onClick={() => _setBlockInspectorShown(true)} className="components-button gbkit-editor-toolbar_settings_icon "></button>
+                <button onClick={() => setBlockInspectorShown(true)} className="components-button gbkit-editor-toolbar_settings_icon "></button>
             </div>
 
             {isBlockInspectorShown && <Popover
                 expandOnMobile={true}
                 focusOnMount="container"
                 headerTitle="Block Settings"
-                onClose={() => { _setBlockInspectorShown(false) }}
+                onClose={() => { setBlockInspectorShown(false) }}
             >
                 <BlockInspector />
             </Popover>}
