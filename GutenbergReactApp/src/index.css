@@ -15,8 +15,31 @@ body {
 	padding-bottom: 46.5px;
 }
 
+/* Theme (for no-theme design) */
+
 .editor-styles-wrapper {
 	overflow-x: hidden;
+}
+
+.editor-styles-wrapper p {
+	margin-block-start: 15px;
+	margin-block-end: 15px;
+	font-size: 17px;
+}
+
+.editor-styles-wrapper h2 {
+	margin-block-start: 30px;
+	margin-block-end: 10px;
+}
+
+.editor-styles-wrapper h3, h4 {
+	margin-block-start: 20px;
+	margin-block-end: 10px;
+}
+
+.editor-styles-wrapper li {
+	font-size: 17px;
+	margin-bottom: 5px;
 }
 
 .rich-text:focus {
