@@ -29,7 +29,7 @@ import '@wordpress/format-library/build-style/style.css';
 // Internal imports
 import EditorToolbar from './EditorToolbar';
 import { postMessage } from '../misc/Helpers';
-import CodeEditor from './CodeEditor';
+// import CodeEditor from './CodeEditor';
 
 // Current editor (assumes can be only one instance).
 let editor = {};
@@ -84,32 +84,30 @@ function Editor() {
         bodyPlaceholder: "Start writing..."
     };
 
-    if (isCodeEditorEnabled) {
-        return <CodeEditor value={serialize(blocks)} />;
-    }
+    // if (isCodeEditorEnabled) {
+    //     return <CodeEditor value={serialize(blocks)} />;
+    // }
 
     return (
-        <div className="gbkit-block-editor-provider">
-<BlockEditorProvider
-    value={blocks}
-    onInput={didChangeBlocks}
-    onChange={didChangeBlocks}
-    settings={settings}
->
-                <BlockTools>
-                    <div className="editor-styles-wrapper">
-                        <BlockEditorKeyboardShortcuts.Register />
-                        <WritingFlow>
-                            <ObserveTyping>
-                                <BlockList />
-                                <EditorToolbar registeredBlocks={registeredBlocks} /> { /* not sure if optimal placement */}
-                            </ObserveTyping>
-                        </WritingFlow>
-                    </div>
-                </BlockTools>
-                <Popover.Slot />
-            </BlockEditorProvider>
-        </div>
+        <BlockEditorProvider
+            value={blocks}
+            onInput={didChangeBlocks}
+            onChange={didChangeBlocks}
+            settings={settings}
+        >
+            <BlockTools>
+                <div className="editor-styles-wrapper">
+                    <BlockEditorKeyboardShortcuts.Register />
+                    <WritingFlow>
+                        <ObserveTyping>
+                            <BlockList />
+                            <EditorToolbar registeredBlocks={registeredBlocks} /> { /* not sure if optimal placement */}
+                        </ObserveTyping>
+                    </WritingFlow>
+                </div>
+            </BlockTools>
+            <Popover.Slot />
+        </BlockEditorProvider>
     );
 }
 

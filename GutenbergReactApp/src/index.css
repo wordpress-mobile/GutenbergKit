@@ -4,15 +4,11 @@
 
 body {
 	margin: 0;
-	padding: 0;
+	padding: 16px;
+	padding-top: 8px;
+	padding-bottom: 46.5px;
 	font-family: -apple-system;
 	line-height: 1.55;
-}
-
-.gbkit-block-editor-provider {
-	padding: 16px;
-	padding-top: 0px;
-	padding-bottom: 46.5px;
 }
 
 /* Theme (for no-theme design) */
@@ -307,4 +303,9 @@ There has to be a setting or any other better way of doing that.
 
 .blocks-table__placeholder-form {
 	gap: 16px !important;
+}
+
+/* FIXME: workaround for popover layout – should be fixed differentyl */
+.components-popover.block-editor-block-switcher__popover .components-popover__content  {
+	min-width: 274px !important;
 }
