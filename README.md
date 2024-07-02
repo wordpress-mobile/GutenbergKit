@@ -48,3 +48,5 @@ To build the React app for production and incorporate the changes in the `Gutenb
 ```
 ./Scripts/build.sh
 ```
+
+Once it's done, the Swift package is ready to be published.
