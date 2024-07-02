@@ -89,8 +89,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         loadEditor()
     }
 
-
-
     // TODO: move
     private func registerBlockTypes(data: Data) async {
         guard let string = String(data: data, encoding: .utf8),
@@ -112,8 +110,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func loadEditor() {
-        let reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
-        webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+        if let editorURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
+            webView.load(URLRequest(url: editorURL))
+        } else {
+            let reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
+            webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+        }
     }
 
     // MARK: - Public API
