@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0C15CEF32C33981400FFB5B0 /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C15CEF22C33981400FFB5B0 /* EditorView.swift */; };
 		0CF6E0452BEFF59600EDEE8A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0CF6E0402BEFF59600EDEE8A /* Assets.xcassets */; };
 		0CF6E0462BEFF59600EDEE8A /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0CF6E0422BEFF59600EDEE8A /* Preview Assets.xcassets */; };
 		0CF6E0472BEFF59600EDEE8A /* GutenbergApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CF6E0432BEFF59600EDEE8A /* GutenbergApp.swift */; };
@@ -15,6 +16,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0C15CEF22C33981400FFB5B0 /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
 		0C4F598B2BEFF4970028BD96 /* Gutenberg.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Gutenberg.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0C61AA062C25109600FA7E46 /*  */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = ""; sourceTree = "<group>"; };
 		0CF6E0402BEFF59600EDEE8A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -59,6 +61,7 @@
 				0CF6E0402BEFF59600EDEE8A /* Assets.xcassets */,
 				0CF6E0412BEFF59600EDEE8A /* Preview Content */,
 				0CF6E0432BEFF59600EDEE8A /* GutenbergApp.swift */,
+				0C15CEF22C33981400FFB5B0 /* EditorView.swift */,
 				0CF6E0442BEFF59600EDEE8A /* ContentView.swift */,
 			);
 			path = GutenbergDemo;
@@ -152,6 +155,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0C15CEF32C33981400FFB5B0 /* EditorView.swift in Sources */,
 				0CF6E0482BEFF59600EDEE8A /* ContentView.swift in Sources */,
 				0CF6E0472BEFF59600EDEE8A /* GutenbergApp.swift in Sources */,
 			);
