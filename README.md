@@ -1,4 +1,8 @@
-A proof of concept for a Gutenberg editor as a React app embedded in a native iOS app.
+# GutenbergKit
+
+A proof of concept Gutenberg editor for native iOS apps built using web technologies.
+
+<img width="447" alt="Screenshot 2024-07-01 at 10 30 11 AM" src="https://github.com/kean/GutenbergKit/assets/1567433/4d9b2fcd-30fa-46ca-895d-07e0848143b1">
 
 ## Development
 
