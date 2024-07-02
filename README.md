@@ -12,7 +12,7 @@ The ReactJS app is embedded in the native GutenbergKit module.
 
 To launch the app in the browser, run:
 
-```
+```bash
 cd ./ReactApp
 npm install // On first use
 npm run dev
@@ -32,7 +32,7 @@ By default, the demo app uses a production build of the React app included in th
 
 If you are using SwiftUI previews, make sure to point them to the localhost programatically:
 
-```
+```swift
 #Preview {
     NavigationStack {
 //        EditorView()
