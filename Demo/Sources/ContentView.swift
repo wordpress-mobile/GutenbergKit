@@ -6,7 +6,6 @@ struct ContentView: View {
         NavigationView {
             EditorView()
         }
-        .navigationTitle("Editor Demo")
     }
 }
 

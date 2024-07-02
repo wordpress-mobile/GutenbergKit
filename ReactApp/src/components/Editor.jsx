@@ -71,8 +71,6 @@ function Editor() {
         // }
     }
 
-    // Warning: `useEffect` and functions captured it in can't read the latest useState values,
-    // and hence `useRef`.
     useEffect(() => {
         window.editor = editor;
         registerCoreBlocks();
@@ -81,7 +79,7 @@ function Editor() {
 
     const settings = {
         hasFixedToolbar: true,
-        bodyPlaceholder: "Start writing..."
+        bodyPlaceholder: "Hello!"
     };
 
     // if (isCodeEditorEnabled) {
