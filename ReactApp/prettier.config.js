@@ -1,1 +1,1 @@
-export { default } from "@wordpress/prettier-config";
+export { default } from '@wordpress/prettier-config';
