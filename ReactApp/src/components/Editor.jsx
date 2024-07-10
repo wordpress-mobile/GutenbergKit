@@ -138,7 +138,7 @@ function Editor({ post = POST_MOCK }) {
 				<PostTitle ref={titleRef} />
 			</div>
 			<BlockTools>
-				<div className="editor-styles-wrapper">
+				<div id="canvas" className="editor-styles-wrapper">
 					<BlockEditorKeyboardShortcuts.Register />
 					<WritingFlow>
 						<ObserveTyping>

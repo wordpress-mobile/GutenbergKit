@@ -24,25 +24,33 @@ const EditorToolbar = (props) => {
 		);
 	}
 
+	const toggleBlockSettings = () => {
+		setBlockInspectorShown((prev) => !prev);
+		// TODO: Replace DOM manipulation with React state
+		document
+			.getElementById('canvas')
+			.setAttribute('aria-hidden', !isBlockInspectorShown);
+	};
+
 	return (
 		<div className="gbkit gbkit-editor-toolbar">
 			<div className="gbkit-editor-toolbar_toolbar-group">
 				{addBlockButton}
 
 				<button
-					onClick={() => setBlockInspectorShown(true)}
-					className="components-button gbkit-editor-toolbar_settings_icon "
+					onClick={toggleBlockSettings}
+					className="components-button gbkit-editor-toolbar_settings_icon"
 				></button>
 			</div>
 
 			{isBlockInspectorShown && (
 				<Popover
+					aria-label="Block Settings"
+					aria-modal
+					role="dialog"
 					expandOnMobile={true}
-					focusOnMount="container"
 					headerTitle="Block Settings"
-					onClose={() => {
-						setBlockInspectorShown(false);
-					}}
+					onClose={toggleBlockSettings}
 				>
 					<BlockInspector />
 				</Popover>
@@ -60,7 +68,7 @@ const EditorToolbar = (props) => {
                     <Sheet.Header />
                     <Sheet.Content>
                         <Sheet.Scroller>
-                            
+
                                 <BlockInspector />
                             </div>
                         </Sheet.Scroller>
