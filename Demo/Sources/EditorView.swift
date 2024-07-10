@@ -74,6 +74,9 @@ private struct _EditorView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> EditorViewController {
         let viewController = EditorViewController(service: .init(client: Client()))
         viewController.editorURL = editorURL
+        if #available(iOS 16.4, *) {
+            viewController.webView.isInspectable = true
+        }
         return viewController
     }
 

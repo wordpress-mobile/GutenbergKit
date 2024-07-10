@@ -81,10 +81,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         ])
 
         webView.alpha = 0
-        
-        if #available(iOS 16.4, *) {
-            webView.isInspectable = true
-        }
 
         // TODO: register it when editor is loaded
 //        service.$rawBlockTypesResponseData.compactMap({ $0 }).sink { [weak self] data in
