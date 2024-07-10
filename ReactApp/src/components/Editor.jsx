@@ -10,6 +10,7 @@ import {
     ObserveTyping,
 } from '@wordpress/block-editor';
 import { Popover } from '@wordpress/components';
+import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { parse, serialize, registerBlockType } from '@wordpress/blocks';
 
@@ -75,6 +76,13 @@ function Editor() {
         window.editor = editor;
         registerCoreBlocks();
         postMessage("onEditorLoaded");
+
+        return () => {
+          window.editor = {};
+          getBlockTypes().forEach((block) => {
+            unregisterBlockType(block.name);
+          });
+        };
     }, []);
 
     const settings = {
