@@ -28,4 +28,4 @@ A Swift package with native wrappers for the Gutenberg editor.
 
 # Notes
 
-- The app sets `base: ""` in `vite.config.js` to ensure the URLs are relative to the deployment folder
+-   The app sets `base: ""` in `vite.config.js` to ensure the URLs are relative to the deployment folder
