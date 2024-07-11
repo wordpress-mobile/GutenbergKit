@@ -1,9 +1,7 @@
-import Editor from './components/Editor'
+import Editor from './components/Editor';
 
 function App() {
-  return (
-    <Editor/>
-  );
+	return <Editor />;
 }
 
-export default App
+export default App;

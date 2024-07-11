@@ -1,10 +1,9 @@
 export function postMessage(message, parameters = {}) {
-    if (window.webkit) {
-        const value = { message: message, body: parameters }
-        window.webkit.messageHandlers.editorDelegate.postMessage(value);
-    };
-};
-
+	if (window.webkit) {
+		const value = { message: message, body: parameters };
+		window.webkit.messageHandlers.editorDelegate.postMessage(value);
+	}
+}
 
 // FIXME: this was an attempt to fix an existing issue in Gutenberg , but it does it only
 // https://a8c.slack.com/archives/D0740HYKLUX/p1719841410651649
