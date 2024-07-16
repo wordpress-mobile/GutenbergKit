@@ -39,7 +39,7 @@ import '@wordpress/format-library/build-style/style.css';
 
 // Internal imports
 import EditorToolbar from './EditorToolbar';
-import { postMessage } from '../misc/Helpers';
+import { editorLoaded, onBlocksChanged } from '../misc/Helpers';
 // import CodeEditor from './CodeEditor';
 
 // Current editor (assumes can be only one instance).
@@ -79,7 +79,7 @@ function Editor({ post = POST_MOCK }) {
 			blocks.length === 0 ||
 			(blocks[0].name == 'core/paragraph' &&
 				blocks[0].attributes.content.trim() === '');
-		postMessage('onBlocksChanged', { isEmpty: isEmpty });
+		onBlocksChanged(isEmpty);
 	}
 
 	editor.setContent = (content) => {
@@ -108,7 +108,8 @@ function Editor({ post = POST_MOCK }) {
 	useEffect(() => {
 		window.editor = editor;
 		registerCoreBlocks();
-		postMessage('onEditorLoaded');
+
+		editorLoaded();
 
 		return () => {
 			window.editor = {};

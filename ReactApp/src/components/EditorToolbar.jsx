@@ -9,7 +9,7 @@ import {
 } from '@wordpress/block-editor';
 import { Popover } from '@wordpress/components';
 // import { Sheet } from 'react-modal-sheet';
-import { postMessage } from '../misc/Helpers';
+import { showBlockPicker } from '../misc/Helpers';
 
 const EditorToolbar = (props) => {
 	const [isBlockInspectorShown, setBlockInspectorShown] = useState(false);
@@ -20,7 +20,7 @@ const EditorToolbar = (props) => {
 		addBlockButton = <Inserter />;
 	} else {
 		addBlockButton = (
-			<button onClick={() => postMessage('showBlockPicker')}>+</button>
+			<button onClick={() => showBlockPicker() }>+</button>
 		);
 	}
 
