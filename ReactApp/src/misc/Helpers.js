@@ -1,20 +1,20 @@
 export function editorLoaded() {
 	console.log("Firing JS editorLoaded event");
 
-	if(editorDelegate) {
+	if(window.editorDelegate) {
 		editorDelegate.onEditorLoaded();
 	}
 
 	if(window.webkit) {
 		window.webkit.messageHandlers.editorDelegate.postMessage({
-			message: 'editorLoaded',
+			message: 'onEditorLoaded',
 			body: {}
 		});
 	}
 }
 
 export function onBlocksChanged(isEmpty = false) {
-	if(editorDelegate) {
+	if(window.editorDelegate) {
 		editorDelegate.onBlocksChanged(isEmpty);
 	}
 
@@ -27,7 +27,7 @@ export function onBlocksChanged(isEmpty = false) {
 }
 
 export function showBlockPicker() {
-	if(editorDelegate) {
+	if(window.editorDelegate) {
 		editorDelegate.showBlockPicker();
 	}
 
