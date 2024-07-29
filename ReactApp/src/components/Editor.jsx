@@ -31,6 +31,7 @@ import '@wordpress/format-library/build-style/style.css';
 import EditorToolbar from './EditorToolbar';
 import { postMessage } from '../misc/Helpers';
 // import CodeEditor from './CodeEditor';
+import { mediaUpload } from './media';
 
 // Current editor (assumes can be only one instance).
 let editor = {};
@@ -90,6 +91,7 @@ function Editor() {
 	const settings = {
 		hasFixedToolbar: true,
 		bodyPlaceholder: 'Hello!',
+		mediaUpload,
 	};
 
 	// if (isCodeEditorEnabled) {

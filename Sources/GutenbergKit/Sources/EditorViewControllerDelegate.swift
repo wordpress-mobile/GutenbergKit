@@ -20,6 +20,8 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// - warning: This is currently also called for the initial render, which
     /// is probably not how it should be in the production design.
     func editor(_ viewController: EditorViewController, didUpdateContentWithState state: EditorState)
+    
+    func editor(_ viewController: EditorViewController, mediaUpload: Bool, body: Any)
 }
 
 public struct EditorState {

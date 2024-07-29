@@ -29,6 +29,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// A custom URL for the editor.
     public var editorURL: URL?
+    public var placeholderURL: URL?
 
     private var cancellables: [AnyCancellable] = []
 
@@ -113,6 +114,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func loadEditor() {
+        // Temp image placeholder for media uplaods
+        placeholderURL = Bundle.module.url(forResource: "placeholder", withExtension: "png", subdirectory: "Gutenberg")
         if let editorURL = editorURL ?? ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
             webView.load(URLRequest(url: editorURL))
         } else {
@@ -221,6 +224,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 delegate?.editor(self, didUpdateContentWithState: state)
             case .showBlockPicker:
                 showBlockInserter()
+            case .mediaUpload:
+                delegate?.editor(self, mediaUpload: true, body: message.body)
             }
         } catch {
             fatalError("failed to decode message: \(error)")
