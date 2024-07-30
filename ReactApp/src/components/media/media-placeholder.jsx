@@ -60,10 +60,11 @@ function MediaPlaceholder(props) {
 						fetch(event.detail?.localUrl)
 							.then((response) => response.arrayBuffer())
 							.then((arrayBuffer) => {
-								const blob = new Blob([arrayBuffer], {
+								const blob = new Blob([arrayBuffer]);
+								const img = new Blob([blob], {
 									type: 'image/jpg',
 								});
-								const url = createBlobURL(blob);
+								const url = createBlobURL(img);
 								const imageData = {
 									...(multiple ? { blob: url } : {}),
 									...(!multiple ? { url: url } : {}),
