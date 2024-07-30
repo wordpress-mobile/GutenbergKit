@@ -29,6 +29,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// A custom URL for the editor.
     public var editorURL: URL?
+    public var placeholderURL: URL?
 
     private var cancellables: [AnyCancellable] = []
 
@@ -111,13 +112,51 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             // TOOD: relay to the client
         }
     }
+    
+    private func copyGutenbergFolderToDocuments() {
+        let fileManager = FileManager.default
+        guard let bundleGutenbergURL = Bundle.module.url(forResource: "Gutenberg", withExtension: nil) else {
+            print("Gutenberg folder not found in bundle.")
+            return
+        }
+        
+        let documentsDirectoryURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let documentsGutenbergURL = documentsDirectoryURL.appendingPathComponent("Gutenberg")
+        
+        if fileManager.fileExists(atPath: documentsGutenbergURL.path) {
+            print("Gutenberg folder already exists in Documents directory.")
+            return
+        }
+        
+        do {
+            try fileManager.copyItem(at: bundleGutenbergURL, to: documentsGutenbergURL)
+            print("Gutenberg folder copied to Documents directory.")
+        } catch {
+            print("Error copying Gutenberg folder: \(error.localizedDescription)")
+        }
+    }
+
 
     private func loadEditor() {
+        // Temp image placeholder for media uplaods
+        placeholderURL = Bundle.module.url(forResource: "placeholder", withExtension: "png", subdirectory: "Gutenberg")
         if let editorURL = editorURL ?? ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
             webView.load(URLRequest(url: editorURL))
         } else {
-            let reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
-            webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+            copyGutenbergFolderToDocuments()
+            
+            //let reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
+            //webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+            
+            let fileManager = FileManager.default
+            let documentsDirectoryURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+            let reactAppURL = documentsDirectoryURL.appendingPathComponent("Gutenberg/index.html")
+            
+            if fileManager.fileExists(atPath: reactAppURL.path) {
+                webView.loadFileURL(reactAppURL, allowingReadAccessTo: documentsDirectoryURL)
+            } else {
+                print("HTML file not found in Documents directory.")
+            }
         }
     }
 
@@ -221,6 +260,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 delegate?.editor(self, didUpdateContentWithState: state)
             case .showBlockPicker:
                 showBlockInserter()
+            case .mediaUpload:
+                delegate?.editor(self, mediaUpload: true, body: message.body)
             }
         } catch {
             fatalError("failed to decode message: \(error)")
