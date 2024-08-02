@@ -82,7 +82,9 @@ function Editor() {
 		return () => {
 			window.editor = {};
 			getBlockTypes().forEach((block) => {
-				unregisterBlockType(block.name);
+				if (block.name.startsWith('core/')) {
+					unregisterBlockType(block.name);
+				}
 			});
 		};
 	}, []);
