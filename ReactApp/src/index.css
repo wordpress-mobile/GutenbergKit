@@ -325,3 +325,51 @@ There has to be a setting or any other better way of doing that.
 	.components-popover__content {
 	min-width: 274px !important;
 }
+
+.is-layout-flex {
+	gap: 1.5rem;
+}
+
+.is-layout-grid {
+	gap: 1.5rem;
+}
+
+body .is-layout-flex {
+	display: flex;
+}
+.is-layout-flex {
+	flex-wrap: wrap;
+	align-items: center;
+}
+
+.is-layout-flex > :is(*, div) {
+	margin: 0;
+}
+
+body .is-layout-grid {
+	display: grid;
+}
+
+.is-layout-grid > :is(*, div) {
+	margin: 0;
+}
+
+.wp-block-gallery {
+	--wp--style--unstable-gallery-gap: var(
+		--wp--style--gallery-gap-default,
+		var(--gallery-block--gutter-size, var(--wp--style--block-gap, 0.5em))
+	);
+	gap: var(
+		--wp--style--gallery-gap-default,
+		var(--gallery-block--gutter-size, var(--wp--style--block-gap, 0.5em))
+	);
+}
+
+figure.wp-block-image.is-selected img {
+	outline: 3px solid #434343;
+	outline-offset: -2px;
+}
+
+.components-placeholder.is-medium .components-placeholder__instructions {
+	display: block !important;
+}

@@ -7,6 +7,31 @@
 			content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
 		/>
 		<title>Gutenberg</title>
+
+		<script type="module">
+			import apiFetch from '@wordpress/api-fetch';
+
+			apiFetch.use(
+				apiFetch.createRootURLMiddleware('GUTENBERG_SITE_URL')
+			);
+			// Create a basic authentication header
+			const username = 'GUTENBERG_APPLICATION_USER';
+			const appPassword = 'GUTENBERG_APPLICATION_PASSWORD';
+			const basicAuth = btoa(`${username}:${appPassword}`);
+
+			apiFetch.use((options, next) => {
+				options.headers = options.headers || new Headers();
+				options.headers.set('Authorization', `Basic ${basicAuth}`);
+
+				options.headers.set('Content-Type', 'application/json');
+				return next({
+					...options,
+					headers: {
+						Authorization: `Basic ${basicAuth}`,
+					},
+				});
+			});
+		</script>
 	</head>
 	<body>
 		<div id="root"></div>

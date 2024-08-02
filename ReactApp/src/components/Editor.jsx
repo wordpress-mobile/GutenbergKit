@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { useEffect, useState } from 'react';
 
 // WordPress
@@ -9,10 +10,13 @@ import {
 	WritingFlow,
 	ObserveTyping,
 } from '@wordpress/block-editor';
-import { Popover } from '@wordpress/components';
+import { Popover, SlotFillProvider } from '@wordpress/components';
 import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { parse, serialize, registerBlockType } from '@wordpress/blocks';
+import { mediaUpload, store as editorStore } from '@wordpress/editor';
+import { useSelect, useDispatch } from '@wordpress/data';
+import { store as coreStore, EntityProvider } from '@wordpress/core-data';
 
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
@@ -36,6 +40,54 @@ import { postMessage } from '../misc/Helpers';
 let editor = {};
 
 function Editor() {
+	const postType = 'post';
+	const postId = 5;
+	const author = 1;
+	const { hasUploadPermissions, reusableBlocks } = useSelect(
+		(select) => {
+			const { getEntityRecord, getEntityRecords } = select(coreStore);
+			const user = getEntityRecord('root', 'user', author);
+
+			return {
+				reusableBlocks: getEntityRecords('postType', 'wp_block', {
+					per_page: 100,
+				}),
+				hasUploadPermissions: user?.capabilities?.upload_files ?? true,
+			};
+		},
+		[postType, postId]
+	);
+
+	const { setEditedPost } = useDispatch(editorStore);
+
+	useEffect(() => {
+		setEditedPost(postType, postId);
+	}, [postType, postId, setEditedPost]);
+
+	const post = {
+		id: postId,
+		title: {
+			raw: '',
+		},
+		featured_media: undefined,
+		content: {
+			raw: '',
+		},
+		type: postType,
+		status: 'draft',
+		meta: [],
+	};
+
+	return (
+		<EditorComponent
+			post={post}
+			hasUploadPermissions={hasUploadPermissions}
+			reusableBlocks={reusableBlocks}
+		/>
+	);
+}
+
+function EditorComponent({ post, hasUploadPermissions, reusableBlocks }) {
 	const [blocks, setBlocks] = useState([]);
 	const [registeredBlocks, setRegisteredBlocks] = useState([]);
 	const [isCodeEditorEnabled, setCodeEditorEnabled] = useState(false);
@@ -90,6 +142,9 @@ function Editor() {
 	const settings = {
 		hasFixedToolbar: true,
 		bodyPlaceholder: 'Hello!',
+		titlePlaceholder: 'Add title',
+		mediaUpload: hasUploadPermissions ? mediaUpload : undefined,
+		__experimentalReusableBlocks: reusableBlocks,
 	};
 
 	// if (isCodeEditorEnabled) {
@@ -97,28 +152,33 @@ function Editor() {
 	// }
 
 	return (
-		<BlockEditorProvider
-			value={blocks}
-			onInput={didChangeBlocks}
-			onChange={didChangeBlocks}
-			settings={settings}
-		>
-			<BlockTools>
-				<div className="editor-styles-wrapper">
-					<BlockEditorKeyboardShortcuts.Register />
-					<WritingFlow>
-						<ObserveTyping>
-							<BlockList />
-							<EditorToolbar
-								registeredBlocks={registeredBlocks}
-							/>{' '}
-							{/* not sure if optimal placement */}
-						</ObserveTyping>
-					</WritingFlow>
-				</div>
-			</BlockTools>
-			<Popover.Slot />
-		</BlockEditorProvider>
+		<SlotFillProvider>
+			<EntityProvider kind="root" type="site">
+				<EntityProvider kind="postType" type={post.type} id={post.id}>
+					<BlockEditorProvider
+						value={blocks}
+						onInput={didChangeBlocks}
+						onChange={didChangeBlocks}
+						settings={settings}
+					>
+						<BlockTools>
+							<div className="editor-styles-wrapper">
+								<BlockEditorKeyboardShortcuts.Register />
+								<WritingFlow>
+									<ObserveTyping>
+										<BlockList />
+										<EditorToolbar
+											registeredBlocks={registeredBlocks}
+										/>
+									</ObserveTyping>
+								</WritingFlow>
+							</div>
+						</BlockTools>
+						<Popover.Slot />
+					</BlockEditorProvider>
+				</EntityProvider>
+			</EntityProvider>
+		</SlotFillProvider>
 	);
 }
 
