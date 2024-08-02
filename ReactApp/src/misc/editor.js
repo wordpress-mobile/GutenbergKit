@@ -16,8 +16,9 @@ export async function loadRemoteEditor(global) {
 	apiFetch.setFetchHandler(fetchHandler);
 
 	try {
-		const response = await apiFetch({ path: '/beae/v1/editor-assets' });
-		const { styles, scripts } = await response.json();
+		const { styles, scripts } = await apiFetch({
+			path: '/beae/v1/editor-assets',
+		});
 		injectStyles(styles);
 		await injectScripts(scripts);
 	} catch (error) {
@@ -25,6 +26,7 @@ export async function loadRemoteEditor(global) {
 	}
 }
 
+// TODO: Increase fetch handler robustness and error handling
 function fetchHandler(options) {
 	const { apiToken } = window.GBKit;
 	const { path, url, ...rest } = options;
@@ -38,7 +40,15 @@ function fetchHandler(options) {
 		headers: {
 			Authorization: `Bearer ${apiToken}`,
 		},
-	});
+	})
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`API request failed: ${response.status}`);
+			}
+
+			return response;
+		})
+		.then((response) => response.json());
 }
 
 function injectStyles(styles) {
