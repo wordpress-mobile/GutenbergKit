@@ -37,6 +37,7 @@ function fetchHandler(options) {
 
 	return fetch(url || path, {
 		...rest,
+		mode: 'cors',
 		headers: {
 			Authorization: `Bearer ${apiToken}`,
 		},
