@@ -117,7 +117,34 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             webView.load(URLRequest(url: editorURL))
         } else {
             let reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
-            webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+            let htmlContent = try! String(contentsOf: reactAppURL, encoding: .utf8)
+            
+            // Fetch environment variables
+            if let siteURL = ProcessInfo.processInfo.environment["GUTENBERG_SITE_URL"],
+               let username = ProcessInfo.processInfo.environment["GUTENBERG_APPLICATION_USER"],
+               let appPassword = ProcessInfo.processInfo.environment["GUTENBERG_APPLICATION_PASSWORD"] {
+
+                // Create a script tag string with the environment variables
+                let scriptContent = """
+                <script>
+                (function() {
+                    window.gb = window.gb || {};
+                    window.gb.GUTENBERG_SITE_URL = '\(siteURL)';
+                    window.gb.GUTENBERG_APPLICATION_USER = '\(username)';
+                    window.gb.GUTENBERG_APPLICATION_PASSWORD = '\(appPassword)';
+                })();
+                </script>
+                """
+
+                // Insert the script tag just before the closing </head> tag
+                let modifiedHTML = htmlContent.replacingOccurrences(of: "</head>", with: "\(scriptContent)</head>")
+
+                // Load the modified HTML content
+                webView.loadHTMLString(modifiedHTML, baseURL: reactAppURL.deletingLastPathComponent())
+            } else {
+                // If any environment variable is missing, load the file as is
+                webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+            }
         }
     }
 
