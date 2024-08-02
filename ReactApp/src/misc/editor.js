@@ -61,10 +61,10 @@ function injectStyles(styles) {
 const localGutenbergPackages = ['api-fetch'];
 const excludedScripts = new RegExp(
 	localGutenbergPackages
-		.map(
-			(script) =>
-				`wp-content/plugins/gutenberg/build/${script.replace(/\//g, '\\/')}\\b`
-		)
+		.flatMap((script) => [
+			`wp-content/plugins/gutenberg/build/${script.replace(/\//g, '\\/')}\\b`,
+			`wp-includes/js/dist/${script.replace(/\//g, '\\/')}\\b`,
+		])
 		.join('|')
 );
 
