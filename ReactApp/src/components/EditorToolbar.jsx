@@ -1,12 +1,9 @@
-import {
-	BlockInspector,
-	BlockToolbar,
-	Inserter,
-} from '@wordpress/block-editor';
-import { Popover } from '@wordpress/components';
-import { useState } from 'react';
 // import { Sheet } from 'react-modal-sheet';
 import { postMessage } from '../misc/Helpers';
+
+const { useState } = window.wp.element;
+const { BlockInspector, BlockToolbar, Inserter } = window.wp.blockEditor;
+const { Popover } = window.wp.components;
 
 const EditorToolbar = (props) => {
 	const [isBlockInspectorShown, setBlockInspectorShown] = useState(false);
@@ -57,7 +54,6 @@ const EditorToolbar = (props) => {
                     <Sheet.Header />
                     <Sheet.Content>
                         <Sheet.Scroller>
-                            
                                 <BlockInspector />
                             </div>
                         </Sheet.Scroller>

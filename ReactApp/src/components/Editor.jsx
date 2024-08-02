@@ -1,19 +1,3 @@
-import { useEffect, useState } from 'react';
-
-// WordPress
-import {
-	BlockEditorKeyboardShortcuts,
-	BlockEditorProvider,
-	BlockList,
-	BlockTools,
-	WritingFlow,
-	ObserveTyping,
-} from '@wordpress/block-editor';
-import { Popover } from '@wordpress/components';
-import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
-import { registerCoreBlocks } from '@wordpress/block-library';
-import { parse, serialize, registerBlockType } from '@wordpress/blocks';
-
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
 import '@wordpress/block-editor/build-style/style.css';
@@ -24,13 +8,27 @@ import '@wordpress/block-library/build-style/editor.css';
 import '@wordpress/block-library/build-style/theme.css';
 
 // Registers standard formatting options for RichText.
-import '@wordpress/format-library';
 import '@wordpress/format-library/build-style/style.css';
 
 // Internal imports
 import EditorToolbar from './EditorToolbar';
 import { postMessage } from '../misc/Helpers';
 // import CodeEditor from './CodeEditor';
+
+// WordPress
+const { useEffect, useState } = window.wp.element;
+const {
+	BlockEditorKeyboardShortcuts,
+	BlockEditorProvider,
+	BlockList,
+	BlockTools,
+	WritingFlow,
+	ObserveTyping,
+} = window.wp.blockEditor;
+const { Popover } = window.wp.components;
+const { getBlockTypes, unregisterBlockType } = window.wp.blocks;
+const { registerCoreBlocks } = window.wp.blockLibrary;
+const { parse, serialize, registerBlockType } = window.wp.blocks;
 
 // Current editor (assumes can be only one instance).
 let editor = {};
