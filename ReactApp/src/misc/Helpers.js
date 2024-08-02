@@ -1,3 +1,17 @@
+export function getGBKit() {
+	if (window.GBKit) {
+		return window.GBKit;
+	}
+
+	const emptyObject = {};
+	try {
+		return JSON.parse(localStorage.getItem('GBKit')) || emptyObject;
+	} catch (error) {
+		console.error('Failed parsing GBKit from localStorage:', error);
+		return emptyObject;
+	}
+}
+
 export function postMessage(message, parameters = {}) {
 	if (window.webkit) {
 		const value = { message: message, body: parameters };
