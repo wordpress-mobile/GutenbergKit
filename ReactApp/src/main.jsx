@@ -1,5 +1,13 @@
+/**
+ * External dependencies
+ */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+
+/**
+ * Internal dependencies
+ */
+import './misc/api-fetch-setup';
 import App from './App.jsx';
 import './index.css';
 
