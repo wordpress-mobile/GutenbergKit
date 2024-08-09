@@ -49,7 +49,9 @@ function Editor({ post = POST_MOCK }) {
 	const titleRef = useRef();
 	const { setupEditor } = useDispatch(editorStore);
 
-	setupEditor(post, [], {});
+	useEffect(() => {
+		setupEditor(post, [], {});
+	}, []);
 
 	function didChangeBlocks(blocks) {
 		setBlocks(blocks);
