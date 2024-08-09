@@ -107,33 +107,31 @@ function Editor({ post = POST_MOCK }) {
 	// }
 
 	return (
-		<>
+		<BlockEditorProvider
+			value={blocks}
+			onInput={didChangeBlocks}
+			onChange={didChangeBlocks}
+			settings={settings}
+		>
 			<div className="editor-visual-editor__post-title-wrapper">
 				<PostTitle ref={titleRef} />
 			</div>
-			<BlockEditorProvider
-				value={blocks}
-				onInput={didChangeBlocks}
-				onChange={didChangeBlocks}
-				settings={settings}
-			>
-				<BlockTools>
-					<div className="editor-styles-wrapper">
-						<BlockEditorKeyboardShortcuts.Register />
-						<WritingFlow>
-							<ObserveTyping>
-								<BlockList />
-								<EditorToolbar
-									registeredBlocks={registeredBlocks}
-								/>{' '}
-								{/* not sure if optimal placement */}
-							</ObserveTyping>
-						</WritingFlow>
-					</div>
-				</BlockTools>
-				<Popover.Slot />
-			</BlockEditorProvider>
-		</>
+			<BlockTools>
+				<div className="editor-styles-wrapper">
+					<BlockEditorKeyboardShortcuts.Register />
+					<WritingFlow>
+						<ObserveTyping>
+							<BlockList />
+							<EditorToolbar
+								registeredBlocks={registeredBlocks}
+							/>{' '}
+							{/* not sure if optimal placement */}
+						</ObserveTyping>
+					</WritingFlow>
+				</div>
+			</BlockTools>
+			<Popover.Slot />
+		</BlockEditorProvider>
 	);
 }
 
