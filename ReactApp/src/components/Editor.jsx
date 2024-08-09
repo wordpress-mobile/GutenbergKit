@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // WordPress
 import {
@@ -13,6 +13,8 @@ import { Popover } from '@wordpress/components';
 import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { parse, serialize, registerBlockType } from '@wordpress/blocks';
+import { store as editorStore, PostTitle } from '@wordpress/editor';
+import { useDispatch } from '@wordpress/data';
 
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
@@ -35,10 +37,21 @@ import { postMessage } from '../misc/Helpers';
 // Current editor (assumes can be only one instance).
 let editor = {};
 
-function Editor() {
+const POST_MOCK = {
+	id: 1,
+	type: 'post',
+};
+
+function Editor({ post = POST_MOCK }) {
 	const [blocks, setBlocks] = useState([]);
 	const [registeredBlocks, setRegisteredBlocks] = useState([]);
 	const [isCodeEditorEnabled, setCodeEditorEnabled] = useState(false);
+	const titleRef = useRef();
+	const { setupEditor } = useDispatch(editorStore);
+
+	useEffect(() => {
+		setupEditor(post, [], {});
+	}, []);
 
 	function didChangeBlocks(blocks) {
 		setBlocks(blocks);
@@ -89,7 +102,6 @@ function Editor() {
 
 	const settings = {
 		hasFixedToolbar: true,
-		bodyPlaceholder: 'Hello!',
 	};
 
 	// if (isCodeEditorEnabled) {
@@ -103,6 +115,9 @@ function Editor() {
 			onChange={didChangeBlocks}
 			settings={settings}
 		>
+			<div className="editor-visual-editor__post-title-wrapper">
+				<PostTitle ref={titleRef} />
+			</div>
 			<BlockTools>
 				<div className="editor-styles-wrapper">
 					<BlockEditorKeyboardShortcuts.Register />
