@@ -325,3 +325,22 @@ There has to be a setting or any other better way of doing that.
 	.components-popover__content {
 	min-width: 274px !important;
 }
+
+/* Post Title */
+.rich-text [data-rich-text-placeholder] {
+	pointer-events: none;
+}
+.rich-text [data-rich-text-placeholder]:after {
+	content: attr(data-rich-text-placeholder);
+	opacity: 0.62;
+}
+
+.editor-visual-editor__post-title-wrapper {
+	margin-top: 1rem;
+	min-height: 35px;
+}
+
+.editor-visual-editor__post-title-wrapper .wp-block-post-title {
+	font-size: 20px;
+	margin-bottom: 0;
+}
