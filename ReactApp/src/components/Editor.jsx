@@ -13,8 +13,13 @@ import { Popover } from '@wordpress/components';
 import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { parse, serialize, registerBlockType } from '@wordpress/blocks';
-import { store as editorStore, PostTitle } from '@wordpress/editor';
-import { useDispatch } from '@wordpress/data';
+import {
+	store as editorStore,
+	mediaUpload,
+	PostTitle,
+} from '@wordpress/editor';
+import { useDispatch, useSelect } from '@wordpress/data';
+import { store as coreStore } from '@wordpress/core-data';
 
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
@@ -40,6 +45,7 @@ let editor = {};
 const POST_MOCK = {
 	id: 1,
 	type: 'post',
+	author: 1,
 };
 
 function Editor({ post = POST_MOCK }) {
@@ -51,6 +57,15 @@ function Editor({ post = POST_MOCK }) {
 
 	useEffect(() => {
 		setupEditor(post, [], {});
+	}, []);
+
+	const { hasUploadPermissions } = useSelect((select) => {
+		const { getEntityRecord } = select(coreStore);
+		const user = getEntityRecord('root', 'user', post.author);
+
+		return {
+			hasUploadPermissions: user?.capabilities?.upload_files ?? true,
+		};
 	}, []);
 
 	function didChangeBlocks(blocks) {
@@ -102,6 +117,7 @@ function Editor({ post = POST_MOCK }) {
 
 	const settings = {
 		hasFixedToolbar: true,
+		mediaUpload: hasUploadPermissions ? mediaUpload : undefined,
 	};
 
 	// if (isCodeEditorEnabled) {
