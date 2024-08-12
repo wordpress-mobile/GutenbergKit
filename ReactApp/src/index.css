@@ -344,3 +344,14 @@ There has to be a setting or any other better way of doing that.
 	font-size: 20px;
 	margin-bottom: 0;
 }
+
+/* Snackbar */
+
+.components-editor-notices__snackbar {
+	bottom: 54px;
+	padding-left: 24px;
+	padding-right: 24px;
+	position: fixed;
+	right: 0;
+	left: 0;
+}
