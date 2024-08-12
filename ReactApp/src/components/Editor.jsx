@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-
-// WordPress
+/**
+ * WordPress dependencies
+ */
+import { useEffect, useRef, useState } from '@wordpress/element';
 import {
 	BlockEditorKeyboardShortcuts,
 	BlockEditorProvider,

@@ -1,8 +1,7 @@
 /**
- * External dependencies
+ * WordPress dependencies
  */
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import { createRoot, StrictMode } from '@wordpress/element';
 
 /**
  * Internal dependencies
@@ -13,8 +12,8 @@ import './index.css';
 
 initializeApiFetch();
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-	<React.StrictMode>
+createRoot(document.getElementById('root')).render(
+	<StrictMode>
 		<App />
-	</React.StrictMode>
+	</StrictMode>
 );
