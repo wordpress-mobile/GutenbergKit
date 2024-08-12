@@ -17,6 +17,7 @@ import { parse, serialize, registerBlockType } from '@wordpress/blocks';
 import {
 	store as editorStore,
 	mediaUpload,
+	EditorSnackbars,
 	PostTitle,
 } from '@wordpress/editor';
 import { useDispatch, useSelect } from '@wordpress/data';
@@ -25,6 +26,7 @@ import { store as coreStore } from '@wordpress/core-data';
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
 import '@wordpress/block-editor/build-style/style.css';
+import '@wordpress/editor/build-style/style.css';
 
 // Default styles that are needed for the core blocks.
 import '@wordpress/block-library/build-style/style.css';
@@ -150,6 +152,7 @@ function Editor({ post = POST_MOCK }) {
 				</div>
 			</BlockTools>
 			<Popover.Slot />
+			<EditorSnackbars />
 		</BlockEditorProvider>
 	);
 }
