@@ -1,10 +1,13 @@
+/**
+ * WordPress dependencies
+ */
+import { useState } from '@wordpress/element';
 import {
 	BlockInspector,
 	BlockToolbar,
 	Inserter,
 } from '@wordpress/block-editor';
 import { Popover } from '@wordpress/components';
-import { useState } from 'react';
 // import { Sheet } from 'react-modal-sheet';
 import { postMessage } from '../misc/Helpers';
 
