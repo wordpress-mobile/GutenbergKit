@@ -4,24 +4,32 @@
 import apiFetch from '@wordpress/api-fetch';
 
 /**
+ * Internal dependencies
+ */
+import { getGBKit } from './store';
+
+/**
  * Initializes the API fetch configuration and middleware.
  *
  * This function sets up the root URL middleware, adds headers to requests,
  * and preloads some endpoints with mock data for specific components.
  */
 export function initializeApiFetch() {
-	apiFetch.use(apiFetch.createRootURLMiddleware(''));
+	const { siteURL, authToken } = getGBKit();
+	const rootURL = siteURL ? `${siteURL}/wp-json/` : undefined;
 
+	apiFetch.use(apiFetch.createRootURLMiddleware(rootURL));
 	apiFetch.use((options, next) => {
-		options.headers = options.headers || new Headers();
-		options.headers.set('Content-Type', 'application/json');
+		options.headers = {
+			...options.headers,
+			'Content-Type': 'application/json',
+		};
 
-		return next({
-			...options,
-			headers: {
-				Authorization: 'Basic ',
-			},
-		});
+		if (authToken) {
+			options.headers.Authorization = `Basic ${authToken}`;
+		}
+
+		return next(options);
 	});
 
 	// Preload some endpoints to return data needed for some components
