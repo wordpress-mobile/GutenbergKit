@@ -112,10 +112,7 @@ function corsMiddleware(options, next) {
 
 function createHeadersMiddleware(authToken) {
 	return (options, next) => {
-		options.headers = {
-			...options.headers,
-			'Content-Type': 'application/json',
-		};
+		options.headers = options.headers || {};
 
 		if (authToken) {
 			options.headers.Authorization = `Basic ${authToken}`;
