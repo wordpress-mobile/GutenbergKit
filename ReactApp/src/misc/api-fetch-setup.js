@@ -20,6 +20,10 @@ export function initializeApiFetch() {
 
 	apiFetch.use(apiFetch.createRootURLMiddleware(rootURL));
 	apiFetch.use((options, next) => {
+		options.mode = 'cors';
+		return next(options);
+	});
+	apiFetch.use((options, next) => {
 		options.headers = {
 			...options.headers,
 			'Content-Type': 'application/json',
