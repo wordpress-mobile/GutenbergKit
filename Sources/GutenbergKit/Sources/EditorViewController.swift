@@ -11,6 +11,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let controller = GutenbergEditorController()
     private let timestampInit = CFAbsoluteTimeGetCurrent()
     private let service: EditorService
+    private let siteURL: String
+    private let authToken: String
 
     public private(set) var state = EditorState()
 
@@ -33,9 +35,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private var cancellables: [AnyCancellable] = []
 
     /// Initalizes the editor with the initial content (Gutenberg).
-    public init(content: String = "", service: EditorService) {
+    public init(content: String = "", service: EditorService, siteURL: String = "", authToken: String = "") {
         self._initialRawContent = content
         self.service = service
+        self.siteURL = siteURL
+        self.authToken = authToken
 
         Task {
             await service.warmup()
@@ -119,6 +123,17 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             let reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
             webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.module.resourceURL!)
         }
+    }
+
+    func injectEditorConfiguration() {
+        evaluate("""
+        window.GBKit = {
+            siteURL: '\(siteURL)',
+            authToken: '\(authToken)'
+        };
+        localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
+        "done";
+        """)
     }
 
     // MARK: - Public API
@@ -213,6 +228,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     fileprivate func controller(_ controller: GutenbergEditorController, didReceiveMessage message: EditorJSMessage) {
         do {
             switch message.type {
+            case .onLoaded:
+                injectEditorConfiguration()
             case .onEditorLoaded:
                 didLoadEditor()
             case .onBlocksChanged:
@@ -256,7 +273,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
         let editorViewController = EditorViewController(
             content: "",
-            service: EditorService(client: MockClient())
+            service: EditorService(client: MockClient()),
+            siteURL: "",
+            authToken: ""
         )
         _ = editorViewController.view // Trigger viewDidLoad
 
@@ -280,6 +299,10 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         NSLog("navigation: \(String(describing: navigation))")
+        MainActor.assumeIsolated {
+            let message = EditorJSMessage(type: EditorJSMessage.MessageType.onLoaded)
+            delegate?.controller(self, didReceiveMessage: message)
+        }
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
