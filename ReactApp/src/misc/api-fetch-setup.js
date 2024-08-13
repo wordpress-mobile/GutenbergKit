@@ -19,22 +19,8 @@ export function initializeApiFetch() {
 	const rootURL = siteURL ? `${siteURL}/wp-json/` : undefined;
 
 	apiFetch.use(apiFetch.createRootURLMiddleware(rootURL));
-	apiFetch.use((options, next) => {
-		options.mode = 'cors';
-		return next(options);
-	});
-	apiFetch.use((options, next) => {
-		options.headers = {
-			...options.headers,
-			'Content-Type': 'application/json',
-		};
-
-		if (authToken) {
-			options.headers.Authorization = `Basic ${authToken}`;
-		}
-
-		return next(options);
-	});
+	apiFetch.use(corsMiddleware);
+	apiFetch.use(createHeadersMiddleware(authToken));
 
 	// Preload some endpoints to return data needed for some components
 	// Like PostTitle.
@@ -117,4 +103,24 @@ export function initializeApiFetch() {
 			},
 		})
 	);
+}
+
+function corsMiddleware(options, next) {
+	options.mode = 'cors';
+	return next(options);
+}
+
+function createHeadersMiddleware(authToken) {
+	return (options, next) => {
+		options.headers = {
+			...options.headers,
+			'Content-Type': 'application/json',
+		};
+
+		if (authToken) {
+			options.headers.Authorization = `Basic ${authToken}`;
+		}
+
+		return next(options);
+	};
 }
