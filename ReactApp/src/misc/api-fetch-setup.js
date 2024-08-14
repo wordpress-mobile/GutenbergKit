@@ -4,25 +4,23 @@
 import apiFetch from '@wordpress/api-fetch';
 
 /**
+ * Internal dependencies
+ */
+import { getGBKit } from './store';
+
+/**
  * Initializes the API fetch configuration and middleware.
  *
  * This function sets up the root URL middleware, adds headers to requests,
  * and preloads some endpoints with mock data for specific components.
  */
 export function initializeApiFetch() {
-	apiFetch.use(apiFetch.createRootURLMiddleware(''));
+	const { siteURL, authToken } = getGBKit();
+	const rootURL = siteURL ? `${siteURL}/wp-json/` : undefined;
 
-	apiFetch.use((options, next) => {
-		options.headers = options.headers || new Headers();
-		options.headers.set('Content-Type', 'application/json');
-
-		return next({
-			...options,
-			headers: {
-				Authorization: 'Basic ',
-			},
-		});
-	});
+	apiFetch.use(apiFetch.createRootURLMiddleware(rootURL));
+	apiFetch.use(corsMiddleware);
+	apiFetch.use(createHeadersMiddleware(authToken));
 
 	// Preload some endpoints to return data needed for some components
 	// Like PostTitle.
@@ -105,4 +103,21 @@ export function initializeApiFetch() {
 			},
 		})
 	);
+}
+
+function corsMiddleware(options, next) {
+	options.mode = 'cors';
+	return next(options);
+}
+
+function createHeadersMiddleware(authToken) {
+	return (options, next) => {
+		options.headers = options.headers || {};
+
+		if (authToken) {
+			options.headers.Authorization = `Basic ${authToken}`;
+		}
+
+		return next(options);
+	};
 }
