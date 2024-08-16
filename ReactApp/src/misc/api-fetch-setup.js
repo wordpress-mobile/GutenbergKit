@@ -15,12 +15,12 @@ import { getGBKit } from './store';
  * and preloads some endpoints with mock data for specific components.
  */
 export function initializeApiFetch() {
-	const { siteURL, authToken } = getGBKit();
-	const rootURL = siteURL ? `${siteURL}/wp-json/` : undefined;
+	const { siteAPIURL, authToken, siteID } = getGBKit();
+	const rootURL = siteAPIURL ?? undefined;
 
 	apiFetch.use(apiFetch.createRootURLMiddleware(rootURL));
 	apiFetch.use(corsMiddleware);
-	apiFetch.use(createHeadersMiddleware(authToken));
+	apiFetch.use(createHeadersMiddleware(authToken, siteID));
 
 	// Preload some endpoints to return data needed for some components
 	// Like PostTitle.
@@ -110,12 +110,24 @@ function corsMiddleware(options, next) {
 	return next(options);
 }
 
-function createHeadersMiddleware(authToken) {
+function createHeadersMiddleware(authToken, siteID) {
 	return (options, next) => {
 		options.headers = options.headers || {};
 
+		// Replace some namespaces to work with WordPress.com REST API.
+		if (
+			options.path &&
+			siteID.length &&
+			!options.path.includes(`/sites/${siteID}/`)
+		) {
+			options.path = options.path
+				.replace('/wp/v2/', `/wp/v2/sites/${siteID}/`)
+				.replace('/wpcom/v2/', `/wpcom/v2/sites/${siteID}/`)
+				.replace('/oembed/1.0/', `/oembed/1.0/sites/${siteID}/`);
+		}
+
 		if (authToken) {
-			options.headers.Authorization = `Basic ${authToken}`;
+			options.headers.Authorization = `${siteID ? 'Bearer' : 'Basic'} ${authToken}`;
 		}
 
 		return next(options);

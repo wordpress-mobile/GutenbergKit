@@ -11,8 +11,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let controller = GutenbergEditorController()
     private let timestampInit = CFAbsoluteTimeGetCurrent()
     private let service: EditorService
-    private let siteURL: String
+    private let siteAPIURL: String
     private let authToken: String
+    private let siteID: NSNumber?
 
     public private(set) var state = EditorState()
 
@@ -35,11 +36,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private var cancellables: [AnyCancellable] = []
 
     /// Initalizes the editor with the initial content (Gutenberg).
-    public init(content: String = "", service: EditorService, siteURL: String = "", authToken: String = "") {
+    public init(content: String = "", service: EditorService, siteAPIURL: String = "", authToken: String = "", siteID: NSNumber? = nil) {
         self._initialRawContent = content
         self.service = service
-        self.siteURL = siteURL
+        self.siteAPIURL = siteAPIURL
         self.authToken = authToken
+        self.siteID = siteID
 
         Task {
             await service.warmup()
@@ -92,7 +94,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 //            assert(Thread.isMainThread)
 //
 //        }.store(in: &cancellables)
-
+        
+        setupEditor()
         loadEditor()
     }
 
@@ -115,6 +118,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             // TOOD: relay to the client
         }
     }
+    
+    private func setupEditor() {
+        let webViewConfiguration = webView.configuration
+        let userContentController = webViewConfiguration.userContentController
+        let editorInitialConfig = getEditorConfiguration()
+        userContentController.addUserScript(editorInitialConfig)
+    }
 
     private func loadEditor() {
         if let editorURL = editorURL ?? ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
@@ -125,15 +135,20 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
-    func injectEditorConfiguration() {
-        evaluate("""
+    private func getEditorConfiguration() -> WKUserScript {
+        let siteIDString = siteID?.stringValue ?? ""
+        let jsCode = """
         window.GBKit = {
-            siteURL: '\(siteURL)',
-            authToken: '\(authToken)'
+            siteAPIURL: '\(siteAPIURL)',
+            authToken: '\(authToken)',
+            siteID: '\(siteIDString)'
         };
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
         "done";
-        """)
+        """
+
+        let editorScript = WKUserScript(source: jsCode, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        return editorScript
     }
 
     // MARK: - Public API
@@ -229,7 +244,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         do {
             switch message.type {
             case .onLoaded:
-                injectEditorConfiguration()
+                return
             case .onEditorLoaded:
                 didLoadEditor()
             case .onBlocksChanged:
@@ -274,7 +289,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let editorViewController = EditorViewController(
             content: "",
             service: EditorService(client: MockClient()),
-            siteURL: "",
+            siteAPIURL: "",
             authToken: ""
         )
         _ = editorViewController.view // Trigger viewDidLoad
