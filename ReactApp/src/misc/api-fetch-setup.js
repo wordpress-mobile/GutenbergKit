@@ -16,9 +16,8 @@ import { getGBKit } from './store';
  */
 export function initializeApiFetch() {
 	const { siteAPIURL, authToken, siteID } = getGBKit();
-	const rootURL = siteAPIURL ?? undefined;
 
-	apiFetch.use(apiFetch.createRootURLMiddleware(rootURL));
+	apiFetch.use(apiFetch.createRootURLMiddleware(siteAPIURL));
 	apiFetch.use(corsMiddleware);
 	apiFetch.use(createHeadersMiddleware(authToken, siteID));
 
