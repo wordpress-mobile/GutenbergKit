@@ -1,5 +1,6 @@
 package com.example.gutenbergkit
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -10,14 +11,19 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
-
+import androidx.webkit.WebViewAssetLoader
+import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
 
 class GutenbergView : WebView {
 
     private var isEditorLoaded = false
     private var didFireEditorLoaded = false
+    private var assetLoader = WebViewAssetLoader.Builder()
+        .addPathHandler("/assets/", AssetsPathHandler(this.context))
+        .build()
 
     var editorDidBecomeAvailable: ((GutenbergView) -> Unit)? = null
 
@@ -29,9 +35,8 @@ class GutenbergView : WebView {
         defStyle
     )
 
+    @SuppressLint("SetJavaScriptEnabled") // Without JavaScript we have no Gutenberg
     fun start() {
-        this.settings.allowFileAccess = true
-        this.settings.allowUniversalAccessFromFileURLs = true
         this.settings.javaScriptCanOpenWindowsAutomatically = true
         this.settings.javaScriptEnabled = true
         this.addJavascriptInterface(this, "editorDelegate")
@@ -44,6 +49,17 @@ class GutenbergView : WebView {
             ) {
                 Log.e("GutenbergView", error.toString())
                 super.onReceivedError(view, request, error)
+            }
+
+            override fun shouldInterceptRequest(
+                view: WebView?,
+                request: WebResourceRequest?
+            ): WebResourceResponse? {
+                return if (request?.url != null) {
+                    assetLoader.shouldInterceptRequest(request.url)
+                } else {
+                    super.shouldInterceptRequest(view, request)
+                }
             }
         }
 
@@ -60,7 +76,9 @@ class GutenbergView : WebView {
 
         // Production mode – load the assets from the app bundle – you'll need to copy
         // this value out of the `dist` directory after building GutenbergKit
-        this.loadUrl("file:///android_asset/index.html")
+        //
+        // This URL maps to the `assets` directory in this module
+        this.loadUrl("https://appassets.androidplatform.net/assets/index.html")
 
         // Dev mode – you can connect the app to a local dev server and have it refresh as
         // changes are made. To start the server, run `make dev-server` in the project root
