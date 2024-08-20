@@ -137,12 +137,22 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     private func getEditorConfiguration() -> WKUserScript {
         let siteIDString = siteID?.stringValue ?? ""
+        let authType = siteID != nil ? "Bearer" : "Basic"
         let jsCode = """
         window.GBKit = {
             siteAPIURL: '\(siteAPIURL)',
-            authToken: '\(authToken)',
-            siteID: '\(siteIDString)'
+            authToken: '\(authType) \(authToken)',
+            apiPathModifier
         };
+        function apiPathModifier(path) {
+            const siteID = '\(siteIDString)';
+            if (path && siteID.length && !path.includes(`/sites/${siteID}/`)) {
+                return path
+                    .replace('/wp/v2/', `/wp/v2/sites/${siteID}/`)
+                    .replace('/wpcom/v2/', `/wpcom/v2/sites/${siteID}/`)
+                    .replace('/oembed/1.0/', `/oembed/1.0/sites/${siteID}/`);
+            }
+        }
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
         "done";
         """
