@@ -29,7 +29,7 @@ class GutenbergView : WebView {
         defStyle
     )
 
-    fun startWithDevServer() {
+    fun start() {
         this.settings.allowFileAccess = true
         this.settings.allowUniversalAccessFromFileURLs = true
         this.settings.javaScriptCanOpenWindowsAutomatically = true
@@ -63,7 +63,7 @@ class GutenbergView : WebView {
         this.loadUrl("file:///android_asset/index.html")
 
         // Dev mode – you can connect the app to a local dev server and have it refresh as
-        // changes are made. To start the server, run `npm run dev` in the GutenbergKit/ReactApp
+        // changes are made. To start the server, run `make dev-server` in the project root
         // directory.
         //
         // You'll need to set this to the IP address of your local machine

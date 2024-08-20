@@ -29,6 +29,6 @@ class MainActivity : AppCompatActivity() {
         gbView.editorDidBecomeAvailable = { editor ->
             editor.setContent("<!-- wp:paragraph --><p>This is the new content</p><!-- /wp:paragraph -->")
         }
-        gbView.startWithDevServer()
+        gbView.start()
     }
 }
