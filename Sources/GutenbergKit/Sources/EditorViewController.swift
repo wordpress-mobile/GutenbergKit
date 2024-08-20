@@ -95,7 +95,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 //
 //        }.store(in: &cancellables)
         
-        setupEditor()
+        setUpEditor()
         loadEditor()
     }
 
@@ -119,7 +119,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
     
-    private func setupEditor() {
+    private func setUpEditor() {
         let webViewConfiguration = webView.configuration
         let userContentController = webViewConfiguration.userContentController
         let editorInitialConfig = getEditorConfiguration()
