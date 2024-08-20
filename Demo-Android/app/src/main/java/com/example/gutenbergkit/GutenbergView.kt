@@ -84,9 +84,9 @@ class GutenbergView : WebView {
         // changes are made. To start the server, run `make dev-server` in the project root
         // directory.
         //
-        // You'll need to set this to the IP address of your local machine
-        //
-        // this.loadUrl("http://192.168.5.248:5173/")
+        // This only works in the emulator – if you want to run on a real device, you'll need to
+        // set this to the IP address of your dev machine.
+        // this.loadUrl("http://10.0.2.2:5173/")
 
         Log.i("GutenbergView", "Startup Complete")
     }
