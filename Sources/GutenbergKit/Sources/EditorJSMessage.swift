@@ -14,11 +14,6 @@ struct EditorJSMessage {
         self.body = object["body"]
     }
 
-    init(type: MessageType) {
-        self.type = type
-        self.body = nil
-    }
-
     func decode<T: Decodable>(_ type: T.Type) throws -> T {
         guard let body else {
             throw URLError(.unknown)
@@ -28,8 +23,6 @@ struct EditorJSMessage {
     }
 
     enum MessageType: String {
-        /// The web view loaded the specified URL or file
-        case onLoaded
         /// The editor was mounted (initial useEffect was called).
         case onEditorLoaded
         /// The editor content changed.

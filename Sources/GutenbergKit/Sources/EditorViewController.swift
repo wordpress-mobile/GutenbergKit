@@ -253,8 +253,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     fileprivate func controller(_ controller: GutenbergEditorController, didReceiveMessage message: EditorJSMessage) {
         do {
             switch message.type {
-            case .onLoaded:
-                return
             case .onEditorLoaded:
                 didLoadEditor()
             case .onBlocksChanged:
@@ -324,10 +322,6 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         NSLog("navigation: \(String(describing: navigation))")
-        MainActor.assumeIsolated {
-            let message = EditorJSMessage(type: EditorJSMessage.MessageType.onLoaded)
-            delegate?.controller(self, didReceiveMessage: message)
-        }
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
