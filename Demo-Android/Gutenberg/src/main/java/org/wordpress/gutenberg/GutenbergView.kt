@@ -1,4 +1,4 @@
-package com.example.gutenbergkit
+package org.wordpress.gutenberg
 
 import android.annotation.SuppressLint
 import android.content.Context

@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "GutenbergKit"
 include(":app")
+include(":Gutenberg")
