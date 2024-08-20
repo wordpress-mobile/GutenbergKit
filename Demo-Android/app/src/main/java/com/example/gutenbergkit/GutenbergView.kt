@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
 import android.util.Log
+import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -47,12 +48,13 @@ class GutenbergView : WebView {
         }
 
         this.webChromeClient = object : WebChromeClient() {
-            override fun onConsoleMessage(message: String?, lineNumber: Int, sourceID: String?) {
-                if (message != null) {
-                    Log.i("GutenbergView", message)
+            override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                if (consoleMessage != null) {
+                    Log.i("GutenbergView", consoleMessage.message())
                 } else {
                     Log.i("GutenbergView", "null message")
                 }
+                return super.onConsoleMessage(consoleMessage)
             }
         }
 
