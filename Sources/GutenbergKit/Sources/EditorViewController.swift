@@ -57,7 +57,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // This is important so they user can't select anything but text across blocks.
         config.selectionGranularity = .character
 
-        self.webView = WKWebView(frame: .zero, configuration: config)
+        self.webView = GBWebView(frame: .zero, configuration: config)
 
         super.init(nibName: nil, bundle: nil)
     }
