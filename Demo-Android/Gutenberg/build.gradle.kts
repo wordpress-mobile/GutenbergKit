@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.jetbrains.kotlin.android)
+    id("com.automattic.android.publish-to-s3")
 }
 
 android {
@@ -41,4 +42,18 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+}
+
+project.afterEvaluate {
+    publishing {
+        publications {
+            create<MavenPublication>("maven") {
+                from(components["release"])
+
+                groupId = "org.wordpress.gutenbergkit"
+                artifactId = "android"
+                // version is set by 'publish-to-s3' plugin
+            }
+        }
+    }
 }
