@@ -25,3 +25,7 @@ steps:
   - label: ":swift: Build Swift Package"
     command: make build_swift_package
     plugins: *plugins
+
+  - label: ":swift: Test Swift Package"
+    command: make test_swift_package
+    plugins: *plugins

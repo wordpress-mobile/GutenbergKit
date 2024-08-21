@@ -34,3 +34,10 @@ build_swift_package:
 		-sdk iphonesimulator \
 		-destination 'OS=17.5,name=iPhone 15 Plus' \
 		| xcbeautify
+
+test_swift_package:
+	xcodebuild test \
+		-scheme GutenbergKit \
+		-sdk iphonesimulator \
+		-destination 'OS=17.5,name=iPhone 15 Plus' \
+		| xcbeautify
