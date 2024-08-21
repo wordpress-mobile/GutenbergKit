@@ -15,3 +15,6 @@ dev-server: npm-dependencies
 
 fmt-js: npm-dependencies
 	npm --prefix ReactApp/ run format
+
+lint-js: npm-dependencies
+	npm --prefix ReactApp/ run lint

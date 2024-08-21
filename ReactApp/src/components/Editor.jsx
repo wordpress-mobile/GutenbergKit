@@ -11,9 +11,9 @@ import {
 	ObserveTyping,
 } from '@wordpress/block-editor';
 import { Popover } from '@wordpress/components';
-import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
-import { registerCoreBlocks } from '@wordpress/block-library';
-import { parse, serialize, registerBlockType } from '@wordpress/blocks';
+import { getBlockTypes } from '@wordpress/blocks';
+import { registerCoreBlocks, unregisterBlockType } from '@wordpress/block-library';
+import { parse, serialize } from '@wordpress/blocks';
 import {
 	store as editorStore,
 	mediaUpload,
@@ -53,8 +53,8 @@ const POST_MOCK = {
 
 function Editor({ post = POST_MOCK }) {
 	const [blocks, setBlocks] = useState([]);
-	const [registeredBlocks, setRegisteredBlocks] = useState([]);
-	const [isCodeEditorEnabled, setCodeEditorEnabled] = useState(false);
+	const [registeredBlocks] = useState([]);
+	const [setCodeEditorEnabled] = useState(false);
 	const titleRef = useRef();
 	const { setupEditor } = useDispatch(editorStore);
 
@@ -95,15 +95,6 @@ function Editor({ post = POST_MOCK }) {
 	editor.getContent = () => serialize(blocks);
 
 	editor.setCodeEditorEnabled = (enabled) => setCodeEditorEnabled(enabled);
-
-	editor.registerBlocks = (blockTypes) => {
-		// TODO: uncomment when the custom picker is ready (blocker: can't insert blocks)
-		// setRegisteredBlocks(blockTypes);
-		// TODO: uncomment to enable custom block registration
-		// for (const blockType of blockTypes) {
-		//     registerBlockType(blockType.name, blockType);
-		// }
-	};
 
 	useEffect(() => {
 		window.editor = editor;
