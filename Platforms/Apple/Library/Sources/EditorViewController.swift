@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import UIKit
 import WebKit
 import SwiftUI
@@ -328,3 +329,4 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
 private extension WKWebView {
 
 }
+#endif

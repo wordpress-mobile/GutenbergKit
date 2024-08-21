@@ -1,5 +1,5 @@
 import Foundation
-
+#if canImport(UIKit)
 public protocol EditorViewControllerDelegate: AnyObject {
     /// Gets called when the editor is loaded and the initial content is displayed.
     ///
@@ -26,3 +26,5 @@ public struct EditorState {
     /// Set to `true` if the editor has non-empty content.
     public var isEmpty = true
 }
+
+#endif

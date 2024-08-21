@@ -22,6 +22,7 @@ struct EditorBlockPicker: View {
             }
         }
         .toolbar(content: {
+            #if canImport(UIKit)
             ToolbarItemGroup(placement: .topBarLeading) {
                 Button("Close", action: { dismiss() })
             }
@@ -39,8 +40,11 @@ struct EditorBlockPicker: View {
                     }
                 })
             }
+            #endif
         })
+        #if canImport(UIKit)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
 
 //        TabView(selection: $group,
 //                content:  {
@@ -76,7 +80,9 @@ struct EditorBlockPicker: View {
 //                    .padding(.bottom, 8)
 
             }
+            #if canImport(UIKit)
             .background(Color(uiColor: .secondarySystemBackground))
+            #endif
 
 
             List {
@@ -94,7 +100,10 @@ struct EditorBlockPicker: View {
                     _Label("Audio", systemImage: "waveform")
                 }
             }
+
+            #if canImport(UIKit)
             .listStyle(.insetGrouped)
+            #endif
         }
 //        .safeAreaInset(edge: .bottom) {
 //            HStack(spacing: 30) {
@@ -114,6 +123,7 @@ struct EditorBlockPicker: View {
 //        }
 //        .searchable(text: $searchText)//, placement: .navigationBarDrawer(displayMode: .always))
         .toolbar(content: {
+            #if canImport(UIKit)
             ToolbarItemGroup(placement: .topBarLeading) {
                 Button("Close", action: { dismiss() })
             }
@@ -131,8 +141,11 @@ struct EditorBlockPicker: View {
                     }
                 })
             }
+            #endif
         })
+        #if canImport(UIKit)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
 //        .toolbar(.hidden, for: .navigationBar)
 
         .tint(Color.primary)
@@ -190,7 +203,9 @@ private struct MenuItem: View {
                 .foregroundStyle(isSelected ? Color.primary : Color.secondary)
             Rectangle()
                 .frame(height: 2)
+            #if canImport(UIKit)
                 .foregroundStyle(isSelected ? Color.black : Color(uiColor: .separator))
+            #endif
                 .opacity(isSelected ? 1 : 0)
         }
     }

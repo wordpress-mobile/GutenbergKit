@@ -1,6 +1,8 @@
 // swift-tools-version: 5.9
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
+// This Package.swift file is only for the Library to be visible to the Demo App.
+
 import PackageDescription
 
 let package = Package(
@@ -12,13 +14,11 @@ let package = Package(
     targets: [
         .target(
             name: "GutenbergKit",
-            path: "Platforms/Apple/Library/Sources/",
             resources: [.copy("Resources")]
         ),
         .testTarget(
             name: "GutenbergKitTests",
-            dependencies: ["GutenbergKit"],
-            path: "Platforms/Apple/Library/Tests"
+            dependencies: ["GutenbergKit"]
         )
     ]
 )

@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 60;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -22,7 +22,6 @@
 		0CE8E7862C339B0600B9DC67 /* EditorView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
 		0CE8E7872C339B0600B9DC67 /* GutenbergApp.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GutenbergApp.swift; sourceTree = "<group>"; };
 		0CE8E7892C339B0600B9DC67 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
-		0CE8E7922C339B1B00B9DC67 /* GutenbergKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = GutenbergKit; path = ..; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -40,7 +39,6 @@
 		0C4F59822BEFF4970028BD96 = {
 			isa = PBXGroup;
 			children = (
-				0CE8E7922C339B1B00B9DC67 /* GutenbergKit */,
 				0CE8E7882C339B0600B9DC67 /* Sources */,
 				0C83424D2C339B7F00CAA762 /* Resources */,
 				0CE8E78A2C339B0600B9DC67 /* PreviewContent */,
@@ -137,6 +135,9 @@
 				Base,
 			);
 			mainGroup = 0C4F59822BEFF4970028BD96;
+			packageReferences = (
+				247E8EAE2C768ADE005BE1B9 /* XCLocalSwiftPackageReference "../Library" */,
+			);
 			productRefGroup = 0C4F598C2BEFF4970028BD96 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -296,10 +297,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"./PreviewContent\"";
-				DEVELOPMENT_TEAM = NR8DLKJ7E6;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = PZYM8XX95Q;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -312,8 +315,13 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.github.kean.Gutenberg;
+				PRODUCT_BUNDLE_IDENTIFIER = org.wordpress.gutenberg.development;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "Gutenberg Development";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -325,10 +333,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"./PreviewContent\"";
-				DEVELOPMENT_TEAM = NR8DLKJ7E6;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -341,8 +349,12 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.github.kean.Gutenberg;
+				PRODUCT_BUNDLE_IDENTIFIER = "org.wordpress.gutenberg-example";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -371,6 +383,13 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		247E8EAE2C768ADE005BE1B9 /* XCLocalSwiftPackageReference "../Library" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../Library;
+		};
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		0CF6E04B2BEFF60E00EDEE8A /* GutenbergKit */ = {

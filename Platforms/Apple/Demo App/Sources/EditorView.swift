@@ -5,6 +5,7 @@ struct EditorView: View {
     var editorURL: URL?
 
     var body: some View {
+        #if canImport(UIKit)
         _EditorView(editorURL: editorURL)
             .toolbar {
                 ToolbarItemGroup(placement: .topBarLeading) {
@@ -29,6 +30,9 @@ struct EditorView: View {
                     moreMenu
                 }
             }
+        #else
+        Text(verbatim: "Not supported on macOS yet").padding()
+        #endif
     }
 
     private var moreMenu: some View {
@@ -68,6 +72,7 @@ struct EditorView: View {
     }
 }
 
+#if canImport(UIKit)
 private struct _EditorView: UIViewControllerRepresentable {
     var editorURL: URL?
 
@@ -84,6 +89,7 @@ private struct _EditorView: UIViewControllerRepresentable {
         // Do nothing
     }
 }
+#endif
 
 struct Client: EditorNetworkingClient {
     func send(_ request: EditorNetworkRequest) async throws -> EditorNetworkResponse {
