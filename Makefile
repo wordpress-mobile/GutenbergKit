@@ -18,3 +18,10 @@ fmt-js: npm-dependencies
 
 lint-js: npm-dependencies
 	npm --prefix ReactApp/ run lint
+
+build_swift_package:
+	xcodebuild build \
+		-scheme GutenbergKit \
+		-sdk iphonesimulator \
+		-destination 'OS=17.5,name=iPhone 15 Plus' \
+		| xcbeautify

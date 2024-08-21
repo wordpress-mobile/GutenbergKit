@@ -6,7 +6,7 @@ env:
 
 steps:
   - label: ":swift: Build Swift Package"
-    command: swift build
+    command: make build_swift_package
     plugins: &plugins
       - $CI_TOOLKIT_PLUGIN
       - $NVM_PLUGIN
