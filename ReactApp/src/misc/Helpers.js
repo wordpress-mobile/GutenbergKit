@@ -1,6 +1,4 @@
 export function editorLoaded() {
-	console.log('Firing JS editorLoaded event');
-
 	if (window.editorDelegate) {
 		window.editorDelegate.onEditorLoaded();
 	}
