@@ -28,7 +28,7 @@ local-android-library: build
 	./Demo-Android/gradlew -p Demo-Android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3
 
 build_swift_package:
-	echo "--- :swift: Building Swift Package"
+	set -o pipefail # Otherwise, xcbeautify will swallow xcodebuild's error return code, if any
 	xcodebuild build \
 		-scheme GutenbergKit \
 		-sdk iphonesimulator \
@@ -36,6 +36,7 @@ build_swift_package:
 		| xcbeautify
 
 test_swift_package:
+	set -o pipefail # Otherwise, xcbeautify will swallow xcodebuild's error return code, if any
 	xcodebuild test \
 		-scheme GutenbergKit \
 		-sdk iphonesimulator \
