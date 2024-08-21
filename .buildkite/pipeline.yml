@@ -5,16 +5,8 @@ env:
   IMAGE_ID: $IMAGE_ID
 
 steps:
-  - label: ":swift: Build Swift Package"
-    command: make build_swift_package
-    plugins: &plugins
-      - $CI_TOOLKIT_PLUGIN
-      - $NVM_PLUGIN
-
-  - label: ":swift: Test Swift Package"
-    command: make test_swift_package
-    plugins: *plugins
-
   - label: ":react: Build React App"
     command: make build
-    plugins: *plugins
+    plugins:
+      - $CI_TOOLKIT_PLUGIN
+      - $NVM_PLUGIN
