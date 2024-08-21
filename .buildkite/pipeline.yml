@@ -1,0 +1,12 @@
+agents:
+  queue: mac
+
+env:
+  IMAGE_ID: $IMAGE_ID
+
+steps:
+  - label: ":react: Build React App"
+    command: make build
+    plugins:
+      - $CI_TOOLKIT_PLUGIN
+      - $NVM_PLUGIN
