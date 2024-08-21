@@ -26,3 +26,11 @@ lint-js: npm-dependencies
 local-android-library: build
 	echo "--- :android: Building Library"
 	./Demo-Android/gradlew -p Demo-Android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3
+
+build_swift_package:
+	echo "--- :swift: Building Swift Package"
+	xcodebuild build \
+		-scheme GutenbergKit \
+		-sdk iphonesimulator \
+		-destination 'OS=17.5,name=iPhone 15 Plus' \
+		| xcbeautify
