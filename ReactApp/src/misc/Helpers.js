@@ -2,7 +2,7 @@ export function editorLoaded() {
 	console.log('Firing JS editorLoaded event');
 
 	if (window.editorDelegate) {
-		editorDelegate.onEditorLoaded();
+		window.editorDelegate.onEditorLoaded();
 	}
 
 	if (window.webkit) {
@@ -15,7 +15,7 @@ export function editorLoaded() {
 
 export function onBlocksChanged(isEmpty = false) {
 	if (window.editorDelegate) {
-		editorDelegate.onBlocksChanged(isEmpty);
+		window.editorDelegate.onBlocksChanged(isEmpty);
 	}
 
 	if (window.webkit) {
@@ -28,7 +28,7 @@ export function onBlocksChanged(isEmpty = false) {
 
 export function showBlockPicker() {
 	if (window.editorDelegate) {
-		editorDelegate.showBlockPicker();
+		window.editorDelegate.showBlockPicker();
 	}
 
 	if (window.webkit) {
