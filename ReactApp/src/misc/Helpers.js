@@ -1,43 +1,42 @@
 export function editorLoaded() {
-	console.log("Firing JS editorLoaded event");
+	console.log('Firing JS editorLoaded event');
 
-	if(window.editorDelegate) {
+	if (window.editorDelegate) {
 		editorDelegate.onEditorLoaded();
 	}
 
-	if(window.webkit) {
+	if (window.webkit) {
 		window.webkit.messageHandlers.editorDelegate.postMessage({
 			message: 'onEditorLoaded',
-			body: {}
+			body: {},
 		});
 	}
 }
 
 export function onBlocksChanged(isEmpty = false) {
-	if(window.editorDelegate) {
+	if (window.editorDelegate) {
 		editorDelegate.onBlocksChanged(isEmpty);
 	}
 
-	if(window.webkit) {
+	if (window.webkit) {
 		window.webkit.messageHandlers.editorDelegate.postMessage({
 			message: 'onBlocksChanged',
-			body: { isEmpty: isEmpty }
+			body: { isEmpty: isEmpty },
 		});
 	}
 }
 
 export function showBlockPicker() {
-	if(window.editorDelegate) {
+	if (window.editorDelegate) {
 		editorDelegate.showBlockPicker();
 	}
 
-	if(window.webkit) {
+	if (window.webkit) {
 		window.webkit.messageHandlers.editorDelegate.postMessage({
 			message: 'showBlockPicker',
-			body: {}
+			body: {},
 		});
 	}
-
 }
 
 // FIXME: this was an attempt to fix an existing issue in Gutenberg , but it does it only
