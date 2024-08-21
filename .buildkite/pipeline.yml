@@ -7,7 +7,7 @@ env:
 steps:
   - label: ":react: Build React App"
     command: make build
-    plugins:
+    plugins: &plugins
       - $CI_TOOLKIT_PLUGIN
       - $NVM_PLUGIN
 
@@ -18,7 +18,10 @@ steps:
       ./Demo-Android/gradlew -p Demo-Android :gutenberg:prepareToPublishToS3 $(prepare_to_publish_to_s3_params) :gutenberg:publish
     agents:
       queue: android
-    plugins:
+    plugins: *plugins
       - $CI_TOOLKIT_PLUGIN
       - $NVM_PLUGIN
 
+  - label: ":swift: Build Swift Package"
+    command: swift build
+    plugins: *plugins
