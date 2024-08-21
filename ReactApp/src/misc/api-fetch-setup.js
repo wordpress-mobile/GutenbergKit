@@ -15,18 +15,15 @@ import { getGBKit } from './store';
  * and preloads some endpoints with mock data for specific components.
  */
 export function initializeApiFetch() {
-	const { siteAPIURL, authToken } = getGBKit();
+	const { siteApiRoot, authHeader } = getGBKit();
 
-	apiFetch.use(apiFetch.createRootURLMiddleware(siteAPIURL));
+	apiFetch.use(apiFetch.createRootURLMiddleware(siteApiRoot));
 	apiFetch.use(corsMiddleware);
 	apiFetch.use(apiPathModifierMiddleware);
-	apiFetch.use(createHeadersMiddleware(authToken));
+	apiFetch.use(createHeadersMiddleware(authHeader));
 
 	// Preload some endpoints to return data needed for some components
 	// Like PostTitle.
-	const LOCAL_POST_ID = 1;
-	const LOCAL_AUTHOR_ID = 1;
-
 	apiFetch.use(
 		apiFetch.createPreloadingMiddleware({
 			'/wp/v2/types?context=view': {
@@ -83,24 +80,6 @@ export function initializeApiFetch() {
 					template_lock: false,
 				},
 			},
-			[`/wp/v2/posts/${LOCAL_POST_ID}?context=edit`]: {
-				body: {
-					id: LOCAL_POST_ID,
-					slug: '',
-					status: 'auto-draft',
-					type: 'post',
-					title: { raw: 'Auto Draft', rendered: 'Auto Draft' },
-					content: {
-						raw: '',
-						rendered: '',
-						protected: false,
-						block_version: 0,
-					},
-					excerpt: { raw: '', rendered: '', protected: false },
-					author: LOCAL_AUTHOR_ID,
-					featured_media: 0,
-				},
-			},
 		})
 	);
 }
@@ -111,17 +90,29 @@ function corsMiddleware(options, next) {
 }
 
 function apiPathModifierMiddleware(options, next) {
-	const { apiPathModifier = (path) => path } = getGBKit();
-	options.path = apiPathModifier(options.path);
+	const { siteApiNamespace } = getGBKit();
+
+	if (siteApiNamespace) {
+		const originalPath = options.path;
+
+		// Determine the initial segments of the path where the namespace should be inserted.
+		// E.g /wp/v2/, /oembed/1.0/
+		const initialPathSegments =
+			originalPath.split('/').splice(1, 2).join('/') + '/';
+		const remainingPath = originalPath.replace(initialPathSegments, '');
+
+		// Update the path with the new namespace.
+		options.path = `${initialPathSegments}${siteApiNamespace}${remainingPath}`;
+	}
 	return next(options);
 }
 
-function createHeadersMiddleware(authToken) {
+function createHeadersMiddleware(authHeader) {
 	return (options, next) => {
 		options.headers = options.headers || {};
 
-		if (authToken) {
-			options.headers.Authorization = authToken;
+		if (authHeader) {
+			options.headers.Authorization = authHeader;
 		}
 
 		return next(options);

@@ -11,9 +11,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let controller = GutenbergEditorController()
     private let timestampInit = CFAbsoluteTimeGetCurrent()
     private let service: EditorService
-    private let siteAPIURL: String
-    private let authToken: String
-    private let siteID: NSNumber?
+    private let siteApiRoot: String
+    private let siteApiNamespace: String
+    private let authHeader: String
 
     public private(set) var state = EditorState()
 
@@ -36,12 +36,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private var cancellables: [AnyCancellable] = []
 
     /// Initalizes the editor with the initial content (Gutenberg).
-    public init(content: String = "", service: EditorService, siteAPIURL: String = "", authToken: String = "", siteID: NSNumber? = nil) {
+    public init(content: String = "", service: EditorService, siteApiRoot: String = "", siteApiNamespace: String = "", authHeader: String = "") {
         self._initialRawContent = content
         self.service = service
-        self.siteAPIURL = siteAPIURL
-        self.authToken = authToken
-        self.siteID = siteID
+        self.siteApiRoot = siteApiRoot
+        self.siteApiNamespace = siteApiNamespace
+        self.authHeader = authHeader
 
         Task {
             await service.warmup()
@@ -136,23 +136,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func getEditorConfiguration() -> WKUserScript {
-        let siteIDString = siteID?.stringValue ?? ""
-        let authType = siteID != nil ? "Bearer" : "Basic"
         let jsCode = """
         window.GBKit = {
-            siteAPIURL: '\(siteAPIURL)',
-            authToken: '\(authType) \(authToken)',
-            apiPathModifier
+            siteApiRoot: '\(siteApiRoot)',
+            siteApiNamespace: '\(siteApiNamespace)',
+            authHeader: '\(authHeader)'
         };
-        function apiPathModifier(path) {
-            const siteID = '\(siteIDString)';
-            if (path && siteID.length && !path.includes(`/sites/${siteID}/`)) {
-                return path
-                    .replace('/wp/v2/', `/wp/v2/sites/${siteID}/`)
-                    .replace('/wpcom/v2/', `/wpcom/v2/sites/${siteID}/`)
-                    .replace('/oembed/1.0/', `/oembed/1.0/sites/${siteID}/`);
-            }
-        }
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
         "done";
         """
@@ -297,8 +286,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let editorViewController = EditorViewController(
             content: "",
             service: EditorService(client: MockClient()),
-            siteAPIURL: "",
-            authToken: ""
+            siteApiRoot: "",
+            authHeader: ""
         )
         _ = editorViewController.view // Trigger viewDidLoad
 
