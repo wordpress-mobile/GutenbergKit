@@ -54,7 +54,7 @@ const POST_MOCK = {
 function Editor({ post = POST_MOCK }) {
 	const [blocks, setBlocks] = useState([]);
 	const [registeredBlocks] = useState([]);
-	const [setCodeEditorEnabled] = useState(false);
+	const [_isCodeEditorEnabled, setCodeEditorEnabled] = useState(false);
 	const titleRef = useRef();
 	const { setupEditor } = useDispatch(editorStore);
 
