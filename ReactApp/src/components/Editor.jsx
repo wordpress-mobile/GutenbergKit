@@ -11,8 +11,8 @@ import {
 	ObserveTyping,
 } from '@wordpress/block-editor';
 import { Popover } from '@wordpress/components';
-import { getBlockTypes } from '@wordpress/blocks';
-import { registerCoreBlocks, unregisterBlockType } from '@wordpress/block-library';
+import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
+import { registerCoreBlocks } from '@wordpress/block-library';
 import { parse, serialize } from '@wordpress/blocks';
 import {
 	store as editorStore,

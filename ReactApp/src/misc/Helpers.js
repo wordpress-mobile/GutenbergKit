@@ -19,7 +19,7 @@ export function onBlocksChanged(isEmpty = false) {
 	if (window.webkit) {
 		window.webkit.messageHandlers.editorDelegate.postMessage({
 			message: 'onBlocksChanged',
-			body: { isEmpty: isEmpty },
+			body: { isEmpty },
 		});
 	}
 }
