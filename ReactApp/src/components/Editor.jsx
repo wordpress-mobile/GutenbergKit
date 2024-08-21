@@ -46,9 +46,7 @@ import { postMessage } from '../misc/Helpers';
 let editor = {};
 
 const POST_MOCK = {
-	id: 1,
 	type: 'post',
-	author: 1,
 };
 
 function Editor({ post = POST_MOCK }) {
