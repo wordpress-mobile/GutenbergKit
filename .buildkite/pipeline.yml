@@ -11,6 +11,10 @@ steps:
       - $CI_TOOLKIT_PLUGIN
       - $NVM_PLUGIN
 
+  - label: ":swift: Test Swift Package"
+    command: make test_swift_package
+    plugins: *plugins
+
   - label: ":react: Build React App"
     command: make build
     plugins: *plugins
