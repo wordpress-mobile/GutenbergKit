@@ -42,21 +42,12 @@ playground.xcworkspace
 .swiftpm
 
 
-## CocoaPods
-#
-# We recommend against adding the Pods directory to your .gitignore. However
-# you should judge for yourself, the pros and cons are mentioned at:
-# https://guides.cocoapods.org/using/using-cocoapods.html#should-i-check-the-pods-directory-into-source-control
-#
+# Build Products
+/Platforms/Apple/Library/Sources/Resources/assets
+/Platforms/Apple/Library/Sources/Resources/index.html
 
-Pods/
-
-
-## Carthage
-#
-# Add this line if you want to avoid checking in source code from Carthage dependencies.
-
-Carthage
+/Platforms/Android/Framework/src/main/assets/assets
+/Platforms/Android/Framework/src/main/assets/index.html
 
 
 # Logs
@@ -189,3 +180,8 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Android App
+local.properties
+.gradle
+.idea
