@@ -285,9 +285,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
         let editorViewController = EditorViewController(
             content: "",
-            service: EditorService(client: MockClient()),
-            siteApiRoot: "",
-            authHeader: ""
+            service: EditorService(client: MockClient())
         )
         _ = editorViewController.view // Trigger viewDidLoad
 
