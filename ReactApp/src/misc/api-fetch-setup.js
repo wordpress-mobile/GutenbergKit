@@ -93,16 +93,8 @@ function apiPathModifierMiddleware(options, next) {
 	const { siteApiNamespace } = getGBKit();
 
 	if (siteApiNamespace) {
-		const originalPath = options.path;
-
-		// Determine the initial segments of the path where the namespace should be inserted.
-		// E.g /wp/v2/, /oembed/1.0/
-		const initialPathSegments =
-			originalPath.split('/').splice(1, 2).join('/') + '/';
-		const remainingPath = originalPath.replace(initialPathSegments, '');
-
-		// Update the path with the new namespace.
-		options.path = `${initialPathSegments}${siteApiNamespace}${remainingPath}`;
+		// Insert the API namespace after the first two path segments. 
+		options.path = options.path.replace(/^((?:\/[\w.-]+){2})/, `$1/${siteApiNamespace}`);
 	}
 	return next(options);
 }
