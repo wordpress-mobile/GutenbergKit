@@ -19,8 +19,6 @@ steps:
     agents:
       queue: android
     plugins: *plugins
-      - $CI_TOOLKIT_PLUGIN
-      - $NVM_PLUGIN
 
   - label: ":swift: Build Swift Package"
     command: make build_swift_package
