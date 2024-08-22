@@ -13,9 +13,7 @@ The ReactJS app is embedded in the native GutenbergKit module.
 To launch the app in the browser, run:
 
 ```bash
-cd ./ReactApp
-npm install // On first use
-npm run dev
+make dev-server
 ```
 
 ### GutenbergKit
@@ -46,7 +44,7 @@ If you are using SwiftUI previews, make sure to point them to the localhost prog
 To build the React app for production and incorporate the changes in the `GutenbergKit` Swift module, run:
 
 ```
-./Scripts/build.sh
+make build
 ```
 
 Once it's done, the Swift package is ready to be published.

@@ -4,7 +4,7 @@ import GutenbergKit
 struct ContentView: View {
     var body: some View {
         NavigationView {
-            EditorView()
+            EditorView(editorURL: URL(string: "http://localhost:5173/")!)
         }
     }
 }

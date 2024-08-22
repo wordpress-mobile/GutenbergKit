@@ -1,7 +1,39 @@
-export function postMessage(message, parameters = {}) {
+export function editorLoaded() {
+	if (window.editorDelegate) {
+		window.editorDelegate.onEditorLoaded();
+	}
+
 	if (window.webkit) {
-		const value = { message: message, body: parameters };
-		window.webkit.messageHandlers.editorDelegate.postMessage(value);
+		window.webkit.messageHandlers.editorDelegate.postMessage({
+			message: 'onEditorLoaded',
+			body: {},
+		});
+	}
+}
+
+export function onBlocksChanged(isEmpty = false) {
+	if (window.editorDelegate) {
+		window.editorDelegate.onBlocksChanged(isEmpty);
+	}
+
+	if (window.webkit) {
+		window.webkit.messageHandlers.editorDelegate.postMessage({
+			message: 'onBlocksChanged',
+			body: { isEmpty },
+		});
+	}
+}
+
+export function showBlockPicker() {
+	if (window.editorDelegate) {
+		window.editorDelegate.showBlockPicker();
+	}
+
+	if (window.webkit) {
+		window.webkit.messageHandlers.editorDelegate.postMessage({
+			message: 'showBlockPicker',
+			body: {},
+		});
 	}
 }
 
