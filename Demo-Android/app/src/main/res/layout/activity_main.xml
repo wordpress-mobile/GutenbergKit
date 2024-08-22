@@ -7,7 +7,7 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
-    <com.example.gutenbergkit.GutenbergView
+    <org.wordpress.gutenberg.GutenbergView
         android:id="@+id/gutenbergView"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"

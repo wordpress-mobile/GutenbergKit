@@ -10,3 +10,15 @@ steps:
     plugins:
       - $CI_TOOLKIT_PLUGIN
       - $NVM_PLUGIN
+
+  - label: ":android: Publish Android Library"
+    command: |
+      make build
+      echo "--- :android: Publishing Android Library"
+      ./Demo-Android/gradlew -p Demo-Android :gutenberg:prepareToPublishToS3 $(prepare_to_publish_to_s3_params) :gutenberg:publish
+    agents:
+      queue: android
+    plugins:
+      - $CI_TOOLKIT_PLUGIN
+      - $NVM_PLUGIN
+
