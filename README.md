@@ -6,6 +6,8 @@ A proof of concept Gutenberg editor for native iOS apps built using web technolo
 
 ## Development
 
+Before getting started, you'll need the Node dependencies to be checked out locally, which you can get by running `make build`.
+
 ### React App
 
 The ReactJS app is embedded in the native GutenbergKit module.
@@ -22,7 +24,7 @@ A Swift package with native wrappers for the Gutenberg editor.
 
 ### Demo
 
-A host app that can be used to test the changes made to the editor quickly. 
+A host app that can be used to test the changes made to the editor quickly.
 
 By default, the demo app uses a production build of the React app included in the `GutenbergKit` package. During development, make sure to run the React app and pass the localhost URL as an environment variable of the demo app.
 
