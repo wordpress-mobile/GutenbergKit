@@ -28,15 +28,17 @@ local-android-library: build
 	./Demo-Android/gradlew -p Demo-Android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3
 
 build_swift_package:
-	# FIXME: Reintroduce xcbeautify once build failure in CI is sorted.
-	# Somehow, even with 'set -o pipefail' the failure from xcodebuild is swallowed
-	xcodebuild build \
+	@set -o pipefail && \
+		xcodebuild build \
 		-scheme GutenbergKit \
 		-sdk iphonesimulator \
-		-destination 'OS=17.5,name=iPhone 15 Plus'
+		-destination 'OS=17.5,name=iPhone 15 Plus' \
+		| xcbeautify
 
 test_swift_package:
-	xcodebuild test \
+	@set -o pipefail && \
+		xcodebuild test \
 		-scheme GutenbergKit \
 		-sdk iphonesimulator \
-		-destination 'OS=17.5,name=iPhone 15 Plus'
+		-destination 'OS=17.5,name=iPhone 15 Plus' \
+		| xcbeautify
