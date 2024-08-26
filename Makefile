@@ -1,4 +1,15 @@
 
+SIMULATOR_DESTINATION := OS=17.5,name=iPhone 15 Plus
+
+define XCODEBUILD_CMD
+	@set -o pipefail && \
+		xcodebuild $(1) \
+		-scheme GutenbergKit \
+		-sdk iphonesimulator \
+		-destination '${SIMULATOR_DESTINATION}' \
+		| xcbeautify
+endef
+
 npm-dependencies:
 	echo "--- :npm: Installing NPM Dependencies"
 	npm --prefix ReactApp/ ci
@@ -28,17 +39,7 @@ local-android-library: build
 	./Demo-Android/gradlew -p Demo-Android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3
 
 build_swift_package: build
-	@set -o pipefail && \
-		xcodebuild build \
-		-scheme GutenbergKit \
-		-sdk iphonesimulator \
-		-destination 'OS=17.5,name=iPhone 15 Plus' \
-		| xcbeautify
+	$(call XCODEBUILD_CMD, build)
 
 test_swift_package: build
-	@set -o pipefail && \
-		xcodebuild test \
-		-scheme GutenbergKit \
-		-sdk iphonesimulator \
-		-destination 'OS=17.5,name=iPhone 15 Plus' \
-		| xcbeautify
+	$(call XCODEBUILD_CMD, test)
