@@ -5,9 +5,6 @@ env:
   IMAGE_ID: $IMAGE_ID
 
 steps:
-  - label: ":bug: swift version?"
-    command: swift --version
-
   - label: ":react: Build React App"
     command: make build
     plugins: &plugins
