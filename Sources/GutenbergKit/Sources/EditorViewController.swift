@@ -11,8 +11,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let controller = GutenbergEditorController()
     private let timestampInit = CFAbsoluteTimeGetCurrent()
     private let service: EditorService
-    private let siteURL: String
-    private let authToken: String
+    private let siteApiRoot: String
+    private let siteApiNamespace: String
+    private let authHeader: String
 
     public private(set) var state = EditorState()
 
@@ -35,11 +36,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private var cancellables: [AnyCancellable] = []
 
     /// Initalizes the editor with the initial content (Gutenberg).
-    public init(content: String = "", service: EditorService, siteURL: String = "", authToken: String = "") {
+    public init(content: String = "", service: EditorService, siteApiRoot: String = "", siteApiNamespace: String = "", authHeader: String = "") {
         self._initialRawContent = content
         self.service = service
-        self.siteURL = siteURL
-        self.authToken = authToken
+        self.siteApiRoot = siteApiRoot
+        self.siteApiNamespace = siteApiNamespace
+        self.authHeader = authHeader
 
         Task {
             await service.warmup()
@@ -92,7 +94,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 //            assert(Thread.isMainThread)
 //
 //        }.store(in: &cancellables)
-
+        
+        setUpEditor()
         loadEditor()
     }
 
@@ -115,6 +118,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             // TOOD: relay to the client
         }
     }
+    
+    private func setUpEditor() {
+        let webViewConfiguration = webView.configuration
+        let userContentController = webViewConfiguration.userContentController
+        let editorInitialConfig = getEditorConfiguration()
+        userContentController.addUserScript(editorInitialConfig)
+    }
 
     private func loadEditor() {
         if let editorURL = editorURL ?? ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
@@ -125,15 +135,19 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
-    func injectEditorConfiguration() {
-        evaluate("""
+    private func getEditorConfiguration() -> WKUserScript {
+        let jsCode = """
         window.GBKit = {
-            siteURL: '\(siteURL)',
-            authToken: '\(authToken)'
+            siteApiRoot: '\(siteApiRoot)',
+            siteApiNamespace: '\(siteApiNamespace)',
+            authHeader: '\(authHeader)'
         };
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
         "done";
-        """)
+        """
+
+        let editorScript = WKUserScript(source: jsCode, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        return editorScript
     }
 
     // MARK: - Public API
@@ -228,8 +242,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     fileprivate func controller(_ controller: GutenbergEditorController, didReceiveMessage message: EditorJSMessage) {
         do {
             switch message.type {
-            case .onLoaded:
-                injectEditorConfiguration()
             case .onEditorLoaded:
                 didLoadEditor()
             case .onBlocksChanged:
@@ -273,9 +285,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
         let editorViewController = EditorViewController(
             content: "",
-            service: EditorService(client: MockClient()),
-            siteURL: "",
-            authToken: ""
+            service: EditorService(client: MockClient())
         )
         _ = editorViewController.view // Trigger viewDidLoad
 
@@ -299,10 +309,6 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         NSLog("navigation: \(String(describing: navigation))")
-        MainActor.assumeIsolated {
-            let message = EditorJSMessage(type: EditorJSMessage.MessageType.onLoaded)
-            delegate?.controller(self, didReceiveMessage: message)
-        }
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {

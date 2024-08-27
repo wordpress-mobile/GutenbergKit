@@ -15,18 +15,15 @@ import { getGBKit } from './store';
  * and preloads some endpoints with mock data for specific components.
  */
 export function initializeApiFetch() {
-	const { siteURL, authToken } = getGBKit();
-	const rootURL = siteURL ? `${siteURL}/wp-json/` : undefined;
+	const { siteApiRoot, authHeader } = getGBKit();
 
-	apiFetch.use(apiFetch.createRootURLMiddleware(rootURL));
+	apiFetch.use(apiFetch.createRootURLMiddleware(siteApiRoot));
 	apiFetch.use(corsMiddleware);
-	apiFetch.use(createHeadersMiddleware(authToken));
+	apiFetch.use(apiPathModifierMiddleware);
+	apiFetch.use(createHeadersMiddleware(authHeader));
 
 	// Preload some endpoints to return data needed for some components
 	// Like PostTitle.
-	const LOCAL_POST_ID = 1;
-	const LOCAL_AUTHOR_ID = 1;
-
 	apiFetch.use(
 		apiFetch.createPreloadingMiddleware({
 			'/wp/v2/types?context=view': {
@@ -83,24 +80,6 @@ export function initializeApiFetch() {
 					template_lock: false,
 				},
 			},
-			[`/wp/v2/posts/${LOCAL_POST_ID}?context=edit`]: {
-				body: {
-					id: LOCAL_POST_ID,
-					slug: '',
-					status: 'auto-draft',
-					type: 'post',
-					title: { raw: 'Auto Draft', rendered: 'Auto Draft' },
-					content: {
-						raw: '',
-						rendered: '',
-						protected: false,
-						block_version: 0,
-					},
-					excerpt: { raw: '', rendered: '', protected: false },
-					author: LOCAL_AUTHOR_ID,
-					featured_media: 0,
-				},
-			},
 		})
 	);
 }
@@ -110,12 +89,22 @@ function corsMiddleware(options, next) {
 	return next(options);
 }
 
-function createHeadersMiddleware(authToken) {
+function apiPathModifierMiddleware(options, next) {
+	const { siteApiNamespace } = getGBKit();
+
+	if (siteApiNamespace) {
+		// Insert the API namespace after the first two path segments. 
+		options.path = options.path.replace(/^((?:\/[\w.-]+){2})/, `$1/${siteApiNamespace}`);
+	}
+	return next(options);
+}
+
+function createHeadersMiddleware(authHeader) {
 	return (options, next) => {
 		options.headers = options.headers || {};
 
-		if (authToken) {
-			options.headers.Authorization = `Basic ${authToken}`;
+		if (authHeader) {
+			options.headers.Authorization = authHeader;
 		}
 
 		return next(options);
