@@ -3,12 +3,9 @@
  */
 import { useEffect, useRef, useState } from '@wordpress/element';
 import {
-	BlockEditorKeyboardShortcuts,
-	BlockEditorProvider,
 	BlockList,
-	BlockTools,
-	WritingFlow,
-	ObserveTyping,
+	privateApis as blockEditorPrivateApis,
+	store as blockEditorStore,
 } from '@wordpress/block-editor';
 import { Popover } from '@wordpress/components';
 import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
@@ -19,9 +16,11 @@ import {
 	mediaUpload,
 	EditorSnackbars,
 	PostTitle,
+	privateApis as editorPrivateApis,
 } from '@wordpress/editor';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as coreStore } from '@wordpress/core-data';
+import { __dangerousOptInToUnstableAPIsOnlyForCoreModules } from '@wordpress/private-apis';
 
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
@@ -49,6 +48,19 @@ const POST_MOCK = {
 	type: 'post',
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
+export const { lock, unlock } =
+	__dangerousOptInToUnstableAPIsOnlyForCoreModules(
+		'I acknowledge private features are not for use in themes or plugins and doing so will break in the next version of WordPress.',
+		'@wordpress/editor'
+	);
+
+const { useBlockEditorSettings } = unlock(editorPrivateApis);
+const {
+	ExperimentalBlockEditorProvider: BlockEditorProvider,
+	ExperimentalBlockCanvas: BlockCanvas,
+} = unlock(blockEditorPrivateApis);
+
 function Editor({ post = POST_MOCK }) {
 	const [blocks, setBlocks] = useState([]);
 	const [registeredBlocks] = useState([]);
@@ -58,14 +70,23 @@ function Editor({ post = POST_MOCK }) {
 
 	useEffect(() => {
 		setupEditor(post, [], {});
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
-	const { hasUploadPermissions } = useSelect((select) => {
-		const { getEntityRecord } = select(coreStore);
+	const {
+		blockPatterns,
+		editorSettings,
+		hasUploadPermissions,
+		reusableBlocks,
+	} = useSelect((select) => {
+		const { getEntityRecord, getEntityRecords } = select(coreStore);
+		const { getSettings } = select(blockEditorStore);
 		const user = getEntityRecord('root', 'user', post.author);
-
 		return {
+			blockPatterns: select(coreStore).getBlockPatterns(),
+			editorSettings: getSettings(),
 			hasUploadPermissions: user?.capabilities?.upload_files ?? true,
+			reusableBlocks: getEntityRecords('postType', 'wp_block'),
 		};
 	}, []);
 
@@ -108,9 +129,19 @@ function Editor({ post = POST_MOCK }) {
 		};
 	}, []);
 
+	const blockEditorSettings = useBlockEditorSettings(
+		editorSettings,
+		post.type,
+		post?.id,
+		'visual'
+	);
+
 	const settings = {
+		...blockEditorSettings,
 		hasFixedToolbar: true,
 		mediaUpload: hasUploadPermissions ? mediaUpload : undefined,
+		__experimentalReusableBlocks: reusableBlocks,
+		__experimentalBlockPatterns: blockPatterns,
 	};
 
 	// if (isCodeEditorEnabled) {
@@ -118,32 +149,29 @@ function Editor({ post = POST_MOCK }) {
 	// }
 
 	return (
-		<BlockEditorProvider
-			value={blocks}
-			onInput={didChangeBlocks}
-			onChange={didChangeBlocks}
-			settings={settings}
-		>
-			<div className="editor-visual-editor__post-title-wrapper">
-				<PostTitle ref={titleRef} />
-			</div>
-			<BlockTools>
-				<div className="editor-styles-wrapper">
-					<BlockEditorKeyboardShortcuts.Register />
-					<WritingFlow>
-						<ObserveTyping>
-							<BlockList />
-							<EditorToolbar
-								registeredBlocks={registeredBlocks}
-							/>{' '}
-							{/* not sure if optimal placement */}
-						</ObserveTyping>
-					</WritingFlow>
-				</div>
-			</BlockTools>
-			<Popover.Slot />
-			<EditorSnackbars />
-		</BlockEditorProvider>
+		<div className="editor__container">
+			<BlockEditorProvider
+				value={blocks}
+				onInput={didChangeBlocks}
+				onChange={didChangeBlocks}
+				settings={settings}
+			>
+				<BlockCanvas
+					shouldIframe={false}
+					height="auto"
+					styles={settings.styles}
+				>
+					<div className="editor-visual-editor__post-title-wrapper">
+						<PostTitle ref={titleRef} />
+					</div>
+					<BlockList />
+				</BlockCanvas>
+				<EditorToolbar registeredBlocks={registeredBlocks} />
+
+				<Popover.Slot />
+				<EditorSnackbars />
+			</BlockEditorProvider>
+		</div>
 	);
 }
 
