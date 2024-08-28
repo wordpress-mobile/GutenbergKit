@@ -94,6 +94,12 @@ export function initializeApiFetch() {
 
 function corsMiddleware(options, next) {
 	options.mode = 'cors';
+
+	// This custom header causes CORS errors. Although settings the mode to 'cors'
+	// should prevent this header, incorrect middleware order results in setting
+	// the header.
+	delete options.headers['x-wp-api-fetch-from-editor'];
+
 	return next(options);
 }
 
