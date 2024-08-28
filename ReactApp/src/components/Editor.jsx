@@ -69,7 +69,18 @@ function Editor({ post = POST_MOCK }) {
 	const { setupEditor } = useDispatch(editorStore);
 
 	useEffect(() => {
+		window.editor = editor;
 		setupEditor(post, [], {});
+		registerCoreBlocks();
+
+		editorLoaded();
+
+		return () => {
+			window.editor = {};
+			getBlockTypes().forEach((block) => {
+				unregisterBlockType(block.name);
+			});
+		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
@@ -114,20 +125,6 @@ function Editor({ post = POST_MOCK }) {
 	editor.getContent = () => serialize(blocks);
 
 	editor.setCodeEditorEnabled = (enabled) => setCodeEditorEnabled(enabled);
-
-	useEffect(() => {
-		window.editor = editor;
-		registerCoreBlocks();
-
-		editorLoaded();
-
-		return () => {
-			window.editor = {};
-			getBlockTypes().forEach((block) => {
-				unregisterBlockType(block.name);
-			});
-		};
-	}, []);
 
 	const blockEditorSettings = useBlockEditorSettings(
 		editorSettings,
