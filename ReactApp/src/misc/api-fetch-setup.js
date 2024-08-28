@@ -17,6 +17,14 @@ import { getGBKit } from './store';
 export function initializeApiFetch() {
 	const { siteApiRoot, authHeader } = getGBKit();
 
+	if (!siteApiRoot) {
+		throw new Error('API fetch requires a site API root.');
+	}
+
+	if (!authHeader) {
+		console.warn('Missing authentication header.');
+	}
+
 	apiFetch.use(apiFetch.createRootURLMiddleware(siteApiRoot));
 	apiFetch.use(corsMiddleware);
 	apiFetch.use(apiPathModifierMiddleware);
