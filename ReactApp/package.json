@@ -7,6 +7,7 @@
 	"scripts": {
 		"dev": "vite --host",
 		"build": "vite build",
+		"build:setup": "vite build ./src/setup/ --outDir ./dist/setup",
 		"lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
 		"format": "prettier --write .",
 		"preview": "vite preview --host"
