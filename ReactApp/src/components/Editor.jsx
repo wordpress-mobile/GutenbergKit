@@ -21,7 +21,7 @@ import {
 	PostTitle,
 } from '@wordpress/editor';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { store as coreStore } from '@wordpress/core-data';
+import { store as coreStore, EntityProvider } from '@wordpress/core-data';
 
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
@@ -118,32 +118,34 @@ function Editor({ post = POST_MOCK }) {
 	// }
 
 	return (
-		<BlockEditorProvider
-			value={blocks}
-			onInput={didChangeBlocks}
-			onChange={didChangeBlocks}
-			settings={settings}
-		>
-			<div className="editor-visual-editor__post-title-wrapper">
-				<PostTitle ref={titleRef} />
-			</div>
-			<BlockTools>
-				<div className="editor-styles-wrapper">
-					<BlockEditorKeyboardShortcuts.Register />
-					<WritingFlow>
-						<ObserveTyping>
-							<BlockList />
-							<EditorToolbar
-								registeredBlocks={registeredBlocks}
-							/>{' '}
-							{/* not sure if optimal placement */}
-						</ObserveTyping>
-					</WritingFlow>
+		<EntityProvider kind="postType" type={post.type} id={post.id}>
+			<BlockEditorProvider
+				value={blocks}
+				onInput={didChangeBlocks}
+				onChange={didChangeBlocks}
+				settings={settings}
+			>
+				<div className="editor-visual-editor__post-title-wrapper">
+					<PostTitle ref={titleRef} />
 				</div>
-			</BlockTools>
-			<Popover.Slot />
-			<EditorSnackbars />
-		</BlockEditorProvider>
+				<BlockTools>
+					<div className="editor-styles-wrapper">
+						<BlockEditorKeyboardShortcuts.Register />
+						<WritingFlow>
+							<ObserveTyping>
+								<BlockList />
+								<EditorToolbar
+									registeredBlocks={registeredBlocks}
+								/>{' '}
+								{/* not sure if optimal placement */}
+							</ObserveTyping>
+						</WritingFlow>
+					</div>
+				</BlockTools>
+				<Popover.Slot />
+				<EditorSnackbars />
+			</BlockEditorProvider>
+		</EntityProvider>
 	);
 }
 
