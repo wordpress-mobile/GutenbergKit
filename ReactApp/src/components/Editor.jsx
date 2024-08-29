@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 /**
  * WordPress dependencies
  */
@@ -19,7 +20,7 @@ import {
 	privateApis as editorPrivateApis,
 } from '@wordpress/editor';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { store as coreStore } from '@wordpress/core-data';
+import { store as coreStore, useEntityBlockEditor } from '@wordpress/core-data';
 import { __dangerousOptInToUnstableAPIsOnlyForCoreModules } from '@wordpress/private-apis';
 
 // Default styles that are needed for the editor.
@@ -44,10 +45,6 @@ import { editorLoaded, onBlocksChanged } from '../misc/Helpers';
 // Current editor (assumes can be only one instance).
 let editor = {};
 
-const POST_MOCK = {
-	type: 'post',
-};
-
 // eslint-disable-next-line react-refresh/only-export-components
 export const { lock, unlock } =
 	__dangerousOptInToUnstableAPIsOnlyForCoreModules(
@@ -55,22 +52,44 @@ export const { lock, unlock } =
 		'@wordpress/editor'
 	);
 
+const postTypeEntities = [
+	{ name: 'post', baseURL: '/wp/v2/posts' },
+	{ name: 'page', baseURL: '/wp/v2/pages' },
+	{ name: 'attachment', baseURL: '/wp/v2/media' },
+	{ name: 'wp_block', baseURL: '/wp/v2/blocks' },
+].map((postTypeEntity) => ({
+	kind: 'postType',
+	...postTypeEntity,
+	transientEdits: {
+		blocks: true,
+		selection: true,
+	},
+	mergedEdits: {
+		meta: true,
+	},
+	rawAttributes: ['title', 'excerpt', 'content'],
+}));
+
 const { useBlockEditorSettings } = unlock(editorPrivateApis);
 const {
 	ExperimentalBlockEditorProvider: BlockEditorProvider,
 	ExperimentalBlockCanvas: BlockCanvas,
 } = unlock(blockEditorPrivateApis);
 
-function Editor({ post = POST_MOCK }) {
+function Editor({ post }) {
 	const [blocks, setBlocks] = useState([]);
 	const [registeredBlocks] = useState([]);
 	const [_isCodeEditorEnabled, setCodeEditorEnabled] = useState(false);
 	const titleRef = useRef();
+	const { addEntities, receiveEntityRecords } = useDispatch(coreStore);
 	const { setupEditor } = useDispatch(editorStore);
 
 	useEffect(() => {
 		window.editor = editor;
-		setupEditor(post, [], {});
+		addEntities(postTypeEntities);
+		receiveEntityRecords('postType', post.type, post);
+
+		setupEditor(post, [], []);
 		registerCoreBlocks();
 
 		editorLoaded();
@@ -89,11 +108,18 @@ function Editor({ post = POST_MOCK }) {
 		editorSettings,
 		hasUploadPermissions,
 		reusableBlocks,
+		hasPostLoaded,
 	} = useSelect((select) => {
-		const { getEntityRecord, getEntityRecords } = select(coreStore);
+		const { hasFinishedResolution, getEntityRecord, getEntityRecords } =
+			select(coreStore);
 		const { getSettings } = select(blockEditorStore);
 		const user = getEntityRecord('root', 'user', post.author);
 		return {
+			hasPostLoaded: hasFinishedResolution('getEntityRecord', [
+				'postType',
+				post.type,
+				post.id,
+			]),
 			blockPatterns: select(coreStore).getBlockPatterns(),
 			editorSettings: getSettings(),
 			hasUploadPermissions: user?.capabilities?.upload_files ?? true,
@@ -101,15 +127,34 @@ function Editor({ post = POST_MOCK }) {
 		};
 	}, []);
 
-	function didChangeBlocks(blocks) {
-		setBlocks(blocks);
+	const [postBlocks, onInput, onChange] = useEntityBlockEditor(
+		'postType',
+		post.type,
+		{
+			id: post.id,
+		}
+	);
 
-		// TODO: this doesn't include everything
-		const isEmpty =
-			blocks.length === 0 ||
-			(blocks[0].name == 'core/paragraph' &&
-				blocks[0].attributes.content.trim() === '');
-		onBlocksChanged(isEmpty);
+	function didChangeBlocks(blocks) {
+		console.log('blocks', blocks);
+		// setBlocks(blocks);
+
+		// // TODO: this doesn't include everything
+		// const isEmpty =
+		// 	blocks.length === 0 ||
+		// 	(blocks[0].name == 'core/paragraph' &&
+		// 		blocks[0].attributes.content.trim() === '');
+		// onBlocksChanged(isEmpty);
+	}
+
+	function onBlockEditorInput(blocks, options) {
+		onInput(blocks, options);
+		didChangeBlocks(blocks);
+	}
+
+	function onBlockEditorChange(blocks, options) {
+		onChange(blocks, options);
+		didChangeBlocks(blocks);
 	}
 
 	editor.setContent = (content) => {
@@ -129,7 +174,7 @@ function Editor({ post = POST_MOCK }) {
 	const blockEditorSettings = useBlockEditorSettings(
 		editorSettings,
 		post.type,
-		post?.id,
+		post.id,
 		'visual'
 	);
 
@@ -146,29 +191,31 @@ function Editor({ post = POST_MOCK }) {
 	// }
 
 	return (
-		<div className="editor__container">
-			<BlockEditorProvider
-				value={blocks}
-				onInput={didChangeBlocks}
-				onChange={didChangeBlocks}
-				settings={settings}
-			>
-				<BlockCanvas
-					shouldIframe={false}
-					height="auto"
-					styles={settings.styles}
+		hasPostLoaded && (
+			<div className="editor__container">
+				<BlockEditorProvider
+					value={postBlocks}
+					onInput={onBlockEditorInput}
+					onChange={onBlockEditorChange}
+					settings={settings}
 				>
-					<div className="editor-visual-editor__post-title-wrapper">
-						<PostTitle ref={titleRef} />
-					</div>
-					<BlockList />
-				</BlockCanvas>
-				<EditorToolbar registeredBlocks={registeredBlocks} />
+					<BlockCanvas
+						shouldIframe={false}
+						height="auto"
+						styles={settings.styles}
+					>
+						<div className="editor-visual-editor__post-title-wrapper">
+							<PostTitle ref={titleRef} />
+						</div>
+						<BlockList />
+					</BlockCanvas>
+					<EditorToolbar registeredBlocks={registeredBlocks} />
 
-				<Popover.Slot />
-				<EditorSnackbars />
-			</BlockEditorProvider>
-		</div>
+					<Popover.Slot />
+					<EditorSnackbars />
+				</BlockEditorProvider>
+			</div>
+		)
 	);
 }
 
