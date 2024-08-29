@@ -21,7 +21,7 @@ import {
 	PostTitle,
 } from '@wordpress/editor';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { store as coreStore, EntityProvider } from '@wordpress/core-data';
+import { store as coreStore, useEntityBlockEditor } from '@wordpress/core-data';
 
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
@@ -45,12 +45,12 @@ import { editorLoaded, onBlocksChanged } from '../misc/Helpers';
 // Current editor (assumes can be only one instance).
 let editor = {};
 
-const POST_MOCK = {
-	type: 'post',
-};
-
-function Editor({ post = POST_MOCK }) {
-	const [blocks, setBlocks] = useState([]);
+function Editor({ post }) {
+	const [blocks, onInput, onChange] = useEntityBlockEditor(
+		'postType',
+		post.type,
+		{ id: post.id }
+	);
 	const [registeredBlocks] = useState([]);
 	const [_isCodeEditorEnabled, setCodeEditorEnabled] = useState(false);
 	const titleRef = useRef();
@@ -69,8 +69,8 @@ function Editor({ post = POST_MOCK }) {
 		};
 	}, []);
 
-	function didChangeBlocks(blocks) {
-		setBlocks(blocks);
+	function didChangeBlocks(blocks, ...rest) {
+		onChange(blocks, ...rest);
 
 		// TODO: this doesn't include everything
 		const isEmpty =
@@ -81,12 +81,12 @@ function Editor({ post = POST_MOCK }) {
 	}
 
 	editor.setContent = (content) => {
-		setBlocks(parse(content));
+		onChange(parse(content));
 	};
 
 	editor.setInitialContent = (content) => {
 		const blocks = parse(content);
-		didChangeBlocks(blocks); // TODO: redesign this
+		didChangeBlocks(blocks, {}); // TODO: redesign this
 		return serialize(blocks); // It's used for tracking changes
 	};
 
@@ -118,34 +118,32 @@ function Editor({ post = POST_MOCK }) {
 	// }
 
 	return (
-		<EntityProvider kind="postType" type={post.type} id={post.id}>
-			<BlockEditorProvider
-				value={blocks}
-				onInput={didChangeBlocks}
-				onChange={didChangeBlocks}
-				settings={settings}
-			>
-				<div className="editor-visual-editor__post-title-wrapper">
-					<PostTitle ref={titleRef} />
+		<BlockEditorProvider
+			value={blocks}
+			onInput={onInput}
+			onChange={didChangeBlocks}
+			settings={settings}
+		>
+			<div className="editor-visual-editor__post-title-wrapper">
+				<PostTitle ref={titleRef} />
+			</div>
+			<BlockTools>
+				<div className="editor-styles-wrapper">
+					<BlockEditorKeyboardShortcuts.Register />
+					<WritingFlow>
+						<ObserveTyping>
+							<BlockList />
+							<EditorToolbar
+								registeredBlocks={registeredBlocks}
+							/>{' '}
+							{/* not sure if optimal placement */}
+						</ObserveTyping>
+					</WritingFlow>
 				</div>
-				<BlockTools>
-					<div className="editor-styles-wrapper">
-						<BlockEditorKeyboardShortcuts.Register />
-						<WritingFlow>
-							<ObserveTyping>
-								<BlockList />
-								<EditorToolbar
-									registeredBlocks={registeredBlocks}
-								/>{' '}
-								{/* not sure if optimal placement */}
-							</ObserveTyping>
-						</WritingFlow>
-					</div>
-				</BlockTools>
-				<Popover.Slot />
-				<EditorSnackbars />
-			</BlockEditorProvider>
-		</EntityProvider>
+			</BlockTools>
+			<Popover.Slot />
+			<EditorSnackbars />
+		</BlockEditorProvider>
 	);
 }
 
