@@ -37,6 +37,22 @@ export function showBlockPicker() {
 	}
 }
 
+export function getPost() {
+	const currentPost = window?.initialPost;
+	if (currentPost) {
+		return {
+			id: currentPost.id,
+			title: { raw: decodeURIComponent(currentPost.title) },
+			content: { raw: decodeURIComponent(currentPost.content) },
+			type: 'post',
+		};
+	}
+
+	return {
+		type: 'post',
+		status: 'draft',
+	};
+}
 // FIXME: this was an attempt to fix an existing issue in Gutenberg , but it does it only
 // https://a8c.slack.com/archives/D0740HYKLUX/p1719841410651649
 //

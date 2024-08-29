@@ -6,6 +6,9 @@ import Combine
 @MainActor
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
     public let webView: WKWebView
+    private var initialTitle: String
+    private var type: String
+    private var id: Int?
     private var _initialRawContent: String
     private var _isEditorRendered = false
     private let controller = GutenbergEditorController()
@@ -36,7 +39,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private var cancellables: [AnyCancellable] = []
 
     /// Initalizes the editor with the initial content (Gutenberg).
-    public init(content: String = "", service: EditorService, siteApiRoot: String = "", siteApiNamespace: String = "", authHeader: String = "") {
+    public init(id: Int? = nil, type: String = "", title: String = "", content: String = "", service: EditorService, siteApiRoot: String = "", siteApiNamespace: String = "", authHeader: String = "") {
+        self.id = id
+        self.type = type
+        self.initialTitle = title
         self._initialRawContent = content
         self.service = service
         self.siteApiRoot = siteApiRoot
@@ -136,7 +142,16 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func getEditorConfiguration() -> WKUserScript {
+        let escapedTitle = initialTitle.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+        let escapedContent = _initialRawContent.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+        let postId = id != nil ? id! : nil
+
         let jsCode = """
+        window.initialPost = {
+            id: \(id != nil ? "\(id!)" : "null"),
+            title: '\(escapedTitle)',
+            content: '\(escapedContent)'
+        };
         window.GBKit = {
             siteApiRoot: '\(siteApiRoot)',
             siteApiNamespace: '\(siteApiNamespace)',
@@ -265,11 +280,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         print("gutenbergkit-measure_editor-first-render:", duration)
 
         // TODO: refactor (perform initial setup with a single JS call)
-        Task { @MainActor in
+        /*Task { @MainActor in
             if let data = service.rawBlockTypesResponseData {
                 await registerBlockTypes(data: data)
             }
             await setInitialContent(_initialRawContent)
+        }*/
+        UIView.animate(withDuration: 0.2, delay: 0, options: [.allowUserInteraction]) {
+            self.webView.alpha = 1
         }
     }
 
