@@ -18,13 +18,15 @@ window.GBKit = getGBKit();
 initializeApiFetch();
 
 // TEMP: This should be fetched from the host apps.
-apiFetch({ path: `/wp-block-editor/v1/settings` })
-	.then((editorSettings) => {
-		dispatch(blockEditorStore).updateSettings(editorSettings);
-	})
-	.catch((error) => {
-		console.error('Error fetching editor settings:', error);
-	});
+if (window.GBKit?.siteApiRoot?.length) {
+	apiFetch({ path: `/wp-block-editor/v1/settings` })
+		.then((editorSettings) => {
+			dispatch(blockEditorStore).updateSettings(editorSettings);
+		})
+		.catch((error) => {
+			console.error('Error fetching editor settings:', error);
+		});
+}
 
 createRoot(document.getElementById('root')).render(
 	<StrictMode>
