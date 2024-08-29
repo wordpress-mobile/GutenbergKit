@@ -135,10 +135,9 @@ function Editor({ post }) {
 		}
 	);
 
+	// eslint-disable-next-line no-unused-vars
 	function didChangeBlocks(blocks) {
-		console.log('blocks', blocks);
 		// setBlocks(blocks);
-
 		// // TODO: this doesn't include everything
 		// const isEmpty =
 		// 	blocks.length === 0 ||
