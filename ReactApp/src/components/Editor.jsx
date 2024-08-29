@@ -123,6 +123,7 @@ function Editor({ post }) {
 			onInput={onInput}
 			onChange={didChangeBlocks}
 			settings={settings}
+			useSubRegistry={false}
 		>
 			<div className="editor-visual-editor__post-title-wrapper">
 				<PostTitle ref={titleRef} />
