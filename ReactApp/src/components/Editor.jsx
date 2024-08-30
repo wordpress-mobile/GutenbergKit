@@ -68,17 +68,24 @@ function Editor({ post = POST_MOCK }) {
 		setupEditor(post, [], {});
 	}, []);
 
-	const { hasUploadPermissions } = useSelect((select) => {
-		const { getEntityRecord } = select(coreStore);
+	const { hasPostLoaded, hasUploadPermissions } = useSelect((select) => {
+		const { hasFinishedResolution, getEntityRecord } = select(coreStore);
 		const user = getEntityRecord('root', 'user', post.author);
 
 		return {
+			hasPostLoaded: post?.id
+				? hasFinishedResolution('getEntityRecord', [
+						'postType',
+						post.type,
+						post.id,
+					])
+				: true,
 			hasUploadPermissions: user?.capabilities?.upload_files ?? true,
 		};
 	}, []);
 
-	function didChangeBlocks(blocks, ...rest) {
-		onChange(blocks, ...rest);
+	function didChangeBlocks(blocks, options) {
+		onChange(blocks, options);
 
 		// TODO: this doesn't include everything
 		const isEmpty =
@@ -94,7 +101,7 @@ function Editor({ post = POST_MOCK }) {
 
 	editor.setInitialContent = (content) => {
 		const blocks = parse(content);
-		didChangeBlocks(blocks, {}); // TODO: redesign this
+		// didChangeBlocks(blocks, {}); // TODO: redesign this
 		return serialize(blocks); // It's used for tracking changes
 	};
 
@@ -126,35 +133,37 @@ function Editor({ post = POST_MOCK }) {
 	// }
 
 	return (
-		<EntityProvider kind="postType" type={post.type} id={post.id}>
-			<BlockEditorProvider
-				value={blocks}
-				onInput={onInput}
-				onChange={didChangeBlocks}
-				settings={settings}
-				useSubRegistry={false}
-			>
-				<div className="editor-visual-editor__post-title-wrapper">
-					<PostTitle ref={titleRef} />
-				</div>
-				<BlockTools>
-					<div className="editor-styles-wrapper">
-						<BlockEditorKeyboardShortcuts.Register />
-						<WritingFlow>
-							<ObserveTyping>
-								<BlockList />
-								<EditorToolbar
-									registeredBlocks={registeredBlocks}
-								/>{' '}
-								{/* not sure if optimal placement */}
-							</ObserveTyping>
-						</WritingFlow>
+		hasPostLoaded && (
+			<EntityProvider kind="postType" type={post.type} id={post.id}>
+				<BlockEditorProvider
+					value={blocks}
+					onInput={onInput}
+					onChange={didChangeBlocks}
+					settings={settings}
+					useSubRegistry={false}
+				>
+					<div className="editor-visual-editor__post-title-wrapper">
+						<PostTitle ref={titleRef} />
 					</div>
-				</BlockTools>
-				<Popover.Slot />
-				<EditorSnackbars />
-			</BlockEditorProvider>
-		</EntityProvider>
+					<BlockTools>
+						<div className="editor-styles-wrapper">
+							<BlockEditorKeyboardShortcuts.Register />
+							<WritingFlow>
+								<ObserveTyping>
+									<BlockList />
+									<EditorToolbar
+										registeredBlocks={registeredBlocks}
+									/>{' '}
+									{/* not sure if optimal placement */}
+								</ObserveTyping>
+							</WritingFlow>
+						</div>
+					</BlockTools>
+					<Popover.Slot />
+					<EditorSnackbars />
+				</BlockEditorProvider>
+			</EntityProvider>
+		)
 	);
 }
 
