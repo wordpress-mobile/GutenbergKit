@@ -44,7 +44,7 @@ export function getPost() {
 			id: currentPost.id,
 			title: { raw: decodeURIComponent(currentPost.title) },
 			content: { raw: decodeURIComponent(currentPost.content) },
-			type: 'post',
+			type: currentPost?.type ?? 'post',
 		};
 	}
 
