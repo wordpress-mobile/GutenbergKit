@@ -21,7 +21,11 @@ import {
 	PostTitle,
 } from '@wordpress/editor';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { store as coreStore, useEntityBlockEditor } from '@wordpress/core-data';
+import {
+	store as coreStore,
+	EntityProvider,
+	useEntityBlockEditor,
+} from '@wordpress/core-data';
 
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
@@ -45,7 +49,11 @@ import { editorLoaded, onBlocksChanged } from '../misc/Helpers';
 // Current editor (assumes can be only one instance).
 let editor = {};
 
-function Editor({ post }) {
+const POST_MOCK = {
+	type: 'post',
+};
+
+function Editor({ post = POST_MOCK }) {
 	const [blocks, onInput, onChange] = useEntityBlockEditor(
 		'postType',
 		post.type,
@@ -118,33 +126,35 @@ function Editor({ post }) {
 	// }
 
 	return (
-		<BlockEditorProvider
-			value={blocks}
-			onInput={onInput}
-			onChange={didChangeBlocks}
-			settings={settings}
-			useSubRegistry={false}
-		>
-			<div className="editor-visual-editor__post-title-wrapper">
-				<PostTitle ref={titleRef} />
-			</div>
-			<BlockTools>
-				<div className="editor-styles-wrapper">
-					<BlockEditorKeyboardShortcuts.Register />
-					<WritingFlow>
-						<ObserveTyping>
-							<BlockList />
-							<EditorToolbar
-								registeredBlocks={registeredBlocks}
-							/>{' '}
-							{/* not sure if optimal placement */}
-						</ObserveTyping>
-					</WritingFlow>
+		<EntityProvider kind="postType" type={post.type} id={post.id}>
+			<BlockEditorProvider
+				value={blocks}
+				onInput={onInput}
+				onChange={didChangeBlocks}
+				settings={settings}
+				useSubRegistry={false}
+			>
+				<div className="editor-visual-editor__post-title-wrapper">
+					<PostTitle ref={titleRef} />
 				</div>
-			</BlockTools>
-			<Popover.Slot />
-			<EditorSnackbars />
-		</BlockEditorProvider>
+				<BlockTools>
+					<div className="editor-styles-wrapper">
+						<BlockEditorKeyboardShortcuts.Register />
+						<WritingFlow>
+							<ObserveTyping>
+								<BlockList />
+								<EditorToolbar
+									registeredBlocks={registeredBlocks}
+								/>{' '}
+								{/* not sure if optimal placement */}
+							</ObserveTyping>
+						</WritingFlow>
+					</div>
+				</BlockTools>
+				<Popover.Slot />
+				<EditorSnackbars />
+			</BlockEditorProvider>
+		</EntityProvider>
 	);
 }
 
