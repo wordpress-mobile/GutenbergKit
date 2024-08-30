@@ -42,6 +42,7 @@ body {
 	margin-block-start: 15px;
 	margin-block-end: 15px;
 	font-size: 17px;
+	line-height: 1.8;
 }
 
 .editor-styles-wrapper h2 {
@@ -390,8 +391,9 @@ There has to be a setting or any other better way of doing that.
 }
 
 .editor-visual-editor__post-title-wrapper .wp-block-post-title {
-	font-size: 20px;
-	margin-bottom: 0;
+	font-size: 20px !important;
+	margin-bottom: 0 !important;
+	line-height: 1.5 !important;
 }
 
 /* Snackbar */
