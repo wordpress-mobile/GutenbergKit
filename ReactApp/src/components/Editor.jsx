@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from '@wordpress/element';
 import {
 	BlockList,
 	privateApis as blockEditorPrivateApis,
-	store as blockEditorStore,
 } from '@wordpress/block-editor';
 import { Popover } from '@wordpress/components';
 import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
@@ -40,6 +39,7 @@ import '@wordpress/format-library/build-style/style.css';
 // Internal imports
 import EditorToolbar from './EditorToolbar';
 import { editorLoaded, onBlocksChanged } from '../misc/Helpers';
+import { useEditorStyles } from './hooks/use-editor-styles';
 // import CodeEditor from './CodeEditor';
 
 // Current editor (assumes can be only one instance).
@@ -106,22 +106,25 @@ function Editor({ post }) {
 	const {
 		blockPatterns,
 		editorSettings,
+		hasPostLoaded,
 		hasUploadPermissions,
 		reusableBlocks,
-		hasPostLoaded,
 	} = useSelect((select) => {
 		const { hasFinishedResolution, getEntityRecord, getEntityRecords } =
 			select(coreStore);
-		const { getSettings } = select(blockEditorStore);
+		const { getEditorSettings } = select(editorStore);
 		const user = getEntityRecord('root', 'user', post.author);
+
 		return {
-			hasPostLoaded: hasFinishedResolution('getEntityRecord', [
-				'postType',
-				post.type,
-				post.id,
-			]),
+			hasPostLoaded: post?.id
+				? hasFinishedResolution('getEntityRecord', [
+						'postType',
+						post.type,
+						post.id,
+					])
+				: true,
 			blockPatterns: select(coreStore).getBlockPatterns(),
-			editorSettings: getSettings(),
+			editorSettings: getEditorSettings(),
 			hasUploadPermissions: user?.capabilities?.upload_files ?? true,
 			reusableBlocks: getEntityRecords('postType', 'wp_block'),
 		};
@@ -185,6 +188,8 @@ function Editor({ post }) {
 		__experimentalBlockPatterns: blockPatterns,
 	};
 
+	const styles = useEditorStyles();
+
 	// if (isCodeEditorEnabled) {
 	//     return <CodeEditor value={serialize(blocks)} />;
 	// }
@@ -201,7 +206,7 @@ function Editor({ post }) {
 					<BlockCanvas
 						shouldIframe={false}
 						height="auto"
-						styles={settings.styles}
+						styles={styles}
 					>
 						<div className="editor-visual-editor__post-title-wrapper">
 							<PostTitle ref={titleRef} />
