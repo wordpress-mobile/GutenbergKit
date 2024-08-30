@@ -146,12 +146,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let escapedContent = _initialRawContent.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
         let postId = id != nil ? id! : nil
 
-        let jsCode = """
-        window.initialPost = {
-            id: \(id != nil ? "\(id!)" : "null"),
-            title: '\(escapedTitle)',
-            content: '\(escapedContent)'
-        };
+        var jsCode = """
         window.GBKit = {
             siteApiRoot: '\(siteApiRoot)',
             siteApiNamespace: '\(siteApiNamespace)',
@@ -160,6 +155,15 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
         "done";
         """
+        if let postId = id {
+            jsCode = """
+            window.initialPost = {
+                id: '\(postId)',
+                title: '\(escapedTitle)',
+                content: '\(escapedContent)'
+            };
+            """ + jsCode
+        }
 
         let editorScript = WKUserScript(source: jsCode, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         return editorScript
@@ -230,19 +234,19 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private func setInitialContent(_ content: String, _ completion: (() -> Void)? = nil) async {
         guard _isEditorRendered else { fatalError("called too early") }
 
-        let start = CFAbsoluteTimeGetCurrent()
+       // let start = CFAbsoluteTimeGetCurrent()
 
         // TODO: Find a faster and more reliable way to pass large strings to a web view
-        let escapedString = content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+        //let escapedString = content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
 
         // TODO: Check errors and notify the delegate when the editor is loaded and the content got displayed
         do {
-            let serializedContent = try await webView.evaluateJavaScript("""
+            /*let serializedContent = try await webView.evaluateJavaScript("""
         editor.setInitialContent(decodeURIComponent('\(escapedString)'));
         """) as! String
             self.initialContent = serializedContent
-            delegate?.editor(self, didDisplayInitialContent: serializedContent)
-            print("gutenbergkit-set-initial-content:", CFAbsoluteTimeGetCurrent() - start)
+            delegate?.editor(self, didDisplayInitialContent: serializedContent)*/
+            //print("gutenbergkit-set-initial-content:", CFAbsoluteTimeGetCurrent() - start)
 
             UIView.animate(withDuration: 0.2, delay: 0.1, options: [.allowUserInteraction]) {
                 self.webView.alpha = 1
@@ -280,14 +284,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         print("gutenbergkit-measure_editor-first-render:", duration)
 
         // TODO: refactor (perform initial setup with a single JS call)
-        /*Task { @MainActor in
-            if let data = service.rawBlockTypesResponseData {
+        Task { @MainActor in
+            /* if let data = service.rawBlockTypesResponseData {
                 await registerBlockTypes(data: data)
-            }
+            } */
             await setInitialContent(_initialRawContent)
-        }*/
-        UIView.animate(withDuration: 0.2, delay: 0, options: [.allowUserInteraction]) {
-            self.webView.alpha = 1
         }
     }
 
