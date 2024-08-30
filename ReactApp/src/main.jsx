@@ -4,32 +4,48 @@
 import { createRoot, StrictMode } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { dispatch } from '@wordpress/data';
-import { store as blockEditorStore } from '@wordpress/block-editor';
+import { store as editorStore } from '@wordpress/editor';
+import { store as preferencesStore } from '@wordpress/preferences';
 
 /**
  * Internal dependencies
  */
 import { initializeApiFetch } from './misc/api-fetch-setup';
 import { getGBKit } from './misc/store.js';
+import { getPost } from './misc/Helpers';
 import App from './App.jsx';
 import './index.css';
 
 window.GBKit = getGBKit();
 initializeApiFetch();
 
-// TEMP: This should be fetched from the host apps.
-if (window.GBKit?.siteApiRoot?.length) {
-	apiFetch({ path: `/wp-block-editor/v1/settings` })
-		.then((editorSettings) => {
-			dispatch(blockEditorStore).updateSettings(editorSettings);
-		})
-		.catch((error) => {
-			console.error('Error fetching editor settings:', error);
-		});
+function initializeEditor() {
+	// TEMP: This should be fetched from the host apps.
+	if (window.GBKit?.siteApiRoot?.length) {
+		apiFetch({ path: `/wp-block-editor/v1/settings` })
+			.then((editorSettings) => {
+				dispatch(editorStore).updateEditorSettings(editorSettings);
+			})
+			.catch((error) => {
+				console.error('Error fetching editor settings:', error);
+			});
+	}
+
+	dispatch(preferencesStore).setDefaults('core/edit-post', {
+		// This should be provided by the host app or endpoint
+		themeStyles: false,
+	});
+
+	const post = getPost();
+	const settings = {
+		post,
+	};
+
+	createRoot(document.getElementById('root')).render(
+		<StrictMode>
+			<App {...settings} />
+		</StrictMode>
+	);
 }
 
-createRoot(document.getElementById('root')).render(
-	<StrictMode>
-		<App />
-	</StrictMode>
-);
+initializeEditor();

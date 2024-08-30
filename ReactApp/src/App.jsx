@@ -1,13 +1,10 @@
 /**
  * Internal dependencies
  */
-import { getPost } from './misc/Helpers';
 import Editor from './components/Editor';
 
-const post = getPost();
-
-function App() {
-	return <Editor post={post} />;
+function App(props) {
+	return <Editor {...props} />;
 }
 
 export default App;
