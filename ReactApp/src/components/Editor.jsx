@@ -106,23 +106,18 @@ function Editor({ post }) {
 	const {
 		blockPatterns,
 		editorSettings,
-		hasPostLoaded,
 		hasUploadPermissions,
+		isEditorReady,
 		reusableBlocks,
 	} = useSelect((select) => {
-		const { hasFinishedResolution, getEntityRecord, getEntityRecords } =
-			select(coreStore);
-		const { getEditorSettings } = select(editorStore);
+		const { getEntityRecord, getEntityRecords } = select(coreStore);
+		const { __unstableIsEditorReady, getEditorSettings } =
+			select(editorStore);
 		const user = getEntityRecord('root', 'user', post.author);
+		const isEditorReady = post?.id ? __unstableIsEditorReady() : true;
 
 		return {
-			hasPostLoaded: post?.id
-				? hasFinishedResolution('getEntityRecord', [
-						'postType',
-						post.type,
-						post.id,
-					])
-				: true,
+			isEditorReady: isEditorReady,
 			blockPatterns: select(coreStore).getBlockPatterns(),
 			editorSettings: getEditorSettings(),
 			hasUploadPermissions: user?.capabilities?.upload_files ?? true,
@@ -195,31 +190,25 @@ function Editor({ post }) {
 	// }
 
 	return (
-		hasPostLoaded && (
-			<div className="editor__container">
-				<BlockEditorProvider
-					value={postBlocks}
-					onInput={onBlockEditorInput}
-					onChange={onBlockEditorChange}
-					settings={settings}
-				>
-					<BlockCanvas
-						shouldIframe={false}
-						height="auto"
-						styles={styles}
-					>
-						<div className="editor-visual-editor__post-title-wrapper">
-							<PostTitle ref={titleRef} />
-						</div>
-						<BlockList />
-					</BlockCanvas>
-					<EditorToolbar registeredBlocks={registeredBlocks} />
+		<div className="editor__container">
+			<BlockEditorProvider
+				value={postBlocks}
+				onInput={onBlockEditorInput}
+				onChange={onBlockEditorChange}
+				settings={settings}
+			>
+				<BlockCanvas shouldIframe={false} height="auto" styles={styles}>
+					<div className="editor-visual-editor__post-title-wrapper">
+						{isEditorReady && <PostTitle ref={titleRef} />}
+					</div>
+					<BlockList />
+				</BlockCanvas>
+				{isEditorReady && <EditorToolbar />}
 
-					<Popover.Slot />
-					<EditorSnackbars />
-				</BlockEditorProvider>
-			</div>
-		)
+				<Popover.Slot />
+				<EditorSnackbars />
+			</BlockEditorProvider>
+		</div>
 	);
 }
 
