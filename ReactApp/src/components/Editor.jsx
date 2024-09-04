@@ -24,7 +24,9 @@ import { __dangerousOptInToUnstableAPIsOnlyForCoreModules } from '@wordpress/pri
 
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
+import '@wordpress/block-editor/build-style/default-editor-styles.css';
 import '@wordpress/block-editor/build-style/style.css';
+import '@wordpress/block-editor/build-style/content.css';
 import '@wordpress/editor/build-style/style.css';
 
 // Default styles that are needed for the core blocks.
