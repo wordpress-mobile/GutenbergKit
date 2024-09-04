@@ -13,12 +13,7 @@ import { Button, Popover, ToolbarButton } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { close, cog } from '@wordpress/icons';
 
-/**
- * Internal dependencies
- */
-import { showBlockPicker } from '../misc/Helpers';
-
-const EditorToolbar = (props) => {
+const EditorToolbar = () => {
 	const [isBlockInspectorShown, setBlockInspectorShown] = useState(false);
 	const { isSelected } = useSelect((select) => {
 		const { getSelectedBlockClientId } = select(blockEditorStore);
@@ -36,18 +31,10 @@ const EditorToolbar = (props) => {
 		setBlockInspectorShown(false);
 	}
 
-	let addBlockButton;
-	if (props.registeredBlocks.length === 0) {
-		// TODO: use the native inserter
-		addBlockButton = <Inserter />;
-	} else {
-		addBlockButton = <button onClick={showBlockPicker}>+</button>;
-	}
-
 	return (
 		<>
 			<div className="gbkit gbkit-editor-toolbar">
-				{addBlockButton}
+				<Inserter />
 
 				{isSelected && (
 					<div className="gbkit-editor-toolbar_toolbar-group">
