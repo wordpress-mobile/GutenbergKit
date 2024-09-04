@@ -158,7 +158,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         if let postId = id {
             jsCode = """
             window.initialPost = {
-                id: '\(postId)',
+                id: \(postId),
                 title: '\(escapedTitle)',
                 content: '\(escapedContent)'
             };
