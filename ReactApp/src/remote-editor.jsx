@@ -8,6 +8,7 @@ import apiFetch from '@wordpress/api-fetch';
  */
 import { getGBKit } from './misc/store.js';
 import { initializeApiFetch } from './misc/api-fetch-setup.js';
+import { getRemoteEditor } from './misc/Helpers.js';
 import './index.css';
 
 window.GBKit = getGBKit();
@@ -17,9 +18,7 @@ initalizeRemoteEditor();
 
 async function initalizeRemoteEditor() {
 	try {
-		const { styles, scripts } = await window.wp.apiFetch({
-			path: '__experimental/wp-block-editor/v1/editor-assets',
-		});
+		const { styles, scripts } = await getRemoteEditor();
 		await loadAssets([...styles, ...scripts].join(''));
 		const { default: App } = await import('./App.jsx');
 		const { createRoot, StrictMode } = window.wp.element;

@@ -37,6 +37,30 @@ export function showBlockPicker() {
 	}
 }
 
+window.editor = window.editor || {};
+
+export async function getRemoteEditor() {
+	return new Promise((resolve, reject) => {
+		if (window.editor.resolveRemoteEditor) {
+			window.editor.resolveRemoteEditor(null);
+		}
+
+		window.editor.resolveRemoteEditor = resolve;
+		window.editor.rejectRemoteEditor = reject;
+
+		if (window.editorDelegate) {
+			window.editorDelegate.getRemoteEditor();
+		}
+
+		if (window.webkit) {
+			window.webkit.messageHandlers.editorDelegate.postMessage({
+				message: 'getRemoteEditor',
+				body: {},
+			});
+		}
+	});
+}
+
 // FIXME: this was an attempt to fix an existing issue in Gutenberg , but it does it only
 // https://a8c.slack.com/archives/D0740HYKLUX/p1719841410651649
 //

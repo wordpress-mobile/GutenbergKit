@@ -110,7 +110,7 @@ function Editor({ post = POST_MOCK }) {
 	editor.setCodeEditorEnabled = (enabled) => setCodeEditorEnabled(enabled);
 
 	useEffect(() => {
-		window.editor = editor;
+		window.editor = { ...window.editor, ...editor };
 		registerCoreBlocks();
 
 		editorLoaded();

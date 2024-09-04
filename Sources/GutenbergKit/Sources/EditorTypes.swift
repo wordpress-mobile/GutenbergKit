@@ -9,3 +9,8 @@ struct EditorBlockType: Decodable, Identifiable {
     let category: String?
     let keywords: [String]?
 }
+
+struct EditorAssets: Decodable {
+    let styles: String
+    let scripts: String
+}

@@ -37,6 +37,13 @@ public final class EditorService {
         self.refreshBlockTypesTask = task
         return try await task.value
     }
+    
+    func getRemoteEditor() async throws -> EditorAssets {
+        let request = EditorNetworkRequest(method: "GET", url: URL(string: "./wp-json/__experimental/wp-block-editor/v1/editor-assets")!)
+        let response = try await self.client.send(request)
+        try validate(response.urlResponse)
+        return try await decode(response.data ?? Data())
+    }
 }
 
 // MARK: - Helpers

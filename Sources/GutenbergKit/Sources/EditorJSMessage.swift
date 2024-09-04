@@ -29,6 +29,8 @@ struct EditorJSMessage {
         case onBlocksChanged
         /// The user tapped the inserter button.
         case showBlockPicker
+        /// Fetch assets from a remote editor
+        case getRemoteEditor
     }
 
     struct DidUpdateBlocksBody: Decodable {

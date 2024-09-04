@@ -209,6 +209,18 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let host = UIHostingController(rootView: view)
         present(host, animated: true)
     }
+    
+    private func getRemoteEditor() {
+        Task {
+            do {
+                let result = try await service.getRemoteEditor()
+                evaluate("editor.resolveRemoteEditor(decodeURIComponent('\(result)'));")
+            } catch {
+                NSLog("Error fetching remote editor: \(error)")
+                evaluate("editor.rejectRemoteEditor(\(error)');")
+            }
+        }
+    }
 
     // MARK: - Internal (Initial Content)
 
@@ -250,6 +262,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 delegate?.editor(self, didUpdateContentWithState: state)
             case .showBlockPicker:
                 showBlockInserter()
+            case .getRemoteEditor:
+                getRemoteEditor()
             }
         } catch {
             fatalError("failed to decode message: \(error)")
