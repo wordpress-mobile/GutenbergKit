@@ -1,9 +1,4 @@
 /**
- * WordPress dependencies
- */
-import apiFetch from '@wordpress/api-fetch';
-
-/**
  * Internal dependencies
  */
 import { getGBKit } from './store';
@@ -14,7 +9,7 @@ import { getGBKit } from './store';
  * This function sets up the root URL middleware, adds headers to requests,
  * and preloads some endpoints with mock data for specific components.
  */
-export function initializeApiFetch() {
+export function initializeApiFetch(apiFetch) {
 	const { siteApiRoot, authHeader } = getGBKit();
 
 	if (!siteApiRoot) {
@@ -30,6 +25,8 @@ export function initializeApiFetch() {
 	apiFetch.use(apiPathModifierMiddleware);
 	apiFetch.use(createHeadersMiddleware(authHeader));
 	apiFetch.use(apiFetch.createPreloadingMiddleware(preloadData));
+
+	return apiFetch;
 }
 
 function corsMiddleware(options, next) {

@@ -187,6 +187,3 @@ local.properties
 
 /Sources/GutenbergKit/Gutenberg/assets
 /Sources/GutenbergKit/Gutenberg/index.html
-
-# Psuedo editor assets endpoint response
-ReactApp/assets.json

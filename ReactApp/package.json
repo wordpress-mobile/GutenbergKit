@@ -6,11 +6,13 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite --host",
+		"dev:remote": "vite --host --config vite.config.remote-editor.js",
 		"build": "vite build",
-		"build:setup": "vite build ./src/setup/ --outDir ./dist/setup",
+		"build:remote": "vite build --config vite.config.remote-editor.js",
 		"lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
 		"format": "prettier --write .",
-		"preview": "vite preview --host"
+		"preview": "vite preview --host",
+		"preview:remote": "vite preview --host --config vite.config.remote-editor.js"
 	},
 	"dependencies": {
 		"@monaco-editor/react": "^4.6.0",
