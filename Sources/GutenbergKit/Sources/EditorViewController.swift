@@ -9,6 +9,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private var initialTitle: String
     private var type: String
     private var id: Int?
+    private var themeStyles: Bool?
     private var _initialRawContent: String
     private var _isEditorRendered = false
     private let controller = GutenbergEditorController()
@@ -39,11 +40,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private var cancellables: [AnyCancellable] = []
 
     /// Initalizes the editor with the initial content (Gutenberg).
-    public init(id: Int? = nil, type: String = "", title: String = "", content: String = "", service: EditorService, siteApiRoot: String = "", siteApiNamespace: String = "", authHeader: String = "") {
+    public init(id: Int? = nil, type: String = "", title: String = "", content: String = "", service: EditorService, themeStyles: Bool = false, siteApiRoot: String = "", siteApiNamespace: String = "", authHeader: String = "") {
         self.id = id
         self.type = type
         self.initialTitle = title
         self._initialRawContent = content
+        self.themeStyles = themeStyles
         self.service = service
         self.siteApiRoot = siteApiRoot
         self.siteApiNamespace = siteApiNamespace
@@ -145,12 +147,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let escapedTitle = initialTitle.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
         let escapedContent = _initialRawContent.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
         let postId = id != nil ? id! : nil
+        let hasThemeStylesEnabled = themeStyles != nil ? themeStyles! : false
 
         var jsCode = """
         window.GBKit = {
             siteApiRoot: '\(siteApiRoot)',
             siteApiNamespace: '\(siteApiNamespace)',
-            authHeader: '\(authHeader)'
+            authHeader: '\(authHeader)',
+            themeStyles: \(hasThemeStylesEnabled)
         };
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
         "done";

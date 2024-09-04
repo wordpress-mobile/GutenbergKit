@@ -20,8 +20,10 @@ window.GBKit = getGBKit();
 initializeApiFetch();
 
 function initializeEditor() {
+	const { themeStyles, siteApiRoot } = window.GBKit;
+
 	// TEMP: This should be fetched from the host apps.
-	if (window.GBKit?.siteApiRoot?.length) {
+	if (siteApiRoot?.length) {
 		apiFetch({ path: `/wp-block-editor/v1/settings` })
 			.then((editorSettings) => {
 				dispatch(editorStore).updateEditorSettings(editorSettings);
@@ -32,8 +34,7 @@ function initializeEditor() {
 	}
 
 	dispatch(preferencesStore).setDefaults('core/edit-post', {
-		// This should be provided by the host app or endpoint
-		themeStyles: false,
+		themeStyles,
 	});
 
 	const post = getPost();
