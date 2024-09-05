@@ -43,7 +43,7 @@ const EditorToolbar = () => {
 							icon={cog}
 							onClick={openSettings}
 							className="gbkit-editor-toolbar_settings_icon"
-						></ToolbarButton>
+						/>
 					</div>
 				)}
 
