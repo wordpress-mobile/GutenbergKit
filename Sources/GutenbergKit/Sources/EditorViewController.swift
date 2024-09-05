@@ -146,28 +146,25 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private func getEditorConfiguration() -> WKUserScript {
         let escapedTitle = initialTitle.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
         let escapedContent = _initialRawContent.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
-        let postId = id != nil ? id! : nil
         let hasThemeStylesEnabled = themeStyles != nil ? themeStyles! : false
 
-        var jsCode = """
+        let jsCode = """
         window.GBKit = {
             siteApiRoot: '\(siteApiRoot)',
             siteApiNamespace: '\(siteApiNamespace)',
             authHeader: '\(authHeader)',
-            themeStyles: \(hasThemeStylesEnabled)
+            themeStyles: \(hasThemeStylesEnabled),
+            \(id != nil ? """
+            post: {
+                id: \(id!),
+                title: '\(escapedTitle)',
+                content: '\(escapedContent)'
+            },
+            """ : "")
         };
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
         "done";
         """
-        if let postId = id {
-            jsCode = """
-            window.initialPost = {
-                id: \(postId),
-                title: '\(escapedTitle)',
-                content: '\(escapedContent)'
-            };
-            """ + jsCode
-        }
 
         let editorScript = WKUserScript(source: jsCode, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         return editorScript

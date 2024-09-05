@@ -11,8 +11,7 @@ import { store as preferencesStore } from '@wordpress/preferences';
  * Internal dependencies
  */
 import { initializeApiFetch } from './misc/api-fetch-setup';
-import { getGBKit } from './misc/store.js';
-import { getPost } from './misc/Helpers';
+import { getGBKit, getPost } from './misc/store.js';
 import App from './App.jsx';
 import './index.css';
 

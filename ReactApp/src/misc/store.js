@@ -17,3 +17,20 @@ export function getGBKit() {
 		return emptyObject;
 	}
 }
+
+export function getPost() {
+	const { post } = getGBKit();
+	if (post) {
+		return {
+			id: post.id,
+			title: { raw: decodeURIComponent(post.title) },
+			content: { raw: decodeURIComponent(post.content) },
+			type: post?.type ?? 'post',
+		};
+	}
+
+	return {
+		type: 'post',
+		status: 'draft',
+	};
+}
