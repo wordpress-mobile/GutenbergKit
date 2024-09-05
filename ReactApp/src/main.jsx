@@ -20,7 +20,7 @@ window.GBKit = getGBKit();
 initializeApiFetch();
 
 function initializeEditor() {
-	const { themeStyles, siteApiRoot } = window.GBKit;
+	const { themeStyles, siteApiRoot } = getGBKit();
 
 	// TEMP: This should be fetched from the host apps.
 	if (siteApiRoot?.length) {
