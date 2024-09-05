@@ -14,6 +14,17 @@ build: npm-dependencies
 	cp -r ./ReactApp/dist/. ./Sources/GutenbergKit/Gutenberg/
 	cp -r ./ReactApp/dist/. ./Demo-Android/Gutenberg/src/main/assets
 
+build-remote: npm-dependencies
+	echo "--- :node: Building Gutenberg"
+
+	npm --prefix ReactApp/ run build:remote
+
+	# Copy build products into place
+	echo "--- :open_file_folder: Copying Build Products into place"
+	rm -rf ./Sources/GutenbergKit/Gutenberg/ ./Demo-Android/Gutenberg/src/main/assets/
+	cp -r ./ReactApp/dist/. ./Sources/GutenbergKit/Gutenberg/
+	cp -r ./ReactApp/dist/. ./Demo-Android/Gutenberg/src/main/assets
+
 dev-server: npm-dependencies
 	npm --prefix ReactApp/ run dev
 
