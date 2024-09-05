@@ -25,7 +25,7 @@ export function getPost() {
 			id: post.id,
 			title: { raw: decodeURIComponent(post.title) },
 			content: { raw: decodeURIComponent(post.content) },
-			type: post?.type ?? 'post',
+			type: post.type || 'post',
 		};
 	}
 
