@@ -138,7 +138,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         if let editorURL = editorURL ?? ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
             webView.load(URLRequest(url: editorURL))
         } else {
-            let reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
+            let reactAppURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg")!
             webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.module.resourceURL!)
         }
     }
