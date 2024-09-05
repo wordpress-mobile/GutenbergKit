@@ -40,30 +40,13 @@ import '@wordpress/format-library/build-style/style.css';
 // Internal imports
 import EditorToolbar from './EditorToolbar';
 import { editorLoaded, onBlocksChanged } from '../misc/Helpers';
+import { postTypeEntities } from '../misc/post-type-entities';
 import { useEditorStyles } from './hooks/use-editor-styles';
 import { unlock } from './lock-unlock';
 // import CodeEditor from './CodeEditor';
 
 // Current editor (assumes can be only one instance).
 let editor = {};
-
-const postTypeEntities = [
-	{ name: 'post', baseURL: '/wp/v2/posts' },
-	{ name: 'page', baseURL: '/wp/v2/pages' },
-	{ name: 'attachment', baseURL: '/wp/v2/media' },
-	{ name: 'wp_block', baseURL: '/wp/v2/blocks' },
-].map((postTypeEntity) => ({
-	kind: 'postType',
-	...postTypeEntity,
-	transientEdits: {
-		blocks: true,
-		selection: true,
-	},
-	mergedEdits: {
-		meta: true,
-	},
-	rawAttributes: ['title', 'excerpt', 'content'],
-}));
 
 const { useBlockEditorSettings } = unlock(editorPrivateApis);
 const {
