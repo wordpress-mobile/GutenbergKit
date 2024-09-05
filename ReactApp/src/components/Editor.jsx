@@ -20,7 +20,6 @@ import {
 } from '@wordpress/editor';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as coreStore, useEntityBlockEditor } from '@wordpress/core-data';
-import { __dangerousOptInToUnstableAPIsOnlyForCoreModules } from '@wordpress/private-apis';
 
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
@@ -42,17 +41,11 @@ import '@wordpress/format-library/build-style/style.css';
 import EditorToolbar from './EditorToolbar';
 import { editorLoaded, onBlocksChanged } from '../misc/Helpers';
 import { useEditorStyles } from './hooks/use-editor-styles';
+import { unlock } from './lock-unlock';
 // import CodeEditor from './CodeEditor';
 
 // Current editor (assumes can be only one instance).
 let editor = {};
-
-// eslint-disable-next-line react-refresh/only-export-components
-export const { lock, unlock } =
-	__dangerousOptInToUnstableAPIsOnlyForCoreModules(
-		'I acknowledge private features are not for use in themes or plugins and doing so will break in the next version of WordPress.',
-		'@wordpress/editor'
-	);
 
 const postTypeEntities = [
 	{ name: 'post', baseURL: '/wp/v2/posts' },
