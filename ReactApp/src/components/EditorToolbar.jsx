@@ -6,69 +6,69 @@ import {
 	BlockInspector,
 	BlockToolbar,
 	Inserter,
+	store as blockEditorStore,
 } from '@wordpress/block-editor';
-import { Popover } from '@wordpress/components';
-// import { Sheet } from 'react-modal-sheet';
-import { showBlockPicker } from '../misc/Helpers';
+import { useSelect } from '@wordpress/data';
+import { Button, Popover, ToolbarButton } from '@wordpress/components';
+import { __ } from '@wordpress/i18n';
+import { close, cog } from '@wordpress/icons';
 
-const EditorToolbar = (props) => {
+const EditorToolbar = () => {
 	const [isBlockInspectorShown, setBlockInspectorShown] = useState(false);
+	const { isSelected } = useSelect((select) => {
+		const { getSelectedBlockClientId } = select(blockEditorStore);
+		const selectedBlockClientId = getSelectedBlockClientId();
+		return {
+			isSelected: selectedBlockClientId !== null,
+		};
+	});
 
-	let addBlockButton;
-	if (props.registeredBlocks.length === 0) {
-		// TODO: use the native inserter
-		addBlockButton = <Inserter />;
-	} else {
-		addBlockButton = <button onClick={showBlockPicker}>+</button>;
+	function openSettings() {
+		setBlockInspectorShown(true);
+	}
+
+	function onCloseSettings() {
+		setBlockInspectorShown(false);
 	}
 
 	return (
-		<div className="gbkit gbkit-editor-toolbar">
-			<div className="gbkit-editor-toolbar_toolbar-group">
-				{addBlockButton}
+		<>
+			<div className="gbkit gbkit-editor-toolbar">
+				<Inserter />
 
-				<button
-					onClick={() => setBlockInspectorShown(true)}
-					className="components-button gbkit-editor-toolbar_settings_icon "
-				></button>
+				{isSelected && (
+					<div className="gbkit-editor-toolbar_toolbar-group">
+						<ToolbarButton
+							title={__('Open Settings')}
+							icon={cog}
+							onClick={openSettings}
+							className="gbkit-editor-toolbar_settings_icon"
+						/>
+					</div>
+				)}
+
+				<BlockToolbar />
 			</div>
 
 			{isBlockInspectorShown && (
 				<Popover
-					expandOnMobile={true}
-					focusOnMount="container"
-					headerTitle="Block Settings"
-					onClose={() => {
-						setBlockInspectorShown(false);
-					}}
+					className="block-settings-menu"
+					variant="unstyled"
+					placement="overlay"
 				>
-					<BlockInspector />
+					<>
+						<div className="block-settings-menu__header">
+							<Button
+								className="block-settings-menu__close"
+								icon={close}
+								onClick={onCloseSettings}
+							/>
+						</div>
+						<BlockInspector />
+					</>
 				</Popover>
 			)}
-
-			{/* // FIXME: this is the iteration that was using Sheet from 'react-modal-sheet' */}
-			{/* <Sheet
-                isOpen={isBlockInspectorShown}
-                onClose={() => setBlockInspectorShown(false)}
-                snapPoints={[window.innerHeight - 20, 400, 0]}
-                initialSnap={1}
-                tweenConfig={{ ease: 'anticipate', duration: 0.5 }}
-            >
-                <Sheet.Container>
-                    <Sheet.Header />
-                    <Sheet.Content>
-                        <Sheet.Scroller>
-                            
-                                <BlockInspector />
-                            </div>
-                        </Sheet.Scroller>
-                    </Sheet.Content>
-                </Sheet.Container>
-                <Sheet.Backdrop />
-            </Sheet> */}
-
-			<BlockToolbar />
-		</div>
+		</>
 	);
 };
 

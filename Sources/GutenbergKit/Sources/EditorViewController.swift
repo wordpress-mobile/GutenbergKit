@@ -6,6 +6,10 @@ import Combine
 @MainActor
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
     public let webView: WKWebView
+    private var initialTitle: String
+    private var type: String
+    private var id: Int?
+    private var themeStyles: Bool?
     private var _initialRawContent: String
     private var _isEditorRendered = false
     private let controller = GutenbergEditorController()
@@ -36,8 +40,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private var cancellables: [AnyCancellable] = []
 
     /// Initalizes the editor with the initial content (Gutenberg).
-    public init(content: String = "", service: EditorService, siteApiRoot: String = "", siteApiNamespace: String = "", authHeader: String = "") {
+    public init(id: Int? = nil, type: String = "", title: String = "", content: String = "", service: EditorService, themeStyles: Bool = false, siteApiRoot: String = "", siteApiNamespace: String = "", authHeader: String = "") {
+        self.id = id
+        self.type = type
+        self.initialTitle = title
         self._initialRawContent = content
+        self.themeStyles = themeStyles
         self.service = service
         self.siteApiRoot = siteApiRoot
         self.siteApiNamespace = siteApiNamespace
@@ -136,11 +144,23 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func getEditorConfiguration() -> WKUserScript {
+        let escapedTitle = initialTitle.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+        let escapedContent = _initialRawContent.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+        let hasThemeStylesEnabled = themeStyles != nil ? themeStyles! : false
+
         let jsCode = """
         window.GBKit = {
             siteApiRoot: '\(siteApiRoot)',
             siteApiNamespace: '\(siteApiNamespace)',
-            authHeader: '\(authHeader)'
+            authHeader: '\(authHeader)',
+            themeStyles: \(hasThemeStylesEnabled),
+            \(id != nil ? """
+            post: {
+                id: \(id!),
+                title: '\(escapedTitle)',
+                content: '\(escapedContent)'
+            },
+            """ : "")
         };
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
         "done";
@@ -215,19 +235,19 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private func setInitialContent(_ content: String, _ completion: (() -> Void)? = nil) async {
         guard _isEditorRendered else { fatalError("called too early") }
 
-        let start = CFAbsoluteTimeGetCurrent()
+       // let start = CFAbsoluteTimeGetCurrent()
 
         // TODO: Find a faster and more reliable way to pass large strings to a web view
-        let escapedString = content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+        //let escapedString = content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
 
         // TODO: Check errors and notify the delegate when the editor is loaded and the content got displayed
         do {
-            let serializedContent = try await webView.evaluateJavaScript("""
+            /*let serializedContent = try await webView.evaluateJavaScript("""
         editor.setInitialContent(decodeURIComponent('\(escapedString)'));
         """) as! String
             self.initialContent = serializedContent
-            delegate?.editor(self, didDisplayInitialContent: serializedContent)
-            print("gutenbergkit-set-initial-content:", CFAbsoluteTimeGetCurrent() - start)
+            delegate?.editor(self, didDisplayInitialContent: serializedContent)*/
+            //print("gutenbergkit-set-initial-content:", CFAbsoluteTimeGetCurrent() - start)
 
             UIView.animate(withDuration: 0.2, delay: 0.1, options: [.allowUserInteraction]) {
                 self.webView.alpha = 1
@@ -266,9 +286,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         // TODO: refactor (perform initial setup with a single JS call)
         Task { @MainActor in
-            if let data = service.rawBlockTypesResponseData {
+            /* if let data = service.rawBlockTypesResponseData {
                 await registerBlockTypes(data: data)
-            }
+            } */
             await setInitialContent(_initialRawContent)
         }
     }

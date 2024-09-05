@@ -1,14 +1,11 @@
+/* eslint-disable react/prop-types */
 /**
  * WordPress dependencies
  */
 import { useEffect, useRef, useState } from '@wordpress/element';
 import {
-	BlockEditorKeyboardShortcuts,
-	BlockEditorProvider,
 	BlockList,
-	BlockTools,
-	WritingFlow,
-	ObserveTyping,
+	privateApis as blockEditorPrivateApis,
 } from '@wordpress/block-editor';
 import { Popover } from '@wordpress/components';
 import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
@@ -19,13 +16,16 @@ import {
 	mediaUpload,
 	EditorSnackbars,
 	PostTitle,
+	privateApis as editorPrivateApis,
 } from '@wordpress/editor';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { store as coreStore } from '@wordpress/core-data';
+import { store as coreStore, useEntityBlockEditor } from '@wordpress/core-data';
 
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
+import '@wordpress/block-editor/build-style/default-editor-styles.css';
 import '@wordpress/block-editor/build-style/style.css';
+import '@wordpress/block-editor/build-style/content.css';
 import '@wordpress/editor/build-style/style.css';
 
 // Default styles that are needed for the core blocks.
@@ -40,44 +40,96 @@ import '@wordpress/format-library/build-style/style.css';
 // Internal imports
 import EditorToolbar from './EditorToolbar';
 import { editorLoaded, onBlocksChanged } from '../misc/Helpers';
+import { postTypeEntities } from '../misc/post-type-entities';
+import { useEditorStyles } from './hooks/use-editor-styles';
+import { unlock } from './lock-unlock';
 // import CodeEditor from './CodeEditor';
 
 // Current editor (assumes can be only one instance).
 let editor = {};
 
-const POST_MOCK = {
-	type: 'post',
-};
+const { useBlockEditorSettings } = unlock(editorPrivateApis);
+const {
+	ExperimentalBlockEditorProvider: BlockEditorProvider,
+	ExperimentalBlockCanvas: BlockCanvas,
+} = unlock(blockEditorPrivateApis);
 
-function Editor({ post = POST_MOCK }) {
+function Editor({ post }) {
 	const [blocks, setBlocks] = useState([]);
 	const [registeredBlocks] = useState([]);
 	const [_isCodeEditorEnabled, setCodeEditorEnabled] = useState(false);
 	const titleRef = useRef();
+	const { addEntities, receiveEntityRecords } = useDispatch(coreStore);
 	const { setupEditor } = useDispatch(editorStore);
 
 	useEffect(() => {
-		setupEditor(post, [], {});
+		window.editor = editor;
+		addEntities(postTypeEntities);
+		receiveEntityRecords('postType', post.type, post);
+
+		setupEditor(post, [], []);
+		registerCoreBlocks();
+
+		editorLoaded();
+
+		return () => {
+			window.editor = {};
+			getBlockTypes().forEach((block) => {
+				unregisterBlockType(block.name);
+			});
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
-	const { hasUploadPermissions } = useSelect((select) => {
-		const { getEntityRecord } = select(coreStore);
+	const {
+		blockPatterns,
+		editorSettings,
+		hasUploadPermissions,
+		isEditorReady,
+		reusableBlocks,
+	} = useSelect((select) => {
+		const { getEntityRecord, getEntityRecords } = select(coreStore);
+		const { __unstableIsEditorReady, getEditorSettings } =
+			select(editorStore);
 		const user = getEntityRecord('root', 'user', post.author);
+		const isEditorReady = post?.id ? __unstableIsEditorReady() : true;
 
 		return {
+			isEditorReady: isEditorReady,
+			blockPatterns: select(coreStore).getBlockPatterns(),
+			editorSettings: getEditorSettings(),
 			hasUploadPermissions: user?.capabilities?.upload_files ?? true,
+			reusableBlocks: getEntityRecords('postType', 'wp_block'),
 		};
 	}, []);
 
-	function didChangeBlocks(blocks) {
-		setBlocks(blocks);
+	const [postBlocks, onInput, onChange] = useEntityBlockEditor(
+		'postType',
+		post.type,
+		{
+			id: post.id,
+		}
+	);
 
-		// TODO: this doesn't include everything
-		const isEmpty =
-			blocks.length === 0 ||
-			(blocks[0].name == 'core/paragraph' &&
-				blocks[0].attributes.content.trim() === '');
-		onBlocksChanged(isEmpty);
+	// eslint-disable-next-line no-unused-vars
+	function didChangeBlocks(blocks) {
+		// setBlocks(blocks);
+		// // TODO: this doesn't include everything
+		// const isEmpty =
+		// 	blocks.length === 0 ||
+		// 	(blocks[0].name == 'core/paragraph' &&
+		// 		blocks[0].attributes.content.trim() === '');
+		// onBlocksChanged(isEmpty);
+	}
+
+	function onBlockEditorInput(blocks, options) {
+		onInput(blocks, options);
+		didChangeBlocks(blocks);
+	}
+
+	function onBlockEditorChange(blocks, options) {
+		onChange(blocks, options);
+		didChangeBlocks(blocks);
 	}
 
 	editor.setContent = (content) => {
@@ -94,56 +146,47 @@ function Editor({ post = POST_MOCK }) {
 
 	editor.setCodeEditorEnabled = (enabled) => setCodeEditorEnabled(enabled);
 
-	useEffect(() => {
-		window.editor = editor;
-		registerCoreBlocks();
-
-		editorLoaded();
-
-		return () => {
-			window.editor = {};
-			getBlockTypes().forEach((block) => {
-				unregisterBlockType(block.name);
-			});
-		};
-	}, []);
+	const blockEditorSettings = useBlockEditorSettings(
+		editorSettings,
+		post.type,
+		post.id,
+		'visual'
+	);
 
 	const settings = {
+		...blockEditorSettings,
 		hasFixedToolbar: true,
 		mediaUpload: hasUploadPermissions ? mediaUpload : undefined,
+		__experimentalReusableBlocks: reusableBlocks,
+		__experimentalBlockPatterns: blockPatterns,
 	};
+
+	const styles = useEditorStyles();
 
 	// if (isCodeEditorEnabled) {
 	//     return <CodeEditor value={serialize(blocks)} />;
 	// }
 
 	return (
-		<BlockEditorProvider
-			value={blocks}
-			onInput={didChangeBlocks}
-			onChange={didChangeBlocks}
-			settings={settings}
-		>
-			<div className="editor-visual-editor__post-title-wrapper">
-				<PostTitle ref={titleRef} />
-			</div>
-			<BlockTools>
-				<div className="editor-styles-wrapper">
-					<BlockEditorKeyboardShortcuts.Register />
-					<WritingFlow>
-						<ObserveTyping>
-							<BlockList />
-							<EditorToolbar
-								registeredBlocks={registeredBlocks}
-							/>{' '}
-							{/* not sure if optimal placement */}
-						</ObserveTyping>
-					</WritingFlow>
-				</div>
-			</BlockTools>
-			<Popover.Slot />
-			<EditorSnackbars />
-		</BlockEditorProvider>
+		<div className="editor__container">
+			<BlockEditorProvider
+				value={postBlocks}
+				onInput={onBlockEditorInput}
+				onChange={onBlockEditorChange}
+				settings={settings}
+			>
+				<BlockCanvas shouldIframe={false} height="auto" styles={styles}>
+					<div className="editor-visual-editor__post-title-wrapper">
+						{isEditorReady && <PostTitle ref={titleRef} />}
+					</div>
+					<BlockList />
+				</BlockCanvas>
+				{isEditorReady && <EditorToolbar />}
+
+				<Popover.Slot />
+				<EditorSnackbars />
+			</BlockEditorProvider>
+		</div>
 	);
 }
 

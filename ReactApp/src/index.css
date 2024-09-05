@@ -15,23 +15,34 @@
 
 body {
 	margin: 0;
-	padding: 16px;
-	padding-top: 8px;
-	padding-bottom: 46.5px;
 	font-family: -apple-system;
 	line-height: 1.55;
 }
 
 /* Theme (for no-theme design) */
+* {
+	-webkit-tap-highlight-color: transparent;
+}
+
+.components-button:focus:not(:disabled) {
+	outline: 0 !important;
+	box-shadow: none !important;
+}
+
+:root .editor-styles-wrapper {
+	padding: 0px 16px 56px 16px;
+}
 
 .editor-styles-wrapper {
-	overflow-x: hidden;
+	overflow: hidden;
+	min-height: 100vh;
 }
 
 .editor-styles-wrapper p {
 	margin-block-start: 15px;
 	margin-block-end: 15px;
 	font-size: 17px;
+	line-height: 1.8;
 }
 
 .editor-styles-wrapper h2 {
@@ -54,6 +65,10 @@ h4 {
 	outline: none;
 }
 
+.block-editor-block-popover {
+	display: none;
+}
+
 /* Toolbar */
 
 .gbkit-editor-toolbar {
@@ -68,17 +83,13 @@ h4 {
 	left: 0;
 	z-index: 999;
 	overflow-x: scroll;
+	min-height: 46px;
 
 	transition: position 1.5s linear;
 }
 
 .gbkit-editor-toolbar::-webkit-scrollbar {
 	display: none;
-}
-
-/* TODO: re-enable when we are ready to support Patterns and Media */
-.block-editor-inserter__tablist-and-close-button {
-	display: none !important;
 }
 
 .block-editor-block-toolbar {
@@ -93,12 +104,15 @@ h4 {
 
 .block-editor-inserter .block-editor-inserter__toggle {
 	background: black;
-	color: white;
-	/* FIXME: cleanup this mess */
+	color: white !important;
 	clip-path: inset(4px 4px 4px 4px);
 	margin: 4px 12px;
 	margin-right: 8px;
 	border-radius: 24px !important;
+}
+
+.block-editor-inserter__menu .block-editor-tabbed-sidebar__close-button {
+	display: none;
 }
 
 .block-editor-block-contextual-toolbar {
@@ -107,22 +121,25 @@ h4 {
 }
 
 .gbkit-editor-toolbar_settings_icon {
-	background-repeat: no-repeat;
-	background-position: center;
-	background-image: url('data:image/svg+xml;utf8,<?xml version="1.0" ?><svg enable-background="new 0 0 32 32" id="Glyph" version="1.1" viewBox="0 0 32 32" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><path d="M27.526,18.036L27,17.732c-0.626-0.361-1-1.009-1-1.732s0.374-1.371,1-1.732l0.526-0.304  c1.436-0.83,1.927-2.662,1.098-4.098l-1-1.732c-0.827-1.433-2.666-1.925-4.098-1.098L23,7.339c-0.626,0.362-1.375,0.362-2,0  c-0.626-0.362-1-1.009-1-1.732V5c0-1.654-1.346-3-3-3h-2c-1.654,0-3,1.346-3,3v0.608c0,0.723-0.374,1.37-1,1.732  c-0.626,0.361-1.374,0.362-2,0L8.474,7.036C7.042,6.209,5.203,6.701,4.375,8.134l-1,1.732c-0.829,1.436-0.338,3.269,1.098,4.098  L5,14.268C5.626,14.629,6,15.277,6,16s-0.374,1.371-1,1.732l-0.526,0.304c-1.436,0.829-1.927,2.662-1.098,4.098l1,1.732  c0.828,1.433,2.667,1.925,4.098,1.098L9,24.661c0.626-0.363,1.374-0.361,2,0c0.626,0.362,1,1.009,1,1.732V27c0,1.654,1.346,3,3,3h2  c1.654,0,3-1.346,3-3v-0.608c0-0.723,0.374-1.37,1-1.732c0.625-0.361,1.374-0.362,2,0l0.526,0.304  c1.432,0.826,3.271,0.334,4.098-1.098l1-1.732C29.453,20.698,28.962,18.865,27.526,18.036z M16,21c-2.757,0-5-2.243-5-5s2.243-5,5-5  s5,2.243,5,5S18.757,21,16,21z" id="XMLID_273_"/></svg>');
-	margin-left: 4px;
+	font-size: 34px !important;
+	min-width: 46px !important;
 }
 
 .gbkit-editor-toolbar .block-editor-inserter {
 	border-right: 0.5px solid #c8c7cc;
 }
 
+.gbkit-editor-toolbar .block-editor-inserter button {
+	margin-right: 12px;
+}
+
 .gbkit-editor-toolbar_toolbar-group {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	border-right: 0.5px solid #c8c7cc;
-	padding-right: 12px;
+}
+
+.block-editor-block-contextual-toolbar {
+	border-left: 0.5px solid #c8c7cc !important;
 }
 
 /* Modal Sheet */
@@ -133,7 +150,45 @@ h4 {
 	box-shadow: rgba(0, 0, 0, 0.1) 0px -2px 10px !important;
 }
 
+/* Popover */
+
+.components-popover__header-title {
+	padding-left: 20px;
+}
+
+.components-popover.is-expanded .components-popover__content {
+	border-radius: 0 !important;
+	padding: 0 8px;
+}
+
 /* Misc */
+
+.block-settings-menu {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	background-color: #ffffff;
+	transform: none !important;
+	position: fixed !important;
+	overflow: scroll;
+}
+
+.block-settings-menu__header {
+	display: flex;
+	flex-direction: column;
+	align-items: end;
+}
+
+.block-settings-menu__close {
+	margin: 8px 8px 0px 0px;
+}
+
+.block-settings-menu .components-popover__content {
+	width: 100%;
+	min-height: 100vh;
+}
 
 .block-inspector-siderbar {
 	background: #f6f6fbff;
@@ -159,6 +214,10 @@ There has to be a setting or any other better way of doing that.
 
 /* Inserter (Mobile Design) */
 
+.block-editor-tabbed-sidebar__tablist button {
+	font-size: 16px;
+}
+
 .block-editor-inserter__menu {
 	/* Fixes vertical scrolling */
 	overflow-y: auto !important;
@@ -168,6 +227,22 @@ There has to be a setting or any other better way of doing that.
 	/* Fixes margins; the editor uses negative ones here */
 	margin-bottom: auto !important;
 	margin-top: auto !important;
+}
+
+.block-editor-inserter__menu .block-editor-tabbed-sidebar__tabpanel button {
+	font-size: 16px;
+}
+
+.block-editor-inserter__menu
+	.block-editor-tabbed-sidebar__tabpanel
+	.block-editor-inserter__patterns-category-panel-title {
+	font-size: 18px;
+}
+
+.block-editor-inserter__menu
+	.block-editor-tabbed-sidebar__tabpanel
+	.block-editor-block-patterns-list__item-title {
+	font-size: 16px;
 }
 
 .block-editor-inserter__popover
@@ -198,6 +273,44 @@ There has to be a setting or any other better way of doing that.
 	font-size: 15px;
 	font-weight: 600;
 	margin-left: 12px;
+}
+
+.components-draggable-drag-component-root {
+	display: none !important;
+}
+
+.components-button.block-editor-block-types-list__item {
+	-webkit-tap-highlight-color: transparent;
+	pointer-events: auto;
+}
+
+.components-button.block-editor-block-types-list__item:not(
+		:disabled
+	):hover::after {
+	background: transparent;
+}
+
+.components-button[aria-expanded="true"],
+.components-button:hover:not(:disabled, [aria-disabled="true"]) {
+	color: inherit;
+}
+
+.components-button.block-editor-block-types-list__item:not(:disabled):hover
+	.block-editor-block-types-list__item-title {
+	color: inherit !important;
+}
+
+.components-button.block-editor-block-types-list__item:not(:disabled):hover
+	svg {
+	color: inherit !important;
+}
+
+.block-editor-block-types-list__list-item {
+	pointer-events: auto;
+}
+
+.block-editor-block-types-list__item {
+	pointer-events: none;
 }
 
 .block-editor-block-types-list__item-icon {
@@ -336,13 +449,14 @@ There has to be a setting or any other better way of doing that.
 }
 
 .editor-visual-editor__post-title-wrapper {
-	margin-top: 1rem;
+	margin-top: 1.5rem;
 	min-height: 35px;
 }
 
 .editor-visual-editor__post-title-wrapper .wp-block-post-title {
-	font-size: 20px;
-	margin-bottom: 0;
+	font-size: 20px !important;
+	margin-bottom: 0 !important;
+	line-height: 1.5 !important;
 }
 
 /* Snackbar */
