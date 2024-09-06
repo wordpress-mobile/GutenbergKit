@@ -68,7 +68,7 @@ function Editor({ post }) {
 		// addEntities(postTypeEntities);
 		// receiveEntityRecords('postType', post.type, post);
 
-		setupEditor(post, [], []);
+		setupEditor(post, {});
 		registerCoreBlocks();
 
 		editorLoaded();
