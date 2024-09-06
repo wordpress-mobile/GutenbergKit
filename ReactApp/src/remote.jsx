@@ -45,9 +45,7 @@ async function initalizeRemoteEditor() {
 		});
 
 		const post = getPost();
-		const settings = {
-			post,
-		};
+		const settings = { post };
 
 		const { default: App } = await import('./App.jsx');
 		const { createRoot, createElement, StrictMode } = window.wp.element;

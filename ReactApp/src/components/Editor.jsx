@@ -107,9 +107,7 @@ function Editor({ post }) {
 	const [postBlocks, onInput, onChange] = useEntityBlockEditor(
 		'postType',
 		post.type,
-		{
-			id: post.id,
-		}
+		{ id: post.id }
 	);
 
 	// eslint-disable-next-line no-unused-vars
