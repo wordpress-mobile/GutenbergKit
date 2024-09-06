@@ -154,6 +154,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         let jsCode = """
         window.GBKit = {
+            siteURL: '\(siteURL)',
             siteApiRoot: '\(siteApiRoot)',
             siteApiNamespace: '\(siteApiNamespace)',
             authHeader: '\(authHeader)',
