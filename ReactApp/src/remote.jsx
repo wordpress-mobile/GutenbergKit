@@ -20,7 +20,7 @@ async function initalizeRemoteEditor() {
 	try {
 		const { themeStyles, siteApiRoot } = getGBKit();
 		const { styles, scripts } = await apiFetch({
-			path: '__experimental/wp-block-editor/v1/editor-assets',
+			path: '/__experimental/wp-block-editor/v1/editor-assets',
 		});
 		await loadAssets([...styles, ...scripts].join(''));
 
