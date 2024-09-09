@@ -8,11 +8,6 @@ export default defineConfig({
 		rollupOptions: {
 			input: 'remote.html',
 			external: externalize,
-			output: {
-				entryFileNames: `assets/[name].js`,
-				chunkFileNames: `assets/[name].js`,
-				assetFileNames: `assets/[name].[ext]`,
-			},
 		},
 		target: 'esnext',
 	},
