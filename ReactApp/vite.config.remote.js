@@ -3,7 +3,6 @@ import react from '@vitejs/plugin-react';
 import { defaultRequestToExternal } from '@wordpress/dependency-extraction-webpack-plugin/lib/util.js';
 
 export default defineConfig({
-	base: '',
 	build: {
 		rollupOptions: {
 			input: 'remote.html',
