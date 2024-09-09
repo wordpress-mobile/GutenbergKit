@@ -64,9 +64,7 @@ function Editor({ post }) {
 
 	useEffect(() => {
 		window.editor = editor;
-		// TODO: Disabled as it cleared content, reinstate proplerly.
-		// addEntities(postTypeEntities);
-		// receiveEntityRecords('postType', post.type, post);
+		receiveEntityRecords('postType', post.type, post);
 
 		setupEditor(post, {});
 		registerCoreBlocks();
