@@ -171,6 +171,7 @@ function Editor({ post }) {
 				onInput={onBlockEditorInput}
 				onChange={onBlockEditorChange}
 				settings={settings}
+				useSubRegistry={false}
 			>
 				<BlockCanvas shouldIframe={false} height="auto" styles={styles}>
 					<div className="editor-visual-editor__post-title-wrapper">
