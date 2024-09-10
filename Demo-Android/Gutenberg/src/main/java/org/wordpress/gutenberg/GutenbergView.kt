@@ -21,9 +21,19 @@ class GutenbergView : WebView {
 
     private var isEditorLoaded = false
     private var didFireEditorLoaded = false
+    private var hasSetEditorConfig = false
     private var assetLoader = WebViewAssetLoader.Builder()
         .addPathHandler("/assets/", AssetsPathHandler(this.context))
         .build()
+    private var initialTitle: String = ""
+    private var type: String = ""
+    private var id: Int? = null
+    private var themeStyles: Boolean? = null
+    private var initialContent: String = ""
+    private var siteApiRoot: String = ""
+    private var siteApiNamespace: String = ""
+    private var authHeader: String = ""
+
 
     var editorDidBecomeAvailable: ((GutenbergView) -> Unit)? = null
 
@@ -36,9 +46,27 @@ class GutenbergView : WebView {
     )
 
     @SuppressLint("SetJavaScriptEnabled") // Without JavaScript we have no Gutenberg
-    fun start() {
+    fun start(
+        siteApiRoot: String = "",
+        siteApiNamespace: String = "",
+        authHeader: String = "",
+        themeStyles: Boolean = false,
+        postId: Int? = null,
+        postType: String = "",
+        postTitle: String = "",
+        postContent: String = ""
+    ) {
+        id = postId
+        type = postType
+        initialTitle = postTitle
+        initialContent = postContent
+        this.themeStyles = themeStyles
+        this.siteApiRoot = siteApiRoot
+        this.siteApiNamespace = siteApiNamespace
+        this.authHeader = authHeader
         this.settings.javaScriptCanOpenWindowsAutomatically = true
         this.settings.javaScriptEnabled = true
+        this.settings.domStorageEnabled = true;
         this.addJavascriptInterface(this, "editorDelegate")
 
         this.webViewClient = object : WebViewClient() {
@@ -55,6 +83,15 @@ class GutenbergView : WebView {
                 view: WebView?,
                 request: WebResourceRequest?
             ): WebResourceResponse? {
+                if (!hasSetEditorConfig) {
+                    Handler(Looper.getMainLooper()).post {
+                        var editorInitialConfig = getEditorConfiguration()
+                        view?.evaluateJavascript(editorInitialConfig, null)
+
+                    }
+                    hasSetEditorConfig = true
+                }
+
                 return if (request?.url != null) {
                     assetLoader.shouldInterceptRequest(request.url)
                 } else {
@@ -89,6 +126,29 @@ class GutenbergView : WebView {
         // this.loadUrl("http://10.0.2.2:5173/")
 
         Log.i("GutenbergView", "Startup Complete")
+    }
+
+    private fun getEditorConfiguration(): String {
+        val escapedTitle = java.net.URLEncoder.encode(initialTitle, "UTF-8").replace("+", "%20")
+        val escapedContent = java.net.URLEncoder.encode(initialContent, "UTF-8").replace("+", "%20")
+
+        val jsCode = """
+            window.GBKit = {
+                siteApiRoot: '$siteApiRoot',
+                siteApiNamespace: '$siteApiNamespace',
+                authHeader: '$authHeader',
+                themeStyles: $themeStyles,
+                ${if (id != null) """
+                post: {
+                    id: $id,
+                    title: '$escapedTitle',
+                    content: '$escapedContent'
+                },
+                """ else ""}
+            };
+            localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
+        """.trimIndent()
+        return jsCode
     }
 
     fun setContent(newContent: String) {
