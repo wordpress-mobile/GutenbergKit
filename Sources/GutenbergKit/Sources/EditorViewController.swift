@@ -10,6 +10,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private var type: String
     private var id: Int?
     private var themeStyles: Bool?
+    private var plugins: Bool
     private var _initialRawContent: String
     private var _isEditorRendered = false
     private let controller = GutenbergEditorController()
@@ -41,12 +42,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private var cancellables: [AnyCancellable] = []
 
     /// Initalizes the editor with the initial content (Gutenberg).
-    public init(id: Int? = nil, type: String = "", title: String = "", content: String = "", service: EditorService, themeStyles: Bool = false, siteURL: String = "", siteApiRoot: String = "", siteApiNamespace: String = "", authHeader: String = "") {
+    public init(id: Int? = nil, type: String = "", title: String = "", content: String = "", service: EditorService, themeStyles: Bool = false, plugins: Bool = false, siteURL: String = "", siteApiRoot: String = "", siteApiNamespace: String = "", authHeader: String = "") {
         self.id = id
         self.type = type
         self.initialTitle = title
         self._initialRawContent = content
         self.themeStyles = themeStyles
+        self.plugins = plugins
         self.service = service
         self.siteURL = siteURL
         self.siteApiRoot = siteApiRoot
@@ -139,7 +141,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private func loadEditor() {
         if let editorURL = editorURL ?? ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
             webView.load(URLRequest(url: editorURL))
-        } else if let editorURL = URL(string: "\(siteURL)/wp-content/plugins/block-editor-assets-endpoint/editor/remote.html") {
+        } else if plugins,
+                  let editorURL = URL(string: "\(siteURL)/wp-content/plugins/block-editor-assets-endpoint/editor/remote.html") {
             webView.load(URLRequest(url: editorURL))
         } else {
             let reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
