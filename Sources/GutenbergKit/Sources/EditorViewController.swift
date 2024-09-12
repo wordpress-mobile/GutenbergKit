@@ -142,7 +142,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         if let editorURL = editorURL ?? ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
             webView.load(URLRequest(url: editorURL))
         } else if plugins,
-                  let editorURL = URL(string: "\(siteURL)/wp-content/plugins/block-editor-assets-endpoint/editor/remote.html") {
+                  let editorURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg") {
             webView.load(URLRequest(url: editorURL))
         } else {
             let reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
