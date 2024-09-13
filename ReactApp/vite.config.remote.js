@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { defaultRequestToExternal } from '@wordpress/dependency-extraction-webpack-plugin/lib/util.js';
+import MagicString from 'magic-string';
 
 export default defineConfig({
 	base: '',
@@ -34,45 +35,64 @@ function wordPressExternals() {
 	return {
 		name: 'wordpress-externals-plugin',
 		transform(code, id) {
-			code = code.replace(
-				// Match WordPress and React JSX runtime import statements
-				/import\s*(?:{([^}]+)}\s*from)?\s*['"](@wordpress\/([^'"]+)|react\/jsx-runtime)['"]/g,
-				(match, imports, module) => {
-					const externalDefinition = defaultRequestToExternal(module);
+			const magicString = new MagicString(code);
+			let hasReplacements = false;
 
-					if (
-						!externalDefinition ||
-						/@wordpress\/(api-fetch|i18n|url)/.test(id)
-					) {
-						// Exclude the module from externalization
-						return match;
-					}
+			// Match WordPress and React JSX runtime import statements
+			const regex =
+				/import\s*(?:{([^}]+)}\s*from)?\s*['"](@wordpress\/([^'"]+)|react\/jsx-runtime)['"];/g;
+			let match;
 
-					if (!imports) {
-						// Remove the side effect import entirely
-						return '';
-					}
+			while ((match = regex.exec(code)) !== null) {
+				const [fullMatch, imports, module] = match;
+				const externalDefinition = defaultRequestToExternal(module);
 
-					const importList = imports?.split(',').map((i) => {
-						const parts = i.trim().split(/\s+as\s+/);
-						if (parts.length === 2) {
-							// Convert import "as" syntax to destructuring assignment
-							return `${parts[0]}: ${parts[1]}`;
-						}
-						return i.trim();
-					});
-
-					const definitionArray = Array.isArray(externalDefinition)
-						? externalDefinition
-						: [externalDefinition];
-
-					return `const { ${importList.join(', ')} } = window.${definitionArray.join('.')}`;
+				if (
+					!externalDefinition ||
+					/@wordpress\/(api-fetch|i18n|url)/.test(id)
+				) {
+					continue; // Exclude the module from externalization
 				}
-			);
+
+				hasReplacements = true;
+
+				if (!imports) {
+					// Remove the side effect import entirely
+					magicString.remove(
+						match.index,
+						match.index + fullMatch.length
+					);
+					continue;
+				}
+
+				const importList = imports.split(',').map((i) => {
+					const parts = i.trim().split(/\s+as\s+/);
+					if (parts.length === 2) {
+						// Convert import "as" syntax to destructuring assignment
+						return `${parts[0]}: ${parts[1]}`;
+					}
+					return i.trim();
+				});
+
+				const definitionArray = Array.isArray(externalDefinition)
+					? externalDefinition
+					: [externalDefinition];
+
+				const replacement = `const { ${importList.join(', ')} } = window.${definitionArray.join('.')};`;
+				magicString.overwrite(
+					match.index,
+					match.index + fullMatch.length,
+					replacement
+				);
+			}
+
+			if (!hasReplacements) {
+				return null;
+			}
 
 			return {
-				code,
-				map: null,
+				code: magicString.toString(),
+				map: magicString.generateMap({ hires: true }),
 			};
 		},
 	};
