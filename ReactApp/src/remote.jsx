@@ -19,9 +19,13 @@ initalizeRemoteEditor();
 async function initalizeRemoteEditor() {
 	try {
 		const { themeStyles, siteURL, siteApiRoot } = getGBKit();
-		const { styles, scripts } = await apiFetch({
-			url: `${siteURL}/wp-json/__experimental/wp-block-editor/v1/editor-assets`,
+		const scripts = await apiFetch({
+			url: `${siteURL}/wp-json/__experimental/scripts?context=edit`,
 		});
+		const styles = await apiFetch({
+			url: `${siteURL}/wp-json/__experimental/styles?context=edit`,
+		});
+		return;
 		await loadAssets([...styles, ...scripts].join(''));
 
 		// Utilize remote-loaded globals rather than importing local modules
@@ -60,19 +64,13 @@ async function initalizeRemoteEditor() {
 /**
  * Load the asset files for a block
  */
-async function loadAssets(html) {
-	const doc = new window.DOMParser().parseFromString(html, 'text/html');
-
-	const newAssets = Array.from(
-		doc.querySelectorAll('link[rel="stylesheet"],script')
-	).filter((asset) => asset.id && !excludedScripts.test(asset.src));
-
+async function loadAssets(assets) {
 	/*
 	 * Load each asset in order, as they may depend upon an earlier loaded script.
 	 * Stylesheets and Inline Scripts will resolve immediately upon insertion.
 	 */
-	for (const newAsset of newAssets) {
-		await loadAsset(newAsset);
+	for (const asset of assets) {
+		await loadAsset(asset);
 	}
 }
 
@@ -93,26 +91,22 @@ const excludedScripts = new RegExp(
  * This function returns a Promise that will resolve once the asset is loaded,
  * or in the case of Stylesheets and Inline JavaScript, will resolve immediately.
  *
- * @param {HTMLElement} el A HTML Element asset to inject.
+ * @param {Object} asset An asset objcet to inject.
  *
  * @return {Promise} Promise which will resolve when the asset is loaded.
  */
-function loadAsset(el) {
+function loadAsset(asset, type = 'script') {
 	return new Promise((resolve) => {
 		/*
 		 * Reconstruct the passed element, this is required as inserting the Node directly
 		 * won't always fire the required onload events, even if the asset wasn't already loaded.
 		 */
-		const newNode = document.createElement(el.nodeName);
-
-		['id', 'rel', 'src', 'href', 'type'].forEach((attr) => {
-			if (el[attr]) {
-				newNode[attr] = el[attr];
-			}
-		});
+		const newNode = document.createElement(type);
+		newNode.id = asset.handle;
+		newNode.src = asset.url;
 
 		// Append inline <script> contents.
-		if (el.innerHTML) {
+		if (asset.extra) {
 			newNode.appendChild(document.createTextNode(el.innerHTML));
 		}
 
