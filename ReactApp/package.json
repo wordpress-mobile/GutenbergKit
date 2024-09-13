@@ -6,7 +6,8 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite --host",
-		"build": "vite build",
+		"dev:remote": "vite --host --config vite.config.remote.js",
+		"build": "vite build && vite build --emptyOutDir=false --config vite.config.remote.js",
 		"lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
 		"format": "prettier --write .",
 		"preview": "vite preview --host"
@@ -29,6 +30,7 @@
 		"@types/react": "^18.2.66",
 		"@types/react-dom": "^18.2.22",
 		"@vitejs/plugin-react": "^4.2.1",
+		"@wordpress/dependency-extraction-webpack-plugin": "^6.6.0",
 		"@wordpress/prettier-config": "^4.3.0",
 		"eslint": "^8.57.0",
 		"eslint-plugin-react": "^7.34.1",

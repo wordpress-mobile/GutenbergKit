@@ -86,17 +86,29 @@ export function initializeApiFetch() {
 
 function corsMiddleware(options, next) {
 	options.mode = 'cors';
+
+	// TODO: Ensure this header is not set via CORS mode.
+	// This custom header causes CORS errors. Although settings the mode to 'cors'
+	// should prevent this header, incorrect middleware order results in setting
+	// the header.
+	// https://github.com/Automattic/jetpack/blob/7801b7f21e01d8a4a102c44dac69c6ebdd1e549d/projects/plugins/jetpack/extensions/editor.js#L22-L52
+	delete options.headers['x-wp-api-fetch-from-editor'];
+
 	return next(options);
 }
 
 function apiPathModifierMiddleware(options, next) {
 	const { siteApiNamespace } = getGBKit();
 
-	if (siteApiNamespace && !options.path.includes(siteApiNamespace)) {
+	if (
+		options.path &&
+		siteApiNamespace &&
+		!options.path.includes(siteApiNamespace)
+	) {
 		// Insert the API namespace after the first two path segments.
 		options.path = options.path.replace(
-			/^((?:\/[\w.-]+){2})/,
-			`$1/${siteApiNamespace}`
+			/^(?<apiPath>\/?(?:[\w.-]+\/){2})/,
+			`$<apiPath>${siteApiNamespace}/`
 		);
 	}
 	return next(options);

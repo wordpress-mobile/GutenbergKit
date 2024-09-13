@@ -10,11 +10,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private var type: String
     private var id: Int?
     private var themeStyles: Bool?
+    private var plugins: Bool
     private var _initialRawContent: String
     private var _isEditorRendered = false
     private let controller = GutenbergEditorController()
     private let timestampInit = CFAbsoluteTimeGetCurrent()
     private let service: EditorService
+    private let siteURL: String
     private let siteApiRoot: String
     private let siteApiNamespace: String
     private let authHeader: String
@@ -40,13 +42,15 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private var cancellables: [AnyCancellable] = []
 
     /// Initalizes the editor with the initial content (Gutenberg).
-    public init(id: Int? = nil, type: String = "", title: String = "", content: String = "", service: EditorService, themeStyles: Bool = false, siteApiRoot: String = "", siteApiNamespace: String = "", authHeader: String = "") {
+    public init(id: Int? = nil, type: String = "", title: String = "", content: String = "", service: EditorService, themeStyles: Bool = false, plugins: Bool = false, siteURL: String = "", siteApiRoot: String = "", siteApiNamespace: String = "", authHeader: String = "") {
         self.id = id
         self.type = type
         self.initialTitle = title
         self._initialRawContent = content
         self.themeStyles = themeStyles
+        self.plugins = plugins
         self.service = service
+        self.siteURL = siteURL
         self.siteApiRoot = siteApiRoot
         self.siteApiNamespace = siteApiNamespace
         self.authHeader = authHeader
@@ -137,6 +141,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private func loadEditor() {
         if let editorURL = editorURL ?? ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
             webView.load(URLRequest(url: editorURL))
+        } else if plugins,
+                  let editorURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg") {
+            webView.load(URLRequest(url: editorURL))
         } else {
             let reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
             webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.module.resourceURL!)
@@ -150,6 +157,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         let jsCode = """
         window.GBKit = {
+            siteURL: '\(siteURL)',
             siteApiRoot: '\(siteApiRoot)',
             siteApiNamespace: '\(siteApiNamespace)',
             authHeader: '\(authHeader)',

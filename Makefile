@@ -17,6 +17,9 @@ build: npm-dependencies
 dev-server: npm-dependencies
 	npm --prefix ReactApp/ run dev
 
+dev-server-remote: npm-dependencies
+	npm --prefix ReactApp/ run dev:remote
+
 fmt-js: npm-dependencies
 	npm --prefix ReactApp/ run format
 

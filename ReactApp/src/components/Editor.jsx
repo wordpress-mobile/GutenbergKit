@@ -64,10 +64,9 @@ function Editor({ post }) {
 
 	useEffect(() => {
 		window.editor = editor;
-		addEntities(postTypeEntities);
 		receiveEntityRecords('postType', post.type, post);
 
-		setupEditor(post, [], []);
+		setupEditor(post, {});
 		registerCoreBlocks();
 
 		editorLoaded();
@@ -106,9 +105,7 @@ function Editor({ post }) {
 	const [postBlocks, onInput, onChange] = useEntityBlockEditor(
 		'postType',
 		post.type,
-		{
-			id: post.id,
-		}
+		{ id: post.id }
 	);
 
 	// eslint-disable-next-line no-unused-vars
@@ -174,6 +171,7 @@ function Editor({ post }) {
 				onInput={onBlockEditorInput}
 				onChange={onBlockEditorChange}
 				settings={settings}
+				useSubRegistry={false}
 			>
 				<BlockCanvas shouldIframe={false} height="auto" styles={styles}>
 					<div className="editor-visual-editor__post-title-wrapper">
