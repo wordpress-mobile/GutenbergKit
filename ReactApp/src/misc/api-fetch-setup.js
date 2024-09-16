@@ -21,6 +21,7 @@ export function initializeApiFetch() {
 	apiFetch.use(corsMiddleware);
 	apiFetch.use(apiPathModifierMiddleware);
 	apiFetch.use(createHeadersMiddleware(authHeader));
+	apiFetch.use(filterEndpointsMiddleware);
 
 	// Preload some endpoints to return data needed for some components
 	// Like PostTitle.
@@ -124,4 +125,19 @@ function createHeadersMiddleware(authHeader) {
 
 		return next(options);
 	};
+}
+
+function filterEndpointsMiddleware(options, next) {
+	const disabledEndpoints = [
+		/^\/wp\/v2\/posts\/-?\d+/, // Matches /wp/v2/posts/{ID}
+		/^\/wp\/v2\/pages\/-?\d+/, // Matches /wp/v2/pages/{ID}
+	];
+	const isDisabled = disabledEndpoints.some((pattern) =>
+		pattern.test(options.path)
+	);
+
+	if (isDisabled) {
+		return Promise.resolve([]);
+	}
+	return next(options);
 }
