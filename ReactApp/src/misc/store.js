@@ -29,8 +29,11 @@ export function getPost() {
 		};
 	}
 
+	// Since we don't use the auto-save functionality, draft posts need to have an ID.
+	// We assign a temporary ID of -1.
 	return {
 		type: 'post',
 		status: 'draft',
+		id: -1,
 	};
 }
