@@ -14,10 +14,10 @@ import { parse, serialize } from '@wordpress/blocks';
 import {
 	store as editorStore,
 	mediaUpload,
+	EditorProvider,
 	EditorSnackbars,
 	PostTitle,
 } from '@wordpress/editor';
-import { ExperimentalEditorProvider } from '@wordpress/editor/src/components/provider';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as coreStore } from '@wordpress/core-data';
 
@@ -150,10 +150,7 @@ function Editor({ post }) {
 	return (
 		hasLoadedPost && (
 			<div className="editor__container">
-				<ExperimentalEditorProvider
-					post={currentPost}
-					settings={settings}
-				>
+				<EditorProvider post={currentPost} settings={settings}>
 					<BlockCanvas
 						shouldIframe={false}
 						height="auto"
@@ -168,7 +165,7 @@ function Editor({ post }) {
 
 					<Popover.Slot />
 					<EditorSnackbars />
-				</ExperimentalEditorProvider>
+				</EditorProvider>
 			</div>
 		)
 	);
