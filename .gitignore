@@ -41,13 +41,6 @@ playground.xcworkspace
 .build/
 .swiftpm
 
-## Production Build Products
-/Demo-Android/Gutenberg/src/main/assets/assets
-/Demo-Android/Gutenberg/src/main/assets/index.html
-
-/Sources/GutenbergKit/Gutenberg/assets
-/Sources/GutenbergKit/Gutenberg/index.html
-
 # Logs
 logs
 *.log
@@ -182,8 +175,12 @@ local.properties
 /Demo-Android/.gradle
 /Demo-Android/.idea
 
-/Demo-Android/app/src/main/assets/assets
-/Demo-Android/app/src/main/assets/index.html
+## Production Build Products
+/Demo-Android/Gutenberg/src/main/assets/assets
+/Demo-Android/Gutenberg/src/main/assets/index.html
+/Demo-Android/Gutenberg/src/main/assets/remote.html
 
-/Sources/GutenbergKit/Gutenberg/assets
-/Sources/GutenbergKit/Gutenberg/index.html
+# Disabled removing these files until this is published like Android in CI.
+# /Sources/GutenbergKit/Gutenberg/assets
+# /Sources/GutenbergKit/Gutenberg/index.html
+# /Sources/GutenbergKit/Gutenberg/remote.html
