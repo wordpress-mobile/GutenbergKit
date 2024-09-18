@@ -177,11 +177,13 @@ class GutenbergView : WebView {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
             return
         }
-        this.evaluateJavascript("editor.getTitleAndContent();") { result ->
-            val jsonObject = JSONObject(result)
-            val title = jsonObject.getString("title")
-            val content = jsonObject.getString("content")
-            callback.onResult(title, content)
+        Handler(Looper.getMainLooper()).post {
+            this.evaluateJavascript("editor.getTitleAndContent();") { result ->
+                val jsonObject = JSONObject(result)
+                val title = jsonObject.getString("title")
+                val content = jsonObject.getString("content")
+                callback.onResult(title, content)
+            }
         }
     }
 
