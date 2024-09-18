@@ -54,7 +54,10 @@ function Editor({ post }) {
 	const [blocks, setBlocks] = useState([]);
 	const [_isCodeEditorEnabled, setCodeEditorEnabled] = useState(false);
 	const titleRef = useRef();
-	const { addEntities, receiveEntityRecords } = useDispatch(coreStore);
+	const { addEntities, editEntityRecord, receiveEntityRecords } =
+		useDispatch(coreStore);
+	const { getEditedPostAttribute } = useSelect(editorStore);
+	const { setEditedPost } = unlock(useDispatch(editorStore));
 
 	useEffect(() => {
 		window.editor = editor;
@@ -64,6 +67,8 @@ function Editor({ post }) {
 		registerCoreBlocks();
 
 		editorLoaded();
+		// Temp, check why this isn't being called in the provider.
+		setEditedPost(post.type, post.id);
 
 		return () => {
 			window.editor = {};
@@ -116,14 +121,29 @@ function Editor({ post }) {
 		// onBlocksChanged(isEmpty);
 	}
 
+	function editContent(edits) {
+		editEntityRecord('postType', post.type, post.id, edits);
+	}
+
 	editor.setContent = (content) => {
-		setBlocks(parse(content));
+		editContent({ content });
+	};
+
+	editor.setTitle = (title) => {
+		editContent({ title });
 	};
 
 	editor.setInitialContent = (content) => {
 		const blocks = parse(content);
 		didChangeBlocks(blocks); // TODO: redesign this
 		return serialize(blocks); // It's used for tracking changes
+	};
+
+	editor.getTitleAndContent = () => {
+		return {
+			title: getEditedPostAttribute('title'),
+			content: getEditedPostAttribute('content'),
+		};
 	};
 
 	editor.getContent = () => serialize(blocks);
