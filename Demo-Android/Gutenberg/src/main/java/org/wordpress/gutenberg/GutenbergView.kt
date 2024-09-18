@@ -168,7 +168,11 @@ class GutenbergView : WebView {
         this.evaluateJavascript("editor.setTitle('$newTitle');", null)
     }
 
-    fun getTitleAndContent(callback: (title: String, content: String) -> Unit) {
+    interface TitleAndContentCallback {
+        fun onResult(title: String, content: String)
+    }
+
+    fun getTitleAndContent(callback: TitleAndContentCallback) {
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
             return
@@ -177,7 +181,7 @@ class GutenbergView : WebView {
             val jsonObject = JSONObject(result)
             val title = jsonObject.getString("title")
             val content = jsonObject.getString("content")
-            callback(title, content)
+            callback.onResult(title, content)
         }
     }
 
