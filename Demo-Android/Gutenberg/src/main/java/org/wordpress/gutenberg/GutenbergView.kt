@@ -16,6 +16,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
+import org.json.JSONObject
 
 class GutenbergView : WebView {
 
@@ -152,14 +153,32 @@ class GutenbergView : WebView {
     }
 
     fun setContent(newContent: String) {
-        Log.i("GutenbergView", "Setting content to $newContent")
-
         if(!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
             return
         }
-
         this.evaluateJavascript("editor.setContent('$newContent');", null)
+    }
+
+    fun setTitle(newTitle: String) {
+        if(!isEditorLoaded) {
+            Log.e("GutenbergView", "You can't change the editor content until it has loaded")
+            return
+        }
+        this.evaluateJavascript("editor.setTitle('$newTitle');", null)
+    }
+
+    fun getTitleAndContent(callback: (title: String, content: String) -> Unit) {
+        if (!isEditorLoaded) {
+            Log.e("GutenbergView", "You can't change the editor content until it has loaded")
+            return
+        }
+        this.evaluateJavascript("editor.getTitleAndContent();") { result ->
+            val jsonObject = JSONObject(result)
+            val title = jsonObject.getString("title")
+            val content = jsonObject.getString("content")
+            callback(title, content)
+        }
     }
 
     @JavascriptInterface
