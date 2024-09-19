@@ -22,6 +22,7 @@ export function initializeApiFetch() {
 	apiFetch.use(apiPathModifierMiddleware);
 	apiFetch.use(createHeadersMiddleware(authHeader));
 	apiFetch.use(filterEndpointsMiddleware);
+	apiFetch.use(mediaUploadMiddleware);
 
 	// Preload some endpoints to return data needed for some components
 	// Like PostTitle.
@@ -138,6 +139,30 @@ function filterEndpointsMiddleware(options, next) {
 
 	if (isDisabled) {
 		return Promise.resolve([]);
+	}
+	return next(options);
+}
+
+/**
+ * Middleware to modify media upload requests.
+ *
+ * This middleware intercepts requests to the media endpoint and conditionally
+ * removes the 'post' field if its value is '-1', which is used for draft posts.
+ */
+function mediaUploadMiddleware(options, next) {
+	if (options.path.startsWith('/wp/v2/media') && options.method === 'POST') {
+		if (options.body instanceof FormData) {
+			const newFormData = new FormData();
+
+			options.body.forEach((value, key) => {
+				if (key === 'post' && value === '-1') {
+					return;
+				}
+				newFormData.append(key, value);
+			});
+
+			options.body = newFormData;
+		}
 	}
 	return next(options);
 }
