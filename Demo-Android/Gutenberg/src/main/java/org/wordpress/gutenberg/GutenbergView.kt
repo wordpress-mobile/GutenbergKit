@@ -2,12 +2,15 @@ package org.wordpress.gutenberg
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
 import android.util.Log
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -37,6 +40,9 @@ class GutenbergView : WebView {
 
 
     var editorDidBecomeAvailable: ((GutenbergView) -> Unit)? = null
+    var filePathCallback: ValueCallback<Array<Uri?>?>? = null
+    val pickImageRequestCode = 1
+    var onFileChooserRequested: ((Intent, Int) -> Unit)? = null
 
     constructor(context: Context) : super(context)
     constructor(context: Context, attrs: AttributeSet) : super(context, attrs)
@@ -109,6 +115,30 @@ class GutenbergView : WebView {
                     Log.i("GutenbergView", "null message")
                 }
                 return super.onConsoleMessage(consoleMessage)
+            }
+            override fun onShowFileChooser(
+                webView: WebView?,
+                newFilePathCallback: ValueCallback<Array<Uri?>?>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                filePathCallback = newFilePathCallback
+                val allowMultiple = fileChooserParams?.mode == FileChooserParams.MODE_OPEN_MULTIPLE
+                val mimeTypes = fileChooserParams?.acceptTypes
+
+                val intent = Intent(Intent.ACTION_PICK).apply {
+                    type = "*/*"  // Default to all types
+                }
+
+                if (!mimeTypes.isNullOrEmpty()) {
+                    intent.type = mimeTypes.joinToString("|")
+                }
+
+                if (allowMultiple) {
+                    intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                }
+
+                onFileChooserRequested?.invoke(Intent.createChooser(intent, "Select Files"), pickImageRequestCode)
+                return true
             }
         }
 
@@ -211,5 +241,9 @@ class GutenbergView : WebView {
     @JavascriptInterface
     fun showBlockPicker() {
         Log.i("GutenbergView", "BlockPickerShouldShow")
+    }
+
+    fun resetFilePathCallback() {
+        filePathCallback = null
     }
 }
