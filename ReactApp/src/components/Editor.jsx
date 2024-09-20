@@ -8,11 +8,7 @@ import {
 	privateApis as blockEditorPrivateApis,
 } from '@wordpress/block-editor';
 import { Popover } from '@wordpress/components';
-import {
-	getBlockTypes,
-	unregisterBlockType,
-	__unstableSerializeAndClean,
-} from '@wordpress/blocks';
+import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { parse, serialize } from '@wordpress/blocks';
 import {
@@ -62,7 +58,6 @@ function Editor({ post }) {
 	const { setEditedPost } = useDispatch(editorStore);
 	const { getEditedPostAttribute, getEditedPostContent } =
 		useSelect(editorStore);
-	const { getEditedEntityRecord } = useSelect(coreStore);
 
 	useEffect(() => {
 		window.editor = editor;
@@ -145,23 +140,13 @@ function Editor({ post }) {
 	};
 
 	editor.getContent = () => {
-		const record = getEditedEntityRecord('postType', post.type, post.id);
-		if (record) {
-			if (typeof record.content === 'function') {
-				return record.content(record);
-			} else if (record.blocks) {
-				return __unstableSerializeAndClean(record.blocks);
-			} else if (record.content) {
-				return record.content;
-			}
-		}
+		return getEditedPostContent();
 	};
 
 	editor.getTitleAndContent = () => {
 		return {
 			title: getEditedPostAttribute('title'),
 			content: getEditedPostContent(),
-			contentNew: editor.getContent(),
 		};
 	};
 
