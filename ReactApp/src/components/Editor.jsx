@@ -8,7 +8,11 @@ import {
 	privateApis as blockEditorPrivateApis,
 } from '@wordpress/block-editor';
 import { Popover } from '@wordpress/components';
-import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
+import {
+	getBlockTypes,
+	unregisterBlockType,
+	__unstableSerializeAndClean,
+} from '@wordpress/blocks';
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { parse, serialize } from '@wordpress/blocks';
 import {
@@ -54,8 +58,12 @@ function Editor({ post }) {
 	const [blocks, setBlocks] = useState([]);
 	const [_isCodeEditorEnabled, setCodeEditorEnabled] = useState(false);
 	const titleRef = useRef();
-	const { addEntities, editEntityRecord, receiveEntityRecords } =
-		useDispatch(coreStore);
+	const {
+		addEntities,
+		editEntityRecord,
+		getEditedEntityRecord,
+		receiveEntityRecords,
+	} = useDispatch(coreStore);
 	const { getEditedPostAttribute, getEditedPostContent } =
 		useSelect(editorStore);
 	const { setEditedPost } = unlock(useDispatch(editorStore));
@@ -140,14 +148,26 @@ function Editor({ post }) {
 		return serialize(blocks); // It's used for tracking changes
 	};
 
+	editor.getContent = () => {
+		const record = getEditedEntityRecord('postType', post.type, post.id);
+		if (record) {
+			if (typeof record.content === 'function') {
+				return record.content(record);
+			} else if (record.blocks) {
+				return __unstableSerializeAndClean(record.blocks);
+			} else if (record.content) {
+				return record.content;
+			}
+		}
+	};
+
 	editor.getTitleAndContent = () => {
 		return {
 			title: getEditedPostAttribute('title'),
 			content: getEditedPostContent(),
+			contentNew: editor.getContent(),
 		};
 	};
-
-	editor.getContent = () => serialize(blocks);
 
 	editor.setCodeEditorEnabled = (enabled) => setCodeEditorEnabled(enabled);
 
