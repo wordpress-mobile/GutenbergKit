@@ -256,6 +256,7 @@ class GutenbergView : WebView {
 object GutenbergWebViewPool {
     private var preloadedWebView: GutenbergView? = null
 
+    @JvmStatic
     fun getPreloadedWebView(context: Context): GutenbergView {
         if (preloadedWebView == null) {
             preloadedWebView = createAndPreloadWebView(context)
@@ -271,6 +272,7 @@ object GutenbergWebViewPool {
         return webView
     }
 
+    @JvmStatic
     fun recycleWebView(webView: GutenbergView) {
         webView.stopLoading()
         preloadedWebView = null
