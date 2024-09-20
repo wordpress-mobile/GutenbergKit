@@ -207,8 +207,10 @@ class GutenbergView : WebView {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
             return
         }
-        this.clearFocus()
         Handler(Looper.getMainLooper()).post {
+            // Clearing the focus is necessary to resolve any pending text composition,
+            // ensuring the editor provides the latest content.
+            this.clearFocus()
             this.evaluateJavascript("editor.getTitleAndContent();") { result ->
                 val jsonObject = JSONObject(result)
                 val title = jsonObject.optString("title", "")
