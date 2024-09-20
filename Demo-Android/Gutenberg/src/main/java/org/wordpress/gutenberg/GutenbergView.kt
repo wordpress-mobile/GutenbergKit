@@ -21,6 +21,8 @@ import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
 import org.json.JSONObject
 
+const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
+
 class GutenbergView : WebView {
 
     private var isEditorLoaded = false
@@ -146,7 +148,7 @@ class GutenbergView : WebView {
         // this value out of the `dist` directory after building GutenbergKit
         //
         // This URL maps to the `assets` directory in this module
-        this.loadUrl("https://appassets.androidplatform.net/assets/index.html")
+        this.loadUrl(ASSET_URL)
 
         // Dev mode – you can connect the app to a local dev server and have it refresh as
         // changes are made. To start the server, run `make dev-server` in the project root
@@ -248,5 +250,29 @@ class GutenbergView : WebView {
 
     fun resetFilePathCallback() {
         filePathCallback = null
+    }
+}
+
+object GutenbergWebViewPool {
+    private var preloadedWebView: GutenbergView? = null
+
+    fun getPreloadedWebView(context: Context): GutenbergView {
+        if (preloadedWebView == null) {
+            preloadedWebView = createAndPreloadWebView(context)
+        }
+        return preloadedWebView!!
+    }
+
+    private fun createAndPreloadWebView(context: Context): GutenbergView {
+        val webView = GutenbergView(context)
+        webView.settings.javaScriptEnabled = true
+        webView.settings.domStorageEnabled = true
+        webView.loadUrl(ASSET_URL)
+        return webView
+    }
+
+    fun recycleWebView(webView: GutenbergView) {
+        webView.stopLoading()
+        preloadedWebView = null
     }
 }
