@@ -56,7 +56,8 @@ function Editor({ post }) {
 	const titleRef = useRef();
 	const { addEntities, editEntityRecord, receiveEntityRecords } =
 		useDispatch(coreStore);
-	const { getEditedPostAttribute } = useSelect(editorStore);
+	const { getEditedPostAttribute, getEditedPostContent } =
+		useSelect(editorStore);
 	const { setEditedPost } = unlock(useDispatch(editorStore));
 
 	useEffect(() => {
@@ -142,7 +143,7 @@ function Editor({ post }) {
 	editor.getTitleAndContent = () => {
 		return {
 			title: getEditedPostAttribute('title'),
-			content: getEditedPostAttribute('content'),
+			content: getEditedPostContent(),
 		};
 	};
 
