@@ -55,18 +55,14 @@ let editor = {};
 const { ExperimentalBlockCanvas: BlockCanvas } = unlock(blockEditorPrivateApis);
 
 function Editor({ post }) {
-	const [blocks, setBlocks] = useState([]);
 	const [_isCodeEditorEnabled, setCodeEditorEnabled] = useState(false);
 	const titleRef = useRef();
-	const {
-		addEntities,
-		editEntityRecord,
-		getEditedEntityRecord,
-		receiveEntityRecords,
-	} = useDispatch(coreStore);
+	const { addEntities, editEntityRecord, receiveEntityRecords } =
+		useDispatch(coreStore);
+	const { setEditedPost } = useDispatch(editorStore);
 	const { getEditedPostAttribute, getEditedPostContent } =
 		useSelect(editorStore);
-	const { setEditedPost } = unlock(useDispatch(editorStore));
+	const { getEditedEntityRecord } = useSelect(coreStore);
 
 	useEffect(() => {
 		window.editor = editor;
