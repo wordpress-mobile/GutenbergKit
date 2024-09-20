@@ -212,7 +212,6 @@ class GutenbergView : WebView {
                 val jsonObject = JSONObject(result)
                 val title = jsonObject.optString("title", "")
                 val content = jsonObject.optString("content", "")
-                Log.d("Gutenberg", "JSON data: $jsonObject")
                 callback.onResult(title, content)
             }
         }
