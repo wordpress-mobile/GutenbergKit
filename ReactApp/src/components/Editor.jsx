@@ -12,7 +12,6 @@ import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { parse, serialize } from '@wordpress/blocks';
 import {
-	store as editorStore,
 	mediaUpload,
 	EditorProvider,
 	EditorSnackbars,
@@ -77,14 +76,12 @@ function Editor({ post }) {
 	const {
 		blockPatterns,
 		currentPost,
-		editorSettings,
 		hasLoadedPost,
 		hasUploadPermissions,
 		reusableBlocks,
 	} = useSelect((select) => {
 		const { getEntityRecord, getEntityRecords, hasFinishedResolution } =
 			select(coreStore);
-		const { getEditorSettings } = select(editorStore);
 		const user = getEntityRecord('root', 'user', post.author);
 		const currentPost = getEntityRecord('postType', post.type, post.id);
 		const hasLoadedPost = post?.id
@@ -98,7 +95,6 @@ function Editor({ post }) {
 		return {
 			blockPatterns: select(coreStore).getBlockPatterns(),
 			currentPost,
-			editorSettings: getEditorSettings(),
 			hasLoadedPost,
 			hasUploadPermissions: user?.capabilities?.upload_files ?? true,
 			reusableBlocks: getEntityRecords('postType', 'wp_block'),
@@ -132,13 +128,12 @@ function Editor({ post }) {
 
 	const settings = useMemo(
 		() => ({
-			...editorSettings,
 			hasFixedToolbar: true,
 			mediaUpload: hasUploadPermissions ? mediaUpload : undefined,
 			__experimentalReusableBlocks: reusableBlocks,
 			__experimentalBlockPatterns: blockPatterns,
 		}),
-		[blockPatterns, editorSettings, hasUploadPermissions, reusableBlocks]
+		[blockPatterns, hasUploadPermissions, reusableBlocks]
 	);
 
 	const styles = useEditorStyles();
