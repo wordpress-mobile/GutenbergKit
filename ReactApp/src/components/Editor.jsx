@@ -145,7 +145,11 @@ function Editor({ post }) {
 	return (
 		hasLoadedPost && (
 			<div className="editor__container">
-				<EditorProvider post={currentPost} settings={settings}>
+				<EditorProvider
+					post={currentPost}
+					settings={settings}
+					useSubRegistry={false}
+				>
 					<BlockCanvas
 						shouldIframe={false}
 						height="auto"
