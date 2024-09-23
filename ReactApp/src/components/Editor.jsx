@@ -134,11 +134,11 @@ function Editor({ post }) {
 	}
 
 	editor.setContent = (content) => {
-		editContent({ content });
+		editContent({ content: decodeURIComponent(content) });
 	};
 
 	editor.setTitle = (title) => {
-		editContent({ title });
+		editContent({ title: decodeURIComponent(title) });
 	};
 
 	editor.getContent = () => {
