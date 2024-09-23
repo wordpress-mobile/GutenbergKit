@@ -27,6 +27,7 @@ const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
 
 class GutenbergView : WebView {
 
+    var isPreloading = false
     private var isEditorLoaded = false
     private var didFireEditorLoaded = false
     private var hasSetEditorConfig = false
@@ -94,6 +95,7 @@ class GutenbergView : WebView {
         this.settings.domStorageEnabled = true;
         this.addJavascriptInterface(this, "editorDelegate")
         this.visibility = View.GONE
+        isPreloading = false
 
         this.webViewClient = object : WebViewClient() {
             override fun onReceivedError(
@@ -262,6 +264,10 @@ class GutenbergView : WebView {
 
     @JavascriptInterface
     fun onEditorLoaded() {
+        if (isPreloading) {
+            Log.d("GutenbergView", "Is preloading")
+            return
+        }
         Log.i("GutenbergView", "EditorLoaded received in native code")
         isEditorLoaded = true
         handler.post {
@@ -332,6 +338,7 @@ object GutenbergWebViewPool {
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
         webView.loadUrl(ASSET_URL)
+        webView.isPreloading = true
         return webView
     }
 
@@ -341,5 +348,6 @@ object GutenbergWebViewPool {
         webView.removeAllViews()
         webView.loadUrl("about:blank")
         preloadedWebView = null
+        webView.isPreloading = false
     }
 }
