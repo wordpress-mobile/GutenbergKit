@@ -27,7 +27,6 @@ const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
 
 class GutenbergView : WebView {
 
-    var isPreloading = false
     private var isEditorLoaded = false
     private var didFireEditorLoaded = false
     private var hasSetEditorConfig = false
@@ -49,7 +48,7 @@ class GutenbergView : WebView {
     val pickImageRequestCode = 1
     private var onFileChooserRequested: WeakReference<((Intent, Int) -> Unit)?>? = null
     private var contentChangeListener: WeakReference<ContentChangeListener>? = null
-    private var editorDidBecomeAvailableListener: WeakReference<EditorAvailableListener>? = null
+    private var editorDidBecomeAvailableListener: EditorAvailableListener? = null
 
     fun setContentChangeListener(listener: ContentChangeListener) {
         contentChangeListener = WeakReference(listener)
@@ -60,7 +59,7 @@ class GutenbergView : WebView {
     }
 
     fun setEditorDidBecomeAvailable(listener: EditorAvailableListener?) {
-        editorDidBecomeAvailableListener = WeakReference(listener)
+        editorDidBecomeAvailableListener = listener
     }
 
     constructor(context: Context) : super(context)
@@ -95,7 +94,6 @@ class GutenbergView : WebView {
         this.settings.domStorageEnabled = true;
         this.addJavascriptInterface(this, "editorDelegate")
         this.visibility = View.GONE
-        isPreloading = false
 
         this.webViewClient = object : WebViewClient() {
             override fun onReceivedError(
@@ -238,7 +236,7 @@ class GutenbergView : WebView {
         fun onContentChanged(title: String, content: String)
     }
 
-    interface EditorAvailableListener {
+    fun interface EditorAvailableListener {
         fun onEditorAvailable(view: GutenbergView?)
     }
 
@@ -264,22 +262,18 @@ class GutenbergView : WebView {
 
     @JavascriptInterface
     fun onEditorLoaded() {
-        if (isPreloading) {
-            Log.d("GutenbergView", "Is preloading")
-            return
-        }
         Log.i("GutenbergView", "EditorLoaded received in native code")
         isEditorLoaded = true
         handler.post {
             if(!didFireEditorLoaded) {
-                editorDidBecomeAvailableListener?.get()?.onEditorAvailable(this)
+                editorDidBecomeAvailableListener?.onEditorAvailable(this)
                 this.editorDidBecomeAvailable?.let { it(this) }
                 this.didFireEditorLoaded = true
                 this.visibility = View.VISIBLE
                 this.alpha = 0f
                 this.animate()
                     .alpha(1f)
-                    .setDuration(200)
+                    .setDuration(300)
                     .start()
             }
         }
@@ -338,7 +332,6 @@ object GutenbergWebViewPool {
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
         webView.loadUrl(ASSET_URL)
-        webView.isPreloading = true
         return webView
     }
 
@@ -348,6 +341,5 @@ object GutenbergWebViewPool {
         webView.removeAllViews()
         webView.loadUrl("about:blank")
         preloadedWebView = null
-        webView.isPreloading = false
     }
 }
