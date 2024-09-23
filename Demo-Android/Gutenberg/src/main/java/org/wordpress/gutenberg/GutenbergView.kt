@@ -20,6 +20,7 @@ import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
 import org.json.JSONObject
+import java.lang.ref.WeakReference
 
 const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
 
@@ -40,11 +41,20 @@ class GutenbergView : WebView {
     private var siteApiNamespace: String = ""
     private var authHeader: String = ""
 
-
+    private val handler = Handler(Looper.getMainLooper())
     var editorDidBecomeAvailable: ((GutenbergView) -> Unit)? = null
     var filePathCallback: ValueCallback<Array<Uri?>?>? = null
     val pickImageRequestCode = 1
-    var onFileChooserRequested: ((Intent, Int) -> Unit)? = null
+    private var onFileChooserRequested: WeakReference<((Intent, Int) -> Unit)?>? = null
+    private var contentChangeListener: WeakReference<ContentChangeListener>? = null
+
+    fun setContentChangeListener(listener: ContentChangeListener) {
+        contentChangeListener = WeakReference(listener)
+    }
+
+    fun setOnFileChooserRequestedListener(listener: (Intent, Int) -> Unit) {
+        onFileChooserRequested = WeakReference(listener)
+    }
 
     constructor(context: Context) : super(context)
     constructor(context: Context, attrs: AttributeSet) : super(context, attrs)
@@ -93,7 +103,7 @@ class GutenbergView : WebView {
                 request: WebResourceRequest?
             ): WebResourceResponse? {
                 if (!hasSetEditorConfig) {
-                    Handler(Looper.getMainLooper()).post {
+                    handler.post {
                         var editorInitialConfig = getEditorConfiguration()
                         view?.evaluateJavascript(editorInitialConfig, null)
 
@@ -139,7 +149,11 @@ class GutenbergView : WebView {
                     intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
                 }
 
-                onFileChooserRequested?.invoke(Intent.createChooser(intent, "Select Files"), pickImageRequestCode)
+                onFileChooserRequested?.get()?.let { callback ->
+                    handler.post {
+                        callback(Intent.createChooser(intent, "Select Files"), pickImageRequestCode)
+                    }
+                }
                 return true
             }
         }
@@ -204,15 +218,21 @@ class GutenbergView : WebView {
         fun onResult(title: String, content: String)
     }
 
-    fun getTitleAndContent(callback: TitleAndContentCallback) {
+    interface ContentChangeListener {
+        fun onContentChanged(title: String, content: String)
+    }
+
+    fun getTitleAndContent(callback: TitleAndContentCallback, clearFocus: Boolean = true) {
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
             return
         }
-        Handler(Looper.getMainLooper()).post {
+        handler.post {
             // Clearing the focus is necessary to resolve any pending text composition,
             // ensuring the editor provides the latest content.
-            this.clearFocus()
+            if (clearFocus) {
+                this.clearFocus()
+            }
             this.evaluateJavascript("editor.getTitleAndContent();") { result ->
                 val jsonObject = JSONObject(result)
                 val title = jsonObject.optString("title", "")
@@ -226,12 +246,21 @@ class GutenbergView : WebView {
     fun onEditorLoaded() {
         Log.i("GutenbergView", "EditorLoaded received in native code")
         isEditorLoaded = true
-        Handler(Looper.getMainLooper()).post {
+        handler.post {
             if(!didFireEditorLoaded) {
                 this.editorDidBecomeAvailable?.let { it(this) }
                 this.didFireEditorLoaded = true
             }
         }
+    }
+
+    @JavascriptInterface
+    fun onEditorContentChanged() {
+        getTitleAndContent(object : TitleAndContentCallback {
+            override fun onResult(title: String, content: String) {
+                contentChangeListener?.get()?.onContentChanged(title, content)
+            }
+        }, false)
     }
 
     @JavascriptInterface
@@ -250,6 +279,15 @@ class GutenbergView : WebView {
 
     fun resetFilePathCallback() {
         filePathCallback = null
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        contentChangeListener = null
+        editorDidBecomeAvailable = null
+        filePathCallback = null
+        onFileChooserRequested = null
+        handler.removeCallbacksAndMessages(null)
     }
 }
 
@@ -275,6 +313,8 @@ object GutenbergWebViewPool {
     @JvmStatic
     fun recycleWebView(webView: GutenbergView) {
         webView.stopLoading()
+        webView.removeAllViews()
+        webView.loadUrl("about:blank")
         preloadedWebView = null
     }
 }
