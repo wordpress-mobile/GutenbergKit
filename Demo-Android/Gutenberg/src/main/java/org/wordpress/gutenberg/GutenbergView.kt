@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
 import android.util.Log
+import android.view.View
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
@@ -87,6 +88,7 @@ class GutenbergView : WebView {
         this.settings.javaScriptEnabled = true
         this.settings.domStorageEnabled = true;
         this.addJavascriptInterface(this, "editorDelegate")
+        this.visibility = View.GONE
 
         this.webViewClient = object : WebViewClient() {
             override fun onReceivedError(
@@ -250,6 +252,12 @@ class GutenbergView : WebView {
             if(!didFireEditorLoaded) {
                 this.editorDidBecomeAvailable?.let { it(this) }
                 this.didFireEditorLoaded = true
+                this.visibility = View.VISIBLE
+                this.alpha = 0f
+                this.animate()
+                    .alpha(1f)
+                    .setDuration(500)
+                    .start()
             }
         }
     }
