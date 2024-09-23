@@ -10,7 +10,6 @@ import {
 import { Popover } from '@wordpress/components';
 import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
 import { registerCoreBlocks } from '@wordpress/block-library';
-import { parse, serialize } from '@wordpress/blocks';
 import {
 	store as editorStore,
 	mediaUpload,
@@ -18,7 +17,7 @@ import {
 	EditorSnackbars,
 	PostTitle,
 } from '@wordpress/editor';
-import { useDispatch, useSelect } from '@wordpress/data';
+import { useDispatch, useSelect, subscribe } from '@wordpress/data';
 import { store as coreStore } from '@wordpress/core-data';
 
 // Default styles that are needed for the editor.
@@ -39,7 +38,7 @@ import '@wordpress/format-library/build-style/style.css';
 
 // Internal imports
 import EditorToolbar from './EditorToolbar';
-import { editorLoaded } from '../misc/Helpers';
+import { editorLoaded, onEditorContentChanged } from '../misc/Helpers';
 import { postTypeEntities } from '../misc/post-type-entities';
 import { useEditorStyles } from './hooks/use-editor-styles';
 import { unlock } from './lock-unlock';
@@ -52,7 +51,9 @@ const { ExperimentalBlockCanvas: BlockCanvas } = unlock(blockEditorPrivateApis);
 
 function Editor({ post }) {
 	const [_isCodeEditorEnabled, setCodeEditorEnabled] = useState(false);
-	const titleRef = useRef();
+	const editorPostTitleRef = useRef();
+	const postTitleRef = useRef(post.title);
+	const postContentRef = useRef(post.content);
 	const { addEntities, editEntityRecord, receiveEntityRecords } =
 		useDispatch(coreStore);
 	const { setEditedPost } = useDispatch(editorStore);
@@ -110,16 +111,23 @@ function Editor({ post }) {
 		};
 	}, []);
 
-	// eslint-disable-next-line no-unused-vars
-	function didChangeBlocks(blocks) {
-		// setBlocks(blocks);
-		// // TODO: this doesn't include everything
-		// const isEmpty =
-		// 	blocks.length === 0 ||
-		// 	(blocks[0].name == 'core/paragraph' &&
-		// 		blocks[0].attributes.content.trim() === '');
-		// onBlocksChanged(isEmpty);
-	}
+	useEffect(() => {
+		const unsubscribe = subscribe(() => {
+			const { title, content } = editor.getTitleAndContent();
+			if (
+				title !== postTitleRef.current ||
+				content !== postContentRef.current
+			) {
+				onEditorContentChanged();
+				postTitleRef.current = title;
+				postContentRef.current = content;
+			}
+		});
+
+		return () => {
+			unsubscribe();
+		};
+	}, []);
 
 	function editContent(edits) {
 		editEntityRecord('postType', post.type, post.id, edits);
@@ -131,12 +139,6 @@ function Editor({ post }) {
 
 	editor.setTitle = (title) => {
 		editContent({ title });
-	};
-
-	editor.setInitialContent = (content) => {
-		const blocks = parse(content);
-		didChangeBlocks(blocks); // TODO: redesign this
-		return serialize(blocks); // It's used for tracking changes
 	};
 
 	editor.getContent = () => {
@@ -179,7 +181,7 @@ function Editor({ post }) {
 						styles={styles}
 					>
 						<div className="editor-visual-editor__post-title-wrapper">
-							<PostTitle ref={titleRef} />
+							<PostTitle ref={editorPostTitleRef} />
 						</div>
 						<BlockList />
 					</BlockCanvas>
