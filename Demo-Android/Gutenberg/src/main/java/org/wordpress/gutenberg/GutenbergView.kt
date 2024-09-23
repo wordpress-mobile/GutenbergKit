@@ -71,24 +71,7 @@ class GutenbergView : WebView {
     )
 
     @SuppressLint("SetJavaScriptEnabled") // Without JavaScript we have no Gutenberg
-    fun start(
-        siteApiRoot: String = "",
-        siteApiNamespace: String = "",
-        authHeader: String = "",
-        themeStyles: Boolean = false,
-        postId: Int? = null,
-        postType: String = "",
-        postTitle: String = "",
-        postContent: String = ""
-    ) {
-        id = postId
-        type = postType
-        initialTitle = postTitle
-        initialContent = postContent
-        this.themeStyles = themeStyles
-        this.siteApiRoot = siteApiRoot
-        this.siteApiNamespace = siteApiNamespace
-        this.authHeader = authHeader
+    fun initializeWebView() {
         this.settings.javaScriptCanOpenWindowsAutomatically = true
         this.settings.javaScriptEnabled = true
         this.settings.domStorageEnabled = true;
@@ -164,6 +147,28 @@ class GutenbergView : WebView {
                 return true
             }
         }
+    }
+
+    fun start(
+        siteApiRoot: String = "",
+        siteApiNamespace: String = "",
+        authHeader: String = "",
+        themeStyles: Boolean = false,
+        postId: Int? = null,
+        postType: String = "",
+        postTitle: String = "",
+        postContent: String = ""
+    ) {
+        id = postId
+        type = postType
+        initialTitle = postTitle
+        initialContent = postContent
+        this.themeStyles = themeStyles
+        this.siteApiRoot = siteApiRoot
+        this.siteApiNamespace = siteApiNamespace
+        this.authHeader = authHeader
+
+        initializeWebView()
 
         // Production mode – load the assets from the app bundle – you'll need to copy
         // this value out of the `dist` directory after building GutenbergKit
@@ -329,8 +334,7 @@ object GutenbergWebViewPool {
 
     private fun createAndPreloadWebView(context: Context): GutenbergView {
         val webView = GutenbergView(context)
-        webView.settings.javaScriptEnabled = true
-        webView.settings.domStorageEnabled = true
+        webView.initializeWebView()
         webView.loadUrl(ASSET_URL)
         return webView
     }
