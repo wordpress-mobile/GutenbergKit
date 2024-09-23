@@ -48,6 +48,7 @@ class GutenbergView : WebView {
     val pickImageRequestCode = 1
     private var onFileChooserRequested: WeakReference<((Intent, Int) -> Unit)?>? = null
     private var contentChangeListener: WeakReference<ContentChangeListener>? = null
+    private var editorDidBecomeAvailableListener: WeakReference<EditorAvailableListener>? = null
 
     fun setContentChangeListener(listener: ContentChangeListener) {
         contentChangeListener = WeakReference(listener)
@@ -55,6 +56,10 @@ class GutenbergView : WebView {
 
     fun setOnFileChooserRequestedListener(listener: (Intent, Int) -> Unit) {
         onFileChooserRequested = WeakReference(listener)
+    }
+
+    fun setEditorDidBecomeAvailable(listener: EditorAvailableListener?) {
+        editorDidBecomeAvailableListener = WeakReference(listener)
     }
 
     constructor(context: Context) : super(context)
@@ -224,6 +229,10 @@ class GutenbergView : WebView {
         fun onContentChanged(title: String, content: String)
     }
 
+    interface EditorAvailableListener {
+        fun onEditorAvailable(view: GutenbergView?)
+    }
+
     fun getTitleAndContent(callback: TitleAndContentCallback, clearFocus: Boolean = true) {
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
@@ -250,6 +259,7 @@ class GutenbergView : WebView {
         isEditorLoaded = true
         handler.post {
             if(!didFireEditorLoaded) {
+                editorDidBecomeAvailableListener?.get()?.onEditorAvailable(this)
                 this.editorDidBecomeAvailable?.let { it(this) }
                 this.didFireEditorLoaded = true
                 this.visibility = View.VISIBLE
