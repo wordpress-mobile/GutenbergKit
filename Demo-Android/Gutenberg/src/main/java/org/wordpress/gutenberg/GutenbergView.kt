@@ -256,7 +256,7 @@ class GutenbergView : WebView {
                 this.alpha = 0f
                 this.animate()
                     .alpha(1f)
-                    .setDuration(500)
+                    .setDuration(200)
                     .start()
             }
         }
