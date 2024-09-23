@@ -182,9 +182,13 @@ class GutenbergView : WebView {
         Log.i("GutenbergView", "Startup Complete")
     }
 
+    private fun encodeForEditor(value: String): String {
+        return java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+    }
+
     private fun getEditorConfiguration(): String {
-        val escapedTitle = java.net.URLEncoder.encode(initialTitle, "UTF-8").replace("+", "%20")
-        val escapedContent = java.net.URLEncoder.encode(initialContent, "UTF-8").replace("+", "%20")
+        val escapedTitle = encodeForEditor(initialTitle)
+        val escapedContent = encodeForEditor(initialContent)
 
         val jsCode = """
             window.GBKit = {
@@ -206,19 +210,22 @@ class GutenbergView : WebView {
     }
 
     fun setContent(newContent: String) {
-        if(!isEditorLoaded) {
+        if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
             return
         }
-        this.evaluateJavascript("editor.setContent('$newContent');", null)
+        val encodedContent = encodeForEditor(newContent)
+        this.evaluateJavascript("editor.setContent('$encodedContent');", null)
     }
 
+
     fun setTitle(newTitle: String) {
-        if(!isEditorLoaded) {
+        if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
             return
         }
-        this.evaluateJavascript("editor.setTitle('$newTitle');", null)
+        val encodedTitle = encodeForEditor(newTitle)
+        this.evaluateJavascript("editor.setTitle('$encodedTitle');", null)
     }
 
     interface TitleAndContentCallback {
