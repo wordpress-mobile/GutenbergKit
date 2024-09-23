@@ -11,6 +11,7 @@ import { Popover } from '@wordpress/components';
 import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
 import { registerCoreBlocks } from '@wordpress/block-library';
 import {
+	store as editorStore,
 	mediaUpload,
 	EditorProvider,
 	EditorSnackbars,
