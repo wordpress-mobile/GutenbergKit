@@ -53,7 +53,10 @@ async function initalizeRemoteEditor() {
 			createElement(StrictMode, null, createElement(App, settings))
 		);
 	} catch (error) {
-		console.error('Error initializing the remote editor', error);
+		// Fallback to the local editor and display a notice. Because the remote
+		// editor loading failed, it is more practical to rely upon the local
+		// editor's scripts and styles for displaying the notice.
+		window.location.href = 'index.html?error=remote_editor_load_error';
 	}
 }
 
