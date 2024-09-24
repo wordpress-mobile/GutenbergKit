@@ -6,6 +6,35 @@ import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 
 export default function EditorLoadNotice() {
+	const { notice, setNotice } = useEditorLoadNotice();
+
+	const actions = [
+		{
+			label: 'Retry',
+			onClick: () => (window.location.href = 'remote.html'),
+			variant: 'primary',
+		},
+		{
+			label: 'Dismiss',
+			onClick: () => setNotice(null),
+			variant: 'secondary',
+		},
+	];
+
+	if (!notice) {
+		return null;
+	}
+
+	return (
+		<div className="editor-load-notice">
+			<Notice actions={actions} status="warning" isDismissible={false}>
+				{notice}
+			</Notice>
+		</div>
+	);
+}
+
+function useEditorLoadNotice() {
 	const [notice, setNotice] = useState(null);
 
 	useEffect(() => {
@@ -35,21 +64,7 @@ export default function EditorLoadNotice() {
 		}
 	}, [notice]);
 
-	const handleDismiss = () => {
-		setNotice(null);
-	};
-
-	if (!notice) {
-		return null;
-	}
-
-	return (
-		<div className="editor-load-notice">
-			<Notice status="warning" onDismiss={handleDismiss}>
-				{notice}
-			</Notice>
-		</div>
-	);
+	return { notice, setNotice };
 }
 
 const REMOTE_EDITOR_LOAD_ERROR = 'remote_editor_load_error';
