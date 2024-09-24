@@ -6,7 +6,7 @@ import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 
 export default function EditorLoadNotice() {
-	const { notice, setNotice } = useEditorLoadNotice();
+	const { notice, clearNotice } = useEditorLoadNotice();
 
 	const actions = [
 		{
@@ -16,7 +16,7 @@ export default function EditorLoadNotice() {
 		},
 		{
 			label: 'Dismiss',
-			onClick: () => setNotice(null),
+			onClick: clearNotice,
 			variant: 'secondary',
 		},
 	];
@@ -64,7 +64,7 @@ function useEditorLoadNotice() {
 		}
 	}, [notice]);
 
-	return { notice, setNotice };
+	return { notice, clearNotice: () => setNotice(null) };
 }
 
 const REMOTE_EDITOR_LOAD_ERROR = 'remote_editor_load_error';
