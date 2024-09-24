@@ -45,7 +45,7 @@ function useEditorLoadNotice() {
 		switch (error) {
 			case REMOTE_EDITOR_LOAD_ERROR:
 				message = __(
-					"Oops! We couldn't load your site's editor and plugins. Don't worry, the default editor is here to save the day!"
+					"Oops! We couldn't load your site's editor and plugins. Don't worry, you can use the default editor for now."
 				);
 				break;
 			default:
