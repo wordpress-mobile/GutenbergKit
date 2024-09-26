@@ -9,3 +9,8 @@ struct EditorBlockType: Decodable, Identifiable {
     let category: String?
     let keywords: [String]?
 }
+
+public struct EditorTitleAndContent: Decodable {
+    public let title: String
+    public let content: String
+}
