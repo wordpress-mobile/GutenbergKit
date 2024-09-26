@@ -261,6 +261,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         // TODO: Check errors and notify the delegate when the editor is loaded and the content got displayed
         do {
+            self.initialContent = _initialRawContent
             /*let serializedContent = try await webView.evaluateJavaScript("""
         editor.setInitialContent(decodeURIComponent('\(escapedString)'));
         """) as! String
