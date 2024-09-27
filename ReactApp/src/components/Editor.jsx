@@ -119,11 +119,7 @@ function Editor({ post }) {
 				title !== postTitleRef.current ||
 				content !== postContentRef.current
 			) {
-				const isEmpty =
-					content.length === 0 ||
-					(content[0].name == 'core/paragraph' &&
-						content[0].attributes.content.trim() === '');
-				onEditorContentChanged(isEmpty);
+				onEditorContentChanged();
 				postTitleRef.current = title;
 				postContentRef.current = content;
 			}

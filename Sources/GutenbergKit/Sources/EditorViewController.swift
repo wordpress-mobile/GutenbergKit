@@ -283,8 +283,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             case .onEditorLoaded:
                 didLoadEditor()
             case .onEditorContentChanged:
-                let body = try message.decode(EditorJSMessage.DidUpdateBlocksBody.self)
-                self.state.isEmpty = body.isEmpty
+                // TODO: Refactor and remove EditorState entirely?
                 delegate?.editor(self, didUpdateContentWithState: state)
             case .showBlockPicker:
                 showBlockInserter()

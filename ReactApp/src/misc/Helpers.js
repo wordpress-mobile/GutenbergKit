@@ -11,15 +11,14 @@ export function editorLoaded() {
 	}
 }
 
-export function onEditorContentChanged(isEmpty = false) {
+export function onEditorContentChanged() {
 	if (window.editorDelegate) {
-		window.editorDelegate.onEditorContentChanged(isEmpty);
+		window.editorDelegate.onEditorContentChanged();
 	}
 
 	if (window.webkit) {
 		window.webkit.messageHandlers.editorDelegate.postMessage({
 			message: 'onEditorContentChanged',
-			body: { isEmpty },
 		});
 	}
 }
