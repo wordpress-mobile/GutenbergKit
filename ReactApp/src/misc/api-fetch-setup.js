@@ -151,6 +151,7 @@ function filterEndpointsMiddleware(options, next) {
  */
 function mediaUploadMiddleware(options, next) {
 	if (
+		options.path &&
 		options.path.startsWith('/wp/v2/media') &&
 		options.method === 'POST' &&
 		options.body instanceof FormData &&
