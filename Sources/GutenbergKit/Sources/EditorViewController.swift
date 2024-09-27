@@ -162,13 +162,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             siteApiNamespace: '\(siteApiNamespace)',
             authHeader: '\(authHeader)',
             themeStyles: \(hasThemeStylesEnabled),
-            \(id != nil ? """
             post: {
-                id: \(id!),
+                id: \(id ?? -1),
                 title: '\(escapedTitle)',
                 content: '\(escapedContent)'
             },
-            """ : "")
         };
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
         "done";
