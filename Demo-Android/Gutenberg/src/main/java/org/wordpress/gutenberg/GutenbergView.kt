@@ -43,6 +43,8 @@ class GutenbergView : WebView {
     private var siteApiRoot: String = ""
     private var siteApiNamespace: String = ""
     private var authHeader: String = ""
+    private var lastUpdatedTitle = ""
+    private var lastUpdatedContent = ""
 
     private val handler = Handler(Looper.getMainLooper())
     var editorDidBecomeAvailable: ((GutenbergView) -> Unit)? = null
@@ -263,22 +265,22 @@ class GutenbergView : WebView {
             return
         }
 
-        if (this.isDestroyed) {
-            Log.e("GutenbergView", "WebView is no longer instantiated, cannot evaluate JavaScript")
-            return
-        }
-
         handler.post {
             // Clearing the focus is necessary to resolve any pending text composition,
             // ensuring the editor provides the latest content.
             if (clearFocus) {
                 this.clearFocus()
             }
+
+            if (this.isDestroyed) {
+                callback.onResult(lastUpdatedTitle, lastUpdatedContent)
+            }
+
             this.evaluateJavascript("editor.getTitleAndContent();") { result ->
                 val jsonObject = JSONObject(result)
-                val title = jsonObject.optString("title", "")
-                val content = jsonObject.optString("content", "")
-                callback.onResult(title, content)
+                lastUpdatedTitle = jsonObject.optString("title", "")
+                lastUpdatedContent = jsonObject.optString("content", "")
+                callback.onResult(lastUpdatedTitle, lastUpdatedContent)
             }
         }
     }
