@@ -172,7 +172,10 @@ class GutenbergView : WebView {
         this.siteApiRoot = siteApiRoot
         this.siteApiNamespace = siteApiNamespace
         this.authHeader = authHeader
-
+        isEditorLoaded = false
+        didFireEditorLoaded = false
+        hasSetEditorConfig = false
+        
         initializeWebView()
 
         // Production mode – load the assets from the app bundle – you'll need to copy
@@ -220,9 +223,6 @@ class GutenbergView : WebView {
     }
 
     fun clearConfig() {
-        isEditorLoaded = false
-        didFireEditorLoaded = false
-        hasSetEditorConfig = false
         val jsCode = """
             delete window.GBKit;
             localStorage.removeItem('GBKit');
