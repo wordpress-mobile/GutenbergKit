@@ -27,6 +27,8 @@ const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
 
 class GutenbergView : WebView {
 
+    private var isDestroyed = false
+
     private var isEditorLoaded = false
     private var didFireEditorLoaded = false
     private var hasSetEditorConfig = false
@@ -260,6 +262,12 @@ class GutenbergView : WebView {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
             return
         }
+
+        if (this.isDestroyed) {
+            Log.e("GutenbergView", "WebView is no longer instantiated, cannot evaluate JavaScript")
+            return
+        }
+
         handler.post {
             // Clearing the focus is necessary to resolve any pending text composition,
             // ensuring the editor provides the latest content.
@@ -323,6 +331,7 @@ class GutenbergView : WebView {
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        isDestroyed = true
         clearConfig()
         contentChangeListener = null
         editorDidBecomeAvailable = null
