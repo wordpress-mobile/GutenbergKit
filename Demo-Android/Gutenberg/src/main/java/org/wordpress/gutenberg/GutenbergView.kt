@@ -215,7 +215,12 @@ class GutenbergView : WebView {
     }
 
     fun clearConfig() {
-        this.evaluateJavascript("localStorage.clear();", null)
+        val jsCode = """
+            delete window.GBKit;
+            localStorage.removeItem('GBKit');
+        """.trimIndent()
+
+        this.evaluateJavascript(jsCode, null)
     }
 
     fun setContent(newContent: String) {
