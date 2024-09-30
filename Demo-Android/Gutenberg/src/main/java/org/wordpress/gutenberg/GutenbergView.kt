@@ -93,6 +93,7 @@ class GutenbergView : WebView {
                 request: WebResourceRequest?
             ): WebResourceResponse? {
                 if (!hasSetEditorConfig) {
+                    Log.d("Gutenberg", "----------- Setting editor config")
                     handler.post {
                         var editorInitialConfig = getEditorConfiguration()
                         view?.evaluateJavascript(editorInitialConfig, null)
