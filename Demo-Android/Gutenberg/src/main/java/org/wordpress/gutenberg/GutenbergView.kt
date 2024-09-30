@@ -214,6 +214,10 @@ class GutenbergView : WebView {
         return jsCode
     }
 
+    fun clearConfig() {
+        this.evaluateJavascript("localStorage.clear();", null)
+    }
+
     fun setContent(newContent: String) {
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
@@ -313,6 +317,7 @@ class GutenbergView : WebView {
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        clearConfig()
         contentChangeListener = null
         editorDidBecomeAvailable = null
         filePathCallback = null
@@ -342,6 +347,7 @@ object GutenbergWebViewPool {
     @JvmStatic
     fun recycleWebView(webView: GutenbergView) {
         webView.stopLoading()
+        webView.clearConfig()
         webView.removeAllViews()
         webView.loadUrl("about:blank")
         preloadedWebView = null
