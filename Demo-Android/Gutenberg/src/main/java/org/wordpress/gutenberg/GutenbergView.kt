@@ -220,6 +220,9 @@ class GutenbergView : WebView {
     }
 
     fun clearConfig() {
+        isEditorLoaded = false
+        didFireEditorLoaded = false
+        hasSetEditorConfig = false
         val jsCode = """
             delete window.GBKit;
             localStorage.removeItem('GBKit');
