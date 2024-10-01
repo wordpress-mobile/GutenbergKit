@@ -182,9 +182,7 @@ class GutenbergView : WebView {
         // this value out of the `dist` directory after building GutenbergKit
         //
         // This URL maps to the `assets` directory in this module
-        val timestamp = System.currentTimeMillis()
-        val newUrl = "$ASSET_URL?_t=$timestamp"
-        this.loadUrl(newUrl)
+        this.loadUrl(ASSET_URL)
 
         // Dev mode – you can connect the app to a local dev server and have it refresh as
         // changes are made. To start the server, run `make dev-server` in the project root
@@ -288,9 +286,12 @@ class GutenbergView : WebView {
     @JavascriptInterface
     fun onEditorLoaded() {
         Log.i("GutenbergView", "EditorLoaded received in native code")
+        Log.i("GutenbergView", "didFireEditorLoaded: $didFireEditorLoaded")
+
         isEditorLoaded = true
         handler.post {
             if(!didFireEditorLoaded) {
+                Log.i("GutenbergView", "Showing editor with animation")
                 editorDidBecomeAvailableListener?.onEditorAvailable(this)
                 this.editorDidBecomeAvailable?.let { it(this) }
                 this.didFireEditorLoaded = true
