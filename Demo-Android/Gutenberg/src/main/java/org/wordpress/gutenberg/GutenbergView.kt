@@ -170,9 +170,6 @@ class GutenbergView : WebView {
         this.siteApiRoot = siteApiRoot
         this.siteApiNamespace = siteApiNamespace
         this.authHeader = authHeader
-        isEditorLoaded = false
-        didFireEditorLoaded = false
-        hasSetEditorConfig = false
 
         initializeWebView(true)
 
@@ -364,7 +361,7 @@ object GutenbergWebViewPool {
         webView.stopLoading()
         webView.clearConfig()
         webView.removeAllViews()
-        webView.loadUrl("about:blank")
+        webView.destroy()
         preloadedWebView = null
     }
 }
