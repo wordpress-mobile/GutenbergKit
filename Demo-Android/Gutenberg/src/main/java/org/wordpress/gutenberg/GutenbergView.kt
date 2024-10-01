@@ -95,7 +95,6 @@ class GutenbergView : WebView {
                 request: WebResourceRequest?
             ): WebResourceResponse? {
                 if (!hasSetEditorConfig && withConfig) {
-                    Log.d("Gutenberg", "----------- Setting editor config")
                     handler.post {
                         var editorInitialConfig = getEditorConfiguration()
                         view?.evaluateJavascript(editorInitialConfig, null)
@@ -276,12 +275,9 @@ class GutenbergView : WebView {
     @JavascriptInterface
     fun onEditorLoaded() {
         Log.i("GutenbergView", "EditorLoaded received in native code")
-        Log.i("GutenbergView", "didFireEditorLoaded: $didFireEditorLoaded")
-
         isEditorLoaded = true
         handler.post {
             if(!didFireEditorLoaded) {
-                Log.i("GutenbergView", "Showing editor with animation")
                 editorDidBecomeAvailableListener?.onEditorAvailable(this)
                 this.editorDidBecomeAvailable?.let { it(this) }
                 this.didFireEditorLoaded = true
@@ -323,7 +319,6 @@ class GutenbergView : WebView {
     }
 
     override fun onDetachedFromWindow() {
-        Log.i("GutenbergView", "onDetachedFromWindow")
         super.onDetachedFromWindow()
         clearConfig()
         this.stopLoading()
@@ -341,10 +336,8 @@ object GutenbergWebViewPool {
     @JvmStatic
     fun getPreloadedWebView(context: Context): GutenbergView {
         if (preloadedWebView == null) {
-            Log.i("GutenbergView", "Creating WebView")
             preloadedWebView = createAndPreloadWebView(context)
         }
-        Log.i("GutenbergView", "Reusing WebView")
         return preloadedWebView!!
     }
 
@@ -357,7 +350,6 @@ object GutenbergWebViewPool {
 
     @JvmStatic
     fun recycleWebView(webView: GutenbergView) {
-        Log.i("GutenbergView", "Recycle WebView")
         webView.stopLoading()
         webView.clearConfig()
         webView.removeAllViews()
