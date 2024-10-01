@@ -262,24 +262,18 @@ class GutenbergView : WebView {
         fun onEditorAvailable(view: GutenbergView?)
     }
 
-    fun getTitleAndContent(callback: TitleAndContentCallback, clearFocus: Boolean = true) {
+    fun getTitleAndContent(callback: TitleAndContentCallback) {
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
             return
         }
 
         handler.post {
-            // Clearing the focus is necessary to resolve any pending text composition,
-            // ensuring the editor provides the latest content.
-            if (clearFocus) {
-                this.clearFocus()
-            }
-
             if (this.isDestroyed) {
                 callback.onResult(lastUpdatedTitle, lastUpdatedContent)
             }
 
-            this.evaluateJavascript("editor.getTitleAndContent();") { result ->
+            this.evaluateJavascript("editor.getTitleAndContent(true);") { result ->
                 val jsonObject = JSONObject(result)
                 lastUpdatedTitle = jsonObject.optString("title", "")
                 lastUpdatedContent = jsonObject.optString("content", "")
@@ -313,7 +307,7 @@ class GutenbergView : WebView {
             override fun onResult(title: String, content: String) {
                 contentChangeListener?.get()?.onContentChanged(title, content)
             }
-        }, false)
+        })
     }
 
     @JavascriptInterface
