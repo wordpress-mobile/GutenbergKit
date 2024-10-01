@@ -49,6 +49,14 @@ export function showBlockPicker() {
 	}
 }
 
+export function blurEditor() {
+	const activeElement = document.activeElement;
+
+	if (activeElement && activeElement.tagName === 'P') {
+		activeElement.blur();
+	}
+}
+
 // FIXME: this was an attempt to fix an existing issue in Gutenberg , but it does it only
 // https://a8c.slack.com/archives/D0740HYKLUX/p1719841410651649
 //

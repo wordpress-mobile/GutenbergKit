@@ -38,7 +38,11 @@ import '@wordpress/format-library/build-style/style.css';
 
 // Internal imports
 import EditorToolbar from './EditorToolbar';
-import { editorLoaded, onEditorContentChanged } from '../misc/Helpers';
+import {
+	blurEditor,
+	editorLoaded,
+	onEditorContentChanged,
+} from '../misc/Helpers';
 import { postTypeEntities } from '../misc/post-type-entities';
 import { useEditorStyles } from './hooks/use-editor-styles';
 import { unlock } from './lock-unlock';
@@ -138,11 +142,17 @@ function Editor({ post }) {
 		editContent({ title: decodeURIComponent(title) });
 	};
 
-	editor.getContent = () => {
+	editor.getContent = (blurInput = false) => {
+		if (blurInput) {
+			blurEditor();
+		}
 		return getEditedPostContent();
 	};
 
-	editor.getTitleAndContent = () => {
+	editor.getTitleAndContent = (blurInput = false) => {
+		if (blurInput) {
+			blurEditor();
+		}
 		return {
 			title: getEditedPostAttribute('title'),
 			content: getEditedPostContent(),
