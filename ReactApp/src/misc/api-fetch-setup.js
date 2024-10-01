@@ -150,19 +150,14 @@ function filterEndpointsMiddleware(options, next) {
  * removes the 'post' field if its value is '-1', which is used for draft posts.
  */
 function mediaUploadMiddleware(options, next) {
-	if (options.path.startsWith('/wp/v2/media') && options.method === 'POST') {
-		if (options.body instanceof FormData) {
-			const newFormData = new FormData();
-
-			options.body.forEach((value, key) => {
-				if (key === 'post' && value === '-1') {
-					return;
-				}
-				newFormData.append(key, value);
-			});
-
-			options.body = newFormData;
-		}
+	if (
+		options.path.startsWith('/wp/v2/media') &&
+		options.method === 'POST' &&
+		options.body instanceof FormData &&
+		options.body.get('post') === '-1'
+	) {
+		options.body.delete('post');
 	}
+
 	return next(options);
 }
