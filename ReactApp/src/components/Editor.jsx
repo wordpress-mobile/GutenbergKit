@@ -113,7 +113,7 @@ function Editor({ post }) {
 	}, []);
 
 	useEffect(() => {
-		const unsubscribe = subscribe(() => {
+		return subscribe(() => {
 			const { title, content } = editor.getTitleAndContent();
 			if (
 				title !== postTitleRef.current ||
@@ -124,10 +124,6 @@ function Editor({ post }) {
 				postContentRef.current = content;
 			}
 		});
-
-		return () => {
-			unsubscribe();
-		};
 	}, []);
 
 	function editContent(edits) {
