@@ -106,7 +106,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 //            assert(Thread.isMainThread)
 //
 //        }.store(in: &cancellables)
-        
+
         setUpEditor()
         loadEditor()
     }
@@ -130,7 +130,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             // TOOD: relay to the client
         }
     }
-    
+
     private func setUpEditor() {
         let webViewConfiguration = webView.configuration
         let userContentController = webViewConfiguration.userContentController
@@ -162,13 +162,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             siteApiNamespace: '\(siteApiNamespace)',
             authHeader: '\(authHeader)',
             themeStyles: \(hasThemeStylesEnabled),
-            \(id != nil ? """
             post: {
-                id: \(id!),
+                id: \(id ?? -1),
                 title: '\(escapedTitle)',
                 content: '\(escapedContent)'
             },
-            """ : "")
         };
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
         "done";
@@ -196,6 +194,17 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Returns the current editor content.
     public func getContent() async throws -> String {
         try await webView.evaluateJavaScript("editor.getContent();") as! String
+    }
+
+    /// Returns the current editor title and content.
+    public func getTitleAndContent() async throws -> EditorTitleAndContent {
+        let result = try await webView.evaluateJavaScript("editor.getTitleAndContent();")
+        guard let dictionary = result as? [String: Any],
+              let title = dictionary["title"] as? String,
+              let content = dictionary["content"] as? String else {
+            throw NSError(domain: "Invalid data format", code: 0, userInfo: nil)
+        }
+        return EditorTitleAndContent(title: title, content: content)
     }
 
     /// Enables code editor.
@@ -250,6 +259,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         // TODO: Check errors and notify the delegate when the editor is loaded and the content got displayed
         do {
+            self.initialContent = _initialRawContent
             /*let serializedContent = try await webView.evaluateJavaScript("""
         editor.setInitialContent(decodeURIComponent('\(escapedString)'));
         """) as! String
@@ -272,9 +282,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             switch message.type {
             case .onEditorLoaded:
                 didLoadEditor()
-            case .onBlocksChanged:
-                let body = try message.decode(EditorJSMessage.DidUpdateBlocksBody.self)
-                self.state.isEmpty = body.isEmpty
+            case .onEditorContentChanged:
+                // TODO: Refactor and remove EditorState entirely?
                 delegate?.editor(self, didUpdateContentWithState: state)
             case .showBlockPicker:
                 showBlockInserter()

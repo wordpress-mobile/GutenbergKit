@@ -26,7 +26,7 @@ struct EditorJSMessage {
         /// The editor was mounted (initial useEffect was called).
         case onEditorLoaded
         /// The editor content changed.
-        case onBlocksChanged
+        case onEditorContentChanged
         /// The user tapped the inserter button.
         case showBlockPicker
     }
