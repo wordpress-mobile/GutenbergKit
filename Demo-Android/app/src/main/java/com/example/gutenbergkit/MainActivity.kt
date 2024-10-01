@@ -24,12 +24,17 @@ class MainActivity : AppCompatActivity() {
 
         WebView.setWebContentsDebuggingEnabled(true)
 
-        Log.i("GutenbergView", "onCreate")
-
         val gbView = findViewById<GutenbergView>(R.id.gutenbergView)
-        gbView.editorDidBecomeAvailable = { editor ->
-            editor.setContent("<!-- wp:paragraph --><p>This is the new content</p><!-- /wp:paragraph -->")
-        }
-        gbView.start()
+
+        gbView.start(
+            "",
+            "",
+            "",
+            false,
+            null,
+            "post",
+            "",
+            ""
+        )
     }
 }

@@ -11,6 +11,18 @@ export function editorLoaded() {
 	}
 }
 
+export function onEditorContentChanged() {
+	if (window.editorDelegate) {
+		window.editorDelegate.onEditorContentChanged();
+	}
+
+	if (window.webkit) {
+		window.webkit.messageHandlers.editorDelegate.postMessage({
+			message: 'onEditorContentChanged',
+		});
+	}
+}
+
 export function onBlocksChanged(isEmpty = false) {
 	if (window.editorDelegate) {
 		window.editorDelegate.onBlocksChanged(isEmpty);
@@ -34,6 +46,14 @@ export function showBlockPicker() {
 			message: 'showBlockPicker',
 			body: {},
 		});
+	}
+}
+
+export function blurEditor() {
+	const activeElement = document.activeElement;
+
+	if (activeElement && activeElement.tagName === 'P') {
+		activeElement.blur();
 	}
 }
 

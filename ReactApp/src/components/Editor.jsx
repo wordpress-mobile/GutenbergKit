@@ -10,14 +10,14 @@ import {
 import { Popover } from '@wordpress/components';
 import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
 import { registerCoreBlocks } from '@wordpress/block-library';
-import { parse, serialize } from '@wordpress/blocks';
 import {
+	store as editorStore,
 	mediaUpload,
 	EditorProvider,
 	EditorSnackbars,
 	PostTitle,
 } from '@wordpress/editor';
-import { useDispatch, useSelect } from '@wordpress/data';
+import { useDispatch, useSelect, subscribe } from '@wordpress/data';
 import { store as coreStore } from '@wordpress/core-data';
 
 // Default styles that are needed for the editor.
@@ -38,7 +38,11 @@ import '@wordpress/format-library/build-style/style.css';
 
 // Internal imports
 import EditorToolbar from './EditorToolbar';
-import { editorLoaded } from '../misc/Helpers';
+import {
+	blurEditor,
+	editorLoaded,
+	onEditorContentChanged,
+} from '../misc/Helpers';
 import { postTypeEntities } from '../misc/post-type-entities';
 import { useEditorStyles } from './hooks/use-editor-styles';
 import { unlock } from './lock-unlock';
@@ -50,10 +54,15 @@ let editor = {};
 const { ExperimentalBlockCanvas: BlockCanvas } = unlock(blockEditorPrivateApis);
 
 function Editor({ post }) {
-	const [blocks, setBlocks] = useState([]);
 	const [_isCodeEditorEnabled, setCodeEditorEnabled] = useState(false);
-	const titleRef = useRef();
-	const { addEntities, receiveEntityRecords } = useDispatch(coreStore);
+	const editorPostTitleRef = useRef();
+	const postTitleRef = useRef(post.title);
+	const postContentRef = useRef(post.content);
+	const { addEntities, editEntityRecord, receiveEntityRecords } =
+		useDispatch(coreStore);
+	const { setEditedPost } = useDispatch(editorStore);
+	const { getEditedPostAttribute, getEditedPostContent } =
+		useSelect(editorStore);
 
 	useEffect(() => {
 		window.editor = editor;
@@ -63,6 +72,8 @@ function Editor({ post }) {
 		registerCoreBlocks();
 
 		editorLoaded();
+		// Temp, check why this isn't being called in the provider.
+		setEditedPost(post.type, post.id);
 
 		return () => {
 			window.editor = {};
@@ -101,28 +112,48 @@ function Editor({ post }) {
 		};
 	}, []);
 
-	// eslint-disable-next-line no-unused-vars
-	function didChangeBlocks(blocks) {
-		// setBlocks(blocks);
-		// // TODO: this doesn't include everything
-		// const isEmpty =
-		// 	blocks.length === 0 ||
-		// 	(blocks[0].name == 'core/paragraph' &&
-		// 		blocks[0].attributes.content.trim() === '');
-		// onBlocksChanged(isEmpty);
+	useEffect(() => {
+		return subscribe(() => {
+			const { title, content } = editor.getTitleAndContent();
+			if (
+				title !== postTitleRef.current ||
+				content !== postContentRef.current
+			) {
+				onEditorContentChanged();
+				postTitleRef.current = title;
+				postContentRef.current = content;
+			}
+		});
+	}, []);
+
+	function editContent(edits) {
+		editEntityRecord('postType', post.type, post.id, edits);
 	}
 
 	editor.setContent = (content) => {
-		setBlocks(parse(content));
+		editContent({ content: decodeURIComponent(content) });
 	};
 
-	editor.setInitialContent = (content) => {
-		const blocks = parse(content);
-		didChangeBlocks(blocks); // TODO: redesign this
-		return serialize(blocks); // It's used for tracking changes
+	editor.setTitle = (title) => {
+		editContent({ title: decodeURIComponent(title) });
 	};
 
-	editor.getContent = () => serialize(blocks);
+	editor.getContent = (blurInput = false) => {
+		if (blurInput) {
+			blurEditor();
+		}
+		return getEditedPostContent();
+	};
+
+	editor.getTitleAndContent = (blurInput = false) => {
+		if (blurInput) {
+			blurEditor();
+		}
+		return {
+			title: getEditedPostAttribute('title'),
+			content: getEditedPostContent(),
+		};
+	};
 
 	editor.setCodeEditorEnabled = (enabled) => setCodeEditorEnabled(enabled);
 
@@ -156,7 +187,7 @@ function Editor({ post }) {
 						styles={styles}
 					>
 						<div className="editor-visual-editor__post-title-wrapper">
-							<PostTitle ref={titleRef} />
+							<PostTitle ref={editorPostTitleRef} />
 						</div>
 						<BlockList />
 					</BlockCanvas>
