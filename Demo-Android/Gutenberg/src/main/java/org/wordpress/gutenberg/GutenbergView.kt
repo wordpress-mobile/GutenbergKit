@@ -75,7 +75,7 @@ class GutenbergView : WebView {
     )
 
     @SuppressLint("SetJavaScriptEnabled") // Without JavaScript we have no Gutenberg
-    fun initializeWebView() {
+    fun initializeWebView(withConfig: Boolean = false) {
         this.settings.javaScriptCanOpenWindowsAutomatically = true
         this.settings.javaScriptEnabled = true
         this.settings.domStorageEnabled = true;
@@ -96,7 +96,7 @@ class GutenbergView : WebView {
                 view: WebView?,
                 request: WebResourceRequest?
             ): WebResourceResponse? {
-                if (!hasSetEditorConfig) {
+                if (!hasSetEditorConfig && withConfig) {
                     Log.d("Gutenberg", "----------- Setting editor config")
                     handler.post {
                         var editorInitialConfig = getEditorConfiguration()
@@ -175,8 +175,8 @@ class GutenbergView : WebView {
         isEditorLoaded = false
         didFireEditorLoaded = false
         hasSetEditorConfig = false
-        
-        initializeWebView()
+
+        initializeWebView(true)
 
         // Production mode – load the assets from the app bundle – you'll need to copy
         // this value out of the `dist` directory after building GutenbergKit
