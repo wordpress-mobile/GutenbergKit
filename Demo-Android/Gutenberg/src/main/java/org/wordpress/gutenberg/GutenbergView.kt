@@ -27,8 +27,6 @@ const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
 
 class GutenbergView : WebView {
 
-    private var isDestroyed = false
-
     private var isEditorLoaded = false
     private var didFireEditorLoaded = false
     private var hasSetEditorConfig = false
@@ -78,7 +76,7 @@ class GutenbergView : WebView {
     fun initializeWebView(withConfig: Boolean = false) {
         this.settings.javaScriptCanOpenWindowsAutomatically = true
         this.settings.javaScriptEnabled = true
-        this.settings.domStorageEnabled = true;
+        this.settings.domStorageEnabled = true
         this.addJavascriptInterface(this, "editorDelegate")
         this.visibility = View.GONE
 
@@ -267,12 +265,7 @@ class GutenbergView : WebView {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
             return
         }
-
         handler.post {
-            if (this.isDestroyed) {
-                callback.onResult(lastUpdatedTitle, lastUpdatedContent)
-            }
-
             // Pass the value of clearFocus into the JavaScript call
             this.evaluateJavascript("editor.getTitleAndContent($clearFocus);") { result ->
                 val jsonObject = JSONObject(result)
@@ -333,9 +326,10 @@ class GutenbergView : WebView {
     }
 
     override fun onDetachedFromWindow() {
+        Log.i("GutenbergView", "onDetachedFromWindow")
         super.onDetachedFromWindow()
-        isDestroyed = true
         clearConfig()
+        this.stopLoading()
         contentChangeListener = null
         editorDidBecomeAvailable = null
         filePathCallback = null
@@ -350,8 +344,10 @@ object GutenbergWebViewPool {
     @JvmStatic
     fun getPreloadedWebView(context: Context): GutenbergView {
         if (preloadedWebView == null) {
+            Log.i("GutenbergView", "Creating WebView")
             preloadedWebView = createAndPreloadWebView(context)
         }
+        Log.i("GutenbergView", "Reusing WebView")
         return preloadedWebView!!
     }
 
@@ -364,6 +360,7 @@ object GutenbergWebViewPool {
 
     @JvmStatic
     fun recycleWebView(webView: GutenbergView) {
+        Log.i("GutenbergView", "Recycle WebView")
         webView.stopLoading()
         webView.clearConfig()
         webView.removeAllViews()
