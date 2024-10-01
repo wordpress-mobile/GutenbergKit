@@ -262,7 +262,6 @@ class GutenbergView : WebView {
             return
         }
         handler.post {
-            // Pass the value of clearFocus into the JavaScript call
             this.evaluateJavascript("editor.getTitleAndContent($clearFocus);") { result ->
                 val jsonObject = JSONObject(result)
                 lastUpdatedTitle = jsonObject.optString("title", "")
