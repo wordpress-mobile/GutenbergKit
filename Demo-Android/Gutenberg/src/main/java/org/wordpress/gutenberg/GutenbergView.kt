@@ -22,7 +22,6 @@ import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
 import org.json.JSONObject
-import java.lang.ref.WeakReference
 
 const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
 
@@ -49,16 +48,16 @@ class GutenbergView : WebView {
     var editorDidBecomeAvailable: ((GutenbergView) -> Unit)? = null
     var filePathCallback: ValueCallback<Array<Uri?>?>? = null
     val pickImageRequestCode = 1
-    private var onFileChooserRequested: WeakReference<((Intent, Int) -> Unit)?>? = null
-    private var contentChangeListener: WeakReference<ContentChangeListener>? = null
+    private var onFileChooserRequested: ((Intent, Int) -> Unit)? = null
+    private var contentChangeListener: ContentChangeListener? = null
     private var editorDidBecomeAvailableListener: EditorAvailableListener? = null
 
     fun setContentChangeListener(listener: ContentChangeListener) {
-        contentChangeListener = WeakReference(listener)
+        contentChangeListener = listener
     }
 
     fun setOnFileChooserRequestedListener(listener: (Intent, Int) -> Unit) {
-        onFileChooserRequested = WeakReference(listener)
+        onFileChooserRequested = listener
     }
 
     fun setEditorDidBecomeAvailable(listener: EditorAvailableListener?) {
@@ -145,7 +144,7 @@ class GutenbergView : WebView {
                     intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
                 }
 
-                onFileChooserRequested?.get()?.let { callback ->
+                onFileChooserRequested?.let { callback ->
                     handler.post {
                         callback(Intent.createChooser(intent, "Select Files"), pickImageRequestCode)
                     }
@@ -298,7 +297,7 @@ class GutenbergView : WebView {
     fun onEditorContentChanged() {
         getTitleAndContent(object : TitleAndContentCallback {
             override fun onResult(title: String, content: String) {
-                contentChangeListener?.get()?.onContentChanged(title, content)
+                contentChangeListener?.onContentChanged(title, content)
             }
         }, false)
     }
