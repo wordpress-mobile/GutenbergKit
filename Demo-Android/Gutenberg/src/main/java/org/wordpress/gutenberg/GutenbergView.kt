@@ -3,7 +3,6 @@ package org.wordpress.gutenberg
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -94,22 +93,19 @@ class GutenbergView : WebView {
                 view: WebView?,
                 request: WebResourceRequest?
             ): WebResourceResponse? {
-                return if (request?.url != null) {
-                    assetLoader.shouldInterceptRequest(request.url)
-                } else {
-                    super.shouldInterceptRequest(view, request)
-                }
-            }
-
-            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                super.onPageStarted(view, url, favicon)
-
                 if (!hasSetEditorConfig && withConfig) {
                     handler.post {
                         var editorInitialConfig = getEditorConfiguration()
                         view?.evaluateJavascript(editorInitialConfig, null)
+
                     }
                     hasSetEditorConfig = true
+                }
+
+                return if (request?.url != null) {
+                    assetLoader.shouldInterceptRequest(request.url)
+                } else {
+                    super.shouldInterceptRequest(view, request)
                 }
             }
         }
