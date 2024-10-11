@@ -37,7 +37,7 @@ class GutenbergView : WebView {
     private var initialTitle: String = ""
     private var type: String = ""
     private var id: Int? = null
-    private var themeStyles: Boolean? = null
+    private var themeStyles: Boolean = false
     private var initialContent: String = ""
     private var siteApiRoot: String = ""
     private var siteApiNamespace: String = ""
