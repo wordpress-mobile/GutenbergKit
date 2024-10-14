@@ -9,6 +9,12 @@ export function getGBKit() {
 		return window.GBKit;
 	}
 
+	// Android relies upon "pulling" the GBKit object from the native host, as it
+	// does not provide a way to inject JavaScript prior to the WebView loading.
+	if (window.editorDelegate) {
+		return JSON.parse(window.editorDelegate.getEditorConfiguration());
+	}
+
 	const emptyObject = {};
 	try {
 		return JSON.parse(localStorage.getItem('GBKit')) || emptyObject;

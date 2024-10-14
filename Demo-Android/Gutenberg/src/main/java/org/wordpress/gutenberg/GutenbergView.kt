@@ -28,7 +28,6 @@ class GutenbergView : WebView {
 
     private var isEditorLoaded = false
     private var didFireEditorLoaded = false
-    private var hasSetEditorConfig = false
     private var assetLoader = WebViewAssetLoader.Builder()
         .addPathHandler("/assets/", AssetsPathHandler(this.context))
         .build()
@@ -72,7 +71,7 @@ class GutenbergView : WebView {
     )
 
     @SuppressLint("SetJavaScriptEnabled") // Without JavaScript we have no Gutenberg
-    fun initializeWebView(withConfig: Boolean = false) {
+    fun initializeWebView() {
         this.settings.javaScriptCanOpenWindowsAutomatically = true
         this.settings.javaScriptEnabled = true
         this.settings.domStorageEnabled = true
@@ -93,15 +92,6 @@ class GutenbergView : WebView {
                 view: WebView?,
                 request: WebResourceRequest?
             ): WebResourceResponse? {
-                if (!hasSetEditorConfig && withConfig) {
-                    handler.post {
-                        var editorInitialConfig = getEditorConfiguration()
-                        view?.evaluateJavascript(editorInitialConfig, null)
-
-                    }
-                    hasSetEditorConfig = true
-                }
-
                 return if (request?.url != null) {
                     assetLoader.shouldInterceptRequest(request.url)
                 } else {
@@ -169,7 +159,7 @@ class GutenbergView : WebView {
         this.siteApiNamespace = siteApiNamespace
         this.authHeader = authHeader
 
-        initializeWebView(true)
+        initializeWebView()
 
         // Production mode – load the assets from the app bundle – you'll need to copy
         // this value out of the `dist` directory after building GutenbergKit
@@ -192,27 +182,27 @@ class GutenbergView : WebView {
         return java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
     }
 
-    private fun getEditorConfiguration(): String {
+    @JavascriptInterface
+    fun getEditorConfiguration(): String {
         val escapedTitle = encodeForEditor(initialTitle)
         val escapedContent = encodeForEditor(initialContent)
 
-        val jsCode = """
-            window.GBKit = {
-                siteApiRoot: '$siteApiRoot',
-                siteApiNamespace: '$siteApiNamespace',
-                authHeader: '$authHeader',
-                themeStyles: $themeStyles,
+        val json = """
+            {
+                "siteApiRoot": "$siteApiRoot",
+                "siteApiNamespace": "$siteApiNamespace",
+                "authHeader": "$authHeader",
+                "themeStyles": $themeStyles,
                 ${if (id != null) """
-                post: {
-                    id: $id,
-                    title: '$escapedTitle',
-                    content: '$escapedContent'
-                },
+                "post": {
+                    "id": $id,
+                    "title": "$escapedTitle",
+                    "content": "$escapedContent"
+                }
                 """ else ""}
-            };
-            localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
-        """.trimIndent()
-        return jsCode
+            }
+        """
+        return json
     }
 
     fun clearConfig() {
