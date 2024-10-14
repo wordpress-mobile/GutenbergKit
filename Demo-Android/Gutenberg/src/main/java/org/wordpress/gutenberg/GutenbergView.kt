@@ -25,7 +25,6 @@ import org.json.JSONObject
 const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
 
 class GutenbergView : WebView {
-
     private var isEditorLoaded = false
     private var didFireEditorLoaded = false
     private var assetLoader = WebViewAssetLoader.Builder()
@@ -43,7 +42,7 @@ class GutenbergView : WebView {
     private var lastUpdatedContent = ""
 
     private val handler = Handler(Looper.getMainLooper())
-    var editorDidBecomeAvailable: ((GutenbergView) -> Unit)? = null
+    private var editorDidBecomeAvailable: ((GutenbergView) -> Unit)? = null
     var filePathCallback: ValueCallback<Array<Uri?>?>? = null
     val pickImageRequestCode = 1
     private var onFileChooserRequested: ((Intent, Int) -> Unit)? = null
