@@ -20,6 +20,11 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
+import okhttp3.Headers.Companion.toHeaders
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okio.IOException
 import org.json.JSONObject
 import java.lang.ref.WeakReference
 
@@ -48,9 +53,14 @@ class GutenbergView : WebView {
     var editorDidBecomeAvailable: ((GutenbergView) -> Unit)? = null
     var filePathCallback: ValueCallback<Array<Uri?>?>? = null
     val pickImageRequestCode = 1
+
+    var requestInterceptor: GutenbergRequestInterceptor = DefaultGutenbergRequestInterceptor()
+
     private var onFileChooserRequested: WeakReference<((Intent, Int) -> Unit)?>? = null
     private var contentChangeListener: WeakReference<ContentChangeListener>? = null
     private var editorDidBecomeAvailableListener: EditorAvailableListener? = null
+
+    private val httpClient = OkHttpClient()
 
     fun setContentChangeListener(listener: ContentChangeListener) {
         contentChangeListener = WeakReference(listener)
@@ -103,10 +113,34 @@ class GutenbergView : WebView {
                     hasSetEditorConfig = true
                 }
 
-                return if (request?.url != null) {
-                    assetLoader.shouldInterceptRequest(request.url)
+                if (request?.url == null) {
+                    return super.shouldInterceptRequest(view, request)
+                } else if(request.url.host?.contains("appassets.androidplatform.net") == true) {
+                    return assetLoader.shouldInterceptRequest(request.url)
                 } else {
-                    super.shouldInterceptRequest(view, request)
+                    val modifiedRequest = requestInterceptor.interceptRequest(request)
+
+                    try {
+                        val okHttpRequest = Request.Builder()
+                            .url(modifiedRequest.url!!.toString())
+                            .headers(modifiedRequest.requestHeaders.toHeaders())
+                            .build()
+
+                        val response: Response = httpClient.newCall(okHttpRequest).execute()
+
+                        val body = if(response.body != null) { response.body!! } else { return null }
+                        val contentType = if(body.contentType() != null) { body.contentType() } else { return null }
+
+                        return WebResourceResponse(
+                            contentType.toString(),
+                            response.header("content-encoding", null),
+                            body.byteStream()
+                        )
+                    } catch (e: IOException) {
+                        // We don't need to handle this ourselves, just tell the WebView that
+                        // we weren't able to fetch the resource
+                        return null;
+                    }
                 }
             }
         }
