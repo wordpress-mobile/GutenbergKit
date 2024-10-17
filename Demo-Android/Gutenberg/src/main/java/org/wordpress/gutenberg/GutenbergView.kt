@@ -21,22 +21,19 @@ import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
 import org.json.JSONObject
-import java.lang.ref.WeakReference
 
 const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
 
 class GutenbergView : WebView {
-
     private var isEditorLoaded = false
     private var didFireEditorLoaded = false
-    private var hasSetEditorConfig = false
     private var assetLoader = WebViewAssetLoader.Builder()
         .addPathHandler("/assets/", AssetsPathHandler(this.context))
         .build()
     private var initialTitle: String = ""
     private var type: String = ""
     private var id: Int? = null
-    private var themeStyles: Boolean? = null
+    private var themeStyles: Boolean = false
     private var initialContent: String = ""
     private var siteApiRoot: String = ""
     private var siteApiNamespace: String = ""
@@ -45,19 +42,19 @@ class GutenbergView : WebView {
     private var lastUpdatedContent = ""
 
     private val handler = Handler(Looper.getMainLooper())
-    var editorDidBecomeAvailable: ((GutenbergView) -> Unit)? = null
+    private var editorDidBecomeAvailable: ((GutenbergView) -> Unit)? = null
     var filePathCallback: ValueCallback<Array<Uri?>?>? = null
     val pickImageRequestCode = 1
-    private var onFileChooserRequested: WeakReference<((Intent, Int) -> Unit)?>? = null
-    private var contentChangeListener: WeakReference<ContentChangeListener>? = null
+    private var onFileChooserRequested: ((Intent, Int) -> Unit)? = null
+    private var contentChangeListener: ContentChangeListener? = null
     private var editorDidBecomeAvailableListener: EditorAvailableListener? = null
 
     fun setContentChangeListener(listener: ContentChangeListener) {
-        contentChangeListener = WeakReference(listener)
+        contentChangeListener = listener
     }
 
     fun setOnFileChooserRequestedListener(listener: (Intent, Int) -> Unit) {
-        onFileChooserRequested = WeakReference(listener)
+        onFileChooserRequested = listener
     }
 
     fun setEditorDidBecomeAvailable(listener: EditorAvailableListener?) {
@@ -73,7 +70,7 @@ class GutenbergView : WebView {
     )
 
     @SuppressLint("SetJavaScriptEnabled") // Without JavaScript we have no Gutenberg
-    fun initializeWebView(withConfig: Boolean = false) {
+    fun initializeWebView() {
         this.settings.javaScriptCanOpenWindowsAutomatically = true
         this.settings.javaScriptEnabled = true
         this.settings.domStorageEnabled = true
@@ -94,15 +91,6 @@ class GutenbergView : WebView {
                 view: WebView?,
                 request: WebResourceRequest?
             ): WebResourceResponse? {
-                if (!hasSetEditorConfig && withConfig) {
-                    handler.post {
-                        var editorInitialConfig = getEditorConfiguration()
-                        view?.evaluateJavascript(editorInitialConfig, null)
-
-                    }
-                    hasSetEditorConfig = true
-                }
-
                 return if (request?.url != null) {
                     assetLoader.shouldInterceptRequest(request.url)
                 } else {
@@ -141,7 +129,7 @@ class GutenbergView : WebView {
                     intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
                 }
 
-                onFileChooserRequested?.get()?.let { callback ->
+                onFileChooserRequested?.let { callback ->
                     handler.post {
                         callback(Intent.createChooser(intent, "Select Files"), pickImageRequestCode)
                     }
@@ -170,7 +158,7 @@ class GutenbergView : WebView {
         this.siteApiNamespace = siteApiNamespace
         this.authHeader = authHeader
 
-        initializeWebView(true)
+        initializeWebView()
 
         // Production mode – load the assets from the app bundle – you'll need to copy
         // this value out of the `dist` directory after building GutenbergKit
@@ -193,27 +181,27 @@ class GutenbergView : WebView {
         return java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
     }
 
-    private fun getEditorConfiguration(): String {
+    @JavascriptInterface
+    fun getEditorConfiguration(): String {
         val escapedTitle = encodeForEditor(initialTitle)
         val escapedContent = encodeForEditor(initialContent)
 
-        val jsCode = """
-            window.GBKit = {
-                siteApiRoot: '$siteApiRoot',
-                siteApiNamespace: '$siteApiNamespace',
-                authHeader: '$authHeader',
-                themeStyles: $themeStyles,
+        val json = """
+            {
+                "siteApiRoot": "$siteApiRoot",
+                "siteApiNamespace": "$siteApiNamespace",
+                "authHeader": "$authHeader",
+                "themeStyles": $themeStyles,
                 ${if (id != null) """
-                post: {
-                    id: $id,
-                    title: '$escapedTitle',
-                    content: '$escapedContent'
-                },
+                "post": {
+                    "id": $id,
+                    "title": "$escapedTitle",
+                    "content": "$escapedContent"
+                }
                 """ else ""}
-            };
-            localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
-        """.trimIndent()
-        return jsCode
+            }
+        """
+        return json
     }
 
     fun clearConfig() {
@@ -294,7 +282,7 @@ class GutenbergView : WebView {
     fun onEditorContentChanged() {
         getTitleAndContent(object : TitleAndContentCallback {
             override fun onResult(title: String, content: String) {
-                contentChangeListener?.get()?.onContentChanged(title, content)
+                contentChangeListener?.onContentChanged(title, content)
             }
         }, false)
     }
