@@ -8,7 +8,12 @@ import {
 	privateApis as blockEditorPrivateApis,
 } from '@wordpress/block-editor';
 import { Popover } from '@wordpress/components';
-import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
+import {
+	getBlockTypes,
+	unregisterBlockType,
+	getBlockType,
+	createBlock,
+} from '@wordpress/blocks';
 import { registerCoreBlocks } from '@wordpress/block-library';
 import {
 	store as editorStore,
@@ -17,8 +22,11 @@ import {
 	EditorSnackbars,
 	PostTitle,
 } from '@wordpress/editor';
+import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useDispatch, useSelect, subscribe } from '@wordpress/data';
 import { store as coreStore } from '@wordpress/core-data';
+import { store as noticesStore } from '@wordpress/notices';
+import { __ } from '@wordpress/i18n';
 
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
@@ -63,6 +71,8 @@ function Editor({ post }) {
 	const { setEditedPost } = useDispatch(editorStore);
 	const { getEditedPostAttribute, getEditedPostContent } =
 		useSelect(editorStore);
+	const { createErrorNotice } = useDispatch(noticesStore);
+	const { insertBlock } = useDispatch(blockEditorStore);
 
 	useEffect(() => {
 		window.editor = editor;
@@ -156,6 +166,44 @@ function Editor({ post }) {
 	};
 
 	editor.setCodeEditorEnabled = (enabled) => setCodeEditorEnabled(enabled);
+
+	editor.appendMedia = (media = []) => {
+		// TODO: Handle multiple media items.
+		const item = media[0];
+		let mediaType;
+		switch (item.mimetype) {
+			case 'image/jpeg':
+			case 'image/png':
+			case 'image/gif':
+				mediaType = 'image';
+				break;
+			case 'video/mp4':
+				mediaType = 'video';
+				break;
+			default:
+				createErrorNotice(
+					__('File type not supported as a media file.')
+				);
+				return;
+		}
+		const blockName = 'core/' + mediaType;
+		const blockType = getBlockType(blockName);
+
+		if (blockType && blockType?.name) {
+			const newBlock = createBlock(blockType.name, {
+				id: item.Id,
+				[mediaType === 'image' ? 'url' : 'src']: item.url,
+			});
+
+			// const indexAfterSelected = this.props.selectedBlockIndex + 1;
+			// const insertionIndex =
+			// 	indexAfterSelected || this.props.blockCount || 0;
+
+			insertBlock(newBlock, 0);
+		} else {
+			createErrorNotice(__('File type not supported as a media file.'));
+		}
+	};
 
 	const settings = useMemo(
 		() => ({

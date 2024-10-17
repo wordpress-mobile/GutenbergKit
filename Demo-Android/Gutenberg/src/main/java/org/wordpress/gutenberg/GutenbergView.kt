@@ -48,6 +48,7 @@ class GutenbergView : WebView {
     private var onFileChooserRequested: ((Intent, Int) -> Unit)? = null
     private var contentChangeListener: ContentChangeListener? = null
     private var editorDidBecomeAvailableListener: EditorAvailableListener? = null
+    private var mediaPendingAppending: ArrayList<MediaItem> = ArrayList()
 
     fun setContentChangeListener(listener: ContentChangeListener) {
         contentChangeListener = listener
@@ -275,6 +276,8 @@ class GutenbergView : WebView {
                     .setDuration(300)
                     .start()
             }
+
+            appendMedia(mediaPendingAppending)
         }
     }
 
@@ -300,6 +303,31 @@ class GutenbergView : WebView {
     fun showBlockPicker() {
         Log.i("GutenbergView", "BlockPickerShouldShow")
     }
+
+    fun appendMedia(media: ArrayList<MediaItem>) {
+        if (media.isEmpty()) return
+
+        if (isEditorLoaded) {
+            val mediaJsonString = media.map {
+                """
+            {
+                "id": ${it.id},
+                "url": "${it.url}",
+                "mimetype": "${it.mimetype}",
+                "caption": "${it.caption}",
+                "title": "${it.title}",
+                "alt": "${it.alt}"
+            }
+            """.trimIndent()
+            }.joinToString(", ", "[", "]")
+            this.evaluateJavascript("editor.appendMedia($mediaJsonString);", null)
+            mediaPendingAppending.clear()
+        } else  {
+            mediaPendingAppending = media
+        }
+    }
+
+    fun createMediaItem() {}
 
     fun resetFilePathCallback() {
         filePathCallback = null
@@ -344,3 +372,11 @@ object GutenbergWebViewPool {
         preloadedWebView = null
     }
 }
+
+class MediaItem(val id: Int,
+                val url: String,
+                val mimetype: String,
+                val caption: String?,
+                val title: String?,
+                val alt: String?
+)
