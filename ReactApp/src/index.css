@@ -69,6 +69,14 @@ h4 {
 	display: none;
 }
 
+.editor-load-notice {
+	position: fixed;
+	bottom: 62px;
+	left: 16px;
+	right: 16px;
+	z-index: 999;
+}
+
 /* Toolbar */
 
 .gbkit-editor-toolbar {
