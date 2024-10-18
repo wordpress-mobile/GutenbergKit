@@ -3,9 +3,13 @@ import GutenbergKit
 
 struct ContentView: View {
     var body: some View {
+        #if os(macOS)
+        EditorView()
+        #else
         NavigationView {
-            EditorView(editorURL: URL(string: "http://localhost:5173/")!)
+            EditorView()
         }
+        #endif
     }
 }
 

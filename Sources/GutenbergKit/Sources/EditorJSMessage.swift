@@ -1,7 +1,7 @@
 import WebKit
 
 /// A type that represents JavaScript messages send from and to the web view.
-struct EditorJSMessage {
+public struct EditorJSMessage {
     let type: MessageType
     let body: Any?
 
@@ -27,8 +27,6 @@ struct EditorJSMessage {
         case onEditorLoaded
         /// The editor content changed.
         case onEditorContentChanged
-        /// The user tapped the inserter button.
-        case showBlockPicker
     }
 
     struct DidUpdateBlocksBody: Decodable {
