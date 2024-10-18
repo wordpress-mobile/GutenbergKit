@@ -10,7 +10,6 @@ struct EditorBlockPicker: View {
 
     @Environment(\.dismiss) private var dismiss
 
-
     var body: some View {
         List {
             ForEach(viewModel.displayedSections) { section in
@@ -22,9 +21,15 @@ struct EditorBlockPicker: View {
             }
         }
         .toolbar(content: {
-            ToolbarItemGroup(placement: .topBarLeading) {
-                Button("Close", action: { dismiss() })
+            #if(os(macOS))
+            ToolbarItemGroup {
+                _leadingToolbarItems
             }
+            #elseif(os(iOS))
+            ToolbarItemGroup(placement: .topBarLeading) {
+                _leadingToolbarItems
+            }
+
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Menu(content: {
                     Button("Blocks", action: {})
@@ -39,8 +44,11 @@ struct EditorBlockPicker: View {
                     }
                 })
             }
+            #endif
         })
+        #if(os(iOS))
         .navigationBarTitleDisplayMode(.inline)
+        #endif
 
 //        TabView(selection: $group,
 //                content:  {
@@ -65,6 +73,11 @@ struct EditorBlockPicker: View {
     }
 
     @ViewBuilder
+    var _leadingToolbarItems: some View {
+        Button("Close", action: { dismiss() })
+    }
+
+    @ViewBuilder
     var _bodyBlocks: some View {
         VStack(spacing: 0) {
             VStack(spacing: 0) {
@@ -76,8 +89,11 @@ struct EditorBlockPicker: View {
 //                    .padding(.bottom, 8)
 
             }
+        #if canImport(UIKit)
             .background(Color(uiColor: .secondarySystemBackground))
-
+        #elseif canImport(AppKit)
+            .background(Color(nsColor: .secondarySystemFill))
+        #endif
 
             List {
                 Section("Text") {
@@ -94,7 +110,9 @@ struct EditorBlockPicker: View {
                     _Label("Audio", systemImage: "waveform")
                 }
             }
+            #if canImport(UIKit)
             .listStyle(.insetGrouped)
+            #endif
         }
 //        .safeAreaInset(edge: .bottom) {
 //            HStack(spacing: 30) {
@@ -114,6 +132,7 @@ struct EditorBlockPicker: View {
 //        }
 //        .searchable(text: $searchText)//, placement: .navigationBarDrawer(displayMode: .always))
         .toolbar(content: {
+            #if canImport(UIKit)
             ToolbarItemGroup(placement: .topBarLeading) {
                 Button("Close", action: { dismiss() })
             }
@@ -131,8 +150,11 @@ struct EditorBlockPicker: View {
                     }
                 })
             }
+            #endif
         })
+        #if canImport(UIKit)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
 //        .toolbar(.hidden, for: .navigationBar)
 
         .tint(Color.primary)
@@ -190,7 +212,7 @@ private struct MenuItem: View {
                 .foregroundStyle(isSelected ? Color.primary : Color.secondary)
             Rectangle()
                 .frame(height: 2)
-                .foregroundStyle(isSelected ? Color.black : Color(uiColor: .separator))
+                .foregroundStyle(isSelected ? Color.black : Color.separator)
                 .opacity(isSelected ? 1 : 0)
         }
     }
