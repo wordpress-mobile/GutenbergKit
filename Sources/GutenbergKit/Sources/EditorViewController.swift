@@ -132,6 +132,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func setUpEditor() {
+        registerRequestInterceptor()
+
         let webViewConfiguration = webView.configuration
         let userContentController = webViewConfiguration.userContentController
         let editorInitialConfig = getEditorConfiguration()
@@ -368,6 +370,64 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     }
 }
 
-private extension WKWebView {
+class InterceptionProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool {
 
+        // We don't want to interfere with loading the editor JS
+        guard request.url?.host != "localhost" else {
+            debugPrint("Not intercepting \(request)")
+            return false
+        }
+
+        // We care about WordPress.com resources – let's modify those if needed
+        if request.url?.host?.contains("wordpress.com") == true {
+            return request.value(forHTTPHeaderField: "Authorization") == nil // If there's no auth header, we need to intercept
+        }
+
+        return false
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        var mutableRequest = request
+        mutableRequest.allHTTPHeaderFields?["Authorization"] = "Bearer [REDACTED]"
+        return mutableRequest
+    }
+
+    private var taskHandle: Task<Void, Error>?
+    private let session: URLSession = URLSession(configuration: .ephemeral)
+
+    override func startLoading() {
+        self.taskHandle = Task {
+            do {
+                let (data, response) = try await session.data(for: self.request)
+                self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .allowedInMemoryOnly)
+                self.client?.urlProtocol(self, didLoad: data)
+                self.client?.urlProtocolDidFinishLoading(self)
+
+            } catch {
+                self.client?.urlProtocol(self, didFailWithError: error)
+            }
+        }
+    }
+
+    override func stopLoading() {
+        self.taskHandle?.cancel()
+    }
+}
+
+private extension EditorViewController {
+
+    // Inject the interceptor
+    func registerRequestInterceptor() {
+        let browsingContextClass: AnyClass = NSClassFromString("WKBrowsingContextController")!
+        let registerSchemeSelector: Selector = NSSelectorFromString("registerSchemeForCustomProtocol:")
+//        let unregisterSchemeSelector: Selector = NSSelectorFromString("unregisterSchemeForCustomProtocol:")
+
+        if browsingContextClass.responds(to: registerSchemeSelector) == true {
+            browsingContextClass.performSelector(inBackground: registerSchemeSelector, with: "http")
+            browsingContextClass.performSelector(inBackground: registerSchemeSelector, with: "https")
+        }
+
+        URLProtocol.registerClass(InterceptionProtocol.self)
+    }
 }
