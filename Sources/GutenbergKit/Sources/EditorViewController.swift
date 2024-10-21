@@ -24,6 +24,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     public private(set) var state = EditorState()
 
     public weak var delegate: EditorViewControllerDelegate?
+    public weak var requestInterceptorDelegate: EditorRequestInterceptorDelegate?
 
     /// Returns `true` if the editor is loaded and the initial content is displayed.
     public var isEditorLoaded: Bool { initialContent != nil }
@@ -84,6 +85,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         super.viewDidLoad()
 
         controller.delegate = self
+        controller.requestInterceptorDelegate = requestInterceptorDelegate
         webView.navigationDelegate = controller
 
         // FIXME: implement with CSS (bottom toolbar)
@@ -341,8 +343,19 @@ private protocol GutenbergEditorControllerDelegate: AnyObject {
 /// Hiding the conformances, and breaking retain cycles.
 private final class GutenbergEditorController: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
     weak var delegate: GutenbergEditorControllerDelegate?
+    weak var requestInterceptorDelegate: EditorRequestInterceptorDelegate?
 
     // MARK: - WKNavigationDelegate
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        if let delegate = requestInterceptorDelegate {
+            let modifiedRequest = delegate.interceptRequest(for: navigationAction.request)
+            webView.load(modifiedRequest)
+            decisionHandler(.cancel)
+        } else {
+            decisionHandler(.allow)
+        }
+    }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         NSLog("navigation: \(String(describing: navigation))")
@@ -366,6 +379,10 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
             delegate?.controller(self, didReceiveMessage: message)
         }
     }
+}
+
+public protocol EditorRequestInterceptorDelegate: AnyObject {
+    func interceptRequest(for request: URLRequest) -> URLRequest
 }
 
 private extension WKWebView {
