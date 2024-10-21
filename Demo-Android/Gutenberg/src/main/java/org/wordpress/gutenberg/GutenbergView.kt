@@ -128,7 +128,7 @@ class GutenbergView : WebView {
                     } catch (e: IOException) {
                         // We don't need to handle this ourselves, just tell the WebView that
                         // we weren't able to fetch the resource
-                        return null;
+                        return null
                     }
                 }
             }
