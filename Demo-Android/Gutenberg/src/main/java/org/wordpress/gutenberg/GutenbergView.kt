@@ -20,7 +20,6 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
-import okhttp3.OkHttpClient
 import org.json.JSONObject
 
 const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
