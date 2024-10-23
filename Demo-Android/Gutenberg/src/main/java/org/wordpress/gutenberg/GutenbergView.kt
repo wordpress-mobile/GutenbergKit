@@ -20,11 +20,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
-import okhttp3.Headers.Companion.toHeaders
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
-import okio.IOException
 import org.json.JSONObject
 
 const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
@@ -53,12 +49,9 @@ class GutenbergView : WebView {
 
     var requestInterceptor: GutenbergRequestInterceptor = DefaultGutenbergRequestInterceptor()
 
-
     private var onFileChooserRequested: ((Intent, Int) -> Unit)? = null
     private var contentChangeListener: ContentChangeListener? = null
     private var editorDidBecomeAvailableListener: EditorAvailableListener? = null
-
-    private val httpClient = OkHttpClient()
 
     fun setContentChangeListener(listener: ContentChangeListener) {
         contentChangeListener = listener
