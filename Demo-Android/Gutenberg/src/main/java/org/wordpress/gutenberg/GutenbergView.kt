@@ -99,38 +99,18 @@ class GutenbergView : WebView {
             }
 
             override fun shouldInterceptRequest(
-                view: WebView?,
-                request: WebResourceRequest?
+                view: WebView,
+                request: WebResourceRequest
             ): WebResourceResponse? {
-                if (request?.url == null) {
-                    return super.shouldInterceptRequest(view, request)
-                } else if(request.url.host?.contains("appassets.androidplatform.net") == true) {
+                val requestResponse = requestInterceptor.modifyRequest(view, request);
+
+                if (requestResponse != null) {
+                    return requestResponse
+                } else if (request.url.host?.contains("appassets.androidplatform.net") == true) {
                     return assetLoader.shouldInterceptRequest(request.url)
-                } else {
-                    val modifiedRequest = requestInterceptor.interceptRequest(request)
-
-                    try {
-                        val okHttpRequest = Request.Builder()
-                            .url(modifiedRequest.url!!.toString())
-                            .headers(modifiedRequest.requestHeaders.toHeaders())
-                            .build()
-
-                        val response: Response = httpClient.newCall(okHttpRequest).execute()
-
-                        val body = if(response.body != null) { response.body!! } else { return null }
-                        val contentType = if(body.contentType() != null) { body.contentType() } else { return null }
-
-                        return WebResourceResponse(
-                            contentType.toString(),
-                            response.header("content-encoding", null),
-                            body.byteStream()
-                        )
-                    } catch (e: IOException) {
-                        // We don't need to handle this ourselves, just tell the WebView that
-                        // we weren't able to fetch the resource
-                        return null
-                    }
                 }
+
+                return super.shouldInterceptRequest(view, request)
             }
         }
 
