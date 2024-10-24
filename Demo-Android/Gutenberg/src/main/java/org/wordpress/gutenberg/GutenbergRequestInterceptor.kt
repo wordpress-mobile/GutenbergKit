@@ -5,11 +5,11 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 
 public interface GutenbergRequestInterceptor {
-    fun modifyRequest(view: WebView, request: WebResourceRequest): WebResourceResponse?
+    fun modifyRequest(request: WebResourceRequest): WebResourceResponse?
 }
 
 class DefaultGutenbergRequestInterceptor: GutenbergRequestInterceptor {
-    override fun modifyRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+    override fun modifyRequest(request: WebResourceRequest): WebResourceResponse? {
         return null
     }
 }

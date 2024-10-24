@@ -94,7 +94,7 @@ class GutenbergView : WebView {
                 view: WebView,
                 request: WebResourceRequest
             ): WebResourceResponse? {
-                val requestResponse = requestInterceptor.modifyRequest(view, request)
+                val requestResponse = requestInterceptor.modifyRequest(request)
 
                 if (requestResponse != null) {
                     return requestResponse
