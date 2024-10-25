@@ -247,6 +247,16 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         present(host, animated: true)
     }
 
+    private func openMediaLibrary(_ config: OpenMediaLibrary) {
+        print("[1] openMediaLibrary: \(config)")
+        delegate?.editor(self, didRequestMediaFromSiteMediaLibrary: config)
+    }
+    
+    public func receiveMedia(_ media: [[String: Any]]?) {
+        print("[1] receiveMedia: \(media)")
+        evaluate("editor.onMediaLibrarySelect(\(media));")
+    }
+
     // MARK: - Internal (Initial Content)
 
     private func setInitialContent(_ content: String, _ completion: (() -> Void)? = nil) async {
@@ -287,6 +297,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 delegate?.editor(self, didUpdateContentWithState: state)
             case .showBlockPicker:
                 showBlockInserter()
+            case .openMediaLibrary:
+                let config = try message.decode(OpenMediaLibrary.self)
+                openMediaLibrary(config)
             }
         } catch {
             fatalError("failed to decode message: \(error)")

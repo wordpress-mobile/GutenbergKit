@@ -29,6 +29,8 @@ struct EditorJSMessage {
         case onEditorContentChanged
         /// The user tapped the inserter button.
         case showBlockPicker
+        /// User requested the Media Library
+        case openMediaLibrary
     }
 
     struct DidUpdateBlocksBody: Decodable {

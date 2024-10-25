@@ -46,6 +46,7 @@ import {
 import { postTypeEntities } from '../misc/post-type-entities';
 import { useEditorStyles } from './hooks/use-editor-styles';
 import { unlock } from './lock-unlock';
+import { useMediaUpload } from './hooks/use-media-upload.js';
 // import CodeEditor from './CodeEditor';
 
 // Current editor (assumes can be only one instance).
@@ -168,6 +169,7 @@ function Editor({ post }) {
 	);
 
 	const styles = useEditorStyles();
+	useMediaUpload();
 
 	// if (isCodeEditorEnabled) {
 	//     return <CodeEditor value={serialize(blocks)} />;
