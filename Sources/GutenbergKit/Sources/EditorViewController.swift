@@ -248,12 +248,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibrary) {
-        print("[1] openMediaLibrary: \(config)")
         delegate?.editor(self, didRequestMediaFromSiteMediaLibrary: config)
     }
     
-    public func receiveMedia(_ media: [[String: Any]]?) {
-        print("[1] receiveMedia: \(media)")
+    public func receiveMedia(_ media: String) {
         evaluate("editor.onMediaLibrarySelect(\(media));")
     }
 

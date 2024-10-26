@@ -15,11 +15,13 @@ function MediaUpload({ onSelect, render, ...config }) {
 	const open = () => openMediaLibrary(config);
 
 	useEffect(() => {
-		window.editor.onMediaLibrarySelect = (...args) => {
-			console.log('>>> onMediaLibrarySelect', args);
-			onSelect(...args);
+		// TODO: This global is likely causing issue with multiple instances in the
+		// editor causing unexpected media replacements, namely in Gallery blocks.
+		window.editor.onMediaLibrarySelect = (attachment) => {
+			console.log('>>> onMediaLibrarySelect', attachment);
+			onSelect(config.multiple ? attachment : attachment[0]);
 		};
-	}, [onSelect]);
+	}, [onSelect, config.multiple]);
 
 	return render({ open });
 }

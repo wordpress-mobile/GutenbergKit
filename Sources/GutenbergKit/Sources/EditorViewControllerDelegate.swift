@@ -30,23 +30,17 @@ public struct EditorState {
 }
 
 public struct OpenMediaLibrary: Decodable {
-    public let addToGallery: Bool?
     public let allowedTypes: [MediaType]
-    public let gallery: Bool
-    public let mode: String
     public let multiple: Bool
     public let value: Value?
 
     private enum CodingKeys: String, CodingKey {
-        case addToGallery, allowedTypes, gallery, mode, multiple, value
+        case allowedTypes, multiple, value
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
-        addToGallery = try container.decodeIfPresent(Bool.self, forKey: .addToGallery)
-        gallery = try container.decode(Bool.self, forKey: .gallery)
-        mode = try container.decode(String.self, forKey: .mode)
         multiple = try container.decode(Bool.self, forKey: .multiple)
 
         // Decode allowedTypes as [String] and convert to [MediaType]
@@ -106,6 +100,16 @@ public struct MediaInfo: Encodable {
         self.alt = alt
         self.metadata = metadata
     }
+    
+    public func encode(to encoder: Encoder) throws {
+       var container = encoder.container(keyedBy: CodingKeys.self)
+       try container.encodeIfPresent(id, forKey: .id)
+       try container.encode(url ?? "", forKey: .url)
+       try container.encode(type ?? "", forKey: .type)
+       try container.encode(title ?? "", forKey: .title)
+       try container.encode(caption ?? "", forKey: .caption)
+       try container.encode(alt ?? "", forKey: .alt)
+   }
 }
 
 extension MediaInfo {
