@@ -1,13 +1,17 @@
 /**
  * WordPress dependencies
  */
-import { addFilter } from '@wordpress/hooks';
+import { addFilter, removeFilter } from '@wordpress/hooks';
 import { useCallback, useEffect } from '@wordpress/element';
 import { openMediaLibrary } from '../../misc/Helpers';
 
 export function useMediaUpload() {
 	useEffect(() => {
 		addFilter('editor.MediaUpload', 'GutenbergKit', () => MediaUpload);
+
+		return () => {
+			removeFilter('editor.MediaUpload', 'GutenbergKit');
+		};
 	}, []);
 }
 
