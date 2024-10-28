@@ -30,17 +30,19 @@ public struct EditorState {
 }
 
 public struct OpenMediaLibrary: Decodable {
+    public let id: String
     public let allowedTypes: [MediaType]
     public let multiple: Bool
     public let value: Value?
 
     private enum CodingKeys: String, CodingKey {
-        case allowedTypes, multiple, value
+        case id, allowedTypes, multiple, value
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
+        id = try container.decode(String.self, forKey: .id)
         multiple = try container.decode(Bool.self, forKey: .multiple)
 
         // Decode allowedTypes as [String] and convert to [MediaType]

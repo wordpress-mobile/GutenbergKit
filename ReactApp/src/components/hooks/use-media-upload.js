@@ -1,8 +1,13 @@
 /**
+ * External dependencies
+ */
+import { v4 as uuid } from 'uuid';
+
+/**
  * WordPress dependencies
  */
 import { addFilter } from '@wordpress/hooks';
-import { useEffect } from '@wordpress/element';
+import { useCallback, useEffect } from '@wordpress/element';
 import { openMediaLibrary } from '../../misc/Helpers';
 
 export function useMediaUpload() {
@@ -11,17 +16,29 @@ export function useMediaUpload() {
 	}, []);
 }
 
-function MediaUpload({ onSelect, render, ...config }) {
-	const open = () => openMediaLibrary(config);
+function MediaUpload({ render, ...config }) {
+	const { open } = useNativeMediaLibrary(config);
+
+	return render({ open });
+}
+
+function useNativeMediaLibrary({ onSelect, ...config }) {
+	let id;
 
 	useEffect(() => {
-		// TODO: This global is likely causing issue with multiple instances in the
-		// editor causing unexpected media replacements, namely in Gallery blocks.
-		window.editor.onMediaLibrarySelect = (attachment) => {
-			console.log('>>> onMediaLibrarySelect', attachment);
+		id = uuid();
+		window.editor.onMediaLibrarySelect =
+			window.editor.onMediaLibrarySelect || {};
+		window.editor.onMediaLibrarySelect[id] = (attachment) => {
 			onSelect(config.multiple ? attachment : attachment[0]);
+		};
+
+		return () => {
+			delete window.editor.onMediaLibrarySelect[id];
 		};
 	}, [onSelect, config.multiple]);
 
-	return render({ open });
+	const open = useCallback(() => openMediaLibrary(id, config), [id, config]);
+
+	return { open };
 }
