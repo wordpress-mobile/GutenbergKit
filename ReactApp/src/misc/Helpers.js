@@ -57,15 +57,15 @@ export function blurEditor() {
 	}
 }
 
-export function openMediaLibrary(id, config) {
+export function openMediaLibrary(config) {
 	if (window.editorDelegate) {
-		window.editorDelegate.openMediaLibrary(id, config);
+		window.editorDelegate.openMediaLibrary(config);
 	}
 
 	if (window.webkit) {
 		window.webkit.messageHandlers.editorDelegate.postMessage({
 			message: 'openMediaLibrary',
-			body: { id, ...config },
+			body: config,
 		});
 	}
 }

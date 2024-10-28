@@ -1,9 +1,4 @@
 /**
- * External dependencies
- */
-import { v4 as uuid } from 'uuid';
-
-/**
  * WordPress dependencies
  */
 import { addFilter } from '@wordpress/hooks';
@@ -23,22 +18,17 @@ function MediaUpload({ render, ...config }) {
 }
 
 function useNativeMediaLibrary({ onSelect, ...config }) {
-	let id;
-
 	useEffect(() => {
-		id = uuid();
-		window.editor.onMediaLibrarySelect =
-			window.editor.onMediaLibrarySelect || {};
-		window.editor.onMediaLibrarySelect[id] = (attachment) => {
+		window.editor.onMediaLibrarySelect = (attachment) => {
 			onSelect(config.multiple ? attachment : attachment[0]);
 		};
 
 		return () => {
-			delete window.editor.onMediaLibrarySelect[id];
+			window.editor.onMediaLibrarySelect = () => {};
 		};
 	}, [onSelect, config.multiple]);
 
-	const open = useCallback(() => openMediaLibrary(id, config), [id, config]);
+	const open = useCallback(() => openMediaLibrary(config), [config]);
 
 	return { open };
 }
