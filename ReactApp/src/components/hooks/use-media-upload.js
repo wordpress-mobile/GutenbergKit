@@ -27,12 +27,12 @@ function MediaUpload({ render, ...config }) {
 
 function useNativeMediaLibrary({ onSelect, ...config }) {
 	useEffect(() => {
-		window.editor.onMediaLibrarySelect = (attachment) => {
+		window.editor.setMediaUploadAttachment = (attachment) => {
 			onSelect(config.multiple ? attachment : attachment[0]);
 		};
 
 		return () => {
-			window.editor.onMediaLibrarySelect = () => {};
+			window.editor.setMediaUploadAttachment = () => {};
 		};
 	}, [onSelect, config.multiple]);
 

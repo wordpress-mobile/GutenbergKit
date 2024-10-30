@@ -251,8 +251,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         delegate?.editor(self, didRequestMediaFromSiteMediaLibrary: config)
     }
     
-    public func receiveMedia(_ media: String) {
-        evaluate("editor.onMediaLibrarySelect(\(media));")
+    public func setMediaUploadAttachment(_ media: String) {
+        evaluate("editor.setMediaUploadAttachment(\(media));")
     }
 
     // MARK: - Internal (Initial Content)
