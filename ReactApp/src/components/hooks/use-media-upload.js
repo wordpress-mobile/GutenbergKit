@@ -3,6 +3,10 @@
  */
 import { addFilter, removeFilter } from '@wordpress/hooks';
 import { useCallback, useEffect } from '@wordpress/element';
+
+/**
+ * Internal dependencies
+ */
 import { openMediaLibrary } from '../../misc/Helpers';
 
 export function useMediaUpload() {
