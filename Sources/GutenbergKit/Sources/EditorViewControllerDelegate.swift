@@ -111,19 +111,3 @@ public struct MediaInfo: Encodable {
        try container.encode(alt ?? "", forKey: .alt)
    }
 }
-
-extension MediaInfo {
-    /// Dynamically wraps up all properties into a Json Object to be sent to JS Side.
-    public func encodeForJS() -> [String: Any] {
-        guard
-            let data = try? JSONEncoder().encode(self),
-            var jsonObject = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] else
-        {
-            assertionFailure("Encoding of MediaInfo failed")
-            return [String: Any]()
-        }
-
-        jsonObject["metadata"] = self.metadata
-        return jsonObject
-    }
-}
