@@ -94,12 +94,12 @@ class GutenbergView : WebView {
                 view: WebView,
                 request: WebResourceRequest
             ): WebResourceResponse? {
-                val requestResponse = requestInterceptor.modifyRequest(request)
-
-                if (requestResponse != null) {
-                    return requestResponse
+                if (request.url == null) {
+                    return super.shouldInterceptRequest(view, request)
                 } else if (request.url.host?.contains("appassets.androidplatform.net") == true) {
                     return assetLoader.shouldInterceptRequest(request.url)
+                } else if (requestInterceptor.canIntercept(request)) {
+                    return requestInterceptor.handleRequest(request)
                 }
 
                 return super.shouldInterceptRequest(view, request)
