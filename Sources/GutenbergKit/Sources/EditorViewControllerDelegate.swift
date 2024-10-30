@@ -47,7 +47,7 @@ public struct OpenMediaLibrary: Decodable {
         // If allowedTypes is not present in the JSON, use an empty array
         let stringTypes = try container.decodeIfPresent([String].self, forKey: .allowedTypes) ?? []
         allowedTypes = stringTypes.map { MediaType(fromJSString: $0) }
-        
+
         // Decode value as either Int? or [Int]?
         if let singleValue = try? container.decodeIfPresent(Int.self, forKey: .value) {
             value = .single(singleValue)
@@ -65,7 +65,7 @@ public struct OpenMediaLibrary: Decodable {
         case other
         case any
     }
-    
+
     public enum Value {
         case single(Int)
         case multiple([Int])
@@ -100,7 +100,7 @@ public struct MediaInfo: Encodable {
         self.alt = alt
         self.metadata = metadata
     }
-    
+
     public func encode(to encoder: Encoder) throws {
        var container = encoder.container(keyedBy: CodingKeys.self)
        try container.encodeIfPresent(id, forKey: .id)
