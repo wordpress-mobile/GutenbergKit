@@ -20,6 +20,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
+import org.json.JSONException
 import org.json.JSONObject
 
 const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
@@ -50,10 +51,15 @@ class GutenbergView : WebView {
 
     private var onFileChooserRequested: ((Intent, Int) -> Unit)? = null
     private var contentChangeListener: ContentChangeListener? = null
+    private var openMediaLibraryListener: OpenMediaLibraryListener? = null
     private var editorDidBecomeAvailableListener: EditorAvailableListener? = null
 
     fun setContentChangeListener(listener: ContentChangeListener) {
         contentChangeListener = listener
+    }
+
+    fun setOpenMediaLibraryListener(listener: OpenMediaLibraryListener) {
+        openMediaLibraryListener = listener
     }
 
     fun setOnFileChooserRequestedListener(listener: (Intent, Int) -> Unit) {
@@ -247,6 +253,42 @@ class GutenbergView : WebView {
         fun onContentChanged(title: String, content: String)
     }
 
+    enum class MediaType(var label: String) {
+        IMAGE("image"),
+        VIDEO("video"),
+        MEDIA("media"),
+        AUDIO("audio"),
+        ANY("any"),
+        OTHER("other");
+
+        companion object {
+            fun getEnum(value: String): MediaType {
+                for (mediaType in entries) {
+                    if (mediaType.label == value) {
+                        return mediaType
+                    }
+                }
+
+                return OTHER
+            }
+        }
+    }
+
+    sealed class Value {
+        data class Single(val value: Int): Value()
+        data class Multiple(val value: IntArray): Value()
+    }
+
+    data class OpenMediaLibraryConfig(
+        val allowedTypes: Array<MediaType>,
+        val multiple: Boolean,
+        val value: Value?
+    )
+
+    interface OpenMediaLibraryListener {
+        fun onOpenMediaLibrary(config: OpenMediaLibraryConfig)
+    }
+
     fun interface EditorAvailableListener {
         fun onEditorAvailable(view: GutenbergView?)
     }
@@ -300,6 +342,42 @@ class GutenbergView : WebView {
             Log.i("GutenbergView", "BlocksChanged (empty)")
         } else {
             Log.i("GutenbergView", "BlocksChanged (not empty)")
+        }
+    }
+
+    @JavascriptInterface
+    fun openMediaLibrary(jsonString: String) {
+        try {
+            val jsonObj = JSONObject(jsonString)
+
+            // Parse allowedTypes
+            val allowedTypesArray = jsonObj.getJSONArray("allowedTypes")
+            val allowedTypes = Array(allowedTypesArray.length()) { index ->
+                MediaType.getEnum(allowedTypesArray.getString(index))
+            }
+
+            // Parse multiple
+            val multiple = jsonObj.getBoolean("multiple")
+
+            // Parse value
+            val value = if (jsonObj.has("value")) {
+                if (multiple) {
+                    val valueArray = jsonObj.getJSONArray("value")
+                    Value.Multiple(IntArray(valueArray.length()) { index ->
+                        valueArray.getInt(index)
+                    })
+                } else {
+                    Value.Single(jsonObj.getInt("value"))
+                }
+            } else {
+                null
+            }
+
+            val config = OpenMediaLibraryConfig(allowedTypes = allowedTypes, multiple = multiple, value = value)
+
+            openMediaLibraryListener?.onOpenMediaLibrary(config)
+        } catch (e: JSONException) {
+            e.printStackTrace()
         }
     }
 

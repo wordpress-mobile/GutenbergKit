@@ -59,7 +59,7 @@ export function blurEditor() {
 
 export function openMediaLibrary(config) {
 	if (window.editorDelegate) {
-		window.editorDelegate.openMediaLibrary(config);
+		window.editorDelegate.openMediaLibrary(JSON.stringify(config));
 	}
 
 	if (window.webkit) {
