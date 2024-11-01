@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
@@ -22,6 +23,7 @@ import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
 import org.json.JSONException
 import org.json.JSONObject
+import java.util.Locale
 
 const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
 
@@ -253,27 +255,6 @@ class GutenbergView : WebView {
         fun onContentChanged(title: String, content: String)
     }
 
-    enum class MediaType(var label: String) {
-        IMAGE("image"),
-        VIDEO("video"),
-        MEDIA("media"),
-        AUDIO("audio"),
-        ANY("any"),
-        OTHER("other");
-
-        companion object {
-            fun getEnum(value: String): MediaType {
-                for (mediaType in entries) {
-                    if (mediaType.label == value) {
-                        return mediaType
-                    }
-                }
-
-                return OTHER
-            }
-        }
-    }
-
     sealed class Value {
         data class Single(val value: Int): Value()
         data class Multiple(val value: IntArray): Value()
@@ -385,6 +366,14 @@ class GutenbergView : WebView {
         }
     }
 
+    fun setMediaUploadAttachment(media: String) {
+        if (!isEditorLoaded) {
+            Log.e("GutenbergView", "You can't change the editor content until it has loaded")
+            return
+        }
+        this.evaluateJavascript("editor.setMediaUploadAttachment($media);", null)
+    }
+
     @JavascriptInterface
     fun showBlockPicker() {
         Log.i("GutenbergView", "BlockPickerShouldShow")
@@ -431,5 +420,76 @@ object GutenbergWebViewPool {
         webView.removeAllViews()
         webView.destroy()
         preloadedWebView = null
+    }
+}
+
+data class Media(
+    val id: Int,
+    val url: String,
+    val type: String,
+    val caption: String = "",
+    val title: String = "",
+    val alt: String = "",
+    val metadata: Bundle = Bundle()
+) {
+    companion object {
+        private fun convertToType(mimeType: String?): String {
+            val isMediaType = { mediaType: MediaType ->
+                mimeType?.startsWith(mediaType.name.lowercase(Locale.ROOT)) == true
+            }
+            val type = when {
+                        isMediaType(MediaType.IMAGE) -> MediaType.IMAGE
+                        isMediaType(MediaType.VIDEO) -> MediaType.VIDEO
+                        else -> MediaType.OTHER
+                    }.name.lowercase(Locale.ROOT)
+            return type
+        }
+
+        @JvmStatic
+        fun createMediaUsingMimeType(
+            id: Int,
+            url: String,
+            mimeType: String?,
+            caption: String?,
+            title: String?,
+            alt: String?,
+        ): Media {
+            val type = convertToType(mimeType)
+            return Media(id, url, type, caption ?: "", title ?: "", alt ?: "")
+        }
+        @JvmStatic
+        fun createMediaUsingMimeType(
+            id: Int,
+            url: String,
+            mimeType: String?,
+            caption: String?,
+            title: String?,
+            alt: String?,
+            metadata: Bundle = Bundle()
+        ): Media {
+            val type = convertToType(mimeType)
+            return Media(id, url, type, caption ?: "", title ?: "", alt ?: "", metadata)
+        }
+    }
+}
+
+enum class MediaType(var label: String) {
+    IMAGE("image"),
+    VIDEO("video"),
+    MEDIA("media"),
+    AUDIO("audio"),
+    ANY("any"),
+    OTHER("other");
+
+    companion object {
+        fun getEnum(value: String): MediaType {
+            for (mediaType in entries) {
+                if (mediaType.label == value) {
+                    return mediaType
+                }
+            }
+
+            return OTHER
+        }
     }
 }
