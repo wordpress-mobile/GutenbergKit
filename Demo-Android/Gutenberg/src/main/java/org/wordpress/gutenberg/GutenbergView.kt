@@ -45,6 +45,9 @@ class GutenbergView : WebView {
     private var editorDidBecomeAvailable: ((GutenbergView) -> Unit)? = null
     var filePathCallback: ValueCallback<Array<Uri?>?>? = null
     val pickImageRequestCode = 1
+
+    var requestInterceptor: GutenbergRequestInterceptor = DefaultGutenbergRequestInterceptor()
+
     private var onFileChooserRequested: ((Intent, Int) -> Unit)? = null
     private var contentChangeListener: ContentChangeListener? = null
     private var editorDidBecomeAvailableListener: EditorAvailableListener? = null
@@ -88,14 +91,18 @@ class GutenbergView : WebView {
             }
 
             override fun shouldInterceptRequest(
-                view: WebView?,
-                request: WebResourceRequest?
+                view: WebView,
+                request: WebResourceRequest
             ): WebResourceResponse? {
-                return if (request?.url != null) {
-                    assetLoader.shouldInterceptRequest(request.url)
-                } else {
-                    super.shouldInterceptRequest(view, request)
+                if (request.url == null) {
+                    return super.shouldInterceptRequest(view, request)
+                } else if (request.url.host?.contains("appassets.androidplatform.net") == true) {
+                    return assetLoader.shouldInterceptRequest(request.url)
+                } else if (requestInterceptor.canIntercept(request)) {
+                    return requestInterceptor.handleRequest(request)
                 }
+
+                return super.shouldInterceptRequest(view, request)
             }
         }
 
