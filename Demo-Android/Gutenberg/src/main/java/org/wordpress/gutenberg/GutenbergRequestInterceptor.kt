@@ -1,13 +1,19 @@
 package org.wordpress.gutenberg
 
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 
 public interface GutenbergRequestInterceptor {
-    fun interceptRequest(request: WebResourceRequest): WebResourceRequest
+    fun canIntercept(request: WebResourceRequest): Boolean
+    fun handleRequest(request: WebResourceRequest): WebResourceResponse?
 }
 
 class DefaultGutenbergRequestInterceptor: GutenbergRequestInterceptor {
-    override fun interceptRequest(request: WebResourceRequest): WebResourceRequest {
-        return request
+    override fun canIntercept(request: WebResourceRequest): Boolean {
+        return false
+    }
+
+    override fun handleRequest(request: WebResourceRequest): WebResourceResponse? {
+        return null
     }
 }
