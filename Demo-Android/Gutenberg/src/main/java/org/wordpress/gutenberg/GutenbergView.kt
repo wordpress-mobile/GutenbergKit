@@ -351,9 +351,13 @@ class GutenbergView : WebView {
             val jsonObj = JSONObject(jsonString)
 
             // Parse allowedTypes
-            val allowedTypesArray = jsonObj.getJSONArray("allowedTypes")
-            val allowedTypes = Array(allowedTypesArray.length()) { index ->
-                MediaType.getEnum(allowedTypesArray.getString(index))
+            val allowedTypes = if (jsonObj.has("allowedTypes")) {
+                val allowedTypesArray = jsonObj.getJSONArray("allowedTypes")
+                Array(allowedTypesArray.length()) { index ->
+                    MediaType.getEnum(allowedTypesArray.getString(index))
+                }
+            } else {
+                emptyArray()
             }
 
             // Parse multiple
