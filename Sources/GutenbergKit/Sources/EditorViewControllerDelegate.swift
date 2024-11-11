@@ -30,7 +30,7 @@ public struct EditorState {
 }
 
 public struct OpenMediaLibraryAction: Codable {
-    public let allowedTypes: [MediaType]
+    public let allowedTypes: [MediaType]?
     public let multiple: Bool
     public let value: Value?
 
