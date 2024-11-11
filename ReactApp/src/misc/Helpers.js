@@ -57,6 +57,19 @@ export function blurEditor() {
 	}
 }
 
+export function openMediaLibrary(config) {
+	if (window.editorDelegate) {
+		window.editorDelegate.openMediaLibrary(config);
+	}
+
+	if (window.webkit) {
+		window.webkit.messageHandlers.editorDelegate.postMessage({
+			message: 'openMediaLibrary',
+			body: config,
+		});
+	}
+}
+
 // FIXME: this was an attempt to fix an existing issue in Gutenberg , but it does it only
 // https://a8c.slack.com/archives/D0740HYKLUX/p1719841410651649
 //
