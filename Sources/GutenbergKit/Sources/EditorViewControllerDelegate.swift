@@ -67,12 +67,6 @@ public struct OpenMediaLibraryAction: Codable {
     }
 }
 
-extension OpenMediaLibraryAction.MediaType {
-    init(fromJSString rawValue: String) {
-        self = OpenMediaLibraryAction.MediaType(rawValue: rawValue) ?? .other
-    }
-}
-
 public struct MediaInfo: Codable {
     public let id: Int32?
     public let url: String?
