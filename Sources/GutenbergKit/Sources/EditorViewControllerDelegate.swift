@@ -29,7 +29,7 @@ public struct EditorState {
     public var isEmpty = true
 }
 
-public struct OpenMediaLibraryAction: Decodable {
+public struct OpenMediaLibraryAction: Codable {
     public let allowedTypes: [MediaType]
     public let multiple: Bool
     public let value: Value?
@@ -38,27 +38,22 @@ public struct OpenMediaLibraryAction: Decodable {
         case allowedTypes, multiple, value
     }
 
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-
-        multiple = try container.decode(Bool.self, forKey: .multiple)
-
-        // Decode allowedTypes as [String] and convert to [MediaType]
-        // If allowedTypes is not present in the JSON, use an empty array
-        let stringTypes = try container.decodeIfPresent([String].self, forKey: .allowedTypes) ?? []
-        allowedTypes = stringTypes.map { MediaType(fromJSString: $0) }
+        self.allowedTypes = try container.decodeIfPresent([OpenMediaLibraryAction.MediaType].self, forKey: .allowedTypes)
+        self.multiple = try container.decode(Bool.self, forKey: .multiple)
 
         // Decode value as either Int? or [Int]?
         if let singleValue = try? container.decodeIfPresent(Int.self, forKey: .value) {
-            value = .single(singleValue)
+            self.value = .single(singleValue)
         } else if let multipleValues = try? container.decodeIfPresent([Int].self, forKey: .value) {
-            value = .multiple(multipleValues)
+            self.value = .multiple(multipleValues)
         } else {
-            value = nil
+            self.value = nil
         }
     }
 
-    public enum MediaType: String, Decodable {
+    public enum MediaType: String, Codable {
         case image
         case video
         case audio
@@ -66,7 +61,7 @@ public struct OpenMediaLibraryAction: Decodable {
         case any
     }
 
-    public enum Value {
+    public enum Value: Codable {
         case single(Int)
         case multiple([Int])
     }
