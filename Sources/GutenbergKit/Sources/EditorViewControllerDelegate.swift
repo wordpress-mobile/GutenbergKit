@@ -100,14 +100,4 @@ public struct MediaInfo: Encodable {
         self.alt = alt
         self.metadata = metadata
     }
-
-    public func encode(to encoder: Encoder) throws {
-       var container = encoder.container(keyedBy: CodingKeys.self)
-       try container.encodeIfPresent(id, forKey: .id)
-       try container.encode(url ?? "", forKey: .url)
-       try container.encode(type ?? "", forKey: .type)
-       try container.encode(title ?? "", forKey: .title)
-       try container.encode(caption ?? "", forKey: .caption)
-       try container.encode(alt ?? "", forKey: .alt)
-   }
 }
