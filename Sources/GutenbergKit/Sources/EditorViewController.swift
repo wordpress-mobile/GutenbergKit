@@ -247,7 +247,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         present(host, animated: true)
     }
 
-    private func openMediaLibrary(_ config: OpenMediaLibrary) {
+    private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
         delegate?.editor(self, didRequestMediaFromSiteMediaLibrary: config)
     }
     
@@ -296,7 +296,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             case .showBlockPicker:
                 showBlockInserter()
             case .openMediaLibrary:
-                let config = try message.decode(OpenMediaLibrary.self)
+                let config = try message.decode(OpenMediaLibraryAction.self)
                 openMediaLibrary(config)
             }
         } catch {

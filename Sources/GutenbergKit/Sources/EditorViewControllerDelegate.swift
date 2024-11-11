@@ -21,7 +21,7 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// is probably not how it should be in the production design.
     func editor(_ viewController: EditorViewController, didUpdateContentWithState state: EditorState)
 
-    func editor(_ viewController: EditorViewController, didRequestMediaFromSiteMediaLibrary config: OpenMediaLibrary)
+    func editor(_ viewController: EditorViewController, didRequestMediaFromSiteMediaLibrary config: OpenMediaLibraryAction)
 }
 
 public struct EditorState {
@@ -29,7 +29,7 @@ public struct EditorState {
     public var isEmpty = true
 }
 
-public struct OpenMediaLibrary: Decodable {
+public struct OpenMediaLibraryAction: Decodable {
     public let allowedTypes: [MediaType]
     public let multiple: Bool
     public let value: Value?
@@ -72,9 +72,9 @@ public struct OpenMediaLibrary: Decodable {
     }
 }
 
-extension OpenMediaLibrary.MediaType {
+extension OpenMediaLibraryAction.MediaType {
     init(fromJSString rawValue: String) {
-        self = OpenMediaLibrary.MediaType(rawValue: rawValue) ?? .other
+        self = OpenMediaLibraryAction.MediaType(rawValue: rawValue) ?? .other
     }
 }
 
