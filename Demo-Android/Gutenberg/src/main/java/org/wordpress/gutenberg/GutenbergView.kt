@@ -257,7 +257,11 @@ class GutenbergView : WebView {
 
     sealed class Value {
         data class Single(val value: Int): Value()
-        data class Multiple(val value: IntArray): Value()
+        data class Multiple(val values: IntArray): Value() {
+            fun toList(): List<Int> {
+                return values.toList()
+            }
+        }
     }
 
     data class OpenMediaLibraryConfig(
