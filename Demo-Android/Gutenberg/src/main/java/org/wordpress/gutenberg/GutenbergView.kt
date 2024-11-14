@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
@@ -20,7 +21,9 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
+import org.json.JSONException
 import org.json.JSONObject
+import java.util.Locale
 
 const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
 
@@ -50,10 +53,15 @@ class GutenbergView : WebView {
 
     private var onFileChooserRequested: ((Intent, Int) -> Unit)? = null
     private var contentChangeListener: ContentChangeListener? = null
+    private var openMediaLibraryListener: OpenMediaLibraryListener? = null
     private var editorDidBecomeAvailableListener: EditorAvailableListener? = null
 
     fun setContentChangeListener(listener: ContentChangeListener) {
         contentChangeListener = listener
+    }
+
+    fun setOpenMediaLibraryListener(listener: OpenMediaLibraryListener) {
+        openMediaLibraryListener = listener
     }
 
     fun setOnFileChooserRequestedListener(listener: (Intent, Int) -> Unit) {
@@ -247,6 +255,25 @@ class GutenbergView : WebView {
         fun onContentChanged(title: String, content: String)
     }
 
+    sealed class Value {
+        data class Single(val value: Int): Value()
+        data class Multiple(val values: IntArray): Value() {
+            fun toList(): List<Int> {
+                return values.toList()
+            }
+        }
+    }
+
+    data class OpenMediaLibraryConfig(
+        val allowedTypes: Array<MediaType>,
+        val multiple: Boolean,
+        val value: Value?
+    )
+
+    interface OpenMediaLibraryListener {
+        fun onOpenMediaLibrary(config: OpenMediaLibraryConfig)
+    }
+
     fun interface EditorAvailableListener {
         fun onEditorAvailable(view: GutenbergView?)
     }
@@ -304,6 +331,54 @@ class GutenbergView : WebView {
     }
 
     @JavascriptInterface
+    fun openMediaLibrary(jsonString: String) {
+        try {
+            val jsonObj = JSONObject(jsonString)
+
+            // Parse allowedTypes
+            val allowedTypes = if (jsonObj.has("allowedTypes")) {
+                val allowedTypesArray = jsonObj.getJSONArray("allowedTypes")
+                Array(allowedTypesArray.length()) { index ->
+                    MediaType.getEnum(allowedTypesArray.getString(index))
+                }
+            } else {
+                emptyArray()
+            }
+
+            // Parse multiple
+            val multiple = jsonObj.getBoolean("multiple")
+
+            // Parse value
+            val value = if (jsonObj.has("value")) {
+                if (multiple) {
+                    val valueArray = jsonObj.getJSONArray("value")
+                    Value.Multiple(IntArray(valueArray.length()) { index ->
+                        valueArray.getInt(index)
+                    })
+                } else {
+                    Value.Single(jsonObj.getInt("value"))
+                }
+            } else {
+                null
+            }
+
+            val config = OpenMediaLibraryConfig(allowedTypes = allowedTypes, multiple = multiple, value = value)
+
+            openMediaLibraryListener?.onOpenMediaLibrary(config)
+        } catch (e: JSONException) {
+            e.printStackTrace()
+        }
+    }
+
+    fun setMediaUploadAttachment(media: String) {
+        if (!isEditorLoaded) {
+            Log.e("GutenbergView", "You can't change the editor content until it has loaded")
+            return
+        }
+        this.evaluateJavascript("editor.setMediaUploadAttachment($media);", null)
+    }
+
+    @JavascriptInterface
     fun showBlockPicker() {
         Log.i("GutenbergView", "BlockPickerShouldShow")
     }
@@ -349,5 +424,76 @@ object GutenbergWebViewPool {
         webView.removeAllViews()
         webView.destroy()
         preloadedWebView = null
+    }
+}
+
+data class Media(
+    val id: Int,
+    val url: String,
+    val type: String,
+    val caption: String = "",
+    val title: String = "",
+    val alt: String = "",
+    val metadata: Bundle = Bundle()
+) {
+    companion object {
+        private fun convertToType(mimeType: String?): String {
+            val isMediaType = { mediaType: MediaType ->
+                mimeType?.startsWith(mediaType.name.lowercase(Locale.ROOT)) == true
+            }
+            val type = when {
+                        isMediaType(MediaType.IMAGE) -> MediaType.IMAGE
+                        isMediaType(MediaType.VIDEO) -> MediaType.VIDEO
+                        else -> MediaType.OTHER
+                    }.name.lowercase(Locale.ROOT)
+            return type
+        }
+
+        @JvmStatic
+        fun createMediaUsingMimeType(
+            id: Int,
+            url: String,
+            mimeType: String?,
+            caption: String?,
+            title: String?,
+            alt: String?,
+        ): Media {
+            val type = convertToType(mimeType)
+            return Media(id, url, type, caption ?: "", title ?: "", alt ?: "")
+        }
+        @JvmStatic
+        fun createMediaUsingMimeType(
+            id: Int,
+            url: String,
+            mimeType: String?,
+            caption: String?,
+            title: String?,
+            alt: String?,
+            metadata: Bundle = Bundle()
+        ): Media {
+            val type = convertToType(mimeType)
+            return Media(id, url, type, caption ?: "", title ?: "", alt ?: "", metadata)
+        }
+    }
+}
+
+enum class MediaType(var label: String) {
+    IMAGE("image"),
+    VIDEO("video"),
+    MEDIA("media"),
+    AUDIO("audio"),
+    ANY("any"),
+    OTHER("other");
+
+    companion object {
+        fun getEnum(value: String): MediaType {
+            for (mediaType in entries) {
+                if (mediaType.label == value) {
+                    return mediaType
+                }
+            }
+
+            return OTHER
+        }
     }
 }
