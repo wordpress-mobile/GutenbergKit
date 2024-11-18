@@ -7,7 +7,7 @@ import { useCallback, useEffect } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import { openMediaLibrary } from '../utils/helpers';
+import { openMediaLibrary } from '../utils/bridge';
 
 export function useMediaUpload() {
 	useEffect(() => {

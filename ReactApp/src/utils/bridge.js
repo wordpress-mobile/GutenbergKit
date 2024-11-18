@@ -49,14 +49,6 @@ export function showBlockPicker() {
 	}
 }
 
-export function blurEditor() {
-	const activeElement = document.activeElement;
-
-	if (activeElement && activeElement.tagName === 'P') {
-		activeElement.blur();
-	}
-}
-
 export function openMediaLibrary(config) {
 	if (window.editorDelegate) {
 		window.editorDelegate.openMediaLibrary(JSON.stringify(config));
@@ -70,24 +62,52 @@ export function openMediaLibrary(config) {
 	}
 }
 
-// FIXME: this was an attempt to fix an existing issue in Gutenberg , but it does it only
-// https://a8c.slack.com/archives/D0740HYKLUX/p1719841410651649
-//
-// export function removeHoverEffects() {
-//     for (let i = 0; i < document.styleSheets.length; i++) {
-//         let styleSheet = document.styleSheets[i];
-//         try {
-//             if (styleSheet.cssRules) {
-//                 for (let j = 0; j < styleSheet.cssRules.length; j++) {
-//                     let rule = styleSheet.cssRules[j];
-//                     if (rule.selectorText && rule.selectorText.includes(':hover')) {
-//                         styleSheet.deleteRule(j);
-//                         j--; // Adjust the index after deletion
-//                     }
-//                 }
-//             }
-//         } catch (e) {
-//             console.warn('Could not access stylesheet:', styleSheet, e);
-//         }
-//     }
-// }
+/**
+ * Retrieves the native-host-provided GBKit object from localStorage or returns
+ * an empty object if not found.
+ *
+ * @returns {Object} The GBKit object.
+ */
+export function getGBKit() {
+	if (window.GBKit) {
+		return window.GBKit;
+	}
+
+	// Android relies upon "pulling" the GBKit object from the native host, as it
+	// does not provide a way to inject JavaScript prior to the WebView loading.
+	if (window.editorDelegate) {
+		try {
+			return JSON.parse(window.editorDelegate.getEditorConfiguration());
+		} catch (error) {
+			console.error('Failed parsing GBKit from editorDelegate:', error);
+			return {};
+		}
+	}
+
+	try {
+		return JSON.parse(localStorage.getItem('GBKit')) || {};
+	} catch (error) {
+		console.error('Failed parsing GBKit from localStorage:', error);
+		return {};
+	}
+}
+
+export function getPost() {
+	const { post } = getGBKit();
+	if (post) {
+		return {
+			id: post.id,
+			title: { raw: decodeURIComponent(post.title) },
+			content: { raw: decodeURIComponent(post.content) },
+			type: post.type || 'post',
+		};
+	}
+
+	// Since we don't use the auto-save functionality, draft posts need to have an ID.
+	// We assign a temporary ID of -1.
+	return {
+		type: 'post',
+		status: 'draft',
+		id: -1,
+	};
+}

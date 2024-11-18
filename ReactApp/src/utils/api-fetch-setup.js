@@ -6,7 +6,7 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import { getGBKit } from './store';
+import { getGBKit } from './bridge';
 
 /**
  * Initializes the API fetch configuration and middleware.

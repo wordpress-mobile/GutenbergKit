@@ -38,11 +38,7 @@ import '@wordpress/format-library/build-style/style.css';
 
 // Internal imports
 import EditorToolbar from './editor-toolbar.jsx';
-import {
-	blurEditor,
-	editorLoaded,
-	onEditorContentChanged,
-} from '../utils/helpers.js';
+import { editorLoaded, onEditorContentChanged } from '../utils/bridge';
 import { postTypeEntities } from '../utils/post-type-entities';
 import { useEditorStyles } from '../hooks/use-editor-styles';
 import { unlock } from './lock-unlock';
@@ -204,3 +200,11 @@ function Editor({ post }) {
 }
 
 export default Editor;
+
+function blurEditor() {
+	const activeElement = document.activeElement;
+
+	if (activeElement && activeElement.tagName === 'P') {
+		activeElement.blur();
+	}
+}
