@@ -8,7 +8,7 @@ import { store as editPostStore } from '@wordpress/edit-post';
 import { useMemo } from '@wordpress/element';
 
 // Internal imports
-import { unlock } from '../components/lock-unlock';
+import { unlock } from '../lock-unlock';
 
 const { getLayoutStyles } = unlock(blockEditorPrivateApis);
 

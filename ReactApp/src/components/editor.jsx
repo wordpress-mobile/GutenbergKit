@@ -41,7 +41,7 @@ import EditorToolbar from './editor-toolbar';
 import { editorLoaded, onEditorContentChanged } from '../utils/bridge';
 import { postTypeEntities } from '../utils/post-type-entities';
 import { useEditorStyles } from '../hooks/use-editor-styles';
-import { unlock } from './lock-unlock';
+import { unlock } from '../lock-unlock';
 import { useMediaUpload } from '../hooks/use-media-upload';
 // import CodeEditor from './code-editor';
 
