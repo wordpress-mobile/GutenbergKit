@@ -23,9 +23,9 @@ build: npm-dependencies
 
 	# Copy build products into place
 	echo "--- :open_file_folder: Copying Build Products into place"
-	rm -rf ./ios/Sources/GutenbergKit/Gutenberg/ ./Demo-Android/Gutenberg/src/main/assets/
+	rm -rf ./ios/Sources/GutenbergKit/Gutenberg/ ./android/Gutenberg/src/main/assets/
 	cp -r ./dist/. ./ios/Sources/GutenbergKit/Gutenberg/
-	cp -r ./dist/. ./Demo-Android/Gutenberg/src/main/assets
+	cp -r ./dist/. ./android/Gutenberg/src/main/assets
 
 dev-server: npm-dependencies
 	npm run dev
@@ -41,7 +41,7 @@ lint-js: npm-dependencies
 
 local-android-library: build
 	echo "--- :android: Building Library"
-	./Demo-Android/gradlew -p Demo-Android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3
+	./android/gradlew -p ./android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3
 
 build_swift_package: build
 	$(call XCODEBUILD_CMD, build)
