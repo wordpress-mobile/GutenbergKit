@@ -1,3 +1,4 @@
+import { resolve } from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { defaultRequestToExternal } from '@wordpress/dependency-extraction-webpack-plugin/lib/util';
@@ -6,13 +7,15 @@ import MagicString from 'magic-string';
 export default defineConfig({
 	base: '',
 	build: {
+		outDir: '../dist',
 		rollupOptions: {
-			input: 'remote.html',
+			input: resolve(__dirname, 'src/remote.html'),
 			external: externalize,
 		},
 		target: 'esnext',
 	},
 	plugins: [react(), wordPressExternals()],
+	root: 'src',
 });
 
 function externalize(id) {

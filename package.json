@@ -7,7 +7,7 @@
 	"scripts": {
 		"dev": "vite --host",
 		"dev:remote": "vite --host --config vite.config.remote.js",
-		"build": "vite build && vite build --emptyOutDir=false --config vite.config.remote.js",
+		"build": "vite --emptyOutDir build && vite build --emptyOutDir=false --config vite.config.remote.js",
 		"lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
 		"format": "prettier --write .",
 		"preview": "vite preview --host"
