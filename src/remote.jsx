@@ -47,7 +47,7 @@ async function initalizeRemoteEditor() {
 		const post = getPost();
 		const settings = { post };
 
-		const { default: App } = await import('./app');
+		const { default: App } = await import('./components/app');
 		const { createRoot, createElement, StrictMode } = window.wp.element;
 		createRoot(document.getElementById('root')).render(
 			createElement(StrictMode, null, createElement(App, settings))

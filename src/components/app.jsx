@@ -1,8 +1,8 @@
 /**
  * Internal dependencies
  */
-import Editor from './components/editor';
-import EditorLoadNotice from './components/editor-load-notice';
+import Editor from './editor';
+import EditorLoadNotice from './editor-load-notice';
 
 function App(props) {
 	return (
