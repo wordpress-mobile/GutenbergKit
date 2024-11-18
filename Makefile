@@ -3,11 +3,13 @@ SIMULATOR_DESTINATION := OS=17.5,name=iPhone 15 Plus
 
 define XCODEBUILD_CMD
 	@set -o pipefail && \
+		pushd ios > /dev/null && \
 		xcodebuild $(1) \
 		-scheme GutenbergKit \
 		-sdk iphonesimulator \
 		-destination '${SIMULATOR_DESTINATION}' \
-		| xcbeautify
+		| xcbeautify && \
+		popd > /dev/null
 endef
 
 npm-dependencies:
@@ -21,8 +23,8 @@ build: npm-dependencies
 
 	# Copy build products into place
 	echo "--- :open_file_folder: Copying Build Products into place"
-	rm -rf ./Sources/GutenbergKit/Gutenberg/ ./Demo-Android/Gutenberg/src/main/assets/
-	cp -r ./dist/. ./Sources/GutenbergKit/Gutenberg/
+	rm -rf ./ios/Sources/GutenbergKit/Gutenberg/ ./Demo-Android/Gutenberg/src/main/assets/
+	cp -r ./dist/. ./ios/Sources/GutenbergKit/Gutenberg/
 	cp -r ./dist/. ./Demo-Android/Gutenberg/src/main/assets
 
 dev-server: npm-dependencies
