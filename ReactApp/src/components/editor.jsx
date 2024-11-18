@@ -37,7 +37,7 @@ import '@wordpress/format-library';
 import '@wordpress/format-library/build-style/style.css';
 
 // Internal imports
-import EditorToolbar from './editor-toolbar.jsx';
+import EditorToolbar from './editor-toolbar';
 import { editorLoaded, onEditorContentChanged } from '../utils/bridge';
 import { postTypeEntities } from '../utils/post-type-entities';
 import { useEditorStyles } from '../hooks/use-editor-styles';
