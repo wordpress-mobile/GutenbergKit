@@ -44,9 +44,9 @@ import {
 	onEditorContentChanged,
 } from '../misc/helpers.js';
 import { postTypeEntities } from '../misc/post-type-entities';
-import { useEditorStyles } from './hooks/use-editor-styles';
+import { useEditorStyles } from '../hooks/use-editor-styles';
 import { unlock } from './lock-unlock';
-import { useMediaUpload } from './hooks/use-media-upload';
+import { useMediaUpload } from '../hooks/use-media-upload';
 // import CodeEditor from './code-editor';
 
 // Current editor (assumes can be only one instance).

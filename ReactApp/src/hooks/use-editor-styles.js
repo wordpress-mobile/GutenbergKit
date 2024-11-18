@@ -8,7 +8,7 @@ import { store as editPostStore } from '@wordpress/edit-post';
 import { useMemo } from '@wordpress/element';
 
 // Internal imports
-import { unlock } from '../lock-unlock';
+import { unlock } from '../components/lock-unlock';
 
 const { getLayoutStyles } = unlock(blockEditorPrivateApis);
 
@@ -40,7 +40,7 @@ export function useEditorStyles() {
 		}
 
 		const baseStyles = hasThemeStyleSupport
-			? editorSettings.styles ?? []
+			? (editorSettings.styles ?? [])
 			: defaultEditorStyles;
 
 		return baseStyles;
