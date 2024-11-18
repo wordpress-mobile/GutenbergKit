@@ -6,8 +6,8 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import { getGBKit, getPost } from './misc/store.js';
-import { initializeApiFetch } from './misc/api-fetch-setup.js';
+import { getGBKit, getPost } from './utils/store.js';
+import { initializeApiFetch } from './utils/api-fetch-setup.js';
 import './index.css';
 
 window.GBKit = getGBKit();

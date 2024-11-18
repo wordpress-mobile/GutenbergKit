@@ -42,8 +42,8 @@ import {
 	blurEditor,
 	editorLoaded,
 	onEditorContentChanged,
-} from '../misc/helpers.js';
-import { postTypeEntities } from '../misc/post-type-entities';
+} from '../utils/helpers.js';
+import { postTypeEntities } from '../utils/post-type-entities';
 import { useEditorStyles } from '../hooks/use-editor-styles';
 import { unlock } from './lock-unlock';
 import { useMediaUpload } from '../hooks/use-media-upload';
