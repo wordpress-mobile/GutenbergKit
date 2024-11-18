@@ -43,8 +43,8 @@ local-android-library: build
 	echo "--- :android: Building Library"
 	./android/gradlew -p ./android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3
 
-build_swift_package: build
+build-swift-package: build
 	$(call XCODEBUILD_CMD, build)
 
-test_swift_package: build
+test-swift-package: build
 	$(call XCODEBUILD_CMD, test)
