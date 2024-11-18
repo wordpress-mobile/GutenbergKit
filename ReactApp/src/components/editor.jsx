@@ -37,17 +37,17 @@ import '@wordpress/format-library';
 import '@wordpress/format-library/build-style/style.css';
 
 // Internal imports
-import EditorToolbar from './EditorToolbar';
+import EditorToolbar from './editor-toolbar.jsx';
 import {
 	blurEditor,
 	editorLoaded,
 	onEditorContentChanged,
-} from '../misc/Helpers';
+} from '../misc/helpers.js';
 import { postTypeEntities } from '../misc/post-type-entities';
 import { useEditorStyles } from './hooks/use-editor-styles';
 import { unlock } from './lock-unlock';
-import { useMediaUpload } from './hooks/use-media-upload.js';
-// import CodeEditor from './CodeEditor';
+import { useMediaUpload } from './hooks/use-media-upload';
+// import CodeEditor from './code-editor';
 
 // Current editor (assumes can be only one instance).
 let editor = {};

@@ -12,7 +12,7 @@ import { store as preferencesStore } from '@wordpress/preferences';
  */
 import { initializeApiFetch } from './misc/api-fetch-setup';
 import { getGBKit, getPost } from './misc/store.js';
-import App from './App.jsx';
+import App from './app';
 import './index.css';
 
 window.GBKit = getGBKit();
