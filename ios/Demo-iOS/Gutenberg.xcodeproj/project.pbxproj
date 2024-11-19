@@ -22,7 +22,7 @@
 		0CE8E7862C339B0600B9DC67 /* EditorView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
 		0CE8E7872C339B0600B9DC67 /* GutenbergApp.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GutenbergApp.swift; sourceTree = "<group>"; };
 		0CE8E7892C339B0600B9DC67 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
-		0CE8E7922C339B1B00B9DC67 /* GutenbergKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = GutenbergKit; path = ..; sourceTree = "<group>"; };
+		0CE8E7922C339B1B00B9DC67 /* GutenbergKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = GutenbergKit; path = ../..; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
