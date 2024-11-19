@@ -7,7 +7,9 @@ import { privateApis as blockEditorPrivateApis } from '@wordpress/block-editor';
 import { store as editPostStore } from '@wordpress/edit-post';
 import { useMemo } from '@wordpress/element';
 
-// Internal imports
+/**
+ * Internal dependencies
+ */
 import { unlock } from '../lock-unlock';
 
 const { getLayoutStyles } = unlock(blockEditorPrivateApis);

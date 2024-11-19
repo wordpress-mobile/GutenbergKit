@@ -13,7 +13,6 @@
 		"preview": "vite preview --host"
 	},
 	"dependencies": {
-		"@monaco-editor/react": "^4.6",
 		"@wordpress/api-fetch": "^7.10",
 		"@wordpress/block-editor": "^14.5",
 		"@wordpress/block-library": "^9.10",
