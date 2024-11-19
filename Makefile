@@ -3,13 +3,11 @@ SIMULATOR_DESTINATION := OS=17.5,name=iPhone 15 Plus
 
 define XCODEBUILD_CMD
 	@set -o pipefail && \
-		pushd ios > /dev/null && \
 		xcodebuild $(1) \
 		-scheme GutenbergKit \
 		-sdk iphonesimulator \
 		-destination '${SIMULATOR_DESTINATION}' \
-		| xcbeautify && \
-		popd > /dev/null
+		| xcbeautify
 endef
 
 npm-dependencies:
