@@ -35,8 +35,8 @@ async function initalizeRemoteEditor() {
 				.then((editorSettings) => {
 					dispatch(editorStore).updateEditorSettings(editorSettings);
 				})
-				.catch((error) => {
-					console.error('Error fetching editor settings:', error);
+				.catch(() => {
+					// TODO: Communicate helpful guidance to the user.
 				});
 		}
 
@@ -62,6 +62,8 @@ async function initalizeRemoteEditor() {
 
 /**
  * Load the asset files for a block
+ *
+ * @param {string} html The HTML content to parse for assets.
  */
 async function loadAssets(html) {
 	const doc = new window.DOMParser().parseFromString(html, 'text/html');
@@ -120,8 +122,8 @@ function loadAsset(el) {
 		}
 
 		newNode.onload = () => resolve(true);
-		newNode.onerror = (error) => {
-			console.error('Error loading asset', error);
+		newNode.onerror = () => {
+			// TODO: Communicate the error to the user.
 			resolve(false);
 		};
 

@@ -1,8 +1,7 @@
-/* eslint-disable react/prop-types */
 /**
  * WordPress dependencies
  */
-import { useEffect, useRef, useState, useMemo } from '@wordpress/element';
+import { useEffect, useRef, useMemo } from '@wordpress/element';
 import {
 	BlockList,
 	privateApis as blockEditorPrivateApis,
@@ -46,12 +45,11 @@ import { useMediaUpload } from '../hooks/use-media-upload';
 // import CodeEditor from './code-editor';
 
 // Current editor (assumes can be only one instance).
-let editor = {};
+const editor = {};
 
 const { ExperimentalBlockCanvas: BlockCanvas } = unlock(blockEditorPrivateApis);
 
 function Editor({ post }) {
-	const [_isCodeEditorEnabled, setCodeEditorEnabled] = useState(false);
 	const editorPostTitleRef = useRef();
 	const postTitleRef = useRef(post.title);
 	const postContentRef = useRef(post.content);
@@ -87,27 +85,34 @@ function Editor({ post }) {
 		hasLoadedPost,
 		hasUploadPermissions,
 		reusableBlocks,
-	} = useSelect((select) => {
-		const { getEntityRecord, getEntityRecords, hasFinishedResolution } =
-			select(coreStore);
-		const user = getEntityRecord('root', 'user', post.author);
-		const currentPost = getEntityRecord('postType', post.type, post.id);
-		const hasLoadedPost = post?.id
-			? hasFinishedResolution('getEntityRecord', [
-					'postType',
-					post.type,
-					post.id,
-				])
-			: true;
+	} = useSelect(
+		(select) => {
+			const { getEntityRecord, getEntityRecords, hasFinishedResolution } =
+				select(coreStore);
+			const user = getEntityRecord('root', 'user', post.author);
+			const _currentPost = getEntityRecord(
+				'postType',
+				post.type,
+				post.id
+			);
+			const _hasLoadedPost = post?.id
+				? hasFinishedResolution('getEntityRecord', [
+						'postType',
+						post.type,
+						post.id,
+					])
+				: true;
 
-		return {
-			blockPatterns: select(coreStore).getBlockPatterns(),
-			currentPost,
-			hasLoadedPost,
-			hasUploadPermissions: user?.capabilities?.upload_files ?? true,
-			reusableBlocks: getEntityRecords('postType', 'wp_block'),
-		};
-	}, []);
+			return {
+				blockPatterns: select(coreStore).getBlockPatterns(),
+				currentPost: _currentPost,
+				hasLoadedPost: _hasLoadedPost,
+				hasUploadPermissions: user?.capabilities?.upload_files ?? true,
+				reusableBlocks: getEntityRecords('postType', 'wp_block'),
+			};
+		},
+		[post.author, post.id, post.type]
+	);
 
 	useEffect(() => {
 		return subscribe(() => {
@@ -152,8 +157,6 @@ function Editor({ post }) {
 		};
 	};
 
-	editor.setCodeEditorEnabled = (enabled) => setCodeEditorEnabled(enabled);
-
 	const settings = useMemo(
 		() => ({
 			hasFixedToolbar: true,
@@ -166,10 +169,6 @@ function Editor({ post }) {
 
 	const styles = useEditorStyles();
 	useMediaUpload();
-
-	// if (isCodeEditorEnabled) {
-	//     return <CodeEditor value={serialize(blocks)} />;
-	// }
 
 	return (
 		hasLoadedPost && (
@@ -202,6 +201,8 @@ function Editor({ post }) {
 export default Editor;
 
 function blurEditor() {
+	// TODO: Address the disabled eslint rule.
+	// eslint-disable-next-line @wordpress/no-global-active-element
 	const activeElement = document.activeElement;
 
 	if (activeElement && activeElement.tagName === 'P') {

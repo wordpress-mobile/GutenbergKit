@@ -22,19 +22,18 @@
 		"@wordpress/editor": "^14.10",
 		"@wordpress/element": "^6.10",
 		"@wordpress/format-library": "^5.10",
+		"@wordpress/icons": "^10.12.0",
 		"@wordpress/preferences": "^4.10",
-		"@wordpress/private-apis": "^1.10",
-		"react": "^18.3"
+		"@wordpress/private-apis": "^1.10"
 	},
 	"devDependencies": {
 		"@types/react": "^18.3",
 		"@types/react-dom": "^18.3",
 		"@vitejs/plugin-react": "^4.3",
 		"@wordpress/dependency-extraction-webpack-plugin": "^6.6",
+		"@wordpress/eslint-plugin": "^21.5.0",
 		"@wordpress/prettier-config": "^4.3",
-		"eslint": "^9.13",
-		"eslint-plugin-react": "^7.37",
-		"eslint-plugin-react-hooks": "^5.0",
+		"eslint": "^8.57",
 		"eslint-plugin-react-refresh": "^0.4",
 		"magic-string": "^0.30",
 		"prettier": "^3.3",

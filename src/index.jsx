@@ -27,8 +27,8 @@ function initializeEditor() {
 			.then((editorSettings) => {
 				dispatch(editorStore).updateEditorSettings(editorSettings);
 			})
-			.catch((error) => {
-				console.error('Error fetching editor settings:', error);
+			.catch(() => {
+				// TODO: Communicate helpful guidance to the user.
 			});
 	}
 

@@ -32,7 +32,7 @@ function externalize(id) {
 /**
  * Transform code by replacing WordPress imports with global definitions.
  *
- * @returns {object} The transformed code and map.
+ * @return {Object} The transformed code and map.
  */
 function wordPressExternals() {
 	return {
