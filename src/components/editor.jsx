@@ -2,7 +2,7 @@
 /**
  * WordPress dependencies
  */
-import { useEffect, useRef, useState, useMemo } from '@wordpress/element';
+import { useEffect, useRef, useMemo } from '@wordpress/element';
 import {
 	BlockList,
 	privateApis as blockEditorPrivateApis,
@@ -51,7 +51,6 @@ let editor = {};
 const { ExperimentalBlockCanvas: BlockCanvas } = unlock(blockEditorPrivateApis);
 
 function Editor({ post }) {
-	const [_isCodeEditorEnabled, setCodeEditorEnabled] = useState(false);
 	const editorPostTitleRef = useRef();
 	const postTitleRef = useRef(post.title);
 	const postContentRef = useRef(post.content);
@@ -152,8 +151,6 @@ function Editor({ post }) {
 		};
 	};
 
-	editor.setCodeEditorEnabled = (enabled) => setCodeEditorEnabled(enabled);
-
 	const settings = useMemo(
 		() => ({
 			hasFixedToolbar: true,
@@ -166,10 +163,6 @@ function Editor({ post }) {
 
 	const styles = useEditorStyles();
 	useMediaUpload();
-
-	// if (isCodeEditorEnabled) {
-	//     return <CodeEditor value={serialize(blocks)} />;
-	// }
 
 	return (
 		hasLoadedPost && (
