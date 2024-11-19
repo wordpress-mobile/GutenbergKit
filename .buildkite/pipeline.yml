@@ -11,6 +11,12 @@ steps:
           - $CI_TOOLKIT_PLUGIN
           - $NVM_PLUGIN
 
+    - label: ':eslint: Lint React App'
+      command: make lint-js
+      plugins: &plugins
+          - $CI_TOOLKIT_PLUGIN
+          - $NVM_PLUGIN
+
     - label: ':android: Publish Android Library'
       command: |
           make build
