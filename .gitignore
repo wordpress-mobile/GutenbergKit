@@ -159,8 +159,17 @@ dist
 # TernJS port file
 .tern-port
 
-# Stores VSCode versions used for testing VSCode extensions
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
 .vscode-test
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
 # yarn v2
 .yarn/cache
@@ -171,16 +180,16 @@ dist
 
 # Android App
 local.properties
-/Demo-Android/build
-/Demo-Android/.gradle
-/Demo-Android/.idea
+/android/build
+/android/.gradle
+/android/.idea
 
 ## Production Build Products
-/Demo-Android/Gutenberg/src/main/assets/assets
-/Demo-Android/Gutenberg/src/main/assets/index.html
-/Demo-Android/Gutenberg/src/main/assets/remote.html
+/android/Gutenberg/src/main/assets/assets
+/android/Gutenberg/src/main/assets/index.html
+/android/Gutenberg/src/main/assets/remote.html
 
 # Disabled removing these files until this is published like Android in CI.
-# /Sources/GutenbergKit/Gutenberg/assets
-# /Sources/GutenbergKit/Gutenberg/index.html
-# /Sources/GutenbergKit/Gutenberg/remote.html
+# /ios/Sources/GutenbergKit/Gutenberg/assets
+# /ios/Sources/GutenbergKit/Gutenberg/index.html
+# /ios/Sources/GutenbergKit/Gutenberg/remote.html

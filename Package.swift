@@ -12,10 +12,16 @@ let package = Package(
     targets: [
         .target(
             name: "GutenbergKit",
+            dependencies: [],
+            path: "ios/Sources/GutenbergKit",
+            exclude: [],
             resources: [.copy("Gutenberg")]
         ),
         .testTarget(
             name: "GutenbergKitTests",
-            dependencies: ["GutenbergKit"]),
+            dependencies: ["GutenbergKit"],
+            path: "ios/Tests",
+            exclude: []
+        )
     ]
 )

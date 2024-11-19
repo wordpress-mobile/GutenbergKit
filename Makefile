@@ -12,37 +12,37 @@ endef
 
 npm-dependencies:
 	echo "--- :npm: Installing NPM Dependencies"
-	npm --prefix ReactApp/ ci
+	npm ci
 
 build: npm-dependencies
 	echo "--- :node: Building Gutenberg"
 
-	npm --prefix ReactApp/ run build
+	npm run build
 
 	# Copy build products into place
 	echo "--- :open_file_folder: Copying Build Products into place"
-	rm -rf ./Sources/GutenbergKit/Gutenberg/ ./Demo-Android/Gutenberg/src/main/assets/
-	cp -r ./ReactApp/dist/. ./Sources/GutenbergKit/Gutenberg/
-	cp -r ./ReactApp/dist/. ./Demo-Android/Gutenberg/src/main/assets
+	rm -rf ./ios/Sources/GutenbergKit/Gutenberg/ ./android/Gutenberg/src/main/assets/
+	cp -r ./dist/. ./ios/Sources/GutenbergKit/Gutenberg/
+	cp -r ./dist/. ./android/Gutenberg/src/main/assets
 
 dev-server: npm-dependencies
-	npm --prefix ReactApp/ run dev
+	npm run dev
 
 dev-server-remote: npm-dependencies
-	npm --prefix ReactApp/ run dev:remote
+	npm run dev:remote
 
 fmt-js: npm-dependencies
-	npm --prefix ReactApp/ run format
+	npm run format
 
 lint-js: npm-dependencies
-	npm --prefix ReactApp/ run lint
+	npm run lint
 
 local-android-library: build
 	echo "--- :android: Building Library"
-	./Demo-Android/gradlew -p Demo-Android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3
+	./android/gradlew -p ./android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3
 
-build_swift_package: build
+build-swift-package: build
 	$(call XCODEBUILD_CMD, build)
 
-test_swift_package: build
+test-swift-package: build
 	$(call XCODEBUILD_CMD, test)
