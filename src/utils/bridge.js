@@ -66,7 +66,7 @@ export function openMediaLibrary(config) {
  * Retrieves the native-host-provided GBKit object from localStorage or returns
  * an empty object if not found.
  *
- * @returns {Object} The GBKit object.
+ * @return {Object} The GBKit object.
  */
 export function getGBKit() {
 	if (window.GBKit) {
@@ -79,7 +79,6 @@ export function getGBKit() {
 		try {
 			return JSON.parse(window.editorDelegate.getEditorConfiguration());
 		} catch (error) {
-			console.error('Failed parsing GBKit from editorDelegate:', error);
 			return {};
 		}
 	}
@@ -87,7 +86,6 @@ export function getGBKit() {
 	try {
 		return JSON.parse(localStorage.getItem('GBKit')) || {};
 	} catch (error) {
-		console.error('Failed parsing GBKit from localStorage:', error);
 		return {};
 	}
 }

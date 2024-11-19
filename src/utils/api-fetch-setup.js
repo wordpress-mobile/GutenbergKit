@@ -148,6 +148,9 @@ function filterEndpointsMiddleware(options, next) {
  *
  * This middleware intercepts requests to the media endpoint and conditionally
  * removes the 'post' field if its value is '-1', which is used for draft posts.
+ *
+ * @param {Object}   options The fetch options.
+ * @param {Function} next    The next middleware in the chain.
  */
 function mediaUploadMiddleware(options, next) {
 	if (
