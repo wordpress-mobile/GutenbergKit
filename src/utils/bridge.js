@@ -1,3 +1,8 @@
+/**
+ * Notifies the native host that the editor has loaded.
+ *
+ * @return {void}
+ */
 export function editorLoaded() {
 	if (window.editorDelegate) {
 		window.editorDelegate.onEditorLoaded();
@@ -11,6 +16,11 @@ export function editorLoaded() {
 	}
 }
 
+/**
+ * Notifies the native host that the editor content has changed.
+ *
+ * @return {void}
+ */
 export function onEditorContentChanged() {
 	if (window.editorDelegate) {
 		window.editorDelegate.onEditorContentChanged();
@@ -23,6 +33,13 @@ export function onEditorContentChanged() {
 	}
 }
 
+/**
+ * Notifies the native host that blocks have changed.
+ *
+ * @param {boolean} [isEmpty=false] Whether the editor is empty.
+ *
+ * @return {void}
+ */
 export function onBlocksChanged(isEmpty = false) {
 	if (window.editorDelegate) {
 		window.editorDelegate.onBlocksChanged(isEmpty);
@@ -36,6 +53,11 @@ export function onBlocksChanged(isEmpty = false) {
 	}
 }
 
+/**
+ * Requests the native host to show the block picker.
+ *
+ * @return {void}
+ */
 export function showBlockPicker() {
 	if (window.editorDelegate) {
 		window.editorDelegate.showBlockPicker();
@@ -49,6 +71,13 @@ export function showBlockPicker() {
 	}
 }
 
+/**
+ * Requests the native host to open the Media Library
+ *
+ * @param {import('../hooks/use-media-upload').MediaUploadConfig} config Media Library configuration.
+ *
+ * @return {void}
+ */
 export function openMediaLibrary(config) {
 	if (window.editorDelegate) {
 		window.editorDelegate.openMediaLibrary(JSON.stringify(config));
@@ -90,6 +119,21 @@ export function getGBKit() {
 	}
 }
 
+/**
+ * @typedef {Object} Post
+ * @property {string} [title]   The title of the post.
+ * @property {string} [content] The content of the post.
+ * @property {string} type      The type of the post.
+ * @property {number} id        The ID of the post.
+ * @property {number} [author]  The author ID of the post.
+ * @property {string} [status]  The status of the post.
+ */
+
+/**
+ * Retrieves the current post data from the GBKit global.
+ *
+ * @return {Post} The post object containing the following properties:
+ */
 export function getPost() {
 	const { post } = getGBKit();
 	if (post) {
