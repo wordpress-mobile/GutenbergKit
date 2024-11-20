@@ -13,6 +13,11 @@ import { Button, Popover, ToolbarButton } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { close, cog } from '@wordpress/icons';
 
+/**
+ * Renders the editor toolbar containing block-related actions.
+ *
+ * @return {JSX.Element} The rendered editor toolbar component.
+ */
 const EditorToolbar = () => {
 	const [isBlockInspectorShown, setBlockInspectorShown] = useState(false);
 	const { isSelected } = useSelect((select) => {

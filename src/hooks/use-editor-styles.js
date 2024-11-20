@@ -14,7 +14,13 @@ import { unlock } from '../lock-unlock';
 
 const { getLayoutStyles } = unlock(blockEditorPrivateApis);
 
-// This should be exported from Core so no reimplementation is needed.
+/**
+ * Custom hook to retrieve and memoize editor styles.
+ *
+ * @todo This should be exported from Core so no reimplementation is needed.
+ *
+ * @return {any[]} An array of editor styles.
+ */
 export function useEditorStyles() {
 	const { hasThemeStyleSupport, editorSettings } = useSelect((select) => {
 		return {

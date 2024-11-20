@@ -17,7 +17,11 @@ import './index.css';
 
 window.GBKit = getGBKit();
 initializeApiFetch();
+initializeEditor();
 
+/**
+ * Configure editor settings and styles, and render the editor.
+ */
 function initializeEditor() {
 	const { themeStyles, siteApiRoot } = getGBKit();
 
@@ -47,5 +51,3 @@ function initializeEditor() {
 		</StrictMode>
 	);
 }
-
-initializeEditor();

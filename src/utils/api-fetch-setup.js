@@ -9,10 +9,13 @@ import apiFetch from '@wordpress/api-fetch';
 import { getGBKit } from './bridge';
 
 /**
+ * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
+ */
+
+/**
  * Initializes the API fetch configuration and middleware.
  *
- * This function sets up the root URL middleware, adds headers to requests,
- * and preloads some endpoints with mock data for specific components.
+ * @return {void}
  */
 export function initializeApiFetch() {
 	const { siteApiRoot, authHeader } = getGBKit();
@@ -86,19 +89,30 @@ export function initializeApiFetch() {
 	);
 }
 
+/**
+ * Middleware setting the CORS mode and remove a specific header causing CORS errors.
+ *
+ * @type {APIFetchMiddleware}
+ *
+ * @todo Address the CORS header hack.
+ */
 function corsMiddleware(options, next) {
 	options.mode = 'cors';
 
-	// TODO: Ensure this header is not set via CORS mode.
-	// This custom header causes CORS errors. Although settings the mode to 'cors'
-	// should prevent this header, incorrect middleware order results in setting
-	// the header.
+	// HACK: This custom header causes CORS errors. Although settings the mode to
+	// 'cors' should prevent this header, incorrect middleware order results in
+	// setting the header.
 	// https://github.com/Automattic/jetpack/blob/7801b7f21e01d8a4a102c44dac69c6ebdd1e549d/projects/plugins/jetpack/extensions/editor.js#L22-L52
 	delete options.headers['x-wp-api-fetch-from-editor'];
 
 	return next(options);
 }
 
+/**
+ * Middleware modifying the API path by inserting the site API namespace.
+ *
+ * @type {APIFetchMiddleware}
+ */
 function apiPathModifierMiddleware(options, next) {
 	const { siteApiNamespace } = getGBKit();
 
@@ -128,6 +142,11 @@ function createHeadersMiddleware(authHeader) {
 	};
 }
 
+/**
+ * Middleware to filter out requests to specific endpoints.
+ *
+ * @type {APIFetchMiddleware}
+ */
 function filterEndpointsMiddleware(options, next) {
 	const disabledEndpoints = [
 		/^\/wp\/v2\/posts\/-?\d+/, // Matches /wp/v2/posts/{ID}
@@ -149,8 +168,7 @@ function filterEndpointsMiddleware(options, next) {
  * This middleware intercepts requests to the media endpoint and conditionally
  * removes the 'post' field if its value is '-1', which is used for draft posts.
  *
- * @param {Object}   options The fetch options.
- * @param {Function} next    The next middleware in the chain.
+ * @type {APIFetchMiddleware}
  */
 function mediaUploadMiddleware(options, next) {
 	if (

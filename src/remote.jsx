@@ -16,6 +16,9 @@ window.wp.apiFetch = apiFetch;
 initializeApiFetch();
 initalizeRemoteEditor();
 
+/**
+ * Configure editor settings and styles, and render the editor.
+ */
 async function initalizeRemoteEditor() {
 	try {
 		const { themeStyles, siteURL, siteApiRoot } = getGBKit();

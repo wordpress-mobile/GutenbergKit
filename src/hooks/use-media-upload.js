@@ -9,6 +9,19 @@ import { useCallback, useEffect } from '@wordpress/element';
  */
 import { openMediaLibrary } from '../utils/bridge';
 
+/**
+ * @typedef {Object} MediaUploadConfig
+ * @property {Function}        onSelect         Callback function to handle the selected media.
+ * @property {string[]}        [allowedTypes]   Comma-separated list of media types to allow.
+ * @property {boolean}         [multiple=false] Flag to indicate if multiple media items can be selected.
+ * @property {number|number[]} [value]          The context's currently selected media.
+ */
+
+/**
+ * Adds a filter for the MediaUpload component in the Gutenberg editor.
+ *
+ * @return {void}
+ */
 export function useMediaUpload() {
 	useEffect(() => {
 		addFilter('editor.MediaUpload', 'GutenbergKit', () => MediaUpload);
@@ -19,12 +32,26 @@ export function useMediaUpload() {
 	}, []);
 }
 
+/**
+ * Component exposing the native media library.
+ *
+ * @param {MediaUploadConfig} props Component props.
+ *
+ * @return {Element} The rendered component.
+ */
 function MediaUpload({ render, ...config }) {
 	const { open } = useNativeMediaLibrary(config);
 
 	return render({ open });
 }
 
+/**
+ * Establishes global bridge function to handle native Media Library interactions.
+ *
+ * @param {MediaUploadConfig} config Configuration object for the Media Library.
+ *
+ * @return {{open: ()=>void}} An object containing a function to open the Media Library.
+ */
 function useNativeMediaLibrary({ onSelect, ...config }) {
 	useEffect(() => {
 		window.editor.setMediaUploadAttachment = (attachment) => {

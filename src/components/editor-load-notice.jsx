@@ -5,6 +5,11 @@ import { Notice } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 
+/**
+ * Displays a notice with actions to retry or dismiss.
+ *
+ * @return {?JSX.Element} The rendered component or null if no notice is present.
+ */
 export default function EditorLoadNotice() {
 	const { notice, clearNotice } = useEditorLoadNotice();
 
@@ -34,6 +39,11 @@ export default function EditorLoadNotice() {
 	);
 }
 
+/**
+ * Conditionally and temporarily sets a notice message based on the URL.
+ *
+ * @return {{notice:string, clearNotice:()=>void}} The notice message and a function to clear it.
+ */
 function useEditorLoadNotice() {
 	const [notice, setNotice] = useState(null);
 

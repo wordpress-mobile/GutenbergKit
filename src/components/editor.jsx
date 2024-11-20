@@ -45,11 +45,23 @@ import { useEditorStyles } from '../hooks/use-editor-styles';
 import { unlock } from '../lock-unlock';
 import { useMediaUpload } from '../hooks/use-media-upload';
 
+/**
+ * @typedef {import('../utils/bridge').Post} Post
+ */
+
 // Current editor (assumes can be only one instance).
 const editor = {};
 
 const { ExperimentalBlockCanvas: BlockCanvas } = unlock(blockEditorPrivateApis);
 
+/**
+ * Editor component for managing and editing post content.
+ *
+ * @param {Object} props      Component props.
+ * @param {Post}   props.post Post object containing post details.
+ *
+ * @return {JSX.Element} The rendered Editor component.
+ */
 function Editor({ post }) {
 	const editorPostTitleRef = useRef();
 	const postTitleRef = useRef(post.title);
@@ -201,8 +213,17 @@ function Editor({ post }) {
 
 export default Editor;
 
+/**
+ * Blurs the currently active paragraph element in the document.
+ *
+ * This function checks if the currently active element is a paragraph (`<p>`).
+ * If it is, the function removes focus from that element.
+ *
+ * @todo Address the disabled eslint rule `@wordpress/no-global-active-element`.
+ *
+ * @return {void}
+ */
 function blurEditor() {
-	// TODO: Address the disabled eslint rule.
 	// eslint-disable-next-line @wordpress/no-global-active-element
 	const activeElement = document.activeElement;
 
