@@ -1,7 +1,7 @@
 ---
 name: Bug report
-description: Report a bug with the WordPress block editor for mobile apps
-labels: ['bug']
+about: Report a bug with the WordPress block editor for mobile apps
+labels: 'bug'
 ---
 
 <!--
