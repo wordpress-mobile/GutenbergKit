@@ -31,5 +31,7 @@ steps:
       plugins: *plugins
 
     - label: ':ios: Publish iOS Artifacts'
-      command: make publish-ios-artifacts
+      command: |
+          make build
+          .buildkite/scripts/publish-ios-artifacts.sh
       plugins: *plugins
