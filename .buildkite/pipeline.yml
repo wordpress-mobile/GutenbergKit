@@ -29,3 +29,7 @@ steps:
     - label: ':swift: Test Swift Package'
       command: make test-swift-package
       plugins: *plugins
+
+    - label: ':ios: Publish iOS Artifacts'
+      command: make publish-ios-artifacts
+      plugins: *plugins

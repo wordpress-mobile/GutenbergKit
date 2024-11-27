@@ -1,0 +1,48 @@
+# frozen_string_literal: true
+
+before_all do
+  # Ensure we use the latest version of the toolkit
+  check_for_toolkit_updates unless is_ci || ENV['FASTLANE_SKIP_TOOLKIT_UPDATE_CHECK']
+end
+
+lane :upload_ios_artifacts_to_s3 do
+  artifacts_path = File.join(Dir.pwd, 'Sources/GutenbergKit/Gutenberg')
+
+  unless File.directory?(artifacts_path)
+    UI.user_error!("Could not find artifacts to upload at '#{artifacts_path}'.")
+  end
+
+  upload_artifact_files_to_s3(archive_path: artifacts_path, id: last_git_commit[:commit_hash])
+
+  next unless is_ci
+
+  tag = ENV.fetch('BUILDKITE_TAG', nil)
+
+  next if tag.nil? || tag.empty?
+
+  # Tradeoff: We are "wasting" space on S3 by uploading the same archive under different name.
+  # What we get in return is a 1-1 correspondency between archive and podspec, which keeps the setup simpler.
+  upload_artifact_files_to_s3(archive_path: xcframework_archive_path, id: tag)
+end
+
+def upload_artifact_files_to_s3(archive_path:, id:)
+  Dir.glob("#{archive_path}/**/*").each do |file_path|
+    next if File.directory?(file_path)
+
+    relative_path = file_path.sub("#{archive_path}/", '')
+    upload_to_a8c_s3(file: file_path, name_on_s3: "#{id}/#{relative_path}")
+  end
+end
+
+# Notice skip_if_exists is true by default.
+# CI might run on the same commit twice, once for the commit and once for the tag.
+# We don't want to fail on the second run.
+def upload_to_a8c_s3(file:, name_on_s3:, prefix: 'gutenberg-kit')
+  upload_to_s3(
+    bucket: 'a8c-apps-public-artifacts',
+    key: "#{prefix}/#{name_on_s3}",
+    file: file,
+    auto_prefix: false,
+    if_exists: :skip,
+  )
+end

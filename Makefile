@@ -46,3 +46,10 @@ build-swift-package: build
 
 test-swift-package: build
 	$(call XCODEBUILD_CMD, test)
+
+publish-ios-artifacts: build
+	echo "--- :rubygems: Installing Ruby Dependencies"
+	cd ./ios && \
+	install_gems && \
+	echo "--- :s3: Uploading iOS artifacts to S3" && \
+	bundle exec fastlane upload_ios_artifacts_to_s3
