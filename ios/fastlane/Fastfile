@@ -6,7 +6,7 @@ before_all do
 end
 
 lane :upload_ios_artifacts_to_s3 do
-  artifacts_path = File.join(Dir.pwd, 'Sources/GutenbergKit/Gutenberg')
+  artifacts_path = File.join(Dir.pwd, '../Sources/GutenbergKit/Gutenberg')
 
   unless File.directory?(artifacts_path)
     UI.user_error!("Could not find artifacts to upload at '#{artifacts_path}'.")
