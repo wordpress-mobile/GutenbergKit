@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'zip'
+
 before_all do
   # Ensure we use the latest version of the toolkit
   check_for_toolkit_updates unless is_ci || ENV['FASTLANE_SKIP_TOOLKIT_UPDATE_CHECK']
@@ -12,7 +14,15 @@ lane :upload_ios_artifacts_to_s3 do
     UI.user_error!("Could not find artifacts to upload at '#{artifacts_path}'.")
   end
 
-  upload_artifact_files_to_s3(archive_path: artifacts_path, id: last_git_commit[:commit_hash])
+  zipfile_name = "#{artifacts_path}.zip"
+
+  Zip::File.open(zipfile_name, Zip::File::CREATE) do |zipfile|
+    Dir[File.join(artifacts_path, '**', '**')].each do |file|
+      zipfile.add(file.sub(artifacts_path + '/', ''), file)
+    end
+  end
+
+  upload_artifact_files_to_s3(archive_path: zipfile_name, id: last_git_commit[:commit_hash])
 
   next unless is_ci
 
@@ -22,16 +32,11 @@ lane :upload_ios_artifacts_to_s3 do
 
   # Tradeoff: We are "wasting" space on S3 by uploading the same archive under different name.
   # What we get in return is a 1-1 correspondency between archive and podspec, which keeps the setup simpler.
-  upload_artifact_files_to_s3(archive_path: xcframework_archive_path, id: tag)
+  upload_artifact_files_to_s3(archive_path: zipfile_name, id: tag)
 end
 
 def upload_artifact_files_to_s3(archive_path:, id:)
-  Dir.glob("#{archive_path}/**/*").each do |file_path|
-    next if File.directory?(file_path)
-
-    relative_path = file_path.sub("#{archive_path}/", '')
-    upload_to_a8c_s3(file: file_path, name_on_s3: "#{id}/#{relative_path}")
-  end
+  upload_to_a8c_s3(file: archive_path, name_on_s3: "gutenberg-kit-resources-#{id}.zip")
 end
 
 # Notice skip_if_exists is true by default.
