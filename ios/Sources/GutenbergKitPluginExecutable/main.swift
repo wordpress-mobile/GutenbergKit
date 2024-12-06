@@ -8,7 +8,7 @@ let scriptPath = CommandLine.arguments[1]
 
 let process = Process()
 process.executableURL = URL(fileURLWithPath: "/bin/bash")
-process.arguments = [scriptPath]
+process.arguments = [scriptPath, "download"]
 
 do {
     try process.run()
