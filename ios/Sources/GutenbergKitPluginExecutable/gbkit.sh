@@ -25,8 +25,9 @@ function download {
   URL="https://cdn.a8c-ci.services/gutenberg-kit/gutenberg-kit-resources-${VERSION}.zip"
   HTTP_STATUS=$(curl -s -L -w "%{http_code}" -o $ZIP_FILE $URL)
   if [ "$HTTP_STATUS" -ne 200 ]; then
-    echo "❌ Failed downloading editor resources (status code: $HTTP_STATUS), check your network connection and the specified version"
-    rm $ZIP_FILE
+    echo "❌ Failed downloading editor resources (status code: $HTTP_STATUS), check your network connection and that the specified version exists"
+    echo "  - Version: $VERSION"
+    echo "  - URL: $URL"
     exit 1
   fi
 
