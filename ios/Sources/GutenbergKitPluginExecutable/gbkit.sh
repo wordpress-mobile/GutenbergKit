@@ -9,8 +9,10 @@ function show_help {
 
 function download {
   if [ -z "$1" ]; then
+    # HACK: This searches the parent directory as well (i.e., `..`), as WP-iOS
+    # uses a unique project structure with a nested `Modules/Package.swift`
     # If no version is passed, extract the current version from project's Package.resolved file
-    VERSION=$(find . -maxdepth 1 -name "*.xcworkspace" -exec grep -A 5 '"identity" : "gutenbergkit"' {}/xcshareddata/swiftpm/Package.resolved \; | grep '"revision"' | head -n 1 | sed -E 's/.*"revision" : "([^"]+)".*/\1/')
+    VERSION=$(find . .. -maxdepth 1 -name "*.xcworkspace" -exec grep -A 5 '"identity" : "gutenbergkit"' {}/xcshareddata/swiftpm/Package.resolved \; | grep '"revision"' | head -n 1 | sed -E 's/.*"revision" : "([^"]+)".*/\1/')
 
     validate_version_string "$VERSION" "❌ Failed to locate a valid version in your project's \".xcworkspace\" directory, please specify a version"
   else
