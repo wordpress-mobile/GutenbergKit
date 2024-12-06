@@ -4,7 +4,10 @@ import Foundation
 @main
 struct GutebergKitPlugin: BuildToolPlugin {
     func createBuildCommands(context: PluginContext, target: Target) throws -> [Command] {
-        let scriptPath = context.package.directory.appending(subpath: "ios/Plugins/gbkit.sh")
+        let scriptPath = try context.tool(named: "GutenbergKitPluginExecutable")
+            .path
+            .removingLastComponent()
+            .appending("GutenbergKit_GutenbergKitPluginExecutable.bundle/Contents/Resources/gbkit.sh")
 
         return [
             .buildCommand(

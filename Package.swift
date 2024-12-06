@@ -33,7 +33,9 @@ let package = Package(
         .executableTarget(
             name: "GutenbergKitPluginExecutable",
             dependencies: [],
-            path: "ios/Sources/GutenbergKitPluginExecutable"
+            path: "ios/Sources/GutenbergKitPluginExecutable",
+            exclude: [],
+            resources: [.copy("gbkit.sh")]
         )
     ]
 )
