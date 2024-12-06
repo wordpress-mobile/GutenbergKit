@@ -7,7 +7,8 @@ let package = Package(
     name: "GutenbergKit",
     platforms: [.iOS(.v15), .macOS(.v14)],
     products: [
-        .library(name: "GutenbergKit", targets: ["GutenbergKit"])
+        .library(name: "GutenbergKit", targets: ["GutenbergKit"]),
+        .plugin(name: "GutenbergKitPlugin", targets: ["GutenbergKitPlugin"])
     ],
     targets: [
         .target(
@@ -22,6 +23,17 @@ let package = Package(
             dependencies: ["GutenbergKit"],
             path: "ios/Tests",
             exclude: []
+        ),
+        .plugin(
+            name: "GutenbergKitPlugin",
+            capability: .buildTool(),
+            dependencies: ["GutenbergKitPluginExecutable"],
+            path: "ios/Plugins/GutenbergKitPlugin"
+        ),
+        .executableTarget(
+            name: "GutenbergKitPluginExecutable",
+            dependencies: [],
+            path: "ios/Sources/GutenbergKitPluginExecutable"
         )
     ]
 )
