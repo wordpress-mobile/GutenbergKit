@@ -8,7 +8,7 @@ let package = Package(
     platforms: [.iOS(.v15), .macOS(.v14)],
     products: [
         .library(name: "GutenbergKit", targets: ["GutenbergKit"]),
-        .plugin(name: "GutenbergKitPlugin", targets: ["GutenbergKitPlugin"])
+        .plugin(name: "GutenbergKitDownloadJS", targets: ["Download Gutenberg JS"])
     ],
     targets: [
         .target(
@@ -25,17 +25,17 @@ let package = Package(
             exclude: []
         ),
         .plugin(
-            name: "GutenbergKitPlugin",
-            capability: .buildTool(),
-            dependencies: ["GutenbergKitPluginExecutable"],
-            path: "ios/Plugins/GutenbergKitPlugin"
-        ),
-        .executableTarget(
-            name: "GutenbergKitPluginExecutable",
-            dependencies: [],
-            path: "ios/Sources/GutenbergKitPluginExecutable",
-            exclude: [],
-            resources: [.copy("gbkit.sh")]
+          name: "Download Gutenberg JS",
+          capability: .command(
+            intent: .custom(
+              verb: "download-gutenberg-js",
+              description: "Downloads the Gutenberg JS files."),
+            permissions: [
+              .writeToPackageDirectory(reason: "Downloads and unzips the Gutenberg JS files into your project directory."),
+              .allowNetworkConnections(scope: .all(ports: []), reason: "Downloads the Gutenberg JS files from the GitHub Release.")
+            ]),
+          dependencies: [],
+          path: "ios/Plugins/DownloadGutenbergJS"
         )
     ]
 )
