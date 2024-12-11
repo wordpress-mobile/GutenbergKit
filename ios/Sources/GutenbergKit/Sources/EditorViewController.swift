@@ -188,7 +188,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         guard _isEditorRendered else { return }
 
         let escapedString = content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
-        evaluate("editor.setContent(decodeURIComponent('\(escapedString)'));", isCritical: true)
+        evaluate("editor.setContent('\(escapedString)');", isCritical: true)
     }
 
     /// Returns the current editor content.
