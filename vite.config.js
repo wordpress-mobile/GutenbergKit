@@ -9,6 +9,14 @@ export default defineConfig({
 	build: {
 		outDir: '../dist',
 		target: 'esnext',
+		// Removes hashes from the filenames
+		rollupOptions: {
+			output: {
+				entryFileNames: `assets/[name].js`,
+				chunkFileNames: `assets/[name].js`,
+				assetFileNames: `assets/[name].[ext]`,
+			},
+		},
 	},
 	plugins: [react()],
 	root: 'src',

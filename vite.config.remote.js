@@ -18,6 +18,11 @@ export default defineConfig({
 		rollupOptions: {
 			input: resolve(__dirname, 'src/remote.html'),
 			external: externalize,
+			output: {
+				entryFileNames: `assets/[name].js`,
+				chunkFileNames: `assets/[name].js`,
+				assetFileNames: `assets/[name].[ext]`,
+			},
 		},
 		target: 'esnext',
 	},

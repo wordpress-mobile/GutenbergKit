@@ -9,6 +9,7 @@ extension PackagePlugin.PluginContext {
 
 @main
 struct DownloadGutenbergJSPlugin: CommandPlugin {
+    @MainActor
     func performCommand(context: PackagePlugin.PluginContext, arguments: [String]) async throws {
         let gutenbergKitRoot = try gutenbergKitRoot(relativeTo: context.pluginWorkDirectoryURL)
         let currentHash = shell("git rev-parse HEAD", in: gutenbergKitRoot)
@@ -45,6 +46,7 @@ struct DownloadGutenbergJSPlugin: CommandPlugin {
     }
 
     // (Mis)using a `Task` like this is a bad idea in a real program, but for this script it'll be fine
+    @MainActor
     private func downloadFile(withHash hash: String, to destination: URL) throws {
         let url = URL(string: "https://cdn.a8c-ci.services/gutenberg-kit/gutenberg-kit-resources-\(hash).zip")!
         print("Downloading editor resources from \(url)")
@@ -64,12 +66,16 @@ struct DownloadGutenbergJSPlugin: CommandPlugin {
                     print("  - Version: \(hash)")
                     print("  - URL: \(url)")
 
-                    error = CocoaError(.fileNoSuchFile)
+                    await MainActor.run {
+                        error = CocoaError(.fileNoSuchFile)
+                    }
                 }
 
                 try FileManager.default.moveItem(at: downloadedLocation, to: destination)
             } catch let _error {
-                error = _error
+                await MainActor.run {
+                    error = _error
+                }
             }
             semaphore.signal()
         }
@@ -145,7 +151,9 @@ extension XcodeProject {
     }
 }
 
-extension DownloadGutenbergJSPlugin: XcodeCommandPlugin {
+extension DownloadGutenbergJSPlugin: @preconcurrency XcodeCommandPlugin {
+
+    @MainActor
     func performCommand(context: XcodeProjectPlugin.XcodePluginContext, arguments: [String]) throws {
         let gutenbergKitRoot = try gutenbergKitRoot(relativeTo: context.pluginWorkDirectoryURL)
         let currentHash = shell("git rev-parse HEAD", in: gutenbergKitRoot)
