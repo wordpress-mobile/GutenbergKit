@@ -1,3 +1,4 @@
 android
 ios
 package-lock.json
+.github/**/*.md

@@ -20,11 +20,9 @@ https://hackerone.com/wordpress
 -->
 
 ## Description
-
 <!-- Please write a brief description of the bug. -->
 
 ## Step-by-step reproduction instructions
-
 <!--
 Please list the steps needed to reproduce the bug. For example:
 1. Go to '...'
@@ -33,15 +31,12 @@ Please list the steps needed to reproduce the bug. For example:
 -->
 
 ## Expected behaviour
-
 <!-- Please describe what you expected to happen. -->
 
 ## Actual behaviour
-
 <!-- Please describe what actually happened. -->
 
 ## Screenshots or screen recording (optional)
-
 <!--
 If possible, please upload a screenshot or screen recording which demonstrates
 the bug.
