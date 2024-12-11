@@ -112,6 +112,15 @@ class GutenbergView : WebView {
 
                 return super.shouldInterceptRequest(view, request)
             }
+
+            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                url?.let {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it))
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    view?.context?.startActivity(intent)
+                }
+                return true
+            }
         }
 
         this.webChromeClient = object : WebChromeClient() {
