@@ -188,7 +188,7 @@ class GutenbergView : WebView {
         // this value out of the `dist` directory after building GutenbergKit
         //
         // This URL maps to the `assets` directory in this module
-        this.loadUrl(ASSET_URL)
+        this.loadUrl("http://<YOUR_LOCAL_IP>:5173")
 
         // Dev mode – you can connect the app to a local dev server and have it refresh as
         // changes are made. To start the server, run `make dev-server` in the project root
