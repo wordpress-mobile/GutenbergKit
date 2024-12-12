@@ -40,7 +40,7 @@ This demo app is useful for quickly testing changes made to the editor. By defau
 <details>
 <summary>Example Xcode environment variable</summary>
 
-<img width="725" alt="Xcode environment variables" src="https://github.com/kean/GutenbergKit/assets/1567433/cdc8a28a-c621-4b8e-bc7a-31361694434c">
+<img width="725" alt="Example Xcode environment variable" src="./docs/example-xcode-env-variable.png">
 
 </details>
 
