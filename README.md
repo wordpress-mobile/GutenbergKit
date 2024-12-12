@@ -78,7 +78,7 @@ index bda0e51..3014479 100644
 
 To build GutenbergKit for production run the following command in your terminal:
 
-```
+```bash
 make build
 ```
 
