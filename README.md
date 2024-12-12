@@ -2,7 +2,7 @@
 
 An experimental Gutenberg block editor for native iOS and Android apps relying upon web technologies.
 
-<img width="320" alt="Screenshot 2024-07-01 at 10 30 11 AM" src="https://github.com/kean/GutenbergKit/assets/1567433/4d9b2fcd-30fa-46ca-895d-07e0848143b1">
+<img width="320" alt="GutenbergKit running on an iPhone" src="./docs/gutenberg-kit-preview.png">
 
 ## Development
 
