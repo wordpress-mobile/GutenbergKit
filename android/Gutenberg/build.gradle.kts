@@ -8,8 +8,18 @@ android {
     namespace = "org.wordpress.gutenberg"
     compileSdk = 34
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         minSdk = 22
+
+        buildConfigField(
+            "String",
+            "GUTENBERG_EDITOR_URL",
+            "\"${rootProject.ext["gutenbergEditorUrl"] ?: ""}\""
+        )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
