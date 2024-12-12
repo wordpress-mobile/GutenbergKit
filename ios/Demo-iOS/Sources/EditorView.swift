@@ -94,6 +94,5 @@ struct Client: EditorNetworkingClient {
 #Preview {
     NavigationStack {
         EditorView()
-//        EditorView(editorURL: URL(string: "http://localhost:5173/")!)
     }
 }

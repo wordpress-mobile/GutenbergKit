@@ -30,17 +30,6 @@ By default, the demo app uses a production build of the React app included in th
 
 <img width="725" alt="Xcode environment variables" src="https://github.com/kean/GutenbergKit/assets/1567433/cdc8a28a-c621-4b8e-bc7a-31361694434c">
 
-If you are using SwiftUI previews, make sure to point them to the localhost programatically:
-
-```swift
-#Preview {
-    NavigationStack {
-//        EditorView()
-        EditorView(editorURL: URL(string: "http://localhost:5173/")!)
-    }
-}
-```
-
 ## Production
 
 To build the React app for production and incorporate the changes in the `GutenbergKit` Swift and Kotlin packages, run:
