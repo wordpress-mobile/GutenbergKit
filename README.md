@@ -48,28 +48,14 @@ This demo app is useful for quickly testing changes made to the editor. By defau
 
 1. Start the development server by running `make dev-server`.
 1. Launch Android Studio and open the `android` project.
-1. Open the `GutenbergView.kt` file.
-1. Change the `ASSET_URL` constant to the URL of the development server.
+1. Modify the `android/local.properties` file to include an environment variable named `GUTENBERG_EDITOR_URL` with the URL of the development server.
 1. Run the app.
 
 <details>
-<summary>Example Android code change</summary>
+<summary>Example Android local.properties</summary>
 
-```diff
-diff --git a/android/Gutenberg/src/main/java/org/wordpress/gutenberg/GutenbergView.kt b/android/Gutenberg/src/main/java/org/wordpress/gutenberg/GutenbergView.kt
-index bda0e51..3014479 100644
---- a/android/Gutenberg/src/main/java/org/wordpress/gutenberg/GutenbergView.kt
-+++ b/android/Gutenberg/src/main/java/org/wordpress/gutenberg/GutenbergView.kt
-@@ -188,7 +188,7 @@ class GutenbergView : WebView {
-         // this value out of the `dist` directory after building GutenbergKit
-         //
-         // This URL maps to the `assets` directory in this module
--        this.loadUrl(ASSET_URL)
-+        this.loadUrl("http://<YOUR_LOCAL_IP>:5173")
-
-         // Dev mode – you can connect the app to a local dev server and have it refresh as
-         // changes are made. To start the server, run `make dev-server` in the project root
-
+```
+GUTENBERG_EDITOR_URL=http://<YOUR_LOCAL_IP>:5173/
 ```
 
 </details>
