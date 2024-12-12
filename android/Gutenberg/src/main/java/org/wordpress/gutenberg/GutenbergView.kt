@@ -196,7 +196,7 @@ class GutenbergView : WebView {
         //
         // This only works in the emulator – if you want to run on a real device, you'll need to
         // set this to the IP address of your dev machine.
-        // this.loadUrl("http://10.0.2.2:5173/")
+        // this.loadUrl("http://<YOUR_LOCAL_IP>:5173/")
 
         Log.i("GutenbergView", "Startup Complete")
     }
