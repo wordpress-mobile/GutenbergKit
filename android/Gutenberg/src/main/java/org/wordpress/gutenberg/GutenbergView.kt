@@ -184,19 +184,12 @@ class GutenbergView : WebView {
 
         initializeWebView()
 
-        // Production mode – load the assets from the app bundle – you'll need to copy
-        // this value out of the `dist` directory after building GutenbergKit
-        //
-        // This URL maps to the `assets` directory in this module
-        this.loadUrl(ASSET_URL)
-
-        // Dev mode – you can connect the app to a local dev server and have it refresh as
-        // changes are made. To start the server, run `make dev-server` in the project root
-        // directory.
-        //
-        // This only works in the emulator – if you want to run on a real device, you'll need to
-        // set this to the IP address of your dev machine.
-        // this.loadUrl("http://<YOUR_LOCAL_IP>:5173/")
+        val editorUrl = if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
+            BuildConfig.GUTENBERG_EDITOR_URL
+        } else {
+            ASSET_URL
+        }
+        this.loadUrl(editorUrl)
 
         Log.i("GutenbergView", "Startup Complete")
     }
