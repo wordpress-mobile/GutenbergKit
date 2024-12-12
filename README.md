@@ -76,7 +76,7 @@ index bda0e51..3014479 100644
 
 ## Production
 
-To build the GutenbergKit for production run:
+To build GutenbergKit for production run the following command in your terminal:
 
 ```
 make build
