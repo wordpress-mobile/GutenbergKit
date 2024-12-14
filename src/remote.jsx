@@ -9,6 +9,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { getGBKit, getPost } from './utils/bridge';
 import { initializeApiFetch } from './utils/api-fetch-setup';
 import './index.css';
+import defaultEditorStyles from '@wordpress/block-editor/build-style/default-editor-styles.css?inline';
 
 window.GBKit = getGBKit();
 window.wp = window.wp || {};
@@ -38,7 +39,10 @@ async function initalizeRemoteEditor() {
 				dispatch(editorStore).updateEditorSettings(editorSettings);
 			})
 			.catch(() => {
-				// TODO: Communicate helpful guidance to the user.
+				const editorSettings = {
+					defaultEditorStyles: [{ css: defaultEditorStyles }],
+				};
+				dispatch(editorStore).updateEditorSettings(editorSettings);
 			});
 
 		dispatch(preferencesStore).setDefaults('core/edit-post', {

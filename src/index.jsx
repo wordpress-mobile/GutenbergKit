@@ -6,6 +6,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { dispatch } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { store as preferencesStore } from '@wordpress/preferences';
+import defaultEditorStyles from '@wordpress/block-editor/build-style/default-editor-styles.css?inline';
 
 /**
  * Internal dependencies
@@ -31,7 +32,10 @@ function initializeEditor() {
 			dispatch(editorStore).updateEditorSettings(editorSettings);
 		})
 		.catch(() => {
-			// TODO: Communicate helpful guidance to the user.
+			const editorSettings = {
+				defaultEditorStyles: [{ css: defaultEditorStyles }],
+			};
+			dispatch(editorStore).updateEditorSettings(editorSettings);
 		});
 
 	dispatch(preferencesStore).setDefaults('core/edit-post', {

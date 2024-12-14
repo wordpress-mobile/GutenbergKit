@@ -20,7 +20,6 @@ import { useDispatch, useSelect, subscribe } from '@wordpress/data';
 import { store as coreStore, useEntityBlockEditor } from '@wordpress/core-data';
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
-import '@wordpress/block-editor/build-style/default-editor-styles.css';
 import '@wordpress/block-editor/build-style/style.css';
 // Default styles that are needed for the core blocks.
 import '@wordpress/block-library/build-style/style.css';
