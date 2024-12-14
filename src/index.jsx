@@ -23,18 +23,16 @@ initializeEditor();
  * Configure editor settings and styles, and render the editor.
  */
 function initializeEditor() {
-	const { themeStyles, siteApiRoot } = getGBKit();
+	const { themeStyles } = getGBKit();
 
 	// TEMP: This should be fetched from the host apps.
-	if (siteApiRoot?.length) {
-		apiFetch({ path: `/wp-block-editor/v1/settings` })
-			.then((editorSettings) => {
-				dispatch(editorStore).updateEditorSettings(editorSettings);
-			})
-			.catch(() => {
-				// TODO: Communicate helpful guidance to the user.
-			});
-	}
+	apiFetch({ path: `/wp-block-editor/v1/settings` })
+		.then((editorSettings) => {
+			dispatch(editorStore).updateEditorSettings(editorSettings);
+		})
+		.catch(() => {
+			// TODO: Communicate helpful guidance to the user.
+		});
 
 	dispatch(preferencesStore).setDefaults('core/edit-post', {
 		themeStyles,

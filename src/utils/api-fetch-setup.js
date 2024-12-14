@@ -18,7 +18,7 @@ import { getGBKit } from './bridge';
  * @return {void}
  */
 export function initializeApiFetch() {
-	const { siteApiRoot, authHeader } = getGBKit();
+	const { siteApiRoot = '', authHeader } = getGBKit();
 
 	apiFetch.use(apiFetch.createRootURLMiddleware(siteApiRoot));
 	apiFetch.use(corsMiddleware);

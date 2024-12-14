@@ -21,7 +21,7 @@ initalizeRemoteEditor();
  */
 async function initalizeRemoteEditor() {
 	try {
-		const { themeStyles, siteURL, siteApiRoot } = getGBKit();
+		const { themeStyles, siteURL } = getGBKit();
 		const { styles, scripts } = await apiFetch({
 			url: `${siteURL}/wp-json/__experimental/wp-block-editor/v1/editor-assets`,
 		});
@@ -33,15 +33,13 @@ async function initalizeRemoteEditor() {
 		const { store: preferencesStore } = window.wp.preferences;
 
 		// TEMP: This should be fetched from the host apps.
-		if (siteApiRoot?.length) {
-			apiFetch({ path: `/wp-block-editor/v1/settings` })
-				.then((editorSettings) => {
-					dispatch(editorStore).updateEditorSettings(editorSettings);
-				})
-				.catch(() => {
-					// TODO: Communicate helpful guidance to the user.
-				});
-		}
+		apiFetch({ path: `/wp-block-editor/v1/settings` })
+			.then((editorSettings) => {
+				dispatch(editorStore).updateEditorSettings(editorSettings);
+			})
+			.catch(() => {
+				// TODO: Communicate helpful guidance to the user.
+			});
 
 		dispatch(preferencesStore).setDefaults('core/edit-post', {
 			themeStyles,
