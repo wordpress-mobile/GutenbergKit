@@ -12,12 +12,12 @@ import { registerCoreBlocks } from '@wordpress/block-library';
 import {
 	store as editorStore,
 	mediaUpload,
-	EditorProvider,
 	EditorSnackbars,
 	PostTitle,
+	privateApis as editorPrivateApis,
 } from '@wordpress/editor';
 import { useDispatch, useSelect, subscribe } from '@wordpress/data';
-import { store as coreStore } from '@wordpress/core-data';
+import { store as coreStore, useEntityBlockEditor } from '@wordpress/core-data';
 
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
@@ -52,7 +52,11 @@ import { useMediaUpload } from '../hooks/use-media-upload';
 // Current editor (assumes can be only one instance).
 const editor = {};
 
-const { ExperimentalBlockCanvas: BlockCanvas } = unlock(blockEditorPrivateApis);
+const { useBlockEditorSettings } = unlock(editorPrivateApis);
+const {
+	ExperimentalBlockEditorProvider: BlockEditorProvider,
+	ExperimentalBlockCanvas: BlockCanvas,
+} = unlock(blockEditorPrivateApis);
 
 /**
  * Editor component for managing and editing post content.
@@ -63,7 +67,6 @@ const { ExperimentalBlockCanvas: BlockCanvas } = unlock(blockEditorPrivateApis);
  * @return {JSX.Element} The rendered Editor component.
  */
 function Editor({ post }) {
-	const editorPostTitleRef = useRef();
 	const postTitleRef = useRef(post.title);
 	const postContentRef = useRef(post.content);
 	const { addEntities, editEntityRecord, receiveEntityRecords } =
@@ -71,12 +74,14 @@ function Editor({ post }) {
 	const { setEditedPost } = useDispatch(editorStore);
 	const { getEditedPostAttribute, getEditedPostContent } =
 		useSelect(editorStore);
+	const { setupEditor } = useDispatch(editorStore);
 
 	useEffect(() => {
 		window.editor = editor;
 		addEntities(postTypeEntities);
 		receiveEntityRecords('postType', post.type, post);
 
+		setupEditor(post, {});
 		registerCoreBlocks();
 
 		editorLoaded();
@@ -94,37 +99,33 @@ function Editor({ post }) {
 
 	const {
 		blockPatterns,
-		currentPost,
-		hasLoadedPost,
+		editorSettings,
 		hasUploadPermissions,
+		isEditorReady,
 		reusableBlocks,
 	} = useSelect(
 		(select) => {
-			const { getEntityRecord, getEntityRecords, hasFinishedResolution } =
-				select(coreStore);
+			const { getEntityRecord, getEntityRecords } = select(coreStore);
+			const { __unstableIsEditorReady, getEditorSettings } =
+				select(editorStore);
 			const user = getEntityRecord('root', 'user', post.author);
-			const _currentPost = getEntityRecord(
-				'postType',
-				post.type,
-				post.id
-			);
-			const _hasLoadedPost = post?.id
-				? hasFinishedResolution('getEntityRecord', [
-						'postType',
-						post.type,
-						post.id,
-					])
-				: true;
+			const _isEditorReady = post?.id ? __unstableIsEditorReady() : true;
 
 			return {
+				isEditorReady: _isEditorReady,
+				editorSettings: getEditorSettings(),
 				blockPatterns: select(coreStore).getBlockPatterns(),
-				currentPost: _currentPost,
-				hasLoadedPost: _hasLoadedPost,
 				hasUploadPermissions: user?.capabilities?.upload_files ?? true,
 				reusableBlocks: getEntityRecords('postType', 'wp_block'),
 			};
 		},
-		[post.author, post.id, post.type]
+		[post.author, post.id]
+	);
+
+	const [postBlocks, onInput, onChange] = useEntityBlockEditor(
+		'postType',
+		post.type,
+		{ id: post.id }
 	);
 
 	useEffect(() => {
@@ -170,44 +171,53 @@ function Editor({ post }) {
 		};
 	};
 
+	const blockEditorSettings = useBlockEditorSettings(
+		editorSettings,
+		post.type,
+		post.id,
+		'visual'
+	);
+
 	const settings = useMemo(
 		() => ({
+			...blockEditorSettings,
 			hasFixedToolbar: true,
 			mediaUpload: hasUploadPermissions ? mediaUpload : undefined,
 			__experimentalReusableBlocks: reusableBlocks,
 			__experimentalBlockPatterns: blockPatterns,
 		}),
-		[blockPatterns, hasUploadPermissions, reusableBlocks]
+		[
+			blockEditorSettings,
+			blockPatterns,
+			hasUploadPermissions,
+			reusableBlocks,
+		]
 	);
 
 	const styles = useEditorStyles();
 	useMediaUpload();
 
 	return (
-		hasLoadedPost && (
-			<div className="editor__container">
-				<EditorProvider
-					post={currentPost}
-					settings={settings}
-					useSubRegistry={false}
-				>
-					<BlockCanvas
-						shouldIframe={false}
-						height="auto"
-						styles={styles}
-					>
-						<div className="editor-visual-editor__post-title-wrapper">
-							<PostTitle ref={editorPostTitleRef} />
-						</div>
-						<BlockList />
-					</BlockCanvas>
-					<EditorToolbar />
+		<div className="editor__container">
+			<BlockEditorProvider
+				value={postBlocks}
+				onInput={onInput}
+				onChange={onChange}
+				settings={settings}
+				useSubRegistry={false}
+			>
+				<BlockCanvas shouldIframe={false} height="auto" styles={styles}>
+					<div className="editor-visual-editor__post-title-wrapper">
+						{isEditorReady && <PostTitle ref={postTitleRef} />}
+					</div>
+					<BlockList />
+				</BlockCanvas>
+				{isEditorReady && <EditorToolbar />}
 
-					<Popover.Slot />
-					<EditorSnackbars />
-				</EditorProvider>
-			</div>
-		)
+				<Popover.Slot />
+				<EditorSnackbars />
+			</BlockEditorProvider>
+		</div>
 	);
 }
 
