@@ -23,6 +23,13 @@ export default defineConfig({
 	},
 	plugins: [react(), wordPressExternals()],
 	root: 'src',
+	css: {
+		preprocessorOptions: {
+			scss: {
+				quietDeps: true,
+			},
+		},
+	},
 });
 
 function externalize(id) {
