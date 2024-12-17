@@ -1,6 +1,8 @@
 @use "@wordpress/base-styles/colors" as wordpress;
 
 $border-color: #c8c7cc;
+$border-radius: 2px;
+$min-touch-target-size: 48px;
 
 .gutenberg-kit-editor-toolbar {
 	border-bottom: none;
@@ -14,10 +16,11 @@ $border-color: #c8c7cc;
 }
 
 .gutenberg-kit-editor-toolbar .components-button.has-icon.has-icon {
-	min-width: 48px; // Comply with minimum touch target size recommendation
+	min-width: $min-touch-target-size;
 }
 
 .gutenberg-kit-editor-toolbar .block-editor-inserter__toggle svg {
 	background: wordpress.$black;
+	border-radius: $border-radius;
 	color: wordpress.$white;
 }
