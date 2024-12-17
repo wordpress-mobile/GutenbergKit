@@ -1,0 +1,12 @@
+$border-color: #c8c7cc;
+
+.gutenberg-kit-editor-toolbar {
+	border-bottom: none;
+	border-left: none;
+	border-right: none;
+	border-top-color: $border-color;
+}
+
+.gutenberg-kit-editor-toolbar .components-toolbar-group {
+	border-right-color: $border-color;
+}

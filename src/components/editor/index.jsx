@@ -33,12 +33,13 @@ import '@wordpress/editor/build-style/style.css';
 /**
  * Internal dependencies
  */
-import EditorToolbar from './editor-toolbar';
-import { editorLoaded, onEditorContentChanged } from '../utils/bridge';
-import { postTypeEntities } from '../utils/post-type-entities';
-import { useEditorStyles } from '../hooks/use-editor-styles';
-import { unlock } from '../lock-unlock';
-import { useMediaUpload } from '../hooks/use-media-upload';
+import './style.scss';
+import EditorToolbar from '../editor-toolbar';
+import { editorLoaded, onEditorContentChanged } from '../../utils/bridge';
+import { postTypeEntities } from '../../utils/post-type-entities';
+import { useEditorStyles } from '../../hooks/use-editor-styles';
+import { unlock } from '../../lock-unlock';
+import { useMediaUpload } from '../../hooks/use-media-upload';
 
 /**
  * @typedef {import('../utils/bridge').Post} Post
@@ -207,7 +208,9 @@ function Editor({ post }) {
 					</div>
 					<BlockList />
 				</BlockCanvas>
-				{isEditorReady && <EditorToolbar />}
+				{isEditorReady && (
+					<EditorToolbar className="gutenberg-kit-editor__toolbar" />
+				)}
 
 				<Popover.Slot />
 				<EditorSnackbars />

@@ -1,8 +1,8 @@
 @use "@wordpress/base-styles/variables" as wordpress;
 
 :where(body) {
-	margin: 0;
 	font-family: wordpress.$default-font;
+	margin: 0;
 }
 
 /* Theme (for no-theme design) */
@@ -61,39 +61,6 @@ h4 {
 	left: 16px;
 	right: 16px;
 	z-index: 999;
-}
-
-/* Toolbar */
-
-.gbkit-editor-toolbar {
-	border-top: 0.5px solid #c8c7cc;
-	background: white;
-	width: 100%;
-	display: flex;
-	align-items: center;
-	position: fixed;
-	bottom: 0;
-	right: 0;
-	left: 0;
-	z-index: 999;
-	overflow-x: scroll;
-	min-height: 46px;
-
-	transition: position 1.5s linear;
-}
-
-.gbkit-editor-toolbar::-webkit-scrollbar {
-	display: none;
-}
-
-.block-editor-block-toolbar {
-	/* overflow: hidden !important; */
-	/* Disable scrolling – scroll the wrapper div */
-}
-
-/* NOTE: this is not applicable on mobile */
-.block-editor-block-mover__drag-handle {
-	display: none;
 }
 
 .block-editor-inserter .block-editor-inserter__toggle {
