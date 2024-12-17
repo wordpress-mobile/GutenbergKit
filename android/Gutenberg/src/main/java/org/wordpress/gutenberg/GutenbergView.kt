@@ -115,6 +115,12 @@ class GutenbergView : WebView {
 
             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
                 url?.let {
+                    // Allow the WebView to handle `blob:` requests, which are utilized in the block
+                    // inserter's Patterns tab
+                    if (it.startsWith("blob:")) {
+                        return false
+                    }
+
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it))
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     view?.context?.startActivity(intent)
