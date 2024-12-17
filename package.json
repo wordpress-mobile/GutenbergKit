@@ -10,6 +10,7 @@
 		"build": "vite --emptyOutDir build && vite build --emptyOutDir=false --config vite.config.remote.js",
 		"lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
 		"format": "prettier --write .",
+		"postinstall": "patch-package",
 		"preview": "vite preview --host"
 	},
 	"dependencies": {
