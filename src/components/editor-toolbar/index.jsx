@@ -69,7 +69,7 @@ const EditorToolbar = ({ className }) => {
 					</ToolbarGroup>
 				)}
 
-				<BlockToolbar />
+				<BlockToolbar hideDragHandle />
 			</Toolbar>
 
 			{isBlockInspectorShown && (
