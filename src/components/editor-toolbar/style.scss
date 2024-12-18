@@ -12,6 +12,11 @@ $min-touch-target-size: 48px;
 	border-top-color: $border-color;
 }
 
+// Hide the scrollbar in the toolbar
+.gutenberg-kit-editor-toolbar::-webkit-scrollbar {
+	display: none;
+}
+
 .gutenberg-kit-editor-toolbar .components-toolbar-group {
 	border-right-color: $border-color;
 }
