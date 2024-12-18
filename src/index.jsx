@@ -13,7 +13,7 @@ import defaultEditorStyles from '@wordpress/block-editor/build-style/default-edi
  */
 import { initializeApiFetch } from './utils/api-fetch-setup';
 import { getGBKit, getPost } from './utils/bridge';
-import App from './components/app';
+import EditorInterface from './components/editor-interface';
 import './index.scss';
 
 window.GBKit = getGBKit();
@@ -49,7 +49,7 @@ function initializeEditor() {
 
 	createRoot(document.getElementById('root')).render(
 		<StrictMode>
-			<App {...settings} />
+			<EditorInterface {...settings} />
 		</StrictMode>
 	);
 }

@@ -8,9 +8,12 @@ import { useState, useEffect } from '@wordpress/element';
 /**
  * Displays a notice with actions to retry or dismiss.
  *
+ * @param {Object} props           Component props.
+ * @param {string} props.className Additional class names to apply.
+ *
  * @return {?JSX.Element} The rendered component or null if no notice is present.
  */
-export default function EditorLoadNotice() {
+export default function EditorLoadNotice({ className }) {
 	const { notice, clearNotice } = useEditorLoadNotice();
 
 	const actions = [
@@ -31,7 +34,7 @@ export default function EditorLoadNotice() {
 	}
 
 	return (
-		<div className="editor-load-notice">
+		<div className={className}>
 			<Notice actions={actions} status="warning" isDismissible={false}>
 				{notice}
 			</Notice>
