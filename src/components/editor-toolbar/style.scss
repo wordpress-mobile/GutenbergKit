@@ -26,6 +26,11 @@ $min-touch-target-size: 48px;
 	color: wordpress.$white;
 }
 
+// Disable scrolling of the block toolbar, rely upon parent container scrolling
+.gutenberg-kit-editor-toolbar .block-editor-block-contextual-toolbar {
+	flex-shrink: 0;
+}
+
 .gutenberg-kit-editor-toolbar
 	.block-editor-block-contextual-toolbar.is-unstyled {
 	box-shadow: none;
