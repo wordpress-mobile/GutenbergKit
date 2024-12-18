@@ -31,10 +31,10 @@ This demo app is useful for quickly testing changes made to the editor. By defau
 #### iOS
 
 1. Start the development server by running `make dev-server`.
-1. Launch Xcode and open the `ios/GutenbergKit.xcodeproj` project.
+1. Launch Xcode and open the `ios/Demo-iOS/GutenbergKit.xcodeproj` project.
 1. Select the `Gutenberg` target.
 1. Navigate to _Product_ → _Scheme_ → _Edit Scheme_.
-1. Add an environment variable named `GUTENBERG_SERVER_URL` with the URL of the development server.
+1. Add an environment variable named `GUTENBERG_EDITOR_URL` with the URL of the development server.
 1. Run the app.
 
 <details>
