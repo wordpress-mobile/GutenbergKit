@@ -208,15 +208,6 @@
 	font-size: 13px;
 }
 
-.components-accessible-toolbar .components-button.is-pressed::before,
-.components-toolbar .components-button.is-pressed::before {
-	border-radius: 8px;
-}
-
-/* .components-button.is-pressed {
-	color: black !important;
-} */
-
 /* More */
 
 .components-dropdown-menu__menu-item {
@@ -231,16 +222,8 @@
 	font-size: 17px;
 }
 
-.components-button {
-	border-radius: 8px;
-}
-
 .components-panel__body-title {
 	font-size: 15px;
-}
-
-.components-button {
-	font-size: 17px;
 }
 
 .block-editor-block-card__title {
@@ -261,10 +244,6 @@
 
 .components-base-control__label {
 	font-size: 13px !important;
-}
-
-.components-placeholder {
-	border-radius: 8px !important;
 }
 
 .components-placeholder__label {

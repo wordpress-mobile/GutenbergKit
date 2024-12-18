@@ -48,3 +48,14 @@ $min-touch-target-size: 48px;
 	.components-button:focus::before {
 	display: none;
 }
+
+// Synchronize dimensions of toggleable button pseudo elements to the overriden
+// width
+.gutenberg-kit-editor-toolbar.components-accessible-toolbar
+	.components-button.is-pressed::before,
+.gutenberg-kit-editor-toolbar.components-toolbar
+	.components-button.is-pressed::before {
+	height: calc($min-touch-target-size - 12px);
+	left: 6px;
+	right: 6px;
+}
