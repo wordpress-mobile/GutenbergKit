@@ -1,22 +1,8 @@
-:root {
-	font-family:
-		system-ui,
-		-apple-system,
-		BlinkMacSystemFont,
-		"Segoe UI",
-		Roboto,
-		Oxygen,
-		Ubuntu,
-		Cantarell,
-		"Open Sans",
-		"Helvetica Neue",
-		sans-serif;
-}
+@use "@wordpress/base-styles/variables" as wordpress;
 
-body {
+:where(body) {
 	margin: 0;
-	font-family: -apple-system;
-	line-height: 1.55;
+	font-family: wordpress.$default-font;
 }
 
 /* Theme (for no-theme design) */

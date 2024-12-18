@@ -14,7 +14,7 @@ import defaultEditorStyles from '@wordpress/block-editor/build-style/default-edi
 import { initializeApiFetch } from './utils/api-fetch-setup';
 import { getGBKit, getPost } from './utils/bridge';
 import App from './components/app';
-import './index.css';
+import './index.scss';
 
 window.GBKit = getGBKit();
 initializeApiFetch();

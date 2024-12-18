@@ -8,7 +8,7 @@ import apiFetch from '@wordpress/api-fetch';
  */
 import { getGBKit, getPost } from './utils/bridge';
 import { initializeApiFetch } from './utils/api-fetch-setup';
-import './index.css';
+import './index.scss';
 import defaultEditorStyles from '@wordpress/block-editor/build-style/default-editor-styles.css?inline';
 
 window.GBKit = getGBKit();
