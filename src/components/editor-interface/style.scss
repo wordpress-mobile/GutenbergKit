@@ -9,6 +9,13 @@
 	right: 16px;
 }
 
+// Disable hover styles that are irrelevant for touch devices
+.gutenberg-kit-editor-interface .components-button[aria-expanded="true"],
+.gutenberg-kit-editor-interface
+	.components-button:hover:not(:disabled, [aria-disabled="true"]) {
+	color: inherit;
+}
+
 // Disable focus outline that is irrelevant for touch devices
 .gutenberg-kit-editor-interface .components-button:focus:not(:disabled) {
 	box-shadow: none;

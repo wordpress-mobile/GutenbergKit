@@ -158,11 +158,6 @@ There has to be a setting or any other better way of doing that.
 	background: transparent;
 }
 
-.components-button[aria-expanded="true"],
-.components-button:hover:not(:disabled, [aria-disabled="true"]) {
-	color: inherit;
-}
-
 .components-button.block-editor-block-types-list__item:not(:disabled):hover
 	.block-editor-block-types-list__item-title {
 	color: inherit !important;
