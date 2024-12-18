@@ -24,3 +24,8 @@ $min-touch-target-size: 48px;
 	border-radius: $border-radius;
 	color: wordpress.$white;
 }
+
+.gutenberg-kit-editor-toolbar
+	.block-editor-block-contextual-toolbar.is-unstyled {
+	box-shadow: none;
+}
