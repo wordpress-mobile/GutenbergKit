@@ -10,3 +10,12 @@
 .gutenberg-kit-editor__toolbar .block-editor-block-contextual-toolbar {
 	width: auto;
 }
+
+.gutenberg-kit-editor .components-editor-notices__snackbar {
+	bottom: 56px;
+	left: 0;
+	padding-left: 24px;
+	padding-right: 24px;
+	position: fixed;
+	right: 0;
+}

@@ -194,7 +194,7 @@ function Editor({ post }) {
 	useMediaUpload();
 
 	return (
-		<div className="editor__container">
+		<div className="gutenberg-kit-editor">
 			<BlockEditorProvider
 				value={postBlocks}
 				onInput={onInput}
