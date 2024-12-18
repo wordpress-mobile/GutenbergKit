@@ -6,11 +6,6 @@
 }
 
 /* Theme (for no-theme design) */
-.components-button:focus:not(:disabled) {
-	outline: 0 !important;
-	box-shadow: none !important;
-}
-
 .editor-styles-wrapper {
 	overflow: hidden;
 	min-height: 100vh;

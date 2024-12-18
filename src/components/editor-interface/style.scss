@@ -9,3 +9,9 @@
 	left: 16px;
 	right: 16px;
 }
+
+// Disable focus outline that is irrelevant for touch devices
+.gutenberg-kit-editor-interface .components-button:focus:not(:disabled) {
+	box-shadow: none;
+	outline: 0;
+}

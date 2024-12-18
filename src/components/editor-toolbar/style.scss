@@ -29,3 +29,11 @@ $min-touch-target-size: 48px;
 	.block-editor-block-contextual-toolbar.is-unstyled {
 	box-shadow: none;
 }
+
+// Disable focus outline that is irrelevant for touch devices
+.gutenberg-kit-editor-toolbar.components-accessible-toolbar
+	.components-button:focus::before,
+.gutenberg-kit-editor-toolbar.components-toolbar
+	.components-button:focus::before {
+	display: none;
+}
