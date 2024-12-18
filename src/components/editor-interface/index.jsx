@@ -14,9 +14,9 @@ import './style.scss';
  */
 export default function EditorInterface(props) {
 	return (
-		<>
+		<div className="gutenberg-kit-editor-interface">
 			<EditorLoadNotice className="gutenberg-kit-editor-interface__load-notice" />
 			<Editor {...props} />
-		</>
+		</div>
 	);
 }
