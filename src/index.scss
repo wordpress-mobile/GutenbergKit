@@ -5,35 +5,6 @@
 	margin: 0;
 }
 
-/* Theme (for no-theme design) */
-.editor-styles-wrapper {
-	overflow: hidden;
-	min-height: 100vh;
-}
-
-.editor-styles-wrapper p {
-	margin-block-start: 15px;
-	margin-block-end: 15px;
-	font-size: 17px;
-	line-height: 1.8;
-}
-
-.editor-styles-wrapper h2 {
-	margin-block-start: 30px;
-	margin-block-end: 10px;
-}
-
-.editor-styles-wrapper h3,
-h4 {
-	margin-block-start: 20px;
-	margin-block-end: 10px;
-}
-
-.editor-styles-wrapper li {
-	font-size: 17px;
-	margin-bottom: 5px;
-}
-
 .rich-text:focus {
 	outline: none;
 }
