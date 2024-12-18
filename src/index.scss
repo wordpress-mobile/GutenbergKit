@@ -6,10 +6,6 @@
 }
 
 /* Theme (for no-theme design) */
-* {
-	-webkit-tap-highlight-color: transparent;
-}
-
 .components-button:focus:not(:disabled) {
 	outline: 0 !important;
 	box-shadow: none !important;
