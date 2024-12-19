@@ -1,5 +1,6 @@
 .gutenberg-kit-editor-interface {
 	-webkit-tap-highlight-color: transparent; // Rely upon UI components to communicate touch feedback
+	flex-grow: 1;
 }
 
 .gutenberg-kit-editor-interface__load-notice {

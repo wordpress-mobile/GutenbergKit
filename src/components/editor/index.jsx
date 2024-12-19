@@ -202,7 +202,7 @@ function Editor({ post }) {
 				settings={settings}
 				useSubRegistry={false}
 			>
-				<BlockCanvas shouldIframe={false} height="auto" styles={styles}>
+				<BlockCanvas shouldIframe={false} height="100%" styles={styles}>
 					<div className="editor-visual-editor__post-title-wrapper">
 						{isEditorReady && <PostTitle ref={postTitleRef} />}
 					</div>

@@ -1,5 +1,11 @@
 @use "@wordpress/base-styles/variables" as wordpress;
 
+.root {
+	display: flex;
+	flex-direction: column;
+	height: 100vh;
+}
+
 :where(body) {
 	font-family: wordpress.$default-font;
 	margin: 0;
