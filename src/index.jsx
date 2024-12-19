@@ -15,9 +15,6 @@ import { initializeApiFetch } from './utils/api-fetch-setup';
 import { getGBKit, getPost } from './utils/bridge';
 import EditorInterface from './components/editor-interface';
 import './index.scss';
-// The Vite query parameter breaks the linter's import resolution
-// eslint-disable-next-line import/no-unresolved
-import defaultThemeStyles from './default-theme-styles.scss?inline';
 
 window.GBKit = getGBKit();
 initializeApiFetch();
@@ -36,10 +33,7 @@ function initializeEditor() {
 		})
 		.catch(() => {
 			const editorSettings = {
-				defaultEditorStyles: [
-					{ css: defaultEditorStyles },
-					{ css: defaultThemeStyles },
-				],
+				defaultEditorStyles: [{ css: defaultEditorStyles }],
 			};
 			dispatch(editorStore).updateEditorSettings(editorSettings);
 		});

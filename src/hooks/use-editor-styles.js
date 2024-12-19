@@ -11,6 +11,9 @@ import { useMemo } from '@wordpress/element';
  * Internal dependencies
  */
 import { unlock } from '../lock-unlock';
+// The Vite query parameter breaks the linter's import resolution
+// eslint-disable-next-line import/no-unresolved
+import defaultThemeStyles from './default-theme-styles.scss?inline';
 
 const { getLayoutStyles } = unlock(blockEditorPrivateApis);
 
@@ -44,6 +47,12 @@ export function useEditorStyles() {
 					hasFallbackGapSupport: true,
 					fallbackGapValue: '0.5em',
 				}),
+			});
+		}
+
+		if (!hasThemeStyleSupport) {
+			defaultEditorStyles.push({
+				css: defaultThemeStyles,
 			});
 		}
 
