@@ -26,6 +26,12 @@
 	z-index: 10; // Ensure the toolbar is above the block canvas
 }
 
+// HACK: Force a full-width inserter, consider replacing with a better inserter
+// popover implementation in the future.
+.gutenberg-kit-editor .block-editor-inserter__main-area {
+	width: 100%;
+}
+
 .gutenberg-kit-editor .components-editor-notices__snackbar {
 	bottom: 58px;
 	left: 0;
