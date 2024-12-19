@@ -12,6 +12,12 @@ $min-touch-target-size: 48px;
 	border-top-color: $border-color;
 }
 
+// Disable overflow scrolling for the block toolbar, and rely upon scrolling the
+// parent editor toolbar to avoid nested scrolling views.
+.gutenberg-kit-editor-toolbar .block-editor-block-contextual-toolbar {
+	width: auto;
+}
+
 // Hide the scrollbar in the toolbar
 .gutenberg-kit-editor-toolbar::-webkit-scrollbar {
 	display: none;
