@@ -11,6 +11,9 @@
 
 .gutenberg-kit-editor .editor-styles-wrapper {
 	padding: 0px 16px 56px 16px;
+	// Remove outline to mirror default user agent styles for body elements, which
+	// is the element used for Gutenberg's iframed editor
+	outline: none;
 }
 
 .gutenberg-kit-editor__toolbar {
