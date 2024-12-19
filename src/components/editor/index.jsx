@@ -198,17 +198,18 @@ function Editor({ post }) {
 	const styles = useEditorStyles();
 	useMediaUpload();
 
+	const useRootPaddingAwareAlignments =
+		settings.themeStyles &&
+		settings.__experimentalFeatures?.useRootPaddingAwareAlignments;
+
 	const editorClasses = clsx('gutenberg-kit-editor', {
-		'has-root-padding':
-			!settings.__experimentalFeatures?.useRootPaddingAwareAlignments,
+		'has-root-padding': !useRootPaddingAwareAlignments,
 	});
 	const titleClasses = clsx('editor-visual-editor__post-title-wrapper', {
-		'has-global-padding':
-			settings.__experimentalFeatures?.useRootPaddingAwareAlignments,
+		'has-global-padding': useRootPaddingAwareAlignments,
 	});
 	const blockListClasses = clsx({
-		'has-global-padding':
-			settings.__experimentalFeatures?.useRootPaddingAwareAlignments,
+		'has-global-padding': useRootPaddingAwareAlignments,
 	});
 
 	return (
