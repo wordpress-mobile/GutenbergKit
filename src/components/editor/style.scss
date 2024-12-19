@@ -40,6 +40,12 @@
 	width: 100%;
 }
 
+// Prevent the popover from stealing focus away from the inserter, which results
+// in needing to tap a block type twice to insert it.
+.gutenberg-kit-editor .block-editor-block-popover {
+	display: none;
+}
+
 .gutenberg-kit-editor .components-editor-notices__snackbar {
 	bottom: 58px;
 	left: 0;
