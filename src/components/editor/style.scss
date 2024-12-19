@@ -31,7 +31,7 @@
 	overflow-x: auto;
 	position: fixed;
 	right: 0;
-	z-index: 10; // Ensure the toolbar is above the block canvas
+	z-index: 40; // Ensure the toolbar is above the block canvas and its controls
 }
 
 // HACK: Force a full-width inserter, consider replacing with a better inserter
