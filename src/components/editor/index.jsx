@@ -1,4 +1,9 @@
 /**
+ * External dependencies
+ */
+import clsx from 'clsx';
+
+/**
  * WordPress dependencies
  */
 import { useEffect, useRef, useMemo } from '@wordpress/element';
@@ -193,8 +198,21 @@ function Editor({ post }) {
 	const styles = useEditorStyles();
 	useMediaUpload();
 
+	const editorClasses = clsx('gutenberg-kit-editor', {
+		'has-root-padding':
+			!settings.__experimentalFeatures?.useRootPaddingAwareAlignments,
+	});
+	const titleClasses = clsx('editor-visual-editor__post-title-wrapper', {
+		'has-global-padding':
+			settings.__experimentalFeatures?.useRootPaddingAwareAlignments,
+	});
+	const blockListClasses = clsx({
+		'has-global-padding':
+			settings.__experimentalFeatures?.useRootPaddingAwareAlignments,
+	});
+
 	return (
-		<div className="gutenberg-kit-editor">
+		<div className={editorClasses}>
 			<BlockEditorProvider
 				value={postBlocks}
 				onInput={onInput}
@@ -203,10 +221,10 @@ function Editor({ post }) {
 				useSubRegistry={false}
 			>
 				<BlockCanvas shouldIframe={false} height="100%" styles={styles}>
-					<div className="editor-visual-editor__post-title-wrapper">
+					<div className={titleClasses}>
 						{isEditorReady && <PostTitle ref={postTitleRef} />}
 					</div>
-					<BlockList />
+					<BlockList className={blockListClasses} />
 				</BlockCanvas>
 				{isEditorReady && (
 					<EditorToolbar className="gutenberg-kit-editor__toolbar" />

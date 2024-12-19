@@ -10,10 +10,18 @@
 }
 
 .gutenberg-kit-editor .editor-styles-wrapper {
-	padding: 0px 16px 56px 16px;
+	// Ensure the toolbar does not overlap the content
+	padding-bottom: 56px;
 	// Remove outline to mirror default user agent styles for body elements, which
 	// is the element used for Gutenberg's iframed editor
 	outline: none;
+}
+
+// Apply root level padding for themes that do not use the experimental
+// `useRootPaddingAwareAlignments` settings
+.gutenberg-kit-editor.has-root-padding .editor-styles-wrapper {
+	padding-left: 16px;
+	padding-right: 16px;
 }
 
 .gutenberg-kit-editor__toolbar {
