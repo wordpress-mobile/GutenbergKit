@@ -207,10 +207,6 @@
 	min-height: 40px;
 }
 
-.block-editor-default-block-appender__content {
-	color: gray;
-}
-
 .components-text {
 	font-size: 17px;
 }
@@ -256,24 +252,4 @@
 .components-popover.block-editor-block-switcher__popover
 	.components-popover__content {
 	min-width: 274px !important;
-}
-
-/* Post Title */
-.rich-text [data-rich-text-placeholder] {
-	pointer-events: none;
-}
-.rich-text [data-rich-text-placeholder]:after {
-	content: attr(data-rich-text-placeholder);
-	opacity: 0.62;
-}
-
-.editor-visual-editor__post-title-wrapper {
-	margin-top: 1.5rem;
-	min-height: 35px;
-}
-
-.editor-visual-editor__post-title-wrapper .wp-block-post-title {
-	font-size: 20px !important;
-	margin-bottom: 0 !important;
-	line-height: 1.5 !important;
 }

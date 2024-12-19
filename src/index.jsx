@@ -15,6 +15,7 @@ import { initializeApiFetch } from './utils/api-fetch-setup';
 import { getGBKit, getPost } from './utils/bridge';
 import EditorInterface from './components/editor-interface';
 import './index.scss';
+import defaultThemeStyles from './default-theme-styles.scss?inline';
 
 window.GBKit = getGBKit();
 initializeApiFetch();
@@ -33,7 +34,10 @@ function initializeEditor() {
 		})
 		.catch(() => {
 			const editorSettings = {
-				defaultEditorStyles: [{ css: defaultEditorStyles }],
+				defaultEditorStyles: [
+					{ css: defaultEditorStyles },
+					{ css: defaultThemeStyles },
+				],
 			};
 			dispatch(editorStore).updateEditorSettings(editorSettings);
 		});
