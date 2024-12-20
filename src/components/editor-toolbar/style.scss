@@ -2,7 +2,7 @@
 
 $border-color: #c8c7cc;
 $border-radius: 2px;
-$min-touch-target-size: 48px;
+$min-touch-target-size: 46px;
 
 .gutenberg-kit-editor-toolbar.is-unstyled {
 	background-color: wordpress.$white;
@@ -25,10 +25,15 @@ $min-touch-target-size: 48px;
 
 .gutenberg-kit-editor-toolbar .components-toolbar-group {
 	border-right-color: $border-color;
+	min-height: $min-touch-target-size;
+	padding-left: 0;
+	padding-right: 0;
 }
 
-.gutenberg-kit-editor-toolbar .components-button.has-icon.has-icon {
+.gutenberg-kit-editor-toolbar.gutenberg-kit-editor-toolbar
+	.components-button.has-icon.has-icon {
 	min-width: $min-touch-target-size;
+	max-height: $min-touch-target-size;
 }
 
 .gutenberg-kit-editor-toolbar .block-editor-inserter__toggle svg {
