@@ -26,3 +26,8 @@ $min-menu-item-touch-target-size: 42px;
 	.components-menu-item__button.components-button {
 	min-height: $min-menu-item-touch-target-size;
 }
+
+.gutenberg-kit-editor-interface
+	.components-autocomplete__result.components-button {
+	min-height: $min-menu-item-touch-target-size;
+}
