@@ -4,12 +4,12 @@ $border-color: #c8c7cc;
 $border-radius: 2px;
 $min-touch-target-size: 48px;
 
-.gutenberg-kit-editor-toolbar {
+.gutenberg-kit-editor-toolbar.is-unstyled {
 	background-color: wordpress.$white;
 	border-bottom: none;
 	border-left: none;
 	border-right: none;
-	border-top-color: $border-color;
+	border-top: 1px solid $border-color;
 }
 
 // Disable overflow scrolling for the block toolbar, and rely upon scrolling the

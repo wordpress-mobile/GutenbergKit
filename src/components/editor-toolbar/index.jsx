@@ -54,7 +54,11 @@ const EditorToolbar = ({ className }) => {
 
 	return (
 		<>
-			<Toolbar className={classes} label="Editor toolbar">
+			<Toolbar
+				className={classes}
+				label="Editor toolbar"
+				variant="unstyled"
+			>
 				<ToolbarGroup>
 					<Inserter />
 				</ToolbarGroup>
