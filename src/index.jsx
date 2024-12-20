@@ -6,14 +6,15 @@ import apiFetch from '@wordpress/api-fetch';
 import { dispatch } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { store as preferencesStore } from '@wordpress/preferences';
+import defaultEditorStyles from '@wordpress/block-editor/build-style/default-editor-styles.css?inline';
 
 /**
  * Internal dependencies
  */
 import { initializeApiFetch } from './utils/api-fetch-setup';
 import { getGBKit, getPost } from './utils/bridge';
-import App from './components/app';
-import './index.css';
+import EditorInterface from './components/editor-interface';
+import './index.scss';
 
 window.GBKit = getGBKit();
 initializeApiFetch();
@@ -23,18 +24,19 @@ initializeEditor();
  * Configure editor settings and styles, and render the editor.
  */
 function initializeEditor() {
-	const { themeStyles, siteApiRoot } = getGBKit();
+	const { themeStyles } = getGBKit();
 
 	// TEMP: This should be fetched from the host apps.
-	if (siteApiRoot?.length) {
-		apiFetch({ path: `/wp-block-editor/v1/settings` })
-			.then((editorSettings) => {
-				dispatch(editorStore).updateEditorSettings(editorSettings);
-			})
-			.catch(() => {
-				// TODO: Communicate helpful guidance to the user.
-			});
-	}
+	apiFetch({ path: `/wp-block-editor/v1/settings` })
+		.then((editorSettings) => {
+			dispatch(editorStore).updateEditorSettings(editorSettings);
+		})
+		.catch(() => {
+			const editorSettings = {
+				defaultEditorStyles: [{ css: defaultEditorStyles }],
+			};
+			dispatch(editorStore).updateEditorSettings(editorSettings);
+		});
 
 	dispatch(preferencesStore).setDefaults('core/edit-post', {
 		themeStyles,
@@ -47,7 +49,7 @@ function initializeEditor() {
 
 	createRoot(document.getElementById('root')).render(
 		<StrictMode>
-			<App {...settings} />
+			<EditorInterface {...settings} />
 		</StrictMode>
 	);
 }

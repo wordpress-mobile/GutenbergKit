@@ -1,0 +1,33 @@
+$baseline-interactive-font-size: 17px;
+$min-menu-item-touch-target-size: 42px;
+
+.gutenberg-kit-editor-interface {
+	-webkit-tap-highlight-color: transparent; // Rely upon UI components to communicate touch feedback
+	flex-grow: 1;
+}
+
+.gutenberg-kit-editor-interface__load-notice {
+	bottom: 62px;
+	left: 16px;
+	position: fixed;
+	right: 16px;
+}
+
+.gutenberg-kit-editor-interface .components-button {
+	font-size: $baseline-interactive-font-size;
+}
+
+.gutenberg-kit-editor-interface .components-dropdown-menu__menu-item,
+.gutenberg-kit-editor-interface
+	.components-dropdown-menu__menu
+	.components-menu-item__button,
+.gutenberg-kit-editor-interface
+	.components-dropdown-menu__menu
+	.components-menu-item__button.components-button {
+	min-height: $min-menu-item-touch-target-size;
+}
+
+.gutenberg-kit-editor-interface
+	.components-autocomplete__result.components-button {
+	min-height: $min-menu-item-touch-target-size;
+}

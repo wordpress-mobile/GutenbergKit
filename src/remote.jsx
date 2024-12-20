@@ -8,7 +8,8 @@ import apiFetch from '@wordpress/api-fetch';
  */
 import { getGBKit, getPost } from './utils/bridge';
 import { initializeApiFetch } from './utils/api-fetch-setup';
-import './index.css';
+import './index.scss';
+import defaultEditorStyles from '@wordpress/block-editor/build-style/default-editor-styles.css?inline';
 
 window.GBKit = getGBKit();
 window.wp = window.wp || {};
@@ -21,7 +22,7 @@ initalizeRemoteEditor();
  */
 async function initalizeRemoteEditor() {
 	try {
-		const { themeStyles, siteURL, siteApiRoot } = getGBKit();
+		const { themeStyles, siteURL } = getGBKit();
 		const { styles, scripts } = await apiFetch({
 			url: `${siteURL}/wp-json/__experimental/wp-block-editor/v1/editor-assets`,
 		});
@@ -33,15 +34,16 @@ async function initalizeRemoteEditor() {
 		const { store: preferencesStore } = window.wp.preferences;
 
 		// TEMP: This should be fetched from the host apps.
-		if (siteApiRoot?.length) {
-			apiFetch({ path: `/wp-block-editor/v1/settings` })
-				.then((editorSettings) => {
-					dispatch(editorStore).updateEditorSettings(editorSettings);
-				})
-				.catch(() => {
-					// TODO: Communicate helpful guidance to the user.
-				});
-		}
+		apiFetch({ path: `/wp-block-editor/v1/settings` })
+			.then((editorSettings) => {
+				dispatch(editorStore).updateEditorSettings(editorSettings);
+			})
+			.catch(() => {
+				const editorSettings = {
+					defaultEditorStyles: [{ css: defaultEditorStyles }],
+				};
+				dispatch(editorStore).updateEditorSettings(editorSettings);
+			});
 
 		dispatch(preferencesStore).setDefaults('core/edit-post', {
 			themeStyles,
@@ -50,10 +52,16 @@ async function initalizeRemoteEditor() {
 		const post = getPost();
 		const settings = { post };
 
-		const { default: App } = await import('./components/app');
+		const { default: EditorInterface } = await import(
+			'./components/editor-interface'
+		);
 		const { createRoot, createElement, StrictMode } = window.wp.element;
 		createRoot(document.getElementById('root')).render(
-			createElement(StrictMode, null, createElement(App, settings))
+			createElement(
+				StrictMode,
+				null,
+				createElement(EditorInterface, settings)
+			)
 		);
 	} catch (error) {
 		// Fallback to the local editor and display a notice. Because the remote

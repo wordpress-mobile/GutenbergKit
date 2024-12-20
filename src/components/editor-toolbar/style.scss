@@ -1,0 +1,72 @@
+@use "@wordpress/base-styles/colors" as wordpress;
+
+$border-color: #c8c7cc;
+$border-radius: 2px;
+$min-touch-target-size: 46px;
+
+.gutenberg-kit-editor-toolbar.is-unstyled {
+	background-color: wordpress.$white;
+	border-bottom: none;
+	border-left: none;
+	border-right: none;
+	border-top: 1px solid $border-color;
+}
+
+// Disable overflow scrolling for the block toolbar, and rely upon scrolling the
+// parent editor toolbar to avoid nested scrolling views.
+.gutenberg-kit-editor-toolbar .block-editor-block-contextual-toolbar {
+	width: auto;
+}
+
+// Hide the scrollbar in the toolbar
+.gutenberg-kit-editor-toolbar::-webkit-scrollbar {
+	display: none;
+}
+
+.gutenberg-kit-editor-toolbar .components-toolbar-group {
+	border-right-color: $border-color;
+	min-height: $min-touch-target-size;
+	padding-left: 0;
+	padding-right: 0;
+}
+
+.gutenberg-kit-editor-toolbar.gutenberg-kit-editor-toolbar
+	.components-button.has-icon.has-icon {
+	min-width: $min-touch-target-size;
+	max-height: $min-touch-target-size;
+}
+
+.gutenberg-kit-editor-toolbar .block-editor-inserter__toggle svg {
+	background: wordpress.$black;
+	border-radius: $border-radius;
+	color: wordpress.$white;
+}
+
+// Disable scrolling of the block toolbar, rely upon parent container scrolling
+.gutenberg-kit-editor-toolbar .block-editor-block-contextual-toolbar {
+	flex-shrink: 0;
+}
+
+.gutenberg-kit-editor-toolbar
+	.block-editor-block-contextual-toolbar.is-unstyled {
+	box-shadow: none;
+}
+
+// Disable focus outline that is irrelevant for touch devices
+.gutenberg-kit-editor-toolbar.components-accessible-toolbar
+	.components-button:focus::before,
+.gutenberg-kit-editor-toolbar.components-toolbar
+	.components-button:focus::before {
+	display: none;
+}
+
+// Synchronize dimensions of toggleable button pseudo elements to the overriden
+// width
+.gutenberg-kit-editor-toolbar.components-accessible-toolbar
+	.components-button.is-pressed::before,
+.gutenberg-kit-editor-toolbar.components-toolbar
+	.components-button.is-pressed::before {
+	height: calc($min-touch-target-size - 12px);
+	left: 6px;
+	right: 6px;
+}

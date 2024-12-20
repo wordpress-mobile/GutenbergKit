@@ -1,161 +1,18 @@
-:root {
-	font-family:
-		system-ui,
-		-apple-system,
-		BlinkMacSystemFont,
-		"Segoe UI",
-		Roboto,
-		Oxygen,
-		Ubuntu,
-		Cantarell,
-		"Open Sans",
-		"Helvetica Neue",
-		sans-serif;
-}
+@use "@wordpress/base-styles/variables" as wordpress;
 
-body {
-	margin: 0;
-	font-family: -apple-system;
-	line-height: 1.55;
-}
-
-/* Theme (for no-theme design) */
-* {
-	-webkit-tap-highlight-color: transparent;
-}
-
-.components-button:focus:not(:disabled) {
-	outline: 0 !important;
-	box-shadow: none !important;
-}
-
-:root .editor-styles-wrapper {
-	padding: 0px 16px 56px 16px;
-}
-
-.editor-styles-wrapper {
-	overflow: hidden;
-	min-height: 100vh;
-}
-
-.editor-styles-wrapper p {
-	margin-block-start: 15px;
-	margin-block-end: 15px;
-	font-size: 17px;
-	line-height: 1.8;
-}
-
-.editor-styles-wrapper h2 {
-	margin-block-start: 30px;
-	margin-block-end: 10px;
-}
-
-.editor-styles-wrapper h3,
-h4 {
-	margin-block-start: 20px;
-	margin-block-end: 10px;
-}
-
-.editor-styles-wrapper li {
-	font-size: 17px;
-	margin-bottom: 5px;
-}
-
-.rich-text:focus {
-	outline: none;
-}
-
-.block-editor-block-popover {
-	display: none;
-}
-
-.editor-load-notice {
-	position: fixed;
-	bottom: 62px;
-	left: 16px;
-	right: 16px;
-	z-index: 999;
-}
-
-/* Toolbar */
-
-.gbkit-editor-toolbar {
-	border-top: 0.5px solid #c8c7cc;
-	background: white;
-	width: 100%;
+.root {
 	display: flex;
-	align-items: center;
-	position: fixed;
-	bottom: 0;
-	right: 0;
-	left: 0;
-	z-index: 999;
-	overflow-x: scroll;
-	min-height: 46px;
-
-	transition: position 1.5s linear;
+	flex-direction: column;
+	height: 100vh;
 }
 
-.gbkit-editor-toolbar::-webkit-scrollbar {
-	display: none;
-}
-
-.block-editor-block-toolbar {
-	/* overflow: hidden !important; */
-	/* Disable scrolling – scroll the wrapper div */
-}
-
-/* NOTE: this is not applicable on mobile */
-.block-editor-block-mover__drag-handle {
-	display: none;
-}
-
-.block-editor-inserter .block-editor-inserter__toggle {
-	background: black;
-	color: white !important;
-	clip-path: inset(4px 4px 4px 4px);
-	margin: 4px 12px;
-	margin-right: 8px;
-	border-radius: 24px !important;
+:where(body) {
+	font-family: wordpress.$default-font;
+	margin: 0;
 }
 
 .block-editor-inserter__menu .block-editor-tabbed-sidebar__close-button {
 	display: none;
-}
-
-.block-editor-block-contextual-toolbar {
-	border-bottom: 0 !important;
-	/* TODO: fixme */
-}
-
-.gbkit-editor-toolbar_settings_icon {
-	font-size: 34px !important;
-	min-width: 46px !important;
-}
-
-.gbkit-editor-toolbar .block-editor-inserter {
-	border-right: 0.5px solid #c8c7cc;
-}
-
-.gbkit-editor-toolbar .block-editor-inserter button {
-	margin-right: 12px;
-}
-
-.gbkit-editor-toolbar_toolbar-group {
-	display: flex;
-	align-items: center;
-}
-
-.block-editor-block-contextual-toolbar {
-	border-left: 0.5px solid #c8c7cc !important;
-}
-
-/* Modal Sheet */
-
-.react-modal-sheet-container {
-	border-top-right-radius: 16px !important;
-	border-top-left-radius: 16px !important;
-	box-shadow: rgba(0, 0, 0, 0.1) 0px -2px 10px !important;
 }
 
 /* Popover */
@@ -213,13 +70,6 @@ h4 {
 	display: none;
 }
 
-/* FIXME: this is a workaround to ensure that the images don't grow beyond the screen bounds.
-There has to be a setting or any other better way of doing that.
-*/
-.wp-block-image div {
-	width: auto !important;
-}
-
 /* Inserter (Mobile Design) */
 
 .block-editor-tabbed-sidebar__tablist button {
@@ -261,10 +111,6 @@ There has to be a setting or any other better way of doing that.
 	padding-right: 8px !important;
 }
 
-.components-input-base {
-	border-radius: 8px !important;
-}
-
 .block-editor-inserter__panel-header {
 	display: block;
 	border-bottom: 1px solid lightgray;
@@ -296,11 +142,6 @@ There has to be a setting or any other better way of doing that.
 		:disabled
 	):hover::after {
 	background: transparent;
-}
-
-.components-button[aria-expanded="true"],
-.components-button:hover:not(:disabled, [aria-disabled="true"]) {
-	color: inherit;
 }
 
 .components-button.block-editor-block-types-list__item:not(:disabled):hover
@@ -360,39 +201,14 @@ There has to be a setting or any other better way of doing that.
 	font-size: 13px;
 }
 
-.components-accessible-toolbar .components-button.is-pressed::before,
-.components-toolbar .components-button.is-pressed::before {
-	border-radius: 8px;
-}
-
-/* .components-button.is-pressed {
-	color: black !important;
-} */
-
 /* More */
-
-.components-dropdown-menu__menu-item {
-	min-height: 40px;
-}
-
-.block-editor-default-block-appender__content {
-	color: gray;
-}
 
 .components-text {
 	font-size: 17px;
 }
 
-.components-button {
-	border-radius: 8px;
-}
-
 .components-panel__body-title {
 	font-size: 15px;
-}
-
-.components-button {
-	font-size: 17px;
 }
 
 .block-editor-block-card__title {
@@ -403,10 +219,6 @@ There has to be a setting or any other better way of doing that.
 	font-size: 17px;
 }
 
-.components-popover__content {
-	border-radius: 8px !important;
-}
-
 .components-menu-item__item span {
 	font-size: 17px !important;
 }
@@ -415,21 +227,12 @@ There has to be a setting or any other better way of doing that.
 	font-size: 13px !important;
 }
 
-.components-placeholder {
-	border-radius: 8px !important;
-}
-
 .components-placeholder__label {
 	font-size: 17px !important;
 }
 
 .components-placeholder__input {
-	border-radius: 6px !important;
 	font-size: 17px !important;
-}
-
-.components-text-control__input {
-	border-radius: 6px !important;
 }
 
 .components-base-control__label {
@@ -445,35 +248,4 @@ There has to be a setting or any other better way of doing that.
 .components-popover.block-editor-block-switcher__popover
 	.components-popover__content {
 	min-width: 274px !important;
-}
-
-/* Post Title */
-.rich-text [data-rich-text-placeholder] {
-	pointer-events: none;
-}
-.rich-text [data-rich-text-placeholder]:after {
-	content: attr(data-rich-text-placeholder);
-	opacity: 0.62;
-}
-
-.editor-visual-editor__post-title-wrapper {
-	margin-top: 1.5rem;
-	min-height: 35px;
-}
-
-.editor-visual-editor__post-title-wrapper .wp-block-post-title {
-	font-size: 20px !important;
-	margin-bottom: 0 !important;
-	line-height: 1.5 !important;
-}
-
-/* Snackbar */
-
-.components-editor-notices__snackbar {
-	bottom: 54px;
-	padding-left: 24px;
-	padding-right: 24px;
-	position: fixed;
-	right: 0;
-	left: 0;
 }

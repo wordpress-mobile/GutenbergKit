@@ -12,4 +12,11 @@ export default defineConfig({
 	},
 	plugins: [react()],
 	root: 'src',
+	css: {
+		preprocessorOptions: {
+			scss: {
+				quietDeps: true,
+			},
+		},
+	},
 });

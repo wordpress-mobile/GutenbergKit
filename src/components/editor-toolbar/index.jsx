@@ -9,16 +9,30 @@ import {
 	store as blockEditorStore,
 } from '@wordpress/block-editor';
 import { useSelect } from '@wordpress/data';
-import { Button, Popover, ToolbarButton } from '@wordpress/components';
+import {
+	Button,
+	Popover,
+	Toolbar,
+	ToolbarGroup,
+	ToolbarButton,
+} from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { close, cog } from '@wordpress/icons';
+import clsx from 'clsx';
+
+/**
+ * Internal dependencies
+ */
+import './style.scss';
 
 /**
  * Renders the editor toolbar containing block-related actions.
  *
+ * @param {Object} props           Component props.
+ * @param {string} props.className Component classes.
  * @return {JSX.Element} The rendered editor toolbar component.
  */
-const EditorToolbar = () => {
+const EditorToolbar = ({ className }) => {
 	const [isBlockInspectorShown, setBlockInspectorShown] = useState(false);
 	const { isSelected } = useSelect((select) => {
 		const { getSelectedBlockClientId } = select(blockEditorStore);
@@ -36,24 +50,31 @@ const EditorToolbar = () => {
 		setBlockInspectorShown(false);
 	}
 
+	const classes = clsx('gutenberg-kit-editor-toolbar', className);
+
 	return (
 		<>
-			<div className="gbkit gbkit-editor-toolbar">
-				<Inserter />
+			<Toolbar
+				className={classes}
+				label="Editor toolbar"
+				variant="unstyled"
+			>
+				<ToolbarGroup>
+					<Inserter />
+				</ToolbarGroup>
 
 				{isSelected && (
-					<div className="gbkit-editor-toolbar_toolbar-group">
+					<ToolbarGroup>
 						<ToolbarButton
 							title={__('Open Settings')}
 							icon={cog}
 							onClick={openSettings}
-							className="gbkit-editor-toolbar_settings_icon"
 						/>
-					</div>
+					</ToolbarGroup>
 				)}
 
-				<BlockToolbar />
-			</div>
+				<BlockToolbar hideDragHandle />
+			</Toolbar>
 
 			{isBlockInspectorShown && (
 				<Popover

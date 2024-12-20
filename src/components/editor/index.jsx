@@ -1,4 +1,9 @@
 /**
+ * External dependencies
+ */
+import clsx from 'clsx';
+
+/**
  * WordPress dependencies
  */
 import { useEffect, useRef, useMemo } from '@wordpress/element';
@@ -18,32 +23,28 @@ import {
 } from '@wordpress/editor';
 import { useDispatch, useSelect, subscribe } from '@wordpress/data';
 import { store as coreStore, useEntityBlockEditor } from '@wordpress/core-data';
-
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
-import '@wordpress/block-editor/build-style/default-editor-styles.css';
 import '@wordpress/block-editor/build-style/style.css';
-import '@wordpress/block-editor/build-style/content.css';
-import '@wordpress/editor/build-style/style.css';
-
 // Default styles that are needed for the core blocks.
 import '@wordpress/block-library/build-style/style.css';
 import '@wordpress/block-library/build-style/editor.css';
 import '@wordpress/block-library/build-style/theme.css';
-
-// Registers standard formatting options for RichText.
 import '@wordpress/format-library';
 import '@wordpress/format-library/build-style/style.css';
+import '@wordpress/block-editor/build-style/content.css';
+import '@wordpress/editor/build-style/style.css';
 
 /**
  * Internal dependencies
  */
-import EditorToolbar from './editor-toolbar';
-import { editorLoaded, onEditorContentChanged } from '../utils/bridge';
-import { postTypeEntities } from '../utils/post-type-entities';
-import { useEditorStyles } from '../hooks/use-editor-styles';
-import { unlock } from '../lock-unlock';
-import { useMediaUpload } from '../hooks/use-media-upload';
+import './style.scss';
+import EditorToolbar from '../editor-toolbar';
+import { editorLoaded, onEditorContentChanged } from '../../utils/bridge';
+import { postTypeEntities } from '../../utils/post-type-entities';
+import { useEditorStyles } from '../../hooks/use-editor-styles';
+import { unlock } from '../../lock-unlock';
+import { useMediaUpload } from '../../hooks/use-media-upload';
 
 /**
  * @typedef {import('../utils/bridge').Post} Post
@@ -197,8 +198,22 @@ function Editor({ post }) {
 	const styles = useEditorStyles();
 	useMediaUpload();
 
+	const useRootPaddingAwareAlignments =
+		settings.themeStyles &&
+		settings.__experimentalFeatures?.useRootPaddingAwareAlignments;
+
+	const editorClasses = clsx('gutenberg-kit-editor', {
+		'has-root-padding': !useRootPaddingAwareAlignments,
+	});
+	const titleClasses = clsx('editor-visual-editor__post-title-wrapper', {
+		'has-global-padding': useRootPaddingAwareAlignments,
+	});
+	const blockListClasses = clsx({
+		'has-global-padding': useRootPaddingAwareAlignments,
+	});
+
 	return (
-		<div className="editor__container">
+		<div className={editorClasses}>
 			<BlockEditorProvider
 				value={postBlocks}
 				onInput={onInput}
@@ -206,13 +221,15 @@ function Editor({ post }) {
 				settings={settings}
 				useSubRegistry={false}
 			>
-				<BlockCanvas shouldIframe={false} height="auto" styles={styles}>
-					<div className="editor-visual-editor__post-title-wrapper">
+				<BlockCanvas shouldIframe={false} height="100%" styles={styles}>
+					<div className={titleClasses}>
 						{isEditorReady && <PostTitle ref={postTitleRef} />}
 					</div>
-					<BlockList />
+					<BlockList className={blockListClasses} />
 				</BlockCanvas>
-				{isEditorReady && <EditorToolbar />}
+				{isEditorReady && (
+					<EditorToolbar className="gutenberg-kit-editor__toolbar" />
+				)}
 
 				<Popover.Slot />
 				<EditorSnackbars />
