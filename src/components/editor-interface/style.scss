@@ -1,3 +1,5 @@
+$baseline-interactive-font-size: 17px;
+
 .gutenberg-kit-editor-interface {
 	-webkit-tap-highlight-color: transparent; // Rely upon UI components to communicate touch feedback
 	flex-grow: 1;
@@ -8,4 +10,8 @@
 	left: 16px;
 	position: fixed;
 	right: 16px;
+}
+
+.gutenberg-kit-editor-interface .components-button {
+	font-size: $baseline-interactive-font-size;
 }
