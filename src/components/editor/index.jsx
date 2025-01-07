@@ -12,7 +12,7 @@ import './style.scss';
  *
  * @return {JSX.Element} The rendered App component.
  */
-export default function EditorInterface(props) {
+export default function Editor(props) {
 	return (
 		<div className="gutenberg-kit-editor-interface">
 			<EditorLoadNotice className="gutenberg-kit-editor-interface__load-notice" />
