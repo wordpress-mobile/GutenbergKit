@@ -1,7 +1,7 @@
 /**
  * Internal dependencies
  */
-import Editor from '../editor';
+import VisualEditor from '../visual-editor';
 import EditorLoadNotice from '../editor-load-notice';
 import './style.scss';
 
@@ -16,7 +16,7 @@ export default function EditorInterface(props) {
 	return (
 		<div className="gutenberg-kit-editor-interface">
 			<EditorLoadNotice className="gutenberg-kit-editor-interface__load-notice" />
-			<Editor {...props} />
+			<VisualEditor {...props} />
 		</div>
 	);
 }

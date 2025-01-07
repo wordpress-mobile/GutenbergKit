@@ -67,15 +67,14 @@ const {
  *
  * @return {JSX.Element} The rendered Editor component.
  */
-function Editor({ post }) {
+function VisualEditor({ post }) {
 	const postTitleRef = useRef(post.title);
 	const postContentRef = useRef(post.content);
 	const { addEntities, editEntityRecord, receiveEntityRecords } =
 		useDispatch(coreStore);
-	const { setEditedPost } = useDispatch(editorStore);
+	const { setEditedPost, setupEditor } = useDispatch(editorStore);
 	const { getEditedPostAttribute, getEditedPostContent } =
 		useSelect(editorStore);
-	const { setupEditor } = useDispatch(editorStore);
 
 	useEffect(() => {
 		window.editor = editor;
@@ -238,7 +237,7 @@ function Editor({ post }) {
 	);
 }
 
-export default Editor;
+export default VisualEditor;
 
 /**
  * Blurs the currently active paragraph element in the document.
