@@ -1,6 +1,9 @@
 import Foundation
 
 public protocol EditorViewControllerDelegate: AnyObject {
+    /// Called when the editor loads.
+    func editorDidLoad(_ viewContoller: EditorViewController)
+
     /// Gets called when the editor is loaded and the initial content is displayed.
     ///
     /// - parameter content: Content serialized according to the editor's settings.
