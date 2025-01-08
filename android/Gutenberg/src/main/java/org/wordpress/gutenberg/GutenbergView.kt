@@ -310,6 +310,18 @@ class GutenbergView : WebView {
         }
     }
 
+    fun undo() {
+        handler.post {
+            this.evaluateJavascript("editor.undo();", null)
+        }
+    }
+
+    fun redo() {
+        handler.post {
+            this.evaluateJavascript("editor.redo();", null)
+        }
+    }
+
     @JavascriptInterface
     fun onEditorLoaded() {
         Log.i("GutenbergView", "EditorLoaded received in native code")
