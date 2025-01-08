@@ -118,8 +118,9 @@ class GutenbergView : WebView {
                 return super.shouldInterceptRequest(view, request)
             }
 
-            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-                url?.let {
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest): Boolean {
+                val url = request.url.toString()
+                url.let {
                     // Allow the WebView to handle `blob:` requests, which are utilized in the block
                     // inserter's Patterns tab
                     if (it.startsWith("blob:")) {
