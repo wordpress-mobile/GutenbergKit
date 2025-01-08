@@ -34,6 +34,27 @@ export function onEditorContentChanged() {
 }
 
 /**
+ * Notifies the native host that the editor history stack has changed.
+ *
+ * @param {boolean} hasUndo Whether the editor has undo history.
+ * @param {boolean} hasRedo Whether the editor has redo history.
+ *
+ * @return {void}
+ */
+export function onEditorHistoryChanged(hasUndo, hasRedo) {
+	if (window.editorDelegate) {
+		window.editorDelegate.onEditorHistoryChanged(hasUndo, hasRedo);
+	}
+
+	if (window.webkit) {
+		window.webkit.messageHandlers.editorDelegate.postMessage({
+			message: 'onEditorHistoryChanged',
+			body: { hasUndo, hasRedo },
+		});
+	}
+}
+
+/**
  * Notifies the native host that blocks have changed.
  *
  * @param {boolean} [isEmpty=false] Whether the editor is empty.

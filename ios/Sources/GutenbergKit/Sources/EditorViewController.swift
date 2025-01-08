@@ -293,6 +293,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             case .onEditorContentChanged:
                 // TODO: Refactor and remove EditorState entirely?
                 delegate?.editor(self, didUpdateContentWithState: state)
+            case .onEditorHistoryChanged:
+                let body = try message.decode(EditorJSMessage.DidUpdateEditorHistoryBody.self)
+                self.state.hasUndo = body.hasUndo
+                self.state.hasRedo = body.hasRedo
+                delegate?.editor(self, didUpdateHistoryState: state)
             case .showBlockPicker:
                 showBlockInserter()
             case .openMediaLibrary:
