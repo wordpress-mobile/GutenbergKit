@@ -1,65 +1,33 @@
-.gutenberg-kit-editor {
-	box-sizing: border-box;
-	flex-shrink: 0;
-	height: 100%;
-	max-height: 100%;
-	max-width: 100%;
-	min-width: 300px;
-	position: relative;
-	width: 100%;
+$baseline-interactive-font-size: 17px;
+$min-menu-item-touch-target-size: 42px;
+
+.gutenberg-kit-editor-interface {
+	-webkit-tap-highlight-color: transparent; // Rely upon UI components to communicate touch feedback
+	flex-grow: 1;
 }
 
-.gutenberg-kit-editor .editor-styles-wrapper {
-	// Ensure the toolbar does not overlap the content
-	padding-bottom: 56px;
-	// Remove outline to mirror default user agent styles for body elements, which
-	// is the element used for Gutenberg's iframed editor
-	outline: none;
-}
-
-// Apply root level padding for themes that do not use the experimental
-// `useRootPaddingAwareAlignments` settings
-.gutenberg-kit-editor.has-root-padding .editor-styles-wrapper {
-	padding-left: 16px;
-	padding-right: 16px;
-}
-
-.gutenberg-kit-editor__toolbar {
-	align-items: center;
-	bottom: 0;
-	left: 0;
-	overflow-x: auto;
+.gutenberg-kit-editor-interface__load-notice {
+	bottom: 62px;
+	left: 16px;
 	position: fixed;
-	right: 0;
-	z-index: 40; // Ensure the toolbar is above the block canvas and its controls
+	right: 16px;
 }
 
-// HACK: Force a full-width inserter, consider replacing with a better inserter
-// popover implementation in the future.
-.gutenberg-kit-editor .block-editor-inserter__main-area {
-	width: 100%;
+.gutenberg-kit-editor-interface .components-button {
+	font-size: $baseline-interactive-font-size;
 }
 
-// Prevent the popover from stealing focus away from the inserter, which results
-// in needing to tap a block type twice to insert it.
-.gutenberg-kit-editor .block-editor-block-popover {
-	display: none;
+.gutenberg-kit-editor-interface .components-dropdown-menu__menu-item,
+.gutenberg-kit-editor-interface
+	.components-dropdown-menu__menu
+	.components-menu-item__button,
+.gutenberg-kit-editor-interface
+	.components-dropdown-menu__menu
+	.components-menu-item__button.components-button {
+	min-height: $min-menu-item-touch-target-size;
 }
 
-.gutenberg-kit-editor .components-editor-notices__snackbar {
-	bottom: 58px;
-	left: 0;
-	padding-right: 8px;
-	padding-left: 8px;
-	position: fixed;
-	right: 0;
-}
-
-// Manually copy styles required by Gutenberg that are provided by the WP Admin
-// environment in the form of the `load-styles.php` utility.
-// https://github.com/WordPress/wordpress-develop/blob/a82874058f58575dbba64ce09b6dcbd43ccf5fdc/src/wp-admin/css/common.css#L2617-L2621
-.gutenberg-kit-editor :where(fieldset) {
-	border: 0;
-	padding: 0;
-	margin: 0;
+.gutenberg-kit-editor-interface
+	.components-autocomplete__result.components-button {
+	min-height: $min-menu-item-touch-target-size;
 }

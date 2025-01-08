@@ -52,16 +52,10 @@ async function initalizeRemoteEditor() {
 		const post = getPost();
 		const settings = { post };
 
-		const { default: EditorInterface } = await import(
-			'./components/editor-interface'
-		);
+		const { default: Editor } = await import('./components/editor');
 		const { createRoot, createElement, StrictMode } = window.wp.element;
 		createRoot(document.getElementById('root')).render(
-			createElement(
-				StrictMode,
-				null,
-				createElement(EditorInterface, settings)
-			)
+			createElement(StrictMode, null, createElement(Editor, settings))
 		);
 	} catch (error) {
 		// Fallback to the local editor and display a notice. Because the remote
