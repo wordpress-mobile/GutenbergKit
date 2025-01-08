@@ -72,7 +72,7 @@ function VisualEditor({ post }) {
 	const postContentRef = useRef(post.content);
 	const { addEntities, editEntityRecord, receiveEntityRecords } =
 		useDispatch(coreStore);
-	const { setEditedPost, setupEditor } = useDispatch(editorStore);
+	const { setEditedPost, setupEditor, undo, redo } = useDispatch(editorStore);
 	const { getEditedPostAttribute, getEditedPostContent } =
 		useSelect(editorStore);
 
@@ -169,6 +169,16 @@ function VisualEditor({ post }) {
 			title: getEditedPostAttribute('title'),
 			content: getEditedPostContent(),
 		};
+	};
+
+	editor.undo = () => {
+		// Do not return the `Promise` return value to avoid host errors.
+		undo();
+	};
+
+	editor.redo = () => {
+		// Do not return the `Promise` return value to avoid host errors.
+		redo();
 	};
 
 	const blockEditorSettings = useBlockEditorSettings(

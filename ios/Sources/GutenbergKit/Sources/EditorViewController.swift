@@ -207,6 +207,16 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         return EditorTitleAndContent(title: title, content: content)
     }
 
+    /// Steps backwards in the editor history state
+    public func undo() {
+        evaluate("editor.undo();")
+    }
+
+    /// Steps forwards in the editor history state
+    public func redo() {
+        evaluate("editor.redo();")
+    }
+
     /// Enables code editor.
     public var isCodeEditorEnabled: Bool = false {
         didSet {
