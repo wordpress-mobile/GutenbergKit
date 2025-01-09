@@ -53,11 +53,16 @@ class GutenbergView : WebView {
 
     private var onFileChooserRequested: ((Intent, Int) -> Unit)? = null
     private var contentChangeListener: ContentChangeListener? = null
+    private var historyChangeListener: HistoryChangeListener? = null
     private var openMediaLibraryListener: OpenMediaLibraryListener? = null
     private var editorDidBecomeAvailableListener: EditorAvailableListener? = null
 
     fun setContentChangeListener(listener: ContentChangeListener) {
         contentChangeListener = listener
+    }
+
+    fun setHistoryChangeListener(listener: HistoryChangeListener) {
+        historyChangeListener = listener
     }
 
     fun setOpenMediaLibraryListener(listener: OpenMediaLibraryListener) {
@@ -113,8 +118,9 @@ class GutenbergView : WebView {
                 return super.shouldInterceptRequest(view, request)
             }
 
-            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-                url?.let {
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest): Boolean {
+                val url = request.url.toString()
+                url.let {
                     // Allow the WebView to handle `blob:` requests, which are utilized in the block
                     // inserter's Patterns tab
                     if (it.startsWith("blob:")) {
@@ -263,6 +269,10 @@ class GutenbergView : WebView {
         fun onContentChanged(title: String, content: String)
     }
 
+    interface HistoryChangeListener {
+        fun onHistoryChanged(hasUndo: Boolean, hasRedo: Boolean)
+    }
+
     sealed class Value {
         data class Single(val value: Int): Value()
         data class Multiple(val values: IntArray): Value() {
@@ -301,6 +311,18 @@ class GutenbergView : WebView {
         }
     }
 
+    fun undo() {
+        handler.post {
+            this.evaluateJavascript("editor.undo();", null)
+        }
+    }
+
+    fun redo() {
+        handler.post {
+            this.evaluateJavascript("editor.redo();", null)
+        }
+    }
+
     @JavascriptInterface
     fun onEditorLoaded() {
         Log.i("GutenbergView", "EditorLoaded received in native code")
@@ -327,6 +349,11 @@ class GutenbergView : WebView {
                 contentChangeListener?.onContentChanged(title, content)
             }
         }, false)
+    }
+
+    @JavascriptInterface
+    fun onEditorHistoryChanged(hasUndo: Boolean, hasRedo: Boolean) {
+        historyChangeListener?.onHistoryChanged(hasUndo, hasRedo)
     }
 
     @JavascriptInterface
@@ -400,6 +427,7 @@ class GutenbergView : WebView {
         clearConfig()
         this.stopLoading()
         contentChangeListener = null
+        historyChangeListener = null
         editorDidBecomeAvailable = null
         filePathCallback = null
         onFileChooserRequested = null

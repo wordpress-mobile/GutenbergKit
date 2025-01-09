@@ -27,6 +27,8 @@ struct EditorJSMessage {
         case onEditorLoaded
         /// The editor content changed.
         case onEditorContentChanged
+        /// The editor history (undo, redo) changed.
+        case onEditorHistoryChanged
         /// The user tapped the inserter button.
         case showBlockPicker
         /// User requested the Media Library
@@ -35,5 +37,10 @@ struct EditorJSMessage {
 
     struct DidUpdateBlocksBody: Decodable {
         let isEmpty: Bool
+    }
+
+    struct DidUpdateEditorHistoryBody: Decodable {
+        let hasUndo: Bool
+        let hasRedo: Bool
     }
 }

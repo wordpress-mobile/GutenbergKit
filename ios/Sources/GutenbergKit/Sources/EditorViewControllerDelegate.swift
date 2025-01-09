@@ -24,12 +24,19 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// is probably not how it should be in the production design.
     func editor(_ viewController: EditorViewController, didUpdateContentWithState state: EditorState)
 
+    /// Notifies the client about new history state.
+    func editor(_ viewController: EditorViewController, didUpdateHistoryState state: EditorState)
+
     func editor(_ viewController: EditorViewController, didRequestMediaFromSiteMediaLibrary config: OpenMediaLibraryAction)
 }
 
 public struct EditorState {
     /// Set to `true` if the editor has non-empty content.
     public var isEmpty = true
+    /// Set to `true` if the editor has undo history.
+    public var hasUndo = false
+    /// Set to `true` if the editor has redo history.
+    public var hasRedo = false
 }
 
 public struct OpenMediaLibraryAction: Codable {
