@@ -68,6 +68,7 @@ const {
  * @return {JSX.Element} The rendered Editor component.
  */
 function VisualEditor({ post }) {
+	const editorPostTitleRef = useRef();
 	const postTitleRef = useRef(post.title);
 	const postContentRef = useRef(post.content);
 	const { addEntities, editEntityRecord, receiveEntityRecords } =
@@ -232,7 +233,9 @@ function VisualEditor({ post }) {
 			>
 				<BlockCanvas shouldIframe={false} height="100%" styles={styles}>
 					<div className={titleClasses}>
-						{isEditorReady && <PostTitle ref={postTitleRef} />}
+						{isEditorReady && (
+							<PostTitle ref={editorPostTitleRef} />
+						)}
 					</div>
 					<BlockList className={blockListClasses} />
 				</BlockCanvas>
