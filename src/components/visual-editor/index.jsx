@@ -6,14 +6,12 @@ import clsx from 'clsx';
 /**
  * WordPress dependencies
  */
-import { useEffect, useRef, useMemo } from '@wordpress/element';
+import { useRef, useMemo } from '@wordpress/element';
 import {
 	BlockList,
 	privateApis as blockEditorPrivateApis,
 } from '@wordpress/block-editor';
 import { Popover } from '@wordpress/components';
-import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
-import { registerCoreBlocks } from '@wordpress/block-library';
 import {
 	store as editorStore,
 	mediaUpload,
@@ -21,7 +19,7 @@ import {
 	PostTitle,
 	privateApis as editorPrivateApis,
 } from '@wordpress/editor';
-import { useDispatch, useSelect } from '@wordpress/data';
+import { useSelect } from '@wordpress/data';
 import { store as coreStore, useEntityBlockEditor } from '@wordpress/core-data';
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
@@ -40,12 +38,11 @@ import '@wordpress/editor/build-style/style.css';
  */
 import './style.scss';
 import EditorToolbar from '../editor-toolbar';
-import { editorLoaded } from '../../utils/bridge';
-import { postTypeEntities } from '../../utils/post-type-entities';
 import { useEditorStyles } from '../../hooks/use-editor-styles';
 import { unlock } from '../../lock-unlock';
 import { useMediaUpload } from '../../hooks/use-media-upload';
 import { useHostBridge } from './use-host-bridge';
+import { useEditorSetup } from './use-editor-setup';
 
 /**
  * @typedef {import('../utils/bridge').Post} Post
@@ -67,30 +64,8 @@ const {
  */
 function VisualEditor({ post }) {
 	const editorPostTitleRef = useRef();
-	const { addEntities, receiveEntityRecords } = useDispatch(coreStore);
-	const { setEditedPost, setupEditor } = useDispatch(editorStore);
-
 	useHostBridge(post);
-
-	useEffect(() => {
-		addEntities(postTypeEntities);
-		receiveEntityRecords('postType', post.type, post);
-
-		setupEditor(post, {});
-		registerCoreBlocks();
-
-		editorLoaded();
-		// Temp, check why this isn't being called in the provider.
-		setEditedPost(post.type, post.id);
-
-		return () => {
-			window.editor = {};
-			getBlockTypes().forEach((block) => {
-				unregisterBlockType(block.name);
-			});
-		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []);
+	useEditorSetup(post);
 
 	const {
 		blockPatterns,
