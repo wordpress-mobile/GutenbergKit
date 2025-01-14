@@ -3,6 +3,8 @@
  */
 import { useEntityBlockEditor } from '@wordpress/core-data';
 import { privateApis as blockEditorPrivateApis } from '@wordpress/block-editor';
+import { useSelect } from '@wordpress/data';
+import { store as editorStore } from '@wordpress/editor';
 
 /**
  * Internal dependencies
@@ -16,10 +18,12 @@ import { useEditorSetup } from './use-editor-setup';
 import { useMediaUpload } from './use-media-upload';
 import { useGBKitSettings } from './use-gbkit-settings';
 import { unlock } from '../../lock-unlock';
+import TextEditor from '../text-editor';
 
 /**
  * @typedef {import('../utils/bridge').Post} Post
  */
+
 const { ExperimentalBlockEditorProvider: BlockEditorProvider } = unlock(
 	blockEditorPrivateApis
 );
@@ -50,6 +54,15 @@ export default function Editor({ post, children }) {
 		settings.themeStyles &&
 		settings.__experimentalFeatures?.useRootPaddingAwareAlignments;
 
+	const { mode, isRichEditingEnabled } = useSelect((select) => {
+		const { getEditorSettings, getEditorMode } = select(editorStore);
+		const editorSettings = getEditorSettings();
+		return {
+			mode: getEditorMode(),
+			isRichEditingEnabled: editorSettings.richEditingEnabled,
+		};
+	}, []);
+
 	return (
 		<div className="gutenberg-kit-editor-interface">
 			<EditorLoadNotice className="gutenberg-kit-editor-interface__load-notice" />
@@ -60,11 +73,22 @@ export default function Editor({ post, children }) {
 				settings={settings}
 				useSubRegistry={false}
 			>
-				<VisualEditor
-					useRootPaddingAwareAlignments={
-						useRootPaddingAwareAlignments
-					}
-				/>
+				{mode === 'visual' && isRichEditingEnabled && (
+					<VisualEditor
+						useRootPaddingAwareAlignments={
+							useRootPaddingAwareAlignments
+						}
+					/>
+				)}
+
+				{(mode === 'text' || !isRichEditingEnabled) && (
+					<TextEditor
+						// We should auto-focus the canvas (title) on load.
+						// eslint-disable-next-line jsx-a11y/no-autofocus
+						autoFocus={true}
+					/>
+				)}
+
 				{children}
 			</BlockEditorProvider>
 		</div>

@@ -57,6 +57,15 @@ class GutenbergView : WebView {
     private var openMediaLibraryListener: OpenMediaLibraryListener? = null
     private var editorDidBecomeAvailableListener: EditorAvailableListener? = null
 
+    var textEditorEnabled: Boolean = false
+        set(value) {
+            field = value
+            val mode = if (value) "text" else "visual"
+            handler.post {
+                this.evaluateJavascript("editor.switchEditorMode('$mode');", null)
+            }
+        }
+
     fun setContentChangeListener(listener: ContentChangeListener) {
         contentChangeListener = listener
     }

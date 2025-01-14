@@ -221,7 +221,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     public var isCodeEditorEnabled: Bool = false {
         didSet {
             guard isCodeEditorEnabled != oldValue else { return }
-            evaluate("editor.setCodeEditorEnabled(\(isCodeEditorEnabled ? "true" : "false"));")
+            evaluate("editor.switchEditorMode('\(isCodeEditorEnabled ? "text" : "visual")');")
         }
     }
 

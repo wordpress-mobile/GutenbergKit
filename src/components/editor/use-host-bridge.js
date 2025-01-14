@@ -15,7 +15,7 @@ window.editor = window.editor || {};
 
 export function useHostBridge(post) {
 	const { editEntityRecord } = useDispatch(coreStore);
-	const { undo, redo } = useDispatch(editorStore);
+	const { undo, redo, switchEditorMode } = useDispatch(editorStore);
 	const { getEditedPostAttribute, getEditedPostContent } =
 		useSelect(editorStore);
 
@@ -64,6 +64,11 @@ export function useHostBridge(post) {
 			redo();
 		};
 
+		window.editor.switchEditorMode = (mode) => {
+			// Do not return the `Promise` return value to avoid host errors.
+			switchEditorMode(mode);
+		};
+
 		return () => {
 			delete window.editor.setContent;
 			delete window.editor.setTitle;
@@ -72,7 +77,14 @@ export function useHostBridge(post) {
 			delete window.editor.undo;
 			delete window.editor.redo;
 		};
-	}, [editContent, getEditedPostAttribute, getEditedPostContent, redo, undo]);
+	}, [
+		editContent,
+		getEditedPostAttribute,
+		getEditedPostContent,
+		redo,
+		switchEditorMode,
+		undo,
+	]);
 
 	const postTitleRef = useRef(post.title);
 	const postContentRef = useRef(post.content);
