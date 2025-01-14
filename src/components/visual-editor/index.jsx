@@ -31,7 +31,7 @@ import '@wordpress/editor/build-style/style.css';
  */
 import './style.scss';
 import EditorToolbar from '../editor-toolbar';
-import { useEditorStyles } from '../../hooks/use-editor-styles';
+import { useEditorStyles } from './use-editor-styles';
 import { unlock } from '../../lock-unlock';
 
 const { ExperimentalBlockCanvas: BlockCanvas } = unlock(blockEditorPrivateApis);
