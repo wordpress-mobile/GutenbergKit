@@ -13,7 +13,7 @@ import './style.scss';
 import { useSyncHistoryControls } from './use-sync-history-controls';
 import { useHostBridge } from './use-host-bridge';
 import { useEditorSetup } from './use-editor-setup';
-import { useMediaUpload } from '../../hooks/use-media-upload';
+import { useMediaUpload } from './use-media-upload';
 import { useGBKitSettings } from './use-gbkit-settings';
 import { unlock } from '../../lock-unlock';
 
