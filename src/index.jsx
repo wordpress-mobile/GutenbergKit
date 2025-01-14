@@ -4,7 +4,7 @@
 import { createRoot, StrictMode } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { dispatch } from '@wordpress/data';
-import { store as editorStore } from '@wordpress/editor';
+import { store as editorStore, EditorSnackbars } from '@wordpress/editor';
 import { store as preferencesStore } from '@wordpress/preferences';
 import defaultEditorStyles from '@wordpress/block-editor/build-style/default-editor-styles.css?inline';
 
@@ -49,7 +49,9 @@ function initializeEditor() {
 
 	createRoot(document.getElementById('root')).render(
 		<StrictMode>
-			<Editor {...settings} />
+			<Editor {...settings}>
+				<EditorSnackbars />
+			</Editor>
 		</StrictMode>
 	);
 }

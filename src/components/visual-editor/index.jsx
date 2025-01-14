@@ -12,11 +12,7 @@ import {
 	privateApis as blockEditorPrivateApis,
 } from '@wordpress/block-editor';
 import { Popover } from '@wordpress/components';
-import {
-	store as editorStore,
-	EditorSnackbars,
-	PostTitle,
-} from '@wordpress/editor';
+import { store as editorStore, PostTitle } from '@wordpress/editor';
 import { useSelect } from '@wordpress/data';
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
@@ -78,12 +74,12 @@ function VisualEditor({ useRootPaddingAwareAlignments }) {
 				</div>
 				<BlockList className={blockListClasses} />
 			</BlockCanvas>
+
 			{isEditorReady && (
 				<EditorToolbar className="gutenberg-kit-editor__toolbar" />
 			)}
 
 			<Popover.Slot />
-			<EditorSnackbars />
 		</div>
 	);
 }

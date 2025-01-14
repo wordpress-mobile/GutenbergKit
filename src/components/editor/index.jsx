@@ -27,12 +27,13 @@ const { ExperimentalBlockEditorProvider: BlockEditorProvider } = unlock(
 /**
  * Entry component rendering the editor and surrounding UI.
  *
- * @param {Object} props      Component props.
- * @param {Post}   props.post Post object containing post details.
+ * @param {Object}                               props          Component props.
+ * @param {Post}                                 props.post     Post object containing post details.
+ * @param {import('@wordpress/element').Element} props.children The children to render in the editor.
  *
  * @return {JSX.Element} The rendered App component.
  */
-export default function Editor({ post }) {
+export default function Editor({ post, children }) {
 	useSyncHistoryControls();
 	useHostBridge(post);
 	useEditorSetup(post);
@@ -64,6 +65,7 @@ export default function Editor({ post }) {
 						useRootPaddingAwareAlignments
 					}
 				/>
+				{children}
 			</BlockEditorProvider>
 		</div>
 	);
