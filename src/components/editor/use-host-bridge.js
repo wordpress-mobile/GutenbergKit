@@ -76,6 +76,7 @@ export function useHostBridge(post) {
 			delete window.editor.getTitleAndContent;
 			delete window.editor.undo;
 			delete window.editor.redo;
+			delete window.editor.switchEditorMode;
 		};
 	}, [
 		editContent,
