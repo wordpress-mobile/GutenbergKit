@@ -67,29 +67,32 @@ function VisualEditor({ post }) {
 	useHostBridge(post);
 	useEditorSetup(post);
 
+	const { isEditorReady } = useSelect((select) => {
+		const { __unstableIsEditorReady } = select(editorStore);
+		return {
+			isEditorReady: __unstableIsEditorReady(),
+		};
+	}, []);
+
 	const {
 		blockPatterns,
 		editorSettings,
 		hasUploadPermissions,
-		isEditorReady,
 		reusableBlocks,
 	} = useSelect(
 		(select) => {
 			const { getEntityRecord, getEntityRecords } = select(coreStore);
-			const { __unstableIsEditorReady, getEditorSettings } =
-				select(editorStore);
+			const { getEditorSettings } = select(editorStore);
 			const user = getEntityRecord('root', 'user', post.author);
-			const _isEditorReady = post?.id ? __unstableIsEditorReady() : true;
 
 			return {
-				isEditorReady: _isEditorReady,
 				editorSettings: getEditorSettings(),
 				blockPatterns: select(coreStore).getBlockPatterns(),
 				hasUploadPermissions: user?.capabilities?.upload_files ?? true,
 				reusableBlocks: getEntityRecords('postType', 'wp_block'),
 			};
 		},
-		[post.author, post.id]
+		[post.author]
 	);
 
 	const [postBlocks, onInput, onChange] = useEntityBlockEditor(
