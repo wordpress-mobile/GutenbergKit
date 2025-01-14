@@ -21,7 +21,7 @@ import {
 	PostTitle,
 	privateApis as editorPrivateApis,
 } from '@wordpress/editor';
-import { useDispatch, useSelect, subscribe } from '@wordpress/data';
+import { useDispatch, useSelect } from '@wordpress/data';
 import { store as coreStore, useEntityBlockEditor } from '@wordpress/core-data';
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
@@ -40,18 +40,16 @@ import '@wordpress/editor/build-style/style.css';
  */
 import './style.scss';
 import EditorToolbar from '../editor-toolbar';
-import { editorLoaded, onEditorContentChanged } from '../../utils/bridge';
+import { editorLoaded } from '../../utils/bridge';
 import { postTypeEntities } from '../../utils/post-type-entities';
 import { useEditorStyles } from '../../hooks/use-editor-styles';
 import { unlock } from '../../lock-unlock';
 import { useMediaUpload } from '../../hooks/use-media-upload';
+import { useHostBridge } from './use-host-bridge';
 
 /**
  * @typedef {import('../utils/bridge').Post} Post
  */
-
-// Current editor (assumes can be only one instance).
-const editor = {};
 
 const { useBlockEditorSettings } = unlock(editorPrivateApis);
 const {
@@ -69,16 +67,12 @@ const {
  */
 function VisualEditor({ post }) {
 	const editorPostTitleRef = useRef();
-	const postTitleRef = useRef(post.title);
-	const postContentRef = useRef(post.content);
-	const { addEntities, editEntityRecord, receiveEntityRecords } =
-		useDispatch(coreStore);
-	const { setEditedPost, setupEditor, undo, redo } = useDispatch(editorStore);
-	const { getEditedPostAttribute, getEditedPostContent } =
-		useSelect(editorStore);
+	const { addEntities, receiveEntityRecords } = useDispatch(coreStore);
+	const { setEditedPost, setupEditor } = useDispatch(editorStore);
+
+	useHostBridge(post);
 
 	useEffect(() => {
-		window.editor = editor;
 		addEntities(postTypeEntities);
 		receiveEntityRecords('postType', post.type, post);
 
@@ -128,59 +122,6 @@ function VisualEditor({ post }) {
 		post.type,
 		{ id: post.id }
 	);
-
-	useEffect(() => {
-		return subscribe(() => {
-			const { title, content } = editor.getTitleAndContent();
-			if (
-				title !== postTitleRef.current ||
-				content !== postContentRef.current
-			) {
-				onEditorContentChanged();
-				postTitleRef.current = title;
-				postContentRef.current = content;
-			}
-		});
-	}, []);
-
-	function editContent(edits) {
-		editEntityRecord('postType', post.type, post.id, edits);
-	}
-
-	editor.setContent = (content) => {
-		editContent({ content: decodeURIComponent(content) });
-	};
-
-	editor.setTitle = (title) => {
-		editContent({ title: decodeURIComponent(title) });
-	};
-
-	editor.getContent = (blurInput = false) => {
-		if (blurInput) {
-			blurEditor();
-		}
-		return getEditedPostContent();
-	};
-
-	editor.getTitleAndContent = (blurInput = false) => {
-		if (blurInput) {
-			blurEditor();
-		}
-		return {
-			title: getEditedPostAttribute('title'),
-			content: getEditedPostContent(),
-		};
-	};
-
-	editor.undo = () => {
-		// Do not return the `Promise` return value to avoid host errors.
-		undo();
-	};
-
-	editor.redo = () => {
-		// Do not return the `Promise` return value to avoid host errors.
-		redo();
-	};
 
 	const blockEditorSettings = useBlockEditorSettings(
 		editorSettings,
@@ -251,22 +192,3 @@ function VisualEditor({ post }) {
 }
 
 export default VisualEditor;
-
-/**
- * Blurs the currently active paragraph element in the document.
- *
- * This function checks if the currently active element is a paragraph (`<p>`).
- * If it is, the function removes focus from that element.
- *
- * @todo Address the disabled eslint rule `@wordpress/no-global-active-element`.
- *
- * @return {void}
- */
-function blurEditor() {
-	// eslint-disable-next-line @wordpress/no-global-active-element
-	const activeElement = document.activeElement;
-
-	if (activeElement && activeElement.tagName === 'P') {
-		activeElement.blur();
-	}
-}
