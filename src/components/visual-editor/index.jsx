@@ -38,9 +38,6 @@ import './style.scss';
 import EditorToolbar from '../editor-toolbar';
 import { useEditorStyles } from '../../hooks/use-editor-styles';
 import { unlock } from '../../lock-unlock';
-import { useMediaUpload } from '../../hooks/use-media-upload';
-import { useHostBridge } from './use-host-bridge';
-import { useEditorSetup } from './use-editor-setup';
 import { useGBKitSettings } from './use-gbkit-settings';
 
 /**
@@ -62,8 +59,6 @@ const {
  */
 function VisualEditor({ post }) {
 	const editorPostTitleRef = useRef();
-	useHostBridge(post);
-	useEditorSetup(post);
 
 	const { isEditorReady } = useSelect((select) => {
 		const { __unstableIsEditorReady } = select(editorStore);
@@ -80,7 +75,6 @@ function VisualEditor({ post }) {
 
 	const settings = useGBKitSettings(post);
 	const styles = useEditorStyles();
-	useMediaUpload();
 
 	const useRootPaddingAwareAlignments =
 		settings.themeStyles &&
