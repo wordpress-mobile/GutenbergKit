@@ -18,7 +18,6 @@ import {
 	PostTitle,
 } from '@wordpress/editor';
 import { useSelect } from '@wordpress/data';
-import { useEntityBlockEditor } from '@wordpress/core-data';
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
 import '@wordpress/block-editor/build-style/style.css';
@@ -38,26 +37,18 @@ import './style.scss';
 import EditorToolbar from '../editor-toolbar';
 import { useEditorStyles } from '../../hooks/use-editor-styles';
 import { unlock } from '../../lock-unlock';
-import { useGBKitSettings } from './use-gbkit-settings';
 
-/**
- * @typedef {import('../utils/bridge').Post} Post
- */
-
-const {
-	ExperimentalBlockEditorProvider: BlockEditorProvider,
-	ExperimentalBlockCanvas: BlockCanvas,
-} = unlock(blockEditorPrivateApis);
+const { ExperimentalBlockCanvas: BlockCanvas } = unlock(blockEditorPrivateApis);
 
 /**
  * Editor component for managing and editing post content.
  *
- * @param {Object} props      Component props.
- * @param {Post}   props.post Post object containing post details.
+ * @param {Object}  props                               Component props.
+ * @param {boolean} props.useRootPaddingAwareAlignments Apply root padding.
  *
  * @return {JSX.Element} The rendered Editor component.
  */
-function VisualEditor({ post }) {
+function VisualEditor({ useRootPaddingAwareAlignments }) {
 	const editorPostTitleRef = useRef();
 
 	const { isEditorReady } = useSelect((select) => {
@@ -67,18 +58,7 @@ function VisualEditor({ post }) {
 		};
 	}, []);
 
-	const [postBlocks, onInput, onChange] = useEntityBlockEditor(
-		'postType',
-		post.type,
-		{ id: post.id }
-	);
-
-	const settings = useGBKitSettings(post);
 	const styles = useEditorStyles();
-
-	const useRootPaddingAwareAlignments =
-		settings.themeStyles &&
-		settings.__experimentalFeatures?.useRootPaddingAwareAlignments;
 
 	const editorClasses = clsx('gutenberg-kit-editor', {
 		'has-root-padding': !useRootPaddingAwareAlignments,
@@ -92,28 +72,18 @@ function VisualEditor({ post }) {
 
 	return (
 		<div className={editorClasses}>
-			<BlockEditorProvider
-				value={postBlocks}
-				onInput={onInput}
-				onChange={onChange}
-				settings={settings}
-				useSubRegistry={false}
-			>
-				<BlockCanvas shouldIframe={false} height="100%" styles={styles}>
-					<div className={titleClasses}>
-						{isEditorReady && (
-							<PostTitle ref={editorPostTitleRef} />
-						)}
-					</div>
-					<BlockList className={blockListClasses} />
-				</BlockCanvas>
-				{isEditorReady && (
-					<EditorToolbar className="gutenberg-kit-editor__toolbar" />
-				)}
+			<BlockCanvas shouldIframe={false} height="100%" styles={styles}>
+				<div className={titleClasses}>
+					{isEditorReady && <PostTitle ref={editorPostTitleRef} />}
+				</div>
+				<BlockList className={blockListClasses} />
+			</BlockCanvas>
+			{isEditorReady && (
+				<EditorToolbar className="gutenberg-kit-editor__toolbar" />
+			)}
 
-				<Popover.Slot />
-				<EditorSnackbars />
-			</BlockEditorProvider>
+			<Popover.Slot />
+			<EditorSnackbars />
 		</div>
 	);
 }
