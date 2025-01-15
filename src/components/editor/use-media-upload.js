@@ -7,7 +7,7 @@ import { useCallback, useEffect } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import { openMediaLibrary } from '../utils/bridge';
+import { openMediaLibrary } from '../../utils/bridge';
 
 /**
  * @typedef {Object} MediaUploadConfig

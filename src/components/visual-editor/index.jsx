@@ -6,23 +6,14 @@ import clsx from 'clsx';
 /**
  * WordPress dependencies
  */
-import { useEffect, useRef, useMemo } from '@wordpress/element';
+import { useRef } from '@wordpress/element';
 import {
 	BlockList,
 	privateApis as blockEditorPrivateApis,
 } from '@wordpress/block-editor';
 import { Popover } from '@wordpress/components';
-import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
-import { registerCoreBlocks } from '@wordpress/block-library';
-import {
-	store as editorStore,
-	mediaUpload,
-	EditorSnackbars,
-	PostTitle,
-	privateApis as editorPrivateApis,
-} from '@wordpress/editor';
-import { useDispatch, useSelect, subscribe } from '@wordpress/data';
-import { store as coreStore, useEntityBlockEditor } from '@wordpress/core-data';
+import { store as editorStore, PostTitle } from '@wordpress/editor';
+import { useSelect } from '@wordpress/data';
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
 import '@wordpress/block-editor/build-style/style.css';
@@ -40,176 +31,30 @@ import '@wordpress/editor/build-style/style.css';
  */
 import './style.scss';
 import EditorToolbar from '../editor-toolbar';
-import { editorLoaded, onEditorContentChanged } from '../../utils/bridge';
-import { postTypeEntities } from '../../utils/post-type-entities';
-import { useEditorStyles } from '../../hooks/use-editor-styles';
+import { useEditorStyles } from './use-editor-styles';
 import { unlock } from '../../lock-unlock';
-import { useMediaUpload } from '../../hooks/use-media-upload';
 
-/**
- * @typedef {import('../utils/bridge').Post} Post
- */
-
-// Current editor (assumes can be only one instance).
-const editor = {};
-
-const { useBlockEditorSettings } = unlock(editorPrivateApis);
-const {
-	ExperimentalBlockEditorProvider: BlockEditorProvider,
-	ExperimentalBlockCanvas: BlockCanvas,
-} = unlock(blockEditorPrivateApis);
+const { ExperimentalBlockCanvas: BlockCanvas } = unlock(blockEditorPrivateApis);
 
 /**
  * Editor component for managing and editing post content.
  *
- * @param {Object} props      Component props.
- * @param {Post}   props.post Post object containing post details.
+ * @param {Object}  props                               Component props.
+ * @param {boolean} props.useRootPaddingAwareAlignments Apply root padding.
  *
  * @return {JSX.Element} The rendered Editor component.
  */
-function VisualEditor({ post }) {
-	const postTitleRef = useRef(post.title);
-	const postContentRef = useRef(post.content);
-	const { addEntities, editEntityRecord, receiveEntityRecords } =
-		useDispatch(coreStore);
-	const { setEditedPost, setupEditor, undo, redo } = useDispatch(editorStore);
-	const { getEditedPostAttribute, getEditedPostContent } =
-		useSelect(editorStore);
+function VisualEditor({ useRootPaddingAwareAlignments }) {
+	const editorPostTitleRef = useRef();
 
-	useEffect(() => {
-		window.editor = editor;
-		addEntities(postTypeEntities);
-		receiveEntityRecords('postType', post.type, post);
-
-		setupEditor(post, {});
-		registerCoreBlocks();
-
-		editorLoaded();
-		// Temp, check why this isn't being called in the provider.
-		setEditedPost(post.type, post.id);
-
-		return () => {
-			window.editor = {};
-			getBlockTypes().forEach((block) => {
-				unregisterBlockType(block.name);
-			});
-		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []);
-
-	const {
-		blockPatterns,
-		editorSettings,
-		hasUploadPermissions,
-		isEditorReady,
-		reusableBlocks,
-	} = useSelect(
-		(select) => {
-			const { getEntityRecord, getEntityRecords } = select(coreStore);
-			const { __unstableIsEditorReady, getEditorSettings } =
-				select(editorStore);
-			const user = getEntityRecord('root', 'user', post.author);
-			const _isEditorReady = post?.id ? __unstableIsEditorReady() : true;
-
-			return {
-				isEditorReady: _isEditorReady,
-				editorSettings: getEditorSettings(),
-				blockPatterns: select(coreStore).getBlockPatterns(),
-				hasUploadPermissions: user?.capabilities?.upload_files ?? true,
-				reusableBlocks: getEntityRecords('postType', 'wp_block'),
-			};
-		},
-		[post.author, post.id]
-	);
-
-	const [postBlocks, onInput, onChange] = useEntityBlockEditor(
-		'postType',
-		post.type,
-		{ id: post.id }
-	);
-
-	useEffect(() => {
-		return subscribe(() => {
-			const { title, content } = editor.getTitleAndContent();
-			if (
-				title !== postTitleRef.current ||
-				content !== postContentRef.current
-			) {
-				onEditorContentChanged();
-				postTitleRef.current = title;
-				postContentRef.current = content;
-			}
-		});
-	}, []);
-
-	function editContent(edits) {
-		editEntityRecord('postType', post.type, post.id, edits);
-	}
-
-	editor.setContent = (content) => {
-		editContent({ content: decodeURIComponent(content) });
-	};
-
-	editor.setTitle = (title) => {
-		editContent({ title: decodeURIComponent(title) });
-	};
-
-	editor.getContent = (blurInput = false) => {
-		if (blurInput) {
-			blurEditor();
-		}
-		return getEditedPostContent();
-	};
-
-	editor.getTitleAndContent = (blurInput = false) => {
-		if (blurInput) {
-			blurEditor();
-		}
+	const { isEditorReady } = useSelect((select) => {
+		const { __unstableIsEditorReady } = select(editorStore);
 		return {
-			title: getEditedPostAttribute('title'),
-			content: getEditedPostContent(),
+			isEditorReady: __unstableIsEditorReady(),
 		};
-	};
-
-	editor.undo = () => {
-		// Do not return the `Promise` return value to avoid host errors.
-		undo();
-	};
-
-	editor.redo = () => {
-		// Do not return the `Promise` return value to avoid host errors.
-		redo();
-	};
-
-	const blockEditorSettings = useBlockEditorSettings(
-		editorSettings,
-		post.type,
-		post.id,
-		'visual'
-	);
-
-	const settings = useMemo(
-		() => ({
-			...blockEditorSettings,
-			hasFixedToolbar: true,
-			mediaUpload: hasUploadPermissions ? mediaUpload : undefined,
-			__experimentalReusableBlocks: reusableBlocks,
-			__experimentalBlockPatterns: blockPatterns,
-		}),
-		[
-			blockEditorSettings,
-			blockPatterns,
-			hasUploadPermissions,
-			reusableBlocks,
-		]
-	);
+	}, []);
 
 	const styles = useEditorStyles();
-	useMediaUpload();
-
-	const useRootPaddingAwareAlignments =
-		settings.themeStyles &&
-		settings.__experimentalFeatures?.useRootPaddingAwareAlignments;
 
 	const editorClasses = clsx('gutenberg-kit-editor', {
 		'has-root-padding': !useRootPaddingAwareAlignments,
@@ -223,47 +68,20 @@ function VisualEditor({ post }) {
 
 	return (
 		<div className={editorClasses}>
-			<BlockEditorProvider
-				value={postBlocks}
-				onInput={onInput}
-				onChange={onChange}
-				settings={settings}
-				useSubRegistry={false}
-			>
-				<BlockCanvas shouldIframe={false} height="100%" styles={styles}>
-					<div className={titleClasses}>
-						{isEditorReady && <PostTitle ref={postTitleRef} />}
-					</div>
-					<BlockList className={blockListClasses} />
-				</BlockCanvas>
-				{isEditorReady && (
-					<EditorToolbar className="gutenberg-kit-editor__toolbar" />
-				)}
+			<BlockCanvas shouldIframe={false} height="100%" styles={styles}>
+				<div className={titleClasses}>
+					{isEditorReady && <PostTitle ref={editorPostTitleRef} />}
+				</div>
+				<BlockList className={blockListClasses} />
+			</BlockCanvas>
 
-				<Popover.Slot />
-				<EditorSnackbars />
-			</BlockEditorProvider>
+			{isEditorReady && (
+				<EditorToolbar className="gutenberg-kit-editor__toolbar" />
+			)}
+
+			<Popover.Slot />
 		</div>
 	);
 }
 
 export default VisualEditor;
-
-/**
- * Blurs the currently active paragraph element in the document.
- *
- * This function checks if the currently active element is a paragraph (`<p>`).
- * If it is, the function removes focus from that element.
- *
- * @todo Address the disabled eslint rule `@wordpress/no-global-active-element`.
- *
- * @return {void}
- */
-function blurEditor() {
-	// eslint-disable-next-line @wordpress/no-global-active-element
-	const activeElement = document.activeElement;
-
-	if (activeElement && activeElement.tagName === 'P') {
-		activeElement.blur();
-	}
-}
