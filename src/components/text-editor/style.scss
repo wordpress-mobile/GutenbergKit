@@ -6,9 +6,8 @@
 
 .gutenberg-kit-text-editor .editor-post-title.is-raw-text textarea {
 	font-family: wordpress.$font-family-mono;
-	font-size: 2em;
-	line-height: 1.4;
-	min-height: 150px;
+	line-height: 1.333;
+	min-height: 70px;
 	padding: 16px;
 }
 
@@ -19,9 +18,11 @@
 	color: rgba(30, 30, 30, 0.62);
 }
 
-.gutenberg-kit-text-editor .editor-post-text-editor {
+.gutenberg-kit-text-editor textarea.editor-post-text-editor {
 	border-radius: 2px;
 	box-sizing: border-box;
+	font-size: 13px !important; // Must mirror Gutenberg's `!important` usage
+	line-height: 2;
 }
 
 .gutenberg-kit-text-editor .editor-post-text-editor:focus-visible {
