@@ -1,0 +1,36 @@
+@use "@wordpress/base-styles/variables" as wordpress;
+
+.gutenberg-kit-text-editor {
+	padding: 12px;
+}
+
+.gutenberg-kit-text-editor .editor-post-title.is-raw-text textarea {
+	font-family: wordpress.$font-family-mono;
+	line-height: 1.333;
+	min-height: 70px;
+	padding: 16px;
+}
+
+.gutenberg-kit-text-editor
+	.editor-post-title.is-raw-text
+	textarea::placeholder {
+	// Override Gutenberg's "dark theme" styles creating illegible text
+	color: rgba(30, 30, 30, 0.62);
+}
+
+.gutenberg-kit-text-editor textarea.editor-post-text-editor {
+	border-radius: 2px;
+	box-sizing: border-box;
+	font-size: 13px !important; // Must mirror Gutenberg's `!important` usage
+	line-height: 2;
+}
+
+.gutenberg-kit-text-editor .editor-post-text-editor:focus-visible {
+	border-color: var(
+		--wp-components-color-accent,
+		var(--wp-admin-theme-color, #3858e9)
+	);
+	box-shadow: 0 0 0 calc(1.5px - 1px)
+		var(--wp-components-color-accent, var(--wp-admin-theme-color, #3858e9));
+	outline: 2px solid transparent;
+}
