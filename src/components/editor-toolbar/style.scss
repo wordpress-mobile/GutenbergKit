@@ -18,9 +18,42 @@ $min-touch-target-size: 46px;
 	width: auto;
 }
 
+.gutenberg-kit-editor-toolbar {
+	display: inline-flex;
+	max-width: 100%;
+	justify-content: space-between;
+	width: 100%;
+}
+
+.gutenberg-kit-editor-toolbar__scroll-view {
+	align-items: center;
+	display: inline-flex;
+	overflow-x: auto;
+}
+
 // Hide the scrollbar in the toolbar
-.gutenberg-kit-editor-toolbar::-webkit-scrollbar {
+.gutenberg-kit-editor-toolbar__scroll-view::-webkit-scrollbar {
 	display: none;
+}
+
+.gutenberg-kit-editor-toolbar__shadow {
+	background: linear-gradient(to left, white, transparent);
+	bottom: 0;
+	pointer-events: none;
+	position: absolute;
+	right: 0;
+	top: 0;
+	width: 16px;
+	z-index: 41; // 1 above the block toolbar
+}
+
+.gutenberg-kit-editor-toolbar__shadow.is-keyboard-visible {
+	right: 47px; // Dismiss keyboard button width
+}
+
+.gutenberg-kit-editor-toolbar__keyboard-close {
+	border-left: 1px solid $border-color;
+	border-right: none;
 }
 
 .gutenberg-kit-editor-toolbar .components-toolbar-group {

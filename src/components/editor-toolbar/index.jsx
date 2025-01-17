@@ -8,7 +8,7 @@ import {
 	Inserter,
 	store as blockEditorStore,
 } from '@wordpress/block-editor';
-import { useSelect } from '@wordpress/data';
+import { useSelect, useDispatch } from '@wordpress/data';
 import {
 	Button,
 	Popover,
@@ -17,13 +17,14 @@ import {
 	ToolbarButton,
 } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
-import { close, cog } from '@wordpress/icons';
+import { close, cog, keyboardClose } from '@wordpress/icons';
 import clsx from 'clsx';
 
 /**
  * Internal dependencies
  */
 import './style.scss';
+import { useKeyboardVisibility } from './use-keyboard-visibility';
 
 /**
  * Renders the editor toolbar containing block-related actions.
@@ -41,6 +42,7 @@ const EditorToolbar = ({ className }) => {
 			isSelected: selectedBlockClientId !== null,
 		};
 	});
+	const { clearSelectedBlock } = useDispatch(blockEditorStore);
 
 	function openSettings() {
 		setBlockInspectorShown(true);
@@ -52,6 +54,11 @@ const EditorToolbar = ({ className }) => {
 
 	const classes = clsx('gutenberg-kit-editor-toolbar', className);
 
+	const [isKeyboardVisible, setIsKeyboardVisible] = useKeyboardVisibility();
+	const shadowClasses = clsx(' gutenberg-kit-editor-toolbar__shadow', {
+		'is-keyboard-visible': isKeyboardVisible,
+	});
+
 	return (
 		<>
 			<Toolbar
@@ -59,21 +66,40 @@ const EditorToolbar = ({ className }) => {
 				label="Editor toolbar"
 				variant="unstyled"
 			>
-				<ToolbarGroup>
-					<Inserter />
-				</ToolbarGroup>
-
-				{isSelected && (
+				<div className="gutenberg-kit-editor-toolbar__scroll-view">
 					<ToolbarGroup>
+						<Inserter />
+					</ToolbarGroup>
+
+					{isSelected && (
+						<ToolbarGroup>
+							<ToolbarButton
+								title={__('Open Settings')}
+								icon={cog}
+								onClick={openSettings}
+							/>
+						</ToolbarGroup>
+					)}
+
+					<BlockToolbar hideDragHandle />
+				</div>
+
+				<div className={shadowClasses} />
+
+				{isKeyboardVisible && (
+					<ToolbarGroup className="gutenberg-kit-editor-toolbar__keyboard-close">
 						<ToolbarButton
-							title={__('Open Settings')}
-							icon={cog}
-							onClick={openSettings}
+							title={__('Dismiss keyboard')}
+							icon={keyboardClose}
+							onClick={() => {
+								clearSelectedBlock();
+								hideVirtualKeyboard();
+								// Redundant of `useKeyboardVisibility` logic, but improves stability
+								setIsKeyboardVisible(false);
+							}}
 						/>
 					</ToolbarGroup>
 				)}
-
-				<BlockToolbar hideDragHandle />
 			</Toolbar>
 
 			{isBlockInspectorShown && (
@@ -97,5 +123,11 @@ const EditorToolbar = ({ className }) => {
 		</>
 	);
 };
+
+function hideVirtualKeyboard() {
+	if ('virtualKeyboard' in navigator) {
+		navigator.virtualKeyboard.hide();
+	}
+}
 
 export default EditorToolbar;
