@@ -2,6 +2,7 @@
  * WordPress dependencies
  */
 import { defaultRequestToExternal } from '@wordpress/dependency-extraction-webpack-plugin/lib/util';
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
 /**
  * External dependencies
@@ -21,7 +22,7 @@ export default defineConfig({
 		},
 		target: 'esnext',
 	},
-	plugins: [react(), wordPressExternals()],
+	plugins: [nodePolyfills(), react(), wordPressExternals()],
 	root: 'src',
 	css: {
 		preprocessorOptions: {
