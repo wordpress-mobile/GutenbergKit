@@ -26,6 +26,7 @@
 		"@wordpress/icons": "^10.12.0",
 		"@wordpress/preferences": "^4.10",
 		"@wordpress/private-apis": "^1.10",
+		"@wordpress/rich-text": "^7.16.0",
 		"clsx": "^2.1.1"
 	},
 	"devDependencies": {
