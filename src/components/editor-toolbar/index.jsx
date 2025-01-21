@@ -25,6 +25,7 @@ import clsx from 'clsx';
  */
 import './style.scss';
 import { useKeyboardVisibility } from './use-keyboard-visibility';
+import Platform from '../../utils/platform';
 
 /**
  * Renders the editor toolbar containing block-related actions.
@@ -55,9 +56,6 @@ const EditorToolbar = ({ className }) => {
 	const classes = clsx('gutenberg-kit-editor-toolbar', className);
 
 	const [isKeyboardVisible, setIsKeyboardVisible] = useKeyboardVisibility();
-	const shadowClasses = clsx(' gutenberg-kit-editor-toolbar__shadow', {
-		'is-keyboard-visible': isKeyboardVisible,
-	});
 
 	return (
 		<>
@@ -84,21 +82,23 @@ const EditorToolbar = ({ className }) => {
 					<BlockToolbar hideDragHandle />
 				</div>
 
-				<div className={shadowClasses} />
+				{isKeyboardVisible && Platform.OS === 'ios' && (
+					<>
+						<div className="gutenberg-kit-editor-toolbar__shadow" />
 
-				{isKeyboardVisible && (
-					<ToolbarGroup className="gutenberg-kit-editor-toolbar__keyboard-close">
-						<ToolbarButton
-							title={__('Dismiss keyboard')}
-							icon={keyboardClose}
-							onClick={() => {
-								clearSelectedBlock();
-								hideVirtualKeyboard();
-								// Redundant of `useKeyboardVisibility` logic, but improves stability
-								setIsKeyboardVisible(false);
-							}}
-						/>
-					</ToolbarGroup>
+						<ToolbarGroup className="gutenberg-kit-editor-toolbar__keyboard-close">
+							<ToolbarButton
+								title={__('Dismiss keyboard')}
+								icon={keyboardClose}
+								onClick={() => {
+									clearSelectedBlock();
+									hideVirtualKeyboard();
+									// Redundant of `useKeyboardVisibility` logic, but improves stability
+									setIsKeyboardVisible(false);
+								}}
+							/>
+						</ToolbarGroup>
+					</>
 				)}
 			</Toolbar>
 

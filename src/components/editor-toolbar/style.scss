@@ -41,14 +41,10 @@ $min-touch-target-size: 46px;
 	bottom: 0;
 	pointer-events: none;
 	position: absolute;
-	right: 0;
+	right: 46px; // Dismiss keyboard button width
 	top: 0;
 	width: 14px;
 	z-index: 41; // 1 above the block toolbar
-}
-
-.gutenberg-kit-editor-toolbar__shadow.is-keyboard-visible {
-	right: 46px; // Dismiss keyboard button width
 }
 
 .gutenberg-kit-editor-toolbar .components-toolbar-group {
