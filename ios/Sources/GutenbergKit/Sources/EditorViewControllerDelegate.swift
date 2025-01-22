@@ -27,6 +27,9 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// Notifies the client about new history state.
     func editor(_ viewController: EditorViewController, didUpdateHistoryState state: EditorState)
 
+    /// Notifies the client about an error that occurred during the editor
+    func editor(_ viewController: EditorViewController, didLogError error: EditorError)
+
     func editor(_ viewController: EditorViewController, didRequestMediaFromSiteMediaLibrary config: OpenMediaLibraryAction)
 }
 
@@ -37,6 +40,14 @@ public struct EditorState {
     public var hasUndo = false
     /// Set to `true` if the editor has redo history.
     public var hasRedo = false
+}
+
+public struct EditorError {
+    public let message: String
+    public let stack: String
+    public let sourceURL: String
+    public let line: Int
+    public let column: Int
 }
 
 public struct OpenMediaLibraryAction: Codable {

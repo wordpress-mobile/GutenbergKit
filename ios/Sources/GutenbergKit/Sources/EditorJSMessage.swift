@@ -29,6 +29,8 @@ struct EditorJSMessage {
         case onEditorContentChanged
         /// The editor history (undo, redo) changed.
         case onEditorHistoryChanged
+        /// The editor logged an error
+        case onEditorErrorLogged
         /// The user tapped the inserter button.
         case showBlockPicker
         /// User requested the Media Library
@@ -42,5 +44,13 @@ struct EditorJSMessage {
     struct DidUpdateEditorHistoryBody: Decodable {
         let hasUndo: Bool
         let hasRedo: Bool
+    }
+
+    struct DidLogErrorBody: Decodable {
+        let message: String
+        let stack: String
+        let sourceURL: String
+        let line: Int
+        let column: Int
     }
 }

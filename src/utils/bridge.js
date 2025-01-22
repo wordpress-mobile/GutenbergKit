@@ -181,14 +181,22 @@ export function getPost() {
  * @param {Error} error - The error object to be logged.
  */
 export function logError(error) {
+	const errorDetails = {
+		message: error.message,
+		stack: error.stack,
+		line: error.line,
+		column: error.column,
+		sourceURL: error.sourceURL,
+	};
+
 	if (window.editorDelegate) {
-		window.editorDelegate.logError(error);
+		window.editorDelegate.onEditorErrorLogged(JSON.stringify(errorDetails));
 	}
 
 	if (window.webkit) {
 		window.webkit.messageHandlers.editorDelegate.postMessage({
-			message: 'logError',
-			body: { error: error.message },
+			message: 'onEditorErrorLogged',
+			body: errorDetails,
 		});
 	}
 }
