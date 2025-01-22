@@ -174,3 +174,21 @@ export function getPost() {
 		id: -1,
 	};
 }
+
+/**
+ * Logs an error to the host app.
+ *
+ * @param {Error} error - The error object to be logged.
+ */
+export function logError(error) {
+	if (window.editorDelegate) {
+		window.editorDelegate.logError(error);
+	}
+
+	if (window.webkit) {
+		window.webkit.messageHandlers.editorDelegate.postMessage({
+			message: 'logError',
+			body: { error: error.message },
+		});
+	}
+}

@@ -14,6 +14,7 @@ import EditorLoadNotice from '../editor-load-notice';
 import './style.scss';
 import { useSyncHistoryControls } from './use-sync-history-controls';
 import { useHostBridge } from './use-host-bridge';
+import { useHostErrorLogging } from './use-host-error-logging';
 import { useEditorSetup } from './use-editor-setup';
 import { useMediaUpload } from './use-media-upload';
 import { useGBKitSettings } from './use-gbkit-settings';
@@ -40,6 +41,7 @@ const { ExperimentalBlockEditorProvider: BlockEditorProvider } = unlock(
 export default function Editor({ post, children }) {
 	useSyncHistoryControls();
 	useHostBridge(post);
+	useHostErrorLogging();
 	useEditorSetup(post);
 	useMediaUpload();
 
