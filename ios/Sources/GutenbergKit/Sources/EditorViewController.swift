@@ -72,6 +72,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         config.selectionGranularity = .character
 
         self.webView = GBWebView(frame: .zero, configuration: config)
+        self.webView.scrollView.keyboardDismissMode = .interactive
 
         super.init(nibName: nil, bundle: nil)
     }
