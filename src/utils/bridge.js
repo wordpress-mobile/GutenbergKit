@@ -1,4 +1,9 @@
 /**
+ * Internal dependencies
+ */
+import parseException from './parse-exception';
+
+/**
  * Notifies the native host that the editor has loaded.
  *
  * @return {void}
@@ -178,25 +183,40 @@ export function getPost() {
 /**
  * Logs an error to the host app.
  *
- * @param {Error} error - The error object to be logged.
+ * @param {Error}   error                         The error object to be logged.
+ * @param {Object}  [options]                     Additional options.
+ * @param {Object}  [options.context]             Additional context to be logged.
+ * @param {Object}  [options.tags]                Additional tags to be logged.
+ * @param {boolean} [options.isHandled=false]     Whether the error is handled.
+ * @param {string}  [options.handledBy='Unknown'] The name of the error handler.
+ *
+ * @return {void}
  */
-export function logError(error) {
-	const errorDetails = {
-		message: error.message,
-		stack: error.stack,
-		line: error.line,
-		column: error.column,
-		sourceURL: error.sourceURL,
+export function logException(
+	error,
+	{ context, tags, isHandled, handledBy } = {
+		context: {},
+		tags: {},
+		isHandled: false,
+		handledBy: 'Unknown',
+	}
+) {
+	const parsedException = {
+		...parseException(error, { context, tags }),
+		isHandled,
+		handledBy,
 	};
 
 	if (window.editorDelegate) {
-		window.editorDelegate.onEditorErrorLogged(JSON.stringify(errorDetails));
+		window.editorDelegate.onEditorExceptionLogged(
+			JSON.stringify(parsedException)
+		);
 	}
 
 	if (window.webkit) {
 		window.webkit.messageHandlers.editorDelegate.postMessage({
-			message: 'onEditorErrorLogged',
-			body: errorDetails,
+			message: 'onEditorExceptionLogged',
+			body: parsedException,
 		});
 	}
 }
