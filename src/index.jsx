@@ -4,7 +4,7 @@
 import { createRoot, StrictMode } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { dispatch } from '@wordpress/data';
-import { store as editorStore, EditorSnackbars } from '@wordpress/editor';
+import { store as editorStore } from '@wordpress/editor';
 import { store as preferencesStore } from '@wordpress/preferences';
 import defaultEditorStyles from '@wordpress/block-editor/build-style/default-editor-styles.css?inline';
 
@@ -13,7 +13,7 @@ import defaultEditorStyles from '@wordpress/block-editor/build-style/default-edi
  */
 import { initializeApiFetch } from './utils/api-fetch-setup';
 import { getGBKit, getPost } from './utils/bridge';
-import Editor from './components/editor';
+import Layout from './components/layout';
 import './index.scss';
 
 window.GBKit = getGBKit();
@@ -49,9 +49,7 @@ function initializeEditor() {
 
 	createRoot(document.getElementById('root')).render(
 		<StrictMode>
-			<Editor {...settings}>
-				<EditorSnackbars />
-			</Editor>
+			<Layout {...settings} />
 		</StrictMode>
 	);
 }

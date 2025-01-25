@@ -4,7 +4,7 @@
 import { useEntityBlockEditor } from '@wordpress/core-data';
 import { privateApis as blockEditorPrivateApis } from '@wordpress/block-editor';
 import { useSelect } from '@wordpress/data';
-import { store as editorStore, ErrorBoundary } from '@wordpress/editor';
+import { store as editorStore } from '@wordpress/editor';
 
 /**
  * Internal dependencies
@@ -66,35 +66,33 @@ export default function Editor({ post, children }) {
 	}, []);
 
 	return (
-		<ErrorBoundary>
-			<div className="gutenberg-kit-editor-interface">
-				<EditorLoadNotice className="gutenberg-kit-editor-interface__load-notice" />
-				<BlockEditorProvider
-					value={postBlocks}
-					onInput={onInput}
-					onChange={onChange}
-					settings={settings}
-					useSubRegistry={false}
-				>
-					{mode === 'visual' && isRichEditingEnabled && (
-						<VisualEditor
-							useRootPaddingAwareAlignments={
-								useRootPaddingAwareAlignments
-							}
-						/>
-					)}
+		<div className="gutenberg-kit-editor-interface">
+			<EditorLoadNotice className="gutenberg-kit-editor-interface__load-notice" />
+			<BlockEditorProvider
+				value={postBlocks}
+				onInput={onInput}
+				onChange={onChange}
+				settings={settings}
+				useSubRegistry={false}
+			>
+				{mode === 'visual' && isRichEditingEnabled && (
+					<VisualEditor
+						useRootPaddingAwareAlignments={
+							useRootPaddingAwareAlignments
+						}
+					/>
+				)}
 
-					{(mode === 'text' || !isRichEditingEnabled) && (
-						<TextEditor
-							// We should auto-focus the canvas (title) on load.
-							// eslint-disable-next-line jsx-a11y/no-autofocus
-							autoFocus={true}
-						/>
-					)}
+				{(mode === 'text' || !isRichEditingEnabled) && (
+					<TextEditor
+						// We should auto-focus the canvas (title) on load.
+						// eslint-disable-next-line jsx-a11y/no-autofocus
+						autoFocus={true}
+					/>
+				)}
 
-					{children}
-				</BlockEditorProvider>
-			</div>
-		</ErrorBoundary>
+				{children}
+			</BlockEditorProvider>
+		</div>
 	);
 }
