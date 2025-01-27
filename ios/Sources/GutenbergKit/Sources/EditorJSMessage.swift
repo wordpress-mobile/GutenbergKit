@@ -29,11 +29,11 @@ struct EditorJSMessage {
         case onEditorContentChanged
         /// The editor history (undo, redo) changed.
         case onEditorHistoryChanged
-        /// The editor logged an error
+        /// The editor logged an exception.
         case onEditorExceptionLogged
         /// The user tapped the inserter button.
         case showBlockPicker
-        /// User requested the Media Library
+        /// User requested the Media Library.
         case openMediaLibrary
     }
 

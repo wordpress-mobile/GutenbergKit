@@ -183,7 +183,7 @@ export function getPost() {
 /**
  * Logs an error to the host app.
  *
- * @param {Error}   error                         The error object to be logged.
+ * @param {Error}   exception                     The exception object to be logged.
  * @param {Object}  [options]                     Additional options.
  * @param {Object}  [options.context]             Additional context to be logged.
  * @param {Object}  [options.tags]                Additional tags to be logged.
@@ -193,7 +193,7 @@ export function getPost() {
  * @return {void}
  */
 export function logException(
-	error,
+	exception,
 	{ context, tags, isHandled, handledBy } = {
 		context: {},
 		tags: {},
@@ -202,7 +202,7 @@ export function logException(
 	}
 ) {
 	const parsedException = {
-		...parseException(error, { context, tags }),
+		...parseException(exception, { context, tags }),
 		isHandled,
 		handledBy,
 	};

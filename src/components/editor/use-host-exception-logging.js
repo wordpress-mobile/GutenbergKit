@@ -9,7 +9,7 @@ import { addAction, removeAction } from '@wordpress/hooks';
  */
 import { logException } from '../../utils/bridge';
 
-export function useHostErrorLogging() {
+export function useHostExceptionLogging() {
 	useEffect(() => {
 		addAction(
 			'editor.ErrorBoundary.errorLogged',
