@@ -56,6 +56,7 @@ class GutenbergView : WebView {
     private var historyChangeListener: HistoryChangeListener? = null
     private var openMediaLibraryListener: OpenMediaLibraryListener? = null
     private var editorDidBecomeAvailableListener: EditorAvailableListener? = null
+    private var logJsExceptionListener: LogJsExceptionListener? = null
 
     var textEditorEnabled: Boolean = false
         set(value) {
@@ -76,6 +77,10 @@ class GutenbergView : WebView {
 
     fun setOpenMediaLibraryListener(listener: OpenMediaLibraryListener) {
         openMediaLibraryListener = listener
+    }
+
+    fun setLogJsExceptionListener(listener: LogJsExceptionListener) {
+        logJsExceptionListener = listener
     }
 
     fun setOnFileChooserRequestedListener(listener: (Intent, Int) -> Unit) {
@@ -305,6 +310,10 @@ class GutenbergView : WebView {
         fun onEditorAvailable(view: GutenbergView?)
     }
 
+    interface LogJsExceptionListener {
+        fun onLogJsException(exception: GutenbergJsException)
+    }
+
     fun getTitleAndContent(callback: TitleAndContentCallback, clearFocus: Boolean = true) {
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
@@ -420,6 +429,12 @@ class GutenbergView : WebView {
             return
         }
         this.evaluateJavascript("editor.setMediaUploadAttachment($media);", null)
+    }
+
+    @JavascriptInterface
+    fun onEditorExceptionLogged(exception: String) {
+        val parsedException = GutenbergJsException.fromString(exception)
+        logJsExceptionListener?.onLogJsException(parsedException)
     }
 
     @JavascriptInterface
