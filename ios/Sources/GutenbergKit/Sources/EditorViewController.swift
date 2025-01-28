@@ -309,6 +309,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 self.state.hasUndo = body.hasUndo
                 self.state.hasRedo = body.hasRedo
                 delegate?.editor(self, didUpdateHistoryState: state)
+            case .onEditorExceptionLogged:
+                guard let exception = message.body as? [String: Any],
+                  let editorException = GutenbergJSException(from: exception) else {
+                    return
+                }
+                delegate?.editor(self, didLogException: editorException)
             case .showBlockPicker:
                 showBlockInserter()
             case .openMediaLibrary:
