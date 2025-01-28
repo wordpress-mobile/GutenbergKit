@@ -56,12 +56,15 @@ function VisualEditor({ useRootPaddingAwareAlignments }) {
 
 	const styles = useEditorStyles();
 
-	const editorClasses = clsx('gutenberg-kit-editor', {
+	const editorClasses = clsx('gutenberg-kit-visual-editor', {
 		'has-root-padding': !useRootPaddingAwareAlignments,
 	});
-	const titleClasses = clsx('editor-visual-editor__post-title-wrapper', {
-		'has-global-padding': useRootPaddingAwareAlignments,
-	});
+	const titleClasses = clsx(
+		'gutenberg-kit-visual-editor__post-title-wrapper',
+		{
+			'has-global-padding': useRootPaddingAwareAlignments,
+		}
+	);
 	const blockListClasses = clsx({
 		'has-global-padding': useRootPaddingAwareAlignments,
 	});
@@ -76,7 +79,7 @@ function VisualEditor({ useRootPaddingAwareAlignments }) {
 			</BlockCanvas>
 
 			{isEditorReady && (
-				<EditorToolbar className="gutenberg-kit-editor__toolbar" />
+				<EditorToolbar className="gutenberg-kit-visual-editor__toolbar" />
 			)}
 
 			<Popover.Slot />
