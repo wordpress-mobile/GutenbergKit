@@ -23,7 +23,7 @@
 		"@wordpress/editor": "^14.10",
 		"@wordpress/element": "^6.10",
 		"@wordpress/format-library": "^5.10",
-		"@wordpress/icons": "^10.12.0",
+		"@wordpress/icons": "^10.16.0",
 		"@wordpress/preferences": "^4.10",
 		"@wordpress/private-apis": "^1.10",
 		"@wordpress/rich-text": "^7.16.0",
