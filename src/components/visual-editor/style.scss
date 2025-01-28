@@ -9,6 +9,17 @@
 	width: 100%;
 }
 
+// TODO: Replace this `display` style--which ensures children margins are
+// contained, rendering the background color behind them--with a proper fix in
+// core.
+//
+// See the following related changes:
+// - https://github.com/WordPress/gutenberg/pull/66706
+// - https://github.com/WordPress/gutenberg/pull/66390
+.gutenberg-kit-editor .block-editor-block-canvas {
+	display: flex;
+}
+
 .gutenberg-kit-editor .editor-styles-wrapper {
 	// Ensure the toolbar does not overlap the content
 	padding-bottom: 56px;
