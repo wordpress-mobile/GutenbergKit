@@ -175,7 +175,7 @@ export function getPost() {
 	// We assign a temporary ID of -1.
 	return {
 		type: 'post',
-		status: 'draft',
+		status: 'auto-draft',
 		id: -1,
 	};
 }
