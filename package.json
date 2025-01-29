@@ -31,18 +31,18 @@
 		"vite-plugin-node-polyfills": "^0.23.0"
 	},
 	"devDependencies": {
-		"@types/react": "^19.0.8",
-		"@types/react-dom": "^19.0.3",
+		"@types/react": "^18.3",
+		"@types/react-dom": "^18.3",
 		"@vitejs/plugin-react": "^4.3.4",
-		"@wordpress/dependency-extraction-webpack-plugin": "^6.16.0",
-		"@wordpress/eslint-plugin": "^22.2.0",
-		"@wordpress/prettier-config": "^4.16.0",
+		"@wordpress/dependency-extraction-webpack-plugin": "^6.6",
+		"@wordpress/eslint-plugin": "^21.5.0",
+		"@wordpress/prettier-config": "^4.3",
 		"eslint": "^8.57",
-		"eslint-plugin-react-refresh": "^0.4.18",
-		"magic-string": "^0.30.17",
+		"eslint-plugin-react-refresh": "^0.4",
+		"magic-string": "^0.30",
 		"patch-package": "^8.0.0",
-		"prettier": "^3.4.2",
-		"sass-embedded": "^1.83.4",
-		"vite": "^6.0.11"
+		"prettier": "^3.3",
+		"sass-embedded": "^1.83.0",
+		"vite": "^6.0.3"
 	}
 }
