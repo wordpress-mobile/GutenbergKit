@@ -236,6 +236,7 @@
 // Control label
 .components-base-control__label {
 	font-size: 13px !important;
+	color: gray;
 }
 
 // Block placeholder title
@@ -245,11 +246,6 @@
 
 .components-placeholder__input {
 	font-size: 17px !important;
-}
-
-.components-base-control__label {
-	color: gray;
-	font-size: 13px !important;
 }
 
 .blocks-table__placeholder-form {
