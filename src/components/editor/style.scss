@@ -6,6 +6,11 @@ $min-menu-item-touch-target-size: 42px;
 	flex-grow: 1;
 }
 
+// Simplify layout calculcations and mirror the `edit-post` package
+.gutenberg-kit-editor * {
+	box-sizing: border-box;
+}
+
 .gutenberg-kit-editor__load-notice {
 	bottom: 62px;
 	left: 16px;
