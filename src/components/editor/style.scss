@@ -30,3 +30,17 @@ $min-menu-item-touch-target-size: 42px;
 .gutenberg-kit-editor .components-autocomplete__result.components-button {
 	min-height: $min-menu-item-touch-target-size;
 }
+
+// Apply select styles from WordPress' default form styles for consistency.
+// Namely, avoid elements overflowing their parent containers--e.g., the
+// textarea used when toggling "Edit as HTML" mode for a single block.
+// https://github.com/WordPress/wordpress-develop/blob/9acdbb9d8db4eba90d623eefd5ad312cde140593/src/wp-admin/css/forms.css#L2-L10
+input,
+select,
+textarea,
+button {
+	box-sizing: border-box;
+	font-family: inherit;
+	font-size: inherit;
+	font-weight: inherit;
+}
