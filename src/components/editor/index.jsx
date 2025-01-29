@@ -66,8 +66,8 @@ export default function Editor({ post, children }) {
 	}, []);
 
 	return (
-		<div className="gutenberg-kit-editor-interface">
-			<EditorLoadNotice className="gutenberg-kit-editor-interface__load-notice" />
+		<div className="gutenberg-kit-editor">
+			<EditorLoadNotice className="gutenberg-kit-editor__load-notice" />
 			<BlockEditorProvider
 				value={postBlocks}
 				onInput={onInput}
