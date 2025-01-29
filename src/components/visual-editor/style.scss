@@ -26,6 +26,11 @@
 	// Remove outline to mirror default user agent styles for body elements, which
 	// is the element used for Gutenberg's iframed editor
 	outline: none;
+	// TODO: Ideally we resolve this in Gutenberg core. Ensures the styles wrapper
+	// fills its parent container.
+	//
+	// See: https://github.com/WordPress/gutenberg/pull/66706
+	width: 100%;
 }
 
 // Apply root level padding for themes that do not use the experimental
