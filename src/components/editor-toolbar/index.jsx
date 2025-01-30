@@ -8,7 +8,7 @@ import {
 	Inserter,
 	store as blockEditorStore,
 } from '@wordpress/block-editor';
-import { useSelect } from '@wordpress/data';
+import { useSelect, useDispatch } from '@wordpress/data';
 import {
 	Button,
 	Popover,
@@ -19,6 +19,7 @@ import {
 import { __ } from '@wordpress/i18n';
 import { close, cog } from '@wordpress/icons';
 import clsx from 'clsx';
+import { store as editorStore } from '@wordpress/editor';
 
 /**
  * Internal dependencies
@@ -41,6 +42,12 @@ const EditorToolbar = ({ className }) => {
 			isSelected: selectedBlockClientId !== null,
 		};
 	});
+	const { isInserterOpened } = useSelect((select) => {
+		return {
+			isInserterOpened: select(editorStore).isInserterOpened(),
+		};
+	}, []);
+	const { setIsInserterOpened } = useDispatch(editorStore);
 
 	function openSettings() {
 		setBlockInspectorShown(true);
@@ -60,7 +67,10 @@ const EditorToolbar = ({ className }) => {
 				variant="unstyled"
 			>
 				<ToolbarGroup>
-					<Inserter />
+					<Inserter
+						open={isInserterOpened}
+						onToggle={setIsInserterOpened}
+					/>
 				</ToolbarGroup>
 
 				{isSelected && (

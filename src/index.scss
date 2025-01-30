@@ -61,11 +61,7 @@
 	width: 320px;
 }
 
-/* The two selectors below hide the inline inserters shown inside the block list */
-.block-editor-block-list__layout .block-editor-inserter {
-	display: none;
-}
-
+// Hide the inline insterter shown inside the block list
 .block-editor-block-list__block-side-inserter-popover {
 	display: none;
 }
@@ -113,13 +109,6 @@
 	padding: 0px !important;
 	padding-left: 8px !important;
 	padding-right: 8px !important;
-}
-
-// Inserter section header
-.block-editor-inserter__panel-header {
-	display: block;
-	border-bottom: 1px solid lightgray;
-	padding-bottom: 12px;
 }
 
 // Inserter title
