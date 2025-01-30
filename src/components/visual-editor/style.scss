@@ -56,8 +56,10 @@
 	width: 100%;
 }
 
-// Prevent the popover from stealing focus away from the inserter, which results
-// in needing to tap a block type twice to insert it.
+// Hide the inserter popover displayed between blocks when hovering between
+// blocks or hovering over a block type in the inserter. Its presence is less
+// useful for touch devices and steals focus away from the inserter, which
+// results in needing to tap a block type twice to insert it.
 .gutenberg-kit-visual-editor .block-editor-block-popover {
 	display: none;
 }
