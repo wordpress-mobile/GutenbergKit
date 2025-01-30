@@ -40,6 +40,14 @@
 	padding-right: 16px;
 }
 
+// Hide the inline block appendar button, as its positioning and size is not
+// ideal for small screens
+.gutenberg-kit-visual-editor
+	.block-editor-default-block-appender
+	.block-editor-inserter__toggle.components-button.has-icon {
+	display: none;
+}
+
 .gutenberg-kit-visual-editor__toolbar {
 	align-items: center;
 	bottom: 0;
