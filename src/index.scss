@@ -61,17 +61,14 @@
 	width: 320px;
 }
 
-/* The two selectors below hide the inline inserters shown inside the block list */
-.block-editor-block-list__layout .block-editor-inserter {
-	display: none;
-}
-
+// Hide the inline insterter shown inside the block list
 .block-editor-block-list__block-side-inserter-popover {
 	display: none;
 }
 
 /* Inserter (Mobile Design) */
 
+// Inserter tab buttons
 .block-editor-tabbed-sidebar__tablist button {
 	font-size: 16px;
 }
@@ -87,16 +84,19 @@
 	margin-top: auto !important;
 }
 
+// Block inserter Patterns and Media list buttons
 .block-editor-inserter__menu .block-editor-tabbed-sidebar__tabpanel button {
 	font-size: 16px;
 }
 
+// Block inserter Patterns sub-section title
 .block-editor-inserter__menu
 	.block-editor-tabbed-sidebar__tabpanel
 	.block-editor-inserter__patterns-category-panel-title {
 	font-size: 18px;
 }
 
+// Block inserter Patterns item title
 .block-editor-inserter__menu
 	.block-editor-tabbed-sidebar__tabpanel
 	.block-editor-block-patterns-list__item-title {
@@ -111,18 +111,14 @@
 	padding-right: 8px !important;
 }
 
-.block-editor-inserter__panel-header {
-	display: block;
-	border-bottom: 1px solid lightgray;
-	padding-bottom: 12px;
-}
-
+// Inserter title
 .components-popover__header-title {
 	font-size: 17px;
 	font-weight: 600;
 	text-align: center;
 }
 
+// Inserter section title
 .block-editor-inserter__panel-title {
 	font-size: 15px;
 	font-weight: 600;
@@ -162,82 +158,66 @@
 	pointer-events: none;
 }
 
+// Inserter block type icon
 .block-editor-block-types-list__item-icon {
 	scale: 1.3;
 }
 
+// Inserter block type title
 .block-editor-block-types-list__item-title {
 	font-size: 17px;
 }
 
 /* Settings and more */
 
-.block-editor-block-card__title {
-	font-size: 17px;
-	font-weight: 600;
-}
-
+// Block settings description
 .block-editor-block-card__description {
 	font-size: 15px !important;
 	margin-top: -4px !important;
 }
 
+// Block settings heading
 .block-editor-block-inspector h2 {
 	font-size: 17px !important;
 	font-weight: 600 !important;
 }
 
-.block-editor-block-inspector .block-editor-block-icon {
-	padding-top: 4px;
-	/* padding-right: 0px; */
-	margin-right: 8px;
-}
-
+// Block settings help line
 .components-base-control__help {
 	font-size: 13px !important;
 }
 
+// Block settings dropdown menu section label
 .components-menu-group__label {
 	font-size: 13px;
 }
 
 /* More */
 
-.components-text {
-	font-size: 17px;
-}
-
-.components-panel__body-title {
-	font-size: 15px;
-}
-
+// Block settings title
 .block-editor-block-card__title {
 	font-size: 15px !important;
 }
 
+// Toggle control label
 .components-toggle-control__label {
 	font-size: 17px;
 }
 
+// Dropdown menu tab item
 .components-menu-item__item span {
 	font-size: 17px !important;
 }
 
+// Control label
 .components-base-control__label {
 	font-size: 13px !important;
+	color: gray;
 }
 
+// Block placeholder title
 .components-placeholder__label {
 	font-size: 17px !important;
-}
-
-.components-placeholder__input {
-	font-size: 17px !important;
-}
-
-.components-base-control__label {
-	color: gray;
-	font-size: 13px !important;
 }
 
 .blocks-table__placeholder-form {

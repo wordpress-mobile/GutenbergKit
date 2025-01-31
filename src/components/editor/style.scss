@@ -6,6 +6,11 @@ $min-menu-item-touch-target-size: 42px;
 	flex-grow: 1;
 }
 
+// Simplify layout calculcations and mirror the `edit-post` package
+.gutenberg-kit-editor * {
+	box-sizing: border-box;
+}
+
 .gutenberg-kit-editor__load-notice {
 	bottom: 62px;
 	left: 16px;
@@ -29,4 +34,27 @@ $min-menu-item-touch-target-size: 42px;
 
 .gutenberg-kit-editor .components-autocomplete__result.components-button {
 	min-height: $min-menu-item-touch-target-size;
+}
+
+// Apply select styles from WordPress' default form styles for consistency.
+// Namely, avoid elements overflowing their parent containers--e.g., the
+// textarea used when toggling "Edit as HTML" mode for a single block.
+// https://github.com/WordPress/wordpress-develop/blob/9acdbb9d8db4eba90d623eefd5ad312cde140593/src/wp-admin/css/forms.css#L2-L10
+input,
+select,
+textarea,
+button {
+	box-sizing: border-box;
+	font-family: inherit;
+	font-size: inherit;
+	font-weight: inherit;
+}
+
+.gutenberg-kit-editor .components-editor-notices__snackbar {
+	bottom: 58px;
+	left: 0;
+	padding-right: 8px;
+	padding-left: 8px;
+	position: fixed;
+	right: 0;
 }
