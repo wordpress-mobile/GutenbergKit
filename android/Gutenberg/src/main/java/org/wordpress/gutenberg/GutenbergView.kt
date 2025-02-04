@@ -280,7 +280,7 @@ class GutenbergView : WebView {
     }
 
     interface ContentChangeListener {
-        fun onContentChanged(title: String, content: String)
+        fun onContentChanged()
     }
 
     interface HistoryChangeListener {
@@ -364,7 +364,7 @@ class GutenbergView : WebView {
     fun onEditorContentChanged() {
         getTitleAndContent(object : TitleAndContentCallback {
             override fun onResult(title: String, content: String) {
-                contentChangeListener?.onContentChanged(title, content)
+                contentChangeListener?.onContentChanged()
             }
         }, false)
     }
