@@ -13,7 +13,7 @@ import { onEditorContentChanged } from '../../utils/bridge';
 
 window.editor = window.editor || {};
 
-export function useHostBridge(post) {
+export function useHostBridge(post, editorRef) {
 	const { editEntityRecord } = useDispatch(coreStore);
 	const { undo, redo, switchEditorMode } = useDispatch(editorStore);
 	const { getEditedPostAttribute, getEditedPostContent } =
@@ -37,7 +37,7 @@ export function useHostBridge(post) {
 
 		window.editor.getContent = (completeComposition = false) => {
 			if (completeComposition) {
-				endComposition();
+				endComposition(editorRef.current);
 			}
 
 			return getEditedPostContent();
@@ -45,7 +45,7 @@ export function useHostBridge(post) {
 
 		window.editor.getTitleAndContent = (completeComposition = false) => {
 			if (completeComposition) {
-				endComposition();
+				endComposition(editorRef.current);
 			}
 
 			return {
@@ -79,6 +79,7 @@ export function useHostBridge(post) {
 			delete window.editor.switchEditorMode;
 		};
 	}, [
+		editorRef,
 		editContent,
 		getEditedPostAttribute,
 		getEditedPostContent,
@@ -110,13 +111,12 @@ export function useHostBridge(post) {
  * `contenteditable` element. This is used to ensure that the latest composition
  * text is persisted to the DOM before reading its value in the host.
  *
- * @todo Address the disabled eslint rule `@wordpress/no-global-active-element`.
+ * @param {Element} element The element in which to end the composition.
  *
  * @return {void}
  */
-function endComposition() {
-	// eslint-disable-next-line @wordpress/no-global-active-element
-	const activeElement = document.activeElement;
+function endComposition(element) {
+	const activeElement = element?.ownerDocument.activeElement;
 
 	if (activeElement && activeElement.contentEditable === 'true') {
 		const compositionEvent = new Event('compositionend');

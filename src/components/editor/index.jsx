@@ -5,6 +5,7 @@ import { useEntityBlockEditor } from '@wordpress/core-data';
 import { privateApis as blockEditorPrivateApis } from '@wordpress/block-editor';
 import { useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
+import { useRef } from '@wordpress/element';
 
 /**
  * Internal dependencies
@@ -39,8 +40,9 @@ const { ExperimentalBlockEditorProvider: BlockEditorProvider } = unlock(
  * @return {JSX.Element} The rendered App component.
  */
 export default function Editor({ post, children }) {
+	const editorRef = useRef(null);
+	useHostBridge(post, editorRef);
 	useSyncHistoryControls();
-	useHostBridge(post);
 	useHostExceptionLogging();
 	useEditorSetup(post);
 	useMediaUpload();
@@ -66,7 +68,7 @@ export default function Editor({ post, children }) {
 	}, []);
 
 	return (
-		<div className="gutenberg-kit-editor">
+		<div className="gutenberg-kit-editor" ref={editorRef}>
 			<EditorLoadNotice className="gutenberg-kit-editor__load-notice" />
 			<BlockEditorProvider
 				value={postBlocks}
