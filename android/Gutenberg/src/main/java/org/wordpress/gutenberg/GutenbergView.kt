@@ -280,7 +280,7 @@ class GutenbergView : WebView {
     }
 
     interface ContentChangeListener {
-        fun onContentChanged(title: String, content: String)
+        fun onContentChanged()
     }
 
     interface HistoryChangeListener {
@@ -314,13 +314,13 @@ class GutenbergView : WebView {
         fun onLogJsException(exception: GutenbergJsException)
     }
 
-    fun getTitleAndContent(callback: TitleAndContentCallback, clearFocus: Boolean = true) {
+    fun getTitleAndContent(callback: TitleAndContentCallback, completeComposition: Boolean = true) {
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
             return
         }
         handler.post {
-            this.evaluateJavascript("editor.getTitleAndContent($clearFocus);") { result ->
+            this.evaluateJavascript("editor.getTitleAndContent($completeComposition);") { result ->
                 val jsonObject = JSONObject(result)
                 lastUpdatedTitle = jsonObject.optString("title", "")
                 lastUpdatedContent = jsonObject.optString("content", "")
@@ -364,7 +364,7 @@ class GutenbergView : WebView {
     fun onEditorContentChanged() {
         getTitleAndContent(object : TitleAndContentCallback {
             override fun onResult(title: String, content: String) {
-                contentChangeListener?.onContentChanged(title, content)
+                contentChangeListener?.onContentChanged()
             }
         }, false)
     }
