@@ -1,8 +1,13 @@
 diff --git a/node_modules/@wordpress/block-editor/build-module/components/inserter/index.js b/node_modules/@wordpress/block-editor/build-module/components/inserter/index.js
-index aa2e9a5..f2d8481 100644
+index aa2e9a5..a38d989 100644
 --- a/node_modules/@wordpress/block-editor/build-module/components/inserter/index.js
 +++ b/node_modules/@wordpress/block-editor/build-module/components/inserter/index.js
-@@ -192,6 +192,7 @@ class Inserter extends Component {
+@@ -188,10 +188,12 @@ class Inserter extends Component {
+         'is-quick': isQuick
+       }),
+       popoverProps: {
++        ...this.props.popoverProps,
+         position,
          shift: true
        },
        onToggle: this.onToggle,
