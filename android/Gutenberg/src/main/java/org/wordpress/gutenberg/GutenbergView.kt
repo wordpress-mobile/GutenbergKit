@@ -314,13 +314,13 @@ class GutenbergView : WebView {
         fun onLogJsException(exception: GutenbergJsException)
     }
 
-    fun getTitleAndContent(callback: TitleAndContentCallback, clearFocus: Boolean = true) {
+    fun getTitleAndContent(callback: TitleAndContentCallback, completeComposition: Boolean = true) {
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
             return
         }
         handler.post {
-            this.evaluateJavascript("editor.getTitleAndContent($clearFocus);") { result ->
+            this.evaluateJavascript("editor.getTitleAndContent($completeComposition);") { result ->
                 val jsonObject = JSONObject(result)
                 lastUpdatedTitle = jsonObject.optString("title", "")
                 lastUpdatedContent = jsonObject.optString("content", "")

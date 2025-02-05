@@ -35,17 +35,17 @@ export function useHostBridge(post) {
 			editContent({ title: decodeURIComponent(title) });
 		};
 
-		window.editor.getContent = (blurInput = false) => {
-			if (blurInput) {
-				blurEditor();
+		window.editor.getContent = (completeComposition = false) => {
+			if (completeComposition) {
+				endComposition();
 			}
 
 			return getEditedPostContent();
 		};
 
-		window.editor.getTitleAndContent = (blurInput = false) => {
-			if (blurInput) {
-				blurEditor();
+		window.editor.getTitleAndContent = (completeComposition = false) => {
+			if (completeComposition) {
+				endComposition();
 			}
 
 			return {
@@ -106,20 +106,20 @@ export function useHostBridge(post) {
 }
 
 /**
- * Blurs the currently active paragraph element in the document.
- *
- * This function checks if the currently active element is a paragraph (`<p>`).
- * If it is, the function removes focus from that element.
+ * Ends the current text composition on the active element, if it is a
+ * `contenteditable` element. This is used to ensure that the latest composition
+ * text is persisted to the DOM before reading its value in the host.
  *
  * @todo Address the disabled eslint rule `@wordpress/no-global-active-element`.
  *
  * @return {void}
  */
-function blurEditor() {
+function endComposition() {
 	// eslint-disable-next-line @wordpress/no-global-active-element
 	const activeElement = document.activeElement;
 
-	if (activeElement && activeElement.tagName === 'P') {
-		activeElement.blur();
+	if (activeElement && activeElement.contentEditable === 'true') {
+		const compositionEvent = new Event('compositionend');
+		activeElement.dispatchEvent(compositionEvent);
 	}
 }
