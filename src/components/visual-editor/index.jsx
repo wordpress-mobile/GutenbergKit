@@ -153,8 +153,6 @@ function VisualEditor( { hideTitle } ) {
 			</BlockCanvas>
 
 			<EditorToolbar className="gutenberg-kit-visual-editor__toolbar" />
-
-			<Popover.Slot />
 		</div>
 	);
 }

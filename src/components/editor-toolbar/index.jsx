@@ -25,6 +25,7 @@ import { store as editorStore } from '@wordpress/editor';
  * Internal dependencies
  */
 import './style.scss';
+import { useModalize } from './use-modalize';
 
 /**
  * Renders the editor toolbar containing block-related actions.
@@ -49,6 +50,9 @@ const EditorToolbar = ( { className } ) => {
 	}, [] );
 	const { setIsInserterOpened } = useDispatch( editorStore );
 
+	useModalize( isInserterOpened );
+	useModalize( isBlockInspectorShown );
+
 	function openSettings() {
 		setBlockInspectorShown( true );
 	}
@@ -68,6 +72,10 @@ const EditorToolbar = ( { className } ) => {
 			>
 				<ToolbarGroup>
 					<Inserter
+						popoverProps={ {
+							'aria-modal': true,
+							role: 'dialog',
+						} }
 						open={ isInserterOpened }
 						onToggle={ setIsInserterOpened }
 					/>
@@ -91,6 +99,9 @@ const EditorToolbar = ( { className } ) => {
 					className="block-settings-menu"
 					variant="unstyled"
 					placement="overlay"
+					aria-modal
+					onClose={ onCloseSettings }
+					role="dialog"
 				>
 					<>
 						<div className="block-settings-menu__header">
