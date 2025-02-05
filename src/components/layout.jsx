@@ -2,7 +2,6 @@
  * WordPress dependencies
  */
 import { EditorSnackbars, ErrorBoundary } from '@wordpress/editor';
-import { Popover } from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -22,7 +21,6 @@ export default function Layout(props) {
 			<Editor {...props}>
 				<EditorSnackbars />
 			</Editor>
-			<Popover.Slot />
 		</ErrorBoundary>
 	);
 }
