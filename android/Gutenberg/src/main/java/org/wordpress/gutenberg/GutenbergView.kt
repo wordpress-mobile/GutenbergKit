@@ -41,8 +41,8 @@ class GutenbergView : WebView {
     private var siteApiRoot: String = ""
     private var siteApiNamespace: String = ""
     private var authHeader: String = ""
-    private var lastUpdatedTitle = ""
-    private var lastUpdatedContent = ""
+    private var lastUpdatedTitle: CharSequence? = null
+    private var lastUpdatedContent: CharSequence? = null
 
     private val handler = Handler(Looper.getMainLooper())
     private var editorDidBecomeAvailable: ((GutenbergView) -> Unit)? = null
@@ -276,7 +276,7 @@ class GutenbergView : WebView {
     }
 
     interface TitleAndContentCallback {
-        fun onResult(title: String, content: String)
+        fun onResult(title: CharSequence, content: CharSequence)
     }
 
     interface ContentChangeListener {
@@ -314,17 +314,22 @@ class GutenbergView : WebView {
         fun onLogJsException(exception: GutenbergJsException)
     }
 
-    fun getTitleAndContent(callback: TitleAndContentCallback, completeComposition: Boolean = true) {
+    fun getTitleAndContent(originalContent: CharSequence, callback: TitleAndContentCallback, completeComposition: Boolean = true) {
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
             return
         }
         handler.post {
             this.evaluateJavascript("editor.getTitleAndContent($completeComposition);") { result ->
-                val jsonObject = JSONObject(result)
-                lastUpdatedTitle = jsonObject.optString("title", "")
-                lastUpdatedContent = jsonObject.optString("content", "")
-                callback.onResult(lastUpdatedTitle, lastUpdatedContent)
+                try {
+                    val jsonObject = JSONObject(result)
+                    lastUpdatedTitle = jsonObject.getString("title")
+                    lastUpdatedContent = jsonObject.getString("content")
+                } catch (e: JSONException) {
+                    Log.e("GutenbergView", "Received invalid JSON from editor.getTitleAndContent")
+                }
+
+                callback.onResult(lastUpdatedTitle ?: "", lastUpdatedContent ?: originalContent)
             }
         }
     }
@@ -362,11 +367,7 @@ class GutenbergView : WebView {
 
     @JavascriptInterface
     fun onEditorContentChanged() {
-        getTitleAndContent(object : TitleAndContentCallback {
-            override fun onResult(title: String, content: String) {
-                contentChangeListener?.onContentChanged()
-            }
-        }, false)
+        contentChangeListener?.onContentChanged()
     }
 
     @JavascriptInterface
