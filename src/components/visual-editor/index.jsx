@@ -33,6 +33,7 @@ import './style.scss';
 import EditorToolbar from '../editor-toolbar';
 import { useEditorStyles } from './use-editor-styles';
 import { unlock } from '../../lock-unlock';
+import DefaultBlockAppender from '../default-block-appender';
 
 const { ExperimentalBlockCanvas: BlockCanvas } = unlock(blockEditorPrivateApis);
 
@@ -76,6 +77,7 @@ function VisualEditor({ useRootPaddingAwareAlignments }) {
 					{isEditorReady && <PostTitle ref={editorPostTitleRef} />}
 				</div>
 				<BlockList className={blockListClasses} />
+				<DefaultBlockAppender />
 			</BlockCanvas>
 
 			{isEditorReady && (
