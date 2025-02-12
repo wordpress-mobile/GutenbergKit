@@ -1,4 +1,3 @@
-$baseline-interactive-font-size: 17px;
 $min-menu-item-touch-target-size: 42px;
 
 .gutenberg-kit-editor {
@@ -16,10 +15,6 @@ $min-menu-item-touch-target-size: 42px;
 	left: 16px;
 	position: fixed;
 	right: 16px;
-}
-
-.gutenberg-kit-editor .components-button {
-	font-size: $baseline-interactive-font-size;
 }
 
 .gutenberg-kit-editor .components-dropdown-menu__menu-item,
