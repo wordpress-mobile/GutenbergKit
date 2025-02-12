@@ -122,7 +122,7 @@ const EditorToolbar = ({ className }) => {
 								offset={13}
 								headerTitle={__('Block settings')}
 								onFocusOutside={closeIfFocusOutside}
-								onClick={() => setBlockInspectorShown(false)}
+								onClose={() => setBlockInspectorShown(false)}
 								role="dialog"
 							>
 								<BlockInspector />
