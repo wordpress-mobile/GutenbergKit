@@ -1,0 +1,58 @@
+diff --git a/node_modules/@wordpress/components/build-module/popover/index.js b/node_modules/@wordpress/components/build-module/popover/index.js
+index d0b21a5..84bdda0 100644
+--- a/node_modules/@wordpress/components/build-module/popover/index.js
++++ b/node_modules/@wordpress/components/build-module/popover/index.js
+@@ -284,29 +284,31 @@ const UnforwardedPopover = (props, forwardedRef) => {
+     ref: mergedFloatingRef,
+     ...dialogProps,
+     tabIndex: -1,
+-    children: [isExpanded && /*#__PURE__*/_jsx(ScrollLock, {}), isExpanded && /*#__PURE__*/_jsxs("div", {
+-      className: "components-popover__header",
+-      children: [/*#__PURE__*/_jsx("span", {
+-        className: "components-popover__header-title",
+-        children: headerTitle
+-      }), /*#__PURE__*/_jsx(Button, {
+-        className: "components-popover__close",
+-        size: "small",
+-        icon: close,
+-        onClick: onClose,
+-        label: __('Close')
++    children: [/*#__PURE__*/_jsxs("div", {
++      children: [isExpanded && /*#__PURE__*/_jsx(ScrollLock, {}), isExpanded && /*#__PURE__*/_jsxs("div", {
++        className: "components-popover__header",
++        children: [/*#__PURE__*/_jsx("span", {
++          className: "components-popover__header-title",
++          children: headerTitle
++        }), /*#__PURE__*/_jsx(Button, {
++          className: "components-popover__close",
++          size: "small",
++          icon: close,
++          onClick: onClose,
++          label: __('Close')
++        })]
++      }), /*#__PURE__*/_jsx("div", {
++        className: "components-popover__content",
++        children: children
++      }), hasArrow && /*#__PURE__*/_jsx("div", {
++        ref: arrowCallbackRef,
++        className: ['components-popover__arrow', `is-${computedPlacement.split('-')[0]}`].join(' '),
++        style: {
++          left: typeof arrowData?.x !== 'undefined' && Number.isFinite(arrowData.x) ? `${arrowData.x}px` : '',
++          top: typeof arrowData?.y !== 'undefined' && Number.isFinite(arrowData.y) ? `${arrowData.y}px` : ''
++        },
++        children: /*#__PURE__*/_jsx(ArrowTriangle, {})
+       })]
+-    }), /*#__PURE__*/_jsx("div", {
+-      className: "components-popover__content",
+-      children: children
+-    }), hasArrow && /*#__PURE__*/_jsx("div", {
+-      ref: arrowCallbackRef,
+-      className: ['components-popover__arrow', `is-${computedPlacement.split('-')[0]}`].join(' '),
+-      style: {
+-        left: typeof arrowData?.x !== 'undefined' && Number.isFinite(arrowData.x) ? `${arrowData.x}px` : '',
+-        top: typeof arrowData?.y !== 'undefined' && Number.isFinite(arrowData.y) ? `${arrowData.y}px` : ''
+-      },
+-      children: /*#__PURE__*/_jsx(ArrowTriangle, {})
+     })]
+   });
+   const shouldRenderWithinSlot = slot.ref && !inline;

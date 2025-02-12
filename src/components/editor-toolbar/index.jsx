@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { useState } from '@wordpress/element';
+import { useState, useRef } from '@wordpress/element';
 import {
 	BlockInspector,
 	BlockToolbar,
@@ -36,6 +36,8 @@ import { useModalize } from './use-modalize';
  */
 const EditorToolbar = ({ className }) => {
 	const [isBlockInspectorShown, setBlockInspectorShown] = useState(false);
+	const containerRef = useRef(null);
+	const [popoverAnchor, setPopoverAnchor] = useState(null);
 	const { isSelected } = useSelect((select) => {
 		const { getSelectedBlockClientId } = select(blockEditorStore);
 		const selectedBlockClientId = getSelectedBlockClientId();
@@ -53,12 +55,25 @@ const EditorToolbar = ({ className }) => {
 	useModalize(isInserterOpened);
 	useModalize(isBlockInspectorShown);
 
-	function openSettings() {
-		setBlockInspectorShown(true);
-	}
+	/**
+	 * Closes the popover when focus leaves it unless the toggle was pressed or
+	 * focus has moved to a separate dialog. The former is to let the toggle
+	 * handle closing the popover and the latter is to preserve presence in
+	 * case a dialog has opened, allowing focus to return when it's dismissed.
+	 */
+	function closeIfFocusOutside() {
+		if (!containerRef.current) {
+			return;
+		}
 
-	function onCloseSettings() {
-		setBlockInspectorShown(false);
+		const { ownerDocument } = containerRef.current;
+		const dialog = ownerDocument?.activeElement?.closest('[role="dialog"]');
+		if (
+			!containerRef.current.contains(ownerDocument.activeElement) &&
+			(!dialog || dialog.contains(containerRef.current))
+		) {
+			setBlockInspectorShown(false);
+		}
 	}
 
 	const classes = clsx('gutenberg-kit-editor-toolbar', className);
@@ -82,38 +97,44 @@ const EditorToolbar = ({ className }) => {
 				</ToolbarGroup>
 
 				{isSelected && (
-					<ToolbarGroup>
-						<ToolbarButton
-							title={__('Open Settings')}
-							icon={cog}
-							onClick={openSettings}
-						/>
-					</ToolbarGroup>
+					// Some UAs focus the closest focusable parent when the toggle is
+					// clicked. Making this div focusable ensures such UAs will focus
+					// it and `closeIfFocusOutside` can tell if the toggle was clicked.
+					<div ref={containerRef} tabIndex="-1">
+						<ToolbarGroup>
+							<ToolbarButton
+								ref={setPopoverAnchor}
+								title={__('Open Settings')}
+								icon={cog}
+								onClick={() =>
+									setBlockInspectorShown(
+										(previous) => !previous
+									)
+								}
+							/>
+						</ToolbarGroup>
+
+						{isSelected && isBlockInspectorShown && (
+							<Popover
+								anchor={popoverAnchor}
+								aria-modal
+								className="block-settings-menu"
+								expandOnMobile
+								offset={13}
+								headerTitle={__('Block settings')}
+								onFocusOutside={closeIfFocusOutside}
+								onClick={() => setBlockInspectorShown(false)}
+								role="dialog"
+							>
+								<BlockInspector />
+							</Popover>
+						)}
+						<Popover.Slot name="" />
+					</div>
 				)}
 
 				<BlockToolbar hideDragHandle />
 			</Toolbar>
-
-			{isBlockInspectorShown && (
-				<Popover
-					className="block-settings-menu"
-					variant="unstyled"
-					placement="overlay"
-					aria-modal
-					role="dialog"
-				>
-					<>
-						<div className="block-settings-menu__header">
-							<Button
-								className="block-settings-menu__close"
-								icon={close}
-								onClick={onCloseSettings}
-							/>
-						</div>
-						<BlockInspector />
-					</>
-				</Popover>
-			)}
 		</>
 	);
 };

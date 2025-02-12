@@ -29,15 +29,7 @@
 /* Misc */
 
 .block-settings-menu {
-	position: absolute;
-	top: 0;
-	bottom: 0;
-	left: 0;
-	right: 0;
 	background-color: #ffffff;
-	transform: none !important;
-	position: fixed !important;
-	overflow: scroll;
 }
 
 .block-settings-menu__header {
@@ -51,8 +43,7 @@
 }
 
 .block-settings-menu .components-popover__content {
-	width: 100%;
-	min-height: 100vh;
+	min-width: 360px;
 }
 
 .block-inspector-siderbar {
