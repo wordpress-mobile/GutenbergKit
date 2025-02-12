@@ -10,14 +10,13 @@ import {
 } from '@wordpress/block-editor';
 import { useSelect, useDispatch } from '@wordpress/data';
 import {
-	Button,
 	Popover,
 	Toolbar,
 	ToolbarGroup,
 	ToolbarButton,
 } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
-import { close, cog } from '@wordpress/icons';
+import { cog } from '@wordpress/icons';
 import clsx from 'clsx';
 import { store as editorStore } from '@wordpress/editor';
 
