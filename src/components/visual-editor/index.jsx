@@ -34,7 +34,6 @@ import './style.scss';
 import EditorToolbar from '../editor-toolbar';
 import { useEditorStyles } from './use-editor-styles';
 import { unlock } from '../../lock-unlock';
-import { getGBKit } from '../../utils/bridge';
 
 const {
 	ExperimentalBlockCanvas: BlockCanvas,
@@ -59,7 +58,6 @@ const alignCSS = `.is-root-container.alignwide { max-width: var(--wp--style--glo
  */
 function VisualEditor({ useRootPaddingAwareAlignments, hideTitle }) {
 	const editorPostTitleRef = useRef();
-	const { settings } = getGBKit();
 
 	const {
 		isEditorReady,
