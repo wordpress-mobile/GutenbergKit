@@ -48,6 +48,14 @@
 	display: none;
 }
 
+// Apply an admittedly problematic workaround for a bug in responsive images.
+// This should be removed once the bug is fixed in core.
+// https://github.com/WordPress/gutenberg/issues/38381#issuecomment-1099194060
+.gutenberg-kit-visual-editor .wp-block-image > div:first-child {
+	height: auto;
+	max-width: 100%;
+}
+
 .gutenberg-kit-visual-editor__toolbar {
 	align-items: center;
 	bottom: 0;
