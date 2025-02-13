@@ -10,6 +10,7 @@ import { useRef } from '@wordpress/element';
 import {
 	BlockList,
 	privateApis as blockEditorPrivateApis,
+	store as blockEditorStore,
 } from '@wordpress/block-editor';
 import { Popover } from '@wordpress/components';
 import { store as editorStore, PostTitle } from '@wordpress/editor';
@@ -35,7 +36,9 @@ import { useEditorStyles } from './use-editor-styles';
 import { unlock } from '../../lock-unlock';
 import { getGBKit } from '../../utils/bridge';
 
-const { ExperimentalBlockCanvas: BlockCanvas } = unlock(blockEditorPrivateApis);
+const { ExperimentalBlockCanvas: BlockCanvas, useLayoutClasses } = unlock(
+	blockEditorPrivateApis
+);
 
 /**
  * Editor component for managing and editing post content.
@@ -50,9 +53,13 @@ function VisualEditor({ useRootPaddingAwareAlignments }) {
 	const { settings } = getGBKit();
 	const isTitleHidden = settings?.isTitleHidden || false;
 
-	const { isEditorReady } = useSelect((select) => {
+	const { isEditorReady, themeSupportsLayout } = useSelect((select) => {
 		const { __unstableIsEditorReady } = select(editorStore);
+		const { getSettings } = unlock(select(blockEditorStore));
+		const _settings = getSettings();
+
 		return {
+			themeSupportsLayout: _settings.supportsLayout,
 			isEditorReady: __unstableIsEditorReady(),
 		};
 	}, []);
@@ -68,9 +75,27 @@ function VisualEditor({ useRootPaddingAwareAlignments }) {
 			'has-global-padding': useRootPaddingAwareAlignments,
 		}
 	);
-	const blockListClasses = clsx({
-		'has-global-padding': useRootPaddingAwareAlignments,
-	});
+
+	// An opinionated default, as we currently cannot retrievew the post content
+	// attributes from the REST API, as it does not include the current post
+	// context.
+	const postContentAttributes = {
+		align: 'full',
+		layout: { type: 'constrained' },
+	};
+	const { layout = {}, align = '' } = postContentAttributes;
+	const postContentLayoutClasses = useLayoutClasses(
+		postContentAttributes,
+		'core/post-content'
+	);
+	const blockListClasses = clsx(
+		themeSupportsLayout && postContentLayoutClasses,
+		align && `align${align}`,
+		{
+			'is-layout-flow': !themeSupportsLayout,
+			'has-global-padding': useRootPaddingAwareAlignments,
+		}
+	);
 
 	return (
 		<div className={editorClasses}>
@@ -82,7 +107,7 @@ function VisualEditor({ useRootPaddingAwareAlignments }) {
 						)}
 					</div>
 				)}
-				<BlockList className={blockListClasses} />
+				<BlockList className={blockListClasses} layout={layout} />
 			</BlockCanvas>
 
 			{isEditorReady && (
