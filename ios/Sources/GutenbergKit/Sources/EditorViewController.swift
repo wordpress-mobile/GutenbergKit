@@ -16,17 +16,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     public weak var delegate: EditorViewControllerDelegate?
 
-    /// Returns `true` if the editor is loaded and the initial content is displayed.
-    public var isEditorLoaded: Bool { initialContent != nil }
-
-    /// The content that the editor was initialized with, serialized according
-    /// to the editor's settings.
-    ///
-    /// - warning: Checking raw `content` for equality is not a reliable operation
-    /// due to the various formatting choices Gutenberg and WordPress make when
-    /// saving the posts.
-    public private(set) var initialContent: String?
-
     /// A custom URL for the editor.
     public var editorURL: URL?
 
