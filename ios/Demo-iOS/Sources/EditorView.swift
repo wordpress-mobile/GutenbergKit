@@ -72,7 +72,7 @@ private struct _EditorView: UIViewControllerRepresentable {
     var editorURL: URL?
 
     func makeUIViewController(context: Context) -> EditorViewController {
-        let viewController = EditorViewController(service: .init(client: Client()))
+        let viewController = EditorViewController()
         viewController.editorURL = editorURL
         if #available(iOS 16.4, *) {
             viewController.webView.isInspectable = true
@@ -82,12 +82,6 @@ private struct _EditorView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: EditorViewController, context: Context) {
         // Do nothing
-    }
-}
-
-struct Client: EditorNetworkingClient {
-    func send(_ request: EditorNetworkRequest) async throws -> EditorNetworkResponse {
-        throw URLError(.unknown)
     }
 }
 

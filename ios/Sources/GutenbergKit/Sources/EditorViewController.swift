@@ -6,20 +6,11 @@ import Combine
 @MainActor
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
     public let webView: WKWebView
-    private var initialTitle: String
-    private var type: String
-    private var id: Int?
-    private var themeStyles: Bool?
-    private var plugins: Bool
-    private var _initialRawContent: String
+
+    private let configuration: EditorConfiguration
     private var _isEditorRendered = false
     private let controller = GutenbergEditorController()
     private let timestampInit = CFAbsoluteTimeGetCurrent()
-    private let service: EditorService
-    private let siteURL: String
-    private let siteApiRoot: String
-    private let siteApiNamespace: String
-    private let authHeader: String
 
     public private(set) var state = EditorState()
 
@@ -42,22 +33,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private var cancellables: [AnyCancellable] = []
 
     /// Initalizes the editor with the initial content (Gutenberg).
-    public init(id: Int? = nil, type: String = "", title: String = "", content: String = "", service: EditorService, themeStyles: Bool = false, plugins: Bool = false, siteURL: String = "", siteApiRoot: String = "", siteApiNamespace: String = "", authHeader: String = "") {
-        self.id = id
-        self.type = type
-        self.initialTitle = title
-        self._initialRawContent = content
-        self.themeStyles = themeStyles
-        self.plugins = plugins
-        self.service = service
-        self.siteURL = siteURL
-        self.siteApiRoot = siteApiRoot
-        self.siteApiNamespace = siteApiNamespace
-        self.authHeader = authHeader
-
-        Task {
-            await service.warmup()
-        }
+    public init(configuration: EditorConfiguration = .init()) {
+        self.configuration = configuration
 
         // The `allowFileAccessFromFileURLs` allows the web view to access the
         // files from the local filesystem.
@@ -142,7 +119,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private func loadEditor() {
         if let editorURL = editorURL ?? ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
             webView.load(URLRequest(url: editorURL))
-        } else if plugins,
+        } else if configuration.plugins,
                   let editorURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg") {
             webView.load(URLRequest(url: editorURL))
         } else {
@@ -152,19 +129,18 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func getEditorConfiguration() -> WKUserScript {
-        let escapedTitle = initialTitle.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
-        let escapedContent = _initialRawContent.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
-        let hasThemeStylesEnabled = themeStyles != nil ? themeStyles! : false
+        let escapedTitle = configuration.title.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+        let escapedContent = configuration.content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
 
         let jsCode = """
         window.GBKit = {
-            siteURL: '\(siteURL)',
-            siteApiRoot: '\(siteApiRoot)',
-            siteApiNamespace: '\(siteApiNamespace)',
-            authHeader: '\(authHeader)',
-            themeStyles: \(hasThemeStylesEnabled),
+            siteURL: '\(configuration.siteURL)',
+            siteApiRoot: '\(configuration.siteApiRoot)',
+            siteApiNamespace: '\(configuration.siteApiNamespace)',
+            authHeader: '\(configuration.authHeader)',
+            themeStyles: \(configuration.themeStyles),
             post: {
-                id: \(id ?? -1),
+                id: \(configuration.postID ?? -1),
                 title: '\(escapedTitle)',
                 content: '\(escapedContent)'
             },
@@ -250,12 +226,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     // TODO: wire with JS and pass blocks
     private func showBlockInserter() {
-        let viewModel = EditorBlockPickerViewModel(blockTypes: service.blockTypes)
-        let view = NavigationView {
-            EditorBlockPicker(viewModel: viewModel)
-        }
-        let host = UIHostingController(rootView: view)
-        present(host, animated: true)
+//        let viewModel = EditorBlockPickerViewModel(blockTypes: service.blockTypes)
+//        let view = NavigationView {
+//            EditorBlockPicker(viewModel: viewModel)
+//        }
+//        let host = UIHostingController(rootView: view)
+//        present(host, animated: true)
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
@@ -264,34 +240,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     public func setMediaUploadAttachment(_ media: String) {
         evaluate("editor.setMediaUploadAttachment(\(media));")
-    }
-
-    // MARK: - Internal (Initial Content)
-
-    private func setInitialContent(_ content: String, _ completion: (() -> Void)? = nil) async {
-        guard _isEditorRendered else { fatalError("called too early") }
-
-       // let start = CFAbsoluteTimeGetCurrent()
-
-        // TODO: Find a faster and more reliable way to pass large strings to a web view
-        //let escapedString = content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
-
-        // TODO: Check errors and notify the delegate when the editor is loaded and the content got displayed
-        do {
-            self.initialContent = _initialRawContent
-            /*let serializedContent = try await webView.evaluateJavaScript("""
-        editor.setInitialContent(decodeURIComponent('\(escapedString)'));
-        """) as! String
-            self.initialContent = serializedContent
-            delegate?.editor(self, didDisplayInitialContent: serializedContent)*/
-            //print("gutenbergkit-set-initial-content:", CFAbsoluteTimeGetCurrent() - start)
-
-            UIView.animate(withDuration: 0.2, delay: 0.1, options: [.allowUserInteraction]) {
-                self.webView.alpha = 1
-            }
-        } catch {
-            delegate?.editor(self, didEncounterCriticalError: error)
-        }
     }
 
     // MARK: - GutenbergEditorControllerDelegate
@@ -331,17 +279,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         guard !_isEditorRendered else { return }
         _isEditorRendered = true
 
+        UIView.animate(withDuration: 0.2, delay: 0.1, options: [.allowUserInteraction]) {
+            self.webView.alpha = 1
+        }
+
         let duration = CFAbsoluteTimeGetCurrent() - timestampInit
         print("gutenbergkit-measure_editor-first-render:", duration)
         delegate?.editorDidLoad(self)
-
-        // TODO: refactor (perform initial setup with a single JS call)
-        Task { @MainActor in
-            /* if let data = service.rawBlockTypesResponseData {
-                await registerBlockTypes(data: data)
-            } */
-            await setInitialContent(_initialRawContent)
-        }
     }
 
     // MARK: - Warmup
@@ -349,15 +293,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Calls this at any moment before showing the actual editor. The warmup
     /// shaves a couple of hundred milliseconds off the first load.
     public static func warmup() {
-        struct MockClient: EditorNetworkingClient {
-            func send(_ request: EditorNetworkRequest) async throws -> EditorNetworkResponse {
-                throw URLError(.unknown) // Unsupported
-            }
-        }
-        let editorViewController = EditorViewController(
-            content: "",
-            service: EditorService(client: MockClient())
-        )
+        let editorViewController = EditorViewController()
         _ = editorViewController.view // Trigger viewDidLoad
 
         // Retain for 5 seconds and let it prefetch stuff
