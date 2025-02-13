@@ -36,9 +36,18 @@ import { useEditorStyles } from './use-editor-styles';
 import { unlock } from '../../lock-unlock';
 import { getGBKit } from '../../utils/bridge';
 
-const { ExperimentalBlockCanvas: BlockCanvas, useLayoutClasses } = unlock(
-	blockEditorPrivateApis
-);
+const {
+	ExperimentalBlockCanvas: BlockCanvas,
+	LayoutStyle,
+	useLayoutClasses,
+	useLayoutStyles,
+} = unlock(blockEditorPrivateApis);
+
+// Add some styles for alignwide/alignfull Post Content and its children.
+const alignCSS = `.is-root-container.alignwide { max-width: var(--wp--style--global--wide-size); margin-left: auto; margin-right: auto;}
+		.is-root-container.alignwide:where(.is-layout-flow) > :not(.alignleft):not(.alignright) { max-width: var(--wp--style--global--wide-size);}
+		.is-root-container.alignfull { max-width: none; margin-left: auto; margin-right: auto;}
+		.is-root-container.alignfull:where(.is-layout-flow) > :not(.alignleft):not(.alignright) { max-width: none;}`;
 
 /**
  * Editor component for managing and editing post content.
@@ -53,13 +62,22 @@ function VisualEditor({ useRootPaddingAwareAlignments }) {
 	const { settings } = getGBKit();
 	const isTitleHidden = settings?.isTitleHidden || false;
 
-	const { isEditorReady, themeSupportsLayout } = useSelect((select) => {
-		const { __unstableIsEditorReady } = select(editorStore);
+	const {
+		isEditorReady,
+		renderingMode,
+		themeHasDisabledLayoutStyles,
+		themeSupportsLayout,
+	} = useSelect((select) => {
+		const { __unstableIsEditorReady, getRenderingMode } =
+			select(editorStore);
+		const _renderingMode = getRenderingMode();
 		const { getSettings } = unlock(select(blockEditorStore));
 		const _settings = getSettings();
 
 		return {
+			renderingMode: _renderingMode,
 			themeSupportsLayout: _settings.supportsLayout,
+			themeHasDisabledLayoutStyles: _settings.disableLayoutStyles,
 			isEditorReady: __unstableIsEditorReady(),
 		};
 	}, []);
@@ -88,6 +106,11 @@ function VisualEditor({ useRootPaddingAwareAlignments }) {
 		postContentAttributes,
 		'core/post-content'
 	);
+	const postContentLayoutStyles = useLayoutStyles(
+		postContentAttributes,
+		'core/post-content',
+		'.block-editor-block-list__layout.is-root-container'
+	);
 	const blockListClasses = clsx(
 		themeSupportsLayout && postContentLayoutClasses,
 		align && `align${align}`,
@@ -100,6 +123,27 @@ function VisualEditor({ useRootPaddingAwareAlignments }) {
 	return (
 		<div className={editorClasses}>
 			<BlockCanvas shouldIframe={false} height="100%" styles={styles}>
+				{themeSupportsLayout &&
+					!themeHasDisabledLayoutStyles &&
+					renderingMode === 'post-only' && (
+						<>
+							<LayoutStyle
+								selector=".editor-visual-editor__post-title-wrapper"
+								layout={layout}
+							/>
+							<LayoutStyle
+								selector=".block-editor-block-list__layout.is-root-container"
+								layout={layout}
+							/>
+							{align && <LayoutStyle css={alignCSS} />}
+							{postContentLayoutStyles && (
+								<LayoutStyle
+									layout={layout}
+									css={postContentLayoutStyles}
+								/>
+							)}
+						</>
+					)}
 				{!isTitleHidden && (
 					<div className={titleClasses}>
 						{isEditorReady && (
