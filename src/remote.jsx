@@ -22,7 +22,7 @@ initalizeRemoteEditor();
  */
 async function initalizeRemoteEditor() {
 	try {
-		const { themeStyles, siteURL } = getGBKit();
+		const { themeStyles, hideTitle, siteURL } = getGBKit();
 		const { styles, scripts } = await apiFetch({
 			url: `${siteURL}/wp-json/__experimental/wp-block-editor/v1/editor-assets`,
 		});
@@ -50,12 +50,15 @@ async function initalizeRemoteEditor() {
 		});
 
 		const post = getPost();
-		const settings = { post };
 
 		const { default: Layout } = await import('./components/layout');
 		const { createRoot, createElement, StrictMode } = window.wp.element;
 		createRoot(document.getElementById('root')).render(
-			createElement(StrictMode, null, createElement(Layout, settings))
+			createElement(
+				StrictMode,
+				null,
+				createElement(Layout, { post, hideTitle })
+			)
 		);
 	} catch (error) {
 		// Fallback to the local editor and display a notice. Because the remote
