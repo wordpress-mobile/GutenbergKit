@@ -144,6 +144,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 title: '\(escapedTitle)',
                 content: '\(escapedContent)'
             },
+            settings: {
+                isTitleHidden: \(configuration.isTitleHidden)
+            },
         };
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
         "done";

@@ -10,6 +10,7 @@ public struct EditorConfiguration {
     public var postType: String?
     public var themeStyles = false
     public var plugins = false
+    public var isTitleHidden = false
     public var siteURL = ""
     public var siteApiRoot = ""
     public var siteApiNamespace = ""

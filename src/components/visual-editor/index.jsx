@@ -33,6 +33,7 @@ import './style.scss';
 import EditorToolbar from '../editor-toolbar';
 import { useEditorStyles } from './use-editor-styles';
 import { unlock } from '../../lock-unlock';
+import { getGBKit } from '../../utils/bridge';
 
 const { ExperimentalBlockCanvas: BlockCanvas } = unlock(blockEditorPrivateApis);
 
@@ -46,6 +47,8 @@ const { ExperimentalBlockCanvas: BlockCanvas } = unlock(blockEditorPrivateApis);
  */
 function VisualEditor({ useRootPaddingAwareAlignments }) {
 	const editorPostTitleRef = useRef();
+	const { settings } = getGBKit();
+	const isTitleHidden = settings?.isTitleHidden || false;
 
 	const { isEditorReady } = useSelect((select) => {
 		const { __unstableIsEditorReady } = select(editorStore);
@@ -72,9 +75,11 @@ function VisualEditor({ useRootPaddingAwareAlignments }) {
 	return (
 		<div className={editorClasses}>
 			<BlockCanvas shouldIframe={false} height="100%" styles={styles}>
-				<div className={titleClasses}>
-					{isEditorReady && <PostTitle ref={editorPostTitleRef} />}
-				</div>
+				{!isTitleHidden && (
+					<div className={titleClasses}>
+						{isEditorReady && <PostTitle ref={editorPostTitleRef} />}
+					</div>
+				)}
 				<BlockList className={blockListClasses} />
 			</BlockCanvas>
 
