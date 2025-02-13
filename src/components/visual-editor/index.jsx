@@ -53,6 +53,7 @@ const alignCSS = `.is-root-container.alignwide { max-width: var(--wp--style--glo
  *
  * @param {Object}  props                               Component props.
  * @param {boolean} props.useRootPaddingAwareAlignments Apply root padding.
+ * @param {boolean} props.hideTitle                     Whether to hide the title input.
  *
  * @return {JSX.Element} The rendered Editor component.
  */
