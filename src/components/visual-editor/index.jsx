@@ -77,7 +77,9 @@ function VisualEditor({ useRootPaddingAwareAlignments }) {
 			<BlockCanvas shouldIframe={false} height="100%" styles={styles}>
 				{!isTitleHidden && (
 					<div className={titleClasses}>
-						{isEditorReady && <PostTitle ref={editorPostTitleRef} />}
+						{isEditorReady && (
+							<PostTitle ref={editorPostTitleRef} />
+						)}
 					</div>
 				)}
 				<BlockList className={blockListClasses} />
