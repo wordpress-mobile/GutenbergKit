@@ -1,22 +1,45 @@
 // Manually added styles that are missing from the editor settings, likely
 // because the styles are injected by the WP Admin context, which is not present
 // in the REST API endpoint.
+
+// Constraints for the post title.
+.editor-visual-editor__post-title-wrapper
+	> :where(:not(.alignleft):not(.alignright):not(.alignfull)) {
+	max-width: 645px;
+	margin-left: auto !important;
+	margin-right: auto !important;
+}
+
+.editor-visual-editor__post-title-wrapper > .alignwide {
+	max-width: 1340px;
+}
+
+.editor-visual-editor__post-title-wrapper > .alignfull {
+	max-width: none;
+}
+
+// Remove margin from the first and last child of a layout flow container.
 :root :where(.is-layout-flow) > :first-child {
 	margin-block-start: 0;
 }
+
 :root :where(.is-layout-flow) > :last-child {
 	margin-block-end: 0;
 }
+
 :root :where(.is-layout-flow) > * {
 	margin-block-start: 1.2rem;
 	margin-block-end: 0;
 }
+
 :root :where(.is-layout-constrained) > :first-child {
 	margin-block-start: 0;
 }
+
 :root :where(.is-layout-constrained) > :last-child {
 	margin-block-end: 0;
 }
+
 :root :where(.is-layout-constrained) > * {
 	margin-block-start: 1.2rem;
 	margin-block-end: 0;

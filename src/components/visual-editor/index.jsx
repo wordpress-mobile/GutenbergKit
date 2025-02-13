@@ -85,8 +85,10 @@ function VisualEditor({ useRootPaddingAwareAlignments, hideTitle }) {
 	const editorClasses = clsx('gutenberg-kit-visual-editor', {
 		'has-root-padding': !useRootPaddingAwareAlignments,
 	});
+
 	const titleClasses = clsx(
 		'gutenberg-kit-visual-editor__post-title-wrapper',
+		'editor-visual-editor__post-title-wrapper',
 		{
 			'has-global-padding': useRootPaddingAwareAlignments,
 		}
