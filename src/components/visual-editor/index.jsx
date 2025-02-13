@@ -57,10 +57,9 @@ const alignCSS = `.is-root-container.alignwide { max-width: var(--wp--style--glo
  *
  * @return {JSX.Element} The rendered Editor component.
  */
-function VisualEditor({ useRootPaddingAwareAlignments }) {
+function VisualEditor({ useRootPaddingAwareAlignments, hideTitle }) {
 	const editorPostTitleRef = useRef();
 	const { settings } = getGBKit();
-	const isTitleHidden = settings?.isTitleHidden || false;
 
 	const {
 		isEditorReady,
@@ -144,7 +143,7 @@ function VisualEditor({ useRootPaddingAwareAlignments }) {
 							)}
 						</>
 					)}
-				{!isTitleHidden && (
+				{!hideTitle && (
 					<div className={titleClasses}>
 						{isEditorReady && (
 							<PostTitle ref={editorPostTitleRef} />

@@ -4,7 +4,11 @@
 import { createRoot, StrictMode } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { dispatch } from '@wordpress/data';
-import { store as editorStore } from '@wordpress/editor';
+import {
+	EditorSnackbars,
+	ErrorBoundary,
+	store as editorStore,
+} from '@wordpress/editor';
 import { store as preferencesStore } from '@wordpress/preferences';
 import defaultEditorStyles from '@wordpress/block-editor/build-style/default-editor-styles.css?inline';
 
@@ -13,7 +17,7 @@ import defaultEditorStyles from '@wordpress/block-editor/build-style/default-edi
  */
 import { initializeApiFetch } from './utils/api-fetch-setup';
 import { getGBKit, getPost } from './utils/bridge';
-import Layout from './components/layout';
+import Editor from './components/editor';
 import './index.scss';
 
 window.GBKit = getGBKit();
@@ -24,7 +28,7 @@ initializeEditor();
  * Configure editor settings and styles, and render the editor.
  */
 function initializeEditor() {
-	const { themeStyles } = getGBKit();
+	const { themeStyles, hideTitle } = getGBKit();
 
 	// TEMP: This should be fetched from the host apps.
 	apiFetch({ path: `/wp-block-editor/v1/settings` })
@@ -43,13 +47,14 @@ function initializeEditor() {
 	});
 
 	const post = getPost();
-	const settings = {
-		post,
-	};
 
 	createRoot(document.getElementById('root')).render(
 		<StrictMode>
-			<Layout {...settings} />
+			<ErrorBoundary>
+				<Editor post={post} hideTitle={hideTitle}>
+					<EditorSnackbars />
+				</Editor>
+			</ErrorBoundary>
 		</StrictMode>
 	);
 }

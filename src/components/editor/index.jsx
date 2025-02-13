@@ -33,13 +33,14 @@ const { ExperimentalBlockEditorProvider: BlockEditorProvider } = unlock(
 /**
  * Entry component rendering the editor and surrounding UI.
  *
- * @param {Object}                               props          Component props.
- * @param {Post}                                 props.post     Post object containing post details.
- * @param {import('@wordpress/element').Element} props.children The children to render in the editor.
+ * @param {Object}                               props           Component props.
+ * @param {Post}                                 props.post      Post object containing post details.
+ * @param {boolean}                              props.hideTitle Whether to hide the title input.
+ * @param {import('@wordpress/element').Element} props.children  The children to render in the editor.
  *
  * @return {JSX.Element} The rendered App component.
  */
-export default function Editor({ post, children }) {
+export default function Editor({ post, children, hideTitle }) {
 	const editorRef = useRef(null);
 	useHostBridge(post, editorRef);
 	useSyncHistoryControls();
@@ -79,6 +80,7 @@ export default function Editor({ post, children }) {
 			>
 				{mode === 'visual' && isRichEditingEnabled && (
 					<VisualEditor
+						hideTitle={hideTitle}
 						useRootPaddingAwareAlignments={
 							useRootPaddingAwareAlignments
 						}
@@ -90,6 +92,7 @@ export default function Editor({ post, children }) {
 						// We should auto-focus the canvas (title) on load.
 						// eslint-disable-next-line jsx-a11y/no-autofocus
 						autoFocus={true}
+						hideTitle={hideTitle}
 					/>
 				)}
 
