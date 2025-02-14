@@ -51,13 +51,12 @@ const alignCSS = `.is-root-container.alignwide { max-width: var(--wp--style--glo
 /**
  * Editor component for managing and editing post content.
  *
- * @param {Object}  props                               Component props.
- * @param {boolean} props.useRootPaddingAwareAlignments Apply root padding.
- * @param {boolean} props.hideTitle                     Whether to hide the title input.
+ * @param {Object}  props           Component props.
+ * @param {boolean} props.hideTitle Whether to hide the title input.
  *
  * @return {JSX.Element} The rendered Editor component.
  */
-function VisualEditor({ useRootPaddingAwareAlignments, hideTitle }) {
+function VisualEditor({ hideTitle }) {
 	const editorPostTitleRef = useRef();
 
 	const {
@@ -65,6 +64,7 @@ function VisualEditor({ useRootPaddingAwareAlignments, hideTitle }) {
 		renderingMode,
 		themeHasDisabledLayoutStyles,
 		themeSupportsLayout,
+		hasRootPaddingAwareAlignments,
 	} = useSelect((select) => {
 		const { __unstableIsEditorReady, getRenderingMode } =
 			select(editorStore);
@@ -77,21 +77,21 @@ function VisualEditor({ useRootPaddingAwareAlignments, hideTitle }) {
 			themeSupportsLayout: _settings.supportsLayout,
 			themeHasDisabledLayoutStyles: _settings.disableLayoutStyles,
 			isEditorReady: __unstableIsEditorReady(),
+			hasRootPaddingAwareAlignments:
+				_settings.__experimentalFeatures?.useRootPaddingAwareAlignments,
 		};
 	}, []);
 
 	const styles = useEditorStyles();
 
 	const editorClasses = clsx('gutenberg-kit-visual-editor', {
-		'has-root-padding': !useRootPaddingAwareAlignments,
+		'has-root-padding': !hasRootPaddingAwareAlignments,
 	});
 
 	const titleClasses = clsx(
 		'gutenberg-kit-visual-editor__post-title-wrapper',
 		'editor-visual-editor__post-title-wrapper',
-		{
-			'has-global-padding': useRootPaddingAwareAlignments,
-		}
+		{ 'has-global-padding': hasRootPaddingAwareAlignments }
 	);
 
 	// An opinionated default, as we currently cannot retrievew the post content
@@ -116,7 +116,7 @@ function VisualEditor({ useRootPaddingAwareAlignments, hideTitle }) {
 		align && `align${align}`,
 		{
 			'is-layout-flow': !themeSupportsLayout,
-			'has-global-padding': useRootPaddingAwareAlignments,
+			'has-global-padding': hasRootPaddingAwareAlignments,
 		}
 	);
 

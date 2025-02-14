@@ -55,9 +55,6 @@ export default function Editor({ post, children, hideTitle }) {
 	);
 
 	const settings = useGBKitSettings(post);
-	const useRootPaddingAwareAlignments =
-		settings.themeStyles &&
-		settings.__experimentalFeatures?.useRootPaddingAwareAlignments;
 
 	const { mode, isRichEditingEnabled } = useSelect((select) => {
 		const { getEditorSettings, getEditorMode } = select(editorStore);
@@ -79,12 +76,7 @@ export default function Editor({ post, children, hideTitle }) {
 				useSubRegistry={false}
 			>
 				{mode === 'visual' && isRichEditingEnabled && (
-					<VisualEditor
-						hideTitle={hideTitle}
-						useRootPaddingAwareAlignments={
-							useRootPaddingAwareAlignments
-						}
-					/>
+					<VisualEditor hideTitle={hideTitle} />
 				)}
 
 				{(mode === 'text' || !isRichEditingEnabled) && (
