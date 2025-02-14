@@ -17,7 +17,7 @@ import Editor from './editor';
  */
 export default function Layout(props) {
 	return (
-		<ErrorBoundary>
+		<ErrorBoundary canCopyContent>
 			<Editor {...props}>
 				<EditorSnackbars />
 			</Editor>
