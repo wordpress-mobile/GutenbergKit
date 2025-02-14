@@ -56,6 +56,17 @@
 	max-width: 100%;
 }
 
+// Ensure unsupported blocks do not overflow the block canvas
+.gutenberg-kit-visual-editor .wp-block-missing {
+	max-width: 100%;
+	overflow: hidden;
+}
+
+.gutenberg-kit-visual-editor .wp-block-missing img {
+	height: auto;
+	max-width: 100%;
+}
+
 .gutenberg-kit-visual-editor__toolbar {
 	align-items: center;
 	bottom: 0;
