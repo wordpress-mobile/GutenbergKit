@@ -11,7 +11,6 @@ import { useRef } from '@wordpress/element';
  * Internal dependencies
  */
 import VisualEditor from '../visual-editor';
-import EditorLoadNotice from '../editor-load-notice';
 import './style.scss';
 import { useSyncHistoryControls } from './use-sync-history-controls';
 import { useHostBridge } from './use-host-bridge';
@@ -56,18 +55,30 @@ export default function Editor({ post, children, hideTitle }) {
 
 	const settings = useGBKitSettings(post);
 
-	const { mode, isRichEditingEnabled } = useSelect((select) => {
-		const { getEditorSettings, getEditorMode } = select(editorStore);
+	const { isReady, mode, isRichEditingEnabled } = useSelect((select) => {
+		const { __unstableIsEditorReady, getEditorSettings, getEditorMode } =
+			select(editorStore);
 		const editorSettings = getEditorSettings();
+
 		return {
+			// TODO(Perf): The `__unstableIsEditorReady` selector is insufficient as
+			// it does not account for post type loading, which is first referenced
+			// within the post title component render. This results in the post title
+			// popping in after the editor mounted. The web editor does not experience
+			// this issue because the post type is loaded for "mode" selection before
+			// the editor is mounted.
+			isReady: __unstableIsEditorReady(),
 			mode: getEditorMode(),
 			isRichEditingEnabled: editorSettings.richEditingEnabled,
 		};
 	}, []);
 
+	if (!isReady) {
+		return null;
+	}
+
 	return (
 		<div className="gutenberg-kit-editor" ref={editorRef}>
-			<EditorLoadNotice className="gutenberg-kit-editor__load-notice" />
 			<BlockEditorProvider
 				value={postBlocks}
 				onInput={onInput}

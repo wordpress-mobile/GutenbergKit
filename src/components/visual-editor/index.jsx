@@ -60,14 +60,12 @@ function VisualEditor({ hideTitle }) {
 	const editorPostTitleRef = useRef();
 
 	const {
-		isEditorReady,
 		renderingMode,
 		themeHasDisabledLayoutStyles,
 		themeSupportsLayout,
 		hasRootPaddingAwareAlignments,
 	} = useSelect((select) => {
-		const { __unstableIsEditorReady, getRenderingMode } =
-			select(editorStore);
+		const { getRenderingMode } = select(editorStore);
 		const _renderingMode = getRenderingMode();
 		const { getSettings } = unlock(select(blockEditorStore));
 		const _settings = getSettings();
@@ -76,7 +74,6 @@ function VisualEditor({ hideTitle }) {
 			renderingMode: _renderingMode,
 			themeSupportsLayout: _settings.supportsLayout,
 			themeHasDisabledLayoutStyles: _settings.disableLayoutStyles,
-			isEditorReady: __unstableIsEditorReady(),
 			hasRootPaddingAwareAlignments:
 				_settings.__experimentalFeatures?.useRootPaddingAwareAlignments,
 		};
@@ -146,17 +143,13 @@ function VisualEditor({ hideTitle }) {
 					)}
 				{!hideTitle && (
 					<div className={titleClasses}>
-						{isEditorReady && (
-							<PostTitle ref={editorPostTitleRef} />
-						)}
+						<PostTitle ref={editorPostTitleRef} />
 					</div>
 				)}
 				<BlockList className={blockListClasses} layout={layout} />
 			</BlockCanvas>
 
-			{isEditorReady && (
-				<EditorToolbar className="gutenberg-kit-visual-editor__toolbar" />
-			)}
+			<EditorToolbar className="gutenberg-kit-visual-editor__toolbar" />
 
 			<Popover.Slot />
 		</div>
