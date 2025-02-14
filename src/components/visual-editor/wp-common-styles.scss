@@ -5,7 +5,7 @@
 // Constraints for the post title.
 .editor-visual-editor__post-title-wrapper
 	> :where(:not(.alignleft):not(.alignright):not(.alignfull)) {
-	max-width: 645px;
+	max-width: var(--wp--style--global--content-size);
 	margin-left: auto !important;
 	margin-right: auto !important;
 }

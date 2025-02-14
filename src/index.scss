@@ -1,5 +1,10 @@
 @use "@wordpress/base-styles/variables" as wordpress;
 
+// Reasonable defaults used when theme styles are unavailable
+:root {
+	--wp--style--global--content-size: 645px;
+}
+
 .root {
 	display: flex;
 	flex-direction: column;
