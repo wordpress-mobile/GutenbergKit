@@ -23,10 +23,10 @@ initalizeRemoteEditor();
 async function initalizeRemoteEditor() {
 	try {
 		const { themeStyles, hideTitle, siteURL } = getGBKit();
-		const { styles, scripts } = await apiFetch({
-			url: `${siteURL}/wp-json/__experimental/wp-block-editor/v1/editor-assets`,
-		});
-		await loadAssets([...styles, ...scripts].join(''));
+		const { styles, scripts } = await apiFetch( {
+			url: `${ siteURL }/wp-json/__experimental/wp-block-editor/v1/editor-assets`,
+		} );
+		await loadAssets( [ ...styles, ...scripts ].join( '' ) );
 
 		// Utilize remote-loaded globals rather than importing local modules
 		const { dispatch } = window.wp.data;
@@ -34,33 +34,33 @@ async function initalizeRemoteEditor() {
 		const { store: preferencesStore } = window.wp.preferences;
 
 		// TEMP: This should be fetched from the host apps.
-		apiFetch({ path: `/wp-block-editor/v1/settings` })
-			.then((editorSettings) => {
-				dispatch(editorStore).updateEditorSettings(editorSettings);
-			})
-			.catch(() => {
+		apiFetch( { path: `/wp-block-editor/v1/settings` } )
+			.then( ( editorSettings ) => {
+				dispatch( editorStore ).updateEditorSettings( editorSettings );
+			} )
+			.catch( () => {
 				const editorSettings = {
-					defaultEditorStyles: [{ css: defaultEditorStyles }],
+					defaultEditorStyles: [ { css: defaultEditorStyles } ],
 				};
-				dispatch(editorStore).updateEditorSettings(editorSettings);
-			});
+				dispatch( editorStore ).updateEditorSettings( editorSettings );
+			} );
 
-		dispatch(preferencesStore).setDefaults('core/edit-post', {
+		dispatch( preferencesStore ).setDefaults( 'core/edit-post', {
 			themeStyles,
-		});
+		} );
 
 		const post = getPost();
 
-		const { default: Layout } = await import('./components/layout');
+		const { default: Layout } = await import( './components/layout' );
 		const { createRoot, createElement, StrictMode } = window.wp.element;
-		createRoot(document.getElementById('root')).render(
+		createRoot( document.getElementById( 'root' ) ).render(
 			createElement(
 				StrictMode,
 				null,
-				createElement(Layout, { post, hideTitle })
+				createElement( Layout, { post, hideTitle } )
 			)
 		);
-	} catch (error) {
+	} catch ( error ) {
 		// Fallback to the local editor and display a notice. Because the remote
 		// editor loading failed, it is more practical to rely upon the local
 		// editor's scripts and styles for displaying the notice.
@@ -73,31 +73,34 @@ async function initalizeRemoteEditor() {
  *
  * @param {string} html The HTML content to parse for assets.
  */
-async function loadAssets(html) {
-	const doc = new window.DOMParser().parseFromString(html, 'text/html');
+async function loadAssets( html ) {
+	const doc = new window.DOMParser().parseFromString( html, 'text/html' );
 
 	const newAssets = Array.from(
-		doc.querySelectorAll('link[rel="stylesheet"],script')
-	).filter((asset) => asset.id && !excludedScripts.test(asset.src));
+		doc.querySelectorAll( 'link[rel="stylesheet"],script' )
+	).filter( ( asset ) => asset.id && ! excludedScripts.test( asset.src ) );
 
 	/*
 	 * Load each asset in order, as they may depend upon an earlier loaded script.
 	 * Stylesheets and Inline Scripts will resolve immediately upon insertion.
 	 */
-	for (const newAsset of newAssets) {
-		await loadAsset(newAsset);
+	for ( const newAsset of newAssets ) {
+		await loadAsset( newAsset );
 	}
 }
 
 // Discard remote copies of localy-sourced Gutenberg packages to avoid conflicts
-const localGutenbergPackages = ['api-fetch'];
+const localGutenbergPackages = [ 'api-fetch' ];
 const excludedScripts = new RegExp(
 	localGutenbergPackages
-		.flatMap((script) => [
-			`wp-content/plugins/gutenberg/build/${script.replace(/\//g, '\\/')}\\b`,
-			`wp-includes/js/dist/${script.replace(/\//g, '\\/')}\\b`,
-		])
-		.join('|')
+		.flatMap( ( script ) => [
+			`wp-content/plugins/gutenberg/build/${ script.replace(
+				/\//g,
+				'\\/'
+			) }\\b`,
+			`wp-includes/js/dist/${ script.replace( /\//g, '\\/' ) }\\b`,
+		] )
+		.join( '|' )
 );
 
 /**
@@ -110,39 +113,39 @@ const excludedScripts = new RegExp(
  *
  * @return {Promise} Promise which will resolve when the asset is loaded.
  */
-function loadAsset(el) {
-	return new Promise((resolve) => {
+function loadAsset( el ) {
+	return new Promise( ( resolve ) => {
 		/*
 		 * Reconstruct the passed element, this is required as inserting the Node directly
 		 * won't always fire the required onload events, even if the asset wasn't already loaded.
 		 */
-		const newNode = document.createElement(el.nodeName);
+		const newNode = document.createElement( el.nodeName );
 
-		['id', 'rel', 'src', 'href', 'type'].forEach((attr) => {
-			if (el[attr]) {
-				newNode[attr] = el[attr];
+		[ 'id', 'rel', 'src', 'href', 'type' ].forEach( ( attr ) => {
+			if ( el[ attr ] ) {
+				newNode[ attr ] = el[ attr ];
 			}
-		});
+		} );
 
 		// Append inline <script> contents.
-		if (el.innerHTML) {
-			newNode.appendChild(document.createTextNode(el.innerHTML));
+		if ( el.innerHTML ) {
+			newNode.appendChild( document.createTextNode( el.innerHTML ) );
 		}
 
-		newNode.onload = () => resolve(true);
+		newNode.onload = () => resolve( true );
 		newNode.onerror = () => {
 			// TODO: Communicate the error to the user.
-			resolve(false);
+			resolve( false );
 		};
 
-		document.body.appendChild(newNode);
+		document.body.appendChild( newNode );
 
 		// Resolve Stylesheets and Inline JavaScript immediately.
 		if (
 			'link' === newNode.nodeName.toLowerCase() ||
-			('script' === newNode.nodeName.toLowerCase() && !newNode.src)
+			( 'script' === newNode.nodeName.toLowerCase() && ! newNode.src )
 		) {
 			resolve();
 		}
-	});
+	} );
 }

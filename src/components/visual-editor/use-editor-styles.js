@@ -17,7 +17,7 @@ import defaultThemeStyles from './default-theme-styles.scss?inline';
 // eslint-disable-next-line import/no-unresolved
 import commonStyles from './wp-common-styles.scss?inline';
 
-const { getLayoutStyles } = unlock(blockEditorPrivateApis);
+const { getLayoutStyles } = unlock( blockEditorPrivateApis );
 
 /**
  * Custom hook to retrieve and memoize editor styles.
@@ -27,49 +27,49 @@ const { getLayoutStyles } = unlock(blockEditorPrivateApis);
  * @return {any[]} An array of editor styles.
  */
 export function useEditorStyles() {
-	const { hasThemeStyleSupport, editorSettings } = useSelect((select) => {
+	const { hasThemeStyleSupport, editorSettings } = useSelect( ( select ) => {
 		return {
 			hasThemeStyleSupport:
-				select(editPostStore).isFeatureActive('themeStyles'),
-			editorSettings: select(editorStore).getEditorSettings(),
+				select( editPostStore ).isFeatureActive( 'themeStyles' ),
+			editorSettings: select( editorStore ).getEditorSettings(),
 		};
-	}, []);
+	}, [] );
 
-	return useMemo(() => {
+	return useMemo( () => {
 		const defaultEditorStyles = [
-			...(editorSettings?.defaultEditorStyles ?? []),
+			...( editorSettings?.defaultEditorStyles ?? [] ),
 		];
 
-		if (!editorSettings.disableLayoutStyles && !hasThemeStyleSupport) {
-			defaultEditorStyles.push({
-				css: getLayoutStyles({
+		if ( ! editorSettings.disableLayoutStyles && ! hasThemeStyleSupport ) {
+			defaultEditorStyles.push( {
+				css: getLayoutStyles( {
 					style: {},
 					selector: 'body',
 					hasBlockGapSupport: false,
 					hasFallbackGapSupport: true,
 					fallbackGapValue: '0.5em',
-				}),
-			});
+				} ),
+			} );
 		}
 
-		if (!hasThemeStyleSupport) {
-			defaultEditorStyles.push({
+		if ( ! hasThemeStyleSupport ) {
+			defaultEditorStyles.push( {
 				css: defaultThemeStyles,
-			});
+			} );
 		}
 
 		const baseStyles = hasThemeStyleSupport
-			? (editorSettings.styles ?? [])
+			? editorSettings.styles ?? []
 			: defaultEditorStyles;
 
 		// `commonStyles` represent manually added notable styles that are missing.
 		// The styles likely absent due to them being injected by the WP Admin
 		// context.
-		return [{ css: commonStyles }, ...baseStyles];
+		return [ { css: commonStyles }, ...baseStyles ];
 	}, [
 		editorSettings.defaultEditorStyles,
 		editorSettings.disableLayoutStyles,
 		editorSettings.styles,
 		hasThemeStyleSupport,
-	]);
+	] );
 }

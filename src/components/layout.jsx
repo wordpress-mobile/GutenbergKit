@@ -16,10 +16,10 @@ import EditorLoadNotice from './editor-load-notice';
  *
  * @return {JSX.Element} The rendered Layout component.
  */
-export default function Layout(props) {
+export default function Layout( props ) {
 	return (
 		<ErrorBoundary canCopyContent>
-			<Editor {...props}>
+			<Editor { ...props }>
 				<EditorSnackbars />
 			</Editor>
 			<EditorLoadNotice className="gutenberg-kit-editor__load-notice" />

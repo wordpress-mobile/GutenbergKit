@@ -16,10 +16,10 @@ import './style.scss';
  *
  * @return {JSX.Element} The rendered text editor component.
  */
-export default function TextEditor({ hideTitle }) {
+export default function TextEditor( { hideTitle } ) {
 	return (
 		<div className="gutenberg-kit-text-editor">
-			{!hideTitle && <PostTitleRaw />}
+			{ ! hideTitle && <PostTitleRaw /> }
 			<PostTextEditor />
 		</div>
 	);

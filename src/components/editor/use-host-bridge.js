@@ -13,43 +13,43 @@ import { onEditorContentChanged } from '../../utils/bridge';
 
 window.editor = window.editor || {};
 
-export function useHostBridge(post, editorRef) {
-	const { editEntityRecord } = useDispatch(coreStore);
-	const { undo, redo, switchEditorMode } = useDispatch(editorStore);
+export function useHostBridge( post, editorRef ) {
+	const { editEntityRecord } = useDispatch( coreStore );
+	const { undo, redo, switchEditorMode } = useDispatch( editorStore );
 	const { getEditedPostAttribute, getEditedPostContent } =
-		useSelect(editorStore);
+		useSelect( editorStore );
 
 	const editContent = useCallback(
-		(edits) => {
-			editEntityRecord('postType', post.type, post.id, edits);
+		( edits ) => {
+			editEntityRecord( 'postType', post.type, post.id, edits );
 		},
-		[editEntityRecord, post.id, post.type]
+		[ editEntityRecord, post.id, post.type ]
 	);
 
-	useEffect(() => {
-		window.editor.setContent = (content) => {
-			editContent({ content: decodeURIComponent(content) });
+	useEffect( () => {
+		window.editor.setContent = ( content ) => {
+			editContent( { content: decodeURIComponent( content ) } );
 		};
 
-		window.editor.setTitle = (title) => {
-			editContent({ title: decodeURIComponent(title) });
+		window.editor.setTitle = ( title ) => {
+			editContent( { title: decodeURIComponent( title ) } );
 		};
 
-		window.editor.getContent = (completeComposition = false) => {
-			if (completeComposition) {
-				endComposition(editorRef.current);
+		window.editor.getContent = ( completeComposition = false ) => {
+			if ( completeComposition ) {
+				endComposition( editorRef.current );
 			}
 
 			return getEditedPostContent();
 		};
 
-		window.editor.getTitleAndContent = (completeComposition = false) => {
-			if (completeComposition) {
-				endComposition(editorRef.current);
+		window.editor.getTitleAndContent = ( completeComposition = false ) => {
+			if ( completeComposition ) {
+				endComposition( editorRef.current );
 			}
 
 			return {
-				title: getEditedPostAttribute('title'),
+				title: getEditedPostAttribute( 'title' ),
 				content: getEditedPostContent(),
 			};
 		};
@@ -64,9 +64,9 @@ export function useHostBridge(post, editorRef) {
 			redo();
 		};
 
-		window.editor.switchEditorMode = (mode) => {
+		window.editor.switchEditorMode = ( mode ) => {
 			// Do not return the `Promise` return value to avoid host errors.
-			switchEditorMode(mode);
+			switchEditorMode( mode );
 		};
 
 		return () => {
@@ -86,13 +86,13 @@ export function useHostBridge(post, editorRef) {
 		redo,
 		switchEditorMode,
 		undo,
-	]);
+	] );
 
-	const postTitleRef = useRef(post.title);
-	const postContentRef = useRef(post.content);
+	const postTitleRef = useRef( post.title );
+	const postContentRef = useRef( post.content );
 
-	useEffect(() => {
-		return subscribe(() => {
+	useEffect( () => {
+		return subscribe( () => {
 			const { title, content } = window.editor.getTitleAndContent();
 			if (
 				title !== postTitleRef.current ||
@@ -102,8 +102,8 @@ export function useHostBridge(post, editorRef) {
 				postTitleRef.current = title;
 				postContentRef.current = content;
 			}
-		});
-	}, []);
+		} );
+	}, [] );
 }
 
 /**
@@ -115,11 +115,11 @@ export function useHostBridge(post, editorRef) {
  *
  * @return {void}
  */
-function endComposition(element) {
+function endComposition( element ) {
 	const activeElement = element?.ownerDocument.activeElement;
 
-	if (activeElement && activeElement.contentEditable === 'true') {
-		const compositionEvent = new Event('compositionend');
-		activeElement.dispatchEvent(compositionEvent);
+	if ( activeElement && activeElement.contentEditable === 'true' ) {
+		const compositionEvent = new Event( 'compositionend' );
+		activeElement.dispatchEvent( compositionEvent );
 	}
 }

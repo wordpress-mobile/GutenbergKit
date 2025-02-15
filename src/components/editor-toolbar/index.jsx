@@ -33,60 +33,60 @@ import './style.scss';
  * @param {string} props.className Component classes.
  * @return {JSX.Element} The rendered editor toolbar component.
  */
-const EditorToolbar = ({ className }) => {
-	const [isBlockInspectorShown, setBlockInspectorShown] = useState(false);
-	const { isSelected } = useSelect((select) => {
-		const { getSelectedBlockClientId } = select(blockEditorStore);
+const EditorToolbar = ( { className } ) => {
+	const [ isBlockInspectorShown, setBlockInspectorShown ] = useState( false );
+	const { isSelected } = useSelect( ( select ) => {
+		const { getSelectedBlockClientId } = select( blockEditorStore );
 		const selectedBlockClientId = getSelectedBlockClientId();
 		return {
 			isSelected: selectedBlockClientId !== null,
 		};
-	});
-	const { isInserterOpened } = useSelect((select) => {
+	} );
+	const { isInserterOpened } = useSelect( ( select ) => {
 		return {
-			isInserterOpened: select(editorStore).isInserterOpened(),
+			isInserterOpened: select( editorStore ).isInserterOpened(),
 		};
-	}, []);
-	const { setIsInserterOpened } = useDispatch(editorStore);
+	}, [] );
+	const { setIsInserterOpened } = useDispatch( editorStore );
 
 	function openSettings() {
-		setBlockInspectorShown(true);
+		setBlockInspectorShown( true );
 	}
 
 	function onCloseSettings() {
-		setBlockInspectorShown(false);
+		setBlockInspectorShown( false );
 	}
 
-	const classes = clsx('gutenberg-kit-editor-toolbar', className);
+	const classes = clsx( 'gutenberg-kit-editor-toolbar', className );
 
 	return (
 		<>
 			<Toolbar
-				className={classes}
+				className={ classes }
 				label="Editor toolbar"
 				variant="unstyled"
 			>
 				<ToolbarGroup>
 					<Inserter
-						open={isInserterOpened}
-						onToggle={setIsInserterOpened}
+						open={ isInserterOpened }
+						onToggle={ setIsInserterOpened }
 					/>
 				</ToolbarGroup>
 
-				{isSelected && (
+				{ isSelected && (
 					<ToolbarGroup>
 						<ToolbarButton
-							title={__('Open Settings')}
-							icon={cog}
-							onClick={openSettings}
+							title={ __( 'Open Settings' ) }
+							icon={ cog }
+							onClick={ openSettings }
 						/>
 					</ToolbarGroup>
-				)}
+				) }
 
 				<BlockToolbar hideDragHandle />
 			</Toolbar>
 
-			{isBlockInspectorShown && (
+			{ isBlockInspectorShown && (
 				<Popover
 					className="block-settings-menu"
 					variant="unstyled"
@@ -96,14 +96,14 @@ const EditorToolbar = ({ className }) => {
 						<div className="block-settings-menu__header">
 							<Button
 								className="block-settings-menu__close"
-								icon={close}
-								onClick={onCloseSettings}
+								icon={ close }
+								onClick={ onCloseSettings }
 							/>
 						</div>
 						<BlockInspector />
 					</>
 				</Popover>
-			)}
+			) }
 		</>
 	);
 };

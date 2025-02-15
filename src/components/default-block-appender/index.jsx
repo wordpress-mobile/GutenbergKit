@@ -18,23 +18,23 @@ import './style.scss';
  * @return {JSX.Element} The rendered button element.
  */
 export default function DefaultBlockAppender() {
-	const { insertBlock } = useDispatch(blockEditorStore);
-	const { blockCount } = useSelect((select) => {
-		const { getBlockCount } = select(blockEditorStore);
+	const { insertBlock } = useDispatch( blockEditorStore );
+	const { blockCount } = useSelect( ( select ) => {
+		const { getBlockCount } = select( blockEditorStore );
 		return {
 			blockCount: getBlockCount(),
 		};
-	});
+	} );
 
 	const onAddParagraphBlock = () => {
-		const paragraphBlock = createBlock('core/paragraph');
-		insertBlock(paragraphBlock, blockCount);
+		const paragraphBlock = createBlock( 'core/paragraph' );
+		insertBlock( paragraphBlock, blockCount );
 	};
 
 	return (
 		<button
-			aria-label={__('Add paragraph block')}
-			onClick={onAddParagraphBlock}
+			aria-label={ __( 'Add paragraph block' ) }
+			onClick={ onAddParagraphBlock }
 			className="gutenberg-kit-default-block-appender"
 		></button>
 	);

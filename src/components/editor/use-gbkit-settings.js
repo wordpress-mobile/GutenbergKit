@@ -15,28 +15,28 @@ import {
  */
 import { unlock } from '../../lock-unlock';
 
-const { useBlockEditorSettings } = unlock(editorPrivateApis);
+const { useBlockEditorSettings } = unlock( editorPrivateApis );
 
-export function useGBKitSettings(post) {
+export function useGBKitSettings( post ) {
 	const {
 		blockPatterns,
 		editorSettings,
 		hasUploadPermissions,
 		reusableBlocks,
 	} = useSelect(
-		(select) => {
-			const { getEntityRecord, getEntityRecords } = select(coreStore);
-			const { getEditorSettings } = select(editorStore);
-			const user = getEntityRecord('root', 'user', post.author);
+		( select ) => {
+			const { getEntityRecord, getEntityRecords } = select( coreStore );
+			const { getEditorSettings } = select( editorStore );
+			const user = getEntityRecord( 'root', 'user', post.author );
 
 			return {
 				editorSettings: getEditorSettings(),
-				blockPatterns: select(coreStore).getBlockPatterns(),
+				blockPatterns: select( coreStore ).getBlockPatterns(),
 				hasUploadPermissions: user?.capabilities?.upload_files ?? true,
-				reusableBlocks: getEntityRecords('postType', 'wp_block'),
+				reusableBlocks: getEntityRecords( 'postType', 'wp_block' ),
 			};
 		},
-		[post.author]
+		[ post.author ]
 	);
 
 	const blockEditorSettings = useBlockEditorSettings(
@@ -47,13 +47,13 @@ export function useGBKitSettings(post) {
 	);
 
 	const settings = useMemo(
-		() => ({
+		() => ( {
 			...blockEditorSettings,
 			hasFixedToolbar: true,
 			mediaUpload: hasUploadPermissions ? mediaUpload : undefined,
 			__experimentalReusableBlocks: reusableBlocks,
 			__experimentalBlockPatterns: blockPatterns,
-		}),
+		} ),
 		[
 			blockEditorSettings,
 			blockPatterns,

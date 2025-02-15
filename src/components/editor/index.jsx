@@ -39,25 +39,25 @@ const { ExperimentalBlockEditorProvider: BlockEditorProvider } = unlock(
  *
  * @return {JSX.Element} The rendered App component.
  */
-export default function Editor({ post, children, hideTitle }) {
-	const editorRef = useRef(null);
-	useHostBridge(post, editorRef);
+export default function Editor( { post, children, hideTitle } ) {
+	const editorRef = useRef( null );
+	useHostBridge( post, editorRef );
 	useSyncHistoryControls();
 	useHostExceptionLogging();
-	useEditorSetup(post);
+	useEditorSetup( post );
 	useMediaUpload();
 
-	const [postBlocks, onInput, onChange] = useEntityBlockEditor(
+	const [ postBlocks, onInput, onChange ] = useEntityBlockEditor(
 		'postType',
 		post.type,
 		{ id: post.id }
 	);
 
-	const settings = useGBKitSettings(post);
+	const settings = useGBKitSettings( post );
 
-	const { isReady, mode, isRichEditingEnabled } = useSelect((select) => {
+	const { isReady, mode, isRichEditingEnabled } = useSelect( ( select ) => {
 		const { __unstableIsEditorReady, getEditorSettings, getEditorMode } =
-			select(editorStore);
+			select( editorStore );
 		const editorSettings = getEditorSettings();
 
 		return {
@@ -71,35 +71,35 @@ export default function Editor({ post, children, hideTitle }) {
 			mode: getEditorMode(),
 			isRichEditingEnabled: editorSettings.richEditingEnabled,
 		};
-	}, []);
+	}, [] );
 
-	if (!isReady) {
+	if ( ! isReady ) {
 		return null;
 	}
 
 	return (
-		<div className="gutenberg-kit-editor" ref={editorRef}>
+		<div className="gutenberg-kit-editor" ref={ editorRef }>
 			<BlockEditorProvider
-				value={postBlocks}
-				onInput={onInput}
-				onChange={onChange}
-				settings={settings}
-				useSubRegistry={false}
+				value={ postBlocks }
+				onInput={ onInput }
+				onChange={ onChange }
+				settings={ settings }
+				useSubRegistry={ false }
 			>
-				{mode === 'visual' && isRichEditingEnabled && (
-					<VisualEditor hideTitle={hideTitle} />
-				)}
+				{ mode === 'visual' && isRichEditingEnabled && (
+					<VisualEditor hideTitle={ hideTitle } />
+				) }
 
-				{(mode === 'text' || !isRichEditingEnabled) && (
+				{ ( mode === 'text' || ! isRichEditingEnabled ) && (
 					<TextEditor
 						// We should auto-focus the canvas (title) on load.
 						// eslint-disable-next-line jsx-a11y/no-autofocus
-						autoFocus={true}
-						hideTitle={hideTitle}
+						autoFocus={ true }
+						hideTitle={ hideTitle }
 					/>
-				)}
+				) }
 
-				{children}
+				{ children }
 			</BlockEditorProvider>
 		</div>
 	);

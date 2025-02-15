@@ -21,15 +21,15 @@ import { onEditorHistoryChanged } from '../../utils/bridge';
  * @return {void}
  */
 export function useSyncHistoryControls() {
-	const { hasUndo, hasRedo } = useSelect((select) => {
-		const store = select(editorStore);
+	const { hasUndo, hasRedo } = useSelect( ( select ) => {
+		const store = select( editorStore );
 		return {
 			hasUndo: store.hasEditorUndo(),
 			hasRedo: store.hasEditorRedo(),
 		};
-	}, []);
+	}, [] );
 
-	useEffect(() => {
-		onEditorHistoryChanged(hasUndo, hasRedo);
-	}, [hasUndo, hasRedo]);
+	useEffect( () => {
+		onEditorHistoryChanged( hasUndo, hasRedo );
+	}, [ hasUndo, hasRedo ] );
 }

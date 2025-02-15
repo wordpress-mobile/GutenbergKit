@@ -20,17 +20,17 @@ import { getGBKit } from './bridge';
 export function initializeApiFetch() {
 	const { siteApiRoot = '', authHeader } = getGBKit();
 
-	apiFetch.use(apiFetch.createRootURLMiddleware(siteApiRoot));
-	apiFetch.use(corsMiddleware);
-	apiFetch.use(apiPathModifierMiddleware);
-	apiFetch.use(createHeadersMiddleware(authHeader));
-	apiFetch.use(filterEndpointsMiddleware);
-	apiFetch.use(mediaUploadMiddleware);
+	apiFetch.use( apiFetch.createRootURLMiddleware( siteApiRoot ) );
+	apiFetch.use( corsMiddleware );
+	apiFetch.use( apiPathModifierMiddleware );
+	apiFetch.use( createHeadersMiddleware( authHeader ) );
+	apiFetch.use( filterEndpointsMiddleware );
+	apiFetch.use( mediaUploadMiddleware );
 
 	// Preload some endpoints to return data needed for some components
 	// Like PostTitle.
 	apiFetch.use(
-		apiFetch.createPreloadingMiddleware({
+		apiFetch.createPreloadingMiddleware( {
 			'/wp/v2/types?context=view': {
 				body: {
 					post: {
@@ -39,7 +39,7 @@ export function initializeApiFetch() {
 						has_archive: false,
 						name: 'Posts',
 						slug: 'post',
-						taxonomies: ['category', 'post_tag'],
+						taxonomies: [ 'category', 'post_tag' ],
 						rest_base: 'posts',
 						rest_namespace: 'wp/v2',
 						template: [],
@@ -78,14 +78,14 @@ export function initializeApiFetch() {
 						'post-formats': true,
 						autosave: true,
 					},
-					taxonomies: ['category', 'post_tag'],
+					taxonomies: [ 'category', 'post_tag' ],
 					rest_base: 'posts',
 					rest_namespace: 'wp/v2',
 					template: [],
 					template_lock: false,
 				},
 			},
-		})
+		} )
 	);
 }
 
@@ -96,16 +96,16 @@ export function initializeApiFetch() {
  *
  * @todo Address the CORS header hack.
  */
-function corsMiddleware(options, next) {
+function corsMiddleware( options, next ) {
 	options.mode = 'cors';
 
 	// HACK: This custom header causes CORS errors. Although settings the mode to
 	// 'cors' should prevent this header, incorrect middleware order results in
 	// setting the header.
 	// https://github.com/Automattic/jetpack/blob/7801b7f21e01d8a4a102c44dac69c6ebdd1e549d/projects/plugins/jetpack/extensions/editor.js#L22-L52
-	delete options.headers['x-wp-api-fetch-from-editor'];
+	delete options.headers[ 'x-wp-api-fetch-from-editor' ];
 
-	return next(options);
+	return next( options );
 }
 
 /**
@@ -113,32 +113,32 @@ function corsMiddleware(options, next) {
  *
  * @type {APIFetchMiddleware}
  */
-function apiPathModifierMiddleware(options, next) {
+function apiPathModifierMiddleware( options, next ) {
 	const { siteApiNamespace } = getGBKit();
 
 	if (
 		options.path &&
 		siteApiNamespace &&
-		!options.path.includes(siteApiNamespace)
+		! options.path.includes( siteApiNamespace )
 	) {
 		// Insert the API namespace after the first two path segments.
 		options.path = options.path.replace(
 			/^(?<apiPath>\/?(?:[\w.-]+\/){2})/,
-			`$<apiPath>${siteApiNamespace}/`
+			`$<apiPath>${ siteApiNamespace }/`
 		);
 	}
-	return next(options);
+	return next( options );
 }
 
-function createHeadersMiddleware(authHeader) {
-	return (options, next) => {
+function createHeadersMiddleware( authHeader ) {
+	return ( options, next ) => {
 		options.headers = options.headers || {};
 
-		if (authHeader) {
+		if ( authHeader ) {
 			options.headers.Authorization = authHeader;
 		}
 
-		return next(options);
+		return next( options );
 	};
 }
 
@@ -147,19 +147,19 @@ function createHeadersMiddleware(authHeader) {
  *
  * @type {APIFetchMiddleware}
  */
-function filterEndpointsMiddleware(options, next) {
+function filterEndpointsMiddleware( options, next ) {
 	const disabledEndpoints = [
 		/^\/wp\/v2\/posts\/-?\d+/, // Matches /wp/v2/posts/{ID}
 		/^\/wp\/v2\/pages\/-?\d+/, // Matches /wp/v2/pages/{ID}
 	];
-	const isDisabled = disabledEndpoints.some((pattern) =>
-		pattern.test(options.path)
+	const isDisabled = disabledEndpoints.some( ( pattern ) =>
+		pattern.test( options.path )
 	);
 
-	if (isDisabled) {
-		return Promise.resolve([]);
+	if ( isDisabled ) {
+		return Promise.resolve( [] );
 	}
-	return next(options);
+	return next( options );
 }
 
 /**
@@ -170,16 +170,16 @@ function filterEndpointsMiddleware(options, next) {
  *
  * @type {APIFetchMiddleware}
  */
-function mediaUploadMiddleware(options, next) {
+function mediaUploadMiddleware( options, next ) {
 	if (
 		options.path &&
-		options.path.startsWith('/wp/v2/media') &&
+		options.path.startsWith( '/wp/v2/media' ) &&
 		options.method === 'POST' &&
 		options.body instanceof FormData &&
-		options.body.get('post') === '-1'
+		options.body.get( 'post' ) === '-1'
 	) {
-		options.body.delete('post');
+		options.body.delete( 'post' );
 	}
 
-	return next(options);
+	return next( options );
 }

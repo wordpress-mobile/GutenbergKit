@@ -42,7 +42,7 @@ const {
 	LayoutStyle,
 	useLayoutClasses,
 	useLayoutStyles,
-} = unlock(blockEditorPrivateApis);
+} = unlock( blockEditorPrivateApis );
 
 // Add some styles for alignwide/alignfull Post Content and its children.
 const alignCSS = `.is-root-container.alignwide { max-width: var(--wp--style--global--wide-size); margin-left: auto; margin-right: auto;}
@@ -58,7 +58,7 @@ const alignCSS = `.is-root-container.alignwide { max-width: var(--wp--style--glo
  *
  * @return {JSX.Element} The rendered Editor component.
  */
-function VisualEditor({ hideTitle }) {
+function VisualEditor( { hideTitle } ) {
 	const editorPostTitleRef = useRef();
 
 	const {
@@ -67,29 +67,29 @@ function VisualEditor({ hideTitle }) {
 		themeHasDisabledLayoutStyles,
 		themeSupportsLayout,
 		hasRootPaddingAwareAlignments,
-	} = useSelect((select) => {
-		const { getRenderingMode } = select(editorStore);
+	} = useSelect( ( select ) => {
+		const { getRenderingMode } = select( editorStore );
 		const _renderingMode = getRenderingMode();
-		const { getSettings } = unlock(select(blockEditorStore));
+		const { getSettings } = unlock( select( blockEditorStore ) );
 		const _settings = getSettings();
 
 		return {
 			renderingMode: _renderingMode,
 			hasThemeStyleSupport:
-				select(editPostStore).isFeatureActive('themeStyles'),
+				select( editPostStore ).isFeatureActive( 'themeStyles' ),
 			themeSupportsLayout: _settings.supportsLayout,
 			themeHasDisabledLayoutStyles: _settings.disableLayoutStyles,
 			hasRootPaddingAwareAlignments:
 				_settings.__experimentalFeatures?.useRootPaddingAwareAlignments,
 		};
-	}, []);
+	}, [] );
 
 	const styles = useEditorStyles();
 
-	const editorClasses = clsx('gutenberg-kit-visual-editor', {
+	const editorClasses = clsx( 'gutenberg-kit-visual-editor', {
 		'has-root-padding':
-			!hasThemeStyleSupport || !hasRootPaddingAwareAlignments,
-	});
+			! hasThemeStyleSupport || ! hasRootPaddingAwareAlignments,
+	} );
 
 	const titleClasses = clsx(
 		'gutenberg-kit-visual-editor__post-title-wrapper',
@@ -119,44 +119,44 @@ function VisualEditor({ hideTitle }) {
 	);
 	const blockListClasses = clsx(
 		themeSupportsLayout && postContentLayoutClasses,
-		align && `align${align}`,
+		align && `align${ align }`,
 		{
-			'is-layout-flow': !themeSupportsLayout,
+			'is-layout-flow': ! themeSupportsLayout,
 			'has-global-padding':
 				hasThemeStyleSupport && hasRootPaddingAwareAlignments,
 		}
 	);
 
 	return (
-		<div className={editorClasses}>
-			<BlockCanvas shouldIframe={false} height="100%" styles={styles}>
-				{themeSupportsLayout &&
-					!themeHasDisabledLayoutStyles &&
+		<div className={ editorClasses }>
+			<BlockCanvas shouldIframe={ false } height="100%" styles={ styles }>
+				{ themeSupportsLayout &&
+					! themeHasDisabledLayoutStyles &&
 					renderingMode === 'post-only' && (
 						<>
 							<LayoutStyle
 								selector=".editor-visual-editor__post-title-wrapper"
-								layout={layout}
+								layout={ layout }
 							/>
 							<LayoutStyle
 								selector=".block-editor-block-list__layout.is-root-container"
-								layout={layout}
+								layout={ layout }
 							/>
-							{align && <LayoutStyle css={alignCSS} />}
-							{postContentLayoutStyles && (
+							{ align && <LayoutStyle css={ alignCSS } /> }
+							{ postContentLayoutStyles && (
 								<LayoutStyle
-									layout={layout}
-									css={postContentLayoutStyles}
+									layout={ layout }
+									css={ postContentLayoutStyles }
 								/>
-							)}
+							) }
 						</>
-					)}
-				{!hideTitle && (
-					<div className={titleClasses}>
-						<PostTitle ref={editorPostTitleRef} />
+					) }
+				{ ! hideTitle && (
+					<div className={ titleClasses }>
+						<PostTitle ref={ editorPostTitleRef } />
 					</div>
-				)}
-				<BlockList className={blockListClasses} layout={layout} />
+				) }
+				<BlockList className={ blockListClasses } layout={ layout } />
 				<DefaultBlockAppender />
 			</BlockCanvas>
 
