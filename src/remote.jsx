@@ -94,11 +94,12 @@ const localGutenbergPackages = [ 'api-fetch' ];
 const excludedScripts = new RegExp(
 	localGutenbergPackages
 		.flatMap( ( script ) => [
-			`wp-content/plugins/gutenberg/build/${ script.replace(
-				/\//g,
-				'\\/'
-			) }\\b`,
-			`wp-includes/js/dist/${ script.replace( /\//g, '\\/' ) }\\b`,
+			`wp-content/plugins/gutenberg/build/${ script
+				.replace( /\\/g, '\\\\' )
+				.replace( /\//g, '\\/' ) }\\b`,
+			`wp-includes/js/dist/${ script
+				.replace( /\\/g, '\\\\' )
+				.replace( /\//g, '\\/' ) }\\b`,
 		] )
 		.join( '|' )
 );
