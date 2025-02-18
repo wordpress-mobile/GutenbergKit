@@ -128,13 +128,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             siteApiNamespace: '\(configuration.siteApiNamespace)',
             authHeader: '\(configuration.authHeader)',
             themeStyles: \(configuration.themeStyles),
+            hideTitle: \(configuration.hideTitle),
             post: {
                 id: \(configuration.postID ?? -1),
                 title: '\(escapedTitle)',
                 content: '\(escapedContent)'
-            },
-            settings: {
-                isTitleHidden: \(configuration.isTitleHidden)
             },
         };
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
