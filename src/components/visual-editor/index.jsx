@@ -15,6 +15,7 @@ import {
 import { Popover } from '@wordpress/components';
 import { store as editorStore, PostTitle } from '@wordpress/editor';
 import { useSelect } from '@wordpress/data';
+import { store as editPostStore } from '@wordpress/edit-post';
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
 import '@wordpress/block-editor/build-style/style.css';
@@ -62,6 +63,7 @@ function VisualEditor({ hideTitle }) {
 
 	const {
 		renderingMode,
+		hasThemeStyleSupport,
 		themeHasDisabledLayoutStyles,
 		themeSupportsLayout,
 		hasRootPaddingAwareAlignments,
@@ -73,6 +75,8 @@ function VisualEditor({ hideTitle }) {
 
 		return {
 			renderingMode: _renderingMode,
+			hasThemeStyleSupport:
+				select(editPostStore).isFeatureActive('themeStyles'),
 			themeSupportsLayout: _settings.supportsLayout,
 			themeHasDisabledLayoutStyles: _settings.disableLayoutStyles,
 			hasRootPaddingAwareAlignments:
@@ -83,13 +87,17 @@ function VisualEditor({ hideTitle }) {
 	const styles = useEditorStyles();
 
 	const editorClasses = clsx('gutenberg-kit-visual-editor', {
-		'has-root-padding': !hasRootPaddingAwareAlignments,
+		'has-root-padding':
+			!hasThemeStyleSupport || !hasRootPaddingAwareAlignments,
 	});
 
 	const titleClasses = clsx(
 		'gutenberg-kit-visual-editor__post-title-wrapper',
 		'editor-visual-editor__post-title-wrapper',
-		{ 'has-global-padding': hasRootPaddingAwareAlignments }
+		{
+			'has-global-padding':
+				hasThemeStyleSupport && hasRootPaddingAwareAlignments,
+		}
 	);
 
 	// An opinionated default, as we currently cannot retrievew the post content
@@ -114,7 +122,8 @@ function VisualEditor({ hideTitle }) {
 		align && `align${align}`,
 		{
 			'is-layout-flow': !themeSupportsLayout,
-			'has-global-padding': hasRootPaddingAwareAlignments,
+			'has-global-padding':
+				hasThemeStyleSupport && hasRootPaddingAwareAlignments,
 		}
 	);
 
