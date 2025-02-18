@@ -1,7 +1,7 @@
 ---
 name: Feature request
 about: Propose an idea for a feature or an enhancement
-type: Bug
+type: Feature
 labels: "[Type] Enhancement"
 ---
 
