@@ -18,7 +18,7 @@ import EditorLoadNotice from './editor-load-notice';
  */
 export default function Layout(props) {
 	return (
-		<ErrorBoundary>
+		<ErrorBoundary canCopyContent>
 			<Editor {...props}>
 				<EditorSnackbars />
 			</Editor>
