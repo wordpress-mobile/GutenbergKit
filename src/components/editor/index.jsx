@@ -11,7 +11,6 @@ import { useRef } from '@wordpress/element';
  * Internal dependencies
  */
 import VisualEditor from '../visual-editor';
-import EditorLoadNotice from '../editor-load-notice';
 import './style.scss';
 import { useSyncHistoryControls } from './use-sync-history-controls';
 import { useHostBridge } from './use-host-bridge';
@@ -33,13 +32,14 @@ const { ExperimentalBlockEditorProvider: BlockEditorProvider } = unlock(
 /**
  * Entry component rendering the editor and surrounding UI.
  *
- * @param {Object}                               props          Component props.
- * @param {Post}                                 props.post     Post object containing post details.
- * @param {import('@wordpress/element').Element} props.children The children to render in the editor.
+ * @param {Object}                               props           Component props.
+ * @param {Post}                                 props.post      Post object containing post details.
+ * @param {boolean}                              props.hideTitle Whether to hide the title input.
+ * @param {import('@wordpress/element').Element} props.children  The children to render in the editor.
  *
  * @return {JSX.Element} The rendered App component.
  */
-export default function Editor({ post, children }) {
+export default function Editor({ post, children, hideTitle }) {
 	const editorRef = useRef(null);
 	useHostBridge(post, editorRef);
 	useSyncHistoryControls();
@@ -54,22 +54,31 @@ export default function Editor({ post, children }) {
 	);
 
 	const settings = useGBKitSettings(post);
-	const useRootPaddingAwareAlignments =
-		settings.themeStyles &&
-		settings.__experimentalFeatures?.useRootPaddingAwareAlignments;
 
-	const { mode, isRichEditingEnabled } = useSelect((select) => {
-		const { getEditorSettings, getEditorMode } = select(editorStore);
+	const { isReady, mode, isRichEditingEnabled } = useSelect((select) => {
+		const { __unstableIsEditorReady, getEditorSettings, getEditorMode } =
+			select(editorStore);
 		const editorSettings = getEditorSettings();
+
 		return {
+			// TODO(Perf): The `__unstableIsEditorReady` selector is insufficient as
+			// it does not account for post type loading, which is first referenced
+			// within the post title component render. This results in the post title
+			// popping in after the editor mounted. The web editor does not experience
+			// this issue because the post type is loaded for "mode" selection before
+			// the editor is mounted.
+			isReady: __unstableIsEditorReady(),
 			mode: getEditorMode(),
 			isRichEditingEnabled: editorSettings.richEditingEnabled,
 		};
 	}, []);
 
+	if (!isReady) {
+		return null;
+	}
+
 	return (
 		<div className="gutenberg-kit-editor" ref={editorRef}>
-			<EditorLoadNotice className="gutenberg-kit-editor__load-notice" />
 			<BlockEditorProvider
 				value={postBlocks}
 				onInput={onInput}
@@ -78,11 +87,7 @@ export default function Editor({ post, children }) {
 				useSubRegistry={false}
 			>
 				{mode === 'visual' && isRichEditingEnabled && (
-					<VisualEditor
-						useRootPaddingAwareAlignments={
-							useRootPaddingAwareAlignments
-						}
-					/>
+					<VisualEditor hideTitle={hideTitle} />
 				)}
 
 				{(mode === 'text' || !isRichEditingEnabled) && (
@@ -90,6 +95,7 @@ export default function Editor({ post, children }) {
 						// We should auto-focus the canvas (title) on load.
 						// eslint-disable-next-line jsx-a11y/no-autofocus
 						autoFocus={true}
+						hideTitle={hideTitle}
 					/>
 				)}
 

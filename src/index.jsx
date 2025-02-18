@@ -24,7 +24,7 @@ initializeEditor();
  * Configure editor settings and styles, and render the editor.
  */
 function initializeEditor() {
-	const { themeStyles } = getGBKit();
+	const { themeStyles, hideTitle } = getGBKit();
 
 	// TEMP: This should be fetched from the host apps.
 	apiFetch({ path: `/wp-block-editor/v1/settings` })
@@ -43,13 +43,10 @@ function initializeEditor() {
 	});
 
 	const post = getPost();
-	const settings = {
-		post,
-	};
 
 	createRoot(document.getElementById('root')).render(
 		<StrictMode>
-			<Layout {...settings} />
+			<Layout post={post} hideTitle={hideTitle} />
 		</StrictMode>
 	);
 }
