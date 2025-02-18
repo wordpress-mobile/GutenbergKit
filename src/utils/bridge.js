@@ -9,15 +9,15 @@ import parseException from './parse-exception';
  * @return {void}
  */
 export function editorLoaded() {
-	if (window.editorDelegate) {
+	if ( window.editorDelegate ) {
 		window.editorDelegate.onEditorLoaded();
 	}
 
-	if (window.webkit) {
-		window.webkit.messageHandlers.editorDelegate.postMessage({
+	if ( window.webkit ) {
+		window.webkit.messageHandlers.editorDelegate.postMessage( {
 			message: 'onEditorLoaded',
 			body: {},
-		});
+		} );
 	}
 }
 
@@ -27,14 +27,14 @@ export function editorLoaded() {
  * @return {void}
  */
 export function onEditorContentChanged() {
-	if (window.editorDelegate) {
+	if ( window.editorDelegate ) {
 		window.editorDelegate.onEditorContentChanged();
 	}
 
-	if (window.webkit) {
-		window.webkit.messageHandlers.editorDelegate.postMessage({
+	if ( window.webkit ) {
+		window.webkit.messageHandlers.editorDelegate.postMessage( {
 			message: 'onEditorContentChanged',
-		});
+		} );
 	}
 }
 
@@ -46,16 +46,16 @@ export function onEditorContentChanged() {
  *
  * @return {void}
  */
-export function onEditorHistoryChanged(hasUndo, hasRedo) {
-	if (window.editorDelegate) {
-		window.editorDelegate.onEditorHistoryChanged(hasUndo, hasRedo);
+export function onEditorHistoryChanged( hasUndo, hasRedo ) {
+	if ( window.editorDelegate ) {
+		window.editorDelegate.onEditorHistoryChanged( hasUndo, hasRedo );
 	}
 
-	if (window.webkit) {
-		window.webkit.messageHandlers.editorDelegate.postMessage({
+	if ( window.webkit ) {
+		window.webkit.messageHandlers.editorDelegate.postMessage( {
 			message: 'onEditorHistoryChanged',
 			body: { hasUndo, hasRedo },
-		});
+		} );
 	}
 }
 
@@ -66,16 +66,16 @@ export function onEditorHistoryChanged(hasUndo, hasRedo) {
  *
  * @return {void}
  */
-export function onBlocksChanged(isEmpty = false) {
-	if (window.editorDelegate) {
-		window.editorDelegate.onBlocksChanged(isEmpty);
+export function onBlocksChanged( isEmpty = false ) {
+	if ( window.editorDelegate ) {
+		window.editorDelegate.onBlocksChanged( isEmpty );
 	}
 
-	if (window.webkit) {
-		window.webkit.messageHandlers.editorDelegate.postMessage({
+	if ( window.webkit ) {
+		window.webkit.messageHandlers.editorDelegate.postMessage( {
 			message: 'onBlocksChanged',
 			body: { isEmpty },
-		});
+		} );
 	}
 }
 
@@ -85,15 +85,15 @@ export function onBlocksChanged(isEmpty = false) {
  * @return {void}
  */
 export function showBlockPicker() {
-	if (window.editorDelegate) {
+	if ( window.editorDelegate ) {
 		window.editorDelegate.showBlockPicker();
 	}
 
-	if (window.webkit) {
-		window.webkit.messageHandlers.editorDelegate.postMessage({
+	if ( window.webkit ) {
+		window.webkit.messageHandlers.editorDelegate.postMessage( {
 			message: 'showBlockPicker',
 			body: {},
-		});
+		} );
 	}
 }
 
@@ -104,16 +104,16 @@ export function showBlockPicker() {
  *
  * @return {void}
  */
-export function openMediaLibrary(config) {
-	if (window.editorDelegate) {
-		window.editorDelegate.openMediaLibrary(JSON.stringify(config));
+export function openMediaLibrary( config ) {
+	if ( window.editorDelegate ) {
+		window.editorDelegate.openMediaLibrary( JSON.stringify( config ) );
 	}
 
-	if (window.webkit) {
-		window.webkit.messageHandlers.editorDelegate.postMessage({
+	if ( window.webkit ) {
+		window.webkit.messageHandlers.editorDelegate.postMessage( {
 			message: 'openMediaLibrary',
 			body: config,
-		});
+		} );
 	}
 }
 
@@ -124,23 +124,23 @@ export function openMediaLibrary(config) {
  * @return {Object} The GBKit object.
  */
 export function getGBKit() {
-	if (window.GBKit) {
+	if ( window.GBKit ) {
 		return window.GBKit;
 	}
 
 	// Android relies upon "pulling" the GBKit object from the native host, as it
 	// does not provide a way to inject JavaScript prior to the WebView loading.
-	if (window.editorDelegate) {
+	if ( window.editorDelegate ) {
 		try {
-			return JSON.parse(window.editorDelegate.getEditorConfiguration());
-		} catch (error) {
+			return JSON.parse( window.editorDelegate.getEditorConfiguration() );
+		} catch ( error ) {
 			return {};
 		}
 	}
 
 	try {
-		return JSON.parse(localStorage.getItem('GBKit')) || {};
-	} catch (error) {
+		return JSON.parse( localStorage.getItem( 'GBKit' ) ) || {};
+	} catch ( error ) {
 		return {};
 	}
 }
@@ -162,11 +162,11 @@ export function getGBKit() {
  */
 export function getPost() {
 	const { post } = getGBKit();
-	if (post) {
+	if ( post ) {
 		return {
 			id: post.id,
-			title: { raw: decodeURIComponent(post.title) },
-			content: { raw: decodeURIComponent(post.content) },
+			title: { raw: decodeURIComponent( post.title ) },
+			content: { raw: decodeURIComponent( post.content ) },
 			type: post.type || 'post',
 		};
 	}
@@ -202,21 +202,21 @@ export function logException(
 	}
 ) {
 	const parsedException = {
-		...parseException(exception, { context, tags }),
+		...parseException( exception, { context, tags } ),
 		isHandled,
 		handledBy,
 	};
 
-	if (window.editorDelegate) {
+	if ( window.editorDelegate ) {
 		window.editorDelegate.onEditorExceptionLogged(
-			JSON.stringify(parsedException)
+			JSON.stringify( parsedException )
 		);
 	}
 
-	if (window.webkit) {
-		window.webkit.messageHandlers.editorDelegate.postMessage({
+	if ( window.webkit ) {
+		window.webkit.messageHandlers.editorDelegate.postMessage( {
 			message: 'onEditorExceptionLogged',
 			body: parsedException,
-		});
+		} );
 	}
 }

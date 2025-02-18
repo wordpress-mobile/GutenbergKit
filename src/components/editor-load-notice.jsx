@@ -13,13 +13,13 @@ import { useState, useEffect } from '@wordpress/element';
  *
  * @return {?JSX.Element} The rendered component or null if no notice is present.
  */
-export default function EditorLoadNotice({ className }) {
+export default function EditorLoadNotice( { className } ) {
 	const { notice, clearNotice } = useEditorLoadNotice();
 
 	const actions = [
 		{
 			label: 'Retry',
-			onClick: () => (window.location.href = 'remote.html'),
+			onClick: () => ( window.location.href = 'remote.html' ),
 			variant: 'primary',
 		},
 		{
@@ -29,14 +29,18 @@ export default function EditorLoadNotice({ className }) {
 		},
 	];
 
-	if (!notice) {
+	if ( ! notice ) {
 		return null;
 	}
 
 	return (
-		<div className={className}>
-			<Notice actions={actions} status="warning" isDismissible={false}>
-				{notice}
+		<div className={ className }>
+			<Notice
+				actions={ actions }
+				status="warning"
+				isDismissible={ false }
+			>
+				{ notice }
 			</Notice>
 		</div>
 	);
@@ -48,14 +52,14 @@ export default function EditorLoadNotice({ className }) {
  * @return {{notice:string, clearNotice:()=>void}} The notice message and a function to clear it.
  */
 function useEditorLoadNotice() {
-	const [notice, setNotice] = useState(null);
+	const [ notice, setNotice ] = useState( null );
 
-	useEffect(() => {
-		const url = new URL(window.location.href);
-		const error = url.searchParams.get('error');
+	useEffect( () => {
+		const url = new URL( window.location.href );
+		const error = url.searchParams.get( 'error' );
 
 		let message = null;
-		switch (error) {
+		switch ( error ) {
 			case REMOTE_EDITOR_LOAD_ERROR:
 				message = __(
 					"Oops! We couldn't load your site's editor and plugins. Don't worry, you can use the default editor for now."
@@ -65,19 +69,19 @@ function useEditorLoadNotice() {
 				message = null;
 		}
 
-		setNotice(message);
-	}, []);
+		setNotice( message );
+	}, [] );
 
-	useEffect(() => {
-		if (notice) {
-			const timeout = setTimeout(() => {
-				setNotice(null);
-			}, 20000);
-			return () => clearTimeout(timeout);
+	useEffect( () => {
+		if ( notice ) {
+			const timeout = setTimeout( () => {
+				setNotice( null );
+			}, 20000 );
+			return () => clearTimeout( timeout );
 		}
-	}, [notice]);
+	}, [ notice ] );
 
-	return { notice, clearNotice: () => setNotice(null) };
+	return { notice, clearNotice: () => setNotice( null ) };
 }
 
 const REMOTE_EDITOR_LOAD_ERROR = 'remote_editor_load_error';

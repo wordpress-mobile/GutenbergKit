@@ -46,7 +46,7 @@
 		"eslint-plugin-react-refresh": "^0.4.18",
 		"magic-string": "^0.30.17",
 		"patch-package": "^8.0.0",
-		"prettier": "^3.4.2",
+		"prettier": "npm:wp-prettier@^3.0.3",
 		"sass-embedded": "^1.83.4",
 		"vite": "^6.0.11"
 	},

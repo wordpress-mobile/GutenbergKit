@@ -10,20 +10,20 @@ import { addAction, removeAction } from '@wordpress/hooks';
 import { logException } from '../../utils/bridge';
 
 export function useHostExceptionLogging() {
-	useEffect(() => {
+	useEffect( () => {
 		addAction(
 			'editor.ErrorBoundary.errorLogged',
 			'GutenbergKit',
-			(error) => {
-				logException(error, {
+			( error ) => {
+				logException( error, {
 					isHandled: true,
 					handledBy: 'editor.ErrorBoundary.errorLogged',
-				});
+				} );
 			}
 		);
 
 		return () => {
-			removeAction('editor.ErrorBoundary.errorLogged', 'GutenbergKit');
+			removeAction( 'editor.ErrorBoundary.errorLogged', 'GutenbergKit' );
 		};
-	}, []);
+	}, [] );
 }

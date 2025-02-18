@@ -15,29 +15,29 @@ import { unregisterFormatType } from '@wordpress/rich-text';
 import { editorLoaded } from '../../utils/bridge';
 import { postTypeEntities } from '../../utils/post-type-entities';
 
-export function useEditorSetup(post) {
-	const { addEntities, receiveEntityRecords } = useDispatch(coreStore);
-	const { setEditedPost, setupEditor } = useDispatch(editorStore);
+export function useEditorSetup( post ) {
+	const { addEntities, receiveEntityRecords } = useDispatch( coreStore );
+	const { setEditedPost, setupEditor } = useDispatch( editorStore );
 
-	useEffect(() => {
-		addEntities(postTypeEntities);
-		receiveEntityRecords('postType', post.type, post);
+	useEffect( () => {
+		addEntities( postTypeEntities );
+		receiveEntityRecords( 'postType', post.type, post );
 
-		setupEditor(post, {});
+		setupEditor( post, {} );
 		registerCoreBlocks();
 
 		editorLoaded();
 		// Temp, check why this isn't being called in the provider.
-		setEditedPost(post.type, post.id);
+		setEditedPost( post.type, post.id );
 
 		return () => {
-			getBlockTypes().forEach((block) => {
-				unregisterBlockType(block.name);
-			});
+			getBlockTypes().forEach( ( block ) => {
+				unregisterBlockType( block.name );
+			} );
 			// `unregisterBlockType` does not un-register the format type
 			// See: https://github.com/WordPress/gutenberg/pull/63554
-			unregisterFormatType('core/footnote');
+			unregisterFormatType( 'core/footnote' );
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []);
+	}, [] );
 }

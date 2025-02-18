@@ -20,18 +20,18 @@
 
 const UNKNOWN_FUNCTION = '?';
 
-function createFrame(filename, func, lineno, colno) {
+function createFrame( filename, func, lineno, colno ) {
 	const frame = {
 		filename,
 		function: func === '<anonymous>' ? UNKNOWN_FUNCTION : func,
 		in_app: true, // All browser frames are considered in_app
 	};
 
-	if (lineno !== undefined) {
+	if ( lineno !== undefined ) {
 		frame.lineno = lineno;
 	}
 
-	if (colno !== undefined) {
+	if ( colno !== undefined ) {
 		frame.colno = colno;
 	}
 
@@ -52,39 +52,39 @@ const chromeEvalRegex = /\((\S*)(?::(\d+))(?::(\d+))\)/;
 // Chromium based browsers: Chrome, Brave, new Opera, new Edge
 // We cannot call this variable `chrome` because it can conflict with global `chrome` variable in certain environments
 // See: https://github.com/getsentry/sentry-javascript/issues/6880
-export const chromeStackParser = (line) => {
+export const chromeStackParser = ( line ) => {
 	// If the stack line has no function name, we need to parse it differently
-	const noFnParts = chromeRegexNoFnName.exec(line);
+	const noFnParts = chromeRegexNoFnName.exec( line );
 
-	if (noFnParts) {
-		const [, filename, _line, col] = noFnParts;
-		return createFrame(filename, UNKNOWN_FUNCTION, +_line, +col);
+	if ( noFnParts ) {
+		const [ , filename, _line, col ] = noFnParts;
+		return createFrame( filename, UNKNOWN_FUNCTION, +_line, +col );
 	}
 
-	const parts = chromeRegex.exec(line);
+	const parts = chromeRegex.exec( line );
 
-	if (parts) {
-		const isEval = parts[2] && parts[2].indexOf('eval') === 0; // start of line
+	if ( parts ) {
+		const isEval = parts[ 2 ] && parts[ 2 ].indexOf( 'eval' ) === 0; // start of line
 
-		if (isEval) {
-			const subMatch = chromeEvalRegex.exec(parts[2]);
+		if ( isEval ) {
+			const subMatch = chromeEvalRegex.exec( parts[ 2 ] );
 
-			if (subMatch) {
+			if ( subMatch ) {
 				// throw out eval line/column and use top-most line/column number
-				parts[2] = subMatch[1]; // url
-				parts[3] = subMatch[2]; // line
-				parts[4] = subMatch[3]; // column
+				parts[ 2 ] = subMatch[ 1 ]; // url
+				parts[ 3 ] = subMatch[ 2 ]; // line
+				parts[ 4 ] = subMatch[ 3 ]; // column
 			}
 		}
 
-		const func = parts[1] || UNKNOWN_FUNCTION;
-		const filename = parts[2];
+		const func = parts[ 1 ] || UNKNOWN_FUNCTION;
+		const filename = parts[ 2 ];
 
 		return createFrame(
 			filename,
 			func,
-			parts[3] ? +parts[3] : undefined,
-			parts[4] ? +parts[4] : undefined
+			parts[ 3 ] ? +parts[ 3 ] : undefined,
+			parts[ 4 ] ? +parts[ 4 ] : undefined
 		);
 	}
 };
@@ -96,31 +96,31 @@ const geckoREgex =
 	/^\s*(.*?)(?:\((.*?)\))?(?:^|@)?((?:[-a-z]+)?:\/.*?|\[native code\]|[^@]*(?:bundle|\d+\.js)|\/[\w\-. /=]+)(?::(\d+))?(?::(\d+))?\s*$/i;
 const geckoEvalRegex = /(\S+) line (\d+)(?: > eval line \d+)* > eval/i;
 
-export const geckoStackParser = (line) => {
-	const parts = geckoREgex.exec(line);
+export const geckoStackParser = ( line ) => {
+	const parts = geckoREgex.exec( line );
 
-	if (parts) {
-		const isEval = parts[3] && parts[3].indexOf(' > eval') > -1;
-		if (isEval) {
-			const subMatch = geckoEvalRegex.exec(parts[3]);
+	if ( parts ) {
+		const isEval = parts[ 3 ] && parts[ 3 ].indexOf( ' > eval' ) > -1;
+		if ( isEval ) {
+			const subMatch = geckoEvalRegex.exec( parts[ 3 ] );
 
-			if (subMatch) {
+			if ( subMatch ) {
 				// throw out eval line/column and use top-most line number
-				parts[1] = parts[1] || 'eval';
-				parts[3] = subMatch[1];
-				parts[4] = subMatch[2];
-				parts[5] = ''; // no column when eval
+				parts[ 1 ] = parts[ 1 ] || 'eval';
+				parts[ 3 ] = subMatch[ 1 ];
+				parts[ 4 ] = subMatch[ 2 ];
+				parts[ 5 ] = ''; // no column when eval
 			}
 		}
 
-		const filename = parts[3];
-		const func = parts[1] || UNKNOWN_FUNCTION;
+		const filename = parts[ 3 ];
+		const func = parts[ 1 ] || UNKNOWN_FUNCTION;
 
 		return createFrame(
 			filename,
 			func,
-			parts[4] ? +parts[4] : undefined,
-			parts[5] ? +parts[5] : undefined
+			parts[ 4 ] ? +parts[ 4 ] : undefined,
+			parts[ 5 ] ? +parts[ 5 ] : undefined
 		);
 	}
 };

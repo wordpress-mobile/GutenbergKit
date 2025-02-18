@@ -6,8 +6,9 @@ import { EditorSnackbars, ErrorBoundary } from '@wordpress/editor';
 /**
  * Internal dependencies
  */
-import Editor from './editor';
-import EditorLoadNotice from './editor-load-notice';
+import Editor from '../editor';
+import EditorLoadNotice from '../editor-load-notice';
+import './style.scss';
 
 /**
  * Top-level layout, including the Editor component wrapped in an ErrorBoundary.
@@ -16,13 +17,13 @@ import EditorLoadNotice from './editor-load-notice';
  *
  * @return {JSX.Element} The rendered Layout component.
  */
-export default function Layout(props) {
+export default function Layout( props ) {
 	return (
 		<ErrorBoundary canCopyContent>
-			<Editor {...props}>
+			<Editor { ...props }>
 				<EditorSnackbars />
 			</Editor>
-			<EditorLoadNotice className="gutenberg-kit-editor__load-notice" />
+			<EditorLoadNotice className="gutenberg-kit-layout__load-notice" />
 		</ErrorBoundary>
 	);
 }
