@@ -35,7 +35,6 @@ import EditorToolbar from '../editor-toolbar';
 import { useEditorStyles } from './use-editor-styles';
 import { unlock } from '../../lock-unlock';
 import DefaultBlockAppender from '../default-block-appender';
-import { getGBKit } from '../../utils/bridge';
 
 const {
 	ExperimentalBlockCanvas: BlockCanvas,
