@@ -41,8 +41,6 @@ class GutenbergView : WebView {
     private var siteApiRoot: String = ""
     private var siteApiNamespace: String = ""
     private var authHeader: String = ""
-    private var lastUpdatedTitle: CharSequence? = null
-    private var lastUpdatedContent: CharSequence? = null
 
     private val handler = Handler(Looper.getMainLooper())
     private var editorDidBecomeAvailable: ((GutenbergView) -> Unit)? = null
@@ -321,15 +319,25 @@ class GutenbergView : WebView {
         }
         handler.post {
             this.evaluateJavascript("editor.getTitleAndContent($completeComposition);") { result ->
+                var lastUpdatedTitle: CharSequence? = null
+                var lastUpdatedContent: CharSequence? = null
+                var changed = false
                 try {
                     val jsonObject = JSONObject(result)
                     lastUpdatedTitle = jsonObject.getString("title")
                     lastUpdatedContent = jsonObject.getString("content")
+                    changed = jsonObject.getBoolean("changed")
                 } catch (e: JSONException) {
                     Log.e("GutenbergView", "Received invalid JSON from editor.getTitleAndContent")
                 }
 
-                callback.onResult(lastUpdatedTitle ?: "", lastUpdatedContent ?: originalContent)
+                val title = lastUpdatedTitle ?: ""
+                val content = if (changed) {
+                    lastUpdatedContent ?: ""
+                } else {
+                    originalContent
+                }
+                callback.onResult(title, content)
             }
         }
     }

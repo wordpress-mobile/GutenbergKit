@@ -168,10 +168,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let result = try await webView.evaluateJavaScript("editor.getTitleAndContent();")
         guard let dictionary = result as? [String: Any],
               let title = dictionary["title"] as? String,
-              let content = dictionary["content"] as? String else {
+              let content = dictionary["content"] as? String,
+              let changed = dictionary["changed"] as? Bool else {
             throw NSError(domain: "Invalid data format", code: 0, userInfo: nil)
         }
-        return EditorTitleAndContent(title: title, content: content)
+        return EditorTitleAndContent(title: title, content: content, changed: changed)
     }
 
     /// Steps backwards in the editor history state

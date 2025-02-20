@@ -13,5 +13,6 @@ struct EditorBlockType: Decodable, Identifiable {
 public struct EditorTitleAndContent: Decodable {
     public let title: String
     public let content: String
+    public let changed: Bool
 }
 
