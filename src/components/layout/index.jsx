@@ -1,12 +1,17 @@
 /**
  * WordPress dependencies
  */
-import { EditorSnackbars, ErrorBoundary } from '@wordpress/editor';
+import {
+	EditorSnackbars,
+	ErrorBoundary,
+	AutosaveMonitor,
+} from '@wordpress/editor';
 
 /**
  * Internal dependencies
  */
 import Editor from '../editor';
+import { onEditorContentChanged } from '../../utils/bridge';
 import EditorLoadNotice from '../editor-load-notice';
 import './style.scss';
 
@@ -20,6 +25,7 @@ import './style.scss';
 export default function Layout( props ) {
 	return (
 		<ErrorBoundary canCopyContent>
+			<AutosaveMonitor autosave={ onEditorContentChanged } />
 			<Editor { ...props }>
 				<EditorSnackbars />
 			</Editor>

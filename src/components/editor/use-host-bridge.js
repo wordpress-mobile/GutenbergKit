@@ -2,14 +2,10 @@
  * WordPress dependencies
  */
 import { useEffect, useCallback, useRef } from '@wordpress/element';
-import { useDispatch, useSelect, subscribe } from '@wordpress/data';
+import { useDispatch, useSelect } from '@wordpress/data';
 import { store as coreStore } from '@wordpress/core-data';
 import { store as editorStore } from '@wordpress/editor';
-
-/**
- * Internal dependencies
- */
-import { onEditorContentChanged } from '../../utils/bridge';
+import { parse, serialize } from '@wordpress/blocks';
 
 window.editor = window.editor || {};
 
@@ -25,6 +21,12 @@ export function useHostBridge( post, editorRef ) {
 		},
 		[ editEntityRecord, post.id, post.type ]
 	);
+
+	const postTitleRef = useRef( post.title.raw );
+	const postContentRef = useRef( null );
+	if ( postContentRef.current === null ) {
+		postContentRef.current = serialize( parse( post.content.raw || '' ) );
+	}
 
 	useEffect( () => {
 		window.editor.setContent = ( content ) => {
@@ -48,10 +50,18 @@ export function useHostBridge( post, editorRef ) {
 				endComposition( editorRef.current );
 			}
 
-			return {
-				title: getEditedPostAttribute( 'title' ),
-				content: getEditedPostContent(),
-			};
+			const title = getEditedPostAttribute( 'title' );
+			const content = getEditedPostContent();
+			const changed =
+				title !== postTitleRef.current ||
+				content !== postContentRef.current;
+
+			if ( changed ) {
+				postTitleRef.current = title;
+				postContentRef.current = content;
+			}
+
+			return { title, content, changed };
 		};
 
 		window.editor.undo = () => {
@@ -87,23 +97,6 @@ export function useHostBridge( post, editorRef ) {
 		switchEditorMode,
 		undo,
 	] );
-
-	const postTitleRef = useRef( post.title );
-	const postContentRef = useRef( post.content );
-
-	useEffect( () => {
-		return subscribe( () => {
-			const { title, content } = window.editor.getTitleAndContent();
-			if (
-				title !== postTitleRef.current ||
-				content !== postContentRef.current
-			) {
-				onEditorContentChanged();
-				postTitleRef.current = title;
-				postContentRef.current = content;
-			}
-		} );
-	}, [] );
 }
 
 /**

@@ -53,6 +53,8 @@ async function initalizeRemoteEditor() {
 
 		const { default: Layout } = await import( './components/layout' );
 		const { createRoot, createElement, StrictMode } = window.wp.element;
+		const { registerCoreBlocks } = window.wp.blockLibrary;
+		registerCoreBlocks();
 		createRoot( document.getElementById( 'root' ) ).render(
 			createElement(
 				StrictMode,
