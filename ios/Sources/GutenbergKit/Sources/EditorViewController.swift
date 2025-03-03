@@ -322,17 +322,13 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
             decisionHandler(.allow)
             return
         }
-
-        let gutenbergEditorURL = URL(string: ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"] ?? "")
-        let localIndexURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")
-        let localRemoteURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg")
-
-        if url == localIndexURL || url == localRemoteURL || url.host == gutenbergEditorURL?.host {
-            decisionHandler(.allow)
-        } else {
+        
+        if navigationAction.navigationType == .linkActivated {
             // Open the link in Safari
             UIApplication.shared.open(url)
             decisionHandler(.cancel)
+        } else {
+            decisionHandler(.allow)
         }
     }
 
