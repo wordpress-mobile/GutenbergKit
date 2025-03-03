@@ -84,7 +84,7 @@ async function loadAssets( html ) {
 
 	const newAssets = Array.from(
 		doc.querySelectorAll( 'link[rel="stylesheet"],script' )
-	).filter( ( asset ) => asset.id && ! excludedScripts.test( asset.src ) );
+	).filter( ( asset ) => asset.id && ! excludedScriptIDs.test( asset.id ) );
 
 	/*
 	 * Load each asset in order, as they may depend upon an earlier loaded script.
@@ -97,17 +97,8 @@ async function loadAssets( html ) {
 
 // Discard remote copies of localy-sourced Gutenberg packages to avoid conflicts
 const localGutenbergPackages = [ 'api-fetch' ];
-const excludedScripts = new RegExp(
-	localGutenbergPackages
-		.flatMap( ( script ) => [
-			`wp-content/plugins/gutenberg/build/${ script
-				.replace( /\\/g, '\\\\' )
-				.replace( /\//g, '\\/' ) }\\b`,
-			`wp-includes/js/dist/${ script
-				.replace( /\\/g, '\\\\' )
-				.replace( /\//g, '\\/' ) }\\b`,
-		] )
-		.join( '|' )
+const excludedScriptIDs = new RegExp(
+	localGutenbergPackages.map( ( script ) => `wp-${ script }-js` ).join( '|' )
 );
 
 /**
