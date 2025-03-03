@@ -33,7 +33,7 @@ async function initalizeRemoteEditor() {
 		const { store: editorStore } = window.wp.editor;
 		const { store: preferencesStore } = window.wp.preferences;
 
-		// TEMP: This should be fetched from the host apps.
+		// TODO: Provide this data from the host app
 		apiFetch( { path: `/wp-block-editor/v1/settings` } )
 			.then( ( editorSettings ) => {
 				dispatch( editorStore ).updateEditorSettings( editorSettings );

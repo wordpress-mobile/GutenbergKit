@@ -27,7 +27,7 @@ initializeEditor();
 function initializeEditor() {
 	const { themeStyles, hideTitle } = getGBKit();
 
-	// TEMP: This should be fetched from the host apps.
+	// TODO: Provide this data from the host app
 	apiFetch( { path: `/wp-block-editor/v1/settings` } )
 		.then( ( editorSettings ) => {
 			dispatch( editorStore ).updateEditorSettings( editorSettings );
