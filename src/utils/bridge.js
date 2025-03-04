@@ -118,10 +118,21 @@ export function openMediaLibrary( config ) {
 }
 
 /**
+ * @typedef GBKitConfig
+ *
+ * @property {boolean}  [themeStyles]      Controls if theme styles are applied to the editor.
+ * @property {string}   [siteApiRoot]      The root URL of the site's API.
+ * @property {string[]} [siteApiNamespace] The namespace of the site's API; if multiple namespaces are provided, the first one is used as the default.
+ * @property {string}   [authHeader]       The authentication header.
+ * @property {string}   [hideTitle]        Whether to hide the title.
+ * @property {Post}     [post]             The post data.
+ */
+
+/**
  * Retrieves the native-host-provided GBKit object from localStorage or returns
  * an empty object if not found.
  *
- * @return {Object} The GBKit object.
+ * @return {GBKitConfig} The GBKit object.
  */
 export function getGBKit() {
 	if ( window.GBKit ) {

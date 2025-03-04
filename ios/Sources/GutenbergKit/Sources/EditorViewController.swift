@@ -125,7 +125,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         window.GBKit = {
             siteURL: '\(configuration.siteURL)',
             siteApiRoot: '\(configuration.siteApiRoot)',
-            siteApiNamespace: '\(configuration.siteApiNamespace)',
+            siteApiNamespace: \(Array(configuration.siteApiNamespace)),
             authHeader: '\(configuration.authHeader)',
             themeStyles: \(configuration.themeStyles),
             hideTitle: \(configuration.hideTitle),
@@ -322,7 +322,7 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
             decisionHandler(.allow)
             return
         }
-        
+
         if navigationAction.navigationType == .linkActivated {
             // Open the link in Safari
             UIApplication.shared.open(url)

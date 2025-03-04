@@ -13,7 +13,7 @@ public struct EditorConfiguration {
     public var hideTitle = false
     public var siteURL = ""
     public var siteApiRoot = ""
-    public var siteApiNamespace = ""
+    public var siteApiNamespace: [String] = []
     public var authHeader = ""
 
     public init(title: String = "", content: String = "") {
