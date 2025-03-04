@@ -4,26 +4,10 @@
 import { useSelect } from '@wordpress/data';
 import { useMemo } from '@wordpress/element';
 import { store as coreStore } from '@wordpress/core-data';
-import {
-	store as editorStore,
-	mediaUpload,
-	privateApis as editorPrivateApis,
-} from '@wordpress/editor';
-
-/**
- * Internal dependencies
- */
-import { unlock } from '../../lock-unlock';
-
-const { useBlockEditorSettings } = unlock( editorPrivateApis );
+import { store as editorStore, mediaUpload } from '@wordpress/editor';
 
 export function useGBKitSettings( post ) {
-	const {
-		blockPatterns,
-		editorSettings,
-		hasUploadPermissions,
-		reusableBlocks,
-	} = useSelect(
+	const { blockPatterns, hasUploadPermissions, reusableBlocks } = useSelect(
 		( select ) => {
 			const { getEntityRecord, getEntityRecords } = select( coreStore );
 			const { getEditorSettings } = select( editorStore );
@@ -39,27 +23,14 @@ export function useGBKitSettings( post ) {
 		[ post.author ]
 	);
 
-	const blockEditorSettings = useBlockEditorSettings(
-		editorSettings,
-		post.type,
-		post.id,
-		'visual'
-	);
-
 	const settings = useMemo(
 		() => ( {
-			...blockEditorSettings,
 			hasFixedToolbar: true,
 			mediaUpload: hasUploadPermissions ? mediaUpload : undefined,
 			__experimentalReusableBlocks: reusableBlocks,
 			__experimentalBlockPatterns: blockPatterns,
 		} ),
-		[
-			blockEditorSettings,
-			blockPatterns,
-			hasUploadPermissions,
-			reusableBlocks,
-		]
+		[ blockPatterns, hasUploadPermissions, reusableBlocks ]
 	);
 
 	return settings;
