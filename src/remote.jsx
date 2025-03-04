@@ -22,9 +22,10 @@ initalizeRemoteEditor();
  */
 async function initalizeRemoteEditor() {
 	try {
-		const { themeStyles, hideTitle, siteURL } = getGBKit();
+		const { themeStyles, hideTitle, siteApiRoot, siteApiNamespace } =
+			getGBKit();
 		const { styles, scripts } = await apiFetch( {
-			url: `${ siteURL }/wp-json/__experimental/wp-block-editor/v1/editor-assets`,
+			url: `${ siteApiRoot }wpcom/v2/${ siteApiNamespace[ 0 ] }/editor-assets`,
 		} );
 		await loadAssets( [ ...styles, ...scripts ].join( '' ) );
 
