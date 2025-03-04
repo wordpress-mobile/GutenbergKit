@@ -126,6 +126,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             siteURL: '\(configuration.siteURL)',
             siteApiRoot: '\(configuration.siteApiRoot)',
             siteApiNamespace: \(Array(configuration.siteApiNamespace)),
+            namespaceExcludedPaths: \(Array(configuration.namespaceExcludedPaths)),
             authHeader: '\(configuration.authHeader)',
             themeStyles: \(configuration.themeStyles),
             hideTitle: \(configuration.hideTitle),

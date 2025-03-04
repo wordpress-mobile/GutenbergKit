@@ -54,10 +54,15 @@ function corsMiddleware( options, next ) {
  * @type {APIFetchMiddleware}
  */
 function apiPathModifierMiddleware( options, next ) {
-	const { siteApiNamespace } = getGBKit();
+	const { siteApiNamespace, namespaceExcludedPaths } = getGBKit();
 	const namespaceRegex = new RegExp( `(${ siteApiNamespace.join( '|' ) })` );
+	const isEligiblePath =
+		options.path &&
+		! namespaceExcludedPaths.some( ( path ) =>
+			options.path.startsWith( path )
+		);
 
-	if ( options.path && ! namespaceRegex.test( options.path ) ) {
+	if ( isEligiblePath && ! namespaceRegex.test( options.path ) ) {
 		// Insert the API namespace after the first two path segments.
 		options.path = options.path.replace(
 			/^(?<apiPath>\/?(?:[\w.-]+\/){2})/,

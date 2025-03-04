@@ -14,6 +14,7 @@ public struct EditorConfiguration {
     public var siteURL = ""
     public var siteApiRoot = ""
     public var siteApiNamespace: [String] = []
+    public var namespaceExcludedPaths: [String] = []
     public var authHeader = ""
 
     public init(title: String = "", content: String = "") {
