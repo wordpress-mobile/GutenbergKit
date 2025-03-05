@@ -3,12 +3,14 @@ import GutenbergKit
 
 struct EditorDownloadView: View {
 
-    @Observable
-    class ViewModel {
+    class ViewModel: ObservableObject {
+        @Published
         var downloadProgress: Double = 0
 
+        @Published
         var siteUrl: String = "http://localhost"
 
+        @Published
         var error: Error? = nil
 
         func download() {
@@ -26,7 +28,7 @@ struct EditorDownloadView: View {
                 do {
                     self.error = nil
 
-                    try await EditorLibrary().downloadManifest(from: url) { progress in
+                    try await EditorLibrary.shared.downloadManifest(from: url) { progress in
                         self.downloadProgress = Double(progress.fractionCompleted)
                     }
                 } catch {
@@ -36,7 +38,7 @@ struct EditorDownloadView: View {
         }
     }
 
-    @State
+    @StateObject
     var viewModel = ViewModel()
 
     var body: some View {

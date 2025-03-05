@@ -64,12 +64,12 @@ public actor EditorLibrary {
         let destination: String
     }
 
-    public nonisolated var rootDirectory: URL {
-        editorCacheRoot
-    }
-
     public nonisolated var bundledManifest: LocalEditorManifest {
         LocalEditorManifest(rootDirectory: Bundle.module.url(forResource: "Gutenberg", withExtension: nil)!)
+    }
+
+    public nonisolated var rootDirectory: URL {
+        editorCacheRoot
     }
 
     public typealias ProgressCallback = (Progress) -> Void
@@ -192,7 +192,7 @@ public actor EditorLibrary {
             .contentsOfDirectory(atPath: rootDirectory.path)
             .compactMap { URL(string: $0) }
             .filter { $0.pathExtension == "editorbundle" }
-            .map { LocalEditorManifest($0) } + [bundledManifest]
+            .map { LocalEditorManifest($0) }
     }
 
     public nonisolated func urlIsInsideEditorLibrary(url: URL) -> Bool {

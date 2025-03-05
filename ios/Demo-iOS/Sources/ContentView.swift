@@ -12,11 +12,9 @@ class EditorListViewModel {
 
     var error: Error? = nil
 
-    let library: EditorLibrary = EditorLibrary()
-
     func load() async {
         do {
-            self.manifests = try await library.listManifests()
+            self.manifests = try await EditorLibrary.shared.listManifests()
         } catch {
             self.error = error
         }
@@ -27,7 +25,7 @@ class EditorListViewModel {
             do {
                 for offset in offsets {
                     let manifestToRemove = manifests[offset]
-                    try await library.remove(manifest: manifestToRemove)
+                    try await EditorLibrary.shared.remove(manifest: manifestToRemove)
                 }
             } catch {
                 self.error = error
@@ -42,6 +40,8 @@ struct ContentView: View {
     @State
     private var viewModel = EditorListViewModel()
 
+    let bundledManifest = EditorLibrary.shared.bundledManifest
+
     var body: some View {
         NavigationView {
             List {
@@ -49,21 +49,28 @@ struct ContentView: View {
                     Text("Error fetching manifests: \(error.localizedDescription)")
                 }
 
-                ForEach(viewModel.manifests) { manifest in
-                    NavigationLink(value: manifest) {
-                        Text(manifest.name)
+                Section {
+                    NavigationLink(value: bundledManifest) {
+                        Text("Bundled Gutenberg")
                     }
-                }.onDelete(perform: deleteManifests)
+                }
+
+                if !viewModel.manifests.isEmpty {
+                    Section("Downloaded Bundles") {
+                        ForEach(viewModel.manifests) { manifest in
+                            NavigationLink(value: manifest) {
+                                Text(manifest.name)
+                            }
+                        }.onDelete(perform: deleteManifests)
+                    }
+                }
             }
         }
         .task {
             await self.viewModel.load()
         }
         .navigationDestination(for: LocalEditorManifest.self) { manifest in
-            EditorView(
-                editorManifest: manifest,
-                editorLibrary: viewModel.library
-            )
+            EditorView(editorManifest: manifest)
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {

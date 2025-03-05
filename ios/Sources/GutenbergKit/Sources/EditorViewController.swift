@@ -23,10 +23,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private var cancellables: [AnyCancellable] = []
 
     /// Initalizes the editor with the initial content (Gutenberg).
-    public init(configuration: EditorConfiguration = .init(), editorLibrary: EditorLibrary = EditorLibrary()) {
+    public init(configuration: EditorConfiguration = .init(), manifest: LocalEditorManifest, editorLibrary: EditorLibrary = EditorLibrary()) {
         self.configuration = configuration
         self.editorLibrary = editorLibrary
-        self.editorManifest = editorLibrary.bundledManifest
+        self.editorManifest = manifest
 
         // The `allowFileAccessFromFileURLs` allows the web view to access the
         // files from the local filesystem.
@@ -114,6 +114,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             webView.load(URLRequest(url: editorURL))
             return
         }
+
+        print("Loading editor from \(editorManifest.editorURL.path)")
+        print("Giving access to \(editorManifest.rootDirectory.path)")
 
         webView.loadFileURL(self.editorManifest.editorURL, allowingReadAccessTo: self.editorManifest.rootDirectory)
     }
@@ -285,7 +288,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Calls this at any moment before showing the actual editor. The warmup
     /// shaves a couple of hundred milliseconds off the first load.
     public static func warmup() {
-        let editorViewController = EditorViewController()
+        let editorViewController = EditorViewController(manifest: EditorLibrary().bundledManifest)
         _ = editorViewController.view // Trigger viewDidLoad
 
         // Retain for 5 seconds and let it prefetch stuff
@@ -348,8 +351,10 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let message = EditorJSMessage(message: message) else {
-            return NSLog("Unsupported message: \(message.body)")
+            print("Unsupported message: \(message.body)")
+            return
         }
+
         MainActor.assumeIsolated {
             delegate?.controller(self, didReceiveMessage: message)
         }
