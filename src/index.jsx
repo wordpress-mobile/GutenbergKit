@@ -39,7 +39,11 @@ function initializeEditor() {
 			dispatch( editorStore ).updateEditorSettings( editorSettings );
 		} );
 
-	dispatch( preferencesStore ).setDefaults( 'core/edit-post', {
+	const preferenceDispatch = dispatch( preferencesStore );
+	preferenceDispatch.setDefaults( 'core', {
+		fixedToolbar: true,
+	} );
+	preferenceDispatch.setDefaults( 'core/edit-post', {
 		themeStyles,
 	} );
 
