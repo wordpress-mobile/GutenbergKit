@@ -165,18 +165,21 @@ export function getPost() {
 	if ( post ) {
 		return {
 			id: post.id,
+			type: post.type || 'post',
+			status: post.status,
 			title: { raw: decodeURIComponent( post.title ) },
 			content: { raw: decodeURIComponent( post.content ) },
-			type: post.type || 'post',
 		};
 	}
 
 	// Since we don't use the auto-save functionality, draft posts need to have an ID.
 	// We assign a temporary ID of -1.
 	return {
+		id: -1,
 		type: 'post',
 		status: 'auto-draft',
-		id: -1,
+		title: { raw: '' },
+		content: { raw: '' },
 	};
 }
 
