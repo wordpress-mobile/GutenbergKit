@@ -21,7 +21,10 @@ let package = Package(
             name: "GutenbergKitTests",
             dependencies: ["GutenbergKit"],
             path: "ios/Tests",
-            exclude: []
-        )
+            exclude: [],
+            resources: [
+                .copy("GutenbergKitTests/Resources/manifest-test-case-1.json")
+            ]
+        ),
     ]
 )

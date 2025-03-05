@@ -20,4 +20,12 @@ public struct EditorConfiguration {
         self.title = title
         self.content = content
     }
+
+    var manifestURL: URL {
+        URL(string: siteApiRoot)!
+            .appendingPathComponent("__experimental")
+            .appendingPathComponent("wp-block-editor")
+            .appendingPathComponent("v1")
+            .appendingPathComponent( "editor-assets" )
+    }
 }

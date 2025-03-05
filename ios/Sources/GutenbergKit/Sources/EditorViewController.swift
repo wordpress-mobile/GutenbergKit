@@ -1,11 +1,12 @@
 import UIKit
-import WebKit
+@preconcurrency import WebKit
 import SwiftUI
 import Combine
 
 @MainActor
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
     public let webView: WKWebView
+    public let editorLibrary: EditorLibrary
 
     private let configuration: EditorConfiguration
     private var _isEditorRendered = false
@@ -17,13 +18,15 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     public weak var delegate: EditorViewControllerDelegate?
 
     /// A custom URL for the editor.
-    public var editorURL: URL?
+    public var editorManifest: LocalEditorManifest
 
     private var cancellables: [AnyCancellable] = []
 
     /// Initalizes the editor with the initial content (Gutenberg).
-    public init(configuration: EditorConfiguration = .init()) {
+    public init(configuration: EditorConfiguration = .init(), editorLibrary: EditorLibrary = EditorLibrary()) {
         self.configuration = configuration
+        self.editorLibrary = editorLibrary
+        self.editorManifest = editorLibrary.bundledManifest
 
         // The `allowFileAccessFromFileURLs` allows the web view to access the
         // files from the local filesystem.
@@ -106,15 +109,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func loadEditor() {
-        if let editorURL = editorURL ?? ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
+        // If you want to load something that's not a manifest, specify the environment variable
+        if let editorURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
             webView.load(URLRequest(url: editorURL))
-        } else if configuration.plugins,
-                  let editorURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg") {
-            webView.load(URLRequest(url: editorURL))
-        } else {
-            let reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
-            webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+            return
         }
+
+        webView.loadFileURL(self.editorManifest.editorURL, allowingReadAccessTo: self.editorManifest.rootDirectory)
     }
 
     private func getEditorConfiguration() -> WKUserScript {
@@ -323,9 +324,16 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
             return
         }
 
+        debugPrint(url)
+
         let gutenbergEditorURL = URL(string: ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"] ?? "")
         let localIndexURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")
         let localRemoteURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg")
+
+        if EditorLibrary().urlIsInsideEditorLibrary(url: url) {
+            decisionHandler(.allow)
+            return
+        }
 
         if url == localIndexURL || url == localRemoteURL || url.host == gutenbergEditorURL?.host {
             decisionHandler(.allow)

@@ -13,6 +13,7 @@
 		0CE8E78E2C339B0600B9DC67 /* GutenbergApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CE8E7872C339B0600B9DC67 /* GutenbergApp.swift */; };
 		0CE8E78F2C339B0600B9DC67 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0CE8E7892C339B0600B9DC67 /* Preview Assets.xcassets */; };
 		0CF6E04C2BEFF60E00EDEE8A /* GutenbergKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0CF6E04B2BEFF60E00EDEE8A /* GutenbergKit */; };
+		2441AFD92D77E5DA00563F80 /* EditorDownloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2441AFD82D77E5DA00563F80 /* EditorDownloadView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -23,6 +24,7 @@
 		0CE8E7872C339B0600B9DC67 /* GutenbergApp.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GutenbergApp.swift; sourceTree = "<group>"; };
 		0CE8E7892C339B0600B9DC67 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		0CE8E7922C339B1B00B9DC67 /* GutenbergKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = GutenbergKit; path = ../..; sourceTree = "<group>"; };
+		2441AFD82D77E5DA00563F80 /* EditorDownloadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorDownloadView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -69,6 +71,7 @@
 			isa = PBXGroup;
 			children = (
 				0CE8E7852C339B0600B9DC67 /* ContentView.swift */,
+				2441AFD82D77E5DA00563F80 /* EditorDownloadView.swift */,
 				0CE8E7862C339B0600B9DC67 /* EditorView.swift */,
 				0CE8E7872C339B0600B9DC67 /* GutenbergApp.swift */,
 			);
@@ -164,6 +167,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				0CE8E78E2C339B0600B9DC67 /* GutenbergApp.swift in Sources */,
+				2441AFD92D77E5DA00563F80 /* EditorDownloadView.swift in Sources */,
 				0CE8E78C2C339B0600B9DC67 /* ContentView.swift in Sources */,
 				0CE8E78D2C339B0600B9DC67 /* EditorView.swift in Sources */,
 			);

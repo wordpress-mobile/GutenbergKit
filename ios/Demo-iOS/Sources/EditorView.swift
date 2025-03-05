@@ -2,10 +2,19 @@ import SwiftUI
 import GutenbergKit
 
 struct EditorView: View {
-    var editorURL: URL?
+    private let editorManifest: LocalEditorManifest
+    private let editorLibrary: EditorLibrary
+
+    init(
+        editorManifest: LocalEditorManifest? = nil,
+        editorLibrary: EditorLibrary = EditorLibrary()
+    ) {
+        self.editorManifest = editorManifest ?? editorLibrary.bundledManifest
+        self.editorLibrary = editorLibrary
+    }
 
     var body: some View {
-        _EditorView(editorURL: editorURL)
+        _EditorView(editorManifest: editorManifest, editorLibrary: editorLibrary)
             .toolbar {
                 ToolbarItemGroup(placement: .topBarLeading) {
                     Button(action: {}, label: {
@@ -69,11 +78,12 @@ struct EditorView: View {
 }
 
 private struct _EditorView: UIViewControllerRepresentable {
-    var editorURL: URL?
+    let editorManifest: LocalEditorManifest
+    let editorLibrary: EditorLibrary
 
     func makeUIViewController(context: Context) -> EditorViewController {
-        let viewController = EditorViewController()
-        viewController.editorURL = editorURL
+        let viewController = EditorViewController(editorLibrary: editorLibrary)
+
         if #available(iOS 16.4, *) {
             viewController.webView.isInspectable = true
         }
@@ -87,6 +97,6 @@ private struct _EditorView: UIViewControllerRepresentable {
 
 #Preview {
     NavigationStack {
-        EditorView()
+        EditorView(editorLibrary: EditorLibrary())
     }
 }
