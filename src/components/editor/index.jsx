@@ -16,7 +16,6 @@ import { useHostBridge } from './use-host-bridge';
 import { useHostExceptionLogging } from './use-host-exception-logging';
 import { useEditorSetup } from './use-editor-setup';
 import { useMediaUpload } from './use-media-upload';
-import { useGBKitSettings } from './use-gbkit-settings';
 import TextEditor from '../text-editor';
 
 /**
@@ -40,8 +39,6 @@ export default function Editor( { post, children, hideTitle } ) {
 	useHostExceptionLogging();
 	useEditorSetup( post );
 	useMediaUpload();
-
-	const settings = useGBKitSettings( post );
 
 	const { isReady, mode, isRichEditingEnabled, currentPost } = useSelect(
 		( select ) => {
@@ -103,3 +100,5 @@ export default function Editor( { post, children, hideTitle } ) {
 		</div>
 	);
 }
+
+const settings = {};
