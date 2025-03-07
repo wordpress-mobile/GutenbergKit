@@ -9,7 +9,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     private let configuration: EditorConfiguration
     private var _isEditorRendered = false
-    private let controller = GutenbergEditorController()
+    private let controller: GutenbergEditorController
     private let timestampInit = CFAbsoluteTimeGetCurrent()
 
     public private(set) var state = EditorState()
@@ -24,6 +24,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Initalizes the editor with the initial content (Gutenberg).
     public init(configuration: EditorConfiguration = .init()) {
         self.configuration = configuration
+        self.controller = GutenbergEditorController(configuration: configuration)
 
         // The `allowFileAccessFromFileURLs` allows the web view to access the
         // files from the local filesystem.
@@ -303,6 +304,14 @@ private protocol GutenbergEditorControllerDelegate: AnyObject {
 /// Hiding the conformances, and breaking retain cycles.
 private final class GutenbergEditorController: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
     weak var delegate: GutenbergEditorControllerDelegate?
+    private let configuration: EditorConfiguration
+    private let editorURL: URL?
+
+    init(configuration: EditorConfiguration) {
+        self.configuration = configuration
+        self.editorURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init)
+        super.init()
+    }
 
     // MARK: - WKNavigationDelegate
 
@@ -324,13 +333,22 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
             return
         }
 
-        if navigationAction.navigationType == .linkActivated {
-            // Open the link in Safari
-            UIApplication.shared.open(url)
-            decisionHandler(.cancel)
-        } else {
+        if url.isFileURL || // Local editor file
+            url.scheme == "about" || // Empty request
+            url.scheme == "blob" || // Blob URL, used by inserter iframes
+            url.scheme == "data" || // Data URL, used by inserter iframes
+            url.host == editorURL?.host || // Local development server
+            url.host == "public-api.wordpress.com" || // WordPress.com REST API
+            (url.host == URL(string: configuration.siteURL)?.host &&
+             (url.path.contains("/wp-json/") || url.query?.contains("rest_route=") == true)) // WordPress REST API
+        {
             decisionHandler(.allow)
+            return
         }
+
+        // Open the request in OS browser
+        UIApplication.shared.open(url)
+        decisionHandler(.cancel)
     }
 
     // MARK: - WKScriptMessageHandler
