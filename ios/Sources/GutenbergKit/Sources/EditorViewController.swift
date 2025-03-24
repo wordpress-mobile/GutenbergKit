@@ -107,14 +107,17 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func loadEditor() {
-        if let editorURL = editorURL ?? ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
-            webView.load(URLRequest(url: editorURL))
-        } else if configuration.plugins,
-                  let editorURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg") {
-            webView.load(URLRequest(url: editorURL))
+        if configuration.plugins,
+           let remoteURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"].flatMap(URL.init) {
+            webView.load(URLRequest(url: remoteURL))
+        } else if let customURL = editorURL ?? ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
+            webView.load(URLRequest(url: customURL))
+        } else if configuration.plugins {
+            let remoteURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg")!
+            webView.loadFileURL(remoteURL, allowingReadAccessTo: Bundle.module.resourceURL!)
         } else {
-            let reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
-            webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+            let indexURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
+            webView.loadFileURL(indexURL, allowingReadAccessTo: Bundle.module.resourceURL!)
         }
     }
 
