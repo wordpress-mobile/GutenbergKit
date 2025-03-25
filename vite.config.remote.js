@@ -37,7 +37,7 @@ function externalize( id ) {
 	const externalDefinition = defaultRequestToExternal( id );
 	return (
 		!! externalDefinition &&
-		! id.endsWith( '.css' ) &&
+		! id.match( /\.css(?:\?inline)?$/ ) &&
 		! [ 'apiFetch', 'i18n', 'url', 'hooks' ].includes(
 			externalDefinition[ externalDefinition.length - 1 ]
 		)
