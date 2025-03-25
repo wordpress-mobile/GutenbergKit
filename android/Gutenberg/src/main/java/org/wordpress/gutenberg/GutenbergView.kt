@@ -39,7 +39,7 @@ class GutenbergView : WebView {
     private var themeStyles: Boolean = false
     private var initialContent: String = ""
     private var siteApiRoot: String = ""
-    private var siteApiNamespace: String = ""
+    private var siteApiNamespace: Array<String> = arrayOf()
     private var authHeader: String = ""
 
     private val handler = Handler(Looper.getMainLooper())
@@ -189,7 +189,7 @@ class GutenbergView : WebView {
 
     fun start(
         siteApiRoot: String = "",
-        siteApiNamespace: String = "",
+        siteApiNamespace: Array<String> = arrayOf(),
         authHeader: String = "",
         themeStyles: Boolean = false,
         plugins: Boolean = false,
@@ -233,7 +233,7 @@ class GutenbergView : WebView {
         val json = """
             {
                 "siteApiRoot": "$siteApiRoot",
-                "siteApiNamespace": "$siteApiNamespace",
+                "siteApiNamespace": ${siteApiNamespace.joinToString(",", "[", "]") { "\"$it\"" }},
                 "authHeader": "$authHeader",
                 "themeStyles": $themeStyles,
                 ${if (id != null) """
