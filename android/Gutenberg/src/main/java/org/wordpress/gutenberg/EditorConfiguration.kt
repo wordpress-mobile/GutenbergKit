@@ -1,5 +1,39 @@
 package org.wordpress.gutenberg
 
+sealed class WebViewGlobalValue {
+    data class StringValue(val value: String) : WebViewGlobalValue()
+    data class NumberValue(val value: Double) : WebViewGlobalValue()
+    data class BooleanValue(val value: Boolean) : WebViewGlobalValue()
+    data class ObjectValue(val value: Map<String, WebViewGlobalValue>) : WebViewGlobalValue()
+    data class ArrayValue(val value: List<WebViewGlobalValue>) : WebViewGlobalValue()
+    object NullValue : WebViewGlobalValue()
+
+    fun toJavaScript(): String {
+        return when (this) {
+            is StringValue -> "\"${value.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")}\""
+            is NumberValue -> value.toString()
+            is BooleanValue -> value.toString()
+            is ObjectValue -> {
+                val pairs = value.map { (key, value) -> "\"$key\": ${value.toJavaScript()}" }
+                "{${pairs.joinToString(",")}}"
+            }
+            is ArrayValue -> "[${value.joinToString(",") { it.toJavaScript() }}]"
+            is NullValue -> "null"
+        }
+    }
+}
+
+data class WebViewGlobal(
+    val name: String,
+    val value: WebViewGlobalValue
+) {
+    init {
+        require(name.matches(Regex("^[a-zA-Z_$][a-zA-Z0-9_$]*$"))) {
+            "Invalid JavaScript identifier: $name"
+        }
+    }
+}
+
 open class EditorConfiguration constructor(
     val title: String,
     val content: String,
@@ -12,7 +46,8 @@ open class EditorConfiguration constructor(
     val siteApiRoot: String,
     val siteApiNamespace: Array<String>,
     val namespaceExcludedPaths: Array<String>,
-    val authHeader: String
+    val authHeader: String,
+    val webViewGlobals: List<WebViewGlobal>
 ) {
     companion object {
         @JvmStatic
@@ -32,6 +67,7 @@ open class EditorConfiguration constructor(
         private var siteApiNamespace: Array<String> = arrayOf()
         private var namespaceExcludedPaths: Array<String> = arrayOf()
         private var authHeader: String = ""
+        private var webViewGlobals: List<WebViewGlobal> = emptyList()
 
         fun setTitle(title: String) = apply { this.title = title }
         fun setContent(content: String) = apply { this.content = content }
@@ -45,6 +81,7 @@ open class EditorConfiguration constructor(
         fun setSiteApiNamespace(siteApiNamespace: Array<String>) = apply { this.siteApiNamespace = siteApiNamespace }
         fun setNamespaceExcludedPaths(namespaceExcludedPaths: Array<String>) = apply { this.namespaceExcludedPaths = namespaceExcludedPaths }
         fun setAuthHeader(authHeader: String) = apply { this.authHeader = authHeader }
+        fun setWebViewGlobals(webViewGlobals: List<WebViewGlobal>) = apply { this.webViewGlobals = webViewGlobals }
 
         fun build(): EditorConfiguration = EditorConfiguration(
             title = title,
@@ -58,7 +95,8 @@ open class EditorConfiguration constructor(
             siteApiRoot = siteApiRoot,
             siteApiNamespace = siteApiNamespace,
             namespaceExcludedPaths = namespaceExcludedPaths,
-            authHeader = authHeader
+            authHeader = authHeader,
+            webViewGlobals = webViewGlobals
         )
     }
 
@@ -80,6 +118,7 @@ open class EditorConfiguration constructor(
         if (!siteApiNamespace.contentEquals(other.siteApiNamespace)) return false
         if (!namespaceExcludedPaths.contentEquals(other.namespaceExcludedPaths)) return false
         if (authHeader != other.authHeader) return false
+        if (webViewGlobals != other.webViewGlobals) return false
 
         return true
     }
@@ -97,6 +136,7 @@ open class EditorConfiguration constructor(
         result = 31 * result + siteApiNamespace.contentHashCode()
         result = 31 * result + namespaceExcludedPaths.contentHashCode()
         result = 31 * result + authHeader.hashCode()
+        result = 31 * result + webViewGlobals.hashCode()
         return result
     }
 }

@@ -108,6 +108,11 @@ class GutenbergView : WebView {
                 super.onReceivedError(view, request, error)
             }
 
+            override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                setGlobalJavaScriptVariables()
+            }
+
             override fun shouldInterceptRequest(
                 view: WebView,
                 request: WebResourceRequest
@@ -195,6 +200,17 @@ class GutenbergView : WebView {
         this.loadUrl(editorUrl)
 
         Log.i("GutenbergView", "Startup Complete")
+    }
+
+    private fun setGlobalJavaScriptVariables() {
+        // Generate JavaScript globals
+        val globalsJS = configuration.webViewGlobals.map { global ->
+            "window[\"${global.name}\"] = ${global.value.toJavaScript()};"
+        }.joinToString("\n")
+
+        if (globalsJS.isNotEmpty()) {
+            this.evaluateJavascript(globalsJS, null)
+        }
     }
 
     private fun encodeForEditor(value: String): String {
