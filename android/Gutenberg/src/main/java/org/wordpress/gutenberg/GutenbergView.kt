@@ -208,22 +208,11 @@ class GutenbergView : WebView {
             "window[\"${global.name}\"] = ${global.value.toJavaScript()};"
         }.joinToString("\n")
 
-        if (globalsJS.isNotEmpty()) {
-            this.evaluateJavascript(globalsJS, null)
-        }
-    }
-
-    private fun encodeForEditor(value: String): String {
-        return java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
-    }
-
-    @JavascriptInterface
-    fun getEditorConfiguration(): String {
         val escapedTitle = encodeForEditor(configuration.title)
         val escapedContent = encodeForEditor(configuration.content)
 
-        val json = """
-            {
+        val gbKitConfig = """
+            window.GBKit = {
                 "siteApiRoot": "${configuration.siteApiRoot}",
                 "siteApiNamespace": ${configuration.siteApiNamespace.joinToString(",", "[", "]") { "\"$it\"" }},
                 "namespaceExcludedPaths": ${configuration.namespaceExcludedPaths.joinToString(",", "[", "]") { "\"$it\"" }},
@@ -237,9 +226,21 @@ class GutenbergView : WebView {
                     "content": "$escapedContent"
                 }
                 """ else ""}
-            }
-        """
-        return json
+            };
+            localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
+        """.trimIndent()
+
+        val combinedJS = if (globalsJS.isNotEmpty()) {
+            "$globalsJS\n$gbKitConfig"
+        } else {
+            gbKitConfig
+        }
+
+        this.evaluateJavascript(combinedJS, null)
+    }
+
+    private fun encodeForEditor(value: String): String {
+        return java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
     }
 
     fun clearConfig() {
