@@ -40,6 +40,7 @@ class GutenbergView : WebView {
     private var initialContent: String = ""
     private var siteApiRoot: String = ""
     private var siteApiNamespace: Array<String> = arrayOf()
+    private var namespaceExcludedPaths: Array<String> = arrayOf()
     private var authHeader: String = ""
 
     private val handler = Handler(Looper.getMainLooper())
@@ -190,6 +191,7 @@ class GutenbergView : WebView {
     fun start(
         siteApiRoot: String = "",
         siteApiNamespace: Array<String> = arrayOf(),
+        namespaceExcludedPaths: Array<String> = arrayOf(),
         authHeader: String = "",
         themeStyles: Boolean = false,
         plugins: Boolean = false,
@@ -205,6 +207,7 @@ class GutenbergView : WebView {
         this.themeStyles = themeStyles
         this.siteApiRoot = siteApiRoot
         this.siteApiNamespace = siteApiNamespace
+        this.namespaceExcludedPaths = namespaceExcludedPaths
         this.authHeader = authHeader
 
         initializeWebView()
@@ -234,6 +237,7 @@ class GutenbergView : WebView {
             {
                 "siteApiRoot": "$siteApiRoot",
                 "siteApiNamespace": ${siteApiNamespace.joinToString(",", "[", "]") { "\"$it\"" }},
+                "namespaceExcludedPaths": ${namespaceExcludedPaths.joinToString(",", "[", "]") { "\"$it\"" }},
                 "authHeader": "$authHeader",
                 "themeStyles": $themeStyles,
                 ${if (id != null) """
