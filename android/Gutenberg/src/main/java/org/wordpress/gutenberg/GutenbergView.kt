@@ -192,6 +192,7 @@ class GutenbergView : WebView {
         siteApiNamespace: String = "",
         authHeader: String = "",
         themeStyles: Boolean = false,
+        plugins: Boolean = false,
         postId: Int? = null,
         postType: String = "",
         postTitle: String = "",
@@ -208,7 +209,9 @@ class GutenbergView : WebView {
 
         initializeWebView()
 
-        val editorUrl = if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
+        val editorUrl = if (plugins && BuildConfig.GUTENBERG_EDITOR_REMOTE_URL.isNotEmpty()) {
+            BuildConfig.GUTENBERG_EDITOR_REMOTE_URL
+        } else if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
             BuildConfig.GUTENBERG_EDITOR_URL
         } else {
             ASSET_URL

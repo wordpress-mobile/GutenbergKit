@@ -21,6 +21,12 @@ android {
             "\"${rootProject.ext["gutenbergEditorUrl"] ?: ""}\""
         )
 
+        buildConfigField(
+            "String",
+            "GUTENBERG_EDITOR_REMOTE_URL",
+            "\"${rootProject.ext["gutenbergEditorRemoteUrl"] ?: ""}\""
+        )
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
     }
