@@ -33,15 +33,7 @@ class GutenbergView : WebView {
     private var assetLoader = WebViewAssetLoader.Builder()
         .addPathHandler("/assets/", AssetsPathHandler(this.context))
         .build()
-    private var initialTitle: String = ""
-    private var type: String = ""
-    private var id: Int? = null
-    private var themeStyles: Boolean = false
-    private var initialContent: String = ""
-    private var siteApiRoot: String = ""
-    private var siteApiNamespace: Array<String> = arrayOf()
-    private var namespaceExcludedPaths: Array<String> = arrayOf()
-    private var authHeader: String = ""
+    private var configuration: EditorConfiguration = EditorConfiguration.builder().build()
 
     private val handler = Handler(Looper.getMainLooper())
     private var editorDidBecomeAvailable: ((GutenbergView) -> Unit)? = null
@@ -188,31 +180,12 @@ class GutenbergView : WebView {
         }
     }
 
-    fun start(
-        siteApiRoot: String = "",
-        siteApiNamespace: Array<String> = arrayOf(),
-        namespaceExcludedPaths: Array<String> = arrayOf(),
-        authHeader: String = "",
-        themeStyles: Boolean = false,
-        plugins: Boolean = false,
-        postId: Int? = null,
-        postType: String = "",
-        postTitle: String = "",
-        postContent: String = ""
-    ) {
-        id = postId
-        type = postType
-        initialTitle = postTitle
-        initialContent = postContent
-        this.themeStyles = themeStyles
-        this.siteApiRoot = siteApiRoot
-        this.siteApiNamespace = siteApiNamespace
-        this.namespaceExcludedPaths = namespaceExcludedPaths
-        this.authHeader = authHeader
+    fun start(configuration: EditorConfiguration) {
+        this.configuration = configuration
 
         initializeWebView()
 
-        val editorUrl = if (plugins && BuildConfig.GUTENBERG_EDITOR_REMOTE_URL.isNotEmpty()) {
+        val editorUrl = if (configuration.plugins && BuildConfig.GUTENBERG_EDITOR_REMOTE_URL.isNotEmpty()) {
             BuildConfig.GUTENBERG_EDITOR_REMOTE_URL
         } else if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
             BuildConfig.GUTENBERG_EDITOR_URL
@@ -230,19 +203,20 @@ class GutenbergView : WebView {
 
     @JavascriptInterface
     fun getEditorConfiguration(): String {
-        val escapedTitle = encodeForEditor(initialTitle)
-        val escapedContent = encodeForEditor(initialContent)
+        val escapedTitle = encodeForEditor(configuration.title)
+        val escapedContent = encodeForEditor(configuration.content)
 
         val json = """
             {
-                "siteApiRoot": "$siteApiRoot",
-                "siteApiNamespace": ${siteApiNamespace.joinToString(",", "[", "]") { "\"$it\"" }},
-                "namespaceExcludedPaths": ${namespaceExcludedPaths.joinToString(",", "[", "]") { "\"$it\"" }},
-                "authHeader": "$authHeader",
-                "themeStyles": $themeStyles,
-                ${if (id != null) """
+                "siteApiRoot": "${configuration.siteApiRoot}",
+                "siteApiNamespace": ${configuration.siteApiNamespace.joinToString(",", "[", "]") { "\"$it\"" }},
+                "namespaceExcludedPaths": ${configuration.namespaceExcludedPaths.joinToString(",", "[", "]") { "\"$it\"" }},
+                "authHeader": "${configuration.authHeader}",
+                "themeStyles": ${configuration.themeStyles},
+                "hideTitle": ${configuration.hideTitle},
+                ${if (configuration.postId != null) """
                 "post": {
-                    "id": $id,
+                    "id": ${configuration.postId},
                     "title": "$escapedTitle",
                     "content": "$escapedContent"
                 }
@@ -269,7 +243,6 @@ class GutenbergView : WebView {
         val encodedContent = encodeForEditor(newContent)
         this.evaluateJavascript("editor.setContent('$encodedContent');", null)
     }
-
 
     fun setTitle(newTitle: String) {
         if (!isEditorLoaded) {
