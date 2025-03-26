@@ -26,6 +26,7 @@ import org.json.JSONObject
 import java.util.Locale
 
 const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
+const val ASSET_URL_REMOTE = "https://appassets.androidplatform.net/assets/remote.html"
 
 class GutenbergView : WebView {
     private var isEditorLoaded = false
@@ -194,6 +195,8 @@ class GutenbergView : WebView {
             BuildConfig.GUTENBERG_EDITOR_REMOTE_URL
         } else if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
             BuildConfig.GUTENBERG_EDITOR_URL
+        } else if (configuration.plugins) {
+            ASSET_URL_REMOTE
         } else {
             ASSET_URL
         }
