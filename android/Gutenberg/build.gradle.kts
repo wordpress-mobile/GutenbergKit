@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.jetbrains.kotlin.android)
     id("com.automattic.android.publish-to-s3")
+    id("kotlin-parcelize")
 }
 
 android {

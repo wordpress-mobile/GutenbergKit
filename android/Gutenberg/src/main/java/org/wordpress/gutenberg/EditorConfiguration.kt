@@ -1,11 +1,22 @@
 package org.wordpress.gutenberg
 
-sealed class WebViewGlobalValue {
+import android.os.Parcelable
+import android.os.Parcel
+import kotlinx.parcelize.Parcelize
+
+@Parcelize
+sealed class WebViewGlobalValue : Parcelable {
+    @Parcelize
     data class StringValue(val value: String) : WebViewGlobalValue()
+    @Parcelize
     data class NumberValue(val value: Double) : WebViewGlobalValue()
+    @Parcelize
     data class BooleanValue(val value: Boolean) : WebViewGlobalValue()
+    @Parcelize
     data class ObjectValue(val value: Map<String, WebViewGlobalValue>) : WebViewGlobalValue()
+    @Parcelize
     data class ArrayValue(val value: List<WebViewGlobalValue>) : WebViewGlobalValue()
+    @Parcelize
     object NullValue : WebViewGlobalValue()
 
     fun toJavaScript(): String {
@@ -23,10 +34,11 @@ sealed class WebViewGlobalValue {
     }
 }
 
+@Parcelize
 data class WebViewGlobal(
     val name: String,
     val value: WebViewGlobalValue
-) {
+) : Parcelable {
     init {
         require(name.matches(Regex("^[a-zA-Z_$][a-zA-Z0-9_$]*$"))) {
             "Invalid JavaScript identifier: $name"
@@ -34,6 +46,7 @@ data class WebViewGlobal(
     }
 }
 
+@Parcelize
 open class EditorConfiguration constructor(
     val title: String,
     val content: String,
@@ -48,7 +61,7 @@ open class EditorConfiguration constructor(
     val namespaceExcludedPaths: Array<String>,
     val authHeader: String,
     val webViewGlobals: List<WebViewGlobal>
-) {
+) : Parcelable {
     companion object {
         @JvmStatic
         fun builder(): Builder = Builder()
