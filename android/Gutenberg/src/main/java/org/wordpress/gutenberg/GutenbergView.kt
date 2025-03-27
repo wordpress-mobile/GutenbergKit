@@ -130,18 +130,65 @@ class GutenbergView : WebView {
             }
 
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest): Boolean {
-                val url = request.url.toString()
-                url.let {
-                    // Allow the WebView to handle `blob:` requests, which are utilized in the block
-                    // inserter's Patterns tab
-                    if (it.startsWith("blob:")) {
+                val url = request.url
+
+                // Allow local file URLs
+                if (url.scheme == "file") {
+                    return false
+                }
+
+                // Allow blob URLs (used by block inserter)
+                if (url.scheme == "blob") {
+                    return false
+                }
+
+                // Allow data URLs (used by block inserter)
+                if (url.scheme == "data") {
+                    return false
+                }
+
+                // Allow about:blank URLs
+                if (url.scheme == "about") {
+                    return false
+                }
+
+                // Allow asset URLs
+                if (url.host == Uri.parse(ASSET_URL).host || url.host == Uri.parse(ASSET_URL_REMOTE).host) {
+                    return false
+                }
+
+                // Allow WordPress.com REST API
+                if (url.host == "public-api.wordpress.com") {
+                    return false
+                }
+
+                // Allow WordPress REST API
+                if (url.host == configuration.siteApiRoot.removePrefix("https://").removePrefix("http://")) {
+                    if (url.path?.contains("/wp-json/") == true || url.query?.contains("rest_route=") == true) {
                         return false
                     }
-
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it))
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    view?.context?.startActivity(intent)
                 }
+
+                // Allow local development server if configured
+                if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
+                    val editorUrl = Uri.parse(BuildConfig.GUTENBERG_EDITOR_URL)
+                    if (url.host == editorUrl.host) {
+                        return false
+                    }
+                }
+
+                // Allow remote editor server if configured
+                if (BuildConfig.GUTENBERG_EDITOR_REMOTE_URL.isNotEmpty()) {
+                    val remoteEditorUrl = Uri.parse(BuildConfig.GUTENBERG_EDITOR_REMOTE_URL)
+                    if (url.host == remoteEditorUrl.host) {
+                        return false
+                    }
+                }
+
+                // For all other URLs, open in external browser
+                val intent = Intent(Intent.ACTION_VIEW, url)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                view?.context?.startActivity(intent)
                 return true
             }
         }
