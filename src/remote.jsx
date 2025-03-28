@@ -32,6 +32,7 @@ async function initalizeRemoteEditor() {
 	try {
 		const { themeStyles, hideTitle, siteApiRoot, siteApiNamespace } =
 			getGBKit();
+		// TODO: Load editor assets within the host app
 		const { styles, scripts } = await apiFetch( {
 			url: `${ siteApiRoot }wpcom/v2/${ siteApiNamespace[ 0 ] }/editor-assets`,
 		} );

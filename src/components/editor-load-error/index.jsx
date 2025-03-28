@@ -9,6 +9,14 @@ import { __ } from '@wordpress/i18n';
  */
 import './style.scss';
 
+/**
+ * Displays an error notice when the editor fails to load.
+ *
+ * @param {Object} props       Component props
+ * @param {string} props.error Error message displayed in the notice
+ *
+ * @return {JSX.Element} Editor load error component
+ */
 const EditorLoadError = ( { error } ) => {
 	return (
 		<div className="gutenberg-kit-editor-load-error">
