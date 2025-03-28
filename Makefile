@@ -1,4 +1,3 @@
-
 SIMULATOR_DESTINATION := OS=17.5,name=iPhone 15 Plus
 
 define XCODEBUILD_CMD
@@ -11,8 +10,10 @@ define XCODEBUILD_CMD
 endef
 
 npm-dependencies:
-	echo "--- :npm: Installing NPM Dependencies"
-	npm ci
+	@if [ "$(SKIP_DEPS)" != "true" ]; then \
+		echo "--- :npm: Installing NPM Dependencies"; \
+		npm ci; \
+	fi
 
 build: npm-dependencies
 	echo "--- :node: Building Gutenberg"
