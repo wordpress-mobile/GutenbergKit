@@ -225,3 +225,34 @@ export function logException(
 		} );
 	}
 }
+
+/**
+ * Waits for the GBKit global to be available.
+ *
+ * @param {number} timeoutMs Timeout in milliseconds after which to reject
+ * @return {Promise<GBKitConfig>} Promise that resolves with GBKit config or rejects after timeout
+ */
+export function waitForGBKit( timeoutMs = 5000 ) {
+	return new Promise( ( resolve, reject ) => {
+		const startTime = Date.now();
+
+		const checkGBKit = () => {
+			if ( window.GBKit ) {
+				resolve( window.GBKit );
+				return;
+			}
+
+			if ( Date.now() - startTime >= timeoutMs ) {
+				reject(
+					new Error( 'GBKit global not available after timeout' )
+				);
+				return;
+			}
+
+			// Check again in 100ms
+			setTimeout( checkGBKit, 100 );
+		};
+
+		checkGBKit();
+	} );
+}

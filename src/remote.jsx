@@ -6,16 +6,45 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import { getGBKit, getPost } from './utils/bridge';
+import { getGBKit, getPost, waitForGBKit } from './utils/bridge';
 import { initializeApiFetch } from './utils/api-fetch-setup';
 import './index.scss';
 import defaultEditorStyles from '@wordpress/block-editor/build-style/default-editor-styles.css?inline';
 
-window.GBKit = getGBKit();
-window.wp = window.wp || {};
-window.wp.apiFetch = apiFetch;
-initializeApiFetch();
-initalizeRemoteEditor();
+/**
+ * Locally-sourced Gutenberg packages; remote copies are discarded to avoid
+ * conflicts
+ */
+const localGutenbergPackages = [ 'api-fetch' ];
+
+try {
+	await waitForGBKit();
+	window.wp = window.wp || {};
+	window.wp.apiFetch = apiFetch;
+	initializeApiFetch();
+	await initalizeRemoteEditor();
+} catch ( error ) {
+	const root = document.getElementById( 'root' );
+	if ( root ) {
+		const { createRoot, createElement, StrictMode } =
+			window.wp.element || {};
+		if ( createRoot && createElement && StrictMode ) {
+			createRoot( root ).render(
+				createElement(
+					StrictMode,
+					null,
+					createElement(
+						'div',
+						{ className: 'error-message' },
+						`Failed to initialize editor: ${ error.message }`
+					)
+				)
+			);
+		} else {
+			root.innerHTML = `<div class="error-message">Failed to initialize editor: ${ error.message }</div>`;
+		}
+	}
+}
 
 /**
  * Configure editor settings and styles, and render the editor.
@@ -55,8 +84,9 @@ async function initalizeRemoteEditor() {
 		} );
 
 		const post = getPost();
-
-		const { default: Layout } = await import( './components/layout' );
+		const { default: Layout } = await import(
+			'./components/layout/index.jsx'
+		);
 		const { createRoot, createElement, StrictMode } = window.wp.element;
 		const { registerCoreBlocks } = window.wp.blockLibrary;
 		registerCoreBlocks();
@@ -81,6 +111,11 @@ async function initalizeRemoteEditor() {
  * @param {string} html The HTML content to parse for assets.
  */
 async function loadAssets( html ) {
+	const excludedScriptIDs = new RegExp(
+		localGutenbergPackages
+			.map( ( script ) => `wp-${ script }-js` )
+			.join( '|' )
+	);
 	const doc = new window.DOMParser().parseFromString( html, 'text/html' );
 
 	const newAssets = Array.from(
@@ -95,12 +130,6 @@ async function loadAssets( html ) {
 		await loadAsset( newAsset );
 	}
 }
-
-// Discard remote copies of localy-sourced Gutenberg packages to avoid conflicts
-const localGutenbergPackages = [ 'api-fetch' ];
-const excludedScriptIDs = new RegExp(
-	localGutenbergPackages.map( ( script ) => `wp-${ script }-js` ).join( '|' )
-);
 
 /**
  * Load an asset for a block.

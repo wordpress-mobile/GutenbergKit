@@ -13,13 +13,26 @@ import { registerCoreBlocks } from '@wordpress/block-library';
  * Internal dependencies
  */
 import { initializeApiFetch } from './utils/api-fetch-setup';
-import { getGBKit, getPost } from './utils/bridge';
+import { getGBKit, getPost, waitForGBKit } from './utils/bridge';
 import Layout from './components/layout';
 import './index.scss';
 
-window.GBKit = getGBKit();
-initializeApiFetch();
-initializeEditor();
+try {
+	await waitForGBKit();
+	initializeApiFetch();
+	initializeEditor();
+} catch ( error ) {
+	const root = document.getElementById( 'root' );
+	if ( root ) {
+		createRoot( root ).render(
+			<StrictMode>
+				<div className="error-message">
+					Failed to initialize editor: { error.message }
+				</div>
+			</StrictMode>
+		);
+	}
+}
 
 /**
  * Configure editor settings and styles, and render the editor.
