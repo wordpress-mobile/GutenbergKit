@@ -229,8 +229,9 @@ export function logException(
 /**
  * Waits for the GBKit global to be available.
  *
- * @param {number} timeoutMs Timeout in milliseconds after which to reject
- * @return {Promise<GBKitConfig>} Promise that resolves with GBKit config or rejects after timeout
+ * @param {number} timeoutMs Timeout in milliseconds after which to reject.
+ *
+ * @return {Promise<GBKitConfig>} Promise that resolves with GBKit config or rejects after timeout.
  */
 export function waitForGBKit( timeoutMs = 5000 ) {
 	return new Promise( ( resolve, reject ) => {
@@ -249,7 +250,6 @@ export function waitForGBKit( timeoutMs = 5000 ) {
 				return;
 			}
 
-			// Check again in 100ms
 			setTimeout( checkGBKit, 100 );
 		};
 

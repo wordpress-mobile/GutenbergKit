@@ -11,16 +11,11 @@ import { initializeApiFetch } from './utils/api-fetch-setup';
 import './index.scss';
 import defaultEditorStyles from '@wordpress/block-editor/build-style/default-editor-styles.css?inline';
 
-/**
- * Locally-sourced Gutenberg packages; remote copies are discarded to avoid
- * conflicts
- */
-const localGutenbergPackages = [ 'api-fetch' ];
+window.wp = window.wp || {};
+window.wp.apiFetch = apiFetch;
 
 try {
 	await waitForGBKit();
-	window.wp = window.wp || {};
-	window.wp.apiFetch = apiFetch;
 	initializeApiFetch();
 	await initalizeRemoteEditor();
 } catch ( error ) {
@@ -84,9 +79,7 @@ async function initalizeRemoteEditor() {
 		} );
 
 		const post = getPost();
-		const { default: Layout } = await import(
-			'./components/layout/index.jsx'
-		);
+		const { default: Layout } = await import( './components/layout' );
 		const { createRoot, createElement, StrictMode } = window.wp.element;
 		const { registerCoreBlocks } = window.wp.blockLibrary;
 		registerCoreBlocks();
@@ -111,11 +104,18 @@ async function initalizeRemoteEditor() {
  * @param {string} html The HTML content to parse for assets.
  */
 async function loadAssets( html ) {
+	/**
+	 * Locally-sourced Gutenberg packages excluded from remote loading to avoid
+	 * conflicts.
+	 */
+	const localGutenbergPackages = [ 'api-fetch' ];
+
 	const excludedScriptIDs = new RegExp(
 		localGutenbergPackages
 			.map( ( script ) => `wp-${ script }-js` )
 			.join( '|' )
 	);
+
 	const doc = new window.DOMParser().parseFromString( html, 'text/html' );
 
 	const newAssets = Array.from(
