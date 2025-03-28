@@ -13,9 +13,10 @@ import { registerCoreBlocks } from '@wordpress/block-library';
  * Internal dependencies
  */
 import { initializeApiFetch } from './utils/api-fetch-setup';
-import { getGBKit, getPost, waitForGBKit } from './utils/bridge';
+import { getGBKit, getPost, waitForGBKit, editorLoaded } from './utils/bridge';
 import Layout from './components/layout';
 import './index.scss';
+import EditorLoadError from './components/editor-load-error';
 
 try {
 	await waitForGBKit();
@@ -23,15 +24,12 @@ try {
 	initializeEditor();
 } catch ( error ) {
 	const root = document.getElementById( 'root' );
-	if ( root ) {
-		createRoot( root ).render(
-			<StrictMode>
-				<div className="error-message">
-					Failed to initialize editor: { error.message }
-				</div>
-			</StrictMode>
-		);
-	}
+	createRoot( root ).render(
+		<StrictMode>
+			<EditorLoadError error={ error } />
+		</StrictMode>
+	);
+	editorLoaded();
 }
 
 /**

@@ -65,6 +65,11 @@ function useEditorLoadNotice() {
 					"Oops! We couldn't load your site's editor and plugins. Don't worry, you can use the default editor for now."
 				);
 				break;
+			case GBKIT_GLOBAL_UNAVAILABLE:
+				message = __(
+					"Oops! Configuration for your site editor was unavailable. Don't worry, you can use the default editor for now."
+				);
+				break;
 			default:
 				message = null;
 		}
@@ -85,3 +90,4 @@ function useEditorLoadNotice() {
 }
 
 const REMOTE_EDITOR_LOAD_ERROR = 'remote_editor_load_error';
+const GBKIT_GLOBAL_UNAVAILABLE = 'gbkit_global_unavailable';

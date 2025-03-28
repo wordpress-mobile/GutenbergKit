@@ -19,26 +19,10 @@ try {
 	initializeApiFetch();
 	await initalizeRemoteEditor();
 } catch ( error ) {
-	const root = document.getElementById( 'root' );
-	if ( root ) {
-		const { createRoot, createElement, StrictMode } =
-			window.wp.element || {};
-		if ( createRoot && createElement && StrictMode ) {
-			createRoot( root ).render(
-				createElement(
-					StrictMode,
-					null,
-					createElement(
-						'div',
-						{ className: 'error-message' },
-						`Failed to initialize editor: ${ error.message }`
-					)
-				)
-			);
-		} else {
-			root.innerHTML = `<div class="error-message">Failed to initialize editor: ${ error.message }</div>`;
-		}
-	}
+	// Fallback to the local editor and display a notice. Because the remote
+	// editor loading failed, it is more practical to rely upon the local
+	// editor's scripts and styles for displaying the notice.
+	window.location.href = 'index.html?error=gbkit_global_unavailable';
 }
 
 /**
