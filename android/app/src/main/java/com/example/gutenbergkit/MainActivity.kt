@@ -8,7 +8,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import org.wordpress.gutenberg.GutenbergView
-
+import org.wordpress.gutenberg.EditorConfiguration
 
 class MainActivity : AppCompatActivity() {
 
@@ -26,15 +26,21 @@ class MainActivity : AppCompatActivity() {
 
         val gbView = findViewById<GutenbergView>(R.id.gutenbergView)
 
-        gbView.start(
-            "",
-            "",
-            "",
-            false,
-            null,
-            "post",
-            "",
-            ""
-        )
+        val config = EditorConfiguration.builder()
+            .setTitle("")
+            .setContent("")
+            .setPostType("post")
+            .setThemeStyles(false)
+            .setPlugins(false)
+            .setHideTitle(false)
+            .setSiteURL("")
+            .setSiteApiRoot("")
+            .setSiteApiNamespace(arrayOf())
+            .setNamespaceExcludedPaths(arrayOf())
+            .setAuthHeader("")
+            .setWebViewGlobals(emptyList())
+            .build()
+
+        gbView.start(config)
     }
 }
