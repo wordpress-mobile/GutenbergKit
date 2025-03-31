@@ -238,6 +238,14 @@ export function waitForGBKit( timeoutMs = 3000 ) {
 		const startTime = Date.now();
 
 		const checkGBKit = () => {
+			if ( ! window.GBKit ) {
+				try {
+					window.GBKit = JSON.parse(
+						localStorage.getItem( 'GBKit' )
+					);
+				} catch ( error ) {}
+			}
+
 			if ( window.GBKit ) {
 				resolve( window.GBKit );
 				return;
