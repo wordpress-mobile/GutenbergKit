@@ -33,7 +33,11 @@ async function initalizeRemoteEditor() {
 		const { themeStyles, hideTitle, siteApiRoot, siteApiNamespace } =
 			getGBKit();
 		// TODO: Load editor assets within the host app
-		const { styles, scripts } = await apiFetch( {
+		const {
+			styles,
+			scripts,
+			allowed_block_types: allowedBlockTypes,
+		} = await apiFetch( {
 			url: `${ siteApiRoot }wpcom/v2/${ siteApiNamespace[ 0 ] }/editor-assets`,
 		} );
 		await loadAssets( [ ...styles, ...scripts ].join( '' ) );
@@ -67,7 +71,14 @@ async function initalizeRemoteEditor() {
 		const { default: Layout } = await import( './components/layout' );
 		const { createRoot, createElement, StrictMode } = window.wp.element;
 		const { registerCoreBlocks } = window.wp.blockLibrary;
+
 		registerCoreBlocks();
+		window.wp.blocks.getBlockTypes().forEach( ( block ) => {
+			if ( ! allowedBlockTypes.includes( block.name ) ) {
+				window.wp.blocks.unregisterBlockType( block.name );
+			}
+		} );
+
 		createRoot( document.getElementById( 'root' ) ).render(
 			createElement(
 				StrictMode,
