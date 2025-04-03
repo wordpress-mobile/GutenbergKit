@@ -7,7 +7,7 @@ import Combine
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
     public let webView: WKWebView
 
-    private let configuration: EditorConfiguration
+    public let configuration: EditorConfiguration
     private var _isEditorRendered = false
     private let controller: GutenbergEditorController
     private let timestampInit = CFAbsoluteTimeGetCurrent()
@@ -130,6 +130,19 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             "window[\"\(global.name)\"] = \(global.value.toJavaScript());"
         }.joined(separator: "\n")
 
+        // Convert block editor settings to JSON string if available
+        var blockEditorSettingsJS = "undefined"
+        if let settings = configuration.blockEditorSettings {
+            do {
+                let jsonData = try JSONSerialization.data(withJSONObject: settings, options: [])
+                if let jsonString = String(data: jsonData, encoding: .utf8) {
+                    blockEditorSettingsJS = jsonString
+                }
+            } catch {
+                NSLog("Failed to serialize block editor settings: \(error)")
+            }
+        }
+
         let jsCode = """
         \(globalsJS)
 
@@ -141,6 +154,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             authHeader: '\(configuration.authHeader)',
             themeStyles: \(configuration.themeStyles),
             hideTitle: \(configuration.hideTitle),
+            blockEditorSettings: \(blockEditorSettingsJS),
             post: {
                 id: \(configuration.postID ?? -1),
                 title: '\(escapedTitle)',

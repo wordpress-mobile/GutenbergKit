@@ -2,7 +2,6 @@
  * WordPress dependencies
  */
 import { createRoot, StrictMode } from '@wordpress/element';
-import apiFetch from '@wordpress/api-fetch';
 import { dispatch } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { store as preferencesStore } from '@wordpress/preferences';
@@ -36,19 +35,18 @@ try {
  * Configure editor settings and styles, and render the editor.
  */
 function initializeEditor() {
-	const { themeStyles, hideTitle } = getGBKit();
+	const { themeStyles, hideTitle, blockEditorSettings } = getGBKit();
 
-	// TODO: Provide this data from the host app
-	apiFetch( { path: `/wp-block-editor/v1/settings` } )
-		.then( ( editorSettings ) => {
-			dispatch( editorStore ).updateEditorSettings( editorSettings );
-		} )
-		.catch( () => {
-			const editorSettings = {
-				defaultEditorStyles: [ { css: defaultEditorStyles } ],
-			};
-			dispatch( editorStore ).updateEditorSettings( editorSettings );
-		} );
+	// Use block editor settings from the native app if available
+	if ( blockEditorSettings ) {
+		dispatch( editorStore ).updateEditorSettings( blockEditorSettings );
+	} else {
+		// Fallback to default settings if not provided by the native app
+		const editorSettings = {
+			defaultEditorStyles: [ { css: defaultEditorStyles } ],
+		};
+		dispatch( editorStore ).updateEditorSettings( editorSettings );
+	}
 
 	const preferenceDispatch = dispatch( preferencesStore );
 	preferenceDispatch.setDefaults( 'core', {
