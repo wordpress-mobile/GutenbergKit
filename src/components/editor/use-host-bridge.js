@@ -11,7 +11,8 @@ window.editor = window.editor || {};
 
 export function useHostBridge( post, editorRef ) {
 	const { editEntityRecord } = useDispatch( coreStore );
-	const { undo, redo, switchEditorMode } = useDispatch( editorStore );
+	const { undo, redo, switchEditorMode, updateEditorSettings } =
+		useDispatch( editorStore );
 	const { getEditedPostAttribute, getEditedPostContent } =
 		useSelect( editorStore );
 
@@ -79,6 +80,10 @@ export function useHostBridge( post, editorRef ) {
 			switchEditorMode( mode );
 		};
 
+		window.editor.updateSettings = ( settings ) => {
+			updateEditorSettings( settings );
+		};
+
 		return () => {
 			delete window.editor.setContent;
 			delete window.editor.setTitle;
@@ -87,6 +92,7 @@ export function useHostBridge( post, editorRef ) {
 			delete window.editor.undo;
 			delete window.editor.redo;
 			delete window.editor.switchEditorMode;
+			delete window.editor.updateSettings;
 		};
 	}, [
 		editorRef,
@@ -96,6 +102,7 @@ export function useHostBridge( post, editorRef ) {
 		redo,
 		switchEditorMode,
 		undo,
+		updateEditorSettings,
 	] );
 }
 
