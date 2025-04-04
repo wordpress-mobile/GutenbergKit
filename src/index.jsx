@@ -35,18 +35,13 @@ try {
  * Configure editor settings and styles, and render the editor.
  */
 function initializeEditor() {
-	const { themeStyles, hideTitle, blockEditorSettings } = getGBKit();
+	const { themeStyles, hideTitle, editorSettings } = getGBKit();
 
-	// Use block editor settings from the native app if available
-	if ( blockEditorSettings ) {
-		dispatch( editorStore ).updateEditorSettings( blockEditorSettings );
-	} else {
-		// Fallback to default settings if not provided by the native app
-		const editorSettings = {
-			defaultEditorStyles: [ { css: defaultEditorStyles } ],
-		};
-		dispatch( editorStore ).updateEditorSettings( editorSettings );
-	}
+	// Use editor settings from the native app if available
+	const settings = editorSettings || {
+		defaultEditorStyles: [ { css: defaultEditorStyles } ],
+	};
+	dispatch( editorStore ).updateEditorSettings( settings );
 
 	const preferenceDispatch = dispatch( preferencesStore );
 	preferenceDispatch.setDefaults( 'core', {

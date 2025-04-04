@@ -7,8 +7,9 @@ import Combine
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
     public let webView: WKWebView
 
-    public let configuration: EditorConfiguration
+    public var configuration: EditorConfiguration
     private var _isEditorRendered = false
+    private var _isEditorSetup = false
     private let controller: GutenbergEditorController
     private let timestampInit = CFAbsoluteTimeGetCurrent()
 
@@ -130,16 +131,16 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             "window[\"\(global.name)\"] = \(global.value.toJavaScript());"
         }.joined(separator: "\n")
 
-        // Convert block editor settings to JSON string if available
-        var blockEditorSettingsJS = "undefined"
-        if let settings = configuration.blockEditorSettings {
+        // Convert editor settings to JSON string if available
+        var editorSettingsJS = "undefined"
+        if let settings = configuration.editorSettings {
             do {
                 let jsonData = try JSONSerialization.data(withJSONObject: settings, options: [])
                 if let jsonString = String(data: jsonData, encoding: .utf8) {
-                    blockEditorSettingsJS = jsonString
+                    editorSettingsJS = jsonString
                 }
             } catch {
-                NSLog("Failed to serialize block editor settings: \(error)")
+                NSLog("Failed to serialize editor settings: \(error)")
             }
         }
 
@@ -154,7 +155,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             authHeader: '\(configuration.authHeader)',
             themeStyles: \(configuration.themeStyles),
             hideTitle: \(configuration.hideTitle),
-            blockEditorSettings: \(blockEditorSettingsJS),
+            editorSettings: \(editorSettingsJS),
             post: {
                 id: \(configuration.postID ?? -1),
                 title: '\(escapedTitle)',
@@ -219,6 +220,20 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             guard isCodeEditorEnabled != oldValue else { return }
             evaluate("editor.switchEditorMode('\(isCodeEditorEnabled ? "text" : "visual")');")
         }
+    }
+
+    /// Updates the editor configuration
+    public func updateConfiguration(_ newConfiguration: EditorConfiguration) {
+        self.configuration = newConfiguration
+    }
+
+    /// Starts the editor setup process
+    public func startEditorSetup() {
+        guard !_isEditorSetup else { return }
+        _isEditorSetup = true
+
+        setUpEditor()
+        loadEditor()
     }
 
     // MARK: - Internal (JavaScript)

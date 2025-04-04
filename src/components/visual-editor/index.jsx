@@ -36,6 +36,7 @@ import EditorToolbar from '../editor-toolbar';
 import { useEditorStyles } from './use-editor-styles';
 import { unlock } from '../../lock-unlock';
 import DefaultBlockAppender from '../default-block-appender';
+import { useEditorVisible } from './use-editor-visible';
 
 const {
 	ExperimentalBlockCanvas: BlockCanvas,
@@ -60,6 +61,7 @@ const alignCSS = `.is-root-container.alignwide { max-width: var(--wp--style--glo
  */
 function VisualEditor( { hideTitle } ) {
 	const editorPostTitleRef = useRef();
+	const editorVisibleRef = useEditorVisible();
 
 	const {
 		renderingMode,
@@ -128,7 +130,7 @@ function VisualEditor( { hideTitle } ) {
 	);
 
 	return (
-		<div className={ editorClasses }>
+		<div className={ editorClasses } ref={ editorVisibleRef }>
 			<BlockCanvas shouldIframe={ false } height="100%" styles={ styles }>
 				{ themeSupportsLayout &&
 					! themeHasDisabledLayoutStyles &&

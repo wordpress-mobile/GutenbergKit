@@ -18,11 +18,15 @@ public struct EditorConfiguration {
     public var authHeader = ""
     public var webViewGlobals: [WebViewGlobal] = []
     /// Raw block editor settings from the WordPress REST API
-    public var blockEditorSettings: [String: Any]?
+    public var editorSettings: [String: Any]?
 
     public init(title: String = "", content: String = "") {
         self.title = title
         self.content = content
+    }
+
+    public mutating func updateEditorSettings(_ settings: [String: Any]?) {
+        self.editorSettings = settings
     }
 }
 

@@ -9,7 +9,6 @@ import { store as editorStore } from '@wordpress/editor';
 /**
  * Internal dependencies
  */
-import { editorLoaded } from '../../utils/bridge';
 import { postTypeEntities } from '../../utils/post-type-entities';
 
 export function useEditorSetup( post ) {
@@ -22,7 +21,6 @@ export function useEditorSetup( post ) {
 
 		setupEditor( post, {} );
 
-		editorLoaded();
 		// Temp, check why this isn't being called in the provider.
 		setEditedPost( post.type, post.id );
 
