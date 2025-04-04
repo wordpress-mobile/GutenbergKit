@@ -13,13 +13,24 @@ import { registerCoreBlocks } from '@wordpress/block-library';
  * Internal dependencies
  */
 import { initializeApiFetch } from './utils/api-fetch-setup';
-import { getGBKit, getPost } from './utils/bridge';
+import { getGBKit, getPost, waitForGBKit, editorLoaded } from './utils/bridge';
 import Layout from './components/layout';
 import './index.scss';
+import EditorLoadError from './components/editor-load-error';
 
-window.GBKit = getGBKit();
-initializeApiFetch();
-initializeEditor();
+try {
+	await waitForGBKit();
+	initializeApiFetch();
+	initializeEditor();
+} catch ( error ) {
+	const root = document.getElementById( 'root' );
+	createRoot( root ).render(
+		<StrictMode>
+			<EditorLoadError error={ error } />
+		</StrictMode>
+	);
+	editorLoaded();
+}
 
 /**
  * Configure editor settings and styles, and render the editor.
@@ -27,7 +38,7 @@ initializeEditor();
 function initializeEditor() {
 	const { themeStyles, hideTitle } = getGBKit();
 
-	// TEMP: This should be fetched from the host apps.
+	// TODO: Provide this data from the host app
 	apiFetch( { path: `/wp-block-editor/v1/settings` } )
 		.then( ( editorSettings ) => {
 			dispatch( editorStore ).updateEditorSettings( editorSettings );

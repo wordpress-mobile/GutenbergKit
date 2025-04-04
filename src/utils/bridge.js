@@ -118,24 +118,26 @@ export function openMediaLibrary( config ) {
 }
 
 /**
+ * @typedef GBKitConfig
+ *
+ * @property {boolean}  [themeStyles]            Controls if theme styles are applied to the editor.
+ * @property {string}   [siteApiRoot]            The root URL of the site's API.
+ * @property {string[]} [siteApiNamespace]       The namespace of the site's API; if multiple namespaces are provided, the first one is used as the default.
+ * @property {string[]} [namespaceExcludedPaths] The paths that should not be namespaced.
+ * @property {string}   [authHeader]             The authentication header.
+ * @property {string}   [hideTitle]              Whether to hide the title.
+ * @property {Post}     [post]                   The post data.
+ */
+
+/**
  * Retrieves the native-host-provided GBKit object from localStorage or returns
  * an empty object if not found.
  *
- * @return {Object} The GBKit object.
+ * @return {GBKitConfig} The GBKit object.
  */
 export function getGBKit() {
 	if ( window.GBKit ) {
 		return window.GBKit;
-	}
-
-	// Android relies upon "pulling" the GBKit object from the native host, as it
-	// does not provide a way to inject JavaScript prior to the WebView loading.
-	if ( window.editorDelegate ) {
-		try {
-			return JSON.parse( window.editorDelegate.getEditorConfiguration() );
-		} catch ( error ) {
-			return {};
-		}
 	}
 
 	try {
@@ -222,4 +224,35 @@ export function logException(
 			body: parsedException,
 		} );
 	}
+}
+
+/**
+ * Waits for the GBKit global to be available.
+ *
+ * @param {number} timeoutMs Timeout in milliseconds after which to reject.
+ *
+ * @return {Promise<GBKitConfig>} Promise that resolves with GBKit config or rejects after timeout.
+ */
+export function waitForGBKit( timeoutMs = 3000 ) {
+	return new Promise( ( resolve, reject ) => {
+		const startTime = Date.now();
+
+		const checkGBKit = () => {
+			if ( window.GBKit ) {
+				resolve( window.GBKit );
+				return;
+			}
+
+			if ( Date.now() - startTime >= timeoutMs ) {
+				reject(
+					new Error( 'GBKit global not available after timeout' )
+				);
+				return;
+			}
+
+			setTimeout( checkGBKit, 100 );
+		};
+
+		checkGBKit();
+	} );
 }

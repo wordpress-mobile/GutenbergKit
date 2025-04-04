@@ -6,25 +6,35 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import { getGBKit, getPost } from './utils/bridge';
+import { getGBKit, getPost, waitForGBKit } from './utils/bridge';
 import { initializeApiFetch } from './utils/api-fetch-setup';
 import './index.scss';
 import defaultEditorStyles from '@wordpress/block-editor/build-style/default-editor-styles.css?inline';
 
-window.GBKit = getGBKit();
 window.wp = window.wp || {};
 window.wp.apiFetch = apiFetch;
-initializeApiFetch();
-initalizeRemoteEditor();
+
+try {
+	await waitForGBKit();
+	initializeApiFetch();
+	await initalizeRemoteEditor();
+} catch ( error ) {
+	// Fallback to the local editor and display a notice. Because the remote
+	// editor loading failed, it is more practical to rely upon the local
+	// editor's scripts and styles for displaying the notice.
+	window.location.href = 'index.html?error=gbkit_global_unavailable';
+}
 
 /**
  * Configure editor settings and styles, and render the editor.
  */
 async function initalizeRemoteEditor() {
 	try {
-		const { themeStyles, hideTitle, siteURL } = getGBKit();
+		const { themeStyles, hideTitle, siteApiRoot, siteApiNamespace } =
+			getGBKit();
+		// TODO: Load editor assets within the host app
 		const { styles, scripts } = await apiFetch( {
-			url: `${ siteURL }/wp-json/__experimental/wp-block-editor/v1/editor-assets`,
+			url: `${ siteApiRoot }wpcom/v2/${ siteApiNamespace[ 0 ] }/editor-assets`,
 		} );
 		await loadAssets( [ ...styles, ...scripts ].join( '' ) );
 
@@ -33,7 +43,7 @@ async function initalizeRemoteEditor() {
 		const { store: editorStore } = window.wp.editor;
 		const { store: preferencesStore } = window.wp.preferences;
 
-		// TEMP: This should be fetched from the host apps.
+		// TODO: Provide this data from the host app
 		apiFetch( { path: `/wp-block-editor/v1/settings` } )
 			.then( ( editorSettings ) => {
 				dispatch( editorStore ).updateEditorSettings( editorSettings );
@@ -54,7 +64,6 @@ async function initalizeRemoteEditor() {
 		} );
 
 		const post = getPost();
-
 		const { default: Layout } = await import( './components/layout' );
 		const { createRoot, createElement, StrictMode } = window.wp.element;
 		const { registerCoreBlocks } = window.wp.blockLibrary;
@@ -80,11 +89,23 @@ async function initalizeRemoteEditor() {
  * @param {string} html The HTML content to parse for assets.
  */
 async function loadAssets( html ) {
+	/**
+	 * Locally-sourced Gutenberg packages excluded from remote loading to avoid
+	 * conflicts.
+	 */
+	const localGutenbergPackages = [ 'api-fetch' ];
+
+	const excludedScriptIDs = new RegExp(
+		localGutenbergPackages
+			.map( ( script ) => `wp-${ script }-js` )
+			.join( '|' )
+	);
+
 	const doc = new window.DOMParser().parseFromString( html, 'text/html' );
 
 	const newAssets = Array.from(
 		doc.querySelectorAll( 'link[rel="stylesheet"],script' )
-	).filter( ( asset ) => asset.id && ! excludedScripts.test( asset.src ) );
+	).filter( ( asset ) => asset.id && ! excludedScriptIDs.test( asset.id ) );
 
 	/*
 	 * Load each asset in order, as they may depend upon an earlier loaded script.
@@ -94,21 +115,6 @@ async function loadAssets( html ) {
 		await loadAsset( newAsset );
 	}
 }
-
-// Discard remote copies of localy-sourced Gutenberg packages to avoid conflicts
-const localGutenbergPackages = [ 'api-fetch' ];
-const excludedScripts = new RegExp(
-	localGutenbergPackages
-		.flatMap( ( script ) => [
-			`wp-content/plugins/gutenberg/build/${ script
-				.replace( /\\/g, '\\\\' )
-				.replace( /\//g, '\\/' ) }\\b`,
-			`wp-includes/js/dist/${ script
-				.replace( /\\/g, '\\\\' )
-				.replace( /\//g, '\\/' ) }\\b`,
-		] )
-		.join( '|' )
-);
 
 /**
  * Load an asset for a block.

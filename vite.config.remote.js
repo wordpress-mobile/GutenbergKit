@@ -19,6 +19,12 @@ export default defineConfig( {
 		rollupOptions: {
 			input: resolve( __dirname, 'src/remote.html' ),
 			external: externalize,
+			output: {
+				manualChunks: {
+					// Chunk to avoid circular dependency
+					bridge: [ 'src/utils/bridge.js' ],
+				},
+			},
 		},
 		target: 'esnext',
 	},
@@ -37,7 +43,7 @@ function externalize( id ) {
 	const externalDefinition = defaultRequestToExternal( id );
 	return (
 		!! externalDefinition &&
-		! id.endsWith( '.css' ) &&
+		! id.match( /\.css(?:\?inline)?$/ ) &&
 		! [ 'apiFetch', 'i18n', 'url', 'hooks' ].includes(
 			externalDefinition[ externalDefinition.length - 1 ]
 		)

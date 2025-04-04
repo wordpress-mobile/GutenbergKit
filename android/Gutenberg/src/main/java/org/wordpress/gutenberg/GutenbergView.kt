@@ -26,6 +26,7 @@ import org.json.JSONObject
 import java.util.Locale
 
 const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
+const val ASSET_URL_REMOTE = "https://appassets.androidplatform.net/assets/remote.html"
 
 class GutenbergView : WebView {
     private var isEditorLoaded = false
@@ -33,14 +34,7 @@ class GutenbergView : WebView {
     private var assetLoader = WebViewAssetLoader.Builder()
         .addPathHandler("/assets/", AssetsPathHandler(this.context))
         .build()
-    private var initialTitle: String = ""
-    private var type: String = ""
-    private var id: Int? = null
-    private var themeStyles: Boolean = false
-    private var initialContent: String = ""
-    private var siteApiRoot: String = ""
-    private var siteApiNamespace: String = ""
-    private var authHeader: String = ""
+    private var configuration: EditorConfiguration = EditorConfiguration.builder().build()
 
     private val handler = Handler(Looper.getMainLooper())
     private var editorDidBecomeAvailable: ((GutenbergView) -> Unit)? = null
@@ -115,6 +109,11 @@ class GutenbergView : WebView {
                 super.onReceivedError(view, request, error)
             }
 
+            override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                setGlobalJavaScriptVariables()
+            }
+
             override fun shouldInterceptRequest(
                 view: WebView,
                 request: WebResourceRequest
@@ -131,18 +130,65 @@ class GutenbergView : WebView {
             }
 
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest): Boolean {
-                val url = request.url.toString()
-                url.let {
-                    // Allow the WebView to handle `blob:` requests, which are utilized in the block
-                    // inserter's Patterns tab
-                    if (it.startsWith("blob:")) {
+                val url = request.url
+
+                // Allow local file URLs
+                if (url.scheme == "file") {
+                    return false
+                }
+
+                // Allow blob URLs (used by block inserter)
+                if (url.scheme == "blob") {
+                    return false
+                }
+
+                // Allow data URLs (used by block inserter)
+                if (url.scheme == "data") {
+                    return false
+                }
+
+                // Allow about:blank URLs
+                if (url.scheme == "about") {
+                    return false
+                }
+
+                // Allow asset URLs
+                if (url.host == Uri.parse(ASSET_URL).host || url.host == Uri.parse(ASSET_URL_REMOTE).host) {
+                    return false
+                }
+
+                // Allow WordPress.com REST API
+                if (url.host == "public-api.wordpress.com") {
+                    return false
+                }
+
+                // Allow WordPress REST API
+                if (url.host == configuration.siteApiRoot.removePrefix("https://").removePrefix("http://")) {
+                    if (url.path?.contains("/wp-json/") == true || url.query?.contains("rest_route=") == true) {
                         return false
                     }
-
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it))
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    view?.context?.startActivity(intent)
                 }
+
+                // Allow local development server if configured
+                if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
+                    val editorUrl = Uri.parse(BuildConfig.GUTENBERG_EDITOR_URL)
+                    if (url.host == editorUrl.host) {
+                        return false
+                    }
+                }
+
+                // Allow remote editor server if configured
+                if (BuildConfig.GUTENBERG_EDITOR_REMOTE_URL.isNotEmpty()) {
+                    val remoteEditorUrl = Uri.parse(BuildConfig.GUTENBERG_EDITOR_REMOTE_URL)
+                    if (url.host == remoteEditorUrl.host) {
+                        return false
+                    }
+                }
+
+                // For all other URLs, open in external browser
+                val intent = Intent(Intent.ACTION_VIEW, url)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                view?.context?.startActivity(intent)
                 return true
             }
         }
@@ -187,29 +233,17 @@ class GutenbergView : WebView {
         }
     }
 
-    fun start(
-        siteApiRoot: String = "",
-        siteApiNamespace: String = "",
-        authHeader: String = "",
-        themeStyles: Boolean = false,
-        postId: Int? = null,
-        postType: String = "",
-        postTitle: String = "",
-        postContent: String = ""
-    ) {
-        id = postId
-        type = postType
-        initialTitle = postTitle
-        initialContent = postContent
-        this.themeStyles = themeStyles
-        this.siteApiRoot = siteApiRoot
-        this.siteApiNamespace = siteApiNamespace
-        this.authHeader = authHeader
+    fun start(configuration: EditorConfiguration) {
+        this.configuration = configuration
 
         initializeWebView()
 
-        val editorUrl = if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
+        val editorUrl = if (configuration.plugins && BuildConfig.GUTENBERG_EDITOR_REMOTE_URL.isNotEmpty()) {
+            BuildConfig.GUTENBERG_EDITOR_REMOTE_URL
+        } else if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
             BuildConfig.GUTENBERG_EDITOR_URL
+        } else if (configuration.plugins) {
+            ASSET_URL_REMOTE
         } else {
             ASSET_URL
         }
@@ -218,31 +252,45 @@ class GutenbergView : WebView {
         Log.i("GutenbergView", "Startup Complete")
     }
 
-    private fun encodeForEditor(value: String): String {
-        return java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
-    }
+    private fun setGlobalJavaScriptVariables() {
+        // Generate JavaScript globals
+        val globalsJS = configuration.webViewGlobals.map { global ->
+            "window[\"${global.name}\"] = ${global.value.toJavaScript()};"
+        }.joinToString("\n")
 
-    @JavascriptInterface
-    fun getEditorConfiguration(): String {
-        val escapedTitle = encodeForEditor(initialTitle)
-        val escapedContent = encodeForEditor(initialContent)
+        val escapedTitle = encodeForEditor(configuration.title)
+        val escapedContent = encodeForEditor(configuration.content)
 
-        val json = """
-            {
-                "siteApiRoot": "$siteApiRoot",
-                "siteApiNamespace": "$siteApiNamespace",
-                "authHeader": "$authHeader",
-                "themeStyles": $themeStyles,
-                ${if (id != null) """
+        val gbKitConfig = """
+            window.GBKit = {
+                "siteApiRoot": "${configuration.siteApiRoot}",
+                "siteApiNamespace": ${configuration.siteApiNamespace.joinToString(",", "[", "]") { "\"$it\"" }},
+                "namespaceExcludedPaths": ${configuration.namespaceExcludedPaths.joinToString(",", "[", "]") { "\"$it\"" }},
+                "authHeader": "${configuration.authHeader}",
+                "themeStyles": ${configuration.themeStyles},
+                "hideTitle": ${configuration.hideTitle},
+                ${if (configuration.postId != null) """
                 "post": {
-                    "id": $id,
+                    "id": ${configuration.postId},
                     "title": "$escapedTitle",
                     "content": "$escapedContent"
                 }
                 """ else ""}
-            }
-        """
-        return json
+            };
+            localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
+        """.trimIndent()
+
+        val combinedJS = if (globalsJS.isNotEmpty()) {
+            "$globalsJS\n$gbKitConfig"
+        } else {
+            gbKitConfig
+        }
+
+        this.evaluateJavascript(combinedJS, null)
+    }
+
+    private fun encodeForEditor(value: String): String {
+        return java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
     }
 
     fun clearConfig() {
@@ -262,7 +310,6 @@ class GutenbergView : WebView {
         val encodedContent = encodeForEditor(newContent)
         this.evaluateJavascript("editor.setContent('$encodedContent');", null)
     }
-
 
     fun setTitle(newTitle: String) {
         if (!isEditorLoaded) {

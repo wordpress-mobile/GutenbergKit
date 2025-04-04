@@ -9,7 +9,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     private let configuration: EditorConfiguration
     private var _isEditorRendered = false
-    private let controller = GutenbergEditorController()
+    private let controller: GutenbergEditorController
     private let timestampInit = CFAbsoluteTimeGetCurrent()
 
     public private(set) var state = EditorState()
@@ -24,6 +24,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Initalizes the editor with the initial content (Gutenberg).
     public init(configuration: EditorConfiguration = .init()) {
         self.configuration = configuration
+        self.controller = GutenbergEditorController(configuration: configuration)
 
         // The `allowFileAccessFromFileURLs` allows the web view to access the
         // files from the local filesystem.
@@ -106,14 +107,17 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func loadEditor() {
-        if let editorURL = editorURL ?? ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
-            webView.load(URLRequest(url: editorURL))
-        } else if configuration.plugins,
-                  let editorURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg") {
-            webView.load(URLRequest(url: editorURL))
+        if configuration.plugins,
+           let remoteURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"].flatMap(URL.init) {
+            webView.load(URLRequest(url: remoteURL))
+        } else if let customURL = editorURL ?? ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
+            webView.load(URLRequest(url: customURL))
+        } else if configuration.plugins {
+            let remoteURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg")!
+            webView.loadFileURL(remoteURL, allowingReadAccessTo: Bundle.module.resourceURL!)
         } else {
-            let reactAppURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
-            webView.loadFileURL(reactAppURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+            let indexURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
+            webView.loadFileURL(indexURL, allowingReadAccessTo: Bundle.module.resourceURL!)
         }
     }
 
@@ -121,11 +125,19 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let escapedTitle = configuration.title.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
         let escapedContent = configuration.content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
 
+        // Generate JavaScript globals
+        let globalsJS = configuration.webViewGlobals.map { global in
+            "window[\"\(global.name)\"] = \(global.value.toJavaScript());"
+        }.joined(separator: "\n")
+
         let jsCode = """
+        \(globalsJS)
+
         window.GBKit = {
             siteURL: '\(configuration.siteURL)',
             siteApiRoot: '\(configuration.siteApiRoot)',
-            siteApiNamespace: '\(configuration.siteApiNamespace)',
+            siteApiNamespace: \(Array(configuration.siteApiNamespace)),
+            namespaceExcludedPaths: \(Array(configuration.namespaceExcludedPaths)),
             authHeader: '\(configuration.authHeader)',
             themeStyles: \(configuration.themeStyles),
             hideTitle: \(configuration.hideTitle),
@@ -135,7 +147,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 content: '\(escapedContent)'
             },
         };
+
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
+
         "done";
         """
 
@@ -302,6 +316,14 @@ private protocol GutenbergEditorControllerDelegate: AnyObject {
 /// Hiding the conformances, and breaking retain cycles.
 private final class GutenbergEditorController: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
     weak var delegate: GutenbergEditorControllerDelegate?
+    private let configuration: EditorConfiguration
+    private let editorURL: URL?
+
+    init(configuration: EditorConfiguration) {
+        self.configuration = configuration
+        self.editorURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init)
+        super.init()
+    }
 
     // MARK: - WKNavigationDelegate
 
@@ -323,17 +345,22 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
             return
         }
 
-        let gutenbergEditorURL = URL(string: ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"] ?? "")
-        let localIndexURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")
-        let localRemoteURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg")
-
-        if url == localIndexURL || url == localRemoteURL || url.host == gutenbergEditorURL?.host {
+        if url.isFileURL || // Local editor file
+            url.scheme == "about" || // Empty request
+            url.scheme == "blob" || // Blob URL, used by inserter iframes
+            url.scheme == "data" || // Data URL, used by inserter iframes
+            url.host == editorURL?.host || // Local development server
+            url.host == "public-api.wordpress.com" || // WordPress.com REST API
+            (url.host == URL(string: configuration.siteURL)?.host &&
+             (url.path.contains("/wp-json/") || url.query?.contains("rest_route=") == true)) // WordPress REST API
+        {
             decisionHandler(.allow)
-        } else {
-            // Open the link in Safari
-            UIApplication.shared.open(url)
-            decisionHandler(.cancel)
+            return
         }
+
+        // Open the request in OS browser
+        UIApplication.shared.open(url)
+        decisionHandler(.cancel)
     }
 
     // MARK: - WKScriptMessageHandler

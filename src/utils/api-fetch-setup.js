@@ -26,67 +26,7 @@ export function initializeApiFetch() {
 	apiFetch.use( createHeadersMiddleware( authHeader ) );
 	apiFetch.use( filterEndpointsMiddleware );
 	apiFetch.use( mediaUploadMiddleware );
-
-	// Preload some endpoints to return data needed for some components
-	// Like PostTitle.
-	apiFetch.use(
-		apiFetch.createPreloadingMiddleware( {
-			'/wp/v2/types?context=view': {
-				body: {
-					post: {
-						description: '',
-						hierarchical: false,
-						has_archive: false,
-						name: 'Posts',
-						slug: 'post',
-						taxonomies: [ 'category', 'post_tag' ],
-						rest_base: 'posts',
-						rest_namespace: 'wp/v2',
-						template: [],
-						template_lock: false,
-						_links: {},
-					},
-					page: {
-						description: '',
-						hierarchical: true,
-						has_archive: false,
-						name: 'Pages',
-						slug: 'page',
-						taxonomies: [],
-						rest_base: 'pages',
-						rest_namespace: 'wp/v2',
-						template: [],
-						template_lock: false,
-						_links: {},
-					},
-				},
-			},
-			'/wp/v2/types/post?context=edit': {
-				body: {
-					name: 'Posts',
-					slug: 'post',
-					supports: {
-						title: true,
-						editor: true,
-						author: true,
-						thumbnail: true,
-						excerpt: true,
-						trackbacks: true,
-						'custom-fields': true,
-						comments: true,
-						revisions: true,
-						'post-formats': true,
-						autosave: true,
-					},
-					taxonomies: [ 'category', 'post_tag' ],
-					rest_base: 'posts',
-					rest_namespace: 'wp/v2',
-					template: [],
-					template_lock: false,
-				},
-			},
-		} )
-	);
+	apiFetch.use( apiFetch.createPreloadingMiddleware( preloadData ) );
 }
 
 /**
@@ -114,19 +54,22 @@ function corsMiddleware( options, next ) {
  * @type {APIFetchMiddleware}
  */
 function apiPathModifierMiddleware( options, next ) {
-	const { siteApiNamespace } = getGBKit();
-
-	if (
+	const { siteApiNamespace, namespaceExcludedPaths } = getGBKit();
+	const namespaceRegex = new RegExp( `(${ siteApiNamespace.join( '|' ) })` );
+	const isEligiblePath =
 		options.path &&
-		siteApiNamespace &&
-		! options.path.includes( siteApiNamespace )
-	) {
+		! namespaceExcludedPaths.some( ( path ) =>
+			options.path.startsWith( path )
+		);
+
+	if ( isEligiblePath && ! namespaceRegex.test( options.path ) ) {
 		// Insert the API namespace after the first two path segments.
 		options.path = options.path.replace(
 			/^(?<apiPath>\/?(?:[\w.-]+\/){2})/,
-			`$<apiPath>${ siteApiNamespace }/`
+			`$<apiPath>${ siteApiNamespace[ 0 ] }/`
 		);
 	}
+
 	return next( options );
 }
 
@@ -183,3 +126,66 @@ function mediaUploadMiddleware( options, next ) {
 
 	return next( options );
 }
+
+/**
+ * Initial data to reduce initial render time. E.g., the PostTitle component
+ * requires the post type data to render the title placeholder.
+ *
+ * @todo Provide this data from the host app
+ */
+const preloadData = {
+	'/wp/v2/types?context=view': {
+		body: {
+			post: {
+				description: '',
+				hierarchical: false,
+				has_archive: false,
+				name: 'Posts',
+				slug: 'post',
+				taxonomies: [ 'category', 'post_tag' ],
+				rest_base: 'posts',
+				rest_namespace: 'wp/v2',
+				template: [],
+				template_lock: false,
+				_links: {},
+			},
+			page: {
+				description: '',
+				hierarchical: true,
+				has_archive: false,
+				name: 'Pages',
+				slug: 'page',
+				taxonomies: [],
+				rest_base: 'pages',
+				rest_namespace: 'wp/v2',
+				template: [],
+				template_lock: false,
+				_links: {},
+			},
+		},
+	},
+	'/wp/v2/types/post?context=edit': {
+		body: {
+			name: 'Posts',
+			slug: 'post',
+			supports: {
+				title: true,
+				editor: true,
+				author: true,
+				thumbnail: true,
+				excerpt: true,
+				trackbacks: true,
+				'custom-fields': true,
+				comments: true,
+				revisions: true,
+				'post-formats': true,
+				autosave: true,
+			},
+			taxonomies: [ 'category', 'post_tag' ],
+			rest_base: 'posts',
+			rest_namespace: 'wp/v2',
+			template: [],
+			template_lock: false,
+		},
+	},
+};
