@@ -21,6 +21,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     public var editorURL: URL?
 
     private var cancellables: [AnyCancellable] = []
+    private var isWarmupMode = false
 
     /// Initalizes the editor with the initial content (Gutenberg).
     public init(configuration: EditorConfiguration = .init()) {
@@ -69,15 +70,17 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         webView.alpha = 0
 
+        if isWarmupMode {
+            setUpEditor()
+            loadEditor()
+        }
+
         // TODO: register it when editor is loaded
 //        service.$rawBlockTypesResponseData.compactMap({ $0 }).sink { [weak self] data in
 //            guard let self else { return }
 //            assert(Thread.isMainThread)
 //
 //        }.store(in: &cancellables)
-
-        setUpEditor()
-        loadEditor()
     }
 
     // TODO: move
@@ -328,6 +331,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// shaves a couple of hundred milliseconds off the first load.
     public static func warmup() {
         let editorViewController = EditorViewController()
+        editorViewController.isWarmupMode = true
         _ = editorViewController.view // Trigger viewDidLoad
 
         // Retain for 5 seconds and let it prefetch stuff
