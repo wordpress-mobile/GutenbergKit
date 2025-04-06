@@ -30,8 +30,13 @@ try {
  */
 async function initalizeRemoteEditor() {
 	try {
-		const { themeStyles, hideTitle, siteApiRoot, siteApiNamespace } =
-			getGBKit();
+		const {
+			themeStyles,
+			hideTitle,
+			siteApiRoot,
+			siteApiNamespace,
+			editorSettings,
+		} = getGBKit();
 		// TODO: Load editor assets within the host app
 		const {
 			styles,
@@ -47,17 +52,11 @@ async function initalizeRemoteEditor() {
 		const { store: editorStore } = window.wp.editor;
 		const { store: preferencesStore } = window.wp.preferences;
 
-		// TODO: Provide this data from the host app
-		apiFetch( { path: `/wp-block-editor/v1/settings` } )
-			.then( ( editorSettings ) => {
-				dispatch( editorStore ).updateEditorSettings( editorSettings );
-			} )
-			.catch( () => {
-				const editorSettings = {
-					defaultEditorStyles: [ { css: defaultEditorStyles } ],
-				};
-				dispatch( editorStore ).updateEditorSettings( editorSettings );
-			} );
+		// Use editor settings from the native app if available
+		const settings = editorSettings || {
+			defaultEditorStyles: [ { css: defaultEditorStyles } ],
+		};
+		dispatch( editorStore ).updateEditorSettings( settings );
 
 		const preferenceDispatch = dispatch( preferencesStore );
 		preferenceDispatch.setDefaults( 'core', {
