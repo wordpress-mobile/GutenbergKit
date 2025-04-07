@@ -3,6 +3,7 @@ package org.wordpress.gutenberg
 import android.os.Parcelable
 import android.os.Parcel
 import kotlinx.parcelize.Parcelize
+import kotlinx.parcelize.RawValue
 
 @Parcelize
 sealed class WebViewGlobalValue : Parcelable {
@@ -60,7 +61,8 @@ open class EditorConfiguration constructor(
     val siteApiNamespace: Array<String>,
     val namespaceExcludedPaths: Array<String>,
     val authHeader: String,
-    val webViewGlobals: List<WebViewGlobal>
+    val webViewGlobals: List<WebViewGlobal>,
+    val editorSettings: @RawValue Map<String, Any>?
 ) : Parcelable {
     companion object {
         @JvmStatic
@@ -81,6 +83,7 @@ open class EditorConfiguration constructor(
         private var namespaceExcludedPaths: Array<String> = arrayOf()
         private var authHeader: String = ""
         private var webViewGlobals: List<WebViewGlobal> = emptyList()
+        private var editorSettings: Map<String, Any>? = null
 
         fun setTitle(title: String) = apply { this.title = title }
         fun setContent(content: String) = apply { this.content = content }
@@ -95,6 +98,7 @@ open class EditorConfiguration constructor(
         fun setNamespaceExcludedPaths(namespaceExcludedPaths: Array<String>) = apply { this.namespaceExcludedPaths = namespaceExcludedPaths }
         fun setAuthHeader(authHeader: String) = apply { this.authHeader = authHeader }
         fun setWebViewGlobals(webViewGlobals: List<WebViewGlobal>) = apply { this.webViewGlobals = webViewGlobals }
+        fun setEditorSettings(editorSettings: Map<String, Any>?) = apply { this.editorSettings = editorSettings }
 
         fun build(): EditorConfiguration = EditorConfiguration(
             title = title,
@@ -109,7 +113,8 @@ open class EditorConfiguration constructor(
             siteApiNamespace = siteApiNamespace,
             namespaceExcludedPaths = namespaceExcludedPaths,
             authHeader = authHeader,
-            webViewGlobals = webViewGlobals
+            webViewGlobals = webViewGlobals,
+            editorSettings = editorSettings
         )
     }
 
@@ -132,6 +137,7 @@ open class EditorConfiguration constructor(
         if (!namespaceExcludedPaths.contentEquals(other.namespaceExcludedPaths)) return false
         if (authHeader != other.authHeader) return false
         if (webViewGlobals != other.webViewGlobals) return false
+        if (editorSettings != other.editorSettings) return false
 
         return true
     }
@@ -150,6 +156,7 @@ open class EditorConfiguration constructor(
         result = 31 * result + namespaceExcludedPaths.contentHashCode()
         result = 31 * result + authHeader.hashCode()
         result = 31 * result + webViewGlobals.hashCode()
+        result = 31 * result + (editorSettings?.hashCode() ?: 0)
         return result
     }
 }
