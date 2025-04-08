@@ -260,17 +260,7 @@ class GutenbergView : WebView {
 
         val escapedTitle = encodeForEditor(configuration.title)
         val escapedContent = encodeForEditor(configuration.content)
-
-        // Convert editor settings to JSON string if available
-        var editorSettingsJS = "undefined"
-        if (configuration.editorSettings != null) {
-            try {
-                val jsonString = JSONObject(configuration.editorSettings).toString()
-                editorSettingsJS = jsonString
-            } catch (e: JSONException) {
-                Log.e("GutenbergView", "Failed to serialize editor settings: ${e.message}")
-            }
-        }
+        val editorSettings = configuration.editorSettings ?: "undefined"
 
         val gbKitConfig = """
             window.GBKit = {
@@ -280,7 +270,7 @@ class GutenbergView : WebView {
                 "authHeader": "${configuration.authHeader}",
                 "themeStyles": ${configuration.themeStyles},
                 "hideTitle": ${configuration.hideTitle},
-                "editorSettings": $editorSettingsJS,
+                "editorSettings": $editorSettings,
                 ${if (configuration.postId != null) """
                 "post": {
                     "id": ${configuration.postId},

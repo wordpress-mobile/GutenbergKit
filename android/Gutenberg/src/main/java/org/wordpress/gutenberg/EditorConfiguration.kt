@@ -62,7 +62,7 @@ open class EditorConfiguration constructor(
     val namespaceExcludedPaths: Array<String>,
     val authHeader: String,
     val webViewGlobals: List<WebViewGlobal>,
-    val editorSettings: @RawValue Map<String, Any>?
+    val editorSettings: String?
 ) : Parcelable {
     companion object {
         @JvmStatic
@@ -83,7 +83,7 @@ open class EditorConfiguration constructor(
         private var namespaceExcludedPaths: Array<String> = arrayOf()
         private var authHeader: String = ""
         private var webViewGlobals: List<WebViewGlobal> = emptyList()
-        private var editorSettings: Map<String, Any>? = null
+        private var editorSettings: String? = null
 
         fun setTitle(title: String) = apply { this.title = title }
         fun setContent(content: String) = apply { this.content = content }
@@ -98,7 +98,7 @@ open class EditorConfiguration constructor(
         fun setNamespaceExcludedPaths(namespaceExcludedPaths: Array<String>) = apply { this.namespaceExcludedPaths = namespaceExcludedPaths }
         fun setAuthHeader(authHeader: String) = apply { this.authHeader = authHeader }
         fun setWebViewGlobals(webViewGlobals: List<WebViewGlobal>) = apply { this.webViewGlobals = webViewGlobals }
-        fun setEditorSettings(editorSettings: Map<String, Any>?) = apply { this.editorSettings = editorSettings }
+        fun setEditorSettings(editorSettings: String?) = apply { this.editorSettings = editorSettings }
 
         fun build(): EditorConfiguration = EditorConfiguration(
             title = title,
