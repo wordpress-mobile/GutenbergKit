@@ -1,9 +1,7 @@
 package org.wordpress.gutenberg
 
 import android.os.Parcelable
-import android.os.Parcel
 import kotlinx.parcelize.Parcelize
-import kotlinx.parcelize.RawValue
 
 @Parcelize
 sealed class WebViewGlobalValue : Parcelable {

@@ -37,7 +37,6 @@ try {
 function initializeEditor() {
 	const { themeStyles, hideTitle, editorSettings } = getGBKit();
 
-	// Use editor settings from the native app if available
 	const settings = editorSettings || {
 		defaultEditorStyles: [ { css: defaultEditorStyles } ],
 	};

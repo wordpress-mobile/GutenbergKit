@@ -52,7 +52,6 @@ async function initalizeRemoteEditor() {
 		const { store: editorStore } = window.wp.editor;
 		const { store: preferencesStore } = window.wp.preferences;
 
-		// Use editor settings from the native app if available
 		const settings = editorSettings || {
 			defaultEditorStyles: [ { css: defaultEditorStyles } ],
 		};
