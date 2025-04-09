@@ -73,11 +73,13 @@ async function initalizeRemoteEditor() {
 		const { registerCoreBlocks } = window.wp.blockLibrary;
 
 		registerCoreBlocks();
-		window.wp.blocks.getBlockTypes().forEach( ( block ) => {
-			if ( ! allowedBlockTypes.includes( block.name ) ) {
-				window.wp.blocks.unregisterBlockType( block.name );
-			}
-		} );
+		if ( allowedBlockTypes ) {
+			window.wp.blocks.getBlockTypes().forEach( ( block ) => {
+				if ( ! allowedBlockTypes.includes( block.name ) ) {
+					window.wp.blocks.unregisterBlockType( block.name );
+				}
+			} );
+		}
 
 		createRoot( document.getElementById( 'root' ) ).render(
 			createElement(
