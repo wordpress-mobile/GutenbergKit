@@ -21,10 +21,17 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     public var editorURL: URL?
 
     private var cancellables: [AnyCancellable] = []
-    private var isWarmupMode = false
+
+    /// Warmup mode preloads resources into memory to make the UI transition seamless when displaying the editor for the first time
+    ///
+    private let isWarmupMode: Bool
 
     /// Initalizes the editor with the initial content (Gutenberg).
-    public init(configuration: EditorConfiguration = .init()) {
+    public convenience init(configuration: EditorConfiguration = .default) {
+        self.init(configuration: configuration, isWarmupMode: false)
+    }
+
+    init(configuration: EditorConfiguration = .default, isWarmupMode: Bool = false) {
         self.configuration = configuration
         self.controller = GutenbergEditorController(configuration: configuration)
 
@@ -42,6 +49,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         self.webView = GBWebView(frame: .zero, configuration: config)
         self.webView.scrollView.keyboardDismissMode = .interactive
+
+        self.isWarmupMode = isWarmupMode
 
         super.init(nibName: nil, bundle: nil)
     }
@@ -330,8 +339,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Calls this at any moment before showing the actual editor. The warmup
     /// shaves a couple of hundred milliseconds off the first load.
     public static func warmup() {
-        let editorViewController = EditorViewController()
-        editorViewController.isWarmupMode = true
+        let editorViewController = EditorViewController(isWarmupMode: true)
         _ = editorViewController.view // Trigger viewDidLoad
 
         // Retain for 5 seconds and let it prefetch stuff

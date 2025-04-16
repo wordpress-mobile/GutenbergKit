@@ -28,6 +28,8 @@ public struct EditorConfiguration {
     public mutating func updateEditorSettings(_ settings: [String: Any]?) {
         self.editorSettings = settings
     }
+
+    public static let `default` = EditorConfiguration()
 }
 
 public struct WebViewGlobal {
