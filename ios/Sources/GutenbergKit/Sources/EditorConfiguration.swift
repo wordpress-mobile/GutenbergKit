@@ -28,10 +28,10 @@ public struct WebViewGlobal {
     let name: String
     let value: WebViewGlobalValue
 
-    public init(name: String, value: WebViewGlobalValue) {
+    public init(name: String, value: WebViewGlobalValue) throws {
         // Validate name is a valid JavaScript identifier
         guard Self.isValidJavaScriptIdentifier(name) else {
-            preconditionFailure("Invalid JavaScript identifier: \(name)")
+            throw WebViewGlobalError.invalidIdentifier(name)
         }
         self.name = name
         self.value = value
@@ -41,6 +41,10 @@ public struct WebViewGlobal {
         // Add validation logic for JavaScript identifiers
         return name.range(of: "^[a-zA-Z_$][a-zA-Z0-9_$]*$", options: .regularExpression) != nil
     }
+}
+
+public enum WebViewGlobalError: Error {
+    case invalidIdentifier(String)
 }
 
 public enum WebViewGlobalValue {
