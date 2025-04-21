@@ -13,9 +13,7 @@ steps:
 
     - label: ':eslint: Lint React App'
       command: make lint-js
-      plugins: &plugins
-          - $CI_TOOLKIT_PLUGIN
-          - $NVM_PLUGIN
+      plugins: *plugins
 
     - label: ':android: Publish Android Library'
       command: |
