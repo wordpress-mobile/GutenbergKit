@@ -7,8 +7,9 @@ import Combine
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
     public let webView: WKWebView
 
-    private let configuration: EditorConfiguration
+    public var configuration: EditorConfiguration
     private var _isEditorRendered = false
+    private var _isEditorSetup = false
     private let controller: GutenbergEditorController
     private let timestampInit = CFAbsoluteTimeGetCurrent()
 
@@ -21,8 +22,16 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     private var cancellables: [AnyCancellable] = []
 
+    /// Warmup mode preloads resources into memory to make the UI transition seamless when displaying the editor for the first time
+    ///
+    private let isWarmupMode: Bool
+
     /// Initalizes the editor with the initial content (Gutenberg).
-    public init(configuration: EditorConfiguration = .init()) {
+    public convenience init(configuration: EditorConfiguration = .default) {
+        self.init(configuration: configuration, isWarmupMode: false)
+    }
+
+    init(configuration: EditorConfiguration = .default, isWarmupMode: Bool = false) {
         self.configuration = configuration
         self.controller = GutenbergEditorController(configuration: configuration)
 
@@ -40,6 +49,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         self.webView = GBWebView(frame: .zero, configuration: config)
         self.webView.scrollView.keyboardDismissMode = .interactive
+
+        self.isWarmupMode = isWarmupMode
 
         super.init(nibName: nil, bundle: nil)
     }
@@ -68,15 +79,17 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         webView.alpha = 0
 
+        if isWarmupMode {
+            setUpEditor()
+            loadEditor()
+        }
+
         // TODO: register it when editor is loaded
 //        service.$rawBlockTypesResponseData.compactMap({ $0 }).sink { [weak self] data in
 //            guard let self else { return }
 //            assert(Thread.isMainThread)
 //
 //        }.store(in: &cancellables)
-
-        setUpEditor()
-        loadEditor()
     }
 
     // TODO: move
@@ -130,6 +143,19 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             "window[\"\(global.name)\"] = \(global.value.toJavaScript());"
         }.joined(separator: "\n")
 
+        // Convert editor settings to JSON string if available
+        var editorSettingsJS = "undefined"
+        if let settings = configuration.editorSettings {
+            do {
+                let jsonData = try JSONSerialization.data(withJSONObject: settings, options: [])
+                if let jsonString = String(data: jsonData, encoding: .utf8) {
+                    editorSettingsJS = jsonString
+                }
+            } catch {
+                NSLog("Failed to serialize editor settings: \(error)")
+            }
+        }
+
         let jsCode = """
         \(globalsJS)
 
@@ -141,6 +167,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             authHeader: '\(configuration.authHeader)',
             themeStyles: \(configuration.themeStyles),
             hideTitle: \(configuration.hideTitle),
+            editorSettings: \(editorSettingsJS),
             post: {
                 id: \(configuration.postID ?? -1),
                 title: '\(escapedTitle)',
@@ -205,6 +232,20 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             guard isCodeEditorEnabled != oldValue else { return }
             evaluate("editor.switchEditorMode('\(isCodeEditorEnabled ? "text" : "visual")');")
         }
+    }
+
+    /// Updates the editor configuration
+    public func updateConfiguration(_ newConfiguration: EditorConfiguration) {
+        self.configuration = newConfiguration
+    }
+
+    /// Starts the editor setup process
+    public func startEditorSetup() {
+        guard !_isEditorSetup else { return }
+        _isEditorSetup = true
+
+        setUpEditor()
+        loadEditor()
     }
 
     // MARK: - Internal (JavaScript)
@@ -298,7 +339,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Calls this at any moment before showing the actual editor. The warmup
     /// shaves a couple of hundred milliseconds off the first load.
     public static func warmup() {
-        let editorViewController = EditorViewController()
+        let editorViewController = EditorViewController(isWarmupMode: true)
         _ = editorViewController.view // Trigger viewDidLoad
 
         // Retain for 5 seconds and let it prefetch stuff

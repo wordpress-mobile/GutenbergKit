@@ -260,6 +260,7 @@ class GutenbergView : WebView {
 
         val escapedTitle = encodeForEditor(configuration.title)
         val escapedContent = encodeForEditor(configuration.content)
+        val editorSettings = configuration.editorSettings ?: "undefined"
 
         val gbKitConfig = """
             window.GBKit = {
@@ -269,6 +270,7 @@ class GutenbergView : WebView {
                 "authHeader": "${configuration.authHeader}",
                 "themeStyles": ${configuration.themeStyles},
                 "hideTitle": ${configuration.hideTitle},
+                "editorSettings": $editorSettings,
                 ${if (configuration.postId != null) """
                 "post": {
                     "id": ${configuration.postId},

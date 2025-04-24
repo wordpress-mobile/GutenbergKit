@@ -17,11 +17,19 @@ public struct EditorConfiguration {
     public var namespaceExcludedPaths: [String] = []
     public var authHeader = ""
     public var webViewGlobals: [WebViewGlobal] = []
+    /// Raw block editor settings from the WordPress REST API
+    public var editorSettings: [String: Any]?
 
     public init(title: String = "", content: String = "") {
         self.title = title
         self.content = content
     }
+
+    public mutating func updateEditorSettings(_ settings: [String: Any]?) {
+        self.editorSettings = settings
+    }
+
+    public static let `default` = EditorConfiguration()
 }
 
 public struct WebViewGlobal {
