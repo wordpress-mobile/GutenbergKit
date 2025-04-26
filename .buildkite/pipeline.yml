@@ -13,15 +13,19 @@ steps:
 
     - label: ':eslint: Lint React App'
       command: make lint-js
-      plugins: &plugins
-          - $CI_TOOLKIT_PLUGIN
-          - $NVM_PLUGIN
+      plugins: *plugins
 
     - label: ':android: Publish Android Library'
       command: |
           make build
           echo "--- :android: Publishing Android Library"
           ./android/gradlew -p ./android :gutenberg:prepareToPublishToS3 $(prepare_to_publish_to_s3_params) :gutenberg:publish
+      agents:
+          queue: android
+      plugins: *plugins
+
+    - label: ':android: Test Android Library'
+      command: make test-android
       agents:
           queue: android
       plugins: *plugins
