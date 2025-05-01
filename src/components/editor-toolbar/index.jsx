@@ -76,7 +76,7 @@ const EditorToolbar = ( { className } ) => {
 				{ isSelected && (
 					<ToolbarGroup>
 						<ToolbarButton
-							title={ __( 'Open Settings' ) }
+							title={ __( 'Block Settings' ) }
 							icon={ cog }
 							onClick={ openSettings }
 						/>
