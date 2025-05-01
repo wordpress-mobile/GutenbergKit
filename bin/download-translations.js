@@ -8,7 +8,7 @@ import fetch from 'node-fetch';
 /**
  * Internal dependencies
  */
-import { info, error } from '../src/utils/logger';
+import { info, error } from '../src/utils/logger.js';
 
 const TRANSLATIONS_DIR = path.join( process.cwd(), 'src/translations/data' );
 const SUPPORTED_LOCALES = [
