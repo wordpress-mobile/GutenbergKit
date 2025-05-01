@@ -8,7 +8,7 @@ const LOG_LEVELS = {
 };
 
 // Default log level
-let currentLogLevel = LOG_LEVELS.INFO;
+let currentLogLevel = process.env.LOG_LEVEL || LOG_LEVELS.INFO;
 
 /**
  * Set the current log level
