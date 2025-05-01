@@ -25,7 +25,9 @@ export async function configureLocale() {
  */
 export async function loadTranslations( locale ) {
 	try {
-		const translations = await import( `../translations/${ locale }.json` );
+		const translations = await import(
+			`../translations/data/${ locale }.json`
+		);
 		setLocaleData( translations );
 	} catch ( err ) {
 		// Continue with default locale
