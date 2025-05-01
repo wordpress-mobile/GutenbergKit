@@ -19,6 +19,8 @@ public struct EditorConfiguration {
     public var webViewGlobals: [WebViewGlobal] = []
     /// Raw block editor settings from the WordPress REST API
     public var editorSettings: [String: Any]?
+    /// The locale to use for translations
+    public var locale = "en"
 
     public init(title: String = "", content: String = "") {
         self.title = title

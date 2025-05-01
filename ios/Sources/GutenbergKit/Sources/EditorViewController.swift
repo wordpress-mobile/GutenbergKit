@@ -168,6 +168,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             themeStyles: \(configuration.themeStyles),
             hideTitle: \(configuration.hideTitle),
             editorSettings: \(editorSettingsJS),
+            locale: '\(configuration.locale)',
             post: {
                 id: \(configuration.postID ?? -1),
                 title: '\(escapedTitle)',
