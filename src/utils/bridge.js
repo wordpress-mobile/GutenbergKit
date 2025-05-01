@@ -1,7 +1,7 @@
 /**
  * Internal dependencies
  */
-import parseException from './parse-exception';
+import parseException from './exception-parser';
 
 /**
  * Notifies the native host that the editor has loaded.
