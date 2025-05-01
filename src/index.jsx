@@ -13,6 +13,7 @@ import { registerCoreBlocks } from '@wordpress/block-library';
  */
 import { initializeApiFetch } from './utils/api-fetch-setup';
 import { getGBKit, getPost, waitForGBKit, editorLoaded } from './utils/bridge';
+import { configureLocale } from './utils/localization';
 import Layout from './components/layout';
 import './index.scss';
 import EditorLoadError from './components/editor-load-error';
@@ -20,6 +21,7 @@ import EditorLoadError from './components/editor-load-error';
 try {
 	await waitForGBKit();
 	initializeApiFetch();
+	await configureLocale();
 	initializeEditor();
 } catch ( error ) {
 	const root = document.getElementById( 'root' );

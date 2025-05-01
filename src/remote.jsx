@@ -7,6 +7,7 @@ import apiFetch from '@wordpress/api-fetch';
  * Internal dependencies
  */
 import { getGBKit, getPost, waitForGBKit } from './utils/bridge';
+import { configureLocale } from './utils/localization';
 import { initializeApiFetch } from './utils/api-fetch-setup';
 import './index.scss';
 import defaultEditorStyles from '@wordpress/block-editor/build-style/default-editor-styles.css?inline';
@@ -17,6 +18,7 @@ window.wp.apiFetch = apiFetch;
 try {
 	await waitForGBKit();
 	initializeApiFetch();
+	await configureLocale();
 	await initalizeRemoteEditor();
 } catch ( error ) {
 	// Fallback to the local editor and display a notice. Because the remote
