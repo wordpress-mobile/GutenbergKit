@@ -5,6 +5,11 @@ import fs from 'fs';
 import path from 'path';
 import fetch from 'node-fetch';
 
+/**
+ * Internal dependencies
+ */
+import { info, error } from '../src/utils/logger';
+
 const TRANSLATIONS_DIR = path.join( process.cwd(), 'src/translations/data' );
 const SUPPORTED_LOCALES = [
 	'en',
@@ -79,35 +84,22 @@ async function downloadTranslations( locale ) {
  * Downloads translations for all supported locales.
  */
 async function downloadAllTranslations() {
-	logInfo( 'Downloading translations...' );
+	info( 'Downloading translations...' );
 
 	for ( const locale of SUPPORTED_LOCALES ) {
 		try {
-			logInfo( `Downloading translations for ${ locale }...` );
+			info( `Downloading translations for ${ locale }...` );
 			await downloadTranslations( locale );
-			logInfo( `✓ Downloaded translations for ${ locale }` );
-		} catch ( error ) {
-			logError(
-				`✗ Failed to download translations for ${ locale }:`,
-				error
-			);
+			info( `✓ Downloaded translations for ${ locale }` );
+		} catch ( err ) {
+			error( `✗ Failed to download translations for ${ locale }:`, err );
 		}
 	}
 
-	logInfo( 'Translation download complete!' );
+	info( 'Translation download complete!' );
 }
 
-downloadAllTranslations().catch( ( error ) => {
-	logError( 'Failed to download translations:', error );
+downloadAllTranslations().catch( ( err ) => {
+	error( 'Failed to download translations:', err );
 	process.exit( 1 );
 } );
-
-function logInfo( message ) {
-	// eslint-disable-next-line no-console
-	console.log( message );
-}
-
-function logError( message ) {
-	// eslint-disable-next-line no-console
-	console.error( message );
-}

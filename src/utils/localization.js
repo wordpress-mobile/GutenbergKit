@@ -6,7 +6,7 @@ import { setLocaleData } from '@wordpress/i18n';
  * Internal dependencies
  */
 import { getGBKit } from './bridge';
-
+import { error } from './logger';
 /**
  * Initializes i18n support for the editor.
  *
@@ -27,7 +27,8 @@ export async function loadTranslations( locale ) {
 	try {
 		const translations = await import( `../translations/${ locale }.json` );
 		setLocaleData( translations );
-	} catch ( error ) {
+	} catch ( err ) {
 		// Continue with default locale
+		error( 'Error loading translations', err );
 	}
 }
