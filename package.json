@@ -11,7 +11,9 @@
 		"lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
 		"format": "prettier --write .",
 		"postinstall": "patch-package",
-		"preview": "vite preview --host"
+		"preview": "vite preview --host",
+		"download-translations": "node bin/download-translations.js",
+		"prebuild": "npm run download-translations"
 	},
 	"dependencies": {
 		"@wordpress/api-fetch": "^7.10",
