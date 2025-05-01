@@ -12,46 +12,55 @@ import { info, error } from '../src/utils/logger';
 
 const TRANSLATIONS_DIR = path.join( process.cwd(), 'src/translations/data' );
 const SUPPORTED_LOCALES = [
-	'en',
-	'es',
-	'fr',
-	'de',
-	'it',
-	'pt',
-	'ru',
-	'ja',
-	'zh',
-	'ko',
-	'nl',
-	'sv',
-	'da',
-	'fi',
-	'no',
-	'pl',
-	'cs',
-	'hu',
-	'ro',
-	'tr',
-	'bg',
-	'el',
-	'sk',
-	'sl',
-	'hr',
-	'sr',
-	'uk',
-	'ar',
-	'he',
-	'fa',
-	'hi',
-	'bn',
-	'id',
-	'ms',
-	'th',
-	'vi',
-	'tl',
-	'af',
-	'sw',
-	'zu',
+	'ar', // Arabic
+	'bg', // Bulgarian
+	'bo', // Tibetan
+	'ca', // Catalan
+	'cs', // Czech
+	'cy', // Welsh
+	'da', // Danish
+	'de', // German
+	'en-au', // English (Australia)
+	'en-ca', // English (Canada)
+	'en-gb', // English (UK)
+	'en-nz', // English (New Zealand)
+	'en-za', // English (South Africa)
+	'el', // Greek
+	'es', // Spanish
+	'es-ar', // Spanish (Argentina)
+	'es-cl', // Spanish (Chile)
+	'es-cr', // Spanish (Costa Rica)
+	'fa', // Persian
+	'fr', // French
+	'gl', // Galician
+	'he', // Hebrew
+	'hr', // Croatian
+	'hu', // Hungarian
+	'id', // Indonesian
+	'is', // Icelandic
+	'it', // Italian
+	'ja', // Japanese
+	'ka', // Georgian
+	'ko', // Korean
+	'nb', // Norwegian (Bokmål)
+	'nl', // Dutch
+	'nl-be', // Dutch (Belgium)
+	'pl', // Polish
+	'pt', // Portuguese
+	'pt-br', // Portuguese (Brazil)
+	'ro', // Romainian
+	'ru', // Russian
+	'sk', // Slovak
+	'sq', // Albanian
+	'sr', // Serbian
+	'sv', // Swedish
+	'th', // Thai
+	'tr', // Turkish
+	'uk', // Ukrainian
+	'ur', // Urdu
+	'vi', // Vietnamese
+	'zh-cn', // Chinese (China)
+	'zh-tw', // Chinese (Taiwan)
 ];
 
 /**
