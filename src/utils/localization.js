@@ -2,6 +2,7 @@
  * WordPress dependencies
  */
 import { setLocaleData } from '@wordpress/i18n';
+
 /**
  * Internal dependencies
  */
@@ -25,7 +26,7 @@ export async function configureLocale() {
  */
 export async function loadTranslations( locale ) {
 	try {
-		const translations = await import(
+		const { default: translations } = await import(
 			`../translations/data/${ locale }.json`
 		);
 		setLocaleData( translations );
