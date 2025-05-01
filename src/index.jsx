@@ -11,7 +11,7 @@ import { registerCoreBlocks } from '@wordpress/block-library';
 /**
  * Internal dependencies
  */
-import { initializeApiFetch } from './utils/api-fetch-setup';
+import { initializeApiFetch } from './utils/api-fetch';
 import { getGBKit, getPost, waitForGBKit, editorLoaded } from './utils/bridge';
 import { configureLocale } from './utils/localization';
 import Layout from './components/layout';

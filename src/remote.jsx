@@ -8,7 +8,7 @@ import apiFetch from '@wordpress/api-fetch';
  */
 import { getGBKit, getPost, waitForGBKit } from './utils/bridge';
 import { configureLocale } from './utils/localization';
-import { initializeApiFetch } from './utils/api-fetch-setup';
+import { initializeApiFetch } from './utils/api-fetch';
 import './index.scss';
 import defaultEditorStyles from '@wordpress/block-editor/build-style/default-editor-styles.css?inline';
 
