@@ -28,12 +28,14 @@ try {
 	await configureLocale();
 
 	// Load the rest of the packages, excluding the i18n packages.
-	const wpDependencies = await loadEditorAssets( {
+	const { allowedBlockTypes, wpDependencies } = await loadEditorAssets( {
 		disallowedPackages: I18N_PACKAGES,
-		unregisterBlocks: true,
 	} );
-	const { initializeEditor } = await import( './utils/editor' );
+	const { initializeEditor, unregisterDisallowedBlocks } = await import(
+		'./utils/editor'
+	);
 	initializeEditor( wpDependencies );
+	unregisterDisallowedBlocks( allowedBlockTypes );
 } catch ( err ) {
 	error( 'Error initializing editor', err );
 	// Fallback to the local editor and display a notice. Because the remote

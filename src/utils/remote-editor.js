@@ -10,19 +10,24 @@ import { getGBKit } from './bridge';
 import { error } from './logger';
 
 /**
+ * @typedef {Object} EditorAssetConfig
+ *
+ * @property {string[]} allowedBlockTypes Array of allowed block types provided by the API.
+ * @property {Object}   wpDependencies    WordPress dependencies, empty when allowedPackages is provided.
+ */
+
+/**
  * Fetch editor assets and return select WordPress dependencies.
  *
- * @param {Object}  [options]                    Options for the fetch.
- * @param {Array}   [options.allowedPackages]    Array of allowed package names to load.
- * @param {Array}   [options.disallowedPackages] Array of disallowed package names to load.
- * @param {boolean} [options.unregisterBlocks]   Whether to unregister disallowed blocks.
+ * @param {Object} [options]                    Options for the fetch.
+ * @param {Array}  [options.allowedPackages]    Array of allowed package names to load.
+ * @param {Array}  [options.disallowedPackages] Array of disallowed package names to load.
  *
- * @return {Object} WordPress dependencies.
+ * @return {EditorAssetConfig} Allowed block types and WordPress dependencies.
  */
 export async function loadEditorAssets( {
 	allowedPackages = [],
 	disallowedPackages = [],
-	unregisterBlocks = false,
 } = {} ) {
 	try {
 		const { siteApiRoot, siteApiNamespace } = getGBKit();
@@ -41,24 +46,26 @@ export async function loadEditorAssets( {
 				allowedPackages,
 			} );
 
-			return {};
+			return {
+				allowedBlockTypes,
+				wpDependencies: {},
+			};
 		}
 
 		await loadAssets( [ ...styles, ...scripts ].join( '' ), {
 			disallowedPackages,
 		} );
 
-		if ( unregisterBlocks ) {
-			unregisterDisallowedBlocks( allowedBlockTypes );
-		}
-
 		return {
-			StrictMode: window.wp.element.StrictMode,
-			createRoot: window.wp.element.createRoot,
-			dispatch: window.wp.data.dispatch,
-			editorStore: window.wp.editor.store,
-			preferencesStore: window.wp.preferences.store,
-			registerCoreBlocks: window.wp.blockLibrary.registerCoreBlocks,
+			allowedBlockTypes,
+			wpDependencies: {
+				StrictMode: window.wp?.element?.StrictMode,
+				createRoot: window.wp?.element?.createRoot,
+				dispatch: window.wp?.data?.dispatch,
+				editorStore: window.wp?.editor?.store,
+				preferencesStore: window.wp?.preferences?.store,
+				registerCoreBlocks: window.wp?.blockLibrary?.registerCoreBlocks,
+			},
 		};
 	} catch ( err ) {
 		error( 'Error loading editor assets', err );
@@ -165,23 +172,6 @@ function loadAsset( el ) {
 			( 'script' === newNode.nodeName.toLowerCase() && ! newNode.src )
 		) {
 			resolve();
-		}
-	} );
-}
-
-/**
- * Unregister blocks that are disallowed.
- *
- * @param {Array} allowedBlockTypes The list of allowed block types.
- */
-function unregisterDisallowedBlocks( allowedBlockTypes ) {
-	if ( ! allowedBlockTypes ) {
-		return;
-	}
-
-	window.wp.blocks.getBlockTypes().forEach( ( block ) => {
-		if ( ! allowedBlockTypes.includes( block.name ) ) {
-			window.wp.blocks.unregisterBlockType( block.name );
 		}
 	} );
 }
