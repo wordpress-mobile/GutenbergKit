@@ -42,7 +42,7 @@ const shouldLog = ( level ) => {
 const error = ( message, data ) => {
 	if ( shouldLog( LOG_LEVELS.ERROR ) ) {
 		// eslint-disable-next-line no-console
-		console.error( `[ERROR] ${ message }`, data || '' );
+		console.error( `[GBK] ${ message }`, data || '' );
 	}
 };
 
@@ -54,7 +54,7 @@ const error = ( message, data ) => {
 const warn = ( message, data ) => {
 	if ( shouldLog( LOG_LEVELS.WARN ) ) {
 		// eslint-disable-next-line no-console
-		console.warn( `[WARN] ${ message }`, data || '' );
+		console.warn( `[GBK] ${ message }`, data || '' );
 	}
 };
 
@@ -66,7 +66,7 @@ const warn = ( message, data ) => {
 const info = ( message, data ) => {
 	if ( shouldLog( LOG_LEVELS.INFO ) ) {
 		// eslint-disable-next-line no-console
-		console.info( `[INFO] ${ message }`, data || '' );
+		console.info( `[GBK] ${ message }`, data || '' );
 	}
 };
 
@@ -78,7 +78,7 @@ const info = ( message, data ) => {
 const debug = ( message, data ) => {
 	if ( shouldLog( LOG_LEVELS.DEBUG ) ) {
 		// eslint-disable-next-line no-console
-		console.debug( `[DEBUG] ${ message }`, data || '' );
+		console.debug( `[GBK] ${ message }`, data || '' );
 	}
 };
 
