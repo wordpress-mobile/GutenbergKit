@@ -1,12 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { createRoot, StrictMode } from '@wordpress/element';
-import { dispatch } from '@wordpress/data';
-import { store as editorStore } from '@wordpress/editor';
-import { store as preferencesStore } from '@wordpress/preferences';
 import defaultEditorStyles from '@wordpress/block-editor/build-style/default-editor-styles.css?inline';
-import { registerCoreBlocks } from '@wordpress/block-library';
 
 /**
  * Internal dependencies
@@ -16,8 +11,27 @@ import { getGBKit, getPost } from './bridge';
 
 /**
  * Configure editor settings and styles, and render the editor.
+ *
+ * Dependency injection is used for various `@wordpress` package functions so
+ * that this utility can be used in both the local and remote editor, which
+ * rely upon ES modules and global variables, respectively.
+ *
+ * @param {Object}   wpDependencies                    - WordPress dependencies.
+ * @param {Function} wpDependencies.createRoot
+ * @param {Function} wpDependencies.StrictMode
+ * @param {Function} wpDependencies.dispatch
+ * @param {Function} wpDependencies.editorStore
+ * @param {Function} wpDependencies.preferencesStore
+ * @param {Function} wpDependencies.registerCoreBlocks
  */
-export function initializeEditor() {
+export function initializeEditor( {
+	createRoot,
+	StrictMode,
+	dispatch,
+	editorStore,
+	preferencesStore,
+	registerCoreBlocks,
+} ) {
 	const { themeStyles, hideTitle, editorSettings } = getGBKit();
 
 	const settings = editorSettings || {
