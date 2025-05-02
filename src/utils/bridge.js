@@ -233,7 +233,7 @@ export function logException(
  *
  * @return {Promise<GBKitConfig>} Promise that resolves with GBKit config or rejects after timeout.
  */
-export function waitForGBKit( timeoutMs = 3000 ) {
+export function awaitGBKitGlobal( timeoutMs = 3000 ) {
 	return new Promise( ( resolve, reject ) => {
 		const startTime = Date.now();
 

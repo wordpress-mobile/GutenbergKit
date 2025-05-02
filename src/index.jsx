@@ -11,14 +11,14 @@ import { registerCoreBlocks } from '@wordpress/block-library';
  * Internal dependencies
  */
 import { initializeApiFetch } from './utils/api-fetch';
-import { waitForGBKit, editorLoaded } from './utils/bridge';
+import { awaitGBKitGlobal, editorLoaded } from './utils/bridge';
 import { configureLocale } from './utils/localization';
 import './index.scss';
 import EditorLoadError from './components/editor-load-error';
 import { error } from './utils/logger';
 
 try {
-	await waitForGBKit();
+	await awaitGBKitGlobal();
 	initializeApiFetch();
 	await configureLocale();
 

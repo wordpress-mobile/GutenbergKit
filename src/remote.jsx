@@ -6,7 +6,7 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import { waitForGBKit } from './utils/bridge';
+import { awaitGBKitGlobal } from './utils/bridge';
 import { configureLocale } from './utils/localization';
 import { initializeApiFetch } from './utils/api-fetch';
 import { fetchEditorAssets } from './utils/remote-editor';
@@ -17,7 +17,7 @@ window.wp = window.wp || {};
 window.wp.apiFetch = apiFetch;
 
 try {
-	await waitForGBKit();
+	await awaitGBKitGlobal();
 	initializeApiFetch();
 	await configureLocale();
 	const wpDependencies = await fetchEditorAssets();
