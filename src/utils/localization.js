@@ -25,6 +25,10 @@ export async function configureLocale() {
  * @return {Promise<void>} A promise that resolves when translations are loaded.
  */
 export async function loadTranslations( locale ) {
+	if ( locale === DEFAULT_LOCALE ) {
+		return;
+	}
+
 	try {
 		debug( 'Loading translations for', locale );
 		const { default: translations } = await import(
@@ -36,3 +40,5 @@ export async function loadTranslations( locale ) {
 		error( 'Error loading translations', err );
 	}
 }
+
+const DEFAULT_LOCALE = 'en';
