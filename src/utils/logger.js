@@ -4,7 +4,6 @@ const LOG_LEVELS = {
 	WARN: 1,
 	INFO: 2,
 	DEBUG: 3,
-	VERBOSE: 4,
 };
 
 // Default log level
@@ -12,7 +11,7 @@ let currentLogLevel = process.env.LOG_LEVEL || LOG_LEVELS.INFO;
 
 /**
  * Set the current log level
- * @param {string} level - The log level to set (ERROR, WARN, INFO, DEBUG, VERBOSE)
+ * @param {string} level - The log level to set (ERROR, WARN, INFO, DEBUG)
  */
 const setLogLevel = ( level ) => {
 	if ( LOG_LEVELS[ level ] !== undefined ) {
@@ -83,16 +82,4 @@ const debug = ( message, data ) => {
 	}
 };
 
-/**
- * Log a verbose message
- * @param {string} message - The message to log
- * @param {*}      [data]  - Optional data to log
- */
-const verbose = ( message, data ) => {
-	if ( shouldLog( LOG_LEVELS.VERBOSE ) ) {
-		// eslint-disable-next-line no-console
-		console.log( `[VERBOSE] ${ message }`, data || '' );
-	}
-};
-
-export { setLogLevel, error, warn, info, debug, verbose, LOG_LEVELS };
+export { setLogLevel, error, warn, info, debug, LOG_LEVELS };

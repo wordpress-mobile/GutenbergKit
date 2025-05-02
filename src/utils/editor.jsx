@@ -9,7 +9,7 @@ import defaultEditorStyles from '@wordpress/block-editor/build-style/default-edi
  */
 import Layout from '../components/layout';
 import { getGBKit, getPost } from './bridge';
-import { verbose } from './logger';
+import { debug } from './logger';
 
 /**
  * Configure editor settings and styles, and render the editor.
@@ -77,5 +77,5 @@ export function unregisterDisallowedBlocks( allowedBlockTypes ) {
 		}
 	} );
 
-	verbose( 'Blocks unregistered:', unregisteredBlocks );
+	debug( 'Blocks unregistered:', unregisteredBlocks );
 }

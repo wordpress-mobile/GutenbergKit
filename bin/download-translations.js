@@ -8,7 +8,7 @@ import fetch from 'node-fetch';
 /**
  * Internal dependencies
  */
-import { info, error, verbose } from '../src/utils/logger.js';
+import { info, error, debug } from '../src/utils/logger.js';
 
 const TRANSLATIONS_DIR = path.join( process.cwd(), 'src/translations/data' );
 const SUPPORTED_LOCALES = [
@@ -97,9 +97,9 @@ async function downloadAllTranslations() {
 
 	for ( const locale of SUPPORTED_LOCALES ) {
 		try {
-			verbose( `Downloading translations for ${ locale }...` );
+			debug( `Downloading translations for ${ locale }...` );
 			await downloadTranslations( locale );
-			verbose( `✓ Downloaded translations for ${ locale }` );
+			debug( `✓ Downloaded translations for ${ locale }` );
 		} catch ( err ) {
 			error( `✗ Failed to download translations for ${ locale }:`, err );
 		}
