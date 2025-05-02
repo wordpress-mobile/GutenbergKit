@@ -11,9 +11,18 @@ import { getGBKit } from './bridge';
 /**
  * Fetch editor assets and return select WordPress dependencies.
  *
+ * @param {Object}  [options]                    Options for the fetch.
+ * @param {Array}   [options.allowedPackages]    Array of allowed package names to load.
+ * @param {Array}   [options.disallowedPackages] Array of disallowed package names to load.
+ * @param {boolean} [options.unregisterBlocks]   Whether to unregister disallowed blocks.
+ *
  * @return {Object} WordPress dependencies.
  */
-export async function fetchEditorAssets() {
+export async function loadEditorAssets( {
+	allowedPackages = [],
+	disallowedPackages = [],
+	unregisterBlocks = false,
+} = {} ) {
 	try {
 		const { siteApiRoot, siteApiNamespace } = getGBKit();
 		// TODO: Load editor assets within the host app
@@ -24,9 +33,23 @@ export async function fetchEditorAssets() {
 		} = await apiFetch( {
 			url: `${ siteApiRoot }wpcom/v2/${ siteApiNamespace[ 0 ] }/editor-assets`,
 		} );
-		await loadAssets( [ ...styles, ...scripts ].join( '' ) );
 
-		unregisterDisallowedBlocks( allowedBlockTypes );
+		if ( allowedPackages.length > 0 ) {
+			// Only load allowed packages.
+			await loadAssets( [ ...styles, ...scripts ].join( '' ), {
+				allowedPackages,
+			} );
+
+			return {};
+		}
+
+		await loadAssets( [ ...styles, ...scripts ].join( '' ), {
+			disallowedPackages,
+		} );
+
+		if ( unregisterBlocks ) {
+			unregisterDisallowedBlocks( allowedBlockTypes );
+		}
 
 		return {
 			StrictMode: window.wp.element.StrictMode,
@@ -47,14 +70,20 @@ export async function fetchEditorAssets() {
 /**
  * Load the asset files for a block
  *
- * @param {string} html The HTML content to parse for assets.
+ * @param {string}   html                         The HTML content to parse for assets.
+ * @param {Object}   [options]                    Options for the load.
+ * @param {string[]} [options.allowedPackages]    Array of allowed package names to load.
+ * @param {string[]} [options.disallowedPackages] Array of disallowed package names to load.
  */
-async function loadAssets( html ) {
+async function loadAssets(
+	html,
+	{ allowedPackages = [], disallowedPackages = [] } = {}
+) {
 	/**
 	 * Locally-sourced Gutenberg packages excluded from remote loading to avoid
 	 * conflicts.
 	 */
-	const localGutenbergPackages = [ 'api-fetch' ];
+	const localGutenbergPackages = [ 'api-fetch', ...disallowedPackages ];
 
 	const excludedScriptIDs = new RegExp(
 		localGutenbergPackages
@@ -62,11 +91,25 @@ async function loadAssets( html ) {
 			.join( '|' )
 	);
 
+	const allowedScriptIDs = allowedPackages.length
+		? new RegExp(
+				allowedPackages.map( ( pkg ) => `wp-${ pkg }-js` ).join( '|' )
+		  )
+		: null;
+
 	const doc = new window.DOMParser().parseFromString( html, 'text/html' );
 
 	const newAssets = Array.from(
 		doc.querySelectorAll( 'link[rel="stylesheet"],script' )
-	).filter( ( asset ) => asset.id && ! excludedScriptIDs.test( asset.id ) );
+	).filter( ( asset ) => {
+		if ( ! asset.id ) {
+			return false;
+		}
+		if ( allowedScriptIDs ) {
+			return allowedScriptIDs.test( asset.id );
+		}
+		return ! excludedScriptIDs.test( asset.id );
+	} );
 
 	/*
 	 * Load each asset in order, as they may depend upon an earlier loaded script.

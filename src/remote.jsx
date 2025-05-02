@@ -7,22 +7,31 @@ import apiFetch from '@wordpress/api-fetch';
  * Internal dependencies
  */
 import { awaitGBKitGlobal } from './utils/bridge';
-import { configureLocale } from './utils/localization';
 import { initializeApiFetch } from './utils/api-fetch';
-import { fetchEditorAssets } from './utils/remote-editor';
+import { loadEditorAssets } from './utils/remote-editor';
 import { error } from './utils/logger';
 import './index.scss';
 
 window.wp = window.wp || {};
 window.wp.apiFetch = apiFetch;
 
+const I18N_PACKAGES = [ 'i18n', 'hooks' ];
+
 try {
 	await awaitGBKitGlobal();
 	initializeApiFetch();
-	await configureLocale();
-	const wpDependencies = await fetchEditorAssets();
 
-	// Postpone importing `@wordpress` packages until after setting the locale
+	// Ensure the i18n packages are loaded, then set the locale before importing
+	// the rest of the packages.
+	await loadEditorAssets( { allowedPackages: I18N_PACKAGES } );
+	const { configureLocale } = await import( './utils/localization' );
+	await configureLocale();
+
+	// Load the rest of the packages, excluding the i18n packages.
+	const wpDependencies = await loadEditorAssets( {
+		disallowedPackages: I18N_PACKAGES,
+		unregisterBlocks: true,
+	} );
 	const { initializeEditor } = await import( './utils/editor' );
 	initializeEditor( wpDependencies );
 } catch ( err ) {
