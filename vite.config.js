@@ -15,6 +15,8 @@ export default defineConfig( {
 				manualChunks: {
 					// Chunk to avoid circular dependency
 					bridge: [ 'src/utils/bridge.js' ],
+					// The dynamic import of this module fails without this
+					editor: [ 'src/utils/editor.jsx' ],
 				},
 			},
 		},
