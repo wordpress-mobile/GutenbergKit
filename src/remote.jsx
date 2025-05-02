@@ -35,7 +35,7 @@ try {
 	const { initializeEditor } = await import( './utils/editor' );
 	initializeEditor( wpDependencies );
 } catch ( err ) {
-	error( err );
+	error( 'Error initializing editor', err );
 	// Fallback to the local editor and display a notice. Because the remote
 	// editor loading failed, it is more practical to rely upon the local
 	// editor's scripts and styles for displaying the notice.

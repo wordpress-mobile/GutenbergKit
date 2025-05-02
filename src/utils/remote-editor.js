@@ -7,6 +7,7 @@ import apiFetch from '@wordpress/api-fetch';
  * Internal dependencies
  */
 import { getGBKit } from './bridge';
+import { error } from './logger';
 
 /**
  * Fetch editor assets and return select WordPress dependencies.
@@ -59,7 +60,8 @@ export async function loadEditorAssets( {
 			preferencesStore: window.wp.preferences.store,
 			registerCoreBlocks: window.wp.blockLibrary.registerCoreBlocks,
 		};
-	} catch ( error ) {
+	} catch ( err ) {
+		error( 'Error loading editor assets', err );
 		// Fallback to the local editor and display a notice. Because the remote
 		// editor loading failed, it is more practical to rely upon the local
 		// editor's scripts and styles for displaying the notice.

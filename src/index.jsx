@@ -33,7 +33,7 @@ try {
 		registerCoreBlocks,
 	} );
 } catch ( err ) {
-	error( err );
+	error( 'Error initializing editor', err );
 	const root = document.getElementById( 'root' );
 	createRoot( root ).render(
 		<StrictMode>
