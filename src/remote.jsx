@@ -27,7 +27,8 @@ try {
 	const { configureLocale } = await import( './utils/localization' );
 	await configureLocale();
 
-	// Load the rest of the packages, excluding the i18n packages.
+	// Ensure the correct translation strings are used by postponing the import
+	// of the remaining `@wordpress` packages until after the locale is set.
 	const { allowedBlockTypes, wpDependencies } = await loadEditorAssets( {
 		disallowedPackages: I18N_PACKAGES,
 	} );
