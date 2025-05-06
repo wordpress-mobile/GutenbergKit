@@ -1,7 +1,6 @@
 /**
  * WordPress dependencies
  */
-import { getBlockTypes, unregisterBlockType } from '@wordpress/blocks';
 import defaultEditorStyles from '@wordpress/block-editor/build-style/default-editor-styles.css?inline';
 
 /**
@@ -9,7 +8,6 @@ import defaultEditorStyles from '@wordpress/block-editor/build-style/default-edi
  */
 import Layout from '../components/layout';
 import { getGBKit, getPost } from './bridge';
-import { debug } from './logger';
 
 /**
  * Configure editor settings and styles, and render the editor.
@@ -57,25 +55,4 @@ export function initializeEditor( {
 			<Layout post={ post } hideTitle={ hideTitle } />
 		</StrictMode>
 	);
-}
-
-/**
- * Unregister blocks that are disallowed.
- *
- * @param {Array} allowedBlockTypes The list of allowed block types.
- */
-export function unregisterDisallowedBlocks( allowedBlockTypes ) {
-	if ( ! allowedBlockTypes ) {
-		return;
-	}
-
-	const unregisteredBlocks = [];
-	getBlockTypes().forEach( ( block ) => {
-		if ( ! allowedBlockTypes.includes( block.name ) ) {
-			unregisterBlockType( block.name );
-			unregisteredBlocks.push( block.name );
-		}
-	} );
-
-	debug( 'Blocks unregistered:', unregisteredBlocks );
 }
