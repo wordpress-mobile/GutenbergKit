@@ -7,6 +7,14 @@ import defaultEditorStyles from '@wordpress/block-editor/build-style/default-edi
  * Internal dependencies
  */
 import Layout from '../components/layout';
+import {
+	createRoot as _createRoot,
+	StrictMode as _StrictMode,
+} from '@wordpress/element';
+import { dispatch as _dispatch } from '@wordpress/data';
+import { store as _editorStore } from '@wordpress/editor';
+import { store as _preferencesStore } from '@wordpress/preferences';
+import { registerCoreBlocks as _registerCoreBlocks } from '@wordpress/block-library';
 import { getGBKit, getPost } from './bridge';
 
 /**
@@ -25,13 +33,13 @@ import { getGBKit, getPost } from './bridge';
  * @param {Function} wpDependencies.registerCoreBlocks
  */
 export function initializeEditor( {
-	createRoot,
-	StrictMode,
-	dispatch,
-	editorStore,
-	preferencesStore,
-	registerCoreBlocks,
-} ) {
+	createRoot = _createRoot,
+	StrictMode = _StrictMode,
+	dispatch = _dispatch,
+	editorStore = _editorStore,
+	preferencesStore = _preferencesStore,
+	registerCoreBlocks = _registerCoreBlocks,
+} = {} ) {
 	const { themeStyles, hideTitle, editorSettings } = getGBKit();
 
 	const settings = editorSettings || {

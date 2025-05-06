@@ -19,6 +19,7 @@ import '@wordpress/editor/build-style/style.css';
 import { awaitGBKitGlobal } from './utils/bridge';
 import { initializeApiFetch } from './utils/api-fetch';
 import { unregisterDisallowedBlocks } from './utils/blocks';
+import { initializeEditor } from './utils/editor';
 import { loadEditorAssets } from './utils/remote-editor';
 import { error } from './utils/logger';
 import './index.scss';
@@ -43,8 +44,6 @@ try {
 	const { allowedBlockTypes, wpDependencies } = await loadEditorAssets( {
 		disallowedPackages: I18N_PACKAGES,
 	} );
-	const { initializeEditor } = await import( './utils/editor' );
-
 	initializeEditor( wpDependencies );
 	unregisterDisallowedBlocks( allowedBlockTypes );
 } catch ( err ) {
