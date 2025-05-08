@@ -19,14 +19,6 @@ export default defineConfig( {
 		rollupOptions: {
 			input: resolve( __dirname, 'src/remote.html' ),
 			external: externalize,
-			output: {
-				manualChunks: {
-					// Chunk to avoid circular dependency
-					bridge: [ 'src/utils/bridge.js' ],
-					// The dynamic import of this module fails without this
-					editor: [ 'src/utils/editor.jsx' ],
-				},
-			},
 		},
 		target: 'esnext',
 	},
