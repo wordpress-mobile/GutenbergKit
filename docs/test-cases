@@ -1,0 +1,119 @@
+# Mobile Editor Tests
+
+## Smoke Tests
+
+**Purpose:** Verify the editor's core functionality: writing/formatting text, uploading media, saving/publishing, and basic block manipulation.
+
+### S.1. Write and format text in a paragraph
+
+-   **Steps:**
+    -   Add a Paragraph block.
+    -   Type some text.
+    -   Apply bold, italic, and strikethrough formatting using the toolbar.
+-   **Expected Outcome:** Text is entered and formatting is applied as expected.
+
+### S.2. Merge and split blocks
+
+-   **Steps:**
+    -   Write a long paragraph.
+    -   Split it into two blocks using Enter.
+    -   Merge them back by deleting content at the start of the second block.
+-   **Expected Outcome:** Blocks split and merge as expected; content remains intact.
+
+### S.3. Undo/Redo Actions
+
+-   **Steps:**
+    -   Add, remove, and edit blocks and text.
+    -   Use Undo and Redo buttons.
+-   **Expected Outcome:** Editor correctly undoes and redoes actions, restoring previous states.
+
+### S.4. Upload an image
+
+-   **Steps:**
+    -   Add an Image block.
+    -   Tap "Choose from device" and select an image.
+-   **Expected Outcome:** Image uploads and displays in the block. Upload progress is shown if needed.
+
+### S.5. Upload an video
+
+-   **Steps:**
+    -   Add a Video block.
+    -   Tap "Choose from device" and select a video.
+-   **Expected Outcome:** Video uploads and displays in the block. Upload progress is shown if needed.
+
+### S.6. Reorder blocks
+
+-   **Steps:**
+    -   Add several content blocks to a post.
+    -   Select a block.
+    -   Use the up/down arrows in the block toolbar to relocate the block.
+-   **Expected Outcome:** The block ordering is updated as expected.
+
+### S.7. Add and preview embedded content
+
+-   **Steps:**
+    -   Add a Shortcode or Embed block.
+    -   Insert a YouTube or Twitter link.
+    -   Preview the post.
+-   **Expected Outcome:** Embedded content (e.g., YouTube video) displays correctly in preview.
+
+### S.8. Save and publish a post
+
+-   **Steps:**
+    -   Create a new post with text and media.
+    -   Save as draft, then publish.
+-   **Expected Outcome:** Post is saved and published successfully; content appears as expected.
+
+## Functionality Tests
+
+**Purpose:** Validate deeper content and formatting features, advanced block settings, and robust editor behaviors.
+
+### F.1. Text alignment options
+
+-   **Steps:**
+    -   Add a Paragraph or Verse block.
+    -   Type text and use alignment options (left, center, right).
+-   **Expected Outcome:** Selected alignment is applied to the block content.
+
+### F.2. Buttons block: add, remove, and style buttons
+
+-   **Steps:**
+    -   Add a Buttons block.
+    -   Add multiple buttons, remove one, and verify focus.
+    -   Apply alignment, background, and text color changes.
+-   **Expected Outcome:** Buttons can be added/removed; styles and alignment update as expected.
+
+### F.3. Color and gradient customization
+
+-   **Steps:**
+    -   Add a block supporting color (e.g., Buttons, Cover).
+    -   Open color settings, switch between solid and gradient, pick custom colors, and apply.
+-   **Expected Outcome:** Selected colors/gradients are applied; UI updates accordingly.
+
+### F.4. Gallery block: image uploads and captions
+
+-   **Steps:**
+    -   Add a Gallery block, upload multiple images.
+    -   Add captions to gallery and individual images, apply formatting.
+-   **Expected Outcome:** Images upload with progress bars; captions and formatting display as expected.
+
+### F.5. Reusable Block Insertion
+
+-   **Steps:**
+    -   Insert a reusable block from the inserter.
+    -   Attempt to edit the block.
+-   **Expected Outcome:** Reusable block content appears; warning is shown if editing is restricted.
+
+### F.6. Upload an audio file
+
+-   **Steps:**
+    -   Add an Audio block.
+    -   Tap "Choose from device" and select an audio file.
+-   **Expected Outcome:** Audio uploads and displays in the block. Upload progress is shown if needed.
+
+### F.7. Upload a file
+
+-   **Steps:**
+    -   Add a File block.
+    -   Tap "Choose from device" and select a file.
+-   **Expected Outcome:** File uploads, filename and download button appear when upload completes.
