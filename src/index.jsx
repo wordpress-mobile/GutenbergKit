@@ -30,9 +30,24 @@ try {
 
 	// Ensure the correct translation strings are used by postponing the import
 	// of `@wordpress` packages until after the locale is set.
-	const { initializeEditor } = await import( './utils/editor' );
-	initializeEditor();
+	//
+	// @TODO: A circular dependency prevents the use of async/await. Addressing
+	// the circular dependency with Rollup's `manualChunks` leads to
+	// unexpectedly preloading `@wordpress` modules, which results in missing
+	// locale strings due to `@wordpress` components relying upon global
+	// variables. Ideally, we remove the circular dependency.
+	import( './utils/editor' )
+		.then( ( { initializeEditor } ) => {
+			initializeEditor();
+		} )
+		.catch( ( err ) => {
+			handleError( err );
+		} );
 } catch ( err ) {
+	handleError( err );
+}
+
+function handleError( err ) {
 	error( 'Error initializing editor', err );
 	const root = document.getElementById( 'root' );
 	createRoot( root ).render(
