@@ -72,7 +72,7 @@ const SUPPORTED_LOCALES = [
  */
 async function prepareTranslations( force = false ) {
 	if ( force ) {
-		info( 'Downloading translations...' );
+		info( 'Ignoring cache, downloading translations...' );
 	} else {
 		info( 'Verifying translations...' );
 	}
