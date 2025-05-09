@@ -32,7 +32,7 @@ export async function loadTranslations( locale ) {
 	try {
 		debug( 'Loading translations for', locale );
 		const { default: translations } = await import(
-			`../translations/data/${ locale }.json`
+			`../translations/${ locale }.json`
 		);
 		setLocaleData( translations );
 	} catch ( err ) {

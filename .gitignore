@@ -195,4 +195,4 @@ local.properties
 # /ios/Sources/GutenbergKit/Gutenberg/remote.html
 
 # Translation files
-src/translations/data/
+src/translations/

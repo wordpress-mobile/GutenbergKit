@@ -10,7 +10,7 @@ import fetch from 'node-fetch';
  */
 import { info, error, debug } from '../src/utils/logger.js';
 
-const TRANSLATIONS_DIR = path.join( process.cwd(), 'src/translations/data' );
+const TRANSLATIONS_DIR = path.join( process.cwd(), 'src/translations' );
 const SUPPORTED_LOCALES = [
 	'ar', // Arabic
 	'bg', // Bulgarian
