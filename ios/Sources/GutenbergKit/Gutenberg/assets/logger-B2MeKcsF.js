@@ -1,0 +1,1 @@
+var n={};const r={ERROR:0,INFO:2,DEBUG:3};let t=n.LOG_LEVEL||r.INFO;const s=e=>e<=t,L=(e,o)=>{s(r.ERROR)&&console.error(`[GBK] ${e}`,o||"")},c=(e,o)=>{s(r.DEBUG)&&console.debug(`[GBK] ${e}`,o||"")};export{c as d,L as e};
