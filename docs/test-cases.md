@@ -4,58 +4,58 @@
 
 **Purpose:** Verify the editor's core functionality: writing/formatting text, uploading media, saving/publishing, and basic block manipulation.
 
-### S.1. Write and format text in a paragraph
+### S.1. Write and format text
 
 -   **Steps:**
-    -   Add a Paragraph block.
+    -   Add a Paragraph, List, or Heading block.
     -   Type some text.
     -   Apply bold, italic, and strikethrough formatting using the toolbar.
 -   **Expected Outcome:** Text is entered and formatting is applied as expected.
 
-### S.2. Merge and split blocks
+### S.2. Add a link to a paragraph
 
 -   **Steps:**
-    -   Write a long paragraph.
-    -   Split it into two blocks using Enter.
+    -   Add a Paragraph, List, or Heading block.
+    -   Type some text.
+    -   Apply a link to the text.
+-   **Expected Outcome:** Link is applied to the text as expected.
+
+### S.3. Merge and split blocks
+
+-   **Steps:**
+    -   Write a long paragraph or list of multiple items.
+    -   Place the cursor somwewhere in the middle and split the block into two blocks using Enter.
     -   Merge them back by deleting content at the start of the second block.
 -   **Expected Outcome:** Blocks split and merge as expected; content remains intact.
 
-### S.3. Undo/Redo Actions
+### S.4. Undo/Redo Actions
 
 -   **Steps:**
     -   Add, remove, and edit blocks and text.
     -   Use Undo and Redo buttons.
 -   **Expected Outcome:** Editor correctly undoes and redoes actions, restoring previous states.
 
-### S.4. Upload an image
+### S.5. Upload an image
 
 -   **Steps:**
     -   Add an Image block.
     -   Tap "Choose from device" and select an image.
 -   **Expected Outcome:** Image uploads and displays in the block. Upload progress is shown if needed.
 
-### S.5. Upload an video
+### S.6. Upload an video
 
 -   **Steps:**
     -   Add a Video block.
     -   Tap "Choose from device" and select a video.
 -   **Expected Outcome:** Video uploads and displays in the block. Upload progress is shown if needed.
 
-### S.6. Reorder blocks
+### S.7. Reorder blocks
 
 -   **Steps:**
     -   Add several content blocks to a post.
     -   Select a block.
     -   Use the up/down arrows in the block toolbar to relocate the block.
 -   **Expected Outcome:** The block ordering is updated as expected.
-
-### S.7. Add and preview embedded content
-
--   **Steps:**
-    -   Add a Shortcode or Embed block.
-    -   Insert a YouTube or Twitter link.
-    -   Preview the post.
--   **Expected Outcome:** Embedded content (e.g., YouTube video) displays correctly in preview.
 
 ### S.8. Save and publish a post
 
@@ -75,7 +75,15 @@
     -   Type text and use alignment options (left, center, right).
 -   **Expected Outcome:** Selected alignment is applied to the block content.
 
-### F.2. Buttons block: add, remove, and style buttons
+### F.2. Add and preview embedded content
+
+-   **Steps:**
+    -   Add a Shortcode or Embed block.
+    -   Insert a YouTube or Twitter link.
+    -   Preview the post.
+-   **Expected Outcome:** Embedded content (e.g., YouTube video) displays correctly in preview.
+
+### F.3. Buttons block: add, remove, and style buttons
 
 -   **Steps:**
     -   Add a Buttons block.
@@ -83,35 +91,34 @@
     -   Apply alignment, background, and text color changes.
 -   **Expected Outcome:** Buttons can be added/removed; styles and alignment update as expected.
 
-### F.3. Color and gradient customization
+### F.4. Color and gradient customization
 
 -   **Steps:**
     -   Add a block supporting color (e.g., Buttons, Cover).
     -   Open color settings, switch between solid and gradient, pick custom colors, and apply.
 -   **Expected Outcome:** Selected colors/gradients are applied; UI updates accordingly.
 
-### F.4. Gallery block: image uploads and captions
+### F.5. Gallery block: image uploads and captions
 
 -   **Steps:**
     -   Add a Gallery block, upload multiple images.
     -   Add captions to gallery and individual images, apply formatting.
--   **Expected Outcome:** Images upload with progress bars; captions and formatting display as expected.
+-   **Expected Outcome:** Images upload with progress indicators; captions and formatting display as expected.
 
-### F.5. Reusable Block Insertion
+### F.6. Pattern insertion
 
 -   **Steps:**
-    -   Insert a reusable block from the inserter.
-    -   Attempt to edit the block.
--   **Expected Outcome:** Reusable block content appears; warning is shown if editing is restricted.
+    -   Insert a pattern from the inserter.
+-   **Expected Outcome:** Pattern content appears.
 
-### F.6. Upload an audio file
+### F.7. Upload an audio file
 
 -   **Steps:**
     -   Add an Audio block.
     -   Tap "Choose from device" and select an audio file.
--   **Expected Outcome:** Audio uploads and displays in the block. Upload progress is shown if needed.
+-   **Expected Outcome:** Audio uploads and displays in the block. Progress indicator is shown if needed.
 
-### F.7. Upload a file
+### F.8. Upload a file
 
 -   **Steps:**
     -   Add a File block.
