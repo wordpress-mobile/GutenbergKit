@@ -24,7 +24,7 @@ export async function configureLocale() {
  * @param {string} locale The locale to load translations for.
  * @return {Promise<void>} A promise that resolves when translations are loaded.
  */
-export async function loadTranslations( locale ) {
+async function loadTranslations( locale ) {
 	if ( locale === DEFAULT_LOCALE ) {
 		return;
 	}
