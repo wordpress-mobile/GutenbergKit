@@ -5,6 +5,9 @@
 	"version": "0.2.0",
 	"type": "module",
 	"scripts": {
+		"clean": "npm run clean:dist && npm run clean:l10n",
+		"clean:dist": "rm -rf dist",
+		"clean:l10n": "rm -rf src/translations",
 		"dev": "vite --host",
 		"dev:remote": "vite --host --config vite.config.remote.js",
 		"build": "vite --emptyOutDir build && vite build --emptyOutDir=false --config vite.config.remote.js",
