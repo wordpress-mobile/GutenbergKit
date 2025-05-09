@@ -113,12 +113,16 @@
 
 ### F.7. Upload an audio file
 
+Known issue: [Audio block unable to upload expected file formats](https://github.com/wordpress-mobile/GutenbergKit/issues/123)
+
 -   **Steps:**
     -   Add an Audio block.
     -   Tap "Choose from device" and select an audio file.
 -   **Expected Outcome:** Audio uploads and displays in the block. Progress indicator is shown if needed.
 
 ### F.8. Upload a file
+
+Known issue: [File block unable to upload expected file formats](https://github.com/wordpress-mobile/GutenbergKit/issues/124)
 
 -   **Steps:**
     -   Add a File block.
