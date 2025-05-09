@@ -64,12 +64,45 @@ const SUPPORTED_LOCALES = [
 ];
 
 /**
+ * Prepare translations for all supported locales.
+ *
+ * @param {boolean} force Whether to force download even if cache exists.
+ *
+ * @return {Promise<void>} A promise that resolves when translations are prepared.
+ */
+async function prepareTranslations( force = false ) {
+	if ( force ) {
+		info( 'Downloading translations...' );
+	} else {
+		info( 'Verifying translations...' );
+	}
+
+	for ( const locale of SUPPORTED_LOCALES ) {
+		try {
+			await downloadTranslations( locale, force );
+		} catch ( err ) {
+			error( `✗ Failed to download translations for ${ locale }:`, err );
+		}
+	}
+
+	info( '✓ Translations ready!' );
+}
+
+/**
  * Downloads translations for a specific locale from translate.wordpress.org.
  *
- * @param {string} locale The locale to download translations for.
+ * @param {string}  locale The locale to download translations for.
+ * @param {boolean} force  Whether to force download even if cache exists.
+ *
  * @return {Promise<void>} A promise that resolves when translations are downloaded.
  */
-async function downloadTranslations( locale ) {
+async function downloadTranslations( locale, force = false ) {
+	if ( ! force && hasValidTranslations( locale ) ) {
+		debug( `Skipping download of cached translations for ${ locale }` );
+		return;
+	}
+	debug( `Downloading translations for ${ locale }...` );
+
 	const url = `https://translate.wordpress.org/projects/wp-plugins/gutenberg/dev/${ locale }/default/export-translations/?format=json`;
 	const response = await fetch( url );
 
@@ -87,28 +120,39 @@ async function downloadTranslations( locale ) {
 
 	// Write translations to file
 	fs.writeFileSync( outputPath, JSON.stringify( translations, null, 2 ) );
+	debug( `✓ Downloaded translations for ${ locale }` );
 }
 
 /**
- * Downloads translations for all supported locales.
+ * Checks if translations exist and are valid for a specific locale.
+ *
+ * @param {string} locale The locale to check.
+ *
+ * @return {boolean} Whether valid translations exist.
  */
-async function downloadAllTranslations() {
-	info( 'Downloading translations...' );
-
-	for ( const locale of SUPPORTED_LOCALES ) {
-		try {
-			debug( `Downloading translations for ${ locale }...` );
-			await downloadTranslations( locale );
-			debug( `✓ Downloaded translations for ${ locale }` );
-		} catch ( err ) {
-			error( `✗ Failed to download translations for ${ locale }:`, err );
-		}
+function hasValidTranslations( locale ) {
+	const filePath = path.join( TRANSLATIONS_DIR, `${ locale }.json` );
+	if ( ! fs.existsSync( filePath ) ) {
+		return false;
 	}
 
-	info( 'Translation download complete!' );
+	try {
+		const content = fs.readFileSync( filePath, 'utf8' );
+		const translations = JSON.parse( content );
+		return translations && typeof translations === 'object';
+	} catch ( err ) {
+		return false;
+	}
 }
 
-downloadAllTranslations().catch( ( err ) => {
-	error( 'Failed to download translations:', err );
+/**
+ * Main entry point for the script.
+ * Parses command line arguments and downloads translations.
+ */
+const forceDownload =
+	process.argv.includes( '--force' ) || process.argv.includes( '-f' );
+
+prepareTranslations( forceDownload ).catch( ( err ) => {
+	error( 'Failed to prepare translations:', err );
 	process.exit( 1 );
 } );

@@ -10,10 +10,9 @@
 		"build": "vite --emptyOutDir build && vite build --emptyOutDir=false --config vite.config.remote.js",
 		"lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
 		"format": "prettier --write .",
-		"postinstall": "patch-package",
-		"preview": "vite preview --host",
-		"download-translations": "node bin/download-translations.js",
-		"prebuild": "npm run download-translations"
+		"postinstall": "patch-package && npm run prep-translations",
+		"prep-translations": "node bin/prep-translations.js",
+		"preview": "vite preview --host"
 	},
 	"dependencies": {
 		"@wordpress/api-fetch": "^7.10",
