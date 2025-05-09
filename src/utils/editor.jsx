@@ -15,6 +15,7 @@ import { dispatch as _dispatch } from '@wordpress/data';
 import { store as _editorStore } from '@wordpress/editor';
 import { store as _preferencesStore } from '@wordpress/preferences';
 import { registerCoreBlocks as _registerCoreBlocks } from '@wordpress/block-library';
+import { unregisterDisallowedBlocks } from './blocks';
 import { getGBKit, getPost } from './bridge';
 
 /**
@@ -31,15 +32,19 @@ import { getGBKit, getPost } from './bridge';
  * @param {Function} wpDependencies.editorStore
  * @param {Function} wpDependencies.preferencesStore
  * @param {Function} wpDependencies.registerCoreBlocks
+ * @param {Array}    [allowedBlockTypes]
  */
-export function initializeEditor( {
-	createRoot = _createRoot,
-	StrictMode = _StrictMode,
-	dispatch = _dispatch,
-	editorStore = _editorStore,
-	preferencesStore = _preferencesStore,
-	registerCoreBlocks = _registerCoreBlocks,
-} = {} ) {
+export function initializeEditor(
+	{
+		createRoot = _createRoot,
+		StrictMode = _StrictMode,
+		dispatch = _dispatch,
+		editorStore = _editorStore,
+		preferencesStore = _preferencesStore,
+		registerCoreBlocks = _registerCoreBlocks,
+	} = {},
+	allowedBlockTypes
+) {
 	const { themeStyles, hideTitle, editorSettings } = getGBKit();
 
 	const settings = editorSettings || {
@@ -56,6 +61,7 @@ export function initializeEditor( {
 	} );
 
 	registerCoreBlocks();
+	unregisterDisallowedBlocks( allowedBlockTypes );
 	const post = getPost();
 
 	createRoot( document.getElementById( 'root' ) ).render(

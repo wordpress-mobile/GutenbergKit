@@ -31,11 +31,15 @@ try {
 	// Ensure the correct translation strings are used by postponing the import
 	// of `@wordpress` packages until after the locale is set.
 	//
-	// @TODO: A circular dependency prevents the use of async/await. Addressing
-	// the circular dependency with Rollup's `manualChunks` leads to
-	// unexpectedly preloading `@wordpress` modules, which results in missing
-	// locale strings due to `@wordpress` components relying upon global
-	// variables. Ideally, we remove the circular dependency.
+	// @TODO: A circular dependency prevents the use of async/await. Ideally, we
+	// address the circular dependency using Rollup's `manualChunks`. However, a
+	// very specific configuration is necessary to ensure that no circular
+	// dependencies are created--includeing from injected Vite helpers.
+	//
+	// See:
+	// - https://github.com/vitejs/vite/issues/18551
+	// - https://github.com/vitejs/vite/issues/13952
+	// - https://github.com/vitejs/vite/issues/5189#issuecomment-2175410148
 	import( './utils/editor' )
 		.then( ( { initializeEditor } ) => {
 			initializeEditor();

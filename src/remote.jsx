@@ -18,8 +18,6 @@ import '@wordpress/editor/build-style/style.css';
  */
 import { awaitGBKitGlobal } from './utils/bridge';
 import { initializeApiFetch } from './utils/api-fetch';
-import { unregisterDisallowedBlocks } from './utils/blocks';
-import { initializeEditor } from './utils/editor';
 import { loadEditorAssets } from './utils/remote-editor';
 import { error } from './utils/logger';
 import './index.scss';
@@ -44,8 +42,8 @@ try {
 	const { allowedBlockTypes, wpDependencies } = await loadEditorAssets( {
 		disallowedPackages: I18N_PACKAGES,
 	} );
-	initializeEditor( wpDependencies );
-	unregisterDisallowedBlocks( allowedBlockTypes );
+	const { initializeEditor } = await import( './utils/editor' );
+	initializeEditor( wpDependencies, allowedBlockTypes );
 } catch ( err ) {
 	error( 'Error initializing editor', err );
 	// Fallback to the local editor and display a notice. Because the remote
