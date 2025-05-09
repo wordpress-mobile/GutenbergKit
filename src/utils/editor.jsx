@@ -7,14 +7,11 @@ import defaultEditorStyles from '@wordpress/block-editor/build-style/default-edi
  * Internal dependencies
  */
 import Layout from '../components/layout';
-import {
-	createRoot as _createRoot,
-	StrictMode as _StrictMode,
-} from '@wordpress/element';
-import { dispatch as _dispatch } from '@wordpress/data';
-import { store as _editorStore } from '@wordpress/editor';
-import { store as _preferencesStore } from '@wordpress/preferences';
-import { registerCoreBlocks as _registerCoreBlocks } from '@wordpress/block-library';
+import { createRoot, StrictMode } from '@wordpress/element';
+import { dispatch } from '@wordpress/data';
+import { store as editorStore } from '@wordpress/editor';
+import { store as preferencesStore } from '@wordpress/preferences';
+import { registerCoreBlocks } from '@wordpress/block-library';
 import { unregisterDisallowedBlocks } from './blocks';
 import { getGBKit, getPost } from './bridge';
 
@@ -25,26 +22,10 @@ import { getGBKit, getPost } from './bridge';
  * that this utility can be used in both the local and remote editor, which
  * rely upon ES modules and global variables, respectively.
  *
- * @param {Object}   wpDependencies                    - WordPress dependencies.
- * @param {Function} wpDependencies.createRoot
- * @param {Function} wpDependencies.StrictMode
- * @param {Function} wpDependencies.dispatch
- * @param {Function} wpDependencies.editorStore
- * @param {Function} wpDependencies.preferencesStore
- * @param {Function} wpDependencies.registerCoreBlocks
- * @param {Array}    [allowedBlockTypes]
+ * @param {Object} [options]
+ * @param {Array}  [options.allowedBlockTypes]
  */
-export function initializeEditor(
-	{
-		createRoot = _createRoot,
-		StrictMode = _StrictMode,
-		dispatch = _dispatch,
-		editorStore = _editorStore,
-		preferencesStore = _preferencesStore,
-		registerCoreBlocks = _registerCoreBlocks,
-	} = {},
-	allowedBlockTypes
-) {
+export function initializeEditor( { allowedBlockTypes } = {} ) {
 	const { themeStyles, hideTitle, editorSettings } = getGBKit();
 
 	const settings = editorSettings || {

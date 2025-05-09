@@ -39,11 +39,11 @@ try {
 
 	// Ensure the correct translation strings are used by postponing the import
 	// of the remaining `@wordpress` packages until after the locale is set.
-	const { allowedBlockTypes, wpDependencies } = await loadEditorAssets( {
+	const { allowedBlockTypes } = await loadEditorAssets( {
 		disallowedPackages: I18N_PACKAGES,
 	} );
 	const { initializeEditor } = await import( './utils/editor' );
-	initializeEditor( wpDependencies, allowedBlockTypes );
+	initializeEditor( { allowedBlockTypes } );
 } catch ( err ) {
 	error( 'Error initializing editor', err );
 	// Fallback to the local editor and display a notice. Because the remote
