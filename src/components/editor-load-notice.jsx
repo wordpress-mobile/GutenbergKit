@@ -18,12 +18,12 @@ export default function EditorLoadNotice( { className } ) {
 
 	const actions = [
 		{
-			label: 'Retry',
+			label: __( 'Retry', 'gutenberg-kit' ),
 			onClick: () => ( window.location.href = 'remote.html' ),
 			variant: 'primary',
 		},
 		{
-			label: 'Dismiss',
+			label: __( 'Dismiss', 'gutenberg-kit' ),
 			onClick: clearNotice,
 			variant: 'secondary',
 		},
@@ -62,12 +62,14 @@ function useEditorLoadNotice() {
 		switch ( error ) {
 			case REMOTE_EDITOR_LOAD_ERROR:
 				message = __(
-					"Oops! We couldn't load your site's editor and plugins. Don't worry, you can use the default editor for now."
+					"Oops! We couldn't load your site's editor and plugins. Don't worry, you can use the default editor for now.",
+					'gutenberg-kit'
 				);
 				break;
 			case GBKIT_GLOBAL_UNAVAILABLE:
 				message = __(
-					"Oops! Configuration for your site editor was unavailable. Don't worry, you can use the default editor for now."
+					"Oops! Configuration for your site editor was unavailable. Don't worry, you can use the default editor for now.",
+					'gutenberg-kit'
 				);
 				break;
 			default:

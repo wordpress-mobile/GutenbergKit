@@ -5,12 +5,16 @@
 	"version": "0.2.0",
 	"type": "module",
 	"scripts": {
+		"clean": "npm run clean:dist && npm run clean:l10n",
+		"clean:dist": "rm -rf dist",
+		"clean:l10n": "rm -rf src/translations",
 		"dev": "vite --host",
 		"dev:remote": "vite --host --config vite.config.remote.js",
 		"build": "vite --emptyOutDir build && vite build --emptyOutDir=false --config vite.config.remote.js",
 		"lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
 		"format": "prettier --write .",
-		"postinstall": "patch-package",
+		"postinstall": "patch-package && npm run prep-translations",
+		"prep-translations": "node bin/prep-translations.js",
 		"preview": "vite preview --host"
 	},
 	"dependencies": {
@@ -45,6 +49,7 @@
 		"eslint": "^8.57",
 		"eslint-plugin-react-refresh": "^0.4.19",
 		"magic-string": "^0.30.17",
+		"node-fetch": "^3.3.2",
 		"patch-package": "^8.0.0",
 		"prettier": "npm:wp-prettier@^3.0.3",
 		"sass-embedded": "^1.86.3",

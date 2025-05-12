@@ -33,7 +33,7 @@ export default function DefaultBlockAppender() {
 
 	return (
 		<button
-			aria-label={ __( 'Add paragraph block' ) }
+			aria-label={ __( 'Add paragraph block', 'gutenberg-kit' ) }
 			onClick={ onAddParagraphBlock }
 			className="gutenberg-kit-default-block-appender"
 		></button>

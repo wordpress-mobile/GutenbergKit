@@ -271,6 +271,7 @@ class GutenbergView : WebView {
                 "themeStyles": ${configuration.themeStyles},
                 "hideTitle": ${configuration.hideTitle},
                 "editorSettings": $editorSettings,
+                "locale": "${configuration.locale}",
                 ${if (configuration.postId != null) """
                 "post": {
                     "id": ${configuration.postId},

@@ -10,12 +10,18 @@ define XCODEBUILD_CMD
 endef
 
 npm-dependencies:
-	@if [ "$(SKIP_DEPS)" != "true" ]; then \
+	@if [ "$(SKIP_DEPS)" != "true" ] && [ "$(SKIP_DEPS)" != "1" ]; then \
 		echo "--- :npm: Installing NPM Dependencies"; \
 		npm ci; \
 	fi
 
-build: npm-dependencies
+prep-translations:
+	@if [ "$(SKIP_L10N)" != "true" ] && [ "$(SKIP_L10N)" != "1" ]; then \
+		echo "--- :npm: Preparing Translations"; \
+		npm run prep-translations -- --force; \
+	fi
+
+build: npm-dependencies prep-translations
 	echo "--- :node: Building Gutenberg"
 
 	npm run build

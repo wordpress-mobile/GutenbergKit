@@ -1,7 +1,7 @@
 /**
  * Internal dependencies
  */
-import parseException from './parse-exception';
+import parseException from './exception-parser';
 
 /**
  * Notifies the native host that the editor has loaded.
@@ -233,7 +233,7 @@ export function logException(
  *
  * @return {Promise<GBKitConfig>} Promise that resolves with GBKit config or rejects after timeout.
  */
-export function waitForGBKit( timeoutMs = 3000 ) {
+export function awaitGBKitGlobal( timeoutMs = 3000 ) {
 	return new Promise( ( resolve, reject ) => {
 		const startTime = Date.now();
 

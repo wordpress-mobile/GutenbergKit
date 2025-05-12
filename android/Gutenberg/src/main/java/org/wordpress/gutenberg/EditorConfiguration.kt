@@ -60,7 +60,8 @@ open class EditorConfiguration constructor(
     val namespaceExcludedPaths: Array<String>,
     val authHeader: String,
     val webViewGlobals: List<WebViewGlobal>,
-    val editorSettings: String?
+    val editorSettings: String?,
+    val locale: String?
 ) : Parcelable {
     companion object {
         @JvmStatic
@@ -82,6 +83,7 @@ open class EditorConfiguration constructor(
         private var authHeader: String = ""
         private var webViewGlobals: List<WebViewGlobal> = emptyList()
         private var editorSettings: String? = null
+        private var locale: String? = "en"
 
         fun setTitle(title: String) = apply { this.title = title }
         fun setContent(content: String) = apply { this.content = content }
@@ -97,6 +99,7 @@ open class EditorConfiguration constructor(
         fun setAuthHeader(authHeader: String) = apply { this.authHeader = authHeader }
         fun setWebViewGlobals(webViewGlobals: List<WebViewGlobal>) = apply { this.webViewGlobals = webViewGlobals }
         fun setEditorSettings(editorSettings: String?) = apply { this.editorSettings = editorSettings }
+        fun setLocale(locale: String?) = apply { this.locale = locale }
 
         fun build(): EditorConfiguration = EditorConfiguration(
             title = title,
@@ -112,7 +115,8 @@ open class EditorConfiguration constructor(
             namespaceExcludedPaths = namespaceExcludedPaths,
             authHeader = authHeader,
             webViewGlobals = webViewGlobals,
-            editorSettings = editorSettings
+            editorSettings = editorSettings,
+            locale = locale
         )
     }
 
@@ -136,6 +140,7 @@ open class EditorConfiguration constructor(
         if (authHeader != other.authHeader) return false
         if (webViewGlobals != other.webViewGlobals) return false
         if (editorSettings != other.editorSettings) return false
+        if (locale != other.locale) return false
 
         return true
     }
@@ -155,6 +160,7 @@ open class EditorConfiguration constructor(
         result = 31 * result + authHeader.hashCode()
         result = 31 * result + webViewGlobals.hashCode()
         result = 31 * result + (editorSettings?.hashCode() ?: 0)
+        result = 31 * result + (locale?.hashCode() ?: 0)
         return result
     }
 }
