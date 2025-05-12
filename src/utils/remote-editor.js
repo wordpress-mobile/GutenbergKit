@@ -10,6 +10,12 @@ import { getGBKit } from './bridge';
 import { error } from './logger';
 
 /**
+ * Cache for editor assets to avoid unnecessary network requests
+ * @type {Object|null}
+ */
+let editorAssetsCache = null;
+
+/**
  * @typedef {Object} EditorAssetConfig
  *
  * @property {string[]} allowedBlockTypes Array of allowed block types provided by the API.
@@ -29,30 +35,27 @@ export async function loadEditorAssets( {
 	disallowedPackages = [],
 } = {} ) {
 	try {
+		// Return cached response if available
+		if ( editorAssetsCache ) {
+			return processEditorAssets( editorAssetsCache, {
+				allowedPackages,
+				disallowedPackages,
+			} );
+		}
+
 		const { siteApiRoot, siteApiNamespace } = getGBKit();
 		// TODO: Load editor assets within the host app
-		const {
-			styles,
-			scripts,
-			allowed_block_types: allowedBlockTypes,
-		} = await apiFetch( {
+		const response = await apiFetch( {
 			url: `${ siteApiRoot }wpcom/v2/${ siteApiNamespace[ 0 ] }/editor-assets`,
 		} );
 
-		if ( allowedPackages.length > 0 ) {
-			// Only load allowed packages.
-			await loadAssets( [ ...styles, ...scripts ].join( '' ), {
-				allowedPackages,
-			} );
+		// Cache the response
+		editorAssetsCache = response;
 
-			return { allowedBlockTypes };
-		}
-
-		await loadAssets( [ ...styles, ...scripts ].join( '' ), {
+		return processEditorAssets( response, {
+			allowedPackages,
 			disallowedPackages,
 		} );
-
-		return { allowedBlockTypes };
 	} catch ( err ) {
 		error( 'Error loading editor assets', err );
 		// Fallback to the local editor and display a notice. Because the remote
@@ -60,6 +63,40 @@ export async function loadEditorAssets( {
 		// editor's scripts and styles for displaying the notice.
 		window.location.href = 'index.html?error=remote_editor_load_error';
 	}
+}
+
+/**
+ * Process editor assets and return the configuration
+ *
+ * @param {Object}   assets                     The assets to process
+ * @param {string[]} assets.styles              Array of style assets
+ * @param {string[]} assets.scripts             Array of script assets
+ * @param {string[]} assets.allowedBlockTypes   Array of allowed block types
+ * @param {Object}   options                    Processing options
+ * @param {string[]} options.allowedPackages    Array of allowed package names
+ * @param {string[]} options.disallowedPackages Array of disallowed package names
+ *
+ * @return {EditorAssetConfig} Processed editor configuration
+ */
+async function processEditorAssets(
+	assets,
+	{ allowedPackages = [], disallowedPackages = [] } = {}
+) {
+	const { styles, scripts, allowed_block_types: allowedBlockTypes } = assets;
+
+	if ( allowedPackages.length > 0 ) {
+		await loadAssets( [ ...styles, ...scripts ].join( '' ), {
+			allowedPackages,
+		} );
+
+		return { allowedBlockTypes };
+	}
+
+	await loadAssets( [ ...styles, ...scripts ].join( '' ), {
+		disallowedPackages,
+	} );
+
+	return { allowedBlockTypes };
 }
 
 /**
