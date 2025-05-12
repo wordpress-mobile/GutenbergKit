@@ -13,7 +13,6 @@ import { error } from './logger';
  * @typedef {Object} EditorAssetConfig
  *
  * @property {string[]} allowedBlockTypes Array of allowed block types provided by the API.
- * @property {Object}   wpDependencies    WordPress dependencies, empty when allowedPackages is provided.
  */
 
 /**
@@ -23,7 +22,7 @@ import { error } from './logger';
  * @param {Array}  [options.allowedPackages]    Array of allowed package names to load.
  * @param {Array}  [options.disallowedPackages] Array of disallowed package names to load.
  *
- * @return {EditorAssetConfig} Allowed block types and WordPress dependencies.
+ * @return {EditorAssetConfig} Editor configuration provided by the API.
  */
 export async function loadEditorAssets( {
 	allowedPackages = [],
@@ -46,27 +45,14 @@ export async function loadEditorAssets( {
 				allowedPackages,
 			} );
 
-			return {
-				allowedBlockTypes,
-				wpDependencies: {},
-			};
+			return { allowedBlockTypes };
 		}
 
 		await loadAssets( [ ...styles, ...scripts ].join( '' ), {
 			disallowedPackages,
 		} );
 
-		return {
-			allowedBlockTypes,
-			wpDependencies: {
-				StrictMode: window.wp?.element?.StrictMode,
-				createRoot: window.wp?.element?.createRoot,
-				dispatch: window.wp?.data?.dispatch,
-				editorStore: window.wp?.editor?.store,
-				preferencesStore: window.wp?.preferences?.store,
-				registerCoreBlocks: window.wp?.blockLibrary?.registerCoreBlocks,
-			},
-		};
+		return { allowedBlockTypes };
 	} catch ( err ) {
 		error( 'Error loading editor assets', err );
 		// Fallback to the local editor and display a notice. Because the remote
