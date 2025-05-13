@@ -209,35 +209,25 @@ class GutenbergView : WebView {
             ): Boolean {
                 filePathCallback = newFilePathCallback
                 val allowMultiple = fileChooserParams?.mode == FileChooserParams.MODE_OPEN_MULTIPLE
-                val mimeTypes = if (fileChooserParams?.acceptTypes == null ||
-                    (fileChooserParams.acceptTypes.size == 1 && fileChooserParams.acceptTypes[0] == "")) {
-                    arrayOf("*/*")
-                } else {
-                    fileChooserParams.acceptTypes
+                // Only accept MIME types if they are not empty strings
+                val mimeTypes = fileChooserParams?.acceptTypes?.takeUnless { it.size == 1 && it[0].isEmpty() }
+
+                val intent = Intent(Intent.ACTION_GET_CONTENT)
+                intent.setType("*/*")
+                intent.addCategory(Intent.CATEGORY_OPENABLE)
+
+                if (mimeTypes != null) {
+                    intent.setType(mimeTypes[0])
+                    intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
                 }
 
-                val intents = mutableListOf<Intent>()
-
-                val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                    addCategory(Intent.CATEGORY_OPENABLE)
-                    type = mimeTypes[0] // Use first MIME type as primary
-                    putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
-                    if (allowMultiple) {
-                        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-                    }
+                if (allowMultiple) {
+                    intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
                 }
-                intents.add(intent)
 
                 onFileChooserRequested?.let { callback ->
                     handler.post {
-                        try {
-                            val chooserIntent = Intent.createChooser(intents[0], "Select Files")
-                            chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, intents.subList(1, intents.size).toTypedArray())
-                            callback(chooserIntent, pickImageRequestCode)
-                            Log.d("GutenbergView", "File chooser intent sent successfully")
-                        } catch (e: Exception) {
-                            Log.e("GutenbergView", "Error launching file chooser", e)
-                        }
+                        callback(Intent.createChooser(intent, "Select Files"), pickImageRequestCode)
                     }
                 }
                 return true
