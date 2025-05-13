@@ -209,23 +209,35 @@ class GutenbergView : WebView {
             ): Boolean {
                 filePathCallback = newFilePathCallback
                 val allowMultiple = fileChooserParams?.mode == FileChooserParams.MODE_OPEN_MULTIPLE
-                val mimeTypes = fileChooserParams?.acceptTypes
-
-                val intent = Intent(Intent.ACTION_PICK).apply {
-                    type = "*/*"  // Default to all types
+                val mimeTypes = if (fileChooserParams?.acceptTypes == null ||
+                    (fileChooserParams.acceptTypes.size == 1 && fileChooserParams.acceptTypes[0] == "")) {
+                    arrayOf("*/*")
+                } else {
+                    fileChooserParams.acceptTypes
                 }
 
-                if (!mimeTypes.isNullOrEmpty()) {
-                    intent.type = mimeTypes.joinToString("|")
-                }
+                val intents = mutableListOf<Intent>()
 
-                if (allowMultiple) {
-                    intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = mimeTypes[0] // Use first MIME type as primary
+                    putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
+                    if (allowMultiple) {
+                        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                    }
                 }
+                intents.add(intent)
 
                 onFileChooserRequested?.let { callback ->
                     handler.post {
-                        callback(Intent.createChooser(intent, "Select Files"), pickImageRequestCode)
+                        try {
+                            val chooserIntent = Intent.createChooser(intents[0], "Select Files")
+                            chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, intents.subList(1, intents.size).toTypedArray())
+                            callback(chooserIntent, pickImageRequestCode)
+                            Log.d("GutenbergView", "File chooser intent sent successfully")
+                        } catch (e: Exception) {
+                            Log.e("GutenbergView", "Error launching file chooser", e)
+                        }
                     }
                 }
                 return true
