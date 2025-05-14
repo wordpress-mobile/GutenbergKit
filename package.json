@@ -15,7 +15,8 @@
 		"format": "prettier --write .",
 		"postinstall": "patch-package && npm run prep-translations",
 		"prep-translations": "node bin/prep-translations.js",
-		"preview": "vite preview --host"
+		"preview": "vite preview --host",
+		"test": "vitest"
 	},
 	"dependencies": {
 		"@wordpress/api-fetch": "^7.10",
