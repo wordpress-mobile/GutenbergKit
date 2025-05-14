@@ -209,15 +209,13 @@ class GutenbergView : WebView {
             ): Boolean {
                 filePathCallback = newFilePathCallback
                 val allowMultiple = fileChooserParams?.mode == FileChooserParams.MODE_OPEN_MULTIPLE
-                val mimeTypes = fileChooserParams?.acceptTypes
+                // Only use `acceptTypes` if it is not merely an empty string
+                val mimeTypes = fileChooserParams?.acceptTypes?.takeUnless { it.size == 1 && it[0].isEmpty() } ?: arrayOf("*/*")
 
-                val intent = Intent(Intent.ACTION_PICK).apply {
-                    type = "*/*"  // Default to all types
-                }
-
-                if (!mimeTypes.isNullOrEmpty()) {
-                    intent.type = mimeTypes.joinToString("|")
-                }
+                val intent = Intent(Intent.ACTION_GET_CONTENT)
+                intent.setType(mimeTypes[0])
+                intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
+                intent.addCategory(Intent.CATEGORY_OPENABLE)
 
                 if (allowMultiple) {
                     intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
