@@ -24,6 +24,7 @@ describe( 'EditorLoadNotice', () => {
 
 	afterEach( () => {
 		vi.useRealTimers();
+		vi.unstubAllGlobals();
 	} );
 
 	it( 'renders nothing when no error is present', () => {
