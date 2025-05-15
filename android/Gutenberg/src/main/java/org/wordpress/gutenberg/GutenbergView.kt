@@ -360,7 +360,7 @@ class GutenbergView : WebView {
         fun onLogJsException(exception: GutenbergJsException)
     }
 
-    fun getTitleAndContent(originalContent: CharSequence, callback: TitleAndContentCallback, completeComposition: Boolean = true) {
+    fun getTitleAndContent(originalContent: CharSequence, callback: TitleAndContentCallback, completeComposition: Boolean = false) {
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
             return
