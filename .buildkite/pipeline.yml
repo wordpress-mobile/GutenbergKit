@@ -15,6 +15,10 @@ steps:
       command: make lint-js
       plugins: *plugins
 
+    - label: ':javascript: Test JavaScript'
+      command: make test-js
+      plugins: *plugins
+
     - label: ':android: Publish Android Library'
       command: |
           make build

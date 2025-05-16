@@ -44,6 +44,9 @@ fmt-js: npm-dependencies
 lint-js: npm-dependencies
 	npm run lint
 
+test-js: npm-dependencies
+	npm run test -- run
+
 local-android-library: build
 	echo "--- :android: Building Library"
 	./android/gradlew -p ./android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3
