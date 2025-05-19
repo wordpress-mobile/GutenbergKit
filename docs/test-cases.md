@@ -40,14 +40,14 @@
 -   **Steps:**
     -   Add an Image block.
     -   Tap "Choose from device" and select an image.
--   **Expected Outcome:** Image uploads and displays in the block. Upload progress is shown if needed.
+-   **Expected Outcome:** Image uploads and displays in the block. An activity indicator is shown while the image is uploading.
 
 ### S.6. Upload an video
 
 -   **Steps:**
     -   Add a Video block.
     -   Tap "Choose from device" and select a video.
--   **Expected Outcome:** Video uploads and displays in the block. Upload progress is shown if needed.
+-   **Expected Outcome:** Video uploads and displays in the block. An activity indicator is shown while the video is uploading.
 
 ### S.7. Reorder blocks
 
@@ -103,7 +103,7 @@
 -   **Steps:**
     -   Add a Gallery block, upload multiple images.
     -   Add captions to gallery and individual images, apply formatting.
--   **Expected Outcome:** Images upload with progress indicators; captions and formatting display as expected.
+-   **Expected Outcome:** An activity indicator is shown while the images are uploading. Captions and formatting display as expected.
 
 ### F.6. Pattern insertion
 
@@ -118,7 +118,7 @@ Known issue: [Audio block unable to upload expected file formats](https://github
 -   **Steps:**
     -   Add an Audio block.
     -   Tap "Choose from device" and select an audio file.
--   **Expected Outcome:** Audio uploads and displays in the block. Progress indicator is shown if needed.
+-   **Expected Outcome:** Audio uploads and displays in the block. An activity indicator is shown while the audio is uploading.
 
 ### F.8. Upload a file
 
