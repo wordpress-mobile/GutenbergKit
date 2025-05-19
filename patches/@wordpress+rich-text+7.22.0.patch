@@ -1,0 +1,16 @@
+diff --git a/node_modules/@wordpress/rich-text/build-module/component/event-listeners/prevent-focus-capture.js b/node_modules/@wordpress/rich-text/build-module/component/event-listeners/prevent-focus-capture.js
+index 3b885f5..c2ea3d0 100644
+--- a/node_modules/@wordpress/rich-text/build-module/component/event-listeners/prevent-focus-capture.js
++++ b/node_modules/@wordpress/rich-text/build-module/component/event-listeners/prevent-focus-capture.js
+@@ -36,9 +36,11 @@ export function preventFocusCapture() {
+     }
+     defaultView.addEventListener('pointerdown', onPointerDown);
+     defaultView.addEventListener('pointerup', onPointerUp);
++    defaultView.addEventListener('pointercancel', onPointerUp);
+     return () => {
+       defaultView.removeEventListener('pointerdown', onPointerDown);
+       defaultView.removeEventListener('pointerup', onPointerUp);
++      defaultView.removeEventListener('pointercancel', onPointerUp);
+     };
+   };
+ }
