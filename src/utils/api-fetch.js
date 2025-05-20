@@ -2,6 +2,7 @@
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
+import { getQueryArg } from '@wordpress/url';
 
 /**
  * Internal dependencies
@@ -26,6 +27,7 @@ export function initializeApiFetch() {
 	apiFetch.use( createHeadersMiddleware( authHeader ) );
 	apiFetch.use( filterEndpointsMiddleware );
 	apiFetch.use( mediaUploadMiddleware );
+	apiFetch.use( transformOEmbedApiResponse );
 	apiFetch.use( apiFetch.createPreloadingMiddleware( preloadData ) );
 }
 
@@ -125,6 +127,66 @@ function mediaUploadMiddleware( options, next ) {
 	}
 
 	return next( options );
+}
+
+/**
+ * Remove the wrapping element from the oEmbed response, as it breaks
+ * Gutenberg's sizing styles.
+ *
+ * @type {APIFetchMiddleware}
+ *
+ * @todo Hoist this host-specific logic to the host app.
+ */
+function transformOEmbedApiResponse( options, next ) {
+	if ( options.path && options.path.indexOf( 'oembed' ) !== -1 ) {
+		const url = getQueryArg( options.path, 'url' );
+		const response = next( options, next );
+
+		/**
+		 * Creates an embed response emulating core's fallback link.
+		 */
+		function createFallbackResponse() {
+			const link = document.createElement( 'a' );
+			link.href = url;
+			link.innerText = url;
+			return {
+				html: link.outerHTML,
+				type: 'rich',
+				provider_name: 'Embed',
+			};
+		}
+
+		return new Promise( ( resolve ) => {
+			response
+				.then( ( data ) => {
+					if ( data.html ) {
+						/**
+						 * Removes wrappers from YouTube, Vimeo, Dailymotion, TED block, e.g.
+						 * <span class="embed-youtube">, <div class="embed-vimeo">, <div class="embed-dailymotion">, <div class="embed-ted">
+						 * and return just the <iframe> child directly to allow wide & full width sizing.
+						 */
+						const doc =
+							document.implementation.createHTMLDocument( '' );
+						doc.body.innerHTML = data.html;
+						const selectors = [
+							'[class="embed-youtube"]',
+							'[class="embed-vimeo"]',
+							'[class="embed-dailymotion"]',
+							'[class="embed-ted"]',
+						].join( ',' );
+						const wrapper = doc.querySelector( selectors );
+						data.html = wrapper ? wrapper.innerHTML : data.html;
+					}
+
+					resolve( data );
+				} )
+				.catch( () => {
+					resolve( createFallbackResponse() );
+				} );
+		} );
+	}
+
+	return next( options, next );
 }
 
 /**
