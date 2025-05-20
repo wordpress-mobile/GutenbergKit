@@ -387,22 +387,13 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
             return
         }
 
-        if url.isFileURL || // Local editor file
-            url.scheme == "about" || // Empty request
-            url.scheme == "blob" || // Blob URL, used by inserter iframes
-            url.scheme == "data" || // Data URL, used by inserter iframes
-            url.host == editorURL?.host || // Local development server
-            url.host == "public-api.wordpress.com" || // WordPress.com REST API
-            (url.host == URL(string: configuration.siteURL)?.host &&
-             (url.path.contains("/wp-json/") || url.query?.contains("rest_route=") == true)) // WordPress REST API
-        {
-            decisionHandler(.allow)
-            return
+        if navigationAction.navigationType == .linkActivated {
+            // Open the request in OS browser
+            UIApplication.shared.open(url)
+            decisionHandler(.cancel)
         }
 
-        // Open the request in OS browser
-        UIApplication.shared.open(url)
-        decisionHandler(.cancel)
+        decisionHandler(.allow)
     }
 
     // MARK: - WKScriptMessageHandler
