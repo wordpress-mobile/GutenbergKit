@@ -61,15 +61,15 @@ describe( 'useMediaUpload', () => {
 	} );
 
 	it( 'should define the setMediaUploadAttachment function', () => {
-		let FilterCallback;
+		let MediaUploadComponent;
 		addFilter.mockImplementation( ( name, namespace, callback ) => {
-			FilterCallback = callback();
+			MediaUploadComponent = callback();
 		} );
 		const onSelect = vi.fn();
 
 		renderHook( () => useMediaUpload() );
 		render(
-			<FilterCallback
+			<MediaUploadComponent
 				render={ ( { open } ) => open() }
 				onSelect={ onSelect }
 				multiple={ false }
@@ -81,15 +81,15 @@ describe( 'useMediaUpload', () => {
 	} );
 
 	it( 'should clear the setMediaUploadAttachment function when the component is unmounted', () => {
-		let FilterCallback;
+		let MediaUploadComponent;
 		addFilter.mockImplementation( ( name, namespace, callback ) => {
-			FilterCallback = callback();
+			MediaUploadComponent = callback();
 		} );
 		const onSelect = vi.fn();
 
 		renderHook( () => useMediaUpload() );
 		const { unmount } = render(
-			<FilterCallback
+			<MediaUploadComponent
 				render={ ( { open } ) => open() }
 				onSelect={ onSelect }
 				multiple={ false }
@@ -108,14 +108,14 @@ describe( 'useMediaUpload', () => {
 	} );
 
 	it( 'should open the media library when the filter is called', () => {
-		let FilterCallback;
+		let MediaUploadComponent;
 		addFilter.mockImplementation( ( name, namespace, callback ) => {
-			FilterCallback = callback();
+			MediaUploadComponent = callback();
 		} );
 
 		renderHook( () => useMediaUpload() );
 		render(
-			<FilterCallback
+			<MediaUploadComponent
 				render={ ( { open } ) => open() }
 				onSelect={ vi.fn() }
 				multiple={ false }
