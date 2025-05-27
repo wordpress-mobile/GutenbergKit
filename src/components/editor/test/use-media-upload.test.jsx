@@ -124,4 +124,21 @@ describe( 'useMediaUpload', () => {
 
 		expect( openMediaLibrary ).toHaveBeenCalled();
 	} );
+
+	it( 'should always provide a multiple argument to the openMediaLibrary callback', () => {
+		let FilterCallback;
+		addFilter.mockImplementation( ( name, namespace, callback ) => {
+			FilterCallback = callback();
+		} );
+
+		renderHook( () => useMediaUpload() );
+		render(
+			<FilterCallback
+				render={ ( { open } ) => open() }
+				onSelect={ vi.fn() }
+			/>
+		);
+
+		expect( openMediaLibrary ).toHaveBeenCalledWith( { multiple: false } );
+	} );
 } );
