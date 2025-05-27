@@ -126,14 +126,14 @@ describe( 'useMediaUpload', () => {
 	} );
 
 	it( 'should always provide a multiple argument to the openMediaLibrary callback', () => {
-		let FilterCallback;
+		let MediaUploadComponent;
 		addFilter.mockImplementation( ( name, namespace, callback ) => {
-			FilterCallback = callback();
+			MediaUploadComponent = callback();
 		} );
 
 		renderHook( () => useMediaUpload() );
 		render(
-			<FilterCallback
+			<MediaUploadComponent
 				render={ ( { open } ) => open() }
 				onSelect={ vi.fn() }
 			/>
