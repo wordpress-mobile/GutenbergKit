@@ -53,6 +53,8 @@ function MediaUpload( { render, ...config } ) {
  * @return {{open: ()=>void}} An object containing a function to open the Media Library.
  */
 function useNativeMediaLibrary( { onSelect, ...config } ) {
+	const { allowedTypes, multiple = false, value } = config;
+
 	useEffect( () => {
 		window.editor.setMediaUploadAttachment = ( attachment ) => {
 			onSelect( config.multiple ? attachment : attachment[ 0 ] );
@@ -63,7 +65,15 @@ function useNativeMediaLibrary( { onSelect, ...config } ) {
 		};
 	}, [ onSelect, config.multiple ] );
 
-	const open = useCallback( () => openMediaLibrary( config ), [ config ] );
+	const open = useCallback(
+		() =>
+			openMediaLibrary( {
+				allowedTypes,
+				multiple,
+				value,
+			} ),
+		[ allowedTypes, multiple, value ]
+	);
 
 	return { open };
 }
