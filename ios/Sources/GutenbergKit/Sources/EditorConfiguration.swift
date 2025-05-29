@@ -22,6 +22,7 @@ public struct EditorConfiguration {
     /// The locale to use for translations
     public var locale = "en"
     public var editorAssetsEndpoint: URL?
+    public var cookies: [HTTPCookie] = []
 
     public init(title: String = "", content: String = "") {
         self.title = title

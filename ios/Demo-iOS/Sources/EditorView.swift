@@ -2,7 +2,11 @@ import SwiftUI
 import GutenbergKit
 
 struct EditorView: View {
-    var configuration: EditorConfiguration
+    private let configuration: EditorConfiguration
+
+    init(configuration: EditorConfiguration) {
+        self.configuration = configuration
+    }
 
     var body: some View {
         _EditorView(configuration: configuration)
@@ -69,7 +73,11 @@ struct EditorView: View {
 }
 
 private struct _EditorView: UIViewControllerRepresentable {
-    let configuration: EditorConfiguration
+    private let configuration: EditorConfiguration
+
+    init(editorURL: URL? = nil, configuration: EditorConfiguration) {
+        self.configuration = configuration
+    }
 
     func makeUIViewController(context: Context) -> EditorViewController {
         let viewController = EditorViewController(configuration: configuration)
