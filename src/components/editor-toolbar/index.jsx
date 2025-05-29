@@ -61,6 +61,16 @@ const EditorToolbar = ( { className } ) => {
 		setBlockInspectorShown( false );
 	}
 
+	function onFocusOutside( event ) {
+		// Do not close the menu if the focus is inside the menu--e.g., a button
+		// opening a adjacent popover.
+		if ( event.target.closest( '.block-settings-menu' ) ) {
+			return;
+		}
+
+		setBlockInspectorShown( false );
+	}
+
 	const classes = clsx( 'gutenberg-kit-editor-toolbar', className );
 
 	return (
@@ -101,6 +111,7 @@ const EditorToolbar = ( { className } ) => {
 					placement="overlay"
 					aria-modal
 					onClose={ onCloseSettings }
+					onFocusOutside={ onFocusOutside }
 					role="dialog"
 				>
 					<>
