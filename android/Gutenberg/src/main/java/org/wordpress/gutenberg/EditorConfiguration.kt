@@ -61,8 +61,9 @@ open class EditorConfiguration constructor(
     val authHeader: String,
     val webViewGlobals: List<WebViewGlobal>,
     val editorSettings: String?,
-    val locale: String?
-) : Parcelable {
+    val locale: String?,
+    val cookies: Map<String, String>
+): Parcelable {
     companion object {
         @JvmStatic
         fun builder(): Builder = Builder()
@@ -84,6 +85,7 @@ open class EditorConfiguration constructor(
         private var webViewGlobals: List<WebViewGlobal> = emptyList()
         private var editorSettings: String? = null
         private var locale: String? = "en"
+        private var cookies: Map<String, String> = mapOf()
 
         fun setTitle(title: String) = apply { this.title = title }
         fun setContent(content: String) = apply { this.content = content }
@@ -100,6 +102,7 @@ open class EditorConfiguration constructor(
         fun setWebViewGlobals(webViewGlobals: List<WebViewGlobal>) = apply { this.webViewGlobals = webViewGlobals }
         fun setEditorSettings(editorSettings: String?) = apply { this.editorSettings = editorSettings }
         fun setLocale(locale: String?) = apply { this.locale = locale }
+        fun setCookies(cookies: Map<String, String>) = apply { this.cookies = cookies }
 
         fun build(): EditorConfiguration = EditorConfiguration(
             title = title,
@@ -116,7 +119,8 @@ open class EditorConfiguration constructor(
             authHeader = authHeader,
             webViewGlobals = webViewGlobals,
             editorSettings = editorSettings,
-            locale = locale
+            locale = locale,
+            cookies = cookies
         )
     }
 
@@ -141,6 +145,7 @@ open class EditorConfiguration constructor(
         if (webViewGlobals != other.webViewGlobals) return false
         if (editorSettings != other.editorSettings) return false
         if (locale != other.locale) return false
+        if (cookies != other.cookies) return false
 
         return true
     }
@@ -161,6 +166,7 @@ open class EditorConfiguration constructor(
         result = 31 * result + webViewGlobals.hashCode()
         result = 31 * result + (editorSettings?.hashCode() ?: 0)
         result = 31 * result + (locale?.hashCode() ?: 0)
+        result = 31 * result + cookies.hashCode()
         return result
     }
 }

@@ -11,12 +11,14 @@ import android.util.AttributeSet
 import android.util.Log
 import android.view.View
 import android.webkit.ConsoleMessage
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
@@ -250,9 +252,24 @@ class GutenbergView : WebView {
         } else {
             ASSET_URL
         }
-        this.loadUrl(editorUrl)
 
-        Log.i("GutenbergView", "Startup Complete")
+        WebStorage.getInstance().deleteAllData()
+        this.clearCache(true)
+        // All cookies are third-party cookies because the root of this document
+        // lives under `https://appassets.androidplatform.net`
+        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true);
+
+        // Erase all local cookies before loading the URL – we don't want to persist
+        // anything between uses – otherwise we might send the wrong cookies
+        CookieManager.getInstance().removeAllCookies {
+            CookieManager.getInstance().flush()
+            for(cookie in configuration.cookies) {
+                CookieManager.getInstance().setCookie(cookie.key, cookie.value)
+            }
+            this.loadUrl(editorUrl)
+
+            Log.i("GutenbergView", "Startup Complete")
+        }
     }
 
     private fun setGlobalJavaScriptVariables() {
