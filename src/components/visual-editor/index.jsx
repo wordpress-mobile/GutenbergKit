@@ -12,7 +12,6 @@ import {
 	privateApis as blockEditorPrivateApis,
 	store as blockEditorStore,
 } from '@wordpress/block-editor';
-import { Popover } from '@wordpress/components';
 import { store as editorStore, PostTitle } from '@wordpress/editor';
 import { useSelect } from '@wordpress/data';
 import { store as editPostStore } from '@wordpress/edit-post';
@@ -153,8 +152,6 @@ function VisualEditor( { hideTitle } ) {
 			</BlockCanvas>
 
 			<EditorToolbar className="gutenberg-kit-visual-editor__toolbar" />
-
-			<Popover.Slot />
 		</div>
 	);
 }
