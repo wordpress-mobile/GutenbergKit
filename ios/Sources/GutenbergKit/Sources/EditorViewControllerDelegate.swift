@@ -1,5 +1,6 @@
 import Foundation
 
+#if canImport(UIKit)
 public protocol EditorViewControllerDelegate: AnyObject {
     /// Called when the editor loads.
     func editorDidLoad(_ viewContoller: EditorViewController)
@@ -40,6 +41,7 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// - parameter type: The type of autocompleter that was triggered (e.g., "plus-symbol", "at-symbol").
     func editor(_ viewController: EditorViewController, didTriggerAutocompleter type: String)
 }
+#endif
 
 public struct EditorState {
     /// Set to `true` if the editor has non-empty content.

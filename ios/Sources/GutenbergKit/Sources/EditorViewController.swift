@@ -1,8 +1,10 @@
-import UIKit
 @preconcurrency import WebKit
 import SwiftUI
 import Combine
 import CryptoKit
+
+#if canImport(UIKit)
+import UIKit
 
 @MainActor
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
@@ -415,3 +417,6 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
         }
     }
 }
+
+
+#endif
