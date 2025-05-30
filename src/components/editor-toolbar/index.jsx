@@ -63,7 +63,7 @@ const EditorToolbar = ( { className } ) => {
 
 	function onFocusOutside( event ) {
 		// Do not close the menu if the focus is inside the menu--e.g., a button
-		// opening a adjacent popover.
+		// opening an adjacent popover.
 		if ( event.target.closest( '.block-settings-menu' ) ) {
 			return;
 		}
