@@ -29,6 +29,8 @@ struct EditorJSMessage {
         case onEditorContentChanged
         /// The editor history (undo, redo) changed.
         case onEditorHistoryChanged
+        /// The editor featured image changed.
+        case onEditorFeaturedImageChanged
         /// The editor logged an exception.
         case onEditorExceptionLogged
         /// The user tapped the inserter button.
@@ -44,5 +46,9 @@ struct EditorJSMessage {
     struct DidUpdateEditorHistoryBody: Decodable {
         let hasUndo: Bool
         let hasRedo: Bool
+    }
+
+    struct DidUpdateFeaturedImageBody: Decodable {
+        let mediaID: Int
     }
 }

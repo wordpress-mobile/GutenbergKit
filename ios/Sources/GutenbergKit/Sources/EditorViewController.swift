@@ -304,6 +304,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 self.state.hasUndo = body.hasUndo
                 self.state.hasRedo = body.hasRedo
                 delegate?.editor(self, didUpdateHistoryState: state)
+            case .onEditorFeaturedImageChanged:
+                let body = try message.decode(EditorJSMessage.DidUpdateFeaturedImageBody.self)
+                delegate?.editor(self, didUpdateFeaturedImage: body.mediaID)
             case .onEditorExceptionLogged:
                 guard let exception = message.body as? [String: Any],
                   let editorException = GutenbergJSException(from: exception) else {
