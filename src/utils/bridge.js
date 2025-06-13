@@ -60,6 +60,26 @@ export function onEditorHistoryChanged( hasUndo, hasRedo ) {
 }
 
 /**
+ * Notifies the native host that the featured image has changed.
+ *
+ * @param {number} [mediaID] The featured image ID.
+ *
+ * @return {void}
+ */
+export function onEditorFeaturedImageChanged( mediaID ) {
+	if ( window.editorDelegate ) {
+		window.editorDelegate.onEditorFeaturedImageChanged( mediaID );
+	}
+
+	if ( window.webkit ) {
+		window.webkit.messageHandlers.editorDelegate.postMessage( {
+			message: 'onEditorFeaturedImageChanged',
+			body: { mediaID },
+		} );
+	}
+}
+
+/**
  * Notifies the native host that blocks have changed.
  *
  * @param {boolean} [isEmpty=false] Whether the editor is empty.

@@ -17,6 +17,7 @@ import { useHostExceptionLogging } from './use-host-exception-logging';
 import { useEditorSetup } from './use-editor-setup';
 import { useMediaUpload } from './use-media-upload';
 import TextEditor from '../text-editor';
+import { useSyncFeaturedImage } from './use-sync-featured-image';
 
 /**
  * @typedef {import('../utils/bridge').Post} Post
@@ -35,6 +36,7 @@ import TextEditor from '../text-editor';
 export default function Editor( { post, children, hideTitle } ) {
 	const editorRef = useRef( null );
 	useHostBridge( post, editorRef );
+	useSyncFeaturedImage();
 	useSyncHistoryControls();
 	useHostExceptionLogging();
 	useEditorSetup( post );
