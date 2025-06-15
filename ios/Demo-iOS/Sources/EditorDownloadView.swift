@@ -5,7 +5,7 @@ struct EditorDownloadView: View {
 
     class ViewModel: ObservableObject {
         @Published
-        var downloadProgress: Double = 0
+        var downloadProgress: Progress? = nil
 
         @Published
         var siteUrl: String = "http://localhost"
@@ -14,7 +14,7 @@ struct EditorDownloadView: View {
         var error: Error? = nil
 
         func download() {
-            Task {
+            Task { @MainActor in
 
                 let url = URL(string: siteUrl)!
                     .appendingPathComponent("wp-json")
@@ -28,8 +28,10 @@ struct EditorDownloadView: View {
                 do {
                     self.error = nil
 
-                    try await EditorLibrary.shared.downloadManifest(from: url) { progress in
-                        self.downloadProgress = Double(progress.fractionCompleted)
+                    try await EditorLibrary.shared.downloadManifest(from: url) { [weak self] progress in
+                        DispatchQueue.main.async {
+                            self?.downloadProgress = progress
+                        }
                     }
                 } catch {
                     self.error = error
@@ -57,7 +59,10 @@ struct EditorDownloadView: View {
                 self.viewModel.download()
             }
 
-            ProgressView(value: viewModel.downloadProgress).progressViewStyle(.linear)
+            if let progress = viewModel.downloadProgress {
+                ProgressView(progress).progressViewStyle(.linear)
+            }
+
         }
     }
 }

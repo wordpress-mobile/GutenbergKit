@@ -131,7 +131,6 @@ public actor EditorLibrary {
 
             for try await asset in group {
                 progress.completedUnitCount += 1
-                callback?(progress)
                 assets.append(asset)
             }
 
