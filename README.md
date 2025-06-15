@@ -60,6 +60,26 @@ GUTENBERG_EDITOR_URL=http://<YOUR_LOCAL_IP>:5173/
 
 </details>
 
+## Testing
+
+To run the JavaScript tests, run the following command in your terminal:
+
+```bash
+make test-js
+```
+
+To run the Swift tests, run the following command in your terminal:
+
+```bash
+make test-swift
+```
+
+To run the Android tests, run the following command in your terminal:
+
+```bash
+make test-android
+```
+
 ## Production
 
 To build GutenbergKit for production run the following command in your terminal:

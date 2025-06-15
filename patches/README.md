@@ -8,8 +8,14 @@ Existing patches should be described and justified here.
 
 ### `@wordpress/block-editor`
 
-Expose an `open` prop on the `Inserter` component, allowing toggling the inserter visibility via the quick inserter's "Browse all" button.
+-   Expose an `open` prop on the `Inserter` component, allowing toggling the inserter visibility via the quick inserter's "Browse all" button.
+-   Disable `stripExperimentalSettings` in the `BlockEditorProvider` component so that the Patterns and Media inserter tabs function.
+-   Allow setting popover props for the `Inserter` component, so we can improve the mobile screen reader experience by marking it as a modal dialog.
 
-### `@wordpress/editor`
+### `@wordpress/components`
 
-Revert https://github.com/WordPress/gutenberg/pull/64892 and export the private `useBlockEditorSettings` API as it is required for GutenbergKit's use of the block editor settings. This can be removed once GutenbergKit resides in the Gutenberg repository, where we can access all the necessary APIs—both public and private.
+-   Apply workaround to `FormFileUpload` to address iOS Safari's lack of support for a wildcard `audio/*` MIME type. Can be removed once [the issue](https://github.com/WordPress/gutenberg/issues/70119) is resolved in a future release.
+
+### `@wordpress/rich-text`
+
+-   Fix `preventFocusCapture` causing uneditable text blocks on touch devices when scrolling by swiping outside of the block canvas--e.g., along the edge of the screen.

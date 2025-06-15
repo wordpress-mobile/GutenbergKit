@@ -12,21 +12,10 @@ import {
 	privateApis as blockEditorPrivateApis,
 	store as blockEditorStore,
 } from '@wordpress/block-editor';
-import { Popover } from '@wordpress/components';
 import { store as editorStore, PostTitle } from '@wordpress/editor';
 import { useSelect } from '@wordpress/data';
 import { store as editPostStore } from '@wordpress/edit-post';
-// Default styles that are needed for the editor.
-import '@wordpress/components/build-style/style.css';
-import '@wordpress/block-editor/build-style/style.css';
-// Default styles that are needed for the core blocks.
-import '@wordpress/block-library/build-style/style.css';
-import '@wordpress/block-library/build-style/editor.css';
-import '@wordpress/block-library/build-style/theme.css';
 import '@wordpress/format-library';
-import '@wordpress/format-library/build-style/style.css';
-import '@wordpress/block-editor/build-style/content.css';
-import '@wordpress/editor/build-style/style.css';
 
 /**
  * Internal dependencies
@@ -36,6 +25,7 @@ import EditorToolbar from '../editor-toolbar';
 import { useEditorStyles } from './use-editor-styles';
 import { unlock } from '../../lock-unlock';
 import DefaultBlockAppender from '../default-block-appender';
+import { useEditorVisible } from './use-editor-visible';
 
 const {
 	ExperimentalBlockCanvas: BlockCanvas,
@@ -60,6 +50,7 @@ const alignCSS = `.is-root-container.alignwide { max-width: var(--wp--style--glo
  */
 function VisualEditor( { hideTitle } ) {
 	const editorPostTitleRef = useRef();
+	const editorVisibleRef = useEditorVisible();
 
 	const {
 		renderingMode,
@@ -128,7 +119,7 @@ function VisualEditor( { hideTitle } ) {
 	);
 
 	return (
-		<div className={ editorClasses }>
+		<div className={ editorClasses } ref={ editorVisibleRef }>
 			<BlockCanvas shouldIframe={ false } height="100%" styles={ styles }>
 				{ themeSupportsLayout &&
 					! themeHasDisabledLayoutStyles &&
@@ -161,8 +152,6 @@ function VisualEditor( { hideTitle } ) {
 			</BlockCanvas>
 
 			<EditorToolbar className="gutenberg-kit-visual-editor__toolbar" />
-
-			<Popover.Slot />
 		</div>
 	);
 }

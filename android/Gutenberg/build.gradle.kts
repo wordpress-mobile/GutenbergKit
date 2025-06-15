@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.jetbrains.kotlin.android)
     id("com.automattic.android.publish-to-s3")
+    id("kotlin-parcelize")
 }
 
 android {
@@ -19,6 +20,12 @@ android {
             "String",
             "GUTENBERG_EDITOR_URL",
             "\"${rootProject.ext["gutenbergEditorUrl"] ?: ""}\""
+        )
+
+        buildConfigField(
+            "String",
+            "GUTENBERG_EDITOR_REMOTE_URL",
+            "\"${rootProject.ext["gutenbergEditorRemoteUrl"] ?: ""}\""
         )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -52,6 +59,9 @@ dependencies {
     implementation(libs.gson)
 
     testImplementation(libs.junit)
+    testImplementation(libs.mockito.core)
+    testImplementation(libs.mockito.kotlin)
+    testImplementation(libs.robolectric)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }

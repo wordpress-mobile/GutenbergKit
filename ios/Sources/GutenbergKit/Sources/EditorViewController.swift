@@ -8,9 +8,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     public let webView: WKWebView
     public let editorLibrary: EditorLibrary
 
-    private let configuration: EditorConfiguration
+    public var configuration: EditorConfiguration
     private var _isEditorRendered = false
-    private let controller = GutenbergEditorController()
+    private var _isEditorSetup = false
+    private let controller: GutenbergEditorController
     private let timestampInit = CFAbsoluteTimeGetCurrent()
 
     public private(set) var state = EditorState()
@@ -22,11 +23,16 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     private var cancellables: [AnyCancellable] = []
 
+    /// Warmup mode preloads resources into memory to make the UI transition seamless when displaying the editor for the first time
+    ///
+    private let isWarmupMode: Bool
+
     /// Initalizes the editor with the initial content (Gutenberg).
-    public init(configuration: EditorConfiguration = .init(), manifest: LocalEditorManifest, editorLibrary: EditorLibrary = EditorLibrary()) {
+    public init(configuration: EditorConfiguration = .init(), manifest: LocalEditorManifest, editorLibrary: EditorLibrary = EditorLibrary(), isWarmupMode: Bool = false) {
         self.configuration = configuration
         self.editorLibrary = editorLibrary
         self.editorManifest = manifest
+        self.controller = GutenbergEditorController(configuration: configuration)
 
         // The `allowFileAccessFromFileURLs` allows the web view to access the
         // files from the local filesystem.
@@ -42,6 +48,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         self.webView = GBWebView(frame: .zero, configuration: config)
         self.webView.scrollView.keyboardDismissMode = .interactive
+
+        self.isWarmupMode = isWarmupMode
 
         super.init(nibName: nil, bundle: nil)
     }
@@ -70,15 +78,17 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         webView.alpha = 0
 
+        if isWarmupMode {
+            setUpEditor()
+            loadEditor()
+        }
+
         // TODO: register it when editor is loaded
 //        service.$rawBlockTypesResponseData.compactMap({ $0 }).sink { [weak self] data in
 //            guard let self else { return }
 //            assert(Thread.isMainThread)
 //
 //        }.store(in: &cancellables)
-
-        setUpEditor()
-        loadEditor()
     }
 
     // TODO: move
@@ -115,6 +125,17 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             return
         }
 
+        if configuration.plugins,
+           let remoteURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"].flatMap(URL.init) {
+            webView.load(URLRequest(url: remoteURL))
+        } else if configuration.plugins {
+            let remoteURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg")!
+            webView.loadFileURL(remoteURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+        } else {
+            let indexURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
+            webView.loadFileURL(indexURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+        }
+
         print("Loading editor from \(editorManifest.editorURL.path)")
         print("Giving access to \(editorManifest.rootDirectory.path)")
 
@@ -125,21 +146,46 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let escapedTitle = configuration.title.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
         let escapedContent = configuration.content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
 
+        // Generate JavaScript globals
+        let globalsJS = configuration.webViewGlobals.map { global in
+            "window[\"\(global.name)\"] = \(global.value.toJavaScript());"
+        }.joined(separator: "\n")
+
+        // Convert editor settings to JSON string if available
+        var editorSettingsJS = "undefined"
+        if let settings = configuration.editorSettings {
+            do {
+                let jsonData = try JSONSerialization.data(withJSONObject: settings, options: [])
+                if let jsonString = String(data: jsonData, encoding: .utf8) {
+                    editorSettingsJS = jsonString
+                }
+            } catch {
+                NSLog("Failed to serialize editor settings: \(error)")
+            }
+        }
+
         let jsCode = """
+        \(globalsJS)
+
         window.GBKit = {
             siteURL: '\(configuration.siteURL)',
             siteApiRoot: '\(configuration.siteApiRoot)',
-            siteApiNamespace: '\(configuration.siteApiNamespace)',
+            siteApiNamespace: \(Array(configuration.siteApiNamespace)),
+            namespaceExcludedPaths: \(Array(configuration.namespaceExcludedPaths)),
             authHeader: '\(configuration.authHeader)',
             themeStyles: \(configuration.themeStyles),
             hideTitle: \(configuration.hideTitle),
+            editorSettings: \(editorSettingsJS),
+            locale: '\(configuration.locale)',
             post: {
                 id: \(configuration.postID ?? -1),
                 title: '\(escapedTitle)',
                 content: '\(escapedContent)'
             },
         };
+
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
+
         "done";
         """
 
@@ -195,6 +241,20 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             guard isCodeEditorEnabled != oldValue else { return }
             evaluate("editor.switchEditorMode('\(isCodeEditorEnabled ? "text" : "visual")');")
         }
+    }
+
+    /// Updates the editor configuration
+    public func updateConfiguration(_ newConfiguration: EditorConfiguration) {
+        self.configuration = newConfiguration
+    }
+
+    /// Starts the editor setup process
+    public func startEditorSetup() {
+        guard !_isEditorSetup else { return }
+        _isEditorSetup = true
+
+        setUpEditor()
+        loadEditor()
     }
 
     // MARK: - Internal (JavaScript)
@@ -288,7 +348,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Calls this at any moment before showing the actual editor. The warmup
     /// shaves a couple of hundred milliseconds off the first load.
     public static func warmup() {
-        let editorViewController = EditorViewController(manifest: EditorLibrary().bundledManifest)
+        let editorViewController = EditorViewController(manifest: EditorLibrary().bundledManifest, isWarmupMode: true)
         _ = editorViewController.view // Trigger viewDidLoad
 
         // Retain for 5 seconds and let it prefetch stuff
@@ -306,6 +366,14 @@ private protocol GutenbergEditorControllerDelegate: AnyObject {
 /// Hiding the conformances, and breaking retain cycles.
 private final class GutenbergEditorController: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
     weak var delegate: GutenbergEditorControllerDelegate?
+    private let configuration: EditorConfiguration
+    private let editorURL: URL?
+
+    init(configuration: EditorConfiguration) {
+        self.configuration = configuration
+        self.editorURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init)
+        super.init()
+    }
 
     // MARK: - WKNavigationDelegate
 
@@ -327,24 +395,18 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
             return
         }
 
-        debugPrint(url)
-
-        let gutenbergEditorURL = URL(string: ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"] ?? "")
-        let localIndexURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")
-        let localRemoteURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg")
-
         if EditorLibrary().urlIsInsideEditorLibrary(url: url) {
             decisionHandler(.allow)
             return
         }
 
-        if url == localIndexURL || url == localRemoteURL || url.host == gutenbergEditorURL?.host {
-            decisionHandler(.allow)
-        } else {
-            // Open the link in Safari
+        if navigationAction.navigationType == .linkActivated {
+            // Open the request in OS browser
             UIApplication.shared.open(url)
             decisionHandler(.cancel)
         }
+
+        decisionHandler(.allow)
     }
 
     // MARK: - WKScriptMessageHandler

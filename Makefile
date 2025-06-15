@@ -1,4 +1,3 @@
-
 SIMULATOR_DESTINATION := OS=17.5,name=iPhone 15 Plus
 
 define XCODEBUILD_CMD
@@ -11,10 +10,18 @@ define XCODEBUILD_CMD
 endef
 
 npm-dependencies:
-	echo "--- :npm: Installing NPM Dependencies"
-	npm ci
+	@if [ "$(SKIP_DEPS)" != "true" ] && [ "$(SKIP_DEPS)" != "1" ]; then \
+		echo "--- :npm: Installing NPM Dependencies"; \
+		npm ci; \
+	fi
 
-build: npm-dependencies
+prep-translations:
+	@if [ "$(SKIP_L10N)" != "true" ] && [ "$(SKIP_L10N)" != "1" ]; then \
+		echo "--- :npm: Preparing Translations"; \
+		npm run prep-translations -- --force; \
+	fi
+
+build: npm-dependencies prep-translations
 	echo "--- :node: Building Gutenberg"
 
 	npm run build
@@ -37,9 +44,16 @@ fmt-js: npm-dependencies
 lint-js: npm-dependencies
 	npm run lint
 
+test-js: npm-dependencies
+	npm run test -- run
+
 local-android-library: build
 	echo "--- :android: Building Library"
 	./android/gradlew -p ./android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3
+
+test-android:
+	echo "--- :android: Running Android Tests"
+	./android/gradlew -p ./android :gutenberg:test
 
 build-swift-package: build
 	$(call XCODEBUILD_CMD, build)

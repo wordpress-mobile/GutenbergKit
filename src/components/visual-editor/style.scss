@@ -40,6 +40,15 @@
 	padding-right: 16px;
 }
 
+// Prevent horizontal scroll in the block inserter popover. This only appears to
+// occur on touch devices, not cursor devices.
+// TODO: Fix this in core and remove the styles.
+.gutenberg-kit-visual-editor
+	.block-editor-inserter__popover
+	.components-popover__content {
+	overflow-x: hidden !important; // `!important` required to override inline styles
+}
+
 // Hide the inline block appendar button, as its positioning and size is not
 // ideal for small screens
 .gutenberg-kit-visual-editor

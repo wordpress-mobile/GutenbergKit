@@ -1,10 +1,9 @@
 /**
  * WordPress dependencies
  */
-import { useEntityBlockEditor } from '@wordpress/core-data';
-import { privateApis as blockEditorPrivateApis } from '@wordpress/block-editor';
+import { store as coreStore } from '@wordpress/core-data';
 import { useSelect } from '@wordpress/data';
-import { store as editorStore } from '@wordpress/editor';
+import { store as editorStore, EditorProvider } from '@wordpress/editor';
 import { useRef } from '@wordpress/element';
 
 /**
@@ -17,17 +16,11 @@ import { useHostBridge } from './use-host-bridge';
 import { useHostExceptionLogging } from './use-host-exception-logging';
 import { useEditorSetup } from './use-editor-setup';
 import { useMediaUpload } from './use-media-upload';
-import { useGBKitSettings } from './use-gbkit-settings';
-import { unlock } from '../../lock-unlock';
 import TextEditor from '../text-editor';
 
 /**
  * @typedef {import('../utils/bridge').Post} Post
  */
-
-const { ExperimentalBlockEditorProvider: BlockEditorProvider } = unlock(
-	blockEditorPrivateApis
-);
 
 /**
  * Entry component rendering the editor and surrounding UI.
@@ -47,31 +40,36 @@ export default function Editor( { post, children, hideTitle } ) {
 	useEditorSetup( post );
 	useMediaUpload();
 
-	const [ postBlocks, onInput, onChange ] = useEntityBlockEditor(
-		'postType',
-		post.type,
-		{ id: post.id }
+	const { isReady, mode, isRichEditingEnabled, currentPost } = useSelect(
+		( select ) => {
+			const {
+				__unstableIsEditorReady,
+				getEditorSettings,
+				getEditorMode,
+			} = select( editorStore );
+			const editorSettings = getEditorSettings();
+			const { getEntityRecord } = select( coreStore );
+			const _currentPost = getEntityRecord(
+				'postType',
+				post.type,
+				post.id
+			);
+
+			return {
+				// TODO(Perf): The `__unstableIsEditorReady` selector is insufficient as
+				// it does not account for post type loading, which is first referenced
+				// within the post title component render. This results in the post title
+				// popping in after the editor mounted. The web editor does not experience
+				// this issue because the post type is loaded for "mode" selection before
+				// the editor is mounted.
+				isReady: __unstableIsEditorReady(),
+				mode: getEditorMode(),
+				isRichEditingEnabled: editorSettings.richEditingEnabled,
+				currentPost: _currentPost,
+			};
+		},
+		[ post.id, post.type ]
 	);
-
-	const settings = useGBKitSettings( post );
-
-	const { isReady, mode, isRichEditingEnabled } = useSelect( ( select ) => {
-		const { __unstableIsEditorReady, getEditorSettings, getEditorMode } =
-			select( editorStore );
-		const editorSettings = getEditorSettings();
-
-		return {
-			// TODO(Perf): The `__unstableIsEditorReady` selector is insufficient as
-			// it does not account for post type loading, which is first referenced
-			// within the post title component render. This results in the post title
-			// popping in after the editor mounted. The web editor does not experience
-			// this issue because the post type is loaded for "mode" selection before
-			// the editor is mounted.
-			isReady: __unstableIsEditorReady(),
-			mode: getEditorMode(),
-			isRichEditingEnabled: editorSettings.richEditingEnabled,
-		};
-	}, [] );
 
 	if ( ! isReady ) {
 		return null;
@@ -79,10 +77,8 @@ export default function Editor( { post, children, hideTitle } ) {
 
 	return (
 		<div className="gutenberg-kit-editor" ref={ editorRef }>
-			<BlockEditorProvider
-				value={ postBlocks }
-				onInput={ onInput }
-				onChange={ onChange }
+			<EditorProvider
+				post={ currentPost }
 				settings={ settings }
 				useSubRegistry={ false }
 			>
@@ -100,7 +96,9 @@ export default function Editor( { post, children, hideTitle } ) {
 				) }
 
 				{ children }
-			</BlockEditorProvider>
+			</EditorProvider>
 		</div>
 	);
 }
+
+const settings = {};

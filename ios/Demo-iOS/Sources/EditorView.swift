@@ -84,6 +84,7 @@ private struct _EditorView: UIViewControllerRepresentable {
         if #available(iOS 16.4, *) {
             viewController.webView.isInspectable = true
         }
+        viewController.startEditorSetup()
         return viewController
     }
 
