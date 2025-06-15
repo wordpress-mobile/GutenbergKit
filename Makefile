@@ -1,4 +1,4 @@
-SIMULATOR_DESTINATION := OS=17.5,name=iPhone 15 Plus
+SIMULATOR_DESTINATION := OS=18.4,name=iPhone 16 Plus
 
 define XCODEBUILD_CMD
 	@set -o pipefail && \
