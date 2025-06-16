@@ -131,15 +131,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         } else if configuration.plugins {
             let remoteURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg")!
             webView.loadFileURL(remoteURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+        } else if FileManager.default.fileExists(atPath: self.editorManifest.editorURL.path) {
+            print("Loading editor from \(editorManifest.editorURL.path)")
+            print("Giving access to \(editorManifest.rootDirectory.path)")
+            webView.loadFileURL(self.editorManifest.editorURL, allowingReadAccessTo: self.editorManifest.rootDirectory)
         } else {
             let indexURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
             webView.loadFileURL(indexURL, allowingReadAccessTo: Bundle.module.resourceURL!)
         }
-
-        print("Loading editor from \(editorManifest.editorURL.path)")
-        print("Giving access to \(editorManifest.rootDirectory.path)")
-
-        webView.loadFileURL(self.editorManifest.editorURL, allowingReadAccessTo: self.editorManifest.rootDirectory)
     }
 
     private func getEditorConfiguration() -> WKUserScript {
