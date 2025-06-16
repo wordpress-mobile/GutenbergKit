@@ -96,7 +96,12 @@ public actor EditorLibrary {
     ///
     @discardableResult
     public func downloadManifest(from url: URL, progress callback: ProgressCallback?) async throws -> LocalEditorManifest {
-        let (data, _) = try await urlsession.data(from: url)
+        try await downloadManifest(from: .init(url: url), progress: callback)
+    }
+
+    @discardableResult
+    public func downloadManifest(from request: URLRequest, progress callback: ProgressCallback?) async throws -> LocalEditorManifest {
+        let (data, _) = try await urlsession.data(for: request)
         let manifest = try EditorManifest(data: data)
 
         try await buildManifest(for: manifest, progress: callback)
