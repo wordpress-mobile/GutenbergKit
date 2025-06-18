@@ -46,6 +46,7 @@ class GutenbergView : WebView {
     private var onFileChooserRequested: ((Intent, Int) -> Unit)? = null
     private var contentChangeListener: ContentChangeListener? = null
     private var historyChangeListener: HistoryChangeListener? = null
+    private var featuredImageChangeListener: FeaturedImageChangeListener? = null
     private var openMediaLibraryListener: OpenMediaLibraryListener? = null
     private var editorDidBecomeAvailableListener: EditorAvailableListener? = null
     private var logJsExceptionListener: LogJsExceptionListener? = null
@@ -65,6 +66,10 @@ class GutenbergView : WebView {
 
     fun setHistoryChangeListener(listener: HistoryChangeListener) {
         historyChangeListener = listener
+    }
+
+    fun setFeaturedImageChangeListener(listener: FeaturedImageChangeListener) {
+        featuredImageChangeListener = listener
     }
 
     fun setOpenMediaLibraryListener(listener: OpenMediaLibraryListener) {
@@ -333,6 +338,10 @@ class GutenbergView : WebView {
         fun onHistoryChanged(hasUndo: Boolean, hasRedo: Boolean)
     }
 
+    interface FeaturedImageChangeListener {
+        fun onFeaturedImageChanged(mediaID: Long)
+    }
+
     sealed class Value {
         data class Single(val value: Int): Value()
         data class Multiple(val values: IntArray): Value() {
@@ -432,6 +441,11 @@ class GutenbergView : WebView {
     }
 
     @JavascriptInterface
+    fun onEditorFeaturedImageChanged(mediaID: Long) {
+        featuredImageChangeListener?.onFeaturedImageChanged(mediaID)
+    }
+
+    @JavascriptInterface
     fun onBlocksChanged(isEmpty: Boolean) {
         if(isEmpty) {
             Log.i("GutenbergView", "BlocksChanged (empty)")
@@ -509,6 +523,7 @@ class GutenbergView : WebView {
         this.stopLoading()
         contentChangeListener = null
         historyChangeListener = null
+        featuredImageChangeListener = null
         editorDidBecomeAvailable = null
         filePathCallback = null
         onFileChooserRequested = null

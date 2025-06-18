@@ -27,6 +27,9 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// Notifies the client about new history state.
     func editor(_ viewController: EditorViewController, didUpdateHistoryState state: EditorState)
 
+    /// Notifies the client about a new featured image.
+    func editor(_ viewController: EditorViewController, didUpdateFeaturedImage mediaID: Int)
+
     /// Notifies the client about an exception that occurred during the editor
     func editor(_ viewController: EditorViewController, didLogException error: GutenbergJSException)
 
