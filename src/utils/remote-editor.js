@@ -1,13 +1,8 @@
 /**
- * WordPress dependencies
- */
-import apiFetch from '@wordpress/api-fetch';
-
-/**
  * Internal dependencies
  */
-import { getGBKit } from './bridge';
-import { error } from './logger';
+import { fetchEditorAssets } from './bridge';
+import { debug, error } from './logger';
 
 /**
  * Cache for editor assets to avoid unnecessary network requests
@@ -43,11 +38,7 @@ export async function loadEditorAssets( {
 			} );
 		}
 
-		const { siteApiRoot, siteApiNamespace } = getGBKit();
-		// TODO: Load editor assets within the host app
-		const response = await apiFetch( {
-			url: `${ siteApiRoot }wpcom/v2/${ siteApiNamespace[ 0 ] }/editor-assets`,
-		} );
+		const response = await fetchEditorAssets();
 
 		// Cache the response
 		editorAssetsCache = response;

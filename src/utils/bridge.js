@@ -276,3 +276,18 @@ export function awaitGBKitGlobal( timeoutMs = 3000 ) {
 		checkGBKit();
 	} );
 }
+
+/**
+ * Retrieves the editor assets from the native host.
+ *
+ * @return {Promise<{scripts: string, styles: string, allowed_block_types: string[]}>} Promise that resolves with the assets object.
+ */
+export async function fetchEditorAssets() {
+	if ( window.webkit ) {
+		return await window.webkit.messageHandlers.loadFetchedEditorAssets.postMessage( {
+			asset: 'manifest',
+		} );
+	} else {
+		throw new Error('Android support is not implemented yet.');
+	}
+}
