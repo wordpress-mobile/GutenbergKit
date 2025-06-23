@@ -94,7 +94,11 @@ public actor EditorAssetsLibrary {
 
     /// Fetches one asset (JavaScript or stylesheet) and caches its content on the device.
     func cacheAsset(from httpURL: URL, ignoreExistingCache: Bool = false) async throws -> URL {
-        guard httpURL.scheme?.starts(with: "http") == true, ["js", "css"].contains(httpURL.pathExtension) else {
+        // The Web Inspector automatically requests ".js.map" files, we'll support it here for debugging purpose.
+        let supportedResourceSuffixes = [".js", ".css", ".js.map"]
+        guard httpURL.scheme?.starts(with: "http") == true,
+              supportedResourceSuffixes.contains(where: { httpURL.lastPathComponent.hasSuffix($0) }) else {
+            NSLog("Attemps to cache an unsupported URL: \(httpURL)")
             throw URLError(.unsupportedURL)
         }
 

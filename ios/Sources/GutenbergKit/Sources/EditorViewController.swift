@@ -528,9 +528,7 @@ class CachedAssetSchemeHandler: NSObject, WKURLSchemeHandler {
                     let mimeType: String = switch httpURL.pathExtension {
                     case "js": "application/javascript"
                     case "css": "text/css"
-                    default:
-                        // This should never happen, since the `cacheAsset(from:)` has done the same check.
-                        throw URLError(.badURL)
+                    default: "application/octet-stream"
                     }
                     let response = URLResponse(url: url, mimeType: mimeType, expectedContentLength: content.count, textEncodingName: nil)
 
