@@ -17,7 +17,7 @@ struct ContentView: View {
                 }
             }
 
-            Section("Remote Editors") {
+            Section {
                 ForEach(remoteEditorConfigurations, id: \.siteURL) { configuration in
                     NavigationLink {
                         EditorView(configuration: configuration)
@@ -28,6 +28,14 @@ struct ContentView: View {
 
                 if remoteEditorConfigurations.isEmpty {
                     Text("Add `EditorConfiguration` instances to the `remoteEditorConfigurations` array to launch remote editors here.")
+                }
+            } header: {
+                Text("Remote Editors")
+            } footer: {
+                if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"] != nil {
+                    Text("Note: The editor is backed by the dev server created by `make dev-server`.")
+                } else {
+                    Text("Note: The editor is backed by the compiled web app created by `make build`.")
                 }
             }
         }
