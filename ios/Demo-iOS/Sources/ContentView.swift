@@ -4,11 +4,70 @@ import GutenbergKit
 let editorURL: URL? = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init)
 
 struct ContentView: View {
+
+    let remoteEditorConfigurations: [EditorConfiguration] = [.template]
+
     var body: some View {
-        NavigationView {
-            EditorView(editorURL: editorURL)
+        List {
+            Section {
+                NavigationLink {
+                    EditorView(configuration: .default)
+                } label: {
+                    Text("Bundled Editor")
+                }
+            }
+
+            Section("Remote Editors") {
+                ForEach(remoteEditorConfigurations, id: \.siteURL) { configuration in
+                    NavigationLink {
+                        EditorView(configuration: configuration)
+                    } label: {
+                        Text(URL(string: configuration.siteURL)?.host ?? configuration.siteURL)
+                    }
+                }
+
+                if remoteEditorConfigurations.isEmpty {
+                    Text("Add `EditorConfiguration` instances to the `remoteEditorConfigurations` array to launch remote editors here.")
+                }
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    Task {
+                        NSLog("Start to fetch assets")
+                        for configuration in remoteEditorConfigurations {
+                            let library = EditorAssetsLibrary(configuration: configuration)
+                            do {
+                                try await library.fetchAssets()
+                            } catch {
+                                NSLog("Failed to fetch assets for \(configuration.siteURL): \(error)")
+                            }
+                        }
+                        NSLog("Done fetching assets")
+                    }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+
+            }
         }
     }
+}
+
+private extension EditorConfiguration {
+
+    static var template: Self {
+        var configuration = EditorConfiguration.default
+        configuration.siteURL = "https://modify-me.com"
+        configuration.siteApiRoot = "\(configuration.siteURL)/wp-json/"
+        configuration.authHeader = "Insert the Authorization header value here"
+        configuration.editorAssetsEndpoint = URL(string: "\(configuration.siteApiRoot)/wpcom/v2/editor-assets")!
+        // The `plugins: true` is necessary for the editor to use 'remote.html'
+        configuration.plugins = true
+        return configuration
+    }
+
 }
 
 #Preview {
