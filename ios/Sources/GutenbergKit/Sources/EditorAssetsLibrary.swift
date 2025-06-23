@@ -58,27 +58,32 @@ public actor EditorAssetsLibrary {
     /// - SeeAlso: `CachedAssetSchemeHandler`
     /// - SeeAlso: `EditorAssetsLibrary.addAsset`
     func manifestContentForEditor() async throws -> Data {
+        // For scheme-less links (i.e. '//stats.wp.com/w.js'), use the scheme in `siteURL`.
+        let siteURLScheme = URL(string: configuration.siteURL)?.scheme
         let data = try await loadManifestContent()
         let manifest = try JSONDecoder().decode(EditorAssetsMainifest.self, from: data)
-        return try manifest.renderForEditor()
+        return try manifest.renderForEditor(defaultScheme: siteURLScheme)
     }
 
     /// Fetches all assets in the `EditorConfiguration.editorAssetsEndpoint` manifest and stores them on the device.
     ///
     /// - SeeAlso: CachedAssetSchemeHandler
     public func fetchAssets() async throws {
+        // For scheme-less links (i.e. '//stats.wp.com/w.js'), use the scheme in `siteURL`.
+        let siteURLScheme = URL(string: configuration.siteURL)?.scheme
+
         let data = try await loadManifestContent(ignoreCache: true)
         let manifest = try JSONDecoder().decode(EditorAssetsMainifest.self, from: data)
-        let assetLinks = try manifest.parseAssetLinks()
+        let assetLinks = try manifest.parseAssetLinks(defaultScheme: siteURLScheme)
 
         for link in assetLinks {
-            guard link.hasPrefix("http://") || link.hasPrefix("https://") else {
-                NSLog("Unexpected asset link: \(link)")
+            guard let url = URL(string: link) else {
+                NSLog("Malformed asset link: \(link)")
                 continue
             }
 
-            guard let url = URL(string: link) else {
-                NSLog("Malformed asset link: \(link)")
+            guard url.scheme == "http" || url.scheme == "https" else {
+                NSLog("Unexpected asset link: \(link)")
                 continue
             }
 
@@ -180,7 +185,7 @@ struct EditorAssetsMainifest: Codable {
         case allowedBlockTypes = "allowed_block_types"
     }
 
-    func parseAssetLinks() throws -> [String] {
+    func parseAssetLinks(defaultScheme: String?) throws -> [String] {
         let html = """
             <html>
                 <head>
@@ -194,22 +199,22 @@ struct EditorAssetsMainifest: Codable {
 
         var assetLinks: [String] = []
         assetLinks += try document.select("script[src]").map {
-            try $0.attr("src")
+            Self.resolveAssetLink(try $0.attr("src"), defaultScheme: defaultScheme)
         }
         assetLinks += try document.select(#"link[rel="stylesheet"][href]"#).map {
-            try $0.attr("href")
+            Self.resolveAssetLink(try $0.attr("href"), defaultScheme: defaultScheme)
         }
         return assetLinks
     }
 
-    func renderForEditor() throws -> Data {
+    func renderForEditor(defaultScheme: String?) throws -> Data {
         var rendered = self
-        rendered.scripts = try Self.renderForEditor(scripts: self.scripts)
-        rendered.styles = try Self.renderForEditor(styles: self.styles)
+        rendered.scripts = try Self.renderForEditor(scripts: self.scripts, defaultScheme: defaultScheme)
+        rendered.styles = try Self.renderForEditor(styles: self.styles, defaultScheme: defaultScheme)
         return try JSONEncoder().encode(rendered)
     }
 
-    private static func renderForEditor(scripts: String) throws -> String {
+    private static func renderForEditor(scripts: String, defaultScheme: String?) throws -> String {
         let html = """
             <html>
                 <head>
@@ -222,7 +227,8 @@ struct EditorAssetsMainifest: Codable {
 
         for script in try document.select("script[src]") {
             if let src = try? script.attr("src") {
-                let newLink = CachedAssetSchemeHandler.cachedURL(forWebLink: src) ?? src
+                let link = Self.resolveAssetLink(src, defaultScheme: defaultScheme)
+                let newLink = CachedAssetSchemeHandler.cachedURL(forWebLink: link) ?? link
                 try script.attr("src", newLink)
             }
         }
@@ -231,7 +237,7 @@ struct EditorAssetsMainifest: Codable {
         return try head.html()
     }
 
-    private static func renderForEditor(styles: String) throws -> String {
+    private static func renderForEditor(styles: String, defaultScheme: String?) throws -> String {
         let html = """
             <html>
                 <head>
@@ -244,12 +250,21 @@ struct EditorAssetsMainifest: Codable {
 
         for stylesheet in try document.select(#"link[rel="stylesheet"][href]"#) {
             if let href = try? stylesheet.attr("href") {
-                let newLink = CachedAssetSchemeHandler.cachedURL(forWebLink: href) ?? href
+                let link = Self.resolveAssetLink(href, defaultScheme: defaultScheme)
+                let newLink = CachedAssetSchemeHandler.cachedURL(forWebLink: link) ?? link
                 try stylesheet.attr("href", newLink)
             }
         }
 
         let head = document.head()!
         return try head.html()
+    }
+
+    private static func resolveAssetLink(_ link: String, defaultScheme: String?) -> String {
+        if link.starts(with: "//") {
+            return "\(defaultScheme ?? "https"):\(link)"
+        }
+
+        return link
     }
 }
