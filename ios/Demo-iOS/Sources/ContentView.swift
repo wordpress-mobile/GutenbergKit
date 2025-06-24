@@ -75,7 +75,7 @@ private extension EditorConfiguration {
 
         // DO NOT CHANGE the properties below
         configuration.siteApiRoot = "\(configuration.siteURL)/wp-json/"
-        configuration.editorAssetsEndpoint = URL(string: "\(configuration.siteApiRoot)/wpcom/v2/editor-assets")!
+        configuration.editorAssetsEndpoint = URL(string: configuration.siteApiRoot)!.appendingPathComponent("wpcom/v2/editor-assets")
         // The `plugins: true` is necessary for the editor to use 'remote.html'
         configuration.plugins = true
 
