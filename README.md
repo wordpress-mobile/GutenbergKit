@@ -89,3 +89,11 @@ make build
 ```
 
 Once finished, the Swift and Kotlin packages are ready to publish. Consuming iOS or Android host apps can then include the GutenbergKit package as a dependency.
+
+## Remote Editor
+
+Some blocks are only available while using the remote editor. To enable it in development environment:
+
+1. Run `make dev-server-remote`
+1. Add `GUTENBERG_EDITOR_REMOTE_URL` (the same way `GUTENBERG_EDITOR_URL` is added for that platform) and use `http://<YOUR_LOCAL_IP>:5173/remote.html` as the value
+1. Remote editor will redirect to the local editor if it fails to load. If you need to debug that failure, disable the redirection in [`src/remote.jsx`](https://github.com/wordpress-mobile/GutenbergKit/blob/trunk/src/remote.jsx#L52) & [`src/utils/remote-editor.js`](https://github.com/wordpress-mobile/GutenbergKit/blob/trunk/src/utils/remote-editor.js#L64). Note that the line numbers might have changed.
