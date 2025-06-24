@@ -67,12 +67,18 @@ private extension EditorConfiguration {
 
     static var template: Self {
         var configuration = EditorConfiguration.default
+
+        #warning("1. Update the property values below")
+        #warning("2. Install the Jetpack plugin to the site")
         configuration.siteURL = "https://modify-me.com"
-        configuration.siteApiRoot = "\(configuration.siteURL)/wp-json/"
         configuration.authHeader = "Insert the Authorization header value here"
+
+        // DO NOT CHANGE the properties below
+        configuration.siteApiRoot = "\(configuration.siteURL)/wp-json/"
         configuration.editorAssetsEndpoint = URL(string: "\(configuration.siteApiRoot)/wpcom/v2/editor-assets")!
         // The `plugins: true` is necessary for the editor to use 'remote.html'
         configuration.plugins = true
+
         return configuration
     }
 
