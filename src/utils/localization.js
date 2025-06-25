@@ -8,6 +8,7 @@ import { setLocaleData } from '@wordpress/i18n';
  */
 import { getGBKit } from './bridge';
 import { error, debug } from './logger';
+
 /**
  * Initializes i18n support for the editor.
  *
@@ -34,10 +35,27 @@ async function loadTranslations( locale ) {
 		const { default: translations } = await import(
 			`../translations/${ locale }.json`
 		);
-		setLocaleData( translations );
+		setLocaleDataCompat( translations );
 	} catch ( err ) {
 		// Continue with default locale
 		error( 'Error loading translations', err );
+	}
+}
+
+/**
+ * Rudimentary utility bridging the setLocaleData function location between the
+ * local and remote editors.
+ *
+ * @todo Align the architecture of the two editors so that the setLocaleData
+ * function is the same in both and remove this function.
+ *
+ * @param {Object} translations The translations to set.
+ */
+function setLocaleDataCompat( translations ) {
+	if ( window.wp?.i18n?.setLocaleData ) {
+		window.wp.i18n.setLocaleData( translations );
+	} else {
+		setLocaleData( translations );
 	}
 }
 
