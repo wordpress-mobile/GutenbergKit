@@ -20,7 +20,7 @@ public actor EditorAssetsLibrary {
 
     /// Returns the `EditorConfiguration.editorAssetsEndpoint` manifest content. The manifest content is cached and
     /// reused on future calls.
-    func loadManifestContent(ignoreCache: Bool = false) async throws -> Data {
+    func loadManifestContent() async throws -> Data {
         let endpoint: URL
         if let url = configuration.editorAssetsEndpoint {
             endpoint = url
@@ -30,22 +30,10 @@ public actor EditorAssetsLibrary {
             throw ManifestError.unavailable
         }
 
-        // TODO: Invalid cache after a certain duration
-        let fileManager = FileManager.default
-        let cached = assetsDirectory.appendingPathComponent("editor-assets.json")
-        if !ignoreCache, fileManager.fileExists(atPath: cached.path) {
-            return try Data(contentsOf: cached)
-        }
-
         var request = URLRequest(url: endpoint)
         request.setValue(configuration.authHeader, forHTTPHeaderField: "Authorization")
         let (data, response) = try await URLSession.shared.data(for: request)
         if let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status) {
-            if !fileManager.fileExists(atPath: cached.deletingLastPathComponent().path) {
-                try fileManager.createDirectory(at: cached.deletingLastPathComponent(), withIntermediateDirectories: true)
-            }
-
-            try data.write(to: cached)
             return data
         } else {
             throw ManifestError.invalidServerResponse
@@ -72,7 +60,7 @@ public actor EditorAssetsLibrary {
         // For scheme-less links (i.e. '//stats.wp.com/w.js'), use the scheme in `siteURL`.
         let siteURLScheme = URL(string: configuration.siteURL)?.scheme
 
-        let data = try await loadManifestContent(ignoreCache: true)
+        let data = try await loadManifestContent()
         let manifest = try JSONDecoder().decode(EditorAssetsMainifest.self, from: data)
         let assetLinks = try manifest.parseAssetLinks(defaultScheme: siteURLScheme)
 
@@ -87,13 +75,13 @@ public actor EditorAssetsLibrary {
                 continue
             }
 
-            _ = try await cacheAsset(from: url, ignoreExistingCache: true)
+            _ = try await cacheAsset(from: url)
         }
         NSLog("\(assetLinks.count) resources processed.")
     }
 
     /// Fetches one asset (JavaScript or stylesheet) and caches its content on the device.
-    func cacheAsset(from httpURL: URL, ignoreExistingCache: Bool = false) async throws -> URL {
+    func cacheAsset(from httpURL: URL) async throws -> URL {
         // The Web Inspector automatically requests ".js.map" files, we'll support it here for debugging purpose.
         let supportedResourceSuffixes = [".js", ".css", ".js.map"]
         guard httpURL.scheme?.starts(with: "http") == true,
@@ -105,10 +93,6 @@ public actor EditorAssetsLibrary {
         let fileManager = FileManager.default
 
         let localURL = assetsDirectory.appendingPathComponent(httpURL.uniqueFilename)
-
-        if ignoreExistingCache, fileManager.fileExists(atPath: localURL.path) {
-            try fileManager.removeItem(at: localURL)
-        }
 
         if !fileManager.fileExists(atPath: localURL.path) {
             if !fileManager.fileExists(atPath: localURL.deletingLastPathComponent().path) {
