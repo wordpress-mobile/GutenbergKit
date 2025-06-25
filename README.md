@@ -92,8 +92,12 @@ Once finished, the Swift and Kotlin packages are ready to publish. Consuming iOS
 
 ## Remote Editor
 
-Some blocks are only available while using the remote editor. To enable it in development environment:
+By default, GutenbergKit utilizes local `@wordpress` modules. This approach is similar to most modern web applications, where the `@wordpress` modules are bundled with the application.
+To enable support for non-core blocks, GutenbergKit can be configured to use remote `@wordpress` modules, where the `@wordpress` modules and plugin-provided editor assets are fetched from a site's remote server. At this time, this functionality is partially implemented and may not work as expected.
 
-1. Run `make dev-server-remote`
-1. Add `GUTENBERG_EDITOR_REMOTE_URL` (the same way `GUTENBERG_EDITOR_URL` is added for that platform) and use `http://<YOUR_LOCAL_IP>:5173/remote.html` as the value
-1. Remote editor will redirect to the local editor if it fails to load. If you need to debug that failure, disable the redirection in [`src/remote.jsx`](https://github.com/wordpress-mobile/GutenbergKit/blob/trunk/src/remote.jsx#L52) & [`src/utils/remote-editor.js`](https://github.com/wordpress-mobile/GutenbergKit/blob/trunk/src/utils/remote-editor.js#L64). Note that the line numbers might have changed.
+The `make build` command builds both the local and remote editors by default. To load the remote editor, you must enable the `plugins` configuration option within the Demo app.
+
+Additionally, a `make dev-server-remote` command is available for serving the latest remote editor changes through a development server. To load the development server in the Demo app, add an environment variable named `GUTENBERG_EDITOR_REMOTE_URL` with the URL of the development server plus `/remote.html`—i.e., `http://<YOUR_LOCAL_IP>:5173/remote.html`.
+
+> [!TIP]
+> The remote editor redirects to the local editor when loading fails. If you need to debug the failure, temporarily remove the `window.location` redirect in [`src/remote.jsx`](https://github.com/wordpress-mobile/GutenbergKit/blob/a211f6cd0391a8d15ae4570d28c66b12ef020134/src/remote.jsx#L52) and [`src/utils/remote-editor.js`](https://github.com/wordpress-mobile/GutenbergKit/blob/a211f6cd0391a8d15ae4570d28c66b12ef020134/src/utils/remote-editor.js#L64).
