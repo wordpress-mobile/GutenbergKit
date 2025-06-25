@@ -33,7 +33,7 @@ struct ContentView: View {
                 Text("Remote Editors")
             } footer: {
                 if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"] != nil {
-                    Text("Note: The editor is backed by the dev server created by `make dev-server`.")
+                    Text("Note: The editor is backed by the dev server created by `make dev-server-remote`.")
                 } else {
                     Text("Note: The editor is backed by the compiled web app created by `make build`.")
                 }
