@@ -284,10 +284,11 @@ export function awaitGBKitGlobal( timeoutMs = 3000 ) {
  */
 export async function fetchEditorAssets() {
 	if ( window.webkit ) {
-		return await window.webkit.messageHandlers.loadFetchedEditorAssets.postMessage( {
-			asset: 'manifest',
-		} );
-	} else {
-		throw new Error('Android support is not implemented yet.');
+		return await window.webkit.messageHandlers.loadFetchedEditorAssets.postMessage(
+			{
+				asset: 'manifest',
+			}
+		);
 	}
+	throw new Error( 'Android support is not implemented yet.' );
 }

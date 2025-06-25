@@ -2,7 +2,7 @@
  * Internal dependencies
  */
 import { fetchEditorAssets } from './bridge';
-import { debug, error } from './logger';
+import { error } from './logger';
 
 /**
  * Cache for editor assets to avoid unnecessary network requests
