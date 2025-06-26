@@ -99,8 +99,12 @@ public actor EditorAssetsLibrary {
                 try fileManager.createDirectory(at: localURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             }
 
-            let (downloaded, _) = try await urlSession.download(from: httpURL)
-            try fileManager.moveItem(at: downloaded, to: localURL)
+            let (downloaded, response) = try await urlSession.download(from: httpURL)
+            if let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status) {
+                try fileManager.moveItem(at: downloaded, to: localURL)
+            } else {
+                throw URLError(.badServerResponse)
+            }
         }
 
         return localURL
