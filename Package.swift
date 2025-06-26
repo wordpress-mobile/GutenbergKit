@@ -10,7 +10,7 @@ let package = Package(
         .library(name: "GutenbergKit", targets: ["GutenbergKit"])
     ],
     dependencies: [
-        .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.8.8"),
+        .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.5"),
     ],
     targets: [
         .target(
