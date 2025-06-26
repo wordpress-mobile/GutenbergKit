@@ -1,7 +1,12 @@
 /**
+ * WordPress dependencies
+ */
+import apiFetch from '@wordpress/api-fetch';
+
+/**
  * Internal dependencies
  */
-import { fetchEditorAssets } from './bridge';
+import { getGBKit, fetchEditorAssets } from './bridge';
 import { error } from './logger';
 
 /**
@@ -38,7 +43,16 @@ export async function loadEditorAssets( {
 			} );
 		}
 
-		const response = await fetchEditorAssets();
+		let response;
+		// TODO: Implement fetchEditorAssets Android support.
+		if ( window.webkit ) {
+			response = await fetchEditorAssets();
+		} else {
+			const { siteApiRoot, siteApiNamespace } = getGBKit();
+			response = await apiFetch( {
+				url: `${ siteApiRoot }wpcom/v2/${ siteApiNamespace[ 0 ] }/editor-assets`,
+			} );
+		}
 
 		// Cache the response
 		editorAssetsCache = response;
