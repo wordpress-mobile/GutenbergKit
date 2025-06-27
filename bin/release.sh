@@ -31,17 +31,28 @@ print_error() {
 
 # Function to show usage
 show_usage() {
-    echo "Usage: $0 [patch|minor|major] [--dry-run]"
+    echo "Usage: $0 [<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease | from-git] [--dry-run]"
     echo ""
     echo "Arguments:"
-    echo "  patch|minor|major  Version increment type (required)"
-    echo "  --dry-run         Run the script without making actual changes"
+    echo "  <newversion>      Custom version number (e.g., 1.2.3)"
+    echo "  major            Increment major version (1.0.0 -> 2.0.0)"
+    echo "  minor            Increment minor version (1.2.0 -> 1.3.0)"
+    echo "  patch            Increment patch version (1.2.3 -> 1.2.4)"
+    echo "  premajor         Increment major version and add prerelease (1.2.3 -> 2.0.0-0)"
+    echo "  preminor         Increment minor version and add prerelease (1.2.3 -> 1.3.0-0)"
+    echo "  prepatch         Increment patch version and add prerelease (1.2.3 -> 1.2.4-0)"
+    echo "  prerelease       Increment prerelease version (1.2.3-0 -> 1.2.3-1)"
+    echo "  from-git         Use version from git tag"
+    echo "  --dry-run        Run the script without making actual changes"
     echo ""
     echo "Examples:"
-    echo "  $0 patch          # Increment patch version (0.3.0 -> 0.3.1)"
-    echo "  $0 minor          # Increment minor version (0.3.0 -> 0.4.0)"
-    echo "  $0 major          # Increment major version (0.3.0 -> 1.0.0)"
-    echo "  $0 patch --dry-run # Test the release process without committing"
+    echo "  $0 patch                    # Increment patch version (0.3.0 -> 0.3.1)"
+    echo "  $0 minor                    # Increment minor version (0.3.0 -> 0.4.0)"
+    echo "  $0 major                    # Increment major version (0.3.0 -> 1.0.0)"
+    echo "  $0 1.2.3                   # Set specific version"
+    echo "  $0 premajor                # Increment major with prerelease (0.3.0 -> 1.0.0-0)"
+    echo "  $0 prerelease              # Increment prerelease (1.2.3-0 -> 1.2.3-1)"
+    echo "  $0 patch --dry-run         # Test the release process without committing"
 }
 
 # Function to check if we're on the trunk branch
@@ -94,13 +105,70 @@ get_current_version() {
     node -p "require('./package.json').version"
 }
 
+# Function to validate version type
+validate_version_type() {
+    local version_type=$1
+
+    # Check if it's a valid npm version type or a custom version number
+    case $version_type in
+        major|minor|patch|premajor|preminor|prepatch|prerelease|from-git)
+            return 0
+            ;;
+        *)
+            # Check if it's a valid semver version number
+            if [[ $version_type =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+                return 0
+            else
+                return 1
+            fi
+            ;;
+    esac
+}
+
+# Function to get version description
+get_version_description() {
+    local version_type=$1
+    local current_version=$(get_current_version)
+
+    case $version_type in
+        major)
+            echo "major version increment"
+            ;;
+        minor)
+            echo "minor version increment"
+            ;;
+        patch)
+            echo "patch version increment"
+            ;;
+        premajor)
+            echo "major version increment with prerelease"
+            ;;
+        preminor)
+            echo "minor version increment with prerelease"
+            ;;
+        prepatch)
+            echo "patch version increment with prerelease"
+            ;;
+        prerelease)
+            echo "prerelease version increment"
+            ;;
+        from-git)
+            echo "version from git tag"
+            ;;
+        *)
+            echo "custom version: $version_type"
+            ;;
+    esac
+}
+
 # Function to increment version
 increment_version() {
     local version_type=$1
     local current_version=$(get_current_version)
+    local version_description=$(get_version_description "$version_type")
 
     print_status "Current version: $current_version"
-    print_status "Incrementing version ($version_type)..."
+    print_status "Incrementing version ($version_description)..."
 
     if [ "$DRY_RUN" = "true" ]; then
         return
@@ -188,10 +256,6 @@ main() {
     # Parse arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
-            patch|minor|major)
-                version_type="$1"
-                shift
-                ;;
             --dry-run)
                 DRY_RUN=true
                 shift
@@ -201,16 +265,28 @@ main() {
                 exit 0
                 ;;
             *)
-                print_error "Unknown option: $1"
-                show_usage
-                exit 1
+                if [ -z "$version_type" ]; then
+                    version_type="$1"
+                else
+                    print_error "Unknown option: $1"
+                    show_usage
+                    exit 1
+                fi
+                shift
                 ;;
         esac
     done
 
     # Validate required argument
     if [ -z "$version_type" ]; then
-        print_error "Version type is required (patch|minor|major)"
+        print_error "Version type is required"
+        show_usage
+        exit 1
+    fi
+
+    # Validate version type
+    if ! validate_version_type "$version_type"; then
+        print_error "Invalid version type: $version_type"
         show_usage
         exit 1
     fi
@@ -259,7 +335,7 @@ main() {
 
     if [ "$DRY_RUN" = "true" ]; then
         print_warning "This was a dry run. No actual changes were made."
-        print_status "To perform the actual release, run: $0 $version_type"
+        print_status "To perform the actual release, run: make release VERSION_TYPE=$version_type"
     else
         print_status "The release is ready for integration into the WordPress app."
     fi

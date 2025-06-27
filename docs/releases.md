@@ -3,14 +3,22 @@
 Use the provided release script to automate the entire process:
 
 ```bash
-# For a patch release (0.3.0 -> 0.3.1)
-make release VERSION_TYPE=patch
+# Standard version increments
+make release VERSION_TYPE=patch    # 0.3.0 -> 0.3.1
+make release VERSION_TYPE=minor    # 0.3.0 -> 0.4.0
+make release VERSION_TYPE=major    # 0.3.0 -> 1.0.0
 
-# For a minor release (0.3.0 -> 0.4.0)
-make release VERSION_TYPE=minor
+# Custom version number
+make release VERSION_TYPE=1.2.3
 
-# For a major release (0.3.0 -> 1.0.0)
-make release VERSION_TYPE=major
+# Prerelease versions
+make release VERSION_TYPE=premajor  # 0.3.0 -> 1.0.0-0
+make release VERSION_TYPE=preminor  # 0.3.0 -> 0.4.0-0
+make release VERSION_TYPE=prepatch  # 0.3.0 -> 0.3.1-0
+make release VERSION_TYPE=prerelease # 1.2.3-0 -> 1.2.3-1
+
+# Use version from git tag
+make release VERSION_TYPE=from-git
 
 # Test the release process without making changes
 make release VERSION_TYPE=patch DRY_RUN=true

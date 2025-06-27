@@ -12,25 +12,47 @@ Automates the GutenbergKit release process. This script performs all the steps o
 
 ```bash
 # Direct usage
-./bin/release.sh [patch|minor|major] [--dry-run]
+./bin/release.sh [<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease | from-git] [--dry-run]
 
 # Via Makefile (recommended)
-make release VERSION_TYPE=[patch|minor|major] [DRY_RUN=true]
+make release VERSION_TYPE=[<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease | from-git] [DRY_RUN=true]
 ```
+
+#### Version Types
+
+| Type           | Description                     | Example               |
+| -------------- | ------------------------------- | --------------------- |
+| `major`        | Increment major version         | `1.2.3` → `2.0.0`     |
+| `minor`        | Increment minor version         | `1.2.3` → `1.3.0`     |
+| `patch`        | Increment patch version         | `1.2.3` → `1.2.4`     |
+| `premajor`     | Increment major with prerelease | `1.2.3` → `2.0.0-0`   |
+| `preminor`     | Increment minor with prerelease | `1.2.3` → `1.3.0-0`   |
+| `prepatch`     | Increment patch with prerelease | `1.2.3` → `1.2.4-0`   |
+| `prerelease`   | Increment prerelease version    | `1.2.3-0` → `1.2.3-1` |
+| `from-git`     | Use version from git tag        | Uses latest git tag   |
+| `<newversion>` | Set specific version            | `1.2.3` → `1.2.3`     |
 
 #### Examples
 
 ```bash
-# Create a patch release
+# Standard releases
 make release VERSION_TYPE=patch
-
-# Create a minor release
 make release VERSION_TYPE=minor
-
-# Create a major release
 make release VERSION_TYPE=major
 
-# Test the release process without making changes
+# Custom version
+make release VERSION_TYPE=1.2.3
+
+# Prerelease versions
+make release VERSION_TYPE=premajor
+make release VERSION_TYPE=preminor
+make release VERSION_TYPE=prepatch
+make release VERSION_TYPE=prerelease
+
+# Use version from git tag
+make release VERSION_TYPE=from-git
+
+# Test without making changes
 make release VERSION_TYPE=patch DRY_RUN=true
 ```
 
