@@ -103,7 +103,6 @@ increment_version() {
     print_status "Incrementing version ($version_type)..."
 
     if [ "$DRY_RUN" = "true" ]; then
-        print_warning "DRY RUN: Would increment version to $version_type"
         return
     fi
 
@@ -117,7 +116,6 @@ build_project() {
     print_status "Building GutenbergKit..."
 
     if [ "$DRY_RUN" = "true" ]; then
-        print_warning "DRY RUN: Would run 'make build'"
         return
     fi
 
@@ -132,7 +130,6 @@ commit_changes() {
     print_status "Adding changes to git..."
 
     if [ "$DRY_RUN" = "true" ]; then
-        print_warning "DRY RUN: Would add and commit changes with message '$version'"
         return
     fi
 
@@ -148,7 +145,6 @@ create_tag() {
     print_status "Creating git tag: v$version"
 
     if [ "$DRY_RUN" = "true" ]; then
-        print_warning "DRY RUN: Would create tag 'v$version'"
         return
     fi
 
@@ -163,7 +159,6 @@ push_changes() {
     print_status "Pushing changes to origin/trunk..."
 
     if [ "$DRY_RUN" = "true" ]; then
-        print_warning "DRY RUN: Would push to origin/trunk with tags"
         return
     fi
 
@@ -178,7 +173,6 @@ create_github_release() {
     print_status "Creating GitHub release: v$version"
 
     if [ "$DRY_RUN" = "true" ]; then
-        print_warning "DRY RUN: Would create GitHub release 'v$version'"
         return
     fi
 
