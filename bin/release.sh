@@ -38,10 +38,10 @@ show_usage() {
     echo "  major            Increment major version (1.0.0 -> 2.0.0)"
     echo "  minor            Increment minor version (1.2.0 -> 1.3.0)"
     echo "  patch            Increment patch version (1.2.3 -> 1.2.4)"
-    echo "  premajor         Increment major version and add prerelease (1.2.3 -> 2.0.0-0)"
-    echo "  preminor         Increment minor version and add prerelease (1.2.3 -> 1.3.0-0)"
-    echo "  prepatch         Increment patch version and add prerelease (1.2.3 -> 1.2.4-0)"
-    echo "  prerelease       Increment prerelease version (1.2.3-0 -> 1.2.3-1)"
+    echo "  premajor         Increment major version and add prerelease (1.2.3 -> 2.0.0-alpha.0)"
+    echo "  preminor         Increment minor version and add prerelease (1.2.3 -> 1.3.0-alpha.0)"
+    echo "  prepatch         Increment patch version and add prerelease (1.2.3 -> 1.2.4-alpha.0)"
+    echo "  prerelease       Increment prerelease version (1.2.3-alpha.0 -> 1.2.3-alpha.1)"
     echo "  from-git         Use version from git tag"
     echo "  --dry-run        Run the script without making actual changes"
     echo ""
@@ -50,8 +50,8 @@ show_usage() {
     echo "  $0 minor                    # Increment minor version (0.3.0 -> 0.4.0)"
     echo "  $0 major                    # Increment major version (0.3.0 -> 1.0.0)"
     echo "  $0 1.2.3                   # Set specific version"
-    echo "  $0 premajor                # Increment major with prerelease (0.3.0 -> 1.0.0-0)"
-    echo "  $0 prerelease              # Increment prerelease (1.2.3-0 -> 1.2.3-1)"
+    echo "  $0 premajor                # Increment major with prerelease (0.3.0 -> 1.0.0-alpha.0)"
+    echo "  $0 prerelease              # Increment prerelease (1.2.3-alpha.0 -> 1.2.3-alpha.1)"
     echo "  $0 patch --dry-run         # Test the release process without committing"
 }
 
@@ -174,7 +174,16 @@ increment_version() {
         return
     fi
 
-    npm --no-git-tag-version version "$version_type"
+    # For prerelease types, always use 'alpha' as the preid
+    case $version_type in
+        premajor|preminor|prepatch|prerelease)
+            npm --no-git-tag-version version "$version_type" --preid=alpha
+            ;;
+        *)
+            npm --no-git-tag-version version "$version_type"
+            ;;
+    esac
+
     local new_version=$(get_current_version)
     print_success "Version incremented to: $new_version"
 }

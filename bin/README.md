@@ -20,17 +20,17 @@ make release VERSION_TYPE=[<newversion> | major | minor | patch | premajor | pre
 
 #### Version Types
 
-| Type           | Description                     | Example               |
-| -------------- | ------------------------------- | --------------------- |
-| `major`        | Increment major version         | `1.2.3` → `2.0.0`     |
-| `minor`        | Increment minor version         | `1.2.3` → `1.3.0`     |
-| `patch`        | Increment patch version         | `1.2.3` → `1.2.4`     |
-| `premajor`     | Increment major with prerelease | `1.2.3` → `2.0.0-0`   |
-| `preminor`     | Increment minor with prerelease | `1.2.3` → `1.3.0-0`   |
-| `prepatch`     | Increment patch with prerelease | `1.2.3` → `1.2.4-0`   |
-| `prerelease`   | Increment prerelease version    | `1.2.3-0` → `1.2.3-1` |
-| `from-git`     | Use version from git tag        | Uses latest git tag   |
-| `<newversion>` | Set specific version            | `1.2.3` → `1.2.3`     |
+| Type           | Description                     | Example                           |
+| -------------- | ------------------------------- | --------------------------------- |
+| `major`        | Increment major version         | `1.2.3` → `2.0.0`                 |
+| `minor`        | Increment minor version         | `1.2.3` → `1.3.0`                 |
+| `patch`        | Increment patch version         | `1.2.3` → `1.2.4`                 |
+| `premajor`     | Increment major with prerelease | `1.2.3` → `2.0.0-alpha.0`         |
+| `preminor`     | Increment minor with prerelease | `1.2.3` → `1.3.0-alpha.0`         |
+| `prepatch`     | Increment patch with prerelease | `1.2.3` → `1.2.4-alpha.0`         |
+| `prerelease`   | Increment prerelease version    | `1.2.3-alpha.0` → `1.2.3-alpha.1` |
+| `from-git`     | Use version from git tag        | Uses latest git tag               |
+| `<newversion>` | Set specific version            | `1.2.3` → `1.2.3`                 |
 
 #### Examples
 

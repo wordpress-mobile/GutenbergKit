@@ -11,11 +11,11 @@ make release VERSION_TYPE=major    # 0.3.0 -> 1.0.0
 # Custom version number
 make release VERSION_TYPE=1.2.3
 
-# Prerelease versions
-make release VERSION_TYPE=premajor  # 0.3.0 -> 1.0.0-0
-make release VERSION_TYPE=preminor  # 0.3.0 -> 0.4.0-0
-make release VERSION_TYPE=prepatch  # 0.3.0 -> 0.3.1-0
-make release VERSION_TYPE=prerelease # 1.2.3-0 -> 1.2.3-1
+# Prerelease versions (using alpha identifier)
+make release VERSION_TYPE=premajor  # 0.3.0 -> 1.0.0-alpha.0
+make release VERSION_TYPE=preminor  # 0.3.0 -> 0.4.0-alpha.0
+make release VERSION_TYPE=prepatch  # 0.3.0 -> 0.3.1-alpha.0
+make release VERSION_TYPE=prerelease # 1.2.3-alpha.0 -> 1.2.3-alpha.1
 
 # Use version from git tag
 make release VERSION_TYPE=from-git
