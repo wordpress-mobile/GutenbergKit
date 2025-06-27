@@ -91,7 +91,7 @@ check_dependencies() {
 
 # Function to get current version
 get_current_version() {
-    npm run version --silent 2>/dev/null | head -n1 || node -p "require('./package.json').version"
+    node -p "require('./package.json').version"
 }
 
 # Function to increment version
