@@ -38,11 +38,11 @@ const I18N_PACKAGES = [ 'i18n', 'hooks' ];
 // - https://github.com/vitejs/vite/issues/5189#issuecomment-2175410148
 awaitGBKitGlobal()
 	.then( initializeApiAndLoadI18n )
-	.then( importLocalization )
-	.then( configureLocalization )
+	.then( importL10n )
+	.then( configureLocale )
 	.then( loadRemainingAssets )
-	.then( initializeEditorWithBlocks )
-	.catch( handleInitializationError );
+	.then( initializeEditor )
+	.catch( handleError );
 
 function initializeApiAndLoadI18n() {
 	initializeApiFetch();
@@ -52,13 +52,13 @@ function initializeApiAndLoadI18n() {
 	return loadEditorAssets( { allowedPackages: I18N_PACKAGES } );
 }
 
-function importLocalization() {
+function importL10n() {
 	return import( './utils/localization' );
 }
 
-function configureLocalization( localizationModule ) {
-	const { configureLocale } = localizationModule;
-	return configureLocale();
+function configureLocale( localeModule ) {
+	const { configureLocale: _configureLocale } = localeModule;
+	return _configureLocale();
 }
 
 function loadRemainingAssets() {
@@ -69,14 +69,16 @@ function loadRemainingAssets() {
 	} );
 }
 
-function initializeEditorWithBlocks( assetsResult ) {
+function initializeEditor( assetsResult ) {
 	const { allowedBlockTypes } = assetsResult;
-	return import( './utils/editor' ).then( ( { initializeEditor } ) => {
-		initializeEditor( { allowedBlockTypes } );
-	} );
+	return import( './utils/editor' ).then(
+		( { initializeEditor: _initializeEditor } ) => {
+			_initializeEditor( { allowedBlockTypes } );
+		}
+	);
 }
 
-function handleInitializationError( err ) {
+function handleError( err ) {
 	error( 'Error initializing editor', err );
 	// Fallback to the local editor and display a notice. Because the remote
 	// editor loading failed, it is more practical to rely upon the local
