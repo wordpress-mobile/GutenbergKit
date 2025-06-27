@@ -67,8 +67,8 @@ function wordPressExternals() {
 
 				if (
 					! externalDefinition ||
-					/@wordpress\/(api-fetch|i18n|url)/.test( id ) ||
-					/@wordpress\/(api-fetch|i18n|url)/.test( module )
+					/@wordpress\/(api-fetch|url|hooks)/.test( id ) ||
+					/@wordpress\/(api-fetch|url|hooks)/.test( module )
 				) {
 					continue; // Exclude the module from externalization
 				}

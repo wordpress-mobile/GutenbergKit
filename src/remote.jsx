@@ -2,7 +2,6 @@
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
-import { setLocaleData } from '@wordpress/i18n';
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
 import '@wordpress/block-editor/build-style/style.css';
@@ -50,7 +49,7 @@ function importLocalization() {
 
 function configureLocalization( localizationModule ) {
 	const { configureLocale } = localizationModule;
-	return configureLocale( setLocaleData );
+	return configureLocale();
 }
 
 function loadRemainingAssets() {
