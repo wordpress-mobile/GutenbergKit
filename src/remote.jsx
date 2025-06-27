@@ -29,35 +29,49 @@ window.wp.apiFetch = apiFetch;
 const I18N_PACKAGES = [ 'i18n', 'hooks' ];
 
 awaitGBKitGlobal()
-	.then( () => {
-		initializeApiFetch();
+	.then( initializeApiAndLoadI18n )
+	.then( importLocalization )
+	.then( configureLocalization )
+	.then( loadRemainingAssets )
+	.then( initializeEditorWithBlocks )
+	.catch( handleInitializationError );
 
-		// Ensure the i18n packages are loaded, then set the locale before importing
-		// the rest of the packages.
-		return loadEditorAssets( { allowedPackages: I18N_PACKAGES } );
-	} )
-	.then( () => {
-		return import( './utils/localization' );
-	} )
-	.then( ( { configureLocale } ) => {
-		return configureLocale( setLocaleData );
-	} )
-	.then( () => {
-		// Ensure the correct translation strings are used by postponing the import
-		// of the remaining `@wordpress` packages until after the locale is set.
-		return loadEditorAssets( {
-			disallowedPackages: I18N_PACKAGES,
-		} );
-	} )
-	.then( ( { allowedBlockTypes } ) => {
-		return import( './utils/editor' ).then( ( { initializeEditor } ) => {
-			initializeEditor( { allowedBlockTypes } );
-		} );
-	} )
-	.catch( ( err ) => {
-		error( 'Error initializing editor', err );
-		// Fallback to the local editor and display a notice. Because the remote
-		// editor loading failed, it is more practical to rely upon the local
-		// editor's scripts and styles for displaying the notice.
-		window.location.href = 'index.html?error=gbkit_global_unavailable';
+function initializeApiAndLoadI18n() {
+	initializeApiFetch();
+
+	// Ensure the i18n packages are loaded, then set the locale before importing
+	// the rest of the packages.
+	return loadEditorAssets( { allowedPackages: I18N_PACKAGES } );
+}
+
+function importLocalization() {
+	return import( './utils/localization' );
+}
+
+function configureLocalization( localizationModule ) {
+	const { configureLocale } = localizationModule;
+	return configureLocale( setLocaleData );
+}
+
+function loadRemainingAssets() {
+	// Ensure the correct translation strings are used by postponing the import
+	// of the remaining `@wordpress` packages until after the locale is set.
+	return loadEditorAssets( {
+		disallowedPackages: I18N_PACKAGES,
 	} );
+}
+
+function initializeEditorWithBlocks( assetsResult ) {
+	const { allowedBlockTypes } = assetsResult;
+	return import( './utils/editor' ).then( ( { initializeEditor } ) => {
+		initializeEditor( { allowedBlockTypes } );
+	} );
+}
+
+function handleInitializationError( err ) {
+	error( 'Error initializing editor', err );
+	// Fallback to the local editor and display a notice. Because the remote
+	// editor loading failed, it is more practical to rely upon the local
+	// editor's scripts and styles for displaying the notice.
+	window.location.href = 'index.html?error=gbkit_global_unavailable';
+}
