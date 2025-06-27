@@ -60,3 +60,27 @@ build-swift-package: build
 
 test-swift-package: build
 	$(call XCODEBUILD_CMD, test)
+
+release:
+	@echo "--- :rocket: Starting GutenbergKit Release Process"
+	@echo "Usage: make release VERSION_TYPE=[patch|minor|major] [DRY_RUN=true]"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make release VERSION_TYPE=patch"
+	@echo "  make release VERSION_TYPE=minor"
+	@echo "  make release VERSION_TYPE=major"
+	@echo "  make release VERSION_TYPE=patch DRY_RUN=true"
+	@echo ""
+	@if [ -z "$(VERSION_TYPE)" ]; then \
+		echo "Error: VERSION_TYPE is required. Use patch, minor, or major."; \
+		exit 1; \
+	fi
+	@if [ "$(VERSION_TYPE)" != "patch" ] && [ "$(VERSION_TYPE)" != "minor" ] && [ "$(VERSION_TYPE)" != "major" ]; then \
+		echo "Error: VERSION_TYPE must be patch, minor, or major."; \
+		exit 1; \
+	fi
+	@if [ "$(DRY_RUN)" = "true" ]; then \
+		./bin/release.sh $(VERSION_TYPE) --dry-run; \
+	else \
+		./bin/release.sh $(VERSION_TYPE); \
+	fi
