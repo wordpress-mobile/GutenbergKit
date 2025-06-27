@@ -90,6 +90,10 @@ make build
 
 Once finished, the Swift and Kotlin packages are ready to publish. Consuming iOS or Android host apps can then include the GutenbergKit package as a dependency.
 
+## Releases
+
+See the [release documentation](./docs/releases.md) for more information.
+
 ## Remote Editor
 
 By default, GutenbergKit utilizes local `@wordpress` modules. This approach is similar to most modern web applications, where the `@wordpress` modules are bundled with the application.
