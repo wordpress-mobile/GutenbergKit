@@ -19,38 +19,6 @@ export default defineConfig( {
 		rollupOptions: {
 			input: resolve( __dirname, 'src/remote.html' ),
 			external: externalize,
-			output: {
-				// Manual chunks are necessary to prevent circular dependencies, some of
-				// which originate from Vite's injected helpers.
-				//
-				// See:
-				// - https://github.com/vitejs/vite/issues/18551
-				// - https://github.com/vitejs/vite/issues/13952
-				// - https://github.com/vitejs/vite/issues/5189#issuecomment-2175410148
-				manualChunks( id ) {
-					const VITE_COMMON_MODULES = [
-						'vite/preload-helper',
-						'vite/modulepreload-polyfill',
-						'vite/dynamic-import-helper',
-						'commonjsHelpers',
-						'commonjs-dynamic-modules',
-						'__vite-browser-external',
-					];
-					if (
-						VITE_COMMON_MODULES.some( ( m ) => id.includes( m ) )
-					) {
-						return 'vite-helpers';
-					}
-
-					if ( id.includes( 'src/utils/bridge.js' ) ) {
-						return 'bridge';
-					}
-
-					if ( id.includes( 'src/utils/logger.js' ) ) {
-						return 'logger';
-					}
-				},
-			},
 		},
 		target: 'esnext',
 	},
