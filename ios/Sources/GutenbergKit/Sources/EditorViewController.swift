@@ -350,9 +350,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Calls this at any moment before showing the actual editor. The warmup
     /// shaves a couple of hundred milliseconds off the first load.
-    public static func warmup() {
-        // TODO: add a `configuration` argument and pre-load editor assets
-        let editorViewController = EditorViewController(isWarmupMode: true)
+    public static func warmup(configuration: EditorConfiguration = .default) {
+        let editorViewController = EditorViewController(configuration: configuration, isWarmupMode: true)
         _ = editorViewController.view // Trigger viewDidLoad
 
         // Retain for 5 seconds and let it prefetch stuff
