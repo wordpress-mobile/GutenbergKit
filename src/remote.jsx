@@ -27,6 +27,15 @@ window.wp.apiFetch = apiFetch;
 
 const I18N_PACKAGES = [ 'i18n', 'hooks' ];
 
+// Rely upon promises rather than async/await to avoid timeouts caused by
+// circular dependencies. Addressing the circular dependencies is quite
+// challenging due to Vite's preload helpers and bugs in `manualChunks`
+// configuration.
+//
+// See:
+// - https://github.com/vitejs/vite/issues/18551
+// - https://github.com/vitejs/vite/issues/13952
+// - https://github.com/vitejs/vite/issues/5189#issuecomment-2175410148
 awaitGBKitGlobal()
 	.then( initializeApiAndLoadI18n )
 	.then( importLocalization )
