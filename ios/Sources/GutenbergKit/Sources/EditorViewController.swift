@@ -1,11 +1,13 @@
 import UIKit
-import WebKit
+@preconcurrency import WebKit
 import SwiftUI
 import Combine
+import CryptoKit
 
 @MainActor
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
     public let webView: WKWebView
+    let assetsLibrary: EditorAssetsLibrary
 
     public var configuration: EditorConfiguration
     private var _isEditorRendered = false
@@ -17,9 +19,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     public weak var delegate: EditorViewControllerDelegate?
 
-    /// A custom URL for the editor.
-    public var editorURL: URL?
-
     private var cancellables: [AnyCancellable] = []
 
     /// Warmup mode preloads resources into memory to make the UI transition seamless when displaying the editor for the first time
@@ -27,12 +26,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let isWarmupMode: Bool
 
     /// Initalizes the editor with the initial content (Gutenberg).
-    public convenience init(configuration: EditorConfiguration = .default) {
-        self.init(configuration: configuration, isWarmupMode: false)
-    }
-
-    init(configuration: EditorConfiguration = .default, isWarmupMode: Bool = false) {
+    public init(configuration: EditorConfiguration = .default, isWarmupMode: Bool = false) {
         self.configuration = configuration
+        self.assetsLibrary = EditorAssetsLibrary(configuration: configuration)
         self.controller = GutenbergEditorController(configuration: configuration)
 
         // The `allowFileAccessFromFileURLs` allows the web view to access the
@@ -46,6 +42,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         // This is important so they user can't select anything but text across blocks.
         config.selectionGranularity = .character
+
+        let schemeHandler = CachedAssetSchemeHandler(library: assetsLibrary)
+        for scheme in CachedAssetSchemeHandler.supportedURLSchemes {
+            config.setURLSchemeHandler(schemeHandler, forURLScheme: scheme)
+        }
 
         self.webView = GBWebView(frame: .zero, configuration: config)
         self.webView.scrollView.keyboardDismissMode = .interactive
@@ -120,14 +121,21 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func loadEditor() {
-        if configuration.plugins,
-           let remoteURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"].flatMap(URL.init) {
-            webView.load(URLRequest(url: remoteURL))
-        } else if let customURL = editorURL ?? ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
-            webView.load(URLRequest(url: customURL))
-        } else if configuration.plugins {
-            let remoteURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg")!
-            webView.loadFileURL(remoteURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+        if configuration.plugins {
+            webView.configuration.userContentController.addScriptMessageHandler(
+                EditorAssetsProvider(library: assetsLibrary),
+                contentWorld: .page,
+                name: "loadFetchedEditorAssets"
+            )
+
+            if let remoteURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"].flatMap(URL.init) {
+                webView.load(URLRequest(url: remoteURL))
+            } else {
+                let remoteURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg")!
+                webView.loadFileURL(remoteURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+            }
+        } else if let editorURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
+            webView.load(URLRequest(url: editorURL))
         } else {
             let indexURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
             webView.loadFileURL(indexURL, allowingReadAccessTo: Bundle.module.resourceURL!)
@@ -342,8 +350,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Calls this at any moment before showing the actual editor. The warmup
     /// shaves a couple of hundred milliseconds off the first load.
-    public static func warmup() {
-        let editorViewController = EditorViewController(isWarmupMode: true)
+    public static func warmup(configuration: EditorConfiguration = .default) {
+        let editorViewController = EditorViewController(configuration: configuration, isWarmupMode: true)
         _ = editorViewController.view // Trigger viewDidLoad
 
         // Retain for 5 seconds and let it prefetch stuff
@@ -411,6 +419,144 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     }
 }
 
-private extension WKWebView {
+private class EditorAssetsProvider: NSObject, WKScriptMessageHandlerWithReply {
+    let library: EditorAssetsLibrary
 
+    init(library: EditorAssetsLibrary) {
+        self.library = library
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage, replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void) {
+        guard let payload = message.body as? NSDictionary,
+              let asset = payload.object(forKey: "asset") as? String,
+              asset == "manifest"
+        else {
+            replyHandler(nil, "Unexpected message")
+            return
+        }
+
+        Task.detached { [library] in
+            do {
+                let data = try await library.manifestContentForEditor()
+                let dict = try JSONSerialization.jsonObject(with: data)
+                await replyHandler(dict, nil)
+            } catch {
+                await replyHandler(nil, error.localizedDescription)
+            }
+        }
+    }
+}
+
+class CachedAssetSchemeHandler: NSObject, WKURLSchemeHandler {
+    nonisolated static let cachedURLSchemePrefix = "gbk-cache-"
+    nonisolated static let supportedURLSchemes = ["gbk-cache-http", "gbk-cache-https"]
+
+    nonisolated static func originalHTTPURL(from url: URL) -> URL? {
+        guard let scheme = url.scheme, supportedURLSchemes.contains(scheme) else { return nil }
+
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: true) else {
+            return nil
+        }
+
+        components.scheme = String(scheme.suffix(from: scheme.index(scheme.startIndex, offsetBy: cachedURLSchemePrefix.count)))
+        return components.url
+    }
+
+    nonisolated static func cachedURL(forWebLink link: String) -> String? {
+        if link.starts(with: "http://") || link.starts(with: "https://") {
+            return cachedURLSchemePrefix + link
+        }
+        return nil
+    }
+
+    let worker: Worker
+
+    init(library: EditorAssetsLibrary) {
+        self.worker = .init(library: library)
+    }
+
+    func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {
+        Task {
+            await worker.start(urlSchemeTask)
+        }
+    }
+
+    func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {
+        Task {
+            await worker.stop(urlSchemeTask)
+        }
+    }
+
+    actor Worker {
+         struct TaskInfo {
+             var webViewTask: WKURLSchemeTask
+             var fetchAssetTask: Task<Void, Never>
+
+             func cancel() {
+                 fetchAssetTask.cancel()
+             }
+        }
+
+        let library: EditorAssetsLibrary
+        var tasks: [ObjectIdentifier: TaskInfo] = [:]
+
+        init(library: EditorAssetsLibrary) {
+            self.library = library
+        }
+
+        deinit {
+            for (_, task) in tasks {
+                task.cancel()
+            }
+        }
+
+        func start(_ task: WKURLSchemeTask) {
+            guard let url = task.request.url, let httpURL = CachedAssetSchemeHandler.originalHTTPURL(from: url) else {
+                task.didFailWithError(URLError(.badURL))
+                return
+            }
+
+            let taskKey = ObjectIdentifier(task)
+
+            let fetchAssetTask = Task { [library, weak self] in
+                do {
+                    let localURL = try await library.cacheAsset(from: httpURL)
+                    assert(localURL.isFileURL)
+
+                    let content = try Data(contentsOf: localURL)
+                    let mimeType: String = switch httpURL.pathExtension {
+                    case "js": "application/javascript"
+                    case "css": "text/css"
+                    default: "application/octet-stream"
+                    }
+                    let response = URLResponse(url: url, mimeType: mimeType, expectedContentLength: content.count, textEncodingName: nil)
+
+                    await self?.tasks[taskKey]?.webViewTask.didReceive(response)
+                    await self?.tasks[taskKey]?.webViewTask.didReceive(content)
+
+                    await self?.finish(with: nil, taskKey: taskKey)
+                } catch {
+                    await self?.finish(with: error, taskKey: taskKey)
+                }
+            }
+            tasks[taskKey] = .init(webViewTask: task, fetchAssetTask: fetchAssetTask)
+        }
+
+        func stop(_ task: WKURLSchemeTask) {
+            let taskKey = ObjectIdentifier(task)
+            tasks[taskKey]?.cancel()
+            tasks[taskKey] = nil
+        }
+
+        private func finish(with error: Error?, taskKey: ObjectIdentifier) {
+            guard let task = tasks[taskKey] else { return }
+
+            if let error {
+                task.webViewTask.didFailWithError(error)
+            } else {
+                task.webViewTask.didFinish()
+            }
+            tasks[taskKey] = nil
+        }
+    }
 }

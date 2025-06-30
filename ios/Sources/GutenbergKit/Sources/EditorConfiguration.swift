@@ -21,6 +21,7 @@ public struct EditorConfiguration {
     public var editorSettings: [String: Any]?
     /// The locale to use for translations
     public var locale = "en"
+    public var editorAssetsEndpoint: URL?
 
     public init(title: String = "", content: String = "") {
         self.title = title

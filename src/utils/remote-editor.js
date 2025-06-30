@@ -6,7 +6,7 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import { getGBKit } from './bridge';
+import { getGBKit, fetchEditorAssets } from './bridge';
 import { error } from './logger';
 
 /**
@@ -43,11 +43,16 @@ export async function loadEditorAssets( {
 			} );
 		}
 
-		const { siteApiRoot, siteApiNamespace } = getGBKit();
-		// TODO: Load editor assets within the host app
-		const response = await apiFetch( {
-			url: `${ siteApiRoot }wpcom/v2/${ siteApiNamespace[ 0 ] }/editor-assets`,
-		} );
+		let response;
+		// TODO: Implement fetchEditorAssets Android support.
+		if ( window.webkit ) {
+			response = await fetchEditorAssets();
+		} else {
+			const { siteApiRoot, siteApiNamespace } = getGBKit();
+			response = await apiFetch( {
+				url: `${ siteApiRoot }wpcom/v2/${ siteApiNamespace[ 0 ] }/editor-assets`,
+			} );
+		}
 
 		// Cache the response
 		editorAssetsCache = response;

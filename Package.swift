@@ -9,10 +9,13 @@ let package = Package(
     products: [
         .library(name: "GutenbergKit", targets: ["GutenbergKit"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.5"),
+    ],
     targets: [
         .target(
             name: "GutenbergKit",
-            dependencies: [],
+            dependencies: ["SwiftSoup"],
             path: "ios/Sources/GutenbergKit",
             exclude: [],
             resources: [.copy("Gutenberg")]
@@ -21,7 +24,10 @@ let package = Package(
             name: "GutenbergKitTests",
             dependencies: ["GutenbergKit"],
             path: "ios/Tests",
-            exclude: []
-        )
+            exclude: [],
+            resources: [
+                .copy("GutenbergKitTests/Resources/manifest-test-case-1.json")
+            ]
+        ),
     ]
 )
