@@ -27,24 +27,58 @@ window.wp.apiFetch = apiFetch;
 
 const I18N_PACKAGES = [ 'i18n', 'hooks' ];
 
-try {
-	await awaitGBKitGlobal();
+// Rely upon promises rather than async/await to avoid timeouts caused by
+// circular dependencies. Addressing the circular dependencies is quite
+// challenging due to Vite's preload helpers and bugs in `manualChunks`
+// configuration.
+//
+// See:
+// - https://github.com/vitejs/vite/issues/18551
+// - https://github.com/vitejs/vite/issues/13952
+// - https://github.com/vitejs/vite/issues/5189#issuecomment-2175410148
+awaitGBKitGlobal()
+	.then( initializeApiAndLoadI18n )
+	.then( importL10n )
+	.then( configureLocale )
+	.then( loadRemainingAssets )
+	.then( initializeEditor )
+	.catch( handleError );
+
+function initializeApiAndLoadI18n() {
 	initializeApiFetch();
 
 	// Ensure the i18n packages are loaded, then set the locale before importing
 	// the rest of the packages.
-	await loadEditorAssets( { allowedPackages: I18N_PACKAGES } );
-	const { configureLocale } = await import( './utils/localization' );
-	await configureLocale();
+	return loadEditorAssets( { allowedPackages: I18N_PACKAGES } );
+}
 
+function importL10n() {
+	return import( './utils/localization' );
+}
+
+function configureLocale( localeModule ) {
+	const { configureLocale: _configureLocale } = localeModule;
+	return _configureLocale();
+}
+
+function loadRemainingAssets() {
 	// Ensure the correct translation strings are used by postponing the import
 	// of the remaining `@wordpress` packages until after the locale is set.
-	const { allowedBlockTypes } = await loadEditorAssets( {
+	return loadEditorAssets( {
 		disallowedPackages: I18N_PACKAGES,
 	} );
-	const { initializeEditor } = await import( './utils/editor' );
-	initializeEditor( { allowedBlockTypes } );
-} catch ( err ) {
+}
+
+function initializeEditor( assetsResult ) {
+	const { allowedBlockTypes } = assetsResult;
+	return import( './utils/editor' ).then(
+		( { initializeEditor: _initializeEditor } ) => {
+			_initializeEditor( { allowedBlockTypes } );
+		}
+	);
+}
+
+function handleError( err ) {
 	error( 'Error initializing editor', err );
 	// Fallback to the local editor and display a notice. Because the remote
 	// editor loading failed, it is more practical to rely upon the local

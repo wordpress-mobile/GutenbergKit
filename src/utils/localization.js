@@ -8,6 +8,7 @@ import { setLocaleData } from '@wordpress/i18n';
  */
 import { getGBKit } from './bridge';
 import { error, debug } from './logger';
+
 /**
  * Initializes i18n support for the editor.
  *
@@ -22,6 +23,7 @@ export async function configureLocale() {
  * Loads translations for the specified locale from the downloaded files.
  *
  * @param {string} locale The locale to load translations for.
+ *
  * @return {Promise<void>} A promise that resolves when translations are loaded.
  */
 async function loadTranslations( locale ) {

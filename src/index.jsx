@@ -23,32 +23,33 @@ import './index.scss';
 import EditorLoadError from './components/editor-load-error';
 import { error } from './utils/logger';
 
-try {
-	await awaitGBKitGlobal();
-	initializeApiFetch();
-	await configureLocale();
+// Rely upon promises rather than async/await to avoid timeouts caused by
+// circular dependencies. Addressing the circular dependencies is quite
+// challenging due to Vite's preload helpers and bugs in `manualChunks`
+// configuration.
+//
+// See:
+// - https://github.com/vitejs/vite/issues/18551
+// - https://github.com/vitejs/vite/issues/13952
+// - https://github.com/vitejs/vite/issues/5189#issuecomment-2175410148
+awaitGBKitGlobal()
+	.then( initializeApiAndLocale )
+	.then( importEditor )
+	.then( initializeEditor )
+	.catch( handleError );
 
-	// Ensure the correct translation strings are used by postponing the import
-	// of `@wordpress` packages until after the locale is set.
-	//
-	// @TODO: A circular dependency prevents the use of async/await. Ideally, we
-	// address the circular dependency using Rollup's `manualChunks`. However, a
-	// very specific configuration is necessary to ensure that no circular
-	// dependencies are created--includeing from injected Vite helpers.
-	//
-	// See:
-	// - https://github.com/vitejs/vite/issues/18551
-	// - https://github.com/vitejs/vite/issues/13952
-	// - https://github.com/vitejs/vite/issues/5189#issuecomment-2175410148
-	import( './utils/editor' )
-		.then( ( { initializeEditor } ) => {
-			initializeEditor();
-		} )
-		.catch( ( err ) => {
-			handleError( err );
-		} );
-} catch ( err ) {
-	handleError( err );
+function initializeApiAndLocale() {
+	initializeApiFetch();
+	return configureLocale();
+}
+
+function importEditor() {
+	return import( './utils/editor' );
+}
+
+function initializeEditor( editorModule ) {
+	const { initializeEditor: _initializeEditor } = editorModule;
+	_initializeEditor();
 }
 
 function handleError( err ) {
