@@ -37,6 +37,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
 
+        // The editor shouldn't try to persist cookies – we want complete control over how they're handled
+        config.websiteDataStore = WKWebsiteDataStore.nonPersistent()
+        for cookie in configuration.cookies {
+            config.websiteDataStore.httpCookieStore.setCookie(cookie)
+        }
+
         // Set-up communications with the editor.
         config.userContentController.add(controller, name: "editorDelegate")
 

@@ -1,7 +1,6 @@
 package com.example.gutenbergkit
 
 import android.os.Bundle
-import android.util.Log
 import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -39,6 +38,7 @@ class MainActivity : AppCompatActivity() {
             .setNamespaceExcludedPaths(arrayOf())
             .setAuthHeader("")
             .setWebViewGlobals(emptyList())
+            .setCookies(emptyMap())
             .build()
 
         gbView.start(config)
