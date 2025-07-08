@@ -291,6 +291,10 @@ export async function fetchEditorAssets() {
 				asset: 'manifest',
 			}
 		);
+	} else if ( window.GutenbergAssetProvider ) {
+		// Android support
+		const manifestJson = window.GutenbergAssetProvider.loadFetchedEditorAssets( 'manifest' );
+		return JSON.parse( manifestJson );
 	}
-	throw new Error( 'Android support is not implemented yet.' );
+	throw new Error( 'Editor assets provider not available.' );
 }

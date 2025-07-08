@@ -1,0 +1,83 @@
+package org.wordpress.gutenberg
+
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.util.Log
+import kotlinx.coroutines.runBlocking
+import java.io.ByteArrayInputStream
+
+class CachedAssetRequestInterceptor(
+    private val library: EditorAssetsLibrary,
+    private val allowedHosts: Set<String> = emptySet()
+) : GutenbergRequestInterceptor {
+
+    companion object {
+        private const val TAG = "CachedAssetInterceptor"
+        private val MIME_TYPES = mapOf(
+            ".js" to "application/javascript",
+            ".css" to "text/css",
+            ".map" to "application/json"
+        )
+        private val CACHEABLE_EXTENSIONS = setOf(".js", ".css", ".js.map")
+    }
+
+    override fun canIntercept(request: WebResourceRequest): Boolean {
+        val url = request.url ?: return false
+
+        // Only intercept if host is in allowed list (if specified)
+        if (allowedHosts.isNotEmpty() && url.host !in allowedHosts) {
+            return false
+        }
+
+        // Only intercept cacheable asset types
+        val urlString = url.toString()
+        return CACHEABLE_EXTENSIONS.any { urlString.contains(it) }
+    }
+
+    override fun handleRequest(request: WebResourceRequest): WebResourceResponse? {
+        val url = request.url?.toString() ?: return null
+
+        try {
+            // First check cache
+            val cachedData = library.getCachedAsset(url)
+            if (cachedData != null) {
+                Log.d(TAG, "Serving cached asset: $url")
+                return createResponse(url, cachedData)
+            }
+
+            // Fetch and cache
+            Log.d(TAG, "Fetching asset: $url")
+            val data = runBlocking {
+                try {
+                    library.cacheAsset(url)
+                    library.getCachedAsset(url)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to cache asset: $url", e)
+                    null
+                }
+            }
+
+            return if (data != null) {
+                createResponse(url, data)
+            } else {
+                null // Let WebView handle the error
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling request: $url", e)
+            return null
+        }
+    }
+
+    fun shutdown() {
+        library.shutdown()
+    }
+
+    private fun createResponse(url: String, data: ByteArray): WebResourceResponse {
+        val mimeType = MIME_TYPES.entries.find { url.contains(it.key) }?.value ?: "application/octet-stream"
+        return WebResourceResponse(
+            mimeType,
+            "UTF-8",
+            ByteArrayInputStream(data)
+        )
+    }
+}

@@ -62,7 +62,10 @@ open class EditorConfiguration constructor(
     val webViewGlobals: List<WebViewGlobal>,
     val editorSettings: String?,
     val locale: String?,
-    val cookies: Map<String, String>
+    val cookies: Map<String, String>,
+    val enableAssetCaching: Boolean = false,
+    val cachedAssetHosts: Set<String> = emptySet(),
+    val editorAssetsEndpoint: String? = null
 ): Parcelable {
     companion object {
         @JvmStatic
@@ -86,6 +89,9 @@ open class EditorConfiguration constructor(
         private var editorSettings: String? = null
         private var locale: String? = "en"
         private var cookies: Map<String, String> = mapOf()
+        private var enableAssetCaching: Boolean = false
+        private var cachedAssetHosts: Set<String> = emptySet()
+        private var editorAssetsEndpoint: String? = null
 
         fun setTitle(title: String) = apply { this.title = title }
         fun setContent(content: String) = apply { this.content = content }
@@ -103,6 +109,9 @@ open class EditorConfiguration constructor(
         fun setEditorSettings(editorSettings: String?) = apply { this.editorSettings = editorSettings }
         fun setLocale(locale: String?) = apply { this.locale = locale }
         fun setCookies(cookies: Map<String, String>) = apply { this.cookies = cookies }
+        fun setEnableAssetCaching(enableAssetCaching: Boolean) = apply { this.enableAssetCaching = enableAssetCaching }
+        fun setCachedAssetHosts(cachedAssetHosts: Set<String>) = apply { this.cachedAssetHosts = cachedAssetHosts }
+        fun setEditorAssetsEndpoint(editorAssetsEndpoint: String?) = apply { this.editorAssetsEndpoint = editorAssetsEndpoint }
 
         fun build(): EditorConfiguration = EditorConfiguration(
             title = title,
@@ -120,7 +129,10 @@ open class EditorConfiguration constructor(
             webViewGlobals = webViewGlobals,
             editorSettings = editorSettings,
             locale = locale,
-            cookies = cookies
+            cookies = cookies,
+            enableAssetCaching = enableAssetCaching,
+            cachedAssetHosts = cachedAssetHosts,
+            editorAssetsEndpoint = editorAssetsEndpoint
         )
     }
 
@@ -146,6 +158,9 @@ open class EditorConfiguration constructor(
         if (editorSettings != other.editorSettings) return false
         if (locale != other.locale) return false
         if (cookies != other.cookies) return false
+        if (enableAssetCaching != other.enableAssetCaching) return false
+        if (cachedAssetHosts != other.cachedAssetHosts) return false
+        if (editorAssetsEndpoint != other.editorAssetsEndpoint) return false
 
         return true
     }
@@ -167,6 +182,9 @@ open class EditorConfiguration constructor(
         result = 31 * result + (editorSettings?.hashCode() ?: 0)
         result = 31 * result + (locale?.hashCode() ?: 0)
         result = 31 * result + cookies.hashCode()
+        result = 31 * result + enableAssetCaching.hashCode()
+        result = 31 * result + cachedAssetHosts.hashCode()
+        result = 31 * result + (editorAssetsEndpoint?.hashCode() ?: 0)
         return result
     }
 }

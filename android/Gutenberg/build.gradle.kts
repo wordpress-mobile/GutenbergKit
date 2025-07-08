@@ -57,6 +57,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.webkit)
     implementation(libs.gson)
+    implementation("org.jsoup:jsoup:1.17.2")
 
     testImplementation(libs.junit)
     testImplementation(libs.mockito.core)

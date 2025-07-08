@@ -26,6 +26,8 @@ import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
 import org.json.JSONException
 import org.json.JSONObject
 import java.util.Locale
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 
 const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
 const val ASSET_URL_REMOTE = "https://appassets.androidplatform.net/assets/remote.html"
@@ -240,6 +242,24 @@ class GutenbergView : WebView {
 
     fun start(configuration: EditorConfiguration) {
         this.configuration = configuration
+
+        // Set up asset caching if enabled
+        if (configuration.enableAssetCaching) {
+            val library = EditorAssetsLibrary(context, configuration)
+            val cachedInterceptor = CachedAssetRequestInterceptor(
+                library,
+                configuration.cachedAssetHosts
+            )
+            requestInterceptor = cachedInterceptor
+
+            // Add JavaScript interface for manifest loading
+            if (configuration.plugins) {
+                this.addJavascriptInterface(
+                    EditorAssetsProvider(library),
+                    "GutenbergAssetProvider"
+                )
+            }
+        }
 
         initializeWebView()
 
@@ -538,6 +558,7 @@ class GutenbergView : WebView {
         super.onDetachedFromWindow()
         clearConfig()
         this.stopLoading()
+        (requestInterceptor as? CachedAssetRequestInterceptor)?.shutdown()
         contentChangeListener = null
         historyChangeListener = null
         featuredImageChangeListener = null
@@ -545,6 +566,26 @@ class GutenbergView : WebView {
         filePathCallback = null
         onFileChooserRequested = null
         handler.removeCallbacksAndMessages(null)
+    }
+
+    companion object {
+        /**
+         * Warmup the editor by preloading assets
+         */
+        @JvmStatic
+        fun warmup(context: Context, configuration: EditorConfiguration) {
+            if (configuration.enableAssetCaching) {
+                val library = EditorAssetsLibrary(context, configuration)
+                // Fetch assets in background
+                kotlinx.coroutines.GlobalScope.launch {
+                    try {
+                        library.fetchAssets()
+                    } catch (e: Exception) {
+                        Log.e("GutenbergView", "Failed to warmup assets", e)
+                    }
+                }
+            }
+        }
     }
 }
 
