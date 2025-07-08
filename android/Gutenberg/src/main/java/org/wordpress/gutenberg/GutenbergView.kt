@@ -251,14 +251,6 @@ class GutenbergView : WebView {
                 configuration.cachedAssetHosts
             )
             requestInterceptor = cachedInterceptor
-
-            // Add JavaScript interface for manifest loading
-            if (configuration.plugins) {
-                this.addJavascriptInterface(
-                    EditorAssetsProvider(library),
-                    "GutenbergAssetProvider"
-                )
-            }
         }
 
         initializeWebView()

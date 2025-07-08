@@ -43,16 +43,7 @@ export async function loadEditorAssets( {
 			} );
 		}
 
-		let response;
-		// TODO: Implement fetchEditorAssets Android support.
-		if ( window.webkit ) {
-			response = await fetchEditorAssets();
-		} else {
-			const { siteApiRoot, siteApiNamespace } = getGBKit();
-			response = await apiFetch( {
-				url: `${ siteApiRoot }wpcom/v2/${ siteApiNamespace[ 0 ] }/editor-assets`,
-			} );
-		}
+		const response = await fetchEditorAssets();
 
 		// Cache the response
 		editorAssetsCache = response;

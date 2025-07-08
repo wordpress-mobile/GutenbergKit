@@ -32,34 +32,46 @@ class EditorAssetsLibrary(
     /**
      * Loads the manifest content from the editor assets endpoint
      */
-    suspend fun loadManifestContent(): String = withContext(Dispatchers.IO) {
-        val endpoint = configuration.editorAssetsEndpoint 
-            ?: "${configuration.siteApiRoot}wpcom/v2/editor-assets"
+    suspend fun loadManifestContent(headers: Map<String, String> = emptyMap()): String =
+        withContext(Dispatchers.IO) {
+            val endpoint = configuration.editorAssetsEndpoint
+                ?: "${configuration.siteApiRoot}wpcom/v2/editor-assets"
 
-        val connection = URL(endpoint).openConnection() as HttpURLConnection
-        connection.requestMethod = "GET"
-        connection.setRequestProperty("Authorization", configuration.authHeader)
-        connection.connectTimeout = 30000
-        connection.readTimeout = 30000
+            val connection = URL(endpoint).openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
 
-        if (connection.responseCode in 200..299) {
-            connection.inputStream.use { it.bufferedReader().readText() }
-        } else {
-            throw Exception("Failed to fetch manifest: ${connection.responseCode}")
+            // Set headers from configuration
+            if (configuration.authHeader.isNotEmpty()) {
+                connection.setRequestProperty("Authorization", configuration.authHeader)
+            }
+
+            // Set headers from request
+            headers.forEach { (key, value) ->
+                connection.setRequestProperty(key, value)
+            }
+
+            connection.connectTimeout = 30000
+            connection.readTimeout = 30000
+
+            if (connection.responseCode in 200..299) {
+                connection.inputStream.use { it.bufferedReader().readText() }
+            } else {
+                throw Exception("Failed to fetch manifest: ${connection.responseCode}")
+            }
         }
-    }
 
     /**
      * Returns the manifest for use by the editor JavaScript
      */
-    suspend fun manifestContentForEditor(): String = withContext(Dispatchers.IO) {
-        val manifestJson = loadManifestContent()
-        val manifest = Gson().fromJson(manifestJson, EditorAssetsManifest::class.java)
-        cachedManifest = manifest
-        // Return the original manifest without URL modification
-        // Android doesn't need to modify URLs like iOS does
-        manifestJson
-    }
+    suspend fun manifestContentForEditor(headers: Map<String, String> = emptyMap()): String =
+        withContext(Dispatchers.IO) {
+            val manifestJson = loadManifestContent(headers)
+            val manifest = Gson().fromJson(manifestJson, EditorAssetsManifest::class.java)
+            cachedManifest = manifest
+            // Return the original manifest without URL modification
+            // Android doesn't need to modify URLs like iOS does
+            manifestJson
+        }
 
     /**
      * Fetches all assets in the manifest and stores them on device

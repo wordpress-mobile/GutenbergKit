@@ -281,8 +281,6 @@ export function awaitGBKitGlobal( timeoutMs = 3000 ) {
  * Retrieves the editor assets from the native host.
  *
  * @return {Promise<{scripts: string, styles: string, allowed_block_types: string[]}>} Promise that resolves with the assets object.
- *
- * @todo Implement Android support.
  */
 export async function fetchEditorAssets() {
 	if ( window.webkit ) {
@@ -291,10 +289,11 @@ export async function fetchEditorAssets() {
 				asset: 'manifest',
 			}
 		);
-	} else if ( window.GutenbergAssetProvider ) {
-		// Android support
-		const manifestJson = window.GutenbergAssetProvider.loadFetchedEditorAssets( 'manifest' );
-		return JSON.parse( manifestJson );
+	} else {
+		// Android implementation - uses same API call that will be intercepted
+		const { siteApiRoot, siteApiNamespace } = getGBKit();
+		return await apiFetch( {
+			url: `${ siteApiRoot }wpcom/v2/${ siteApiNamespace[ 0 ] }/editor-assets`,
+		} );
 	}
-	throw new Error( 'Editor assets provider not available.' );
 }

@@ -23,6 +23,12 @@ class CachedAssetRequestInterceptor(
 
     override fun canIntercept(request: WebResourceRequest): Boolean {
         val url = request.url ?: return false
+        val urlString = url.toString()
+
+        // Intercept manifest endpoint requests
+        if (urlString.contains("/wpcom/v2/") && urlString.contains("/editor-assets")) {
+            return true
+        }
 
         // Only intercept if host is in allowed list (if specified)
         if (allowedHosts.isNotEmpty() && url.host !in allowedHosts) {
@@ -30,7 +36,6 @@ class CachedAssetRequestInterceptor(
         }
 
         // Only intercept cacheable asset types
-        val urlString = url.toString()
         return CACHEABLE_EXTENSIONS.any { urlString.contains(it) }
     }
 
@@ -38,6 +43,37 @@ class CachedAssetRequestInterceptor(
         val url = request.url?.toString() ?: return null
 
         try {
+            // Handle manifest endpoint requests
+            if (url.contains("/wpcom/v2/") && url.contains("/editor-assets")) {
+                Log.d(TAG, "Intercepting manifest request: $url")
+
+                // Extract headers from request
+                val headers = mutableMapOf<String, String>()
+                request.requestHeaders?.forEach { (key, value) ->
+                    headers[key] = value
+                }
+
+                val manifestJson = runBlocking {
+                    try {
+                        library.manifestContentForEditor(headers)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to fetch manifest", e)
+                        null
+                    }
+                }
+
+                return if (manifestJson != null) {
+                    WebResourceResponse(
+                        "application/json",
+                        "UTF-8",
+                        ByteArrayInputStream(manifestJson.toByteArray())
+                    )
+                } else {
+                    null // Let WebView handle the error
+                }
+            }
+
+            // Handle asset caching
             // First check cache
             val cachedData = library.getCachedAsset(url)
             if (cachedData != null) {
@@ -73,7 +109,8 @@ class CachedAssetRequestInterceptor(
     }
 
     private fun createResponse(url: String, data: ByteArray): WebResourceResponse {
-        val mimeType = MIME_TYPES.entries.find { url.contains(it.key) }?.value ?: "application/octet-stream"
+        val mimeType =
+            MIME_TYPES.entries.find { url.contains(it.key) }?.value ?: "application/octet-stream"
         return WebResourceResponse(
             mimeType,
             "UTF-8",
