@@ -7,7 +7,6 @@ import kotlinx.coroutines.*
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
-import java.net.URLEncoder
 import java.security.MessageDigest
 
 class EditorAssetsLibrary(
@@ -44,7 +43,7 @@ class EditorAssetsLibrary(
         connection.readTimeout = 30000
 
         if (connection.responseCode in 200..299) {
-            connection.inputStream.use { it.readText() }
+            connection.inputStream.use { it.bufferedReader().readText() }
         } else {
             throw Exception("Failed to fetch manifest: ${connection.responseCode}")
         }
