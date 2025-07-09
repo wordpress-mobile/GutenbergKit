@@ -62,7 +62,7 @@ build-swift-package: build
 	$(call XCODEBUILD_CMD, build)
 
 test-swift-package: build
-	swift test
+	$(call XCODEBUILD_CMD, test)
 
 release:
 	@echo "--- :rocket: Starting GutenbergKit Release Process"
