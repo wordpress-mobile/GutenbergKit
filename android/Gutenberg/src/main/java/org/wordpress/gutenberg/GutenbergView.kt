@@ -553,13 +553,11 @@ object GutenbergWebViewPool {
 
     @JvmStatic
     fun getPreloadedWebView(context: Context): GutenbergView {
-        if (preloadedWebView == null) {
+        val currentView = preloadedWebView
+        if (currentView == null) {
             preloadedWebView = createAndPreloadWebView(context)
         } else {
-            val parent = preloadedWebView!!.parent
-            if (parent != null) {
-                (parent as? android.view.ViewGroup)?.removeView(preloadedWebView!!)
-            }
+            (currentView.parent as? android.view.ViewGroup)?.removeView(currentView)
         }
         return preloadedWebView!!
     }
