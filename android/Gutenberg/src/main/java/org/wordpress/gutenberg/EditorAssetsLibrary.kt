@@ -36,25 +36,29 @@ class EditorAssetsLibrary(
                 ?: "${configuration.siteApiRoot}wpcom/v2/editor-assets"
 
             val connection = URL(endpoint).openConnection() as HttpURLConnection
-            connection.requestMethod = "GET"
+            try {
+                connection.requestMethod = "GET"
 
-            // Set headers from configuration
-            if (configuration.authHeader.isNotEmpty()) {
-                connection.setRequestProperty("Authorization", configuration.authHeader)
-            }
+                // Set headers from configuration
+                if (configuration.authHeader.isNotEmpty()) {
+                    connection.setRequestProperty("Authorization", configuration.authHeader)
+                }
 
-            // Set headers from request
-            headers.forEach { (key, value) ->
-                connection.setRequestProperty(key, value)
-            }
+                // Set headers from request
+                headers.forEach { (key, value) ->
+                    connection.setRequestProperty(key, value)
+                }
 
-            connection.connectTimeout = 30000
-            connection.readTimeout = 30000
+                connection.connectTimeout = 30000
+                connection.readTimeout = 30000
 
-            if (connection.responseCode in 200..299) {
-                connection.inputStream.use { it.bufferedReader().readText() }
-            } else {
-                throw Exception("Failed to fetch manifest: ${connection.responseCode}")
+                if (connection.responseCode in 200..299) {
+                    connection.inputStream.use { it.bufferedReader().readText() }
+                } else {
+                    throw Exception("Failed to fetch manifest: ${connection.responseCode}")
+                }
+            } finally {
+                connection.disconnect()
             }
         }
 
@@ -89,21 +93,25 @@ class EditorAssetsLibrary(
 
         // Fetch and cache
         val connection = URL(httpURL).openConnection() as HttpURLConnection
-        connection.requestMethod = "GET"
-        connection.connectTimeout = 30000
-        connection.readTimeout = 30000
+        try {
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 30000
+            connection.readTimeout = 30000
 
-        if (connection.responseCode in 200..299) {
-            localFile.parentFile?.mkdirs()
-            connection.inputStream.use { input ->
-                localFile.outputStream().use { output ->
-                    input.copyTo(output)
+            if (connection.responseCode in 200..299) {
+                localFile.parentFile?.mkdirs()
+                connection.inputStream.use { input ->
+                    localFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
                 }
+                Log.d(TAG, "Cached asset: $httpURL (${localFile.length()} bytes)")
+                localFile
+            } else {
+                throw Exception("Failed to fetch asset: $httpURL (${connection.responseCode})")
             }
-            Log.d(TAG, "Cached asset: $httpURL (${localFile.length()} bytes)")
-            localFile
-        } else {
-            throw Exception("Failed to fetch asset: $httpURL (${connection.responseCode})")
+        } finally {
+            connection.disconnect()
         }
     }
 
