@@ -9,11 +9,12 @@ class CachedAssetRequestInterceptor(
     private val library: EditorAssetsLibrary,
     private val allowedHosts: Set<String> = emptySet()
 ) : GutenbergRequestInterceptor {
-
     companion object {
         private const val TAG = "CachedAssetInterceptor"
         private val MIME_TYPES = mapOf(
             ".js" to "application/javascript",
+            // TODO: Avoid possible ordering issues
+            ".css?inline" to "application/javascript",
             ".css" to "text/css",
             ".map" to "application/json"
         )
