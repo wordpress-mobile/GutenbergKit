@@ -308,6 +308,7 @@ class GutenbergView : WebView {
                 "hideTitle": ${configuration.hideTitle},
                 "editorSettings": $editorSettings,
                 "locale": "${configuration.locale}",
+                ${if (configuration.editorAssetsEndpoint != null) "\"editorAssetsEndpoint\": \"${configuration.editorAssetsEndpoint}\"," else ""}
                 ${if (configuration.postId != null) """
                 "post": {
                     "id": ${configuration.postId},

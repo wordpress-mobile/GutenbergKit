@@ -296,9 +296,10 @@ export async function fetchEditorAssets() {
 		);
 	} else {
 		// Android implementation - uses same API call that will be intercepted
-		const { siteApiRoot, siteApiNamespace } = getGBKit();
+		const { siteApiRoot, editorAssetsEndpoint } = getGBKit();
+		const url = editorAssetsEndpoint || `${ siteApiRoot }wpcom/v2/editor-assets`;
 		return await apiFetch( {
-			url: `${ siteApiRoot }wpcom/v2/${ siteApiNamespace[ 0 ] }/editor-assets`,
+			url,
 		} );
 	}
 }
