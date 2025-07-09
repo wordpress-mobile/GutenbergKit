@@ -3,7 +3,6 @@ package org.wordpress.gutenberg
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.util.Log
-import kotlinx.coroutines.runBlocking
 import java.io.ByteArrayInputStream
 
 class CachedAssetRequestInterceptor(
