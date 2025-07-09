@@ -1,29 +1,38 @@
 import Foundation
 
 public struct EditorConfiguration {
-    /// The initial title to initialize the editor with.
+    /// Initial title for populating the editor
     public let title: String
-    /// The initial content to initialize the editor with.
+    /// Initial content for populating the editor
     public let content: String
 
+    /// ID of the post being edited
     public let postID: Int?
+    /// Type of the post being edited
     public let postType: String?
+    /// Toggles application of theme styles
     public let shouldUseThemeStyles: Bool
+    /// Toggles loading plugin-provided editor assets
     public let shouldUsePlugins: Bool
+    /// Toggles visibility of the title field
     public let shouldHideTitle: Bool
+    /// Root URL for the site
     public let siteURL: String
+    /// Root URL for the site API
     public let siteApiRoot: String
+    /// Namespaces for the site API
     public let siteApiNamespace: [String]
+    /// Paths excluded from API namespacing
     public let namespaceExcludedPaths: [String]
+    /// Authorization header
     public let authHeader: String
-
+    /// Global variables to be made available to the editor
     public let webViewGlobals: [WebViewGlobal]
-
     /// Raw block editor settings from the WordPress REST API
     public let editorSettings: EditorSettings
-
-    /// The locale to use for translations
+    /// Locale used for translations
     public let locale: String
+    /// Endpoint for loading editor assets, used when enabling `shouldUsePlugins`
     public var editorAssetsEndpoint: URL?
 
     // Cookies
@@ -46,8 +55,7 @@ public struct EditorConfiguration {
         webViewGlobals: [WebViewGlobal],
         editorSettings: EditorSettings,
         locale: String,
-        editorAssetsEndpoint: URL? = nil,
-        cookies: [HTTPCookie] = []
+        editorAssetsEndpoint: URL? = nil
     ) {
         self.title = title
         self.content = content
@@ -65,7 +73,6 @@ public struct EditorConfiguration {
         self.editorSettings = editorSettings
         self.locale = locale
         self.editorAssetsEndpoint = editorAssetsEndpoint
-        self.cookies = cookies
     }
 
     public func toBuilder() -> EditorConfigurationBuilder {
@@ -85,8 +92,7 @@ public struct EditorConfiguration {
             webViewGlobals: webViewGlobals,
             editorSettings: editorSettings,
             locale: locale,
-            editorAssetsEndpoint: editorAssetsEndpoint,
-            cookies: cookies
+            editorAssetsEndpoint: editorAssetsEndpoint
         )
     }
 
@@ -124,7 +130,6 @@ public struct EditorConfigurationBuilder {
     private var editorSettings: EditorSettings
     private var locale: String
     private var editorAssetsEndpoint: URL?
-    private var cookies: [HTTPCookie]
 
     public init(
         title: String = "",
@@ -142,8 +147,7 @@ public struct EditorConfigurationBuilder {
         webViewGlobals: [WebViewGlobal] = [],
         editorSettings: EditorSettings = [:],
         locale: String = "en",
-        editorAssetsEndpoint: URL? = nil,
-        cookies: [HTTPCookie] = []
+        editorAssetsEndpoint: URL? = nil
     ){
         self.title = title
         self.content = content
@@ -161,7 +165,6 @@ public struct EditorConfigurationBuilder {
         self.editorSettings = editorSettings
         self.locale = locale
         self.editorAssetsEndpoint = editorAssetsEndpoint
-        self.cookies = cookies
     }
 
     public func setTitle(_ title: String) -> EditorConfigurationBuilder {
@@ -260,12 +263,6 @@ public struct EditorConfigurationBuilder {
         return copy
     }
 
-    public func setCookies(_ cookies: [HTTPCookie]) -> EditorConfigurationBuilder {
-        var copy = self
-        copy.cookies = cookies
-        return copy
-    }
-
     public func build() -> EditorConfiguration {
         EditorConfiguration(
             title: title,
@@ -283,8 +280,7 @@ public struct EditorConfigurationBuilder {
             webViewGlobals: webViewGlobals,
             editorSettings: editorSettings,
             locale: locale,
-            editorAssetsEndpoint: editorAssetsEndpoint,
-            cookies: cookies
+            editorAssetsEndpoint: editorAssetsEndpoint
         )
     }
 }
