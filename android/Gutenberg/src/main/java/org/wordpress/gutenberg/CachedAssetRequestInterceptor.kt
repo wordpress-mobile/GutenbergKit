@@ -25,7 +25,7 @@ class CachedAssetRequestInterceptor(
         val url = request.url ?: return false
         val urlString = url.toString()
 
-        // Intercept manifest endpoint requests
+        // Always intercept manifest requests to let us handle caching logic
         if (urlString.contains("/wpcom/v2/") && urlString.contains("/editor-assets")) {
             return true
         }
@@ -45,59 +45,24 @@ class CachedAssetRequestInterceptor(
         try {
             // Handle manifest endpoint requests
             if (url.contains("/wpcom/v2/") && url.contains("/editor-assets")) {
-                Log.d(TAG, "Intercepting manifest request: $url")
-
-                // Extract headers from request
-                val headers = mutableMapOf<String, String>()
-                request.requestHeaders?.forEach { (key, value) ->
-                    headers[key] = value
-                }
-
-                val manifestJson = runBlocking {
-                    try {
-                        library.manifestContentForEditor(headers)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to fetch manifest", e)
-                        null
-                    }
-                }
-
-                return if (manifestJson != null) {
-                    WebResourceResponse(
-                        "application/json",
-                        "UTF-8",
-                        ByteArrayInputStream(manifestJson.toByteArray())
-                    )
-                } else {
-                    null // Let WebView handle the error
-                }
+                Log.d(TAG, "Manifest request detected: $url - letting WebView handle normally")
+                // Let WebView make the request normally, we'll cache assets as they're requested
+                return null
             }
 
-            // Handle asset caching
-            // First check cache
+            // Handle asset caching - only serve if already cached
             val cachedData = library.getCachedAsset(url)
             if (cachedData != null) {
                 Log.d(TAG, "Serving cached asset: $url")
                 return createResponse(url, cachedData)
             }
 
-            // Fetch and cache
-            Log.d(TAG, "Fetching asset: $url")
-            val data = runBlocking {
-                try {
-                    library.cacheAsset(url)
-                    library.getCachedAsset(url)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to cache asset: $url", e)
-                    null
-                }
-            }
-
-            return if (data != null) {
-                createResponse(url, data)
-            } else {
-                null // Let WebView handle the error
-            }
+            // Not cached - let WebView fetch normally and cache in background
+            Log.d(TAG, "Asset not cached, will cache in background: $url")
+            // Start background caching for next time
+            library.cacheAssetInBackground(url)
+            
+            return null // Let WebView handle the request normally
         } catch (e: Exception) {
             Log.e(TAG, "Error handling request: $url", e)
             return null

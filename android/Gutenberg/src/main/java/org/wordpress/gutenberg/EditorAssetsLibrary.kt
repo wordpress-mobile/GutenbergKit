@@ -137,6 +137,22 @@ class EditorAssetsLibrary(
         cacheDir.mkdirs()
     }
 
+    /**
+     * Cache an asset in the background without blocking
+     */
+    fun cacheAssetInBackground(url: String) {
+        if (!shouldCacheUrl(url)) return
+        
+        scope.launch {
+            try {
+                cacheAsset(url)
+                Log.d(TAG, "Background cached: $url")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to background cache: $url", e)
+            }
+        }
+    }
+
     fun shutdown() {
         scope.cancel()
     }
