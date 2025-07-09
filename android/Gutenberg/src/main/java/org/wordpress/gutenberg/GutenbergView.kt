@@ -26,7 +26,11 @@ import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
 import org.json.JSONException
 import org.json.JSONObject
 import java.util.Locale
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.launch
 
 const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
@@ -561,6 +565,8 @@ class GutenbergView : WebView {
     }
 
     companion object {
+        private val warmupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
         /**
          * Warmup the editor by preloading manifest
          */
@@ -569,7 +575,7 @@ class GutenbergView : WebView {
             if (configuration.enableAssetCaching) {
                 val library = EditorAssetsLibrary(context, configuration)
                 // Preload manifest in background
-                kotlinx.coroutines.GlobalScope.launch {
+                warmupScope.launch {
                     try {
                         library.manifestContentForEditor()
                     } catch (e: Exception) {
@@ -577,6 +583,14 @@ class GutenbergView : WebView {
                     }
                 }
             }
+        }
+
+        /**
+         * Cancel any ongoing warmup operations
+         */
+        @JvmStatic
+        fun cancelWarmup() {
+            warmupScope.coroutineContext[Job]?.cancelChildren()
         }
     }
 }
