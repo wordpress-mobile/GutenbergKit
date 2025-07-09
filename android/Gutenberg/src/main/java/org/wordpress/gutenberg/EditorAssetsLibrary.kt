@@ -2,7 +2,6 @@ package org.wordpress.gutenberg
 
 import android.content.Context
 import android.util.Log
-import com.google.gson.Gson
 import kotlinx.coroutines.*
 import java.io.File
 import java.net.HttpURLConnection
@@ -15,7 +14,6 @@ class EditorAssetsLibrary(
 ) {
     private val cacheDir: File = getCacheDirectory()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private var cachedManifest: EditorAssetsManifest? = null
 
     companion object {
         private const val TAG = "EditorAssetsLibrary"
@@ -65,44 +63,10 @@ class EditorAssetsLibrary(
      */
     suspend fun manifestContentForEditor(headers: Map<String, String> = emptyMap()): String =
         withContext(Dispatchers.IO) {
-            val manifestJson = loadManifestContent(headers)
-            val manifest = Gson().fromJson(manifestJson, EditorAssetsManifest::class.java)
-            cachedManifest = manifest
-            // Return the original manifest without URL modification
-            // Android doesn't need to modify URLs like iOS does
-            manifestJson
+            // Simply return the original manifest - no URL modification needed for Android
+            loadManifestContent(headers)
         }
 
-    /**
-     * Fetches all assets in the manifest and stores them on device
-     */
-    suspend fun fetchAssets() = withContext(Dispatchers.IO) {
-        try {
-            val manifestJson = loadManifestContent()
-            val manifest = Gson().fromJson(manifestJson, EditorAssetsManifest::class.java)
-            cachedManifest = manifest
-
-            val siteURLScheme = configuration.siteURL.substringBefore("://")
-            val assetLinks = manifest.parseAssetLinks(siteURLScheme)
-
-            assetLinks.forEach { link ->
-                if (shouldCacheUrl(link)) {
-                    launch {
-                        try {
-                            cacheAsset(link)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to cache asset: $link", e)
-                        }
-                    }
-                }
-            }
-
-            Log.d(TAG, "${assetLinks.size} resources processed.")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to fetch assets", e)
-            throw e
-        }
-    }
 
     /**
      * Caches a single asset from the given URL

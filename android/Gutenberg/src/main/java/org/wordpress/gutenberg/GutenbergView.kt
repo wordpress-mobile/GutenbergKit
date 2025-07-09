@@ -562,18 +562,18 @@ class GutenbergView : WebView {
 
     companion object {
         /**
-         * Warmup the editor by preloading assets
+         * Warmup the editor by preloading manifest
          */
         @JvmStatic
         fun warmup(context: Context, configuration: EditorConfiguration) {
             if (configuration.enableAssetCaching) {
                 val library = EditorAssetsLibrary(context, configuration)
-                // Fetch assets in background
+                // Preload manifest in background
                 kotlinx.coroutines.GlobalScope.launch {
                     try {
-                        library.fetchAssets()
+                        library.manifestContentForEditor()
                     } catch (e: Exception) {
-                        Log.e("GutenbergView", "Failed to warmup assets", e)
+                        Log.e("GutenbergView", "Failed to warmup manifest", e)
                     }
                 }
             }
