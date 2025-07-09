@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import GutenbergKit
 
@@ -22,6 +23,8 @@ struct EditorConfigurationBuilderTests {
         #expect(builder.webViewGlobals == [])
         #expect(builder.editorSettings.isEmpty)
         #expect(builder.locale == "en")
+        #expect(builder.editorAssetsEndpoint == nil)
+        #expect(builder.cookies == [])
     }
 
     @Test("Editor Configuration to Builder")
@@ -42,6 +45,8 @@ struct EditorConfigurationBuilderTests {
             .setWebViewGlobals([WebViewGlobal(name: "foo", value: .string("bar"))])
             .setEditorSettings(["foo":"bar"])
             .setLocale("fr")
+            .setEditorAssetsEndpoint(URL(string: "https://example.com/wp-content/plugins/gutenberg/build/"))
+            .setCookies([HTTPCookie(properties: [.name: "foo", .value: "bar", .domain: "example.com", .path: "/"])!])
             .build()        // Convert to a configuration
             .toBuilder()    // Then back to a builder (to test the configuration->builder logic)
             .build()        // Then back to a configuration to examine the results
@@ -61,6 +66,8 @@ struct EditorConfigurationBuilderTests {
         #expect(configuration.webViewGlobals == [try WebViewGlobal(name: "foo", value: .string("bar"))])
         #expect(configuration.editorSettingsJSON == #"{"foo":"bar"}"#)
         #expect(configuration.locale == "fr")
+        #expect(configuration.editorAssetsEndpoint == URL(string: "https://example.com/wp-content/plugins/gutenberg/build/"))
+        #expect(configuration.cookies == [HTTPCookie(properties: [.name: "foo", .value: "bar", .domain: "example.com", .path: "/"])!])
     }
 
     @Test("Sets Title Correctly")
@@ -159,5 +166,15 @@ struct EditorConfigurationBuilderTests {
     @Test("Sets locale Correctly")
     func editorConfigurationBuilderSetsLocaleCorrectly() throws {
         #expect(EditorConfigurationBuilder().setLocale("en").build().locale == "en")
+    }
+
+    @Test("Sets editorAssetsEndpoint Correctly")
+    func editorConfigurationBuilderSetsEditorAssetsEndpointCorrectly() throws {
+        #expect(EditorConfigurationBuilder().setEditorAssetsEndpoint(URL(string: "https://example.com/wp-content/plugins/gutenberg/build/")).build().editorAssetsEndpoint == URL(string: "https://example.com/wp-content/plugins/gutenberg/build/"))
+    }
+
+    @Test("Sets cookies Correctly")
+    func editorConfigurationBuilderSetsCookiesCorrectly() throws {
+        #expect(EditorConfigurationBuilder().setCookies([HTTPCookie(properties: [.name: "foo", .value: "bar", .domain: "example.com", .path: "/"])!]).build().cookies == [HTTPCookie(properties: [.name: "foo", .value: "bar", .domain: "example.com", .path: "/"])!])
     }
 }
