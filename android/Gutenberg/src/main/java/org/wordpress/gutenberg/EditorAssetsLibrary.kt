@@ -22,7 +22,7 @@ class EditorAssetsLibrary(
 
     companion object {
         private const val TAG = "EditorAssetsLibrary"
-        private const val CACHE_EXPIRY_DAYS = 7
+        private const val CACHE_CLEANUP_INTERVAL_DAYS = 7
         private val CACHEABLE_EXTENSIONS = setOf(".js", ".css", ".js.map")
     }
 
@@ -72,10 +72,16 @@ class EditorAssetsLibrary(
      */
     suspend fun manifestContentForEditor(headers: Map<String, String> = emptyMap()): String =
         withContext(Dispatchers.IO) {
-            // Simply return the original manifest - no URL modification needed for Android
-            loadManifestContent(headers)
-        }
+            val manifestJson = loadManifestContent(headers)
 
+            // Trigger periodic cache cleanup in background
+            // Assets are versioned, so old versions become unused naturally over time
+            scope.launch {
+                cleanupOldCache()
+            }
+
+            manifestJson
+        }
 
     /**
      * Caches a single asset from the given URL
@@ -87,13 +93,9 @@ class EditorAssetsLibrary(
 
         val localFile = getLocalCacheFile(httpURL)
 
-        // Check if already cached and not expired
+        // If already cached, return existing file (versioned URLs change when updated)
         if (localFile.exists()) {
-            val age = System.currentTimeMillis() - localFile.lastModified()
-            val maxAge = CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000L
-            if (age < maxAge) {
-                return@withContext localFile
-            }
+            return@withContext localFile
         }
 
         // Fetch and cache
@@ -129,14 +131,6 @@ class EditorAssetsLibrary(
             return null
         }
 
-        // Check expiry
-        val age = System.currentTimeMillis() - localFile.lastModified()
-        val maxAge = CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000L
-        if (age > maxAge) {
-            localFile.delete()
-            return null
-        }
-
         return try {
             localFile.readBytes()
         } catch (e: Exception) {
@@ -163,6 +157,36 @@ class EditorAssetsLibrary(
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to background cache: $url", e)
             }
+        }
+    }
+
+    /**
+     * Cleans up old cached files to prevent unlimited storage growth.
+     * Since assets are versioned (URLs change when updated), old versions
+     * become unused naturally. We can safely remove files older than the
+     * cleanup interval without affecting functionality.
+     */
+    private fun cleanupOldCache() {
+        try {
+            val cutoffTime = System.currentTimeMillis() - (CACHE_CLEANUP_INTERVAL_DAYS * 24 * 60 * 60 * 1000L)
+            var deletedCount = 0
+            var deletedSize = 0L
+
+            cacheDir.listFiles()?.forEach { file ->
+                if (file.isFile && file.lastModified() < cutoffTime) {
+                    val size = file.length()
+                    if (file.delete()) {
+                        deletedCount++
+                        deletedSize += size
+                    }
+                }
+            }
+
+            if (deletedCount > 0) {
+                Log.d(TAG, "Cache cleanup: deleted $deletedCount files (${deletedSize / 1024}KB)")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Cache cleanup failed", e)
         }
     }
 
