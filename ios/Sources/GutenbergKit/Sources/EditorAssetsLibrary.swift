@@ -127,7 +127,9 @@ private extension EditorConfiguration {
         }
 
         return FileManager.default
-            .urls(for: .applicationSupportDirectory, in:.userDomainMask)
+            // Use the app cache directory to prevent editor assets from being backed up to iCloud.
+            // Set `isExcludedFromBackup = ture` if this directory is changed in the future.
+            .urls(for: .cachesDirectory, in:.userDomainMask)
             .last!
             .appendingPathComponent("editor-caches")
             .appendingPathComponent(siteName)
