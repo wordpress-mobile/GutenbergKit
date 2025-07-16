@@ -19,6 +19,7 @@
         android:layout_margin="16dp"
         android:contentDescription="@string/add_remote_config_description"
         android:src="@android:drawable/ic_input_add"
+        app:backgroundTint="@color/design_default_color_primary"
         app:tint="@android:color/white" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

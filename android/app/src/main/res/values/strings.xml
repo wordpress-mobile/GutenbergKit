@@ -4,8 +4,7 @@
     <!-- Configuration Activity -->
     <string name="demo_title">GutenbergKit Demo</string>
     <string name="bundled_editor">Bundled Editor</string>
-    <string name="sample_site">Sample Site</string>
-    <string name="tap_to_configure">Tap to configure</string>
+    <string name="bundled_editor_subtitle">Offline editor with bundled assets</string>
     <string name="add_remote_config_description">Add remote configuration</string>
 
     <!-- Dialog strings -->
@@ -17,6 +16,9 @@
     <string name="save">Save</string>
     <string name="add">Add</string>
     <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
+    <string name="delete_site_title">Delete Site</string>
+    <string name="delete_site_message">Are you sure you want to delete this site configuration?</string>
 
     <!-- Editor Activity -->
     <string name="editor">Editor</string>

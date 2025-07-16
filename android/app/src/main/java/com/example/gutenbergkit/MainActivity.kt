@@ -1,11 +1,12 @@
 package com.example.gutenbergkit
 
+import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
@@ -14,18 +15,29 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import org.wordpress.gutenberg.EditorConfiguration
+import org.json.JSONArray
+import org.json.JSONObject
+import androidx.core.content.edit
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: ConfigurationAdapter
     private val configurations = mutableListOf<ConfigurationItem>()
+    private lateinit var sharedPrefs: SharedPreferences
+
+    companion object {
+        private const val PREFS_NAME = "gutenberg_configs"
+        private const val KEY_REMOTE_CONFIGS = "remote_configurations"
+        const val EXTRA_CONFIGURATION = "configuration"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_configuration)
 
         title = getString(R.string.demo_title)
+        sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
         recyclerView = findViewById(R.id.configurationsRecyclerView)
         recyclerView.layoutManager = LinearLayoutManager(this)
@@ -33,28 +45,29 @@ class MainActivity : AppCompatActivity() {
         // Add default bundled editor configuration
         configurations.add(ConfigurationItem.BundledEditor)
 
-        // Add a sample remote configuration (similar to iOS template)
-        configurations.add(
-            ConfigurationItem.RemoteEditor(
-                name = getString(R.string.sample_site),
-                siteUrl = "",
-                authHeader = ""
-            )
-        )
+        // Load saved configurations
+        loadSavedConfigurations()
 
-        adapter = ConfigurationAdapter(configurations) { config ->
-            when (config) {
-                is ConfigurationItem.BundledEditor -> launchEditor(createBundledConfiguration())
-                is ConfigurationItem.RemoteEditor -> {
-                    if (config.siteUrl.isEmpty()) {
-                        // Show dialog to configure the site
-                        showEditConfigurationDialog(config)
-                    } else {
+        adapter = ConfigurationAdapter(
+            configurations,
+            onItemClick = { config ->
+                when (config) {
+                    is ConfigurationItem.BundledEditor -> launchEditor(createBundledConfiguration())
+                    is ConfigurationItem.RemoteEditor -> {
                         launchEditor(createRemoteConfiguration(config))
                     }
                 }
+            },
+            onItemLongClick = { config ->
+                when (config) {
+                    is ConfigurationItem.BundledEditor -> false // Can't delete bundled editor
+                    is ConfigurationItem.RemoteEditor -> {
+                        showDeleteDialog(config)
+                        true
+                    }
+                }
             }
-        }
+        )
         recyclerView.adapter = adapter
 
         // Add FAB for adding new remote configurations
@@ -81,6 +94,7 @@ class MainActivity : AppCompatActivity() {
             .setSiteURL(config.siteUrl)
             .setSiteApiRoot("${config.siteUrl}/wp-json/")
             .setSiteApiNamespace(arrayOf("wp/v2"))
+            .setNamespaceExcludedPaths(arrayOf())
             .setAuthHeader(config.authHeader)
             .build()
 
@@ -91,10 +105,12 @@ class MainActivity : AppCompatActivity() {
             .setPostType("post")
             .setThemeStyles(false)
             .setHideTitle(false)
+            .setWebViewGlobals(emptyList())
+            .setCookies(emptyMap())
 
     private fun launchEditor(configuration: EditorConfiguration) {
         val intent = Intent(this, EditorActivity::class.java)
-        intent.putExtra("configuration", configuration)
+        intent.putExtra(EXTRA_CONFIGURATION, configuration)
         startActivity(intent)
     }
 
@@ -118,6 +134,7 @@ class MainActivity : AppCompatActivity() {
                 val index = configurations.indexOf(config)
                 configurations[index] = newConfig
                 adapter.notifyItemChanged(index)
+                saveConfigurations()
             }
             .setNegativeButton(getString(R.string.cancel), null)
             .show()
@@ -142,10 +159,60 @@ class MainActivity : AppCompatActivity() {
                     )
                     configurations.add(newConfig)
                     adapter.notifyItemInserted(configurations.size - 1)
+                    saveConfigurations()
                 }
             }
             .setNegativeButton(getString(R.string.cancel), null)
             .show()
+    }
+
+    private fun showDeleteDialog(config: ConfigurationItem.RemoteEditor) {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.delete_site_title))
+            .setMessage(getString(R.string.delete_site_message))
+            .setPositiveButton(getString(R.string.delete)) { _, _ ->
+                val index = configurations.indexOf(config)
+                configurations.removeAt(index)
+                adapter.notifyItemRemoved(index)
+                saveConfigurations()
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
+    private fun saveConfigurations() {
+        val jsonArray = JSONArray()
+        configurations.forEach { config ->
+            if (config is ConfigurationItem.RemoteEditor) {
+                val jsonObject = JSONObject().apply {
+                    put("name", config.name)
+                    put("siteUrl", config.siteUrl)
+                    put("authHeader", config.authHeader)
+                }
+                jsonArray.put(jsonObject)
+            }
+        }
+        sharedPrefs.edit {
+            putString(KEY_REMOTE_CONFIGS, jsonArray.toString())
+        }
+    }
+
+    private fun loadSavedConfigurations() {
+        val savedData = sharedPrefs.getString(KEY_REMOTE_CONFIGS, null) ?: return
+        try {
+            val jsonArray = JSONArray(savedData)
+            for (i in 0 until jsonArray.length()) {
+                val jsonObject = jsonArray.getJSONObject(i)
+                val config = ConfigurationItem.RemoteEditor(
+                    name = jsonObject.getString("name"),
+                    siteUrl = jsonObject.getString("siteUrl"),
+                    authHeader = jsonObject.getString("authHeader")
+                )
+                configurations.add(config)
+            }
+        } catch (e: Exception) {
+            // Ignore parsing errors
+        }
     }
 }
 
@@ -160,7 +227,8 @@ sealed class ConfigurationItem {
 
 class ConfigurationAdapter(
     private val items: List<ConfigurationItem>,
-    private val onItemClick: (ConfigurationItem) -> Unit
+    private val onItemClick: (ConfigurationItem) -> Unit,
+    private val onItemLongClick: (ConfigurationItem) -> Boolean
 ) : RecyclerView.Adapter<ConfigurationAdapter.ViewHolder>() {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -174,22 +242,24 @@ class ConfigurationAdapter(
         when (item) {
             is ConfigurationItem.BundledEditor -> {
                 holder.titleText.text = holder.itemView.context.getString(R.string.bundled_editor)
-                holder.subtitleText.visibility = View.GONE
+                holder.subtitleText.text =
+                    holder.itemView.context.getString(R.string.bundled_editor_subtitle)
+                holder.subtitleText.visibility = View.VISIBLE
             }
 
             is ConfigurationItem.RemoteEditor -> {
                 holder.titleText.text = item.name
-                holder.subtitleText.text = if (item.siteUrl.isEmpty()) {
-                    holder.itemView.context.getString(R.string.tap_to_configure)
-                } else {
-                    item.siteUrl
-                }
+                holder.subtitleText.text = item.siteUrl
                 holder.subtitleText.visibility = View.VISIBLE
             }
         }
 
         holder.itemView.setOnClickListener {
             onItemClick(item)
+        }
+
+        holder.itemView.setOnLongClickListener {
+            onItemLongClick(item)
         }
     }
 
