@@ -8,12 +8,10 @@
     <string name="add_remote_config_description">Add remote configuration</string>
 
     <!-- Dialog strings -->
-    <string name="edit_configuration">Edit Configuration</string>
     <string name="add_remote_configuration">Add Remote Configuration</string>
     <string name="site_url_hint">Site URL</string>
     <string name="auth_header_hint">Authorization Header</string>
     <string name="jetpack_note">Note: The Jetpack plugin must be installed on the site</string>
-    <string name="save">Save</string>
     <string name="add">Add</string>
     <string name="cancel">Cancel</string>
     <string name="delete">Delete</string>

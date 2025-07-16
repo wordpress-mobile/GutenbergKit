@@ -114,31 +114,6 @@ class MainActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
-    private fun showEditConfigurationDialog(config: ConfigurationItem.RemoteEditor) {
-        val dialogView = layoutInflater.inflate(R.layout.dialog_configuration, null)
-        val siteUrlInput = dialogView.findViewById<EditText>(R.id.siteUrlInput)
-        val authHeaderInput = dialogView.findViewById<EditText>(R.id.authHeaderInput)
-
-        siteUrlInput.setText(config.siteUrl)
-        authHeaderInput.setText(config.authHeader)
-
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.edit_configuration))
-            .setView(dialogView)
-            .setPositiveButton(getString(R.string.save)) { _, _ ->
-                val newConfig = ConfigurationItem.RemoteEditor(
-                    name = config.name,
-                    siteUrl = siteUrlInput.text.toString(),
-                    authHeader = authHeaderInput.text.toString()
-                )
-                val index = configurations.indexOf(config)
-                configurations[index] = newConfig
-                adapter.notifyItemChanged(index)
-                saveConfigurations()
-            }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
-    }
 
     private fun showAddConfigurationDialog() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_configuration, null)
