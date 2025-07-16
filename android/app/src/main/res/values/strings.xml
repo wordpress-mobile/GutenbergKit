@@ -10,13 +10,15 @@
     <!-- Dialog strings -->
     <string name="add_remote_configuration">Add Remote Configuration</string>
     <string name="site_url_hint">Site URL</string>
-    <string name="auth_header_hint">Authorization Header</string>
-    <string name="jetpack_note">Note: The Jetpack plugin must be installed on the site</string>
     <string name="add">Add</string>
     <string name="cancel">Cancel</string>
     <string name="delete">Delete</string>
     <string name="delete_site_title">Delete Site</string>
     <string name="delete_site_message">Are you sure you want to delete this site configuration?</string>
+    
+    <!-- Authentication -->
+    <string name="authentication_failed">Authentication Failed</string>
+    <string name="ok">OK</string>
 
     <!-- Editor Activity -->
     <string name="editor">Editor</string>

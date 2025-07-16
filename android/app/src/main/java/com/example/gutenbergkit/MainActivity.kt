@@ -92,7 +92,7 @@ class MainActivity : AppCompatActivity() {
         createCommonConfigurationBuilder()
             .setPlugins(true) // Enable plugins for remote editor
             .setSiteURL(config.siteUrl)
-            .setSiteApiRoot("${config.siteUrl}/wp-json/")
+            .setSiteApiRoot(config.siteApiRoot)
             .setSiteApiNamespace(arrayOf("wp/v2"))
             .setNamespaceExcludedPaths(arrayOf())
             .setAuthHeader(config.authHeader)
@@ -118,26 +118,43 @@ class MainActivity : AppCompatActivity() {
     private fun showAddConfigurationDialog() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_configuration, null)
         val siteUrlInput = dialogView.findViewById<EditText>(R.id.siteUrlInput)
-        val authHeaderInput = dialogView.findViewById<EditText>(R.id.authHeaderInput)
 
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.add_remote_configuration))
             .setView(dialogView)
             .setPositiveButton(getString(R.string.add)) { _, _ ->
-                val siteUrl = siteUrlInput.text.toString()
+                val siteUrl = siteUrlInput.text.toString().trim()
                 if (siteUrl.isNotEmpty()) {
-                    val newConfig = ConfigurationItem.RemoteEditor(
-                        name = siteUrl.removePrefix("https://").removePrefix("http://")
-                            .substringBefore("/"),
-                        siteUrl = siteUrl,
-                        authHeader = authHeaderInput.text.toString()
-                    )
-                    configurations.add(newConfig)
-                    adapter.notifyItemInserted(configurations.size - 1)
-                    saveConfigurations()
+                    authenticateWithSite(siteUrl)
                 }
             }
             .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+    
+    private fun authenticateWithSite(siteUrl: String) {
+        // TODO: Implement authentication logic
+    }
+    
+    fun onAuthenticationSuccess(siteUrl: String, siteApiRoot: String, authToken: String) {
+        val siteName = siteUrl.removePrefix("https://").removePrefix("http://").substringBefore("/")
+        val newConfig = ConfigurationItem.RemoteEditor(
+            name = siteName,
+            siteUrl = siteUrl,
+            siteApiRoot = siteApiRoot,
+            authHeader = authToken
+        )
+        configurations.add(newConfig)
+        adapter.notifyItemInserted(configurations.size - 1)
+        saveConfigurations()
+    }
+    
+    fun onAuthenticationFailure(errorMessage: String) {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.authentication_failed))
+            .setMessage(errorMessage)
+            .setPositiveButton(getString(R.string.ok), null)
+            .setCancelable(true)
             .show()
     }
 
@@ -162,6 +179,7 @@ class MainActivity : AppCompatActivity() {
                 val jsonObject = JSONObject().apply {
                     put("name", config.name)
                     put("siteUrl", config.siteUrl)
+                    put("siteApiRoot", config.siteApiRoot)
                     put("authHeader", config.authHeader)
                 }
                 jsonArray.put(jsonObject)
@@ -181,6 +199,7 @@ class MainActivity : AppCompatActivity() {
                 val config = ConfigurationItem.RemoteEditor(
                     name = jsonObject.getString("name"),
                     siteUrl = jsonObject.getString("siteUrl"),
+                    siteApiRoot = jsonObject.optString("siteApiRoot", jsonObject.getString("siteUrl") + "/wp-json/"),
                     authHeader = jsonObject.getString("authHeader")
                 )
                 configurations.add(config)
@@ -196,6 +215,7 @@ sealed class ConfigurationItem {
     data class RemoteEditor(
         val name: String,
         val siteUrl: String,
+        val siteApiRoot: String,
         val authHeader: String
     ) : ConfigurationItem()
 }
