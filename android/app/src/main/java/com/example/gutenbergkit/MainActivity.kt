@@ -19,10 +19,14 @@ import org.json.JSONArray
 import org.json.JSONObject
 import androidx.core.content.edit
 import androidx.core.net.toUri
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import rs.wordpress.api.kotlin.ApiDiscoveryResult
 import rs.wordpress.api.kotlin.WpLoginClient
 import android.util.Base64
+import uniffi.wp_api.localizeAutoDiscoveryAttemptFailure
 
 class MainActivity : AppCompatActivity() {
 
@@ -128,9 +132,10 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.add_remote_configuration))
             .setView(dialogView)
-            .setPositiveButton(getString(R.string.add)) { _, _ ->
+            .setPositiveButton(getString(R.string.add)) { dialog, _ ->
                 val siteUrl = siteUrlInput.text.toString().trim()
                 if (siteUrl.isNotEmpty()) {
+                    dialog.dismiss()
                     autoDiscovery(siteUrl)
                 }
             }
@@ -138,16 +143,43 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun autoDiscovery(siteUrl: String) = runBlocking {
-        when (val apiDiscoveryResult = WpLoginClient().apiDiscovery(siteUrl)) {
-            is ApiDiscoveryResult.Success -> {
-                val success = apiDiscoveryResult.success
-                val apiRootUrl = success.apiRootUrl.url()
-                val applicationPasswordAuthenticationUrl =
-                    success.applicationPasswordsAuthenticationUrl.url()
-                authenticateWithSite(apiRootUrl, applicationPasswordAuthenticationUrl)
+    private fun autoDiscovery(siteUrl: String) {
+        val progressView = layoutInflater.inflate(android.R.layout.simple_list_item_1, null).apply {
+            findViewById<TextView>(android.R.id.text1).apply {
+                text = getString(R.string.finding_api_root)
+                gravity = android.view.Gravity.CENTER
+                setPadding(32, 32, 32, 32)
             }
-            else -> onAuthenticationFailure("Failed to find api root: $apiDiscoveryResult")
+        }
+
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle(getString(R.string.discovering_site))
+            .setView(progressView)
+            .setCancelable(false)
+            .create()
+            .also { it.show() }
+
+        CoroutineScope(Dispatchers.IO).launch {
+            when (val apiDiscoveryResult = WpLoginClient().apiDiscovery(siteUrl)) {
+                is ApiDiscoveryResult.Success -> {
+                    val success = apiDiscoveryResult.success
+                    val apiRootUrl = success.apiRootUrl.url()
+                    val applicationPasswordAuthenticationUrl =
+                        success.applicationPasswordsAuthenticationUrl.url()
+                    withContext(Dispatchers.Main) {
+                        progressDialog.dismiss()
+                        authenticateWithSite(apiRootUrl, applicationPasswordAuthenticationUrl)
+                    }
+                }
+
+                else -> {
+                    withContext(Dispatchers.Main) {
+                        progressDialog.dismiss()
+                        // TODO: We should have a helper in "wordpress-rs" to get the localized error without individually matching everything
+                        onAuthenticationFailure("Failed to find api root: $apiDiscoveryResult")
+                    }
+                }
+            }
         }
     }
 

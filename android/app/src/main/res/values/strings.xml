@@ -19,6 +19,8 @@
     <!-- Authentication -->
     <string name="authentication_failed">Authentication Failed</string>
     <string name="ok">OK</string>
+    <string name="discovering_site">Discovering Site</string>
+    <string name="finding_api_root">Finding API root and authentication URL...</string>
 
     <!-- Editor Activity -->
     <string name="editor">Editor</string>
