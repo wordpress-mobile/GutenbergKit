@@ -1,12 +1,7 @@
 /**
- * WordPress dependencies
- */
-import apiFetch from '@wordpress/api-fetch';
-
-/**
  * Internal dependencies
  */
-import { getGBKit, fetchEditorAssets } from './bridge';
+import { fetchEditorAssets } from './bridge';
 import { error } from './logger';
 
 /**

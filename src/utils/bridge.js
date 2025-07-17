@@ -294,12 +294,12 @@ export async function fetchEditorAssets() {
 				asset: 'manifest',
 			}
 		);
-	} else {
-		// Android implementation - uses same API call that will be intercepted
-		const { siteApiRoot, editorAssetsEndpoint } = getGBKit();
-		const url = editorAssetsEndpoint || `${ siteApiRoot }wpcom/v2/editor-assets`;
-		return await apiFetch( {
-			url,
-		} );
 	}
+	// Android implementation - uses same API call that will be intercepted
+	const { siteApiRoot, editorAssetsEndpoint } = getGBKit();
+	const url =
+		editorAssetsEndpoint || `${ siteApiRoot }wpcom/v2/editor-assets`;
+	return await apiFetch( {
+		url,
+	} );
 }
