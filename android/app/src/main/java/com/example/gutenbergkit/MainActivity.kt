@@ -1,44 +1,23 @@
 package com.example.gutenbergkit
 
-import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.os.Bundle
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
 import android.widget.EditText
-import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import org.wordpress.gutenberg.EditorConfiguration
-import org.json.JSONArray
-import org.json.JSONObject
-import androidx.core.content.edit
-import androidx.core.net.toUri
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import rs.wordpress.api.kotlin.ApiDiscoveryResult
-import rs.wordpress.api.kotlin.WpLoginClient
-import android.util.Base64
-import uniffi.wp_api.localizeAutoDiscoveryAttemptFailure
 
-class MainActivity : AppCompatActivity() {
-
+class MainActivity : AppCompatActivity(), AuthenticationManager.AuthenticationCallback {
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: ConfigurationAdapter
     private val configurations = mutableListOf<ConfigurationItem>()
-    private lateinit var sharedPrefs: SharedPreferences
-    private var currentApiRootUrl: String? = null
+    private lateinit var configurationStorage: ConfigurationStorage
+    private lateinit var authenticationManager: AuthenticationManager
 
     companion object {
-        private const val PREFS_NAME = "gutenberg_configs"
-        private const val KEY_REMOTE_CONFIGS = "remote_configurations"
         const val EXTRA_CONFIGURATION = "configuration"
     }
 
@@ -47,7 +26,8 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_configuration)
 
         title = getString(R.string.demo_title)
-        sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        configurationStorage = ConfigurationStorage(this)
+        authenticationManager = AuthenticationManager(this)
 
         recyclerView = findViewById(R.id.configurationsRecyclerView)
         recyclerView.layoutManager = LinearLayoutManager(this)
@@ -56,7 +36,7 @@ class MainActivity : AppCompatActivity() {
         configurations.add(ConfigurationItem.BundledEditor)
 
         // Load saved configurations
-        loadSavedConfigurations()
+        configurations.addAll(configurationStorage.loadConfigurations())
 
         adapter = ConfigurationAdapter(
             configurations,
@@ -124,7 +104,6 @@ class MainActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
-
     private fun showAddConfigurationDialog() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_configuration, null)
         val siteUrlInput = dialogView.findViewById<EditText>(R.id.siteUrlInput)
@@ -136,101 +115,19 @@ class MainActivity : AppCompatActivity() {
                 val siteUrl = siteUrlInput.text.toString().trim()
                 if (siteUrl.isNotEmpty()) {
                     dialog.dismiss()
-                    autoDiscovery(siteUrl)
+                    authenticationManager.startAuthentication(siteUrl, this)
                 }
             }
             .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
-    private fun autoDiscovery(siteUrl: String) {
-        val progressView = layoutInflater.inflate(android.R.layout.simple_list_item_1, null).apply {
-            findViewById<TextView>(android.R.id.text1).apply {
-                text = getString(R.string.finding_api_root)
-                gravity = android.view.Gravity.CENTER
-                setPadding(32, 32, 32, 32)
-            }
-        }
-
-        val progressDialog = AlertDialog.Builder(this)
-            .setTitle(getString(R.string.discovering_site))
-            .setView(progressView)
-            .setCancelable(false)
-            .create()
-            .also { it.show() }
-
-        CoroutineScope(Dispatchers.IO).launch {
-            when (val apiDiscoveryResult = WpLoginClient().apiDiscovery(siteUrl)) {
-                is ApiDiscoveryResult.Success -> {
-                    val success = apiDiscoveryResult.success
-                    val apiRootUrl = success.apiRootUrl.url()
-                    val applicationPasswordAuthenticationUrl =
-                        success.applicationPasswordsAuthenticationUrl.url()
-                    withContext(Dispatchers.Main) {
-                        progressDialog.dismiss()
-                        authenticateWithSite(apiRootUrl, applicationPasswordAuthenticationUrl)
-                    }
-                }
-
-                else -> {
-                    withContext(Dispatchers.Main) {
-                        progressDialog.dismiss()
-                        // TODO: We should have a helper in "wordpress-rs" to get the localized error without individually matching everything
-                        onAuthenticationFailure("Failed to find api root: $apiDiscoveryResult")
-                    }
-                }
-            }
-        }
-    }
-
-    private fun authenticateWithSite(
-        apiRootUrl: String,
-        applicationPasswordAuthenticationUrl: String
-    ) {
-        // Store the API root URL for use in onNewIntent
-        currentApiRootUrl = apiRootUrl
-
-        val uriBuilder = applicationPasswordAuthenticationUrl.toUri().buildUpon()
-
-        uriBuilder
-            .appendQueryParameter("app_name", "GutenbergKitAndroidDemoApp")
-            .appendQueryParameter("app_id", "00000000-0000-4000-9000-000000000000")
-            .appendQueryParameter("success_url", "gutenbergkit://authorized")
-
-        uriBuilder.build().let { uri ->
-            val i = Intent(Intent.ACTION_VIEW, uri)
-            startActivity(i)
-        }
-    }
-
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-
-        intent.data?.let {
-            val siteUrl = it.getQueryParameter("site_url")
-                ?: throw IllegalStateException("site_url is missing from authentication")
-            val username = it.getQueryParameter("user_login")
-                ?: throw IllegalStateException("username is missing from authentication")
-            val password = it.getQueryParameter("password")
-                ?: throw IllegalStateException("password is missing from authentication")
-
-            val siteApiRoot = currentApiRootUrl
-                ?: throw IllegalStateException("API root URL is not available")
-            currentApiRootUrl = null
-            val authToken = "Basic " + Base64.encodeToString(
-                "$username:$password".toByteArray(),
-                Base64.NO_WRAP
-            )
-
-            onAuthenticationSuccess(
-                siteUrl,
-                siteApiRoot,
-                authToken
-            )
-        }
+        authenticationManager.processAuthenticationResult(intent, this)
     }
 
-    fun onAuthenticationSuccess(siteUrl: String, siteApiRoot: String, authToken: String) {
+    override fun onAuthenticationSuccess(siteUrl: String, siteApiRoot: String, authToken: String) {
         val siteName = siteUrl.removePrefix("https://").removePrefix("http://").substringBefore("/")
         val newConfig = ConfigurationItem.RemoteEditor(
             name = siteName,
@@ -240,10 +137,10 @@ class MainActivity : AppCompatActivity() {
         )
         configurations.add(newConfig)
         adapter.notifyItemInserted(configurations.size - 1)
-        saveConfigurations()
+        configurationStorage.saveConfigurations(configurations)
     }
 
-    fun onAuthenticationFailure(errorMessage: String) {
+    override fun onAuthenticationFailure(errorMessage: String) {
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.authentication_failed))
             .setMessage(errorMessage)
@@ -260,105 +157,9 @@ class MainActivity : AppCompatActivity() {
                 val index = configurations.indexOf(config)
                 configurations.removeAt(index)
                 adapter.notifyItemRemoved(index)
-                saveConfigurations()
+                configurationStorage.saveConfigurations(configurations)
             }
             .setNegativeButton(getString(R.string.cancel), null)
             .show()
-    }
-
-    private fun saveConfigurations() {
-        val jsonArray = JSONArray()
-        configurations.forEach { config ->
-            if (config is ConfigurationItem.RemoteEditor) {
-                val jsonObject = JSONObject().apply {
-                    put("name", config.name)
-                    put("siteUrl", config.siteUrl)
-                    put("siteApiRoot", config.siteApiRoot)
-                    put("authHeader", config.authHeader)
-                }
-                jsonArray.put(jsonObject)
-            }
-        }
-        sharedPrefs.edit {
-            putString(KEY_REMOTE_CONFIGS, jsonArray.toString())
-        }
-    }
-
-    private fun loadSavedConfigurations() {
-        val savedData = sharedPrefs.getString(KEY_REMOTE_CONFIGS, null) ?: return
-        try {
-            val jsonArray = JSONArray(savedData)
-            for (i in 0 until jsonArray.length()) {
-                val jsonObject = jsonArray.getJSONObject(i)
-                val config = ConfigurationItem.RemoteEditor(
-                    name = jsonObject.getString("name"),
-                    siteUrl = jsonObject.getString("siteUrl"),
-                    siteApiRoot = jsonObject.optString(
-                        "siteApiRoot",
-                        jsonObject.getString("siteUrl") + "/wp-json/"
-                    ),
-                    authHeader = jsonObject.getString("authHeader")
-                )
-                configurations.add(config)
-            }
-        } catch (e: Exception) {
-            // Ignore parsing errors
-        }
-    }
-}
-
-sealed class ConfigurationItem {
-    object BundledEditor : ConfigurationItem()
-    data class RemoteEditor(
-        val name: String,
-        val siteUrl: String,
-        val siteApiRoot: String,
-        val authHeader: String
-    ) : ConfigurationItem()
-}
-
-class ConfigurationAdapter(
-    private val items: List<ConfigurationItem>,
-    private val onItemClick: (ConfigurationItem) -> Unit,
-    private val onItemLongClick: (ConfigurationItem) -> Boolean
-) : RecyclerView.Adapter<ConfigurationAdapter.ViewHolder>() {
-
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_configuration, parent, false)
-        return ViewHolder(view)
-    }
-
-    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val item = items[position]
-        when (item) {
-            is ConfigurationItem.BundledEditor -> {
-                holder.titleText.text = holder.itemView.context.getString(R.string.bundled_editor)
-                holder.subtitleText.text =
-                    holder.itemView.context.getString(R.string.bundled_editor_subtitle)
-                holder.subtitleText.visibility = View.VISIBLE
-            }
-
-            is ConfigurationItem.RemoteEditor -> {
-                holder.titleText.text = item.name
-                holder.subtitleText.text = item.siteUrl
-                holder.subtitleText.visibility = View.VISIBLE
-            }
-        }
-
-        holder.itemView.setOnClickListener {
-            onItemClick(item)
-        }
-
-        holder.itemView.setOnLongClickListener {
-            onItemLongClick(item)
-        }
-    }
-
-    override fun getItemCount() = items.size
-
-    class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        val titleText: TextView = view.findViewById(R.id.titleText)
-        val subtitleText: TextView = view.findViewById(R.id.subtitleText)
     }
 }
