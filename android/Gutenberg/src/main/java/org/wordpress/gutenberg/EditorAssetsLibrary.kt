@@ -86,7 +86,6 @@ class EditorAssetsLibrary(
     /**
      * Caches a single asset from the given URL
      */
-    // TODO: Double check that caching is site specific
     suspend fun cacheAsset(httpURL: String): File = withContext(Dispatchers.IO) {
         if (!shouldCacheUrl(httpURL)) {
             throw IllegalArgumentException("Unsupported URL for caching: $httpURL")

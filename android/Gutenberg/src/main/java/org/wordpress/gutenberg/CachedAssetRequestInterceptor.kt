@@ -11,13 +11,6 @@ class CachedAssetRequestInterceptor(
 ) : GutenbergRequestInterceptor {
     companion object {
         private const val TAG = "CachedAssetInterceptor"
-        private val MIME_TYPES = mapOf(
-            ".js" to "application/javascript",
-            // TODO: Avoid possible ordering issues
-            ".css?inline" to "application/javascript",
-            ".css" to "text/css",
-            ".map" to "application/json"
-        )
         private val CACHEABLE_EXTENSIONS = setOf(".js", ".css", ".js.map")
     }
 
@@ -74,12 +67,25 @@ class CachedAssetRequestInterceptor(
     }
 
     private fun createResponse(url: String, data: ByteArray): WebResourceResponse {
-        val mimeType =
-            MIME_TYPES.entries.find { url.contains(it.key) }?.value ?: "application/octet-stream"
+        val mimeType = getMimeType(url)
         return WebResourceResponse(
             mimeType,
             "UTF-8",
             ByteArrayInputStream(data)
         )
+    }
+
+    private fun getMimeType(url: String): String {
+        // Check specific patterns first, then fallback to general ones
+        return when {
+            // CSS files with ?inline query parameter are transformed by Vite into JavaScript modules
+            // that export CSS as strings. See use-editor-styles.js where these are imported and used
+            // as JavaScript string variables for programmatic style injection.
+            url.contains(".css?inline") -> "application/javascript"
+            url.contains(".js") -> "application/javascript"
+            url.contains(".css") -> "text/css"
+            url.contains(".map") -> "application/json"
+            else -> "application/octet-stream"
+        }
     }
 }
