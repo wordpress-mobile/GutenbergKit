@@ -563,6 +563,7 @@ class GutenbergView : WebView {
         filePathCallback = null
         onFileChooserRequested = null
         handler.removeCallbacksAndMessages(null)
+        this.destroy()
     }
 
     companion object {

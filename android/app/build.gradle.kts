@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.gutenbergkit"
-        minSdk = 22
+        minSdk = 24
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
@@ -43,6 +43,8 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.webkit)
+    implementation(libs.androidx.recyclerview)
+    implementation(libs.wordpress.rs.android)
     implementation(project(":Gutenberg"))
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
