@@ -1,6 +1,6 @@
 [versions]
 agp = "8.7.3"
-kotlin = "1.9.0"
+kotlin = "2.0.21"
 coreKtx = "1.13.1"
 junit = "4.13.2"
 junitVersion = "1.2.1"
@@ -13,6 +13,9 @@ webkit = "1.11.0"
 gson = "2.8.9"
 mockito = "4.1.0"
 robolectric = "4.14.1"
+kotlinx-coroutines = '1.10.2'
+androidx-recyclerview = '1.3.2'
+wordpress-rs = 'trunk-503f1da9e067677d1517d09f926b1d038dfa58a1'
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -28,6 +31,9 @@ gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 mockito-core = { group = "org.mockito", name = "mockito-core", version.ref = "mockito" }
 mockito-kotlin = { group = "org.mockito.kotlin", name = "mockito-kotlin", version.ref = "mockito" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinx-coroutines" }
+androidx-recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "androidx-recyclerview" }
+wordpress-rs-android = { group = "rs.wordpress.api", name = "android", version.ref = "wordpress-rs" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

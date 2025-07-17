@@ -28,6 +28,12 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven {
+            url = uri("https://a8c-libs.s3.amazonaws.com/android")
+            content {
+                includeGroup("rs.wordpress.api")
+            }
+        }
     }
 }
 
