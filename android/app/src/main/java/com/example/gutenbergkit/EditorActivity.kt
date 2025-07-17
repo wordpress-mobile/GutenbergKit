@@ -2,6 +2,7 @@ package com.example.gutenbergkit
 
 import android.os.Bundle
 import android.webkit.WebView
+import android.content.pm.ApplicationInfo
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -21,7 +22,9 @@ class EditorActivity : AppCompatActivity() {
             insets
         }
 
-        WebView.setWebContentsDebuggingEnabled(true)
+        if (0 != (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)) {
+            WebView.setWebContentsDebuggingEnabled(true)
+        }
 
         // Get the configuration from the intent
         val configuration =
