@@ -83,7 +83,6 @@ class MainActivity : AppCompatActivity(), AuthenticationManager.AuthenticationCa
             .setPlugins(true) // Enable plugins for remote editor
             .setSiteURL(config.siteUrl)
             .setSiteApiRoot(config.siteApiRoot)
-            .setSiteApiNamespace(arrayOf("wp/v2"))
             .setNamespaceExcludedPaths(arrayOf())
             .setAuthHeader(config.authHeader)
             .build()
