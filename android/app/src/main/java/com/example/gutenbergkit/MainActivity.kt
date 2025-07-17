@@ -18,6 +18,11 @@ import org.wordpress.gutenberg.EditorConfiguration
 import org.json.JSONArray
 import org.json.JSONObject
 import androidx.core.content.edit
+import androidx.core.net.toUri
+import kotlinx.coroutines.runBlocking
+import rs.wordpress.api.kotlin.ApiDiscoveryResult
+import rs.wordpress.api.kotlin.WpLoginClient
+import android.util.Base64
 
 class MainActivity : AppCompatActivity() {
 
@@ -25,6 +30,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var adapter: ConfigurationAdapter
     private val configurations = mutableListOf<ConfigurationItem>()
     private lateinit var sharedPrefs: SharedPreferences
+    private var currentApiRootUrl: String? = null
 
     companion object {
         private const val PREFS_NAME = "gutenberg_configs"
@@ -125,17 +131,73 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton(getString(R.string.add)) { _, _ ->
                 val siteUrl = siteUrlInput.text.toString().trim()
                 if (siteUrl.isNotEmpty()) {
-                    authenticateWithSite(siteUrl)
+                    autoDiscovery(siteUrl)
                 }
             }
             .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
-    
-    private fun authenticateWithSite(siteUrl: String) {
-        // TODO: Implement authentication logic
+
+    private fun autoDiscovery(siteUrl: String) = runBlocking {
+        when (val apiDiscoveryResult = WpLoginClient().apiDiscovery(siteUrl)) {
+            is ApiDiscoveryResult.Success -> {
+                val success = apiDiscoveryResult.success
+                val apiRootUrl = success.apiRootUrl.url()
+                val applicationPasswordAuthenticationUrl =
+                    success.applicationPasswordsAuthenticationUrl.url()
+                authenticateWithSite(apiRootUrl, applicationPasswordAuthenticationUrl)
+            }
+            else -> onAuthenticationFailure("Failed to find api root: $apiDiscoveryResult")
+        }
     }
-    
+
+    private fun authenticateWithSite(
+        apiRootUrl: String,
+        applicationPasswordAuthenticationUrl: String
+    ) {
+        // Store the API root URL for use in onNewIntent
+        currentApiRootUrl = apiRootUrl
+
+        val uriBuilder = applicationPasswordAuthenticationUrl.toUri().buildUpon()
+
+        uriBuilder
+            .appendQueryParameter("app_name", "GutenbergKitAndroidDemoApp")
+            .appendQueryParameter("app_id", "00000000-0000-4000-9000-000000000000")
+            .appendQueryParameter("success_url", "gutenbergkit://authorized")
+
+        uriBuilder.build().let { uri ->
+            val i = Intent(Intent.ACTION_VIEW, uri)
+            startActivity(i)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+
+        intent.data?.let {
+            val siteUrl = it.getQueryParameter("site_url")
+                ?: throw IllegalStateException("site_url is missing from authentication")
+            val username = it.getQueryParameter("user_login")
+                ?: throw IllegalStateException("username is missing from authentication")
+            val password = it.getQueryParameter("password")
+                ?: throw IllegalStateException("password is missing from authentication")
+
+            val siteApiRoot = currentApiRootUrl
+                ?: throw IllegalStateException("API root URL is not available")
+            currentApiRootUrl = null
+            val authToken = "Basic " + Base64.encodeToString(
+                "$username:$password".toByteArray(),
+                Base64.NO_WRAP
+            )
+
+            onAuthenticationSuccess(
+                siteUrl,
+                siteApiRoot,
+                authToken
+            )
+        }
+    }
+
     fun onAuthenticationSuccess(siteUrl: String, siteApiRoot: String, authToken: String) {
         val siteName = siteUrl.removePrefix("https://").removePrefix("http://").substringBefore("/")
         val newConfig = ConfigurationItem.RemoteEditor(
@@ -148,7 +210,7 @@ class MainActivity : AppCompatActivity() {
         adapter.notifyItemInserted(configurations.size - 1)
         saveConfigurations()
     }
-    
+
     fun onAuthenticationFailure(errorMessage: String) {
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.authentication_failed))
@@ -199,7 +261,10 @@ class MainActivity : AppCompatActivity() {
                 val config = ConfigurationItem.RemoteEditor(
                     name = jsonObject.getString("name"),
                     siteUrl = jsonObject.getString("siteUrl"),
-                    siteApiRoot = jsonObject.optString("siteApiRoot", jsonObject.getString("siteUrl") + "/wp-json/"),
+                    siteApiRoot = jsonObject.optString(
+                        "siteApiRoot",
+                        jsonObject.getString("siteUrl") + "/wp-json/"
+                    ),
                     authHeader = jsonObject.getString("authHeader")
                 )
                 configurations.add(config)
