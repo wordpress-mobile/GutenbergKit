@@ -1,4 +1,9 @@
 /**
+ * WordPress dependencies
+ */
+import apiFetch from '@wordpress/api-fetch';
+
+/**
  * Internal dependencies
  */
 import parseException from './exception-parser';
@@ -281,8 +286,6 @@ export function awaitGBKitGlobal( timeoutMs = 3000 ) {
  * Retrieves the editor assets from the native host.
  *
  * @return {Promise<{scripts: string, styles: string, allowed_block_types: string[]}>} Promise that resolves with the assets object.
- *
- * @todo Implement Android support.
  */
 export async function fetchEditorAssets() {
 	if ( window.webkit ) {
@@ -292,5 +295,11 @@ export async function fetchEditorAssets() {
 			}
 		);
 	}
-	throw new Error( 'Android support is not implemented yet.' );
+	// Android implementation - uses same API call that will be intercepted
+	const { siteApiRoot, editorAssetsEndpoint } = getGBKit();
+	const url =
+		editorAssetsEndpoint || `${ siteApiRoot }wpcom/v2/editor-assets`;
+	return await apiFetch( {
+		url,
+	} );
 }

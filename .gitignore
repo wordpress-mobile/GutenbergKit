@@ -196,3 +196,6 @@ local.properties
 
 # Translation files
 src/translations/
+
+# Claude
+.claude/settings.local.json

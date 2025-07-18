@@ -26,6 +26,12 @@ import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
 import org.json.JSONException
 import org.json.JSONObject
 import java.util.Locale
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.launch
 
 const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
 const val ASSET_URL_REMOTE = "https://appassets.androidplatform.net/assets/remote.html"
@@ -241,6 +247,16 @@ class GutenbergView : WebView {
     fun start(configuration: EditorConfiguration) {
         this.configuration = configuration
 
+        // Set up asset caching if enabled
+        if (configuration.enableAssetCaching) {
+            val library = EditorAssetsLibrary(context, configuration)
+            val cachedInterceptor = CachedAssetRequestInterceptor(
+                library,
+                configuration.cachedAssetHosts
+            )
+            requestInterceptor = cachedInterceptor
+        }
+
         initializeWebView()
 
         val editorUrl = if (configuration.plugins && BuildConfig.GUTENBERG_EDITOR_REMOTE_URL.isNotEmpty()) {
@@ -292,6 +308,7 @@ class GutenbergView : WebView {
                 "hideTitle": ${configuration.hideTitle},
                 "editorSettings": $editorSettings,
                 "locale": "${configuration.locale}",
+                ${if (configuration.editorAssetsEndpoint != null) "\"editorAssetsEndpoint\": \"${configuration.editorAssetsEndpoint}\"," else ""}
                 ${if (configuration.postId != null) """
                 "post": {
                     "id": ${configuration.postId},
@@ -538,6 +555,7 @@ class GutenbergView : WebView {
         super.onDetachedFromWindow()
         clearConfig()
         this.stopLoading()
+        (requestInterceptor as? CachedAssetRequestInterceptor)?.shutdown()
         contentChangeListener = null
         historyChangeListener = null
         featuredImageChangeListener = null
@@ -546,6 +564,36 @@ class GutenbergView : WebView {
         onFileChooserRequested = null
         handler.removeCallbacksAndMessages(null)
         this.destroy()
+    }
+
+    companion object {
+        private val warmupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+        /**
+         * Warmup the editor by preloading manifest
+         */
+        @JvmStatic
+        fun warmup(context: Context, configuration: EditorConfiguration) {
+            if (configuration.enableAssetCaching) {
+                val library = EditorAssetsLibrary(context, configuration)
+                // Preload manifest in background
+                warmupScope.launch {
+                    try {
+                        library.manifestContentForEditor()
+                    } catch (e: Exception) {
+                        Log.e("GutenbergView", "Failed to warmup manifest", e)
+                    }
+                }
+            }
+        }
+
+        /**
+         * Cancel any ongoing warmup operations
+         */
+        @JvmStatic
+        fun cancelWarmup() {
+            warmupScope.coroutineContext[Job]?.cancelChildren()
+        }
     }
 }
 
