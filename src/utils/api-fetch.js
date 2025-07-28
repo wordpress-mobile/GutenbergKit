@@ -68,7 +68,7 @@ function apiPathModifierMiddleware( options, next ) {
 		// Insert the API namespace after the first two path segments.
 		options.path = options.path.replace(
 			/^(?<apiPath>\/?(?:[\w.-]+\/){2})/,
-			`$<apiPath>${ siteApiNamespace[ 0 ] }/`
+			`$<apiPath>${ siteApiNamespace[ 0 ] }`
 		);
 	}
 
