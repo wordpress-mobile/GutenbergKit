@@ -402,6 +402,7 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
             // Open the request in OS browser
             UIApplication.shared.open(url)
             decisionHandler(.cancel)
+            return
         }
 
         decisionHandler(.allow)
