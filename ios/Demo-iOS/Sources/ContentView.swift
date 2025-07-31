@@ -6,23 +6,26 @@ let editorURL: URL? = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"
 struct ContentView: View {
 
     let remoteEditorConfigurations: [EditorConfiguration] = [.template]
+    @State private var presentedConfiguration: EditorConfiguration?
 
     var body: some View {
         List {
             Section {
-                NavigationLink {
-                    EditorView(configuration: .default)
+                Button {
+                    presentedConfiguration = .default
                 } label: {
                     Text("Bundled Editor")
+                        .foregroundColor(.primary)
                 }
             }
 
             Section {
                 ForEach(remoteEditorConfigurations, id: \.siteURL) { configuration in
-                    NavigationLink {
-                        EditorView(configuration: configuration)
+                    Button {
+                        presentedConfiguration = configuration
                     } label: {
                         Text(URL(string: configuration.siteURL)?.host ?? configuration.siteURL)
+                            .foregroundColor(.primary)
                     }
                 }
 
@@ -58,6 +61,16 @@ struct ContentView: View {
                     Image(systemName: "arrow.clockwise")
                 }
 
+            }
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { presentedConfiguration != nil },
+            set: { if !$0 { presentedConfiguration = nil } }
+        )) {
+            if let configuration = presentedConfiguration {
+                NavigationStack {
+                    EditorView(configuration: configuration)
+                }
             }
         }
     }
