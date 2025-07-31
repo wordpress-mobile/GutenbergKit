@@ -113,3 +113,18 @@ The editor uses a bidirectional bridge pattern:
 - **Vite**: Handles web bundling with separate configs for local and remote editors
 - **Translations**: Automated translation preparation from WordPress packages
 - **Asset Distribution**: Built assets are copied to platform-specific directories
+
+## Code Quality Standards
+
+The project follows WordPress coding standards for JavaScript:
+- **ESLint**: Uses `@wordpress/eslint-plugin/recommended` configuration
+- **Prettier**: Uses `@wordpress/prettier-config` for code formatting
+
+Always run these commands before committing:
+```bash
+# Lint JavaScript code
+npm run lint
+
+# Format JavaScript code
+npm run format
+```
