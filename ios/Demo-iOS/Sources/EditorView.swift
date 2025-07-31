@@ -193,30 +193,30 @@ class EditorViewControllerWrapper: UIViewController {
                     <div id="gbkit-navigation-bar">
                         <div class="gbkit-nav-group gbkit-nav-leading">
                             <button class="gbkit-nav-button" data-action="close">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                <svg viewBox="0 0 24 24" fill="none">
                                     <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                                 </svg>
                             </button>
                         </div>
                         <div class="gbkit-nav-group gbkit-nav-trailing">
                             <button class="gbkit-nav-button" data-action="back">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                <svg viewBox="0 0 24 24" fill="none">
                                     <path d="M7 12L3 8M3 8L7 4M3 8H13C17.4183 8 21 11.5817 21 16C21 20.4183 17.4183 24 13 24H11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                 </svg>
                             </button>
                             <button class="gbkit-nav-button" data-action="forward" disabled>
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                <svg viewBox="0 0 24 24" fill="none">
                                     <path d="M17 12L21 8M21 8L17 4M21 8H11C6.58172 8 3 11.5817 3 16C3 20.4183 6.58172 24 11 24H13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                 </svg>
                             </button>
                             <button class="gbkit-nav-button" data-action="preview">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                <svg viewBox="0 0 24 24" fill="none">
                                     <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="2"/>
                                     <path d="M9 9H15M9 12H15M9 15H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                                 </svg>
                             </button>
                             <button class="gbkit-nav-button" data-action="more">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                <svg viewBox="0 0 24 24" fill="none">
                                     <circle cx="12" cy="5" r="2" fill="currentColor"/>
                                     <circle cx="12" cy="12" r="2" fill="currentColor"/>
                                     <circle cx="12" cy="19" r="2" fill="currentColor"/>
@@ -246,34 +246,61 @@ class EditorViewControllerWrapper: UIViewController {
                         display: flex;
                         justify-content: space-between;
                         align-items: center;
-                        padding: 0 16px;
+                        padding: 0 8px;
                         z-index: 9999;
                         border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+                        overflow: visible;
+                    }
+                    
+                    /* Extend background above the navigation bar */
+                    #gbkit-navigation-bar::before {
+                        content: '';
+                        position: absolute;
+                        top: -200px;
+                        left: -20px;
+                        right: -20px;
+                        height: 200px;
+                        background: rgba(255, 255, 255, 0.9);
+                        backdrop-filter: blur(10px);
+                        -webkit-backdrop-filter: blur(10px);
+                        z-index: -1;
+                    }
+                    
+                    /* Dark mode support for extended background */
+                    @media (prefers-color-scheme: dark) {
+                        #gbkit-navigation-bar::before {
+                            background: rgba(29, 29, 31, 0.94);
+                        }
                     }
                     
                     .gbkit-nav-group {
                         display: flex;
-                        gap: 20px;
+                        gap: 12px;
                         align-items: center;
                     }
                     
                     .gbkit-nav-button {
                         background: none;
                         border: none;
-                        padding: 12px;
-                        min-width: 44px;
-                        min-height: 44px;
+                        padding: 8px;
+                        min-width: 36px;
+                        min-height: 36px;
                         cursor: pointer;
-                        color: #007AFF;
+                        color: #000000;
                         display: flex;
                         align-items: center;
                         justify-content: center;
-                        border-radius: 8px;
+                        border-radius: 6px;
                         -webkit-tap-highlight-color: transparent;
                         -webkit-touch-callout: none;
                         -webkit-user-select: none;
                         user-select: none;
                         outline: none;
+                    }
+                    
+                    .gbkit-nav-button svg {
+                        width: 20px;
+                        height: 20px;
                     }
                     
                     .gbkit-nav-button:active {
@@ -426,6 +453,7 @@ class EditorViewControllerWrapper: UIViewController {
                             transform: scale(1);
                         }
                     }
+                    
                 `;
                 document.head.appendChild(style);
                 
