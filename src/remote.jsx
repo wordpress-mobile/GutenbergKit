@@ -19,6 +19,7 @@ import '@wordpress/editor/build-style/style.css';
 import { awaitGBKitGlobal } from './utils/bridge';
 import { initializeApiFetch } from './utils/api-fetch';
 import { loadEditorAssets } from './utils/remote-editor';
+import { initializeVideoPressAjaxBridge } from './utils/videopress-bridge';
 import { error } from './utils/logger';
 import './index.scss';
 
@@ -70,6 +71,8 @@ function loadRemainingAssets() {
 }
 
 function initializeEditor( assetsResult ) {
+	initializeVideoPressAjaxBridge();
+
 	const { allowedBlockTypes } = assetsResult;
 	return import( './utils/editor' ).then(
 		( { initializeEditor: _initializeEditor } ) => {
