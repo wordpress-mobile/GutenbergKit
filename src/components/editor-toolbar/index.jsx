@@ -17,7 +17,7 @@ import {
 	ToolbarButton,
 } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
-import { close, cog } from '@wordpress/icons';
+import { close, cog, plus } from '@wordpress/icons';
 import clsx from 'clsx';
 import { store as editorStore } from '@wordpress/editor';
 
@@ -26,6 +26,7 @@ import { store as editorStore } from '@wordpress/editor';
  */
 import './style.scss';
 import { useModalize } from './use-modalize';
+import { showBlockPicker, getGBKit } from '../../utils/bridge';
 
 /**
  * Renders the editor toolbar containing block-related actions.
@@ -49,6 +50,10 @@ const EditorToolbar = ( { className } ) => {
 		};
 	}, [] );
 	const { setIsInserterOpened } = useDispatch( editorStore );
+
+	// Check if native block inserter is enabled from configuration
+	const gbKit = getGBKit();
+	const enableNativeBlockInserter = gbKit.enableNativeBlockInserter ?? false;
 
 	useModalize( isInserterOpened );
 	useModalize( isBlockInspectorShown );
@@ -81,14 +86,30 @@ const EditorToolbar = ( { className } ) => {
 				variant="unstyled"
 			>
 				<ToolbarGroup>
-					<Inserter
-						popoverProps={ {
-							'aria-modal': true,
-							role: 'dialog',
-						} }
-						open={ isInserterOpened }
-						onToggle={ setIsInserterOpened }
-					/>
+					{ enableNativeBlockInserter ? (
+						<ToolbarButton
+							title={ __( 'Add block' ) }
+							icon={ plus }
+							onClick={ () => {
+								// Close any open web inserter
+								if ( isInserterOpened ) {
+									setIsInserterOpened( false );
+								}
+								// Show native block picker
+								showBlockPicker();
+							} }
+							className="gutenberg-kit-add-block-button"
+						/>
+					) : (
+						<Inserter
+							popoverProps={ {
+								'aria-modal': true,
+								role: 'dialog',
+							} }
+							isAppender
+							showInserterHelpPanel
+						/>
+					) }
 				</ToolbarGroup>
 
 				{ isSelected && (

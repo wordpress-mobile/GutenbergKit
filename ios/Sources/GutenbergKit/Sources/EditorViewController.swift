@@ -177,6 +177,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             hideTitle: \(configuration.hideTitle),
             editorSettings: \(editorSettingsJS),
             locale: '\(configuration.locale)',
+            enableNativeBlockInserter: \(configuration.enableNativeBlockInserter),
             post: {
                 id: \(configuration.postID ?? -1),
                 title: '\(escapedTitle)',
@@ -279,14 +280,28 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     // MARK: - Internal (Block Inserter)
 
-    // TODO: wire with JS and pass blocks
-    private func showBlockInserter() {
-//        let viewModel = EditorBlockPickerViewModel(blockTypes: service.blockTypes)
-//        let view = NavigationView {
-//            EditorBlockPicker(viewModel: viewModel)
-//        }
-//        let host = UIHostingController(rootView: view)
-//        present(host, animated: true)
+    private func showBlockInserter(blockTypes: [EditorBlockType]) {
+        let view = BlockInserterView(blockTypes: blockTypes) { [weak self] selectedBlockType in
+            self?.insertBlock(selectedBlockType)
+        }
+        let host = UIHostingController(rootView: view)
+        host.view.backgroundColor = .clear
+
+        // Configure sheet presentation with medium detent
+        if let sheet = host.sheetPresentationController {
+            sheet.detents = [.custom(identifier: .medium, resolver: { context in
+                context.containerTraitCollection.horizontalSizeClass == .compact ? 534 : 900
+            }), .large()]
+            sheet.prefersGrabberVisible = true
+            sheet.preferredCornerRadius = 20
+            sheet.prefersScrollingExpandsWhenScrolledToEdge = true
+        }
+
+        present(host, animated: true)
+    }
+    
+    private func insertBlock(_ blockType: EditorBlockType) {
+        evaluate("window.editor.insertBlock('\(blockType.name)');")
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
@@ -300,6 +315,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // MARK: - GutenbergEditorControllerDelegate
 
     fileprivate func controller(_ controller: GutenbergEditorController, didReceiveMessage message: EditorJSMessage) {
+        print("Received message type: \(message.type)")
         do {
             switch message.type {
             case .onEditorLoaded:
@@ -322,7 +338,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 }
                 delegate?.editor(self, didLogException: editorException)
             case .showBlockPicker:
-                showBlockInserter()
+                do {
+                    let body = try message.decode(EditorJSMessage.ShowBlockPickerBody.self)
+                    showBlockInserter(blockTypes: body.blockTypes)
+                } catch {
+                    showBlockInserter(blockTypes: [])
+                }
             case .openMediaLibrary:
                 let config = try message.decode(OpenMediaLibraryAction.self)
                 openMediaLibrary(config)
@@ -344,6 +365,46 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let duration = CFAbsoluteTimeGetCurrent() - timestampInit
         print("gutenbergkit-measure_editor-first-render:", duration)
         delegate?.editorDidLoad(self)
+        
+        // Auto-focus the editor after it loads if configured
+        if configuration.autoFocusOnLoad {
+            autoFocusEditor()
+        }
+    }
+    
+    private func autoFocusEditor() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.simulateTapOnWebView()
+        }
+    }
+    
+    private func simulateTapOnWebView() {
+        // Use a hidden text field to trigger keyboard, then transfer focus
+        let hiddenTextField = UITextField(frame: CGRect(x: -100, y: -100, width: 1, height: 1))
+        hiddenTextField.autocorrectionType = .no
+        hiddenTextField.autocapitalizationType = .none
+        view.addSubview(hiddenTextField)
+        
+        // Focus the hidden field to bring up keyboard
+        hiddenTextField.becomeFirstResponder()
+        
+        // After a short delay, transfer focus to web view
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            hiddenTextField.removeFromSuperview()
+            self?.webView.becomeFirstResponder()
+            
+            // Try one more JavaScript focus attempt with keyboard already up
+            let focusScript = """
+            (function() {
+                const editable = document.querySelector('[contenteditable="true"]');
+                if (editable) {
+                    editable.focus();
+                    editable.click();
+                }
+            })();
+            """
+            self?.evaluate(focusScript)
+        }
     }
 
     // MARK: - Warmup

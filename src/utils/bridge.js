@@ -2,6 +2,7 @@
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
+import { getBlockTypes } from '@wordpress/blocks';
 
 /**
  * Internal dependencies
@@ -110,15 +111,31 @@ export function onBlocksChanged( isEmpty = false ) {
  * @return {void}
  */
 export function showBlockPicker() {
-	if ( window.editorDelegate ) {
-		window.editorDelegate.showBlockPicker();
-	}
+	// Get all registered block types
+	const allBlockTypes = getBlockTypes();
+	const blockTypes = allBlockTypes.map( ( blockType ) => {
+		return {
+			name: blockType.name,
+			title: blockType.title,
+			description: blockType.description,
+			category: blockType.category,
+			keywords: blockType.keywords || [],
+		};
+	} );
 
-	if ( window.webkit ) {
-		window.webkit.messageHandlers.editorDelegate.postMessage( {
-			message: 'showBlockPicker',
-			body: {},
-		} );
+	try {
+		if ( window.editorDelegate ) {
+			window.editorDelegate.showBlockPicker( JSON.stringify( { blockTypes } ) );
+		}
+
+		if ( window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.editorDelegate ) {
+			window.webkit.messageHandlers.editorDelegate.postMessage( {
+				message: 'showBlockPicker',
+				body: { blockTypes },
+			} );
+		}
+	} catch ( error ) {
+		console.error( 'Error sending message to native:', error );
 	}
 }
 

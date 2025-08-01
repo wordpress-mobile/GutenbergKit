@@ -51,4 +51,8 @@ struct EditorJSMessage {
     struct DidUpdateFeaturedImageBody: Decodable {
         let mediaID: Int
     }
+    
+    struct ShowBlockPickerBody: Decodable {
+        let blockTypes: [EditorBlockType]
+    }
 }

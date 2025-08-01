@@ -2,18 +2,29 @@
  * WordPress dependencies
  */
 import { useEffect, useCallback, useRef } from '@wordpress/element';
-import { useDispatch, useSelect } from '@wordpress/data';
+import { useDispatch, useSelect, dispatch, select } from '@wordpress/data';
 import { store as coreStore } from '@wordpress/core-data';
 import { store as editorStore } from '@wordpress/editor';
-import { parse, serialize } from '@wordpress/blocks';
+import { store as blockEditorStore } from '@wordpress/block-editor';
+import { parse, serialize, createBlock } from '@wordpress/blocks';
 
 window.editor = window.editor || {};
+window.editor._savedInsertionPoint = null;
 
 export function useHostBridge( post, editorRef ) {
 	const { editEntityRecord } = useDispatch( coreStore );
 	const { undo, redo, switchEditorMode } = useDispatch( editorStore );
 	const { getEditedPostAttribute, getEditedPostContent } =
 		useSelect( editorStore );
+	
+	// Track the current selection and insertion point
+	const { selectedBlockClientId, blockInsertionPoint } = useSelect( ( select ) => {
+		const { getSelectedBlockClientId, getBlockInsertionPoint } = select( blockEditorStore );
+		return {
+			selectedBlockClientId: getSelectedBlockClientId(),
+			blockInsertionPoint: getBlockInsertionPoint(),
+		};
+	}, [] );
 
 	const editContent = useCallback(
 		( edits ) => {
@@ -27,6 +38,30 @@ export function useHostBridge( post, editorRef ) {
 	if ( postContentRef.current === null ) {
 		postContentRef.current = serialize( parse( post.content.raw || '' ) );
 	}
+
+	// Continuously update the saved insertion point whenever selection changes
+	useEffect( () => {
+		// Only update if we have a selected block OR if we're clearing selection but already have a saved point
+		if ( selectedBlockClientId !== null ) {
+			// We have a selected block, save its position
+			window.editor._savedInsertionPoint = {
+				rootClientId: blockInsertionPoint?.rootClientId,
+				index: blockInsertionPoint?.index || 0,
+				selectedBlockClientId: selectedBlockClientId
+			};
+		} else if ( !window.editor._savedInsertionPoint || !window.editor._savedInsertionPoint.selectedBlockClientId ) {
+			// Only update to null selection if we don't have a previously selected block
+			// This prevents overwriting a good insertion point when focus is lost
+			if ( blockInsertionPoint && blockInsertionPoint.index !== null ) {
+				window.editor._savedInsertionPoint = {
+					rootClientId: blockInsertionPoint?.rootClientId,
+					index: blockInsertionPoint?.index || 0,
+					selectedBlockClientId: null
+				};
+			}
+		}
+		// If selectedBlockClientId is null but we had a previous selection, keep the old insertion point
+	}, [ selectedBlockClientId, blockInsertionPoint ] );
 
 	useEffect( () => {
 		window.editor.setContent = ( content ) => {
@@ -79,6 +114,49 @@ export function useHostBridge( post, editorRef ) {
 			switchEditorMode( mode );
 		};
 
+		window.editor.insertBlock = ( blockName ) => {
+			try {
+				const block = createBlock( blockName );
+
+				// Check if we have a saved insertion point
+				if ( window.editor._savedInsertionPoint ) {
+					const { selectedBlockClientId, index, rootClientId } = window.editor._savedInsertionPoint;
+					
+					// Try to use insertBlocks (plural) which might handle positioning better
+					const { insertBlocks } = dispatch( blockEditorStore );
+					
+					if ( selectedBlockClientId ) {
+						// We have a selected block, insert after it
+						// First, try to get the block directly
+						const selectedBlock = select( blockEditorStore ).getBlock( selectedBlockClientId );
+						if ( selectedBlock ) {
+							const parentClientId = select( blockEditorStore ).getBlockRootClientId( selectedBlockClientId );
+							const blockIndex = select( blockEditorStore ).getBlockIndex( selectedBlockClientId );
+							
+							// Use insertBlocks with explicit position
+							insertBlocks( [ block ], blockIndex + 1, parentClientId );
+						} else {
+							insertBlocks( [ block ], index, rootClientId );
+						}
+					} else {
+						// No selected block, use the saved index
+						insertBlocks( [ block ], index, rootClientId );
+					}
+				} else {
+					// No saved insertion point
+					dispatch( blockEditorStore ).insertBlock( block );
+				}
+				
+				// Select the newly inserted block to help with focusing
+				setTimeout( () => {
+					dispatch( blockEditorStore ).selectBlock( block.clientId );
+				}, 100 );
+			
+			} catch ( error ) {
+				console.error( 'Error in insertBlock:', error );
+			}
+		};
+
 		return () => {
 			delete window.editor.setContent;
 			delete window.editor.setTitle;
@@ -87,6 +165,8 @@ export function useHostBridge( post, editorRef ) {
 			delete window.editor.undo;
 			delete window.editor.redo;
 			delete window.editor.switchEditorMode;
+			delete window.editor.insertBlock;
+			window.editor._savedInsertionPoint = null;
 		};
 	}, [
 		editorRef,

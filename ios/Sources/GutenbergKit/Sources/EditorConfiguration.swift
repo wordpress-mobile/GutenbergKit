@@ -22,6 +22,10 @@ public struct EditorConfiguration {
     /// The locale to use for translations
     public var locale = "en"
     public var editorAssetsEndpoint: URL?
+    /// Enable native block inserter UI.
+    public var enableNativeBlockInserter = true
+    /// Auto-focus the editor when it loads.
+    public var autoFocusOnLoad = true
 
     public init(title: String = "", content: String = "") {
         self.title = title

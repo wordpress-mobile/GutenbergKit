@@ -4,15 +4,18 @@ import GutenbergKit
 struct EditorView: View {
     private let configuration: EditorConfiguration
 
+    @Environment(\.dismiss) private var dismiss
+
     init(configuration: EditorConfiguration) {
         self.configuration = configuration
     }
 
     var body: some View {
         _EditorView(configuration: configuration)
+            .background(Color(.systemBackground))
             .toolbar {
                 ToolbarItemGroup(placement: .topBarLeading) {
-                    Button(action: {}, label: {
+                    Button(action: { dismiss() }, label: {
                         Image(systemName: "xmark")
                     })
                 }
@@ -33,6 +36,7 @@ struct EditorView: View {
                     moreMenu
                 }
             }
+            .tint(Color.primary)
     }
 
     private var moreMenu: some View {

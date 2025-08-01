@@ -7,11 +7,13 @@ struct ContentView: View {
 
     let remoteEditorConfigurations: [EditorConfiguration] = [.template]
 
+    @State private var isShowingDefaultEditor = false
+
     var body: some View {
         List {
             Section {
-                NavigationLink {
-                    EditorView(configuration: .default)
+                Button {
+                    isShowingDefaultEditor = true
                 } label: {
                     Text("Bundled Editor")
                 }
@@ -37,6 +39,11 @@ struct ContentView: View {
                 } else {
                     Text("Note: The editor is backed by the compiled web app created by `make build`.")
                 }
+            }
+        }
+        .fullScreenCover(isPresented: $isShowingDefaultEditor) {
+            NavigationView {
+                EditorView(configuration: .default)
             }
         }
         .toolbar {
