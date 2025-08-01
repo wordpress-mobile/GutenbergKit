@@ -11,6 +11,7 @@ struct BlockInserterView: View {
 
     @State private var isShowingFilesPicker = false
     @State private var selectedMediaItems: [PhotosPickerItem] = []
+    @State private var inlineSelectedMediaItems: [PhotosPickerItem] = []
 
     @Environment(\.dismiss) private var dismiss
     
@@ -44,10 +45,30 @@ struct BlockInserterView: View {
     private var mainContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                if viewModel.searchText.isEmpty {
+                    if #available(iOS 17, *) {
+                        PhotosPicker(
+                            "Photos",
+                            selection: $inlineSelectedMediaItems,
+                            maxSelectionCount: 10,
+                            selectionBehavior: .continuousAndOrdered
+                        )
+                        .labelsHidden()
+                        .photosPickerStyle(.compact)
+                        .photosPickerDisabledCapabilities([.collectionNavigation, .search, .sensitivityAnalysisIntervention, .stagingArea])
+                        .photosPickerAccessoryVisibility(.hidden, edges: .all)
+                        .frame(height: 128)
+                        .clipShape(UnevenRoundedRectangle(
+                            topLeadingRadius: 20, bottomLeadingRadius: 20, bottomTrailingRadius: 0, topTrailingRadius: 0
+                        ))
+                        .padding(.leading)
+
+                    }
+                }
+
                 ForEach(viewModel.filteredSections) { section in
                     BlockInserterSectionView(
                         section: section,
-                        isSearching: !viewModel.searchText.isEmpty,
                         onBlockSelected: insertBlock,
                         onMediaSelected: insertMedia
                     )

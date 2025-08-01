@@ -290,7 +290,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // Configure sheet presentation with medium detent
         if let sheet = host.sheetPresentationController {
             sheet.detents = [.custom(identifier: .medium, resolver: { context in
-                context.containerTraitCollection.horizontalSizeClass == .compact ? 534 : 900
+                context.containerTraitCollection.horizontalSizeClass == .compact ? 508 : 900
             }), .large()]
             sheet.prefersGrabberVisible = true
             sheet.preferredCornerRadius = 20

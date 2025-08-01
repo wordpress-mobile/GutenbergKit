@@ -85,6 +85,7 @@ private extension EditorConfiguration {
         configuration.editorAssetsEndpoint = URL(string: configuration.siteApiRoot)!.appendingPathComponent("wpcom/v2/editor-assets")
         // The `plugins: true` is necessary for the editor to use 'remote.html'
         configuration.plugins = true
+        configuration.enableNativeBlockInserter = true
 
         return configuration
     }
