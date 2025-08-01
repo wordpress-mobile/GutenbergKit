@@ -132,6 +132,20 @@ calculate_new_version() {
     esac
 }
 
+# Function to check if a version is a prerelease
+is_prerelease() {
+    local version=$1
+
+    # Use semver to check if the version has prerelease identifiers
+    local result=$(node -p "require('semver').prerelease('$version') !== null")
+
+    if [ "$result" = "true" ]; then
+        return 0  # It is a prerelease
+    else
+        return 1  # It is not a prerelease
+    fi
+}
+
 # Function to validate version type
 validate_version_type() {
     local version_type=$1
@@ -373,7 +387,12 @@ main() {
     push_changes "$new_version"
     echo
 
-    create_github_release "$new_version"
+    # Only create GitHub release for non-prerelease versions
+    if is_prerelease "$new_version"; then
+        print_status "Skipping GitHub release creation for prerelease version"
+    else
+        create_github_release "$new_version"
+    fi
     echo
 
     # Summary
@@ -384,7 +403,12 @@ main() {
         print_warning "This was a dry run. No actual changes were made."
         print_status "To perform the actual release, run: make release VERSION_TYPE=$version_type"
     else
-        print_status "The release is ready for integration into the WordPress app."
+        if is_prerelease "$new_version"; then
+            print_status "Prerelease tag v$new_version has been created and pushed."
+            print_status "No GitHub release was created for this prerelease version."
+        else
+            print_status "The release is ready for integration into the WordPress app."
+        fi
     fi
 }
 
