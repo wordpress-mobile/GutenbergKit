@@ -23,7 +23,7 @@ public struct EditorConfiguration {
     public var locale = "en"
     public var editorAssetsEndpoint: URL?
     /// Enable native block inserter UI.
-    public var enableNativeBlockInserter = true
+    public var enableNativeBlockInserter = false
     /// Auto-focus the editor when it loads.
     public var autoFocusOnLoad = true
 
