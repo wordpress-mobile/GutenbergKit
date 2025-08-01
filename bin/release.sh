@@ -105,6 +105,33 @@ get_current_version() {
     node -p "require('./package.json').version"
 }
 
+# Function to calculate new version without actually incrementing
+calculate_new_version() {
+    local current_version=$1
+    local version_type=$2
+
+    # Handle custom version numbers
+    case $version_type in
+        major|minor|patch|premajor|preminor|prepatch|prerelease)
+            # For prerelease types, use 'alpha' as the preid
+            if [[ "$version_type" =~ ^pre ]]; then
+                node -p "require('semver').inc('$current_version', '$version_type', 'alpha')"
+            else
+                node -p "require('semver').inc('$current_version', '$version_type')"
+            fi
+            ;;
+        from-git)
+            # For from-git, we would use the git tag version
+            # This is a placeholder - actual implementation would need to fetch from git
+            echo "$current_version"
+            ;;
+        *)
+            # Custom version number
+            echo "$version_type"
+            ;;
+    esac
+}
+
 # Function to validate version type
 validate_version_type() {
     local version_type=$1
@@ -166,11 +193,17 @@ increment_version() {
     local version_type=$1
     local current_version=$(get_current_version)
     local version_description=$(get_version_description "$version_type")
+    local new_version
 
     print_status "Current version: $current_version"
     print_status "Incrementing version ($version_description)..."
 
     if [ "$DRY_RUN" = "true" ]; then
+        # Calculate what the new version would be
+        new_version=$(calculate_new_version "$current_version" "$version_type")
+        print_success "Version would be incremented to: $new_version"
+        # Store in global variable for dry run
+        DRY_RUN_VERSION="$new_version"
         return
     fi
 
@@ -184,7 +217,7 @@ increment_version() {
             ;;
     esac
 
-    local new_version=$(get_current_version)
+    new_version=$(get_current_version)
     print_success "Version incremented to: $new_version"
 }
 
@@ -315,16 +348,21 @@ main() {
 
     # Get current version before incrementing
     local current_version=$(get_current_version)
+    local new_version
 
     # Execute release steps
     increment_version "$version_type"
     echo
 
+    # Get the new version
+    if [ "$DRY_RUN" = "true" ]; then
+        new_version="$DRY_RUN_VERSION"
+    else
+        new_version=$(get_current_version)
+    fi
+
     build_project
     echo
-
-    # Get new version after incrementing
-    local new_version=$(get_current_version)
 
     commit_changes "$new_version"
     echo
