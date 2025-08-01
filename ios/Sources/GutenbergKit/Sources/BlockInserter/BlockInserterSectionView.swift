@@ -20,11 +20,13 @@ struct BlockInserterSectionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            sectionHeader
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if section.category != "text" {
+                sectionHeader
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             blockGrid
         }
-        .padding(.top, 20)
+        .padding(.top, section.category != "text" ? 20 : 28)
         .padding(.bottom, 12)
         .cardStyle()
         .padding(.horizontal)

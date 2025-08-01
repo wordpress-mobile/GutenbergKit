@@ -57,7 +57,7 @@ struct BlockInserterView: View {
                         .photosPickerStyle(.compact)
                         .photosPickerDisabledCapabilities([.collectionNavigation, .search, .sensitivityAnalysisIntervention, .stagingArea])
                         .photosPickerAccessoryVisibility(.hidden, edges: .all)
-                        .frame(height: 128)
+                        .frame(height: 110)
                         .clipShape(UnevenRoundedRectangle(
                             topLeadingRadius: 20, bottomLeadingRadius: 20, bottomTrailingRadius: 0, topTrailingRadius: 0
                         ))
@@ -245,7 +245,11 @@ class BlockInserterViewModel: ObservableObject {
         } else {
             filteredSections = allSections.compactMap { section in
                 let filtered = filterBlocks(in: section, searchText: searchText)
-                return filtered.isEmpty ? nil : BlockInserterSection(name: section.name, blockTypes: filtered)
+                return filtered.isEmpty ? nil : BlockInserterSection(
+                    category: section.category,
+                    name: section.name,
+                    blockTypes: filtered
+                )
             }
         }
     }
@@ -296,7 +300,7 @@ class BlockInserterViewModel: ObservableObject {
         for (categoryKey, displayName) in categoryOrder {
             if let blocks = grouped[categoryKey] {
                 let sortedBlocks = sortBlocks(blocks, category: categoryKey)
-                sections.append(BlockInserterSection(name: displayName, blockTypes: sortedBlocks))
+                sections.append(BlockInserterSection(category: categoryKey, name: displayName, blockTypes: sortedBlocks))
             }
         }
         
@@ -304,7 +308,7 @@ class BlockInserterViewModel: ObservableObject {
         for (category, blocks) in grouped {
             let isStandardCategory = categoryOrder.contains { $0.key == category }
             if !isStandardCategory {
-                sections.append(BlockInserterSection(name: category.capitalized, blockTypes: blocks))
+                sections.append(BlockInserterSection(category: category, name: category.capitalized, blockTypes: blocks))
             }
         }
         
@@ -389,7 +393,8 @@ enum BlockInserterConstants {
 // MARK: - Supporting Types
 
 struct BlockInserterSection: Identifiable {
-    var id: String { name }
+    var id: String { category }
+    let category: String
     let name: String
     let blockTypes: [EditorBlockType]
 }
