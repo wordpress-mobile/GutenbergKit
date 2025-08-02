@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct BlockInserterView: View {
     let blockTypes: [EditorBlockType]
     let onBlockSelected: (EditorBlockType) -> Void
+    let onMediaSelected: ([PhotosPickerItem]) -> Void
     
     @StateObject private var viewModel: BlockInserterViewModel
 
@@ -16,10 +17,12 @@ struct BlockInserterView: View {
     @Environment(\.dismiss) private var dismiss
     
     init(blockTypes: [EditorBlockType], 
-         onBlockSelected: @escaping (EditorBlockType) -> Void) {
+         onBlockSelected: @escaping (EditorBlockType) -> Void,
+         onMediaSelected: @escaping ([PhotosPickerItem]) -> Void) {
         let blockTypes = blockTypes.filter { $0.title != "Unsupported" }
         self.blockTypes = blockTypes.filter { $0.title != "Unsupported" }
         self.onBlockSelected = onBlockSelected
+        self.onMediaSelected = onMediaSelected
         self._viewModel = StateObject(wrappedValue: BlockInserterViewModel(blockTypes: blockTypes))
     }
     
@@ -103,6 +106,10 @@ struct BlockInserterView: View {
             insertMedia($0)
             selectedMediaItems = []
         }
+        .onChange(of: inlineSelectedMediaItems) {
+            insertMedia($0)
+            inlineSelectedMediaItems = []
+        }
 
         Button(action: {
             // TODO: Implement camera
@@ -184,7 +191,8 @@ struct BlockInserterView: View {
     }
     
     private func insertMedia(_ items: [PhotosPickerItem]) {
-        // TODO: figure out how to allow the editor to access the files (WKWebView needs explicit access to the file system)
+        onMediaSelected(items)
+        dismiss()
     }
     
     private func createImageBlock() -> EditorBlockType {
@@ -421,6 +429,9 @@ struct SheetPreviewContainer: View {
                 blockTypes: PreviewData.sampleBlockTypes,
                 onBlockSelected: { blockType in
                     print("Selected block: \(blockType.name)")
+                },
+                onMediaSelected: { items in
+                    print("Selected \(items.count) media items")
                 }
             )
         }

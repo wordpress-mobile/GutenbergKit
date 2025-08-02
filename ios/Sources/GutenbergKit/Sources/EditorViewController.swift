@@ -3,11 +3,13 @@ import UIKit
 import SwiftUI
 import Combine
 import CryptoKit
+import PhotosUI
 
 @MainActor
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
     public let webView: WKWebView
     let assetsLibrary: EditorAssetsLibrary
+    let fileManager = EditorFileManager.shared
 
     public var configuration: EditorConfiguration
     private var _isEditorRendered = false
@@ -58,6 +60,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+    
+    deinit {
+        // Clean up uploaded files when editor is destroyed
+        fileManager.cleanupAllUploads()
     }
 
     public override func viewDidLoad() {
@@ -121,6 +128,16 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func loadEditor() {
+        // Copy editor files to Documents if needed
+        do {
+            try fileManager.copyEditorFilesIfNeeded()
+        } catch {
+            print("Failed to copy editor files: \(error)")
+            // Fall back to loading from bundle
+            loadEditorFromBundle()
+            return
+        }
+        
         if configuration.plugins {
             webView.configuration.userContentController.addScriptMessageHandler(
                 EditorAssetsProvider(library: assetsLibrary),
@@ -129,13 +146,36 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             )
 
             if let remoteURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"].flatMap(URL.init) {
+                // When loading from remote URL, still need to grant access to uploads directory
                 webView.load(URLRequest(url: remoteURL))
+                // Note: WKWebView doesn't support allowingReadAccessTo with remote URLs
+                // Media uploads will need to be handled via blob URLs or data URIs
             } else {
-                let remoteURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg")!
-                webView.loadFileURL(remoteURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+                let remoteURL = fileManager.remoteEditorURL
+                webView.loadFileURL(remoteURL, allowingReadAccessTo: fileManager.gutenbergDirectory)
             }
         } else if let editorURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
+            // When loading from remote URL, still need to grant access to uploads directory
             webView.load(URLRequest(url: editorURL))
+            // Note: WKWebView doesn't support allowingReadAccessTo with remote URLs
+            // Media uploads will need to be handled via blob URLs or data URIs
+        } else {
+            let indexURL = fileManager.editorIndexURL
+            webView.loadFileURL(indexURL, allowingReadAccessTo: fileManager.gutenbergDirectory)
+        }
+    }
+    
+    private func loadEditorFromBundle() {
+        // Fallback method to load from bundle
+        if configuration.plugins {
+            webView.configuration.userContentController.addScriptMessageHandler(
+                EditorAssetsProvider(library: assetsLibrary),
+                contentWorld: .page,
+                name: "loadFetchedEditorAssets"
+            )
+            
+            let remoteURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg")!
+            webView.loadFileURL(remoteURL, allowingReadAccessTo: Bundle.module.resourceURL!)
         } else {
             let indexURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
             webView.loadFileURL(indexURL, allowingReadAccessTo: Bundle.module.resourceURL!)
@@ -281,9 +321,15 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // MARK: - Internal (Block Inserter)
 
     private func showBlockInserter(blockTypes: [EditorBlockType]) {
-        let view = BlockInserterView(blockTypes: blockTypes) { [weak self] selectedBlockType in
-            self?.insertBlock(selectedBlockType)
-        }
+        let view = BlockInserterView(
+            blockTypes: blockTypes,
+            onBlockSelected: { [weak self] selectedBlockType in
+                self?.insertBlock(selectedBlockType)
+            },
+            onMediaSelected: { [weak self] mediaItems in
+                self?.insertMediaFromPicker(mediaItems)
+            }
+        )
         let host = UIHostingController(rootView: view)
         host.view.backgroundColor = .clear
 
@@ -310,6 +356,45 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private func insertBlock(_ blockType: EditorBlockType) {
         evaluate("window.editor.insertBlock('\(blockType.name)');")
     }
+    
+    private func insertMediaFromPicker(_ items: [PhotosPickerItem]) {
+        Task {
+            for item in items {
+                // Load the media data
+                guard let data = try? await item.loadTransferable(type: Data.self) else {
+                    continue
+                }
+                
+                // Determine file extension
+                let contentType = item.supportedContentTypes.first
+                let fileExtension = contentType?.preferredFilenameExtension ?? "jpg"
+                
+                do {
+                    // Save to uploads directory
+                    let fileURL = try await fileManager.saveMediaData(data, withExtension: fileExtension)
+                    
+                    // Determine block type based on content type
+                    let blockType: String
+                    if contentType?.conforms(to: .image) == true {
+                        blockType = "core/image"
+                    } else if contentType?.conforms(to: .movie) == true {
+                        blockType = "core/video"
+                    } else {
+                        blockType = "core/file"
+                    }
+                    
+                    // Generate unique temporary ID
+                    let tempId = "temp-\(Date().timeIntervalSince1970)-\(UUID().uuidString.prefix(8))"
+                    
+                    // Use the bridge method to insert media
+                    evaluate("window.editor.insertMediaFromFile('\(fileURL.absoluteString)', '\(blockType)', '\(tempId)');")
+                    
+                } catch {
+                    print("Failed to save media file: \(error)")
+                }
+            }
+        }
+    }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
         delegate?.editor(self, didRequestMediaFromSiteMediaLibrary: config)
@@ -317,6 +402,19 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     public func setMediaUploadAttachment(_ media: String) {
         evaluate("editor.setMediaUploadAttachment(\(media));")
+    }
+    
+    private func handleMediaUploadComplete(_ body: EditorJSMessage.MediaUploadCompleteBody) {
+        guard let fileURL = URL(string: body.fileUrl) else { return }
+        
+        // Remove the uploaded file from local storage
+        fileManager.removeUploadFile(at: fileURL)
+        
+        if body.success {
+            print("Media upload completed successfully for: \(body.fileUrl), mediaId: \(body.mediaId ?? -1)")
+        } else {
+            print("Media upload failed for: \(body.fileUrl)")
+        }
     }
 
     // MARK: - GutenbergEditorControllerDelegate
@@ -354,6 +452,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             case .openMediaLibrary:
                 let config = try message.decode(OpenMediaLibraryAction.self)
                 openMediaLibrary(config)
+            case .onMediaUploadComplete:
+                let body = try message.decode(EditorJSMessage.MediaUploadCompleteBody.self)
+                handleMediaUploadComplete(body)
             }
         } catch {
             fatalError("failed to decode message: \(error)")

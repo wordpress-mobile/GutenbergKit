@@ -320,3 +320,127 @@ export async function fetchEditorAssets() {
 		url,
 	} );
 }
+
+/**
+ * Notifies the native host that a media file upload has completed.
+ *
+ * @param {string} fileUrl The file:// URL of the media that was uploaded.
+ * @param {boolean} success Whether the upload was successful.
+ * @param {number} [mediaId] The ID of the uploaded media (if successful).
+ *
+ * @return {void}
+ */
+export function onMediaUploadComplete( fileUrl, success, mediaId = null ) {
+	if ( window.editorDelegate ) {
+		window.editorDelegate.onMediaUploadComplete( fileUrl, success, mediaId );
+	}
+
+	if ( window.webkit ) {
+		window.webkit.messageHandlers.editorDelegate.postMessage( {
+			message: 'onMediaUploadComplete',
+			body: { fileUrl, success, mediaId },
+		} );
+	}
+}
+
+/**
+ * Inserts a media block from a file URL.
+ *
+ * @param {string} fileUrl The file:// URL of the media.
+ * @param {string} blockType The block type (e.g., 'core/image', 'core/video').
+ * @param {string} tempId A temporary ID for tracking the block.
+ * @return {Promise<void>}
+ */
+export async function insertMediaFromFile( fileUrl, blockType, tempId ) {
+	try {
+		// Fetch the file to create a blob
+		const response = await fetch( fileUrl );
+		if ( ! response.ok ) {
+			throw new Error( `Failed to fetch file: ${ response.statusText }` );
+		}
+		
+		const blob = await response.blob();
+		const blobUrl = URL.createObjectURL( blob );
+		
+		// Import dependencies
+		const { createBlock } = await import( '@wordpress/blocks' );
+		const { dispatch, select } = await import( '@wordpress/data' );
+		const blockEditorStore = ( await import( '@wordpress/block-editor' ) ).store;
+		const editorStore = ( await import( '@wordpress/editor' ) ).store;
+		
+		// Create and insert the block
+		const block = createBlock( blockType, {
+			url: blobUrl,
+			id: tempId,
+			blob: blob,
+		} );
+		
+		dispatch( blockEditorStore ).insertBlocks( [ block ] );
+		
+		// Trigger upload if mediaUpload is available
+		const editorSettings = select( editorStore )?.getEditorSettings();
+		if ( editorSettings?.mediaUpload ) {
+			editorSettings.mediaUpload( {
+				filesList: [ blob ],
+				onFileChange: ( [ media ] ) => {
+					if ( ! media ) {
+						// Upload failed - notify native
+						onMediaUploadComplete( fileUrl, false );
+						return;
+					}
+					
+					// Find and update the block
+					const blocks = select( blockEditorStore ).getBlocks();
+					const uploadedBlock = blocks.find(
+						( b ) =>
+							b.name === blockType && b.attributes.id === tempId
+					);
+					
+					if ( uploadedBlock ) {
+						dispatch( blockEditorStore ).updateBlockAttributes(
+							uploadedBlock.clientId,
+							{
+								id: media.id,
+								url: media.url,
+								alt: media.alt || '',
+							}
+						);
+					}
+					
+					// Clean up the temporary blob URL
+					URL.revokeObjectURL( blobUrl );
+					
+					// Notify native that upload succeeded
+					onMediaUploadComplete( fileUrl, true, media.id );
+				},
+				onError: ( error ) => {
+					console.error( 'Upload failed:', error );
+					URL.revokeObjectURL( blobUrl );
+					
+					// Notify native that upload failed
+					onMediaUploadComplete( fileUrl, false );
+				},
+			} );
+		} else {
+			// No mediaUpload available, the file will remain as a local blob
+			// Still notify native that we're done with the file
+			onMediaUploadComplete( fileUrl, true );
+		}
+	} catch ( error ) {
+		console.error( 'Failed to load file:', error );
+		
+		// Try direct insertion as fallback
+		const { createBlock } = await import( '@wordpress/blocks' );
+		const { dispatch } = await import( '@wordpress/data' );
+		const blockEditorStore = ( await import( '@wordpress/block-editor' ) ).store;
+		
+		const block = createBlock( blockType, {
+			url: fileUrl,
+			id: tempId,
+		} );
+		dispatch( blockEditorStore ).insertBlocks( [ block ] );
+		
+		// Notify native that we're done with the file (even though upload failed)
+		onMediaUploadComplete( fileUrl, false );
+	}
+}

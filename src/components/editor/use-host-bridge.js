@@ -8,6 +8,11 @@ import { store as editorStore } from '@wordpress/editor';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { parse, serialize, createBlock } from '@wordpress/blocks';
 
+/**
+ * Internal dependencies
+ */
+import { insertMediaFromFile } from '../../utils/bridge';
+
 window.editor = window.editor || {};
 window.editor._savedInsertionPoint = null;
 
@@ -157,6 +162,11 @@ export function useHostBridge( post, editorRef ) {
 			}
 		};
 
+		window.editor.insertMediaFromFile = ( fileUrl, blockType, tempId ) => {
+			// Do not return the Promise to avoid host errors
+			insertMediaFromFile( fileUrl, blockType, tempId );
+		};
+
 		return () => {
 			delete window.editor.setContent;
 			delete window.editor.setTitle;
@@ -166,6 +176,7 @@ export function useHostBridge( post, editorRef ) {
 			delete window.editor.redo;
 			delete window.editor.switchEditorMode;
 			delete window.editor.insertBlock;
+			delete window.editor.insertMediaFromFile;
 			window.editor._savedInsertionPoint = null;
 		};
 	}, [

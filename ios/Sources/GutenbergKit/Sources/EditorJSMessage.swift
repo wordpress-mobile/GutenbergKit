@@ -37,6 +37,8 @@ struct EditorJSMessage {
         case showBlockPicker
         /// User requested the Media Library.
         case openMediaLibrary
+        /// Media upload completed.
+        case onMediaUploadComplete
     }
 
     struct DidUpdateBlocksBody: Decodable {
@@ -54,5 +56,11 @@ struct EditorJSMessage {
     
     struct ShowBlockPickerBody: Decodable {
         let blockTypes: [EditorBlockType]
+    }
+    
+    struct MediaUploadCompleteBody: Decodable {
+        let fileUrl: String
+        let success: Bool
+        let mediaId: Int?
     }
 }
