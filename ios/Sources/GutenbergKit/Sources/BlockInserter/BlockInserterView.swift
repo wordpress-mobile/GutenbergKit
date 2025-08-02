@@ -56,7 +56,6 @@ struct BlockInserterView: View {
                             maxSelectionCount: 10,
                             selectionBehavior: .continuousAndOrdered
                         )
-                        .labelsHidden()
                         .photosPickerStyle(.compact)
                         .photosPickerDisabledCapabilities([.collectionNavigation, .search, .sensitivityAnalysisIntervention, .stagingArea])
                         .photosPickerAccessoryVisibility(.hidden, edges: .all)
@@ -65,7 +64,6 @@ struct BlockInserterView: View {
                             topLeadingRadius: 20, bottomLeadingRadius: 20, bottomTrailingRadius: 0, topTrailingRadius: 0
                         ))
                         .padding(.leading)
-
                     }
                 }
 

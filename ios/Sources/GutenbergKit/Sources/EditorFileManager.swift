@@ -15,10 +15,17 @@ final class EditorFileManager {
     
     /// Actor for managing media uploads
     let uploads: MediaUploadsFileManager
-    
-    private init() {
-        let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
-        self.gutenbergDirectory = documentsURL.appendingPathComponent("GutenbergKit")
+
+    init(targetDirectory: URL? = nil) {
+        if let targetDirectory = targetDirectory {
+            // For testing - use provided directory
+            self.gutenbergDirectory = targetDirectory
+        } else {
+            // Production - use Documents directory
+            let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+            self.gutenbergDirectory = documentsURL.appendingPathComponent("GutenbergKit")
+        }
+        
         self.editorDirectory = gutenbergDirectory.appendingPathComponent("Editor")
         self.uploads = MediaUploadsFileManager(baseDirectory: gutenbergDirectory)
         
