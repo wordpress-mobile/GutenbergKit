@@ -1,6 +1,6 @@
 import Foundation
 
-extension EditorBlockType {
+extension EditorBlock {
     /// Returns the SF Symbol icon name for the block type
     var iconName: String {
         switch name {
@@ -8,13 +8,17 @@ extension EditorBlockType {
         case "core/paragraph": "paragraphsign"
         case "core/heading": "bookmark.fill"
         case "core/list": "list.bullet"
+        case "core/list-item": "list.bullet.indent"
+        case "core/details": "text.line.first.and.arrowtriangle.forward"
         case "core/quote": "quote.opening"
         case "core/code": "curlybraces"
-        case "core/preformatted": "text.alignleft"
+        case "core/preformatted": "text.word.spacing"
         case "core/pullquote": "quote.bubble"
         case "core/verse": "text.quote"
         case "core/table": "tablecells"
-            
+        case "core/footnotes": "list.number"
+        case "core/missing": "exclamationmark.triangle"
+
         // MARK: - Core Media Blocks
         case "core/image": "photo"
         case "core/gallery": "photo.stack"
@@ -25,13 +29,16 @@ extension EditorBlockType {
         case "core/video": "video"
             
         // MARK: - Core Design Blocks
+        case "core/button": "rectangle.fill"
         case "core/buttons": "rectangle.3.group"
+        case "core/column": "rectangle.ratio.9.to.16"
         case "core/columns": "rectangle.split.3x1"
         case "core/group": "square.on.square"
         case "core/more": "ellipsis"
         case "core/nextpage": "arrow.right.doc.on.clipboard"
         case "core/separator": "minus"
         case "core/spacer": "arrow.up.and.down"
+        case "core/text-columns": "text.justify.left"
             
         // MARK: - Core Widget Blocks
         case "core/archives": "archivebox"
@@ -41,9 +48,11 @@ extension EditorBlockType {
         case "core/latest-comments": "bubble.left.and.bubble.right"
         case "core/latest-posts": "doc.plaintext"
         case "core/page-list": "list.bullet.rectangle"
+        case "core/page-list-item": "doc.text"
         case "core/rss": "dot.radiowaves.left.and.right"
         case "core/search": "magnifyingglass"
         case "core/shortcode": "curlybraces.square"
+        case "core/social-link": "link.circle"
         case "core/social-links": "person.2.circle"
         case "core/tag-cloud": "tag.circle"
             
@@ -55,13 +64,51 @@ extension EditorBlockType {
         case "core/post-title": "doc.text"
         case "core/post-content": "doc.richtext"
         case "core/post-excerpt": "doc.append"
-        case "core/post-featured-image": "photo"
+        case "core/post-featured-image": "photo.circle"
         case "core/post-date": "calendar"
         case "core/post-author": "person.circle"
         case "core/post-comments": "bubble.left"
         case "core/post-navigation-link": "arrow.left.arrow.right"
+        case "core/post-author-name": "person.text.rectangle"
+        case "core/post-author-biography": "person.crop.square.filled.and.at.rectangle"
+        case "core/post-comments-count": "bubble.left.and.text.bubble.right"
+        case "core/post-comments-link": "bubble.left.and.bubble.right"
+        case "core/post-comments-form": "text.bubble"
+        case "core/post-terms": "tag"
+        case "core/post-template": "doc.on.doc"
+        case "core/avatar": "person.crop.circle"
+        case "core/navigation": "line.3.horizontal"
+        case "core/navigation-link": "link"
+        case "core/navigation-submenu": "chevron.down.square"
+        case "core/template-part": "square.split.2x2"
+        case "core/pattern": "square.grid.3x3.square"
+        case "core/block": "arrow.triangle.2.circlepath"
+        case "core/home-link": "house"
+        case "core/loginout": "person.crop.circle.badge.checkmark"
+        case "core/term-description": "text.book.closed"
+        case "core/query-title": "text.badge.checkmark"
+        case "core/query-pagination": "ellipsis.rectangle"
+        case "core/query-pagination-next": "chevron.right.square"
+        case "core/query-pagination-numbers": "number.square"
+        case "core/query-pagination-previous": "chevron.left.square"
+        case "core/query-no-results": "xmark.square"
+        case "core/query-total": "number.circle"
+        case "core/read-more": "arrow.right.circle"
+        case "core/comments": "bubble.left.and.bubble.right"
+        case "core/comment-author-name": "person.bubble"
+        case "core/comment-content": "text.bubble"
+        case "core/comment-date": "calendar.badge.clock"
+        case "core/comment-edit-link": "pencil.circle"
+        case "core/comment-reply-link": "arrowshape.turn.up.left"
+        case "core/comment-template": "bubble.left.and.text.bubble.right"
+        case "core/comments-title": "text.bubble.fill"
+        case "core/comments-pagination": "ellipsis.bubble"
+        case "core/comments-pagination-next": "chevron.right.bubble"
+        case "core/comments-pagination-numbers": "number.square.fill"
+        case "core/comments-pagination-previous": "chevron.left.bubble"
             
         // MARK: - Core Embed Blocks
+        case "core/embed": "chevron.left.forwardslash.chevron.right"
         case let name where name.hasPrefix("core-embed/"): "link.circle"
             
         // MARK: - Jetpack AI & Content
@@ -86,7 +133,7 @@ extension EditorBlockType {
             
         // MARK: - Jetpack Media & Galleries
         case "jetpack/image-compare": "arrow.left.and.right"
-        case "jetpack/tiled-gallery": "square.grid.3x3"
+        case "jetpack/tiled-gallery": "rectangle.3.group"
         case "jetpack/slideshow": "play.rectangle"
         case "jetpack/story": "book.pages"
         case "jetpack/gif": "sparkles.rectangle.stack"

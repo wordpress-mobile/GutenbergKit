@@ -53,6 +53,6 @@ struct EditorJSMessage {
     }
     
     struct ShowBlockPickerBody: Decodable {
-        let blockTypes: [EditorBlockType]
+        let blockTypes: [EditorBlock]
     }
 }

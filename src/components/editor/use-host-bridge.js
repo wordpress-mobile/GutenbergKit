@@ -8,6 +8,10 @@ import { store as editorStore } from '@wordpress/editor';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { parse, serialize, createBlock } from '@wordpress/blocks';
 
+/**
+ * Internal dependencies
+ */
+
 window.editor = window.editor || {};
 window.editor._savedInsertionPoint = null;
 
@@ -16,15 +20,19 @@ export function useHostBridge( post, editorRef ) {
 	const { undo, redo, switchEditorMode } = useDispatch( editorStore );
 	const { getEditedPostAttribute, getEditedPostContent } =
 		useSelect( editorStore );
-	
+
 	// Track the current selection and insertion point
-	const { selectedBlockClientId, blockInsertionPoint } = useSelect( ( select ) => {
-		const { getSelectedBlockClientId, getBlockInsertionPoint } = select( blockEditorStore );
-		return {
-			selectedBlockClientId: getSelectedBlockClientId(),
-			blockInsertionPoint: getBlockInsertionPoint(),
-		};
-	}, [] );
+	const { selectedBlockClientId, blockInsertionPoint } = useSelect(
+		( selectFn ) => {
+			const { getSelectedBlockClientId, getBlockInsertionPoint } =
+				selectFn( blockEditorStore );
+			return {
+				selectedBlockClientId: getSelectedBlockClientId(),
+				blockInsertionPoint: getBlockInsertionPoint(),
+			};
+		},
+		[]
+	);
 
 	const editContent = useCallback(
 		( edits ) => {
@@ -47,16 +55,19 @@ export function useHostBridge( post, editorRef ) {
 			window.editor._savedInsertionPoint = {
 				rootClientId: blockInsertionPoint?.rootClientId,
 				index: blockInsertionPoint?.index || 0,
-				selectedBlockClientId: selectedBlockClientId
+				selectedBlockClientId,
 			};
-		} else if ( !window.editor._savedInsertionPoint || !window.editor._savedInsertionPoint.selectedBlockClientId ) {
+		} else if (
+			! window.editor._savedInsertionPoint ||
+			! window.editor._savedInsertionPoint.selectedBlockClientId
+		) {
 			// Only update to null selection if we don't have a previously selected block
 			// This prevents overwriting a good insertion point when focus is lost
 			if ( blockInsertionPoint && blockInsertionPoint.index !== null ) {
 				window.editor._savedInsertionPoint = {
 					rootClientId: blockInsertionPoint?.rootClientId,
 					index: blockInsertionPoint?.index || 0,
-					selectedBlockClientId: null
+					selectedBlockClientId: null,
 				};
 			}
 		}
@@ -120,21 +131,35 @@ export function useHostBridge( post, editorRef ) {
 
 				// Check if we have a saved insertion point
 				if ( window.editor._savedInsertionPoint ) {
-					const { selectedBlockClientId, index, rootClientId } = window.editor._savedInsertionPoint;
-					
+					const { 
+						selectedBlockClientId: savedSelectedBlockClientId, 
+						index, 
+						rootClientId 
+					} = window.editor._savedInsertionPoint;
+
 					// Try to use insertBlocks (plural) which might handle positioning better
 					const { insertBlocks } = dispatch( blockEditorStore );
-					
-					if ( selectedBlockClientId ) {
+
+					if ( savedSelectedBlockClientId ) {
 						// We have a selected block, insert after it
 						// First, try to get the block directly
-						const selectedBlock = select( blockEditorStore ).getBlock( selectedBlockClientId );
+						const selectedBlock = select(
+							blockEditorStore
+						).getBlock( savedSelectedBlockClientId );
 						if ( selectedBlock ) {
-							const parentClientId = select( blockEditorStore ).getBlockRootClientId( selectedBlockClientId );
-							const blockIndex = select( blockEditorStore ).getBlockIndex( selectedBlockClientId );
-							
+							const parentClientId = select(
+								blockEditorStore
+							).getBlockRootClientId( savedSelectedBlockClientId );
+							const blockIndex = select(
+								blockEditorStore
+							).getBlockIndex( savedSelectedBlockClientId );
+
 							// Use insertBlocks with explicit position
-							insertBlocks( [ block ], blockIndex + 1, parentClientId );
+							insertBlocks(
+								[ block ],
+								blockIndex + 1,
+								parentClientId
+							);
 						} else {
 							insertBlocks( [ block ], index, rootClientId );
 						}
@@ -146,15 +171,22 @@ export function useHostBridge( post, editorRef ) {
 					// No saved insertion point
 					dispatch( blockEditorStore ).insertBlock( block );
 				}
-				
+
 				// Select the newly inserted block to help with focusing
 				setTimeout( () => {
 					dispatch( blockEditorStore ).selectBlock( block.clientId );
 				}, 100 );
-			
 			} catch ( error ) {
+				// eslint-disable-next-line no-console
 				console.error( 'Error in insertBlock:', error );
 			}
+		};
+
+		window.editor.insertMediaFromFiles = ( mediaItems ) => {
+			// Do not return the Promise to avoid host errors
+			import( '../../utils/bridge' ).then( ( { insertMediaFromFiles } ) => {
+				insertMediaFromFiles( mediaItems );
+			} );
 		};
 
 		return () => {
@@ -166,6 +198,7 @@ export function useHostBridge( post, editorRef ) {
 			delete window.editor.redo;
 			delete window.editor.switchEditorMode;
 			delete window.editor.insertBlock;
+			delete window.editor.insertMediaFromFiles;
 			window.editor._savedInsertionPoint = null;
 		};
 	}, [

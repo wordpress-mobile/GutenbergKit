@@ -1,8 +1,6 @@
 import Foundation
 
-// MARK: - EditorBlockType Searchable Conformance
-
-extension EditorBlockType: Searchable {
+extension EditorBlock: Searchable {
     func searchableFields() -> [SearchableField] {
         var fields: [SearchableField] = []
         
@@ -56,9 +54,7 @@ extension EditorBlockType: Searchable {
     }
 }
 
-// MARK: - Convenience
-
-extension SearchEngine where Item == EditorBlockType {
+extension SearchEngine where Item == EditorBlock {
     /// Default search engine for editor blocks
-    static let blocks = SearchEngine<EditorBlockType>()
+    static let blocks = SearchEngine<EditorBlock>()
 }

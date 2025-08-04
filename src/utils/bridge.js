@@ -125,16 +125,23 @@ export function showBlockPicker() {
 
 	try {
 		if ( window.editorDelegate ) {
-			window.editorDelegate.showBlockPicker( JSON.stringify( { blockTypes } ) );
+			window.editorDelegate.showBlockPicker(
+				JSON.stringify( { blockTypes } )
+			);
 		}
 
-		if ( window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.editorDelegate ) {
+		if (
+			window.webkit &&
+			window.webkit.messageHandlers &&
+			window.webkit.messageHandlers.editorDelegate
+		) {
 			window.webkit.messageHandlers.editorDelegate.postMessage( {
 				message: 'showBlockPicker',
 				body: { blockTypes },
 			} );
 		}
 	} catch ( error ) {
+		// eslint-disable-next-line no-console
 		console.error( 'Error sending message to native:', error );
 	}
 }
@@ -319,4 +326,124 @@ export async function fetchEditorAssets() {
 	return await apiFetch( {
 		url,
 	} );
+}
+
+
+
+/**
+ * Inserts multiple media files, creating a gallery if there are multiple images,
+ * or individual blocks for other media types.
+ *
+ * @param {Array} mediaItems Array of MediaInfo entities with { id, url, type, title, caption, alt, metadata }
+ * @return {Promise<void>}
+ */
+export async function insertMediaFromFiles( mediaItems ) {
+	try {
+		// Import dependencies
+		const { createBlock } = await import( '@wordpress/blocks' );
+		const { dispatch } = await import( '@wordpress/data' );
+		const blockEditorStore = ( await import( '@wordpress/block-editor' ) )
+			.store;
+
+		// Map media types to block types
+		const getBlockType = ( mediaType ) => {
+			switch ( mediaType ) {
+				case 'image':
+					return 'core/image';
+				case 'video':
+					return 'core/video';
+				case 'audio':
+					return 'core/audio';
+				case 'file':
+				default:
+					return 'core/file';
+			}
+		};
+
+		// Separate images from other media types
+		const imageItems = mediaItems.filter( item => item.type === 'image' );
+		const otherItems = mediaItems.filter( item => item.type !== 'image' );
+
+		const blocksToInsert = [];
+
+		// If multiple images, create a gallery
+		if ( imageItems.length > 1 ) {
+			// Create inner image blocks for the gallery
+			const innerImageBlocks = imageItems.map( item => 
+				createBlock( 'core/image', {
+					url: item.url,
+					id: item.id || undefined,
+					alt: item.alt || '',
+					caption: item.caption || '',
+					title: item.title || undefined,
+				})
+			);
+
+			// Create gallery block with inner blocks
+			const galleryBlock = createBlock( 
+				'core/gallery', 
+				{
+					columns: Math.min( imageItems.length, 3 ), // Max 3 columns
+					imageCrop: true,
+					linkTo: 'none',
+				},
+				innerImageBlocks // Inner blocks parameter
+			);
+
+			blocksToInsert.push( galleryBlock );
+		} else if ( imageItems.length === 1 ) {
+			// Single image, create an image block
+			const item = imageItems[ 0 ];
+			const imageBlock = createBlock( 'core/image', {
+				url: item.url,
+				id: item.id || undefined,
+				alt: item.alt || '',
+				caption: item.caption || '',
+				title: item.title || undefined,
+			} );
+			blocksToInsert.push( imageBlock );
+		}
+
+		// Handle non-image media types individually
+		for ( const item of otherItems ) {
+			const blockType = getBlockType( item.type );
+			const blockAttributes = {
+				url: item.url,
+				id: item.id || undefined,
+				caption: item.caption || '',
+			};
+
+			// Add title for file blocks
+			if ( blockType === 'core/file' && item.title ) {
+				blockAttributes.fileName = item.title;
+			}
+
+			// Add controls for video/audio
+			if ( blockType === 'core/video' || blockType === 'core/audio' ) {
+				blockAttributes.controls = true;
+			}
+
+			const block = createBlock( blockType, blockAttributes );
+			blocksToInsert.push( block );
+		}
+
+		// Insert all blocks
+		if ( blocksToInsert.length > 0 ) {
+			const insertedBlocks = dispatch( blockEditorStore ).insertBlocks( blocksToInsert );
+			
+			if ( !insertedBlocks || insertedBlocks.length === 0 ) {
+				throw new Error( 'Failed to insert blocks' );
+			}
+		}
+
+		// TODO: this doesn't actually trigger the uploads
+
+	} catch ( error ) {
+		// eslint-disable-next-line no-console
+		console.error( 'Failed to insert media:', error );
+		logException( error, {
+			context: { mediaItems },
+			tags: { feature: 'media-insert-multiple' },
+		} );
+	}
 }

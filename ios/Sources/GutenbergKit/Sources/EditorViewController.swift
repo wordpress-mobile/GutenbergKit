@@ -3,11 +3,13 @@ import UIKit
 import SwiftUI
 import Combine
 import CryptoKit
+import PhotosUI
 
 @MainActor
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
     public let webView: WKWebView
     let assetsLibrary: EditorAssetsLibrary
+    let fileManager = EditorFileManager.shared
 
     public var configuration: EditorConfiguration
     private var _isEditorRendered = false
@@ -47,6 +49,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         for scheme in CachedAssetSchemeHandler.supportedURLSchemes {
             config.setURLSchemeHandler(schemeHandler, forURLScheme: scheme)
         }
+        
+        // Register local media scheme handler
+        let localMediaHandler = EditorFileSchemeHandler()
+        config.setURLSchemeHandler(localMediaHandler, forURLScheme: EditorFileSchemeHandler.scheme)
 
         self.webView = GBWebView(frame: .zero, configuration: config)
         self.webView.scrollView.keyboardDismissMode = .interactive
@@ -83,33 +89,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         if isWarmupMode {
             setUpEditor()
             loadEditor()
-        }
-
-        // TODO: register it when editor is loaded
-//        service.$rawBlockTypesResponseData.compactMap({ $0 }).sink { [weak self] data in
-//            guard let self else { return }
-//            assert(Thread.isMainThread)
-//
-//        }.store(in: &cancellables)
-    }
-
-    // TODO: move
-    private func registerBlockTypes(data: Data) async {
-        guard let string = String(data: data, encoding: .utf8),
-            let escapedString = string.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else {
-            assertionFailure("invalid block types")
-            return
-        }
-        do {
-            // TODO: simplify this
-            try await webView.evaluateJavaScript("""
-                const blockTypes = JSON.parse(decodeURIComponent('\(escapedString)'));
-                editor.registerBlocks(blockTypes);
-                "done";
-                """)
-        } catch {
-            NSLog("failed to register blocks \(error)")
-            // TOOD: relay to the client
         }
     }
 
@@ -184,7 +163,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 content: '\(escapedContent)'
             },
         };
-
+        
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
 
         "done";
@@ -197,7 +176,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // MARK: - Public API
 
     // TODO: synchronize with the editor user-generated updates
-    // TODO: convert to a property?
     public func setContent(_ content: String) {
         _setContent(content)
     }
@@ -280,35 +258,63 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     // MARK: - Internal (Block Inserter)
 
-    private func showBlockInserter(blockTypes: [EditorBlockType]) {
-        let view = BlockInserterView(blockTypes: blockTypes) { [weak self] selectedBlockType in
-            self?.insertBlock(selectedBlockType)
-        }
-        let host = UIHostingController(rootView: view)
+    private func showBlockInserter(blocks: [EditorBlock]) {
+        let parameters = MediaPickerParameters(filter: .all, isMultipleSelectionEnabled: true)
+        let mediaPicker = delegate?.getMediaPickerController(for: self, parameters: parameters)
+
+        let host = UIHostingController(rootView: AnyView(EmptyView()))
+
+        let view = BlockInserterView(
+            blocks: blocks,
+            mediaPicker: mediaPicker,
+            presentingViewController: host,
+            onBlockSelected: { [weak self] in
+                self?.insertBlock($0)
+            },
+            onMediaSelected: { [weak self] in
+                self?.insertMedia($0)
+            }
+        )
+        
+        host.rootView = AnyView(NavigationStack { view })
         host.view.backgroundColor = .clear
 
         // Configure sheet presentation with medium detent
         if let sheet = host.sheetPresentationController {
             let compactHeight: CGFloat
             if #available(iOS 26, *) {
-                compactHeight = 548
+                compactHeight = 512
             } else {
-                compactHeight = 566
+                compactHeight = 528
             }
 
             sheet.detents = [.custom(identifier: .medium, resolver: { context in
                 context.containerTraitCollection.horizontalSizeClass == .compact ? compactHeight : 900
             }), .large()]
             sheet.prefersGrabberVisible = true
-            sheet.preferredCornerRadius = 20
-            sheet.prefersScrollingExpandsWhenScrolledToEdge = true
+            sheet.preferredCornerRadius = 26
         }
 
         present(host, animated: true)
     }
     
-    private func insertBlock(_ blockType: EditorBlockType) {
+    private func insertBlock(_ blockType: EditorBlock) {
         evaluate("window.editor.insertBlock('\(blockType.name)');")
+    }
+    
+    private func insertMedia(_ mediaInfo: [MediaInfo]) {
+        guard !mediaInfo.isEmpty else { return }
+        
+        // Encode MediaInfo array directly since it's Codable
+        do {
+            let encoder = JSONEncoder()
+            let jsonData = try encoder.encode(mediaInfo)
+            if let jsonString = String(data: jsonData, encoding: .utf8) {
+                evaluate("window.editor.insertMediaFromFiles(\(jsonString));")
+            }
+        } catch {
+            assertionFailure("Failed to serialize media items: \(error)")
+        }
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
@@ -322,7 +328,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // MARK: - GutenbergEditorControllerDelegate
 
     fileprivate func controller(_ controller: GutenbergEditorController, didReceiveMessage message: EditorJSMessage) {
-        print("Received message type: \(message.type)")
         do {
             switch message.type {
             case .onEditorLoaded:
@@ -347,9 +352,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             case .showBlockPicker:
                 do {
                     let body = try message.decode(EditorJSMessage.ShowBlockPickerBody.self)
-                    showBlockInserter(blockTypes: body.blockTypes)
+                    showBlockInserter(blocks: body.blockTypes)
                 } catch {
-                    showBlockInserter(blockTypes: [])
+                    showBlockInserter(blocks: [])
                 }
             case .openMediaLibrary:
                 let config = try message.decode(OpenMediaLibraryAction.self)
@@ -372,46 +377,22 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let duration = CFAbsoluteTimeGetCurrent() - timestampInit
         print("gutenbergkit-measure_editor-first-render:", duration)
         delegate?.editorDidLoad(self)
-        
-        // Auto-focus the editor after it loads if configured
-        if configuration.autoFocusOnLoad {
-            autoFocusEditor()
+
+        if configuration.autoFocusOnLoad, configuration.content.isEmpty {
+            self.autoFocusEditor()
         }
     }
     
     private func autoFocusEditor() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.simulateTapOnWebView()
-        }
-    }
-    
-    private func simulateTapOnWebView() {
-        // Use a hidden text field to trigger keyboard, then transfer focus
-        let hiddenTextField = UITextField(frame: CGRect(x: -100, y: -100, width: 1, height: 1))
-        hiddenTextField.autocorrectionType = .no
-        hiddenTextField.autocapitalizationType = .none
-        view.addSubview(hiddenTextField)
-        
-        // Focus the hidden field to bring up keyboard
-        hiddenTextField.becomeFirstResponder()
-        
-        // After a short delay, transfer focus to web view
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-            hiddenTextField.removeFromSuperview()
-            self?.webView.becomeFirstResponder()
-            
-            // Try one more JavaScript focus attempt with keyboard already up
-            let focusScript = """
-            (function() {
-                const editable = document.querySelector('[contenteditable="true"]');
-                if (editable) {
-                    editable.focus();
-                    editable.click();
-                }
-            })();
-            """
-            self?.evaluate(focusScript)
-        }
+        evaluate("""
+        (function() {
+            const editable = document.querySelector('[contenteditable="true"]');
+            if (editable) {
+                editable.focus();
+                editable.click();
+            }
+        })();
+        """)
     }
 
     // MARK: - Warmup
@@ -629,3 +610,7 @@ class CachedAssetSchemeHandler: NSObject, WKURLSchemeHandler {
         }
     }
 }
+
+// MARK: - LocalMediaSchemeHandler
+
+

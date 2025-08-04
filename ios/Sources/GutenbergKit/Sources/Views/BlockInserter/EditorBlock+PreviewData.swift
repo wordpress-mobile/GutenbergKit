@@ -2,65 +2,65 @@
 import Foundation
 
 enum PreviewData {
-    static let sampleBlockTypes: [EditorBlockType] = [
+    static let sampleBlockTypes: [EditorBlock] = [
         // Text blocks
-        EditorBlockType(
+        EditorBlock(
             name: "core/paragraph",
             title: "Paragraph",
             description: "Start with the basic building block of all narrative.",
             category: "text",
             keywords: ["text", "paragraph"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/heading",
             title: "Heading",
             description: "Introduce new sections and organize content to help visitors find what they need.",
             category: "text",
             keywords: ["title", "heading"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/list",
             title: "List",
             description: "Create a bulleted or numbered list.",
             category: "text",
             keywords: ["bullet", "number", "list"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/quote",
             title: "Quote",
             description: "Give quoted text visual emphasis.",
             category: "text",
             keywords: ["quote", "citation"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/code",
             title: "Code",
             description: "Display code snippets that respect your spacing and tabs.",
             category: "text",
             keywords: ["code", "programming"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/preformatted",
             title: "Preformatted",
             description: "Add text that respects your spacing and tabs, and also allows styling.",
             category: "text",
             keywords: ["preformatted", "monospace"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/pullquote",
             title: "Pullquote",
             description: "Give special visual emphasis to a quote from your text.",
             category: "text",
             keywords: ["pullquote", "quote"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/verse",
             title: "Verse",
             description: "Insert poetry. Use special spacing formats. Or quote song lyrics.",
             category: "text",
             keywords: ["poetry", "verse"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/table",
             title: "Table",
             description: "Create structured content in rows and columns to display information.",
@@ -69,49 +69,49 @@ enum PreviewData {
         ),
         
         // Media blocks
-        EditorBlockType(
+        EditorBlock(
             name: "core/image",
             title: "Image",
             description: "Insert an image to make a visual statement.",
             category: "media",
             keywords: ["photo", "picture"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/gallery",
             title: "Gallery",
             description: "Display multiple images in a rich gallery.",
             category: "media",
             keywords: ["images", "photos"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/audio",
             title: "Audio",
             description: "Embed a simple audio player.",
             category: "media",
             keywords: ["music", "sound", "podcast"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/video",
             title: "Video",
             description: "Embed a video from your media library or upload a new one.",
             category: "media",
             keywords: ["movie", "film"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/cover",
             title: "Cover",
             description: "Add an image or video with a text overlay.",
             category: "media",
             keywords: ["banner", "hero", "cover"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/file",
             title: "File",
             description: "Add a link to a downloadable file.",
             category: "media",
             keywords: ["download", "pdf", "document"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/media-text",
             title: "Media & Text",
             description: "Set media and words side-by-side for a richer layout.",
@@ -120,42 +120,42 @@ enum PreviewData {
         ),
         
         // Design blocks
-        EditorBlockType(
+        EditorBlock(
             name: "core/columns",
             title: "Columns",
             description: "Display content in multiple columns.",
             category: "design",
             keywords: ["layout", "columns"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/group",
             title: "Group",
             description: "Gather blocks in a container.",
             category: "design",
             keywords: ["container", "wrapper", "group"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/separator",
             title: "Separator",
             description: "Create a break between ideas or sections.",
             category: "design",
             keywords: ["divider", "hr"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/spacer",
             title: "Spacer",
             description: "Add white space between blocks.",
             category: "design",
             keywords: ["space", "gap"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/buttons",
             title: "Buttons",
             description: "Prompt visitors to take action with a group of button-style links.",
             category: "design",
             keywords: ["button", "link", "cta"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/more",
             title: "More",
             description: "Content before this block will be shown in the excerpt on your archives page.",
@@ -164,21 +164,21 @@ enum PreviewData {
         ),
         
         // Widget blocks
-        EditorBlockType(
+        EditorBlock(
             name: "core/search",
             title: "Search",
             description: "Help visitors find your content.",
             category: "widgets",
             keywords: ["find", "search"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/archives",
             title: "Archives",
             description: "Display a date archive of your posts.",
             category: "widgets",
             keywords: ["archive", "history"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/categories",
             title: "Categories",
             description: "Display a list of all categories.",
@@ -187,14 +187,14 @@ enum PreviewData {
         ),
         
         // Theme blocks
-        EditorBlockType(
+        EditorBlock(
             name: "core/site-title",
             title: "Site Title",
             description: "Display your site's title.",
             category: "theme",
             keywords: ["title", "site"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/site-logo",
             title: "Site Logo",
             description: "Display your site's logo.",
@@ -203,28 +203,28 @@ enum PreviewData {
         ),
         
         // Embed blocks
-        EditorBlockType(
+        EditorBlock(
             name: "core-embed/youtube",
             title: "YouTube",
             description: "Embed a YouTube video.",
             category: "embed",
             keywords: ["video", "youtube"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core-embed/twitter",
             title: "Twitter",
             description: "Embed a tweet.",
             category: "embed",
             keywords: ["tweet", "twitter"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core-embed/vimeo",
             title: "Vimeo",
             description: "Embed a Vimeo video.",
             category: "embed",
             keywords: ["video", "vimeo"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core-embed/instagram",
             title: "Instagram",
             description: "Embed an Instagram post.",
@@ -233,63 +233,63 @@ enum PreviewData {
         ),
         
         // Jetpack blocks
-        EditorBlockType(
+        EditorBlock(
             name: "jetpack/ai-assistant",
             title: "AI Assistant",
             description: "Generate text, edit content, and get suggestions using AI.",
             category: "text",
             keywords: ["ai", "artificial intelligence", "generate", "write"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "jetpack/contact-form",
             title: "Contact Form",
             description: "Add a customizable contact form.",
             category: "widgets",
             keywords: ["form", "contact", "email"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "jetpack/markdown",
             title: "Markdown",
             description: "Write posts or pages in plain-text Markdown syntax.",
             category: "text",
             keywords: ["markdown", "md", "formatting"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "jetpack/tiled-gallery",
             title: "Tiled Gallery",
             description: "Display multiple images in an elegantly organized tiled layout.",
             category: "media",
             keywords: ["gallery", "images", "photos", "tiled"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "jetpack/slideshow",
             title: "Slideshow",
             description: "Display multiple images in a slideshow.",
             category: "media",
             keywords: ["slideshow", "carousel", "gallery"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "jetpack/map",
             title: "Map",
             description: "Add an interactive map showing one or more locations.",
             category: "widgets",
             keywords: ["map", "location", "address"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "jetpack/business-hours",
             title: "Business Hours",
             description: "Display your business opening hours.",
             category: "widgets",
             keywords: ["hours", "schedule", "business"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "jetpack/subscriptions",
             title: "Subscriptions",
             description: "Let visitors subscribe to your blog posts.",
             category: "widgets",
             keywords: ["subscribe", "email", "newsletter"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "jetpack/related-posts",
             title: "Related Posts",
             description: "Display a list of related posts.",
@@ -298,21 +298,21 @@ enum PreviewData {
         ),
         
         // Additional common blocks
-        EditorBlockType(
+        EditorBlock(
             name: "core/html",
             title: "Custom HTML",
             description: "Add custom HTML code and preview it as you edit.",
             category: "widgets",
             keywords: ["html", "code", "custom"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/shortcode",
             title: "Shortcode",
             description: "Insert additional custom elements with WordPress shortcodes.",
             category: "widgets",
             keywords: ["shortcode", "custom"],
         ),
-        EditorBlockType(
+        EditorBlock(
             name: "core/social-links",
             title: "Social Icons",
             description: "Display icons linking to your social media profiles.",

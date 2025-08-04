@@ -8,6 +8,13 @@ struct ContentView: View {
     let remoteEditorConfigurations: [EditorConfiguration] = [.template]
 
     @State private var isShowingDefaultEditor = false
+    
+    // Configuration settings
+    @AppStorage("enableNativeBlockInserter") private var enableNativeBlockInserter = true
+    @AppStorage("enablePlugins") private var enablePlugins = false
+    @AppStorage("hideTitle") private var hideTitle = false
+    @AppStorage("autoFocusOnLoad") private var autoFocusOnLoad = true
+    @AppStorage("themeStyles") private var themeStyles = true
 
     var body: some View {
         List {
@@ -18,11 +25,30 @@ struct ContentView: View {
                     Text("Bundled Editor")
                 }
             }
+            
+            Section {
+                Toggle("Native Block Inserter", isOn: $enableNativeBlockInserter)
+                Toggle("Enable Plugins", isOn: $enablePlugins)
+                Toggle("Hide Title", isOn: $hideTitle)
+                Toggle("Auto Focus on Load", isOn: $autoFocusOnLoad)
+                Toggle("Theme Styles", isOn: $themeStyles)
+            } header: {
+                Text("Configuration")
+            } footer: {
+                Button("Reset") {
+                    enableNativeBlockInserter = true
+                    enablePlugins = false
+                    hideTitle = false
+                    autoFocusOnLoad = true
+                    themeStyles = true
+                }
+                .padding(.vertical, 12)
+            }
 
             Section {
                 ForEach(remoteEditorConfigurations, id: \.siteURL) { configuration in
                     NavigationLink {
-                        EditorView(configuration: configuration)
+                        EditorView(configuration: configureWithSettings(configuration))
                     } label: {
                         Text(URL(string: configuration.siteURL)?.host ?? configuration.siteURL)
                     }
@@ -43,7 +69,7 @@ struct ContentView: View {
         }
         .fullScreenCover(isPresented: $isShowingDefaultEditor) {
             NavigationView {
-                EditorView(configuration: .default)
+                EditorView(configuration: configureWithSettings(.default))
             }
         }
         .toolbar {
@@ -64,9 +90,19 @@ struct ContentView: View {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-
             }
         }
+    }
+    
+    // Helper function to apply settings to configuration
+    private func configureWithSettings(_ configuration: EditorConfiguration) -> EditorConfiguration {
+        var config = configuration
+        config.enableNativeBlockInserter = enableNativeBlockInserter
+        config.plugins = enablePlugins
+        config.hideTitle = hideTitle
+        config.autoFocusOnLoad = autoFocusOnLoad
+        config.themeStyles = themeStyles
+        return config
     }
 }
 
@@ -75,8 +111,6 @@ private extension EditorConfiguration {
     static var template: Self {
         var configuration = EditorConfiguration.default
 
-        #warning("1. Update the property values below")
-        #warning("2. Install the Jetpack plugin to the site")
         configuration.siteURL = "https://modify-me.com"
         configuration.authHeader = "Insert the Authorization header value here"
 
@@ -85,7 +119,6 @@ private extension EditorConfiguration {
         configuration.editorAssetsEndpoint = URL(string: configuration.siteApiRoot)!.appendingPathComponent("wpcom/v2/editor-assets")
         // The `plugins: true` is necessary for the editor to use 'remote.html'
         configuration.plugins = true
-        configuration.enableNativeBlockInserter = true
 
         return configuration
     }
