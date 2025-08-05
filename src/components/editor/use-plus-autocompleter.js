@@ -4,10 +4,10 @@
 import { addFilter, removeFilter } from '@wordpress/hooks';
 import { useEffect } from '@wordpress/element';
 
-/*
+/**
  * Internal dependencies
  */
-import { info } from '../../utils/logger';
+import { onAutocompleterTriggered } from '../../utils/bridge';
 
 /**
  * Adds a filter for the Autocomplete completers to show an alert when + is typed.
@@ -42,7 +42,7 @@ function addPlusSymbolCompleter( completers = [] ) {
 		name: 'plus-symbol',
 		triggerPrefix: '+',
 		options: () => {
-			info( 'You typed a + symbol!' );
+			onAutocompleterTriggered( 'plus-symbol' );
 			// Return empty array since we're not providing actual completion options
 			return [];
 		},

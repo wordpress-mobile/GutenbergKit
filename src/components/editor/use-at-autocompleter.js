@@ -4,10 +4,10 @@
 import { addFilter, removeFilter } from '@wordpress/hooks';
 import { useEffect } from '@wordpress/element';
 
-/*
+/**
  * Internal dependencies
  */
-import { info } from '../../utils/logger';
+import { onAutocompleterTriggered } from '../../utils/bridge';
 
 /**
  * Adds a filter for the Autocomplete completers to show an alert when @ is typed.
@@ -48,7 +48,7 @@ function addAtSymbolCompleter( completers = [] ) {
 		name: 'at-symbol',
 		triggerPrefix: '@',
 		options: () => {
-			info( 'You typed an @ symbol!' );
+			onAutocompleterTriggered( 'at-symbol' );
 			// Return empty array since we're not providing actual completion options
 			return [];
 		},

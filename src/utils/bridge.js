@@ -122,6 +122,17 @@ export function openMediaLibrary( config ) {
 }
 
 /**
+ * Notifies the native host that an autocompleter was triggered.
+ *
+ * @param {string} type The type of autocompleter that was triggered (e.g. 'at-symbol', 'plus-symbol').
+ *
+ * @return {void}
+ */
+export function onAutocompleterTriggered( type ) {
+	dispatchToBridge( 'onAutocompleterTriggered', { type } );
+}
+
+/**
  * @typedef GBKitConfig
  *
  * @property {boolean}  [themeStyles]            Controls if theme styles are applied to the editor.
