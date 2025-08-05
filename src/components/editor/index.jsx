@@ -19,6 +19,7 @@ import { useMediaUpload } from './use-media-upload';
 import TextEditor from '../text-editor';
 import { useSyncFeaturedImage } from './use-sync-featured-image';
 import { useDevModeNotice } from './use-dev-mode-notice';
+import { useAtAutocompleter } from './use-at-autocompleter';
 
 /**
  * @typedef {import('../utils/bridge').Post} Post
@@ -43,6 +44,7 @@ export default function Editor( { post, children, hideTitle } ) {
 	useEditorSetup( post );
 	useMediaUpload();
 	useDevModeNotice();
+	useAtAutocompleter();
 
 	const { isReady, mode, isRichEditingEnabled, currentPost } = useSelect(
 		( select ) => {

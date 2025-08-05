@@ -1,0 +1,60 @@
+/**
+ * WordPress dependencies
+ */
+import { addFilter, removeFilter } from '@wordpress/hooks';
+import { useEffect } from '@wordpress/element';
+
+/*
+ * Internal dependencies
+ */
+import { info } from '../../utils/logger';
+
+/**
+ * Adds a filter for the Autocomplete completers to show an alert when @ is typed.
+ *
+ * @return {void}
+ */
+export function useAtAutocompleter() {
+	useEffect( () => {
+		// Avoid conflicts with core's default autocompleter
+		removeFilter(
+			'editor.Autocomplete.completers',
+			'editor/autocompleters/set-default-completers'
+		);
+
+		addFilter(
+			'editor.Autocomplete.completers',
+			'GutenbergKit/at-symbol-alert',
+			addAtSymbolCompleter
+		);
+
+		return () => {
+			removeFilter(
+				'editor.Autocomplete.completers',
+				'GutenbergKit/at-symbol-alert'
+			);
+		};
+	}, [] );
+}
+
+/**
+ * Adds the @ symbol autocompleter to the completers array.
+ *
+ * @param {Array} completers Existing completers.
+ * @return {Array} Updated completers array.
+ */
+function addAtSymbolCompleter( completers = [] ) {
+	const atSymbolCompleter = {
+		name: 'at-symbol',
+		triggerPrefix: '@',
+		options: () => {
+			info( 'You typed an @ symbol!' );
+			// Return empty array since we're not providing actual completion options
+			return [];
+		},
+		getOptionLabel: () => '',
+		getOptionCompletion: () => '@',
+	};
+
+	return [ ...completers, atSymbolCompleter ];
+}
