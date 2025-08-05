@@ -7,6 +7,7 @@ import apiFetch from '@wordpress/api-fetch';
  * Internal dependencies
  */
 import parseException from './exception-parser';
+import { debug } from './logger';
 
 /**
  * Generic function to dispatch messages to both Android and iOS bridges.
@@ -17,6 +18,8 @@ import parseException from './exception-parser';
  * @return {void}
  */
 function dispatchToBridge( methodName, args = {} ) {
+	debug( `Bridge event: ${ methodName }`, args );
+
 	// Android bridge - extract values in property definition order
 	if ( window.editorDelegate ) {
 		const method = window.editorDelegate[ methodName ];
@@ -103,6 +106,8 @@ export function showBlockPicker() {
  * @return {void}
  */
 export function openMediaLibrary( config ) {
+	debug( `Bridge event: openMediaLibrary`, config );
+
 	if ( window.editorDelegate ) {
 		window.editorDelegate.openMediaLibrary( JSON.stringify( config ) );
 	}
@@ -209,6 +214,8 @@ export function logException(
 		isHandled,
 		handledBy,
 	};
+
+	debug( `Bridge event: logException`, parsedException );
 
 	if ( window.editorDelegate ) {
 		window.editorDelegate.onEditorExceptionLogged(
