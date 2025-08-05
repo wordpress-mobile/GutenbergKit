@@ -9,8 +9,34 @@ const LOG_LEVELS = {
 // Default log level
 let currentLogLevel = LOG_LEVELS.INFO;
 
+// Check for log level from environment variable (Node.js)
 if ( typeof process !== 'undefined' && process?.env?.LOG_LEVEL ) {
-	currentLogLevel = process.env.LOG_LEVEL;
+	const envLogLevel = process.env.LOG_LEVEL.toUpperCase();
+	if ( LOG_LEVELS[ envLogLevel ] !== undefined ) {
+		currentLogLevel = LOG_LEVELS[ envLogLevel ];
+	}
+}
+
+// Check for log level from URL parameter (browser) - takes precedence
+const urlLogLevel = getLogLevelFromURL();
+if ( urlLogLevel ) {
+	const upperCaseLevel = urlLogLevel.toUpperCase();
+	if ( LOG_LEVELS[ upperCaseLevel ] !== undefined ) {
+		currentLogLevel = LOG_LEVELS[ upperCaseLevel ];
+	}
+}
+
+/**
+ * Get log level from URL parameters (for browser environments)
+ *
+ * @return {string|null} The log level from URL parameter or null if not found
+ */
+function getLogLevelFromURL() {
+	if ( typeof window !== 'undefined' && window.location ) {
+		const urlParams = new URLSearchParams( window.location.search );
+		return urlParams.get( 'log_level' );
+	}
+	return null;
 }
 
 /**
