@@ -259,6 +259,22 @@ export function logException(
  * @return {Promise<GBKitConfig>} Promise that resolves with GBKit config or rejects after timeout.
  */
 export function awaitGBKitGlobal( timeoutMs = 3000 ) {
+	// In development mode, bypass the GBKit requirement and seed a default post,
+	// allowing the editor to load without the native bridge to simplify testing.
+	if ( isDevMode() ) {
+		return Promise.resolve( {
+			post: {
+				id: -1,
+				type: 'post',
+				title: '',
+				content: '',
+				status: 'auto-draft',
+			},
+			themeStyles: false,
+			hideTitle: false,
+		} );
+	}
+
 	return new Promise( ( resolve, reject ) => {
 		const startTime = Date.now();
 
@@ -280,6 +296,16 @@ export function awaitGBKitGlobal( timeoutMs = 3000 ) {
 
 		checkGBKit();
 	} );
+}
+
+/**
+ * Checks if the editor is running in development mode.
+ *
+ * @return {boolean} True if dev_mode query parameter is present.
+ */
+function isDevMode() {
+	const urlParams = new URLSearchParams( window.location.search );
+	return urlParams.has( 'dev_mode' );
 }
 
 /**
