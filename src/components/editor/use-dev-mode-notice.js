@@ -6,6 +6,11 @@ import { useDispatch } from '@wordpress/data';
 import { store as noticesStore } from '@wordpress/notices';
 import { __ } from '@wordpress/i18n';
 
+/**
+ * Internal dependencies
+ */
+import { isDevMode } from '../../utils/dev-mode';
+
 // Only display the notice on initial load
 let noticeShown = false;
 
@@ -14,8 +19,7 @@ export function useDevModeNotice() {
 		useDispatch( noticesStore );
 
 	useEffect( () => {
-		const url = new URL( window.location.href );
-		const hasDevMode = url.searchParams.has( 'dev_mode' );
+		const hasDevMode = isDevMode();
 
 		if ( hasDevMode && ! noticeShown ) {
 			noticeShown = true;

@@ -20,7 +20,8 @@ import { awaitGBKitGlobal } from './utils/bridge';
 import { initializeApiFetch } from './utils/api-fetch';
 import { loadEditorAssets } from './utils/remote-editor';
 import { initializeVideoPressAjaxBridge } from './utils/videopress-bridge';
-import { error } from './utils/logger';
+import { error, warn } from './utils/logger';
+import { isDevMode } from './utils/dev-mode';
 import './index.scss';
 
 window.wp = window.wp || {};
@@ -83,8 +84,12 @@ function initializeEditor( assetsResult ) {
 
 function handleError( err ) {
 	error( 'Error initializing editor', err );
-	// Fallback to the local editor and display a notice. Because the remote
-	// editor loading failed, it is more practical to rely upon the local
-	// editor's scripts and styles for displaying the notice.
-	window.location.href = 'index.html?error=gbkit_global_unavailable';
+	if ( isDevMode() ) {
+		warn( 'Dev mode disabled automatic redirect to the local editor.' );
+	} else {
+		// Fallback to the local editor and display a notice. Because the remote
+		// editor loading failed, it is more practical to rely upon the local
+		// editor's scripts and styles for displaying the notice.
+		window.location.href = 'index.html?error=gbkit_global_unavailable';
+	}
 }

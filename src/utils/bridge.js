@@ -8,6 +8,7 @@ import apiFetch from '@wordpress/api-fetch';
  */
 import parseException from './exception-parser';
 import { debug } from './logger';
+import { isDevMode } from './dev-mode';
 
 /**
  * Generic function to dispatch messages to both Android and iOS bridges.
@@ -276,16 +277,6 @@ export function awaitGBKitGlobal( timeoutMs = 3000 ) {
 
 		checkGBKit();
 	} );
-}
-
-/**
- * Checks if the editor is running in development mode.
- *
- * @return {boolean} True if dev_mode query parameter is present.
- */
-function isDevMode() {
-	const urlParams = new URLSearchParams( window.location.search );
-	return urlParams.has( 'dev_mode' );
 }
 
 /**
