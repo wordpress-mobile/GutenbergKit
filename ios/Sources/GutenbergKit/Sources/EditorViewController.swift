@@ -326,6 +326,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             case .openMediaLibrary:
                 let config = try message.decode(OpenMediaLibraryAction.self)
                 openMediaLibrary(config)
+            case .onAutocompleterTriggered:
+                let body = try message.decode(EditorJSMessage.AutocompleterTriggeredBody.self)
+                delegate?.editor(self, didTriggerAutocompleter: body.type)
             }
         } catch {
             fatalError("failed to decode message: \(error)")
