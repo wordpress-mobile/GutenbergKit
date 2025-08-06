@@ -134,6 +134,19 @@ The project follows WordPress coding standards for JavaScript:
 -   **ESLint**: Uses `@wordpress/eslint-plugin/recommended` configuration
 -   **Prettier**: Uses `@wordpress/prettier-config` for code formatting
 
+### Logging Guidelines
+
+The project uses a custom logger utility (`src/utils/logger.js`) instead of direct `console` methods:
+
+-   **Required**: Always use the logger utility functions (`error`, `warn`, `info`, `debug`) instead of `console.*` methods
+-   **Error Logging**: Use `error()` for actual errors and exceptions
+-   **Warning Logging**: Use `warn()` for important warnings that should be addressed
+-   **Info Logging**: Use `info()` for general informational messages
+-   **Debug Logging**: Use `debug()` for verbose logging that is helpful during development but not critical
+-   **Usage**: Import from the logger utility: `import { error, warn, info, debug } from './utils/logger';`
+
+Note: Console logs should be used sparingly. For verbose or development-specific logging, prefer the `debug()` function which can be controlled via log levels.
+
 Always run these commands before committing:
 
 ```bash
