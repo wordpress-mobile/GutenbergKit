@@ -1,7 +1,6 @@
 /**
  * WordPress dependencies
  */
-import apiFetch from '@wordpress/api-fetch';
 // Default styles that are needed for the editor.
 import '@wordpress/components/build-style/style.css';
 import '@wordpress/block-editor/build-style/style.css';
@@ -17,15 +16,11 @@ import '@wordpress/editor/build-style/style.css';
  * Internal dependencies
  */
 import { awaitGBKitGlobal } from './utils/bridge';
-import { initializeApiFetch } from './utils/api-fetch';
 import { loadEditorAssets } from './utils/remote-editor';
 import { initializeVideoPressAjaxBridge } from './utils/videopress-bridge';
 import { error, warn } from './utils/logger';
 import { isDevMode } from './utils/dev-mode';
 import './index.scss';
-
-window.wp = window.wp || {};
-window.wp.apiFetch = apiFetch;
 
 const I18N_PACKAGES = [ 'i18n', 'hooks' ];
 
@@ -43,12 +38,11 @@ awaitGBKitGlobal()
 	.then( importL10n )
 	.then( configureLocale )
 	.then( loadRemainingAssets )
+	.then( initializeApiFetch )
 	.then( initializeEditor )
 	.catch( handleError );
 
 function initializeApiAndLoadI18n() {
-	initializeApiFetch();
-
 	// Ensure the i18n packages are loaded, then set the locale before importing
 	// the rest of the packages.
 	return loadEditorAssets( { allowedPackages: I18N_PACKAGES } );
@@ -69,6 +63,15 @@ function loadRemainingAssets() {
 	return loadEditorAssets( {
 		disallowedPackages: I18N_PACKAGES,
 	} );
+}
+
+function initializeApiFetch( assetsResult ) {
+	return import( './utils/api-fetch' ).then(
+		( { initializeApiFetch: _initializeApiFetch } ) => {
+			_initializeApiFetch();
+			return assetsResult;
+		}
+	);
 }
 
 function initializeEditor( assetsResult ) {

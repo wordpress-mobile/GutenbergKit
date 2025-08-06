@@ -1,9 +1,4 @@
 /**
- * WordPress dependencies
- */
-import apiFetch from '@wordpress/api-fetch';
-
-/**
  * Internal dependencies
  */
 import parseException from './exception-parser';
@@ -298,16 +293,13 @@ export function awaitGBKitGlobal( timeoutMs = 3000 ) {
 export async function fetchEditorAssets() {
 	if ( window.webkit ) {
 		return await window.webkit.messageHandlers.loadFetchedEditorAssets.postMessage(
-			{
-				asset: 'manifest',
-			}
+			{ asset: 'manifest' }
 		);
 	}
-	// Android implementation - uses same API call that will be intercepted
 	const { siteApiRoot, editorAssetsEndpoint } = getGBKit();
 	const url =
 		editorAssetsEndpoint || `${ siteApiRoot }wpcom/v2/editor-assets`;
-	return await apiFetch( {
-		url,
-	} );
+	// The native Android bridge intercepts this request, managing any required
+	// authentication configuration
+	return await fetch( url );
 }
