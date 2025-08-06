@@ -240,22 +240,6 @@ export function logException(
  * @return {Promise<GBKitConfig>} Promise that resolves with GBKit config or rejects after timeout.
  */
 export function awaitGBKitGlobal( timeoutMs = 3000 ) {
-	// In development mode, bypass the GBKit requirement and seed a default post,
-	// allowing the editor to load without the native bridge to simplify testing.
-	if ( isDevMode() ) {
-		return Promise.resolve( {
-			post: {
-				id: -1,
-				type: 'post',
-				title: '',
-				content: '',
-				status: 'auto-draft',
-			},
-			themeStyles: false,
-			hideTitle: false,
-		} );
-	}
-
 	return new Promise( ( resolve, reject ) => {
 		const startTime = Date.now();
 
@@ -263,6 +247,22 @@ export function awaitGBKitGlobal( timeoutMs = 3000 ) {
 			if ( window.GBKit ) {
 				resolve( window.GBKit );
 				return;
+			}
+
+			// In development mode, bypass the GBKit requirement and seed a default post,
+			// allowing the editor to load without the native bridge to simplify testing.
+			if ( isDevMode() ) {
+				resolve( {
+					post: {
+						id: -1,
+						type: 'post',
+						title: '',
+						content: '',
+						status: 'auto-draft',
+					},
+					themeStyles: false,
+					hideTitle: false,
+				} );
 			}
 
 			if ( Date.now() - startTime >= timeoutMs ) {
