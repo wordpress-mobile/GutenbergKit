@@ -7,6 +7,36 @@ import apiFetch from '@wordpress/api-fetch';
  * Internal dependencies
  */
 import parseException from './exception-parser';
+import { debug } from './logger';
+import { isDevMode } from './dev-mode';
+
+/**
+ * Generic function to dispatch messages to both Android and iOS bridges.
+ *
+ * @param {string} methodName The name of the method to call on the native side.
+ * @param {Object} args       Arguments object to pass to the method.
+ *
+ * @return {void}
+ */
+function dispatchToBridge( methodName, args = {} ) {
+	debug( `Bridge event: ${ methodName }`, args );
+
+	// Android bridge - extract values in property definition order
+	if ( window.editorDelegate ) {
+		const method = window.editorDelegate[ methodName ];
+		if ( method ) {
+			method.apply( window.editorDelegate, Object.values( args ) );
+		}
+	}
+
+	// iOS webkit bridge - use arguments object directly
+	if ( window.webkit ) {
+		window.webkit.messageHandlers.editorDelegate.postMessage( {
+			message: methodName,
+			body: args,
+		} );
+	}
+}
 
 /**
  * Notifies the native host that the editor has loaded.
@@ -14,16 +44,7 @@ import parseException from './exception-parser';
  * @return {void}
  */
 export function editorLoaded() {
-	if ( window.editorDelegate ) {
-		window.editorDelegate.onEditorLoaded();
-	}
-
-	if ( window.webkit ) {
-		window.webkit.messageHandlers.editorDelegate.postMessage( {
-			message: 'onEditorLoaded',
-			body: {},
-		} );
-	}
+	dispatchToBridge( 'onEditorLoaded', {} );
 }
 
 /**
@@ -32,15 +53,7 @@ export function editorLoaded() {
  * @return {void}
  */
 export function onEditorContentChanged() {
-	if ( window.editorDelegate ) {
-		window.editorDelegate.onEditorContentChanged();
-	}
-
-	if ( window.webkit ) {
-		window.webkit.messageHandlers.editorDelegate.postMessage( {
-			message: 'onEditorContentChanged',
-		} );
-	}
+	dispatchToBridge( 'onEditorContentChanged', {} );
 }
 
 /**
@@ -52,16 +65,7 @@ export function onEditorContentChanged() {
  * @return {void}
  */
 export function onEditorHistoryChanged( hasUndo, hasRedo ) {
-	if ( window.editorDelegate ) {
-		window.editorDelegate.onEditorHistoryChanged( hasUndo, hasRedo );
-	}
-
-	if ( window.webkit ) {
-		window.webkit.messageHandlers.editorDelegate.postMessage( {
-			message: 'onEditorHistoryChanged',
-			body: { hasUndo, hasRedo },
-		} );
-	}
+	dispatchToBridge( 'onEditorHistoryChanged', { hasUndo, hasRedo } );
 }
 
 /**
@@ -72,16 +76,7 @@ export function onEditorHistoryChanged( hasUndo, hasRedo ) {
  * @return {void}
  */
 export function onEditorFeaturedImageChanged( mediaID ) {
-	if ( window.editorDelegate ) {
-		window.editorDelegate.onEditorFeaturedImageChanged( mediaID );
-	}
-
-	if ( window.webkit ) {
-		window.webkit.messageHandlers.editorDelegate.postMessage( {
-			message: 'onEditorFeaturedImageChanged',
-			body: { mediaID },
-		} );
-	}
+	dispatchToBridge( 'onEditorFeaturedImageChanged', { mediaID } );
 }
 
 /**
@@ -92,16 +87,7 @@ export function onEditorFeaturedImageChanged( mediaID ) {
  * @return {void}
  */
 export function onBlocksChanged( isEmpty = false ) {
-	if ( window.editorDelegate ) {
-		window.editorDelegate.onBlocksChanged( isEmpty );
-	}
-
-	if ( window.webkit ) {
-		window.webkit.messageHandlers.editorDelegate.postMessage( {
-			message: 'onBlocksChanged',
-			body: { isEmpty },
-		} );
-	}
+	dispatchToBridge( 'onBlocksChanged', { isEmpty } );
 }
 
 /**
@@ -110,16 +96,7 @@ export function onBlocksChanged( isEmpty = false ) {
  * @return {void}
  */
 export function showBlockPicker() {
-	if ( window.editorDelegate ) {
-		window.editorDelegate.showBlockPicker();
-	}
-
-	if ( window.webkit ) {
-		window.webkit.messageHandlers.editorDelegate.postMessage( {
-			message: 'showBlockPicker',
-			body: {},
-		} );
-	}
+	dispatchToBridge( 'showBlockPicker', {} );
 }
 
 /**
@@ -130,6 +107,8 @@ export function showBlockPicker() {
  * @return {void}
  */
 export function openMediaLibrary( config ) {
+	debug( `Bridge event: openMediaLibrary`, config );
+
 	if ( window.editorDelegate ) {
 		window.editorDelegate.openMediaLibrary( JSON.stringify( config ) );
 	}
@@ -237,6 +216,8 @@ export function logException(
 		handledBy,
 	};
 
+	debug( `Bridge event: logException`, parsedException );
+
 	if ( window.editorDelegate ) {
 		window.editorDelegate.onEditorExceptionLogged(
 			JSON.stringify( parsedException )
@@ -266,6 +247,22 @@ export function awaitGBKitGlobal( timeoutMs = 3000 ) {
 			if ( window.GBKit ) {
 				resolve( window.GBKit );
 				return;
+			}
+
+			// In development mode, bypass the GBKit requirement and seed a default post,
+			// allowing the editor to load without the native bridge to simplify testing.
+			if ( isDevMode() ) {
+				resolve( {
+					post: {
+						id: -1,
+						type: 'post',
+						title: '',
+						content: '',
+						status: 'auto-draft',
+					},
+					themeStyles: false,
+					hideTitle: false,
+				} );
 			}
 
 			if ( Date.now() - startTime >= timeoutMs ) {
