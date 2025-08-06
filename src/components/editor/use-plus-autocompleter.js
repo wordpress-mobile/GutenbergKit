@@ -46,8 +46,7 @@ function addPlusSymbolCompleter( completers = [] ) {
 			// Return empty array since we're not providing actual completion options
 			return [];
 		},
-		getOptionLabel: () => '',
-		getOptionCompletion: () => '+',
+		isDebounced: true,
 	};
 
 	return [ ...completers, plusSymbolCompleter ];
