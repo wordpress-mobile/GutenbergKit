@@ -4,6 +4,7 @@
 import parseException from './exception-parser';
 import { debug } from './logger';
 import { isDevMode } from './dev-mode';
+import { basicFetch } from './fetch';
 
 /**
  * Generic function to dispatch messages to both Android and iOS bridges.
@@ -296,10 +297,12 @@ export async function fetchEditorAssets() {
 			{ asset: 'manifest' }
 		);
 	}
-	const { siteApiRoot, editorAssetsEndpoint } = getGBKit();
+
+	const { siteApiRoot, editorAssetsEndpoint, authHeader } = getGBKit();
 	const url =
 		editorAssetsEndpoint || `${ siteApiRoot }wpcom/v2/editor-assets`;
-	// The native Android bridge intercepts this request, managing any required
-	// authentication configuration
-	return await fetch( url );
+	// Use our fetch utility, as we have not yet loaded the `wp.apiFetch` utility
+	return await basicFetch( url, {
+		headers: { Authorization: authHeader },
+	} );
 }
