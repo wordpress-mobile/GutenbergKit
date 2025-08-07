@@ -55,6 +55,11 @@ function addAtSymbolCompleter( completers = [] ) {
 			// Return empty array since we're not providing actual completion options
 			return [];
 		},
+		allowContext: ( before, after ) => {
+			const beforeEmptyOrWhitespace = /^$|\s$/.test( before );
+			const afterEmptyOrWhitespace = /^$|^\s/.test( after );
+			return beforeEmptyOrWhitespace && afterEmptyOrWhitespace;
+		},
 		isDebounced: true,
 	};
 
