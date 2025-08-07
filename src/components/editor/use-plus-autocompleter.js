@@ -41,8 +41,11 @@ function addPlusSymbolCompleter( completers = [] ) {
 	const plusSymbolCompleter = {
 		name: 'plus-symbol',
 		triggerPrefix: '+',
-		options: () => {
-			onAutocompleterTriggered( 'plus-symbol' );
+		options: ( filterValue ) => {
+			// Only trigger when cursor is directly after + (no characters typed yet)
+			if ( filterValue === '' ) {
+				onAutocompleterTriggered( 'plus-symbol' );
+			}
 			// Return empty array since we're not providing actual completion options
 			return [];
 		},

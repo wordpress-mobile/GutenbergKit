@@ -47,8 +47,11 @@ function addAtSymbolCompleter( completers = [] ) {
 	const atSymbolCompleter = {
 		name: 'at-symbol',
 		triggerPrefix: '@',
-		options: () => {
-			onAutocompleterTriggered( 'at-symbol' );
+		options: ( filterValue ) => {
+			// Only trigger when cursor is directly after @ (no characters typed yet)
+			if ( filterValue === '' ) {
+				onAutocompleterTriggered( 'at-symbol' );
+			}
 			// Return empty array since we're not providing actual completion options
 			return [];
 		},
