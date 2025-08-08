@@ -18,7 +18,7 @@ export default defineConfig( {
 		outDir: '../dist',
 		rollupOptions: {
 			input: resolve( __dirname, 'src/remote.html' ),
-			external: externalize,
+			external,
 		},
 		target: 'esnext',
 	},
@@ -33,7 +33,7 @@ export default defineConfig( {
 	},
 } );
 
-function externalize( id ) {
+function external( id ) {
 	const hasExternal = defaultRequestToExternal( id ) !== undefined;
 	const isCss = id.match( /\.css(?:\?inline)?$/ );
 	const moduleWithSideEffects = [ '@wordpress/format-library' ].includes(
