@@ -36,11 +36,8 @@ export default defineConfig( {
 function external( id ) {
 	const hasExternal = defaultRequestToExternal( id ) !== undefined;
 	const isCss = id.match( /\.css(?:\?inline)?$/ );
-	const moduleWithSideEffects = [ '@wordpress/format-library' ].includes(
-		id
-	);
 
-	return hasExternal && ! isCss && ! moduleWithSideEffects;
+	return hasExternal && ! isCss;
 }
 
 /**
@@ -62,7 +59,7 @@ function wordPressExternals() {
 
 			// Match WordPress and React JSX runtime import statements
 			const regex =
-				/import\s*(?:(\w+)|{([^}]+)})\s*from\s*['"](@wordpress\/(?!.*\.css)[^'"]+|react\/jsx-runtime)['"];/g;
+				/import\s*(?:(?:(\w+)|{([^}]+)})\s*from\s*)?['"](@wordpress\/(?!.*\.css)[^'"]+|react\/jsx-runtime)['"];/g;
 			let match;
 
 			while ( ( match = regex.exec( code ) ) !== null ) {
