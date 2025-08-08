@@ -301,7 +301,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     /// - parameter text: The text to append at the cursor position.
     public func appendTextAtCursor(_ text: String) {
-        let escapedText = text.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? text
+        let escapedText = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? text
         evaluate("editor.appendTextAtCursor(decodeURIComponent('\(escapedText)'));")
     }
 
