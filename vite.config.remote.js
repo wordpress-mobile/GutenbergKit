@@ -45,6 +45,11 @@ function externalize( id ) {
 
 /**
  * Transform code by replacing WordPress imports with global definitions.
+ * E.g., `import { __ } from '@wordpress/i18n';` becomes `const { __ } = window.wp.i18n;`
+ * This replicates Gutenberg's behavior in a browser environment, which relies upon
+ * the `@wordpress/dependency-extraction-webpack-plugin` module.
+ *
+ * See: https://github.com/WordPress/gutenberg/tree/d2fce222ebbbef8dbc56eee1badcfe4ae0df04b0/packages/dependency-extraction-webpack-plugin
  *
  * @return {Object} The transformed code and map.
  */

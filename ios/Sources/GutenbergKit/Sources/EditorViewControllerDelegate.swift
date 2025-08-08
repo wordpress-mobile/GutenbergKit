@@ -37,7 +37,7 @@ public protocol EditorViewControllerDelegate: AnyObject {
 
     /// Notifies the client that an autocompleter was triggered.
     ///
-    /// - parameter type: The type of autocompleter that was triggered (e.g., "plus-symbol", "at-mention").
+    /// - parameter type: The type of autocompleter that was triggered (e.g., "plus-symbol", "at-symbol").
     func editor(_ viewController: EditorViewController, didTriggerAutocompleter type: String)
 }
 
