@@ -35,9 +35,9 @@ export default defineConfig( {
 
 function external( id ) {
 	const hasExternal = defaultRequestToExternal( id ) !== undefined;
-	const isCss = id.match( /\.css(?:\?inline)?$/ );
+	const isInlineCss = id.match( /\.css\?inline$/ );
 
-	return hasExternal && ! isCss;
+	return hasExternal && ! isInlineCss;
 }
 
 /**
@@ -59,13 +59,18 @@ function wordPressExternals() {
 
 			// Match WordPress and React JSX runtime import statements
 			const regex =
-				/import\s*(?:(?:(\w+)|{([^}]+)})\s*from\s*)?['"](@wordpress\/(?!.*\.css)[^'"]+|react\/jsx-runtime)['"];/g;
+				/import\s*(?:(?:(\w+)|{([^}]+)})\s*from\s*)?['"](@wordpress\/[^'"]+|react\/jsx-runtime)['"];/g;
 			let match;
 
 			while ( ( match = regex.exec( code ) ) !== null ) {
 				const [ fullMatch, defaultImport, namedImports, module ] =
 					match;
 				const imports = defaultImport || namedImports;
+
+				if ( module.match( /\.css\?inline$/ ) ) {
+					continue; // Exclude inlined CSS files from externalization
+				}
+
 				const externalDefinition = defaultRequestToExternal( module );
 
 				if ( ! externalDefinition ) {
