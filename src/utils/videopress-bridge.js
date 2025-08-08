@@ -2,7 +2,7 @@
  * Internal dependencies
  */
 import { getGBKit } from './bridge';
-import { warn, info, error } from './logger';
+import { warn, debug, error } from './logger';
 
 /**
  * VideoPress AJAX to REST API bridge.
@@ -62,7 +62,7 @@ export function initializeVideoPressAjaxBridge() {
 		return deferred.promise();
 	};
 
-	info( 'VideoPress AJAX bridge initialized' );
+	debug( 'VideoPress AJAX bridge initialized' );
 }
 
 /**
@@ -89,7 +89,7 @@ function handleVideoPressUploadJWT() {
 				};
 				delete processedResponse.upload_url;
 
-				info(
+				debug(
 					'VideoPress JWT obtained successfully',
 					processedResponse
 				);
