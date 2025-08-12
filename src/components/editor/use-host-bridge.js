@@ -5,7 +5,14 @@ import { useEffect, useCallback, useRef } from '@wordpress/element';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as coreStore } from '@wordpress/core-data';
 import { store as editorStore } from '@wordpress/editor';
-import { parse, serialize } from '@wordpress/blocks';
+import { parse, serialize, getBlockType } from '@wordpress/blocks';
+import { store as blockEditorStore } from '@wordpress/block-editor';
+import { insert, create, toHTMLString } from '@wordpress/rich-text';
+
+/**
+ * Internal dependencies
+ */
+import { warn } from '../../utils/logger';
 
 window.editor = window.editor || {};
 
@@ -14,6 +21,13 @@ export function useHostBridge( post, editorRef ) {
 	const { undo, redo, switchEditorMode } = useDispatch( editorStore );
 	const { getEditedPostAttribute, getEditedPostContent } =
 		useSelect( editorStore );
+	const { updateBlock, selectionChange } = useDispatch( blockEditorStore );
+	const {
+		getSelectedBlockClientId,
+		getBlock,
+		getSelectionStart,
+		getSelectionEnd,
+	} = useSelect( blockEditorStore );
 
 	const editContent = useCallback(
 		( edits ) => {
@@ -79,6 +93,64 @@ export function useHostBridge( post, editorRef ) {
 			switchEditorMode( mode );
 		};
 
+		window.editor.appendTextAtCursor = ( text ) => {
+			const selectedBlockClientId = getSelectedBlockClientId();
+
+			if ( ! selectedBlockClientId ) {
+				warn( 'Unable to append text: no block selected' );
+				return false;
+			}
+
+			const block = getBlock( selectedBlockClientId );
+
+			if ( ! block ) {
+				warn(
+					'Unable to append text: could not retrieve selected block'
+				);
+				return false;
+			}
+
+			const blockType = getBlockType( block.name );
+			const hasContentAttribute = blockType?.attributes?.content;
+
+			if ( ! hasContentAttribute ) {
+				warn(
+					`Unable to append text: block type ${ block.name } does not support text content`
+				);
+				return false;
+			}
+
+			const blockContent = block.attributes?.content || '';
+			const currentValue = create( { html: blockContent } );
+			const selectionStart = getSelectionStart();
+			const selectionEnd = getSelectionEnd();
+			const newValue = insert(
+				currentValue,
+				text,
+				selectionStart?.offset,
+				selectionEnd?.offset
+			);
+
+			updateBlock( selectedBlockClientId, {
+				attributes: {
+					...block.attributes,
+					content: toHTMLString( { value: newValue } ),
+				},
+			} );
+
+			const newCursorPosition =
+				selectionStart?.offset + text.length || newValue.text.length;
+
+			selectionChange( {
+				clientId: selectionStart?.clientId || selectedBlockClientId,
+				attributeKey: selectionStart?.attributeKey || 'content',
+				startOffset: newCursorPosition,
+				endOffset: newCursorPosition,
+			} );
+
+			return true;
+		};
+
 		return () => {
 			delete window.editor.setContent;
 			delete window.editor.setTitle;
@@ -87,6 +159,7 @@ export function useHostBridge( post, editorRef ) {
 			delete window.editor.undo;
 			delete window.editor.redo;
 			delete window.editor.switchEditorMode;
+			delete window.editor.appendTextAtCursor;
 		};
 	}, [
 		editorRef,
@@ -96,6 +169,12 @@ export function useHostBridge( post, editorRef ) {
 		redo,
 		switchEditorMode,
 		undo,
+		getSelectedBlockClientId,
+		getBlock,
+		getSelectionStart,
+		getSelectionEnd,
+		updateBlock,
+		selectionChange,
 	] );
 }
 

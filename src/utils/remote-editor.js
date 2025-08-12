@@ -107,16 +107,8 @@ async function loadAssets(
 	html,
 	{ allowedPackages = [], disallowedPackages = [] } = {}
 ) {
-	/**
-	 * Locally-sourced Gutenberg packages excluded from remote loading to avoid
-	 * conflicts.
-	 */
-	const localGutenbergPackages = [ 'api-fetch', ...disallowedPackages ];
-
 	const excludedScriptIDs = new RegExp(
-		localGutenbergPackages
-			.map( ( script ) => `wp-${ script }-js` )
-			.join( '|' )
+		disallowedPackages.map( ( script ) => `wp-${ script }-js` ).join( '|' )
 	);
 
 	const allowedScriptIDs = allowedPackages.length

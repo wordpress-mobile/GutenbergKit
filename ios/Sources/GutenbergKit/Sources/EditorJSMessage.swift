@@ -37,6 +37,8 @@ struct EditorJSMessage {
         case showBlockPicker
         /// User requested the Media Library.
         case openMediaLibrary
+        /// The user triggered an autocompleter.
+        case onAutocompleterTriggered
     }
 
     struct DidUpdateBlocksBody: Decodable {
@@ -50,5 +52,9 @@ struct EditorJSMessage {
 
     struct DidUpdateFeaturedImageBody: Decodable {
         let mediaID: Int
+    }
+
+    struct AutocompleterTriggeredBody: Decodable {
+        let type: String
     }
 }

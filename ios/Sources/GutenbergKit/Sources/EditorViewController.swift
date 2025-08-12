@@ -297,6 +297,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         evaluate("editor.setMediaUploadAttachment(\(media));")
     }
 
+    /// Appends text at the current cursor position in the editor.
+    ///
+    /// - parameter text: The text to append at the cursor position.
+    public func appendTextAtCursor(_ text: String) {
+        let escapedText = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? text
+        evaluate("editor.appendTextAtCursor(decodeURIComponent('\(escapedText)'));")
+    }
+
     // MARK: - GutenbergEditorControllerDelegate
 
     fileprivate func controller(_ controller: GutenbergEditorController, didReceiveMessage message: EditorJSMessage) {
@@ -326,6 +334,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             case .openMediaLibrary:
                 let config = try message.decode(OpenMediaLibraryAction.self)
                 openMediaLibrary(config)
+            case .onAutocompleterTriggered:
+                let body = try message.decode(EditorJSMessage.AutocompleterTriggeredBody.self)
+                delegate?.editor(self, didTriggerAutocompleter: body.type)
             }
         } catch {
             fatalError("failed to decode message: \(error)")

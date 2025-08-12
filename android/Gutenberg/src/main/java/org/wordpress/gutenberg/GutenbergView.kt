@@ -58,6 +58,7 @@ class GutenbergView : WebView {
     private var openMediaLibraryListener: OpenMediaLibraryListener? = null
     private var editorDidBecomeAvailableListener: EditorAvailableListener? = null
     private var logJsExceptionListener: LogJsExceptionListener? = null
+    private var autocompleterTriggeredListener: AutocompleterTriggeredListener? = null
 
     var textEditorEnabled: Boolean = false
         set(value) {
@@ -86,6 +87,10 @@ class GutenbergView : WebView {
 
     fun setLogJsExceptionListener(listener: LogJsExceptionListener) {
         logJsExceptionListener = listener
+    }
+
+    fun setAutocompleterTriggeredListener(listener: AutocompleterTriggeredListener) {
+        autocompleterTriggeredListener = listener
     }
 
     fun setOnFileChooserRequestedListener(listener: (Intent, Int) -> Unit) {
@@ -403,6 +408,10 @@ class GutenbergView : WebView {
         fun onLogJsException(exception: GutenbergJsException)
     }
 
+    interface AutocompleterTriggeredListener {
+        fun onAutocompleterTriggered(type: String)
+    }
+
     fun getTitleAndContent(originalContent: CharSequence, callback: TitleAndContentCallback, completeComposition: Boolean = false) {
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
@@ -442,6 +451,17 @@ class GutenbergView : WebView {
     fun redo() {
         handler.post {
             this.evaluateJavascript("editor.redo();", null)
+        }
+    }
+
+    fun appendTextAtCursor(text: String) {
+        if (!isEditorLoaded) {
+            Log.e("GutenbergView", "You can't append text until the editor has loaded")
+            return
+        }
+        val encodedText = encodeForEditor(text)
+        handler.post {
+            this.evaluateJavascript("editor.appendTextAtCursor(decodeURIComponent('$encodedText'));", null)
         }
     }
 
@@ -547,6 +567,13 @@ class GutenbergView : WebView {
         Log.i("GutenbergView", "BlockPickerShouldShow")
     }
 
+    @JavascriptInterface
+    fun onAutocompleterTriggered(type: String) {
+        handler.post {
+            autocompleterTriggeredListener?.onAutocompleterTriggered(type)
+        }
+    }
+
     fun resetFilePathCallback() {
         filePathCallback = null
     }
@@ -562,6 +589,7 @@ class GutenbergView : WebView {
         editorDidBecomeAvailable = null
         filePathCallback = null
         onFileChooserRequested = null
+        autocompleterTriggeredListener = null
         handler.removeCallbacksAndMessages(null)
         this.destroy()
     }

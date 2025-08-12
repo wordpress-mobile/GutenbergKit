@@ -1,14 +1,10 @@
 /**
- * WordPress dependencies
- */
-import apiFetch from '@wordpress/api-fetch';
-
-/**
  * Internal dependencies
  */
 import parseException from './exception-parser';
 import { debug } from './logger';
 import { isDevMode } from './dev-mode';
+import { basicFetch } from './fetch';
 
 /**
  * Generic function to dispatch messages to both Android and iOS bridges.
@@ -119,6 +115,17 @@ export function openMediaLibrary( config ) {
 			body: config,
 		} );
 	}
+}
+
+/**
+ * Notifies the native host that an autocompleter was triggered.
+ *
+ * @param {string} type The type of autocompleter that was triggered (e.g. 'at-symbol', 'plus-symbol').
+ *
+ * @return {void}
+ */
+export function onAutocompleterTriggered( type ) {
+	dispatchToBridge( 'onAutocompleterTriggered', { type } );
 }
 
 /**
@@ -287,16 +294,15 @@ export function awaitGBKitGlobal( timeoutMs = 3000 ) {
 export async function fetchEditorAssets() {
 	if ( window.webkit ) {
 		return await window.webkit.messageHandlers.loadFetchedEditorAssets.postMessage(
-			{
-				asset: 'manifest',
-			}
+			{ asset: 'manifest' }
 		);
 	}
-	// Android implementation - uses same API call that will be intercepted
-	const { siteApiRoot, editorAssetsEndpoint } = getGBKit();
+
+	const { siteApiRoot, editorAssetsEndpoint, authHeader } = getGBKit();
 	const url =
 		editorAssetsEndpoint || `${ siteApiRoot }wpcom/v2/editor-assets`;
-	return await apiFetch( {
-		url,
+	// Use our fetch utility, as we have not yet loaded the `wp.apiFetch` utility
+	return await basicFetch( url, {
+		headers: { Authorization: authHeader },
 	} );
 }
