@@ -81,6 +81,7 @@ function createHeadersMiddleware( authHeader ) {
 
 		if ( authHeader ) {
 			options.headers.Authorization = authHeader;
+			options.credentials = 'omit'; // Avoid cookies disrupting token authentication
 		}
 
 		return next( options );
