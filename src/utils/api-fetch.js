@@ -19,12 +19,12 @@ import { getGBKit } from './bridge';
  * @return {void}
  */
 export function initializeApiFetch() {
-	const { siteApiRoot = '', authHeader } = getGBKit();
+	const { siteApiRoot = '' } = getGBKit();
 
 	apiFetch.use( apiFetch.createRootURLMiddleware( siteApiRoot ) );
 	apiFetch.use( corsMiddleware );
 	apiFetch.use( apiPathModifierMiddleware );
-	apiFetch.use( createHeadersMiddleware( authHeader ) );
+	apiFetch.use( createHeadersMiddleware() );
 	apiFetch.use( filterEndpointsMiddleware );
 	apiFetch.use( mediaUploadMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
@@ -75,8 +75,9 @@ function apiPathModifierMiddleware( options, next ) {
 	return next( options );
 }
 
-function createHeadersMiddleware( authHeader ) {
+function createHeadersMiddleware() {
 	return ( options, next ) => {
+		const { authHeader } = getGBKit();
 		options.headers = options.headers || {};
 
 		if ( authHeader ) {
