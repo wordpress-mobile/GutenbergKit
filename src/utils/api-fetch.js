@@ -24,7 +24,7 @@ export function initializeApiFetch() {
 	apiFetch.use( apiFetch.createRootURLMiddleware( siteApiRoot ) );
 	apiFetch.use( corsMiddleware );
 	apiFetch.use( apiPathModifierMiddleware );
-	apiFetch.use( createHeadersMiddleware() );
+	apiFetch.use( tokenAuthMiddleware );
 	apiFetch.use( filterEndpointsMiddleware );
 	apiFetch.use( mediaUploadMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
@@ -75,18 +75,16 @@ function apiPathModifierMiddleware( options, next ) {
 	return next( options );
 }
 
-function createHeadersMiddleware() {
-	return ( options, next ) => {
-		const { authHeader } = getGBKit();
-		options.headers = options.headers || {};
+function tokenAuthMiddleware( options, next ) {
+	const { authHeader } = getGBKit();
+	options.headers = options.headers || {};
 
-		if ( authHeader ) {
-			options.headers.Authorization = authHeader;
-			options.credentials = 'omit'; // Avoid cookies disrupting token authentication
-		}
+	if ( authHeader ) {
+		options.headers.Authorization = authHeader;
+		options.credentials = 'omit'; // Avoid cookies disrupting token authentication
+	}
 
-		return next( options );
-	};
+	return next( options );
 }
 
 /**
