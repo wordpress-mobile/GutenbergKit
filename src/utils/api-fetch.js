@@ -75,6 +75,18 @@ function apiPathModifierMiddleware( options, next ) {
 	return next( options );
 }
 
+/**
+ * Middleware that handles token-based authentication.
+ *
+ * When an auth header is present, this middleware:
+ * 1. Adds the Authorization header to the request
+ * 2. Sets credentials to 'omit' to prevent cookies from interfering with token authentication
+ *
+ * This prevents authentication conflicts where browser cookies could disrupt
+ * token-based authentication by being sent alongside the Authorization header.
+ *
+ * @type {APIFetchMiddleware}
+ */
 function tokenAuthMiddleware( options, next ) {
 	const { authHeader } = getGBKit();
 	options.headers = options.headers || {};
