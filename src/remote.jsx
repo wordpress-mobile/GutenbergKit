@@ -23,6 +23,7 @@ import { isDevMode } from './utils/dev-mode';
 import './index.scss';
 
 const I18N_PACKAGES = [ 'i18n', 'hooks' ];
+const API_FETCH_PACKAGES = [ 'api-fetch', 'url' ];
 
 // Rely upon promises rather than async/await to avoid timeouts caused by
 // circular dependencies. Addressing the circular dependencies is quite
@@ -36,15 +37,14 @@ const I18N_PACKAGES = [ 'i18n', 'hooks' ];
 awaitGBKitGlobal()
 	.then( initializeApiAndLoadI18n )
 	.then( importL10n )
-	.then( configureLocale )
+	.then( configureLocale ) // Configure locale before loading modules with strings
+	.then( loadApiFetch )
+	.then( initializeApiFetch ) // Configure API fetch before loading remaining modules
 	.then( loadRemainingAssets )
-	.then( initializeApiFetch )
 	.then( initializeEditor )
 	.catch( handleError );
 
 function initializeApiAndLoadI18n() {
-	// Ensure the i18n packages are loaded, then set the locale before importing
-	// the rest of the packages.
 	return loadEditorAssets( { allowedPackages: I18N_PACKAGES } );
 }
 
@@ -57,11 +57,13 @@ function configureLocale( localeModule ) {
 	return _configureLocale();
 }
 
+function loadApiFetch() {
+	return loadEditorAssets( { allowedPackages: API_FETCH_PACKAGES } );
+}
+
 function loadRemainingAssets() {
-	// Ensure the correct translation strings are used by postponing the import
-	// of the remaining `@wordpress` packages until after the locale is set.
 	return loadEditorAssets( {
-		disallowedPackages: I18N_PACKAGES,
+		disallowedPackages: [ ...I18N_PACKAGES, ...API_FETCH_PACKAGES ],
 	} );
 }
 
