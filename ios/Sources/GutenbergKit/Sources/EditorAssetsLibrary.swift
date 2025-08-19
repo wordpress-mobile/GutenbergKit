@@ -81,7 +81,7 @@ public actor EditorAssetsLibrary {
     }
 
     /// Fetches one asset (JavaScript or stylesheet) and caches its content on the device.
-    func cacheAsset(from httpURL: URL) async throws -> URL {
+    func cacheAsset(from httpURL: URL) async throws -> (URLResponse, Data) {
         // The Web Inspector automatically requests ".js.map" files, we'll support it here for debugging purpose.
         let supportedResourceSuffixes = [".js", ".css", ".js.map"]
         guard httpURL.scheme?.starts(with: "http") == true,
@@ -103,11 +103,19 @@ public actor EditorAssetsLibrary {
             if let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status) {
                 try fileManager.moveItem(at: downloaded, to: localURL)
             } else {
-                throw URLError(.badServerResponse)
+                NSLog("Received an unexpected HTTP response for URL: \(httpURL)")
+                return try (response, Data(contentsOf: downloaded))
             }
         }
 
-        return localURL
+        let content = try Data(contentsOf: localURL)
+        let mimeType: String = switch httpURL.pathExtension {
+        case "js": "application/javascript"
+        case "css": "text/css"
+        default: "application/octet-stream"
+        }
+        let response = URLResponse(url: httpURL, mimeType: mimeType, expectedContentLength: content.count, textEncodingName: nil)
+        return (response, content)
     }
 }
 
