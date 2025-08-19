@@ -16,27 +16,34 @@ import '@wordpress/editor/build-style/style.css';
 /**
  * Internal dependencies
  */
-import { initializeApiFetch } from './utils/api-fetch';
-import { awaitGBKitGlobal, editorLoaded } from './utils/bridge';
-import { configureLocale } from './utils/localization';
-import './index.scss';
-import EditorLoadError from './components/editor-load-error';
-import { error } from './utils/logger';
+import { initializeApiFetch } from './api-fetch';
+import { awaitGBKitGlobal, editorLoaded } from './bridge';
+import { configureLocale } from './localization';
+import EditorLoadError from '../components/editor-load-error';
+import { error } from './logger';
 
-// Rely upon promises rather than async/await to avoid timeouts caused by
-// circular dependencies. Addressing the circular dependencies is quite
-// challenging due to Vite's preload helpers and bugs in `manualChunks`
-// configuration.
-//
-// See:
-// - https://github.com/vitejs/vite/issues/18551
-// - https://github.com/vitejs/vite/issues/13952
-// - https://github.com/vitejs/vite/issues/5189#issuecomment-2175410148
-awaitGBKitGlobal()
-	.then( initializeApiAndLocale )
-	.then( importEditor )
-	.then( initializeEditor )
-	.catch( handleError );
+/**
+ * Initialize the bundled editor by loading assets and configuring modules
+ * in the correct sequence.
+ *
+ * @return {Promise} Promise that resolves when initialization is complete
+ */
+export function initializeBundledEditor() {
+	// Rely upon promises rather than async/await to avoid timeouts caused by
+	// circular dependencies. Addressing the circular dependencies is quite
+	// challenging due to Vite's preload helpers and bugs in `manualChunks`
+	// configuration.
+	//
+	// See:
+	// - https://github.com/vitejs/vite/issues/18551
+	// - https://github.com/vitejs/vite/issues/13952
+	// - https://github.com/vitejs/vite/issues/5189#issuecomment-2175410148
+	return awaitGBKitGlobal()
+		.then( initializeApiAndLocale )
+		.then( importEditor )
+		.then( initializeEditor )
+		.catch( handleError );
+}
 
 function initializeApiAndLocale() {
 	initializeApiFetch();
@@ -44,7 +51,7 @@ function initializeApiAndLocale() {
 }
 
 function importEditor() {
-	return import( './utils/editor' );
+	return import( './editor' );
 }
 
 function initializeEditor( editorModule ) {

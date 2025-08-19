@@ -15,41 +15,48 @@ import '@wordpress/editor/build-style/style.css';
 /**
  * Internal dependencies
  */
-import { awaitGBKitGlobal } from './utils/bridge';
-import { loadEditorAssets } from './utils/editor-loader';
-import { initializeVideoPressAjaxBridge } from './utils/videopress-bridge';
-import { error, warn } from './utils/logger';
-import { isDevMode } from './utils/dev-mode';
-import './index.scss';
+import { awaitGBKitGlobal } from './bridge';
+import { loadEditorAssets } from './editor-loader';
+import { initializeVideoPressAjaxBridge } from './videopress-bridge';
+import { error, warn } from './logger';
+import { isDevMode } from './dev-mode';
 
 const I18N_PACKAGES = [ 'i18n', 'hooks' ];
 const API_FETCH_PACKAGES = [ 'api-fetch', 'url' ];
 
-// Rely upon promises rather than async/await to avoid timeouts caused by
-// circular dependencies. Addressing the circular dependencies is quite
-// challenging due to Vite's preload helpers and bugs in `manualChunks`
-// configuration.
-//
-// See:
-// - https://github.com/vitejs/vite/issues/18551
-// - https://github.com/vitejs/vite/issues/13952
-// - https://github.com/vitejs/vite/issues/5189#issuecomment-2175410148
-awaitGBKitGlobal()
-	.then( initializeApiAndLoadI18n )
-	.then( importL10n )
-	.then( configureLocale ) // Configure locale before loading modules with strings
-	.then( loadApiFetch )
-	.then( initializeApiFetch ) // Configure API fetch before loading remaining modules
-	.then( loadRemainingAssets )
-	.then( initializeEditor )
-	.catch( handleError );
+/**
+ * Initialize the remote editor by loading assets and configuring modules
+ * in the correct sequence.
+ *
+ * @return {Promise} Promise that resolves when initialization is complete
+ */
+export function initializeRemoteEditor() {
+	// Rely upon promises rather than async/await to avoid timeouts caused by
+	// circular dependencies. Addressing the circular dependencies is quite
+	// challenging due to Vite's preload helpers and bugs in `manualChunks`
+	// configuration.
+	//
+	// See:
+	// - https://github.com/vitejs/vite/issues/18551
+	// - https://github.com/vitejs/vite/issues/13952
+	// - https://github.com/vitejs/vite/issues/5189#issuecomment-2175410148
+	return awaitGBKitGlobal()
+		.then( initializeApiAndLoadI18n )
+		.then( importL10n )
+		.then( configureLocale ) // Configure locale before loading modules with strings
+		.then( loadApiFetch )
+		.then( initializeApiFetch ) // Configure API fetch before loading remaining modules
+		.then( loadRemainingAssets )
+		.then( initializeEditor )
+		.catch( handleError );
+}
 
 function initializeApiAndLoadI18n() {
 	return loadEditorAssets( { allowedPackages: I18N_PACKAGES } );
 }
 
 function importL10n() {
-	return import( './utils/localization' );
+	return import( './localization' );
 }
 
 function configureLocale( localeModule ) {
@@ -68,7 +75,7 @@ function loadRemainingAssets() {
 }
 
 function initializeApiFetch( assetsResult ) {
-	return import( './utils/api-fetch' ).then(
+	return import( './api-fetch' ).then(
 		( { initializeApiFetch: _initializeApiFetch } ) => {
 			_initializeApiFetch();
 			return assetsResult;
@@ -80,7 +87,7 @@ function initializeEditor( assetsResult ) {
 	initializeVideoPressAjaxBridge();
 
 	const { allowedBlockTypes } = assetsResult;
-	return import( './utils/editor' ).then(
+	return import( './editor' ).then(
 		( { initializeEditor: _initializeEditor } ) => {
 			_initializeEditor( { allowedBlockTypes } );
 		}
