@@ -9,5 +9,6 @@ export default defineConfig( {
 	test: {
 		setupFiles: [ './vitest.setup.js' ],
 		css: false,
+		environment: 'jsdom',
 	},
 } );

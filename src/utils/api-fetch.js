@@ -19,12 +19,12 @@ import { getGBKit } from './bridge';
  * @return {void}
  */
 export function initializeApiFetch() {
-	const { siteApiRoot = '', authHeader } = getGBKit();
+	const { siteApiRoot = '' } = getGBKit();
 
 	apiFetch.use( apiFetch.createRootURLMiddleware( siteApiRoot ) );
 	apiFetch.use( corsMiddleware );
 	apiFetch.use( apiPathModifierMiddleware );
-	apiFetch.use( createHeadersMiddleware( authHeader ) );
+	apiFetch.use( tokenAuthMiddleware );
 	apiFetch.use( filterEndpointsMiddleware );
 	apiFetch.use( mediaUploadMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
@@ -75,16 +75,28 @@ function apiPathModifierMiddleware( options, next ) {
 	return next( options );
 }
 
-function createHeadersMiddleware( authHeader ) {
-	return ( options, next ) => {
-		options.headers = options.headers || {};
+/**
+ * Middleware that handles token-based authentication.
+ *
+ * When an auth header is present, this middleware:
+ * 1. Adds the Authorization header to the request
+ * 2. Sets credentials to 'omit' to prevent cookies from interfering with token authentication
+ *
+ * This prevents authentication conflicts where browser cookies could disrupt
+ * token-based authentication by being sent alongside the Authorization header.
+ *
+ * @type {APIFetchMiddleware}
+ */
+function tokenAuthMiddleware( options, next ) {
+	const { authHeader } = getGBKit();
+	options.headers = options.headers || {};
 
-		if ( authHeader ) {
-			options.headers.Authorization = authHeader;
-		}
+	if ( authHeader ) {
+		options.headers.Authorization = authHeader;
+		options.credentials = 'omit'; // Avoid cookies disrupting token authentication
+	}
 
-		return next( options );
-	};
+	return next( options );
 }
 
 /**
