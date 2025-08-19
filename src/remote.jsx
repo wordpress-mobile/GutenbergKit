@@ -16,7 +16,7 @@ import '@wordpress/editor/build-style/style.css';
  * Internal dependencies
  */
 import { awaitGBKitGlobal } from './utils/bridge';
-import { loadEditorAssets } from './utils/remote-editor';
+import { loadEditorAssets } from './utils/editor-loader';
 import { initializeVideoPressAjaxBridge } from './utils/videopress-bridge';
 import { error, warn } from './utils/logger';
 import { isDevMode } from './utils/dev-mode';
