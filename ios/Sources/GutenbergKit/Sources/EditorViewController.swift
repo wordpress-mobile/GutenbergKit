@@ -532,16 +532,7 @@ class CachedAssetSchemeHandler: NSObject, WKURLSchemeHandler {
 
             let fetchAssetTask = Task { [library, weak self] in
                 do {
-                    let localURL = try await library.cacheAsset(from: httpURL)
-                    assert(localURL.isFileURL)
-
-                    let content = try Data(contentsOf: localURL)
-                    let mimeType: String = switch httpURL.pathExtension {
-                    case "js": "application/javascript"
-                    case "css": "text/css"
-                    default: "application/octet-stream"
-                    }
-                    let response = URLResponse(url: url, mimeType: mimeType, expectedContentLength: content.count, textEncodingName: nil)
+                    let (response, content) = try await library.cacheAsset(from: httpURL, webViewURL: url)
 
                     await self?.tasks[taskKey]?.webViewTask.didReceive(response)
                     await self?.tasks[taskKey]?.webViewTask.didReceive(content)

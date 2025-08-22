@@ -81,7 +81,11 @@ public actor EditorAssetsLibrary {
     }
 
     /// Fetches one asset (JavaScript or stylesheet) and caches its content on the device.
-    func cacheAsset(from httpURL: URL) async throws -> URL {
+    ///
+    /// - Parameters:
+    ///   - httpURL: The javascript or css URL.
+    ///   - webViewURL: The corresponding URL requested by web view, which should the "GBK cache prefix" (`gbk-cache-https://`)
+    func cacheAsset(from httpURL: URL, webViewURL: URL? = nil) async throws -> (URLResponse, Data) {
         // The Web Inspector automatically requests ".js.map" files, we'll support it here for debugging purpose.
         let supportedResourceSuffixes = [".js", ".css", ".js.map"]
         guard httpURL.scheme?.starts(with: "http") == true,
@@ -103,11 +107,30 @@ public actor EditorAssetsLibrary {
             if let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status) {
                 try fileManager.moveItem(at: downloaded, to: localURL)
             } else {
-                throw URLError(.badServerResponse)
+                NSLog("Received an unexpected HTTP response for URL: \(httpURL)")
+                var cacheResponse = response
+                // When loading the asset for web view, we need to make sure the return URLResponse.url matches the
+                // asset url in the web view.
+                if let webViewURL {
+                    cacheResponse = URLResponse(
+                        url: webViewURL,
+                        mimeType: response.mimeType,
+                        expectedContentLength: Int(response.expectedContentLength),
+                        textEncodingName: response.textEncodingName
+                    )
+                }
+                return try (cacheResponse, Data(contentsOf: downloaded))
             }
         }
 
-        return localURL
+        let content = try Data(contentsOf: localURL)
+        let mimeType: String = switch httpURL.pathExtension {
+        case "js": "application/javascript"
+        case "css": "text/css"
+        default: "application/octet-stream"
+        }
+        let response = URLResponse(url: webViewURL ?? httpURL, mimeType: mimeType, expectedContentLength: content.count, textEncodingName: nil)
+        return (response, content)
     }
 }
 
