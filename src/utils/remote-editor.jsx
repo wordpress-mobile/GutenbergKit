@@ -1,18 +1,4 @@
 /**
- * WordPress dependencies
- */
-// Default styles that are needed for the editor.
-import '@wordpress/components/build-style/style.css';
-import '@wordpress/block-editor/build-style/style.css';
-// Default styles that are needed for the core blocks.
-import '@wordpress/block-library/build-style/style.css';
-import '@wordpress/block-library/build-style/editor.css';
-import '@wordpress/block-library/build-style/theme.css';
-import '@wordpress/format-library/build-style/style.css';
-import '@wordpress/block-editor/build-style/content.css';
-import '@wordpress/editor/build-style/style.css';
-
-/**
  * Internal dependencies
  */
 import { awaitGBKitGlobal } from './bridge';
@@ -20,6 +6,7 @@ import { loadEditorAssets } from './editor-loader';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge';
 import { error, warn } from './logger';
 import { isDevMode } from './dev-mode';
+import './editor-styles.js';
 
 const I18N_PACKAGES = [ 'i18n', 'hooks' ];
 const API_FETCH_PACKAGES = [ 'api-fetch', 'url' ];
