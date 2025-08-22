@@ -532,7 +532,7 @@ class CachedAssetSchemeHandler: NSObject, WKURLSchemeHandler {
 
             let fetchAssetTask = Task { [library, weak self] in
                 do {
-                    let (response, content) = try await library.cacheAsset(from: httpURL)
+                    let (response, content) = try await library.cacheAsset(from: httpURL, webViewURL: url)
 
                     await self?.tasks[taskKey]?.webViewTask.didReceive(response)
                     await self?.tasks[taskKey]?.webViewTask.didReceive(content)
