@@ -294,11 +294,6 @@ class GutenbergView : WebView {
     }
 
     private fun setGlobalJavaScriptVariables() {
-        // Generate JavaScript globals
-        val globalsJS = configuration.webViewGlobals.map { global ->
-            "window[\"${global.name}\"] = ${global.value.toJavaScript()};"
-        }.joinToString("\n")
-
         val escapedTitle = encodeForEditor(configuration.title)
         val escapedContent = encodeForEditor(configuration.content)
         val editorSettings = configuration.editorSettings ?: "undefined"
@@ -325,13 +320,7 @@ class GutenbergView : WebView {
             localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
         """.trimIndent()
 
-        val combinedJS = if (globalsJS.isNotEmpty()) {
-            "$globalsJS\n$gbKitConfig"
-        } else {
-            gbKitConfig
-        }
-
-        this.evaluateJavascript(combinedJS, null)
+        this.evaluateJavascript(gbKitConfig, null)
     }
 
     private fun encodeForEditor(value: String): String {
