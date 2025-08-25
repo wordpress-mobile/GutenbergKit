@@ -146,11 +146,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let escapedTitle = configuration.title.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
         let escapedContent = configuration.content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
 
-        // Generate JavaScript globals
-        let globalsJS = configuration.webViewGlobals.map { global in
-            "window[\"\(global.name)\"] = \(global.value.toJavaScript());"
-        }.joined(separator: "\n")
-
         // Convert editor settings to JSON string if available
         var editorSettingsJS = "undefined"
         if let settings = configuration.editorSettings {
@@ -165,8 +160,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
 
         let jsCode = """
-        \(globalsJS)
-
         window.GBKit = {
             siteURL: '\(configuration.siteURL)',
             siteApiRoot: '\(configuration.siteApiRoot)',

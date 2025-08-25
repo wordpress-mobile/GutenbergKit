@@ -74,7 +74,6 @@ class MainActivity : AppCompatActivity(), AuthenticationManager.AuthenticationCa
             .setSiteApiNamespace(arrayOf())
             .setNamespaceExcludedPaths(arrayOf())
             .setAuthHeader("")
-            .setWebViewGlobals(emptyList())
             .setCookies(emptyMap())
             .build()
 
@@ -94,7 +93,6 @@ class MainActivity : AppCompatActivity(), AuthenticationManager.AuthenticationCa
             .setPostType("post")
             .setThemeStyles(false)
             .setHideTitle(false)
-            .setWebViewGlobals(emptyList())
             .setCookies(emptyMap())
 
     private fun launchEditor(configuration: EditorConfiguration) {

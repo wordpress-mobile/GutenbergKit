@@ -4,48 +4,6 @@ import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
 
 @Parcelize
-sealed class WebViewGlobalValue : Parcelable {
-    @Parcelize
-    data class StringValue(val value: String) : WebViewGlobalValue()
-    @Parcelize
-    data class NumberValue(val value: Double) : WebViewGlobalValue()
-    @Parcelize
-    data class BooleanValue(val value: Boolean) : WebViewGlobalValue()
-    @Parcelize
-    data class ObjectValue(val value: Map<String, WebViewGlobalValue>) : WebViewGlobalValue()
-    @Parcelize
-    data class ArrayValue(val value: List<WebViewGlobalValue>) : WebViewGlobalValue()
-    @Parcelize
-    object NullValue : WebViewGlobalValue()
-
-    fun toJavaScript(): String {
-        return when (this) {
-            is StringValue -> "\"${value.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")}\""
-            is NumberValue -> value.toString()
-            is BooleanValue -> value.toString()
-            is ObjectValue -> {
-                val pairs = value.map { (key, value) -> "\"$key\": ${value.toJavaScript()}" }
-                "{${pairs.joinToString(",")}}"
-            }
-            is ArrayValue -> "[${value.joinToString(",") { it.toJavaScript() }}]"
-            is NullValue -> "null"
-        }
-    }
-}
-
-@Parcelize
-data class WebViewGlobal(
-    val name: String,
-    val value: WebViewGlobalValue
-) : Parcelable {
-    init {
-        require(name.matches(Regex("^[a-zA-Z_$][a-zA-Z0-9_$]*$"))) {
-            "Invalid JavaScript identifier: $name"
-        }
-    }
-}
-
-@Parcelize
 open class EditorConfiguration constructor(
     val title: String,
     val content: String,
@@ -59,7 +17,6 @@ open class EditorConfiguration constructor(
     val siteApiNamespace: Array<String>,
     val namespaceExcludedPaths: Array<String>,
     val authHeader: String,
-    val webViewGlobals: List<WebViewGlobal>,
     val editorSettings: String?,
     val locale: String?,
     val cookies: Map<String, String>,
@@ -85,7 +42,6 @@ open class EditorConfiguration constructor(
         private var siteApiNamespace: Array<String> = arrayOf()
         private var namespaceExcludedPaths: Array<String> = arrayOf()
         private var authHeader: String = ""
-        private var webViewGlobals: List<WebViewGlobal> = emptyList()
         private var editorSettings: String? = null
         private var locale: String? = "en"
         private var cookies: Map<String, String> = mapOf()
@@ -105,7 +61,6 @@ open class EditorConfiguration constructor(
         fun setSiteApiNamespace(siteApiNamespace: Array<String>) = apply { this.siteApiNamespace = siteApiNamespace }
         fun setNamespaceExcludedPaths(namespaceExcludedPaths: Array<String>) = apply { this.namespaceExcludedPaths = namespaceExcludedPaths }
         fun setAuthHeader(authHeader: String) = apply { this.authHeader = authHeader }
-        fun setWebViewGlobals(webViewGlobals: List<WebViewGlobal>) = apply { this.webViewGlobals = webViewGlobals }
         fun setEditorSettings(editorSettings: String?) = apply { this.editorSettings = editorSettings }
         fun setLocale(locale: String?) = apply { this.locale = locale }
         fun setCookies(cookies: Map<String, String>) = apply { this.cookies = cookies }
@@ -126,7 +81,6 @@ open class EditorConfiguration constructor(
             siteApiNamespace = siteApiNamespace,
             namespaceExcludedPaths = namespaceExcludedPaths,
             authHeader = authHeader,
-            webViewGlobals = webViewGlobals,
             editorSettings = editorSettings,
             locale = locale,
             cookies = cookies,
@@ -154,7 +108,6 @@ open class EditorConfiguration constructor(
         if (!siteApiNamespace.contentEquals(other.siteApiNamespace)) return false
         if (!namespaceExcludedPaths.contentEquals(other.namespaceExcludedPaths)) return false
         if (authHeader != other.authHeader) return false
-        if (webViewGlobals != other.webViewGlobals) return false
         if (editorSettings != other.editorSettings) return false
         if (locale != other.locale) return false
         if (cookies != other.cookies) return false
@@ -178,7 +131,6 @@ open class EditorConfiguration constructor(
         result = 31 * result + siteApiNamespace.contentHashCode()
         result = 31 * result + namespaceExcludedPaths.contentHashCode()
         result = 31 * result + authHeader.hashCode()
-        result = 31 * result + webViewGlobals.hashCode()
         result = 31 * result + (editorSettings?.hashCode() ?: 0)
         result = 31 * result + (locale?.hashCode() ?: 0)
         result = 31 * result + cookies.hashCode()

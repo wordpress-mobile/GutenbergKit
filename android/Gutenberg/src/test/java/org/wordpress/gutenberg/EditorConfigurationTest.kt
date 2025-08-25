@@ -22,11 +22,6 @@ class EditorConfigurationTest {
             .setSiteApiNamespace(arrayOf("wp/v2"))
             .setNamespaceExcludedPaths(arrayOf("users"))
             .setAuthHeader("Bearer token")
-            .setWebViewGlobals(listOf(
-                WebViewGlobal("testString", WebViewGlobalValue.StringValue("test")),
-                WebViewGlobal("testNumber", WebViewGlobalValue.NumberValue(42.0)),
-                WebViewGlobal("testBoolean", WebViewGlobalValue.BooleanValue(true))
-            ))
             .build()
     }
 
@@ -44,60 +39,6 @@ class EditorConfigurationTest {
         assertArrayEquals(arrayOf("wp/v2"), editorConfig.siteApiNamespace)
         assertArrayEquals(arrayOf("users"), editorConfig.namespaceExcludedPaths)
         assertEquals("Bearer token", editorConfig.authHeader)
-        assertEquals(3, editorConfig.webViewGlobals.size)
-    }
-
-    @Test
-    fun `test WebViewGlobal StringValue toJavaScript conversion`() {
-        val stringValue = WebViewGlobalValue.StringValue("test\nvalue")
-        assertEquals("\"test\\nvalue\"", stringValue.toJavaScript())
-    }
-
-    @Test
-    fun `test WebViewGlobal NumberValue toJavaScript conversion`() {
-        val numberValue = WebViewGlobalValue.NumberValue(42.0)
-        assertEquals("42.0", numberValue.toJavaScript())
-    }
-
-    @Test
-    fun `test WebViewGlobal BooleanValue toJavaScript conversion`() {
-        val booleanValue = WebViewGlobalValue.BooleanValue(true)
-        assertEquals("true", booleanValue.toJavaScript())
-    }
-
-    @Test
-    fun `test WebViewGlobal ObjectValue toJavaScript conversion`() {
-        val objectValue = WebViewGlobalValue.ObjectValue(mapOf(
-            "key1" to WebViewGlobalValue.StringValue("value1"),
-            "key2" to WebViewGlobalValue.NumberValue(42.0)
-        ))
-        assertEquals("{\"key1\": \"value1\",\"key2\": 42.0}", objectValue.toJavaScript())
-    }
-
-    @Test
-    fun `test WebViewGlobal ArrayValue toJavaScript conversion`() {
-        val arrayValue = WebViewGlobalValue.ArrayValue(listOf(
-            WebViewGlobalValue.StringValue("value1"),
-            WebViewGlobalValue.NumberValue(42.0)
-        ))
-        assertEquals("[\"value1\",42.0]", arrayValue.toJavaScript())
-    }
-
-    @Test
-    fun `test WebViewGlobal NullValue toJavaScript conversion`() {
-        val nullValue = WebViewGlobalValue.NullValue
-        assertEquals("null", nullValue.toJavaScript())
-    }
-
-    @Test
-    fun `test WebViewGlobal valid identifier`() {
-        val validGlobal = WebViewGlobal("validName", WebViewGlobalValue.StringValue("test"))
-        assertEquals("validName", validGlobal.name)
-    }
-
-    @Test(expected = IllegalArgumentException::class)
-    fun `test WebViewGlobal invalid identifier throws exception`() {
-        WebViewGlobal("123invalid", WebViewGlobalValue.StringValue("test"))
     }
 
     @Test
