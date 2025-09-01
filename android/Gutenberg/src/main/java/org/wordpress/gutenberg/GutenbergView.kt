@@ -631,7 +631,6 @@ object GutenbergWebViewPool {
     private fun createAndPreloadWebView(context: Context): GutenbergView {
         val webView = GutenbergView(context)
         webView.initializeWebView()
-        webView.loadUrl(ASSET_URL)
         return webView
     }
 
