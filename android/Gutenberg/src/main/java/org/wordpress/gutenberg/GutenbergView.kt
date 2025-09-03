@@ -26,12 +26,6 @@ import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
 import org.json.JSONException
 import org.json.JSONObject
 import java.util.Locale
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancelChildren
-import kotlinx.coroutines.launch
 
 const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
 const val ASSET_URL_REMOTE = "https://appassets.androidplatform.net/assets/remote.html"
@@ -584,49 +578,73 @@ class GutenbergView : WebView {
     companion object {
         private const val ASSET_LOADING_TIMEOUT_MS = 5000L
 
+        // Warmup state management
+        private var warmupHandler: Handler? = null
+        private var warmupRunnable: Runnable? = null
+        private var warmupWebView: GutenbergView? = null
+
         /**
-         * Warmup the editor by preloading manifest
+         * Warmup the editor by preloading assets in a temporary WebView.
+         * This pre-caches assets to improve editor launch speed.
          */
         @JvmStatic
         fun warmup(context: Context, configuration: EditorConfiguration) {
-            val gutenbergView = GutenbergWebViewPool.getPreloadedWebView(context)
-            gutenbergView.start(configuration)
+            // Cancel any existing warmup
+            cancelWarmup()
 
-            // Allow the editor to load assets for a short time before deallocating
-            Handler(Looper.getMainLooper()).postDelayed({
-                GutenbergWebViewPool.recycleWebView(gutenbergView)
-            }, ASSET_LOADING_TIMEOUT_MS)
+            // Create dedicated warmup WebView
+            val webView = GutenbergView(context)
+            webView.initializeWebView()
+            webView.start(configuration)
+            warmupWebView = webView
+
+            // Schedule cleanup after assets are loaded
+            warmupHandler = Handler(Looper.getMainLooper())
+            warmupRunnable = Runnable {
+                cleanupWarmup()
+            }
+            warmupHandler?.postDelayed(warmupRunnable!!, ASSET_LOADING_TIMEOUT_MS)
         }
-    }
-}
 
-object GutenbergWebViewPool {
-    private var preloadedWebView: GutenbergView? = null
-
-    @JvmStatic
-    fun getPreloadedWebView(context: Context): GutenbergView {
-        val currentView = preloadedWebView
-        if (currentView == null) {
-            preloadedWebView = createAndPreloadWebView(context)
-        } else {
-            (currentView.parent as? android.view.ViewGroup)?.removeView(currentView)
+        /**
+         * Cancel any pending warmup and clean up resources.
+         */
+        @JvmStatic
+        fun cancelWarmup() {
+            warmupRunnable?.let { runnable ->
+                warmupHandler?.removeCallbacks(runnable)
+            }
+            cleanupWarmup()
         }
-        return preloadedWebView!!
-    }
 
-    private fun createAndPreloadWebView(context: Context): GutenbergView {
-        val webView = GutenbergView(context)
-        webView.initializeWebView()
-        return webView
-    }
+        /**
+         * Clean up warmup resources.
+         */
+        private fun cleanupWarmup() {
+            warmupWebView?.let { webView ->
+                webView.stopLoading()
+                webView.clearConfig()
+                webView.destroy()
+            }
+            warmupWebView = null
+            warmupHandler = null
+            warmupRunnable = null
+        }
 
-    @JvmStatic
-    fun recycleWebView(webView: GutenbergView) {
-        webView.stopLoading()
-        webView.clearConfig()
-        webView.removeAllViews()
-        webView.destroy()
-        preloadedWebView = null
+        /**
+         * Create a new GutenbergView for the editor.
+         * Cancels any pending warmup to free resources.
+         */
+        @JvmStatic
+        fun createForEditor(context: Context): GutenbergView {
+            // Cancel any pending warmup to free resources
+            cancelWarmup()
+
+            // Create fresh WebView for editor
+            val webView = GutenbergView(context)
+            webView.initializeWebView()
+            return webView
+        }
     }
 }
 
