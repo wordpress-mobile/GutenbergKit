@@ -582,6 +582,8 @@ class GutenbergView : WebView {
     }
 
     companion object {
+        private const val ASSET_LOADING_TIMEOUT_MS = 5000L
+
         /**
          * Warmup the editor by preloading manifest
          */
@@ -593,7 +595,7 @@ class GutenbergView : WebView {
             // Allow the editor to load assets for a short time before deallocating
             Handler(Looper.getMainLooper()).postDelayed({
                 GutenbergWebViewPool.recycleWebView(gutenbergView)
-            }, 5000)
+            }, ASSET_LOADING_TIMEOUT_MS)
         }
     }
 }
