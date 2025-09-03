@@ -584,32 +584,18 @@ class GutenbergView : WebView {
     }
 
     companion object {
-        private val warmupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
         /**
          * Warmup the editor by preloading manifest
          */
         @JvmStatic
         fun warmup(context: Context, configuration: EditorConfiguration) {
-            if (configuration.enableAssetCaching) {
-                val library = EditorAssetsLibrary(context, configuration)
-                // Preload manifest in background
-                warmupScope.launch {
-                    try {
-                        library.manifestContentForEditor()
-                    } catch (e: Exception) {
-                        Log.e("GutenbergView", "Failed to warmup manifest", e)
-                    }
-                }
-            }
-        }
+            val gutenbergView = GutenbergWebViewPool.getPreloadedWebView(context)
+            gutenbergView.start(configuration)
 
-        /**
-         * Cancel any ongoing warmup operations
-         */
-        @JvmStatic
-        fun cancelWarmup() {
-            warmupScope.coroutineContext[Job]?.cancelChildren()
+            // Allow the editor to load assets for a short time before deallocating
+            Handler(Looper.getMainLooper()).postDelayed({
+                GutenbergWebViewPool.recycleWebView(gutenbergView)
+            }, 5000)
         }
     }
 }
