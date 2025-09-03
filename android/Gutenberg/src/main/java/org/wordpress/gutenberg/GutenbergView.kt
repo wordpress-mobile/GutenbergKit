@@ -45,7 +45,6 @@ class GutenbergView : WebView {
     private var configuration: EditorConfiguration = EditorConfiguration.builder().build()
 
     private val handler = Handler(Looper.getMainLooper())
-    private var editorDidBecomeAvailable: ((GutenbergView) -> Unit)? = null
     var filePathCallback: ValueCallback<Array<Uri?>?>? = null
     val pickImageRequestCode = 1
 
@@ -461,7 +460,6 @@ class GutenbergView : WebView {
         handler.post {
             if(!didFireEditorLoaded) {
                 editorDidBecomeAvailableListener?.onEditorAvailable(this)
-                this.editorDidBecomeAvailable?.let { it(this) }
                 this.didFireEditorLoaded = true
                 this.visibility = View.VISIBLE
                 this.alpha = 0f
@@ -575,7 +573,7 @@ class GutenbergView : WebView {
         contentChangeListener = null
         historyChangeListener = null
         featuredImageChangeListener = null
-        editorDidBecomeAvailable = null
+        editorDidBecomeAvailableListener = null
         filePathCallback = null
         onFileChooserRequested = null
         autocompleterTriggeredListener = null
