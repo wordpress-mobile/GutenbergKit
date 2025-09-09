@@ -182,6 +182,7 @@ dist
 local.properties
 /android/build
 /android/.gradle
+/android/.kotlin
 /android/.idea
 
 ## Production Build Products
