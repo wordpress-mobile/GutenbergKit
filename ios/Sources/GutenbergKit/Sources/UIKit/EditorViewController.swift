@@ -5,9 +5,9 @@ import Combine
 import CryptoKit
 
 @MainActor
-public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
+public final class EditorViewController: UIViewController {
     public let webView: WKWebView
-    let assetsLibrary: EditorAssetsLibrary
+    let webBridge: WebBridge
 
     public var configuration: EditorConfiguration
     private var _isEditorRendered = false
@@ -28,7 +28,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Initalizes the editor with the initial content (Gutenberg).
     public init(configuration: EditorConfiguration = .default, isWarmupMode: Bool = false) {
         self.configuration = configuration
-        self.assetsLibrary = EditorAssetsLibrary(configuration: configuration)
+        self.webBridge = WebBridge(configuration: configuration)
         self.controller = GutenbergEditorController(configuration: configuration)
 
         // The `allowFileAccessFromFileURLs` allows the web view to access the
@@ -37,16 +37,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
 
-        // Set-up communications with the editor.
-        config.userContentController.add(controller, name: "editorDelegate")
-
         // This is important so they user can't select anything but text across blocks.
         config.selectionGranularity = .character
 
-        let schemeHandler = CachedAssetSchemeHandler(library: assetsLibrary)
-        for scheme in CachedAssetSchemeHandler.supportedURLSchemes {
-            config.setURLSchemeHandler(schemeHandler, forURLScheme: scheme)
-        }
+        self.webBridge.configure(with: config)
 
         self.webView = GBWebView(frame: .zero, configuration: config)
         self.webView.scrollView.keyboardDismissMode = .interactive
@@ -54,6 +48,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         self.isWarmupMode = isWarmupMode
 
         super.init(nibName: nil, bundle: nil)
+
+        self.webBridge.messages
+            .sink { [weak self] in self?.didReceive(message: $0) }
+            .store(in: &cancellables)
     }
 
     required init?(coder: NSCoder) {
@@ -63,7 +61,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     public override func viewDidLoad() {
         super.viewDidLoad()
 
-        controller.delegate = self
         webView.navigationDelegate = controller
 
         // FIXME: implement with CSS (bottom toolbar)
@@ -81,7 +78,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         webView.alpha = 0
 
         if isWarmupMode {
-            setUpEditor()
             loadEditor()
         }
 
@@ -113,21 +109,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
-    private func setUpEditor() {
-        let webViewConfiguration = webView.configuration
-        let userContentController = webViewConfiguration.userContentController
-        let editorInitialConfig = getEditorConfiguration()
-        userContentController.addUserScript(editorInitialConfig)
-    }
-
     private func loadEditor() {
         if configuration.plugins {
-            webView.configuration.userContentController.addScriptMessageHandler(
-                EditorAssetsProvider(library: assetsLibrary),
-                contentWorld: .page,
-                name: "loadFetchedEditorAssets"
-            )
-
             if let remoteURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"].flatMap(URL.init) {
                 webView.load(URLRequest(url: remoteURL))
             } else {
@@ -140,50 +123,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             let indexURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
             webView.loadFileURL(indexURL, allowingReadAccessTo: Bundle.module.resourceURL!)
         }
-    }
-
-    private func getEditorConfiguration() -> WKUserScript {
-        let escapedTitle = configuration.title.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
-        let escapedContent = configuration.content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
-
-        // Convert editor settings to JSON string if available
-        var editorSettingsJS = "undefined"
-        if let settings = configuration.editorSettings {
-            do {
-                let jsonData = try JSONSerialization.data(withJSONObject: settings, options: [])
-                if let jsonString = String(data: jsonData, encoding: .utf8) {
-                    editorSettingsJS = jsonString
-                }
-            } catch {
-                NSLog("Failed to serialize editor settings: \(error)")
-            }
-        }
-
-        let jsCode = """
-        window.GBKit = {
-            siteURL: '\(configuration.siteURL)',
-            siteApiRoot: '\(configuration.siteApiRoot)',
-            siteApiNamespace: \(Array(configuration.siteApiNamespace)),
-            namespaceExcludedPaths: \(Array(configuration.namespaceExcludedPaths)),
-            authHeader: '\(configuration.authHeader)',
-            themeStyles: \(configuration.themeStyles),
-            hideTitle: \(configuration.hideTitle),
-            editorSettings: \(editorSettingsJS),
-            locale: '\(configuration.locale)',
-            post: {
-                id: \(configuration.postID ?? -1),
-                title: '\(escapedTitle)',
-                content: '\(escapedContent)'
-            },
-        };
-
-        localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
-
-        "done";
-        """
-
-        let editorScript = WKUserScript(source: jsCode, injectionTime: .atDocumentStart, forMainFrameOnly: true)
-        return editorScript
     }
 
     // MARK: - Public API
@@ -246,7 +185,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         guard !_isEditorSetup else { return }
         _isEditorSetup = true
 
-        setUpEditor()
         loadEditor()
     }
 
@@ -298,9 +236,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         evaluate("editor.appendTextAtCursor(decodeURIComponent('\(escapedText)'));")
     }
 
-    // MARK: - GutenbergEditorControllerDelegate
-
-    fileprivate func controller(_ controller: GutenbergEditorController, didReceiveMessage message: EditorJSMessage) {
+    private func didReceive(message: EditorJSMessage) {
         do {
             switch message.type {
             case .onEditorLoaded:
@@ -365,14 +301,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 }
 
-@MainActor
-private protocol GutenbergEditorControllerDelegate: AnyObject {
-    func controller(_ controller: GutenbergEditorController, didReceiveMessage message: EditorJSMessage)
-}
-
 /// Hiding the conformances, and breaking retain cycles.
-private final class GutenbergEditorController: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
-    weak var delegate: GutenbergEditorControllerDelegate?
+final class GutenbergEditorController: NSObject {
     private let configuration: EditorConfiguration
     private let editorURL: URL?
 
@@ -381,8 +311,9 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
         self.editorURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init)
         super.init()
     }
+}
 
-    // MARK: - WKNavigationDelegate
+extension GutenbergEditorController: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         NSLog("navigation: \(String(describing: navigation))")
@@ -411,15 +342,21 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
 
         decisionHandler(.allow)
     }
+}
 
-    // MARK: - WKScriptMessageHandler
+@available(iOS 26.0, *)
+extension GutenbergEditorController: WebPage.NavigationDeciding {
+    func decidePolicy(for action: WebPage.NavigationAction, preferences: inout WebPage.NavigationPreferences) async -> WKNavigationActionPolicy {
+        guard let url = action.request.url else {
+            return .allow
+        }
 
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard let message = EditorJSMessage(message: message) else {
-            return NSLog("Unsupported message: \(message.body)")
+        if action.navigationType == .linkActivated {
+            // Open the request in OS browser
+            await UIApplication.shared.open(url)
+            return .cancel
         }
-        MainActor.assumeIsolated {
-            delegate?.controller(self, didReceiveMessage: message)
-        }
+
+        return .allow
     }
 }

@@ -5,13 +5,15 @@ let editorURL: URL? = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"
 
 struct ContentView: View {
 
+    @AppStorage("UseSwiftUIView") var useSwiftUI: Bool = false
+
     let remoteEditorConfigurations: [EditorConfiguration] = [.template]
 
     var body: some View {
         List {
             Section {
                 NavigationLink {
-                    EditorView(configuration: .default)
+                    EditorView(configuration: .default, useSwiftUI: useSwiftUI)
                 } label: {
                     Text("Bundled Editor")
                 }
@@ -20,7 +22,7 @@ struct ContentView: View {
             Section {
                 ForEach(remoteEditorConfigurations, id: \.siteURL) { configuration in
                     NavigationLink {
-                        EditorView(configuration: configuration)
+                        EditorView(configuration: configuration, useSwiftUI: useSwiftUI)
                     } label: {
                         Text(URL(string: configuration.siteURL)?.host ?? configuration.siteURL)
                     }
@@ -37,6 +39,10 @@ struct ContentView: View {
                 } else {
                     Text("Note: The editor is backed by the compiled web app created by `make build`.")
                 }
+            }
+
+            Section("Configuration") {
+                Toggle(isOn: $useSwiftUI) { Text("Use SwiftUI WebView") }
             }
         }
         .toolbar {
@@ -57,7 +63,6 @@ struct ContentView: View {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-
             }
         }
     }

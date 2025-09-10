@@ -2,14 +2,11 @@ import SwiftUI
 import GutenbergKit
 
 struct EditorView: View {
-    private let configuration: EditorConfiguration
-
-    init(configuration: EditorConfiguration) {
-        self.configuration = configuration
-    }
+    let configuration: EditorConfiguration
+    let useSwiftUI: Bool
 
     var body: some View {
-        _EditorView(configuration: configuration)
+        editorView
             .toolbar {
                 ToolbarItemGroup(placement: .topBarLeading) {
                     Button(action: {}, label: {
@@ -33,6 +30,19 @@ struct EditorView: View {
                     moreMenu
                 }
             }
+    }
+
+    @ViewBuilder
+    var editorView: some View {
+        if #available(iOS 26.0, *) {
+            if useSwiftUI {
+                GutenbergEditor(configuration: configuration)
+            } else {
+                _EditorView(configuration: configuration)
+            }
+        } else {
+            _EditorView(configuration: configuration)
+        }
     }
 
     private var moreMenu: some View {
@@ -96,6 +106,6 @@ private struct _EditorView: UIViewControllerRepresentable {
 
 #Preview {
     NavigationStack {
-        EditorView(configuration: .default)
+        EditorView(configuration: .default, useSwiftUI: false)
     }
 }
