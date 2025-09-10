@@ -245,7 +245,11 @@ struct EditorAssetsMainifest: Codable {
         for script in try document.select("script[src]") {
             if let src = try? script.attr("src") {
                 let link = Self.resolveAssetLink(src, defaultScheme: defaultScheme)
+                #if canImport(UIKit)
                 let newLink = CachedAssetSchemeHandler.cachedURL(forWebLink: link) ?? link
+                #else
+                let newLink = link
+                #endif
                 try script.attr("src", newLink)
             }
         }
@@ -268,7 +272,11 @@ struct EditorAssetsMainifest: Codable {
         for stylesheet in try document.select(#"link[rel="stylesheet"][href]"#) {
             if let href = try? stylesheet.attr("href") {
                 let link = Self.resolveAssetLink(href, defaultScheme: defaultScheme)
+                #if canImport(UIKit)
                 let newLink = CachedAssetSchemeHandler.cachedURL(forWebLink: link) ?? link
+                #else
+                let newLink = link
+                #endif
                 try stylesheet.attr("href", newLink)
             }
         }

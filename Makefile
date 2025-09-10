@@ -47,6 +47,9 @@ lint-js: npm-dependencies
 test-js: npm-dependencies
 	npm run test -- run
 
+lint-swift:
+	swift package plugin swiftlint
+
 local-android-library: build
 	echo "--- :android: Building Library"
 	./android/gradlew -p ./android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3

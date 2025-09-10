@@ -30,9 +30,15 @@ struct EditorManifestTests {
             #expect(link.hasPrefix("http://"))
         }
 
+        #if canImport(UIKit)
         for link in try forEditor.parseAssetLinks(defaultScheme: nil) {
             #expect(link.hasPrefix("gbk-cache-http://"))
         }
+        #else
+        for link in try forEditor.parseAssetLinks(defaultScheme: nil) {
+            #expect(link.hasPrefix("http://"))
+        }
+        #endif
     }
 
     @Test

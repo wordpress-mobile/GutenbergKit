@@ -1,8 +1,10 @@
-import UIKit
 @preconcurrency import WebKit
 import SwiftUI
 import Combine
 import CryptoKit
+
+#if canImport(UIKit)
+import UIKit
 
 @MainActor
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
@@ -121,7 +123,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func loadEditor() {
-        if configuration.plugins {
+        if configuration.shouldUsePlugins {
             webView.configuration.userContentController.addScriptMessageHandler(
                 EditorAssetsProvider(library: assetsLibrary),
                 contentWorld: .page,
@@ -143,37 +145,29 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func getEditorConfiguration() -> WKUserScript {
-        let escapedTitle = configuration.title.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
-        let escapedContent = configuration.content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
 
-        // Convert editor settings to JSON string if available
-        var editorSettingsJS = "undefined"
-        if let settings = configuration.editorSettings {
-            do {
-                let jsonData = try JSONSerialization.data(withJSONObject: settings, options: [])
-                if let jsonString = String(data: jsonData, encoding: .utf8) {
-                    editorSettingsJS = jsonString
-                }
-            } catch {
-                NSLog("Failed to serialize editor settings: \(error)")
-            }
-        }
+        // Generate JavaScript globals
+        let globalsJS = configuration.webViewGlobals.map { global in
+            "window[\"\(global.name)\"] = \(global.value.toJavaScript());"
+        }.joined(separator: "\n")
 
         let jsCode = """
+        \(globalsJS)
+
         window.GBKit = {
             siteURL: '\(configuration.siteURL)',
             siteApiRoot: '\(configuration.siteApiRoot)',
             siteApiNamespace: \(Array(configuration.siteApiNamespace)),
             namespaceExcludedPaths: \(Array(configuration.namespaceExcludedPaths)),
             authHeader: '\(configuration.authHeader)',
-            themeStyles: \(configuration.themeStyles),
-            hideTitle: \(configuration.hideTitle),
-            editorSettings: \(editorSettingsJS),
+            themeStyles: \(configuration.shouldUseThemeStyles),
+            hideTitle: \(configuration.shouldHideTitle),
+            editorSettings: \(configuration.editorSettingsJSON),
             locale: '\(configuration.locale)',
             post: {
                 id: \(configuration.postID ?? -1),
-                title: '\(escapedTitle)',
-                content: '\(escapedContent)'
+                title: '\(configuration.escapedTitle)',
+                content: '\(configuration.escapedContent)'
             },
         };
 
@@ -423,3 +417,6 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
         }
     }
 }
+
+
+#endif

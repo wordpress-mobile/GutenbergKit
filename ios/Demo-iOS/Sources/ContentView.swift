@@ -66,20 +66,20 @@ struct ContentView: View {
 private extension EditorConfiguration {
 
     static var template: Self {
-        var configuration = EditorConfiguration.default
-
-        #warning("1. Update the property values below")
+        #warning("1. Update the siteURL and authHeader values below")
         #warning("2. Install the Jetpack plugin to the site")
-        configuration.siteURL = "https://modify-me.com"
-        configuration.authHeader = "Insert the Authorization header value here"
+        let siteUrl: String = "https://modify-me.com"
+        let authHeader: String = "Insert the Authorization header value here"
+        let siteApiRoot: String = "\(siteUrl)/wp-json/"
 
-        // DO NOT CHANGE the properties below
-        configuration.siteApiRoot = "\(configuration.siteURL)/wp-json/"
-        configuration.editorAssetsEndpoint = URL(string: configuration.siteApiRoot)!.appendingPathComponent("wpcom/v2/editor-assets")
-        // The `plugins: true` is necessary for the editor to use 'remote.html'
-        configuration.plugins = true
+        let configuration = EditorConfigurationBuilder()
+            .setSiteUrl(siteUrl)
+            .setAuthHeader(authHeader)
+            .setSiteApiRoot(siteApiRoot)
+            .setEditorAssetsEndpoint(URL(string: siteApiRoot)!.appendingPathComponent("wpcom/v2/editor-assets"))
+            .setShouldUsePlugins(true)
 
-        return configuration
+        return configuration.build()
     }
 
 }

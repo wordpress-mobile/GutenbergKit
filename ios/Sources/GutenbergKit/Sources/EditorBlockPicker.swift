@@ -1,5 +1,6 @@
 import SwiftUI
 
+#if canImport(UIKit)
 // TODO: Add search
 // TODO: Group these properly
 struct EditorBlockPicker: View {
@@ -217,3 +218,4 @@ struct EditorBlockPickerSection: Identifiable {
     let name: String
     let blockTypes: [EditorBlockType]
 }
+#endif
