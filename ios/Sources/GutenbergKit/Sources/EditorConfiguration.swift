@@ -55,7 +55,8 @@ public struct EditorConfiguration {
         webViewGlobals: [WebViewGlobal],
         editorSettings: EditorSettings,
         locale: String,
-        editorAssetsEndpoint: URL? = nil
+        editorAssetsEndpoint: URL? = nil,
+        cookies: [HTTPCookie] = []
     ) {
         self.title = title
         self.content = content
@@ -73,6 +74,7 @@ public struct EditorConfiguration {
         self.editorSettings = editorSettings
         self.locale = locale
         self.editorAssetsEndpoint = editorAssetsEndpoint
+        self.cookies = cookies
     }
 
     public func toBuilder() -> EditorConfigurationBuilder {

@@ -2,9 +2,6 @@ import Foundation
 import CryptoKit
 import SwiftSoup
 
-#if canImport(UIKit)
-import UIKit
-
 public actor EditorAssetsLibrary {
     enum ManifestError: Error {
         case unavailable
@@ -193,8 +190,6 @@ private extension String {
             .joined()
     }
 }
-
-#endif
 
 struct EditorAssetsMainifest: Codable {
     var scripts: String
