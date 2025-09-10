@@ -1,9 +1,4 @@
 /**
- * WordPress dependencies
- */
-import defaultEditorStyles from '@wordpress/block-editor/build-style/default-editor-styles.css?inline';
-
-/**
  * Internal dependencies
  */
 import Layout from '../components/layout';
@@ -14,6 +9,7 @@ import { store as preferencesStore } from '@wordpress/preferences';
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { unregisterDisallowedBlocks } from './blocks';
 import { getGBKit, getPost } from './bridge';
+import { getDefaultEditorSettings } from './editor-settings';
 
 /**
  * Configure editor settings and styles, and render the editor.
@@ -28,9 +24,7 @@ import { getGBKit, getPost } from './bridge';
 export function initializeEditor( { allowedBlockTypes } = {} ) {
 	const { themeStyles, hideTitle, editorSettings } = getGBKit();
 
-	const settings = editorSettings || {
-		defaultEditorStyles: [ { css: defaultEditorStyles } ],
-	};
+	const settings = editorSettings || getDefaultEditorSettings();
 	dispatch( editorStore ).updateEditorSettings( settings );
 
 	const preferenceDispatch = dispatch( preferencesStore );
