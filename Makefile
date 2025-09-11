@@ -1,9 +1,9 @@
-SIMULATOR_DESTINATION := OS=18.4,name=iPhone 16 Plus
+SIMULATOR_DESTINATION := arch=arm64,OS=18.4,name=iPhone 16 Plus
 
 define XCODEBUILD_CMD
 	@set -o pipefail && \
 		xcodebuild $(1) \
-		-scheme GutenbergKit \
+		-scheme GutenbergKit-Package \
 		-sdk iphonesimulator \
 		-destination '${SIMULATOR_DESTINATION}' \
 		| xcbeautify

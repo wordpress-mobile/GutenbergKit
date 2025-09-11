@@ -34,6 +34,9 @@ steps:
           queue: android
       plugins: *plugins
 
-    - label: ':swift: Test Swift Package'
+    - label: ':swift: Swift Simulator Tests'
       command: make test-swift-package
       plugins: *plugins
+
+    - label: ':swift: Test Swift Logic'
+      command: swift test
