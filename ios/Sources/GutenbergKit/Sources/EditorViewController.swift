@@ -21,6 +21,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     public weak var delegate: EditorViewControllerDelegate?
 
+    public var assetManifestParser: EditorAssetManifestParser?
+
     private var cancellables: [AnyCancellable] = []
 
     /// Warmup mode preloads resources into memory to make the UI transition seamless when displaying the editor for the first time

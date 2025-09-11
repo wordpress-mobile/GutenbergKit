@@ -38,6 +38,9 @@ public struct EditorConfiguration {
     // Cookies
     public let cookies: [HTTPCookie]
 
+    // Parses URLs out of the Asset Manifest HTML
+    public var assetManifestParser: EditorAssetManifestParser
+
     /// Deliberately non-public – consumers should use `EditorConfigurationBuilder` to construct a configuration
     init(
         title: String,
@@ -56,7 +59,8 @@ public struct EditorConfiguration {
         editorSettings: EditorSettings,
         locale: String,
         editorAssetsEndpoint: URL? = nil,
-        cookies: [HTTPCookie] = []
+        cookies: [HTTPCookie] = [],
+        assetManifestParser: EditorAssetManifestParser
     ) {
         self.title = title
         self.content = content
@@ -75,6 +79,7 @@ public struct EditorConfiguration {
         self.locale = locale
         self.editorAssetsEndpoint = editorAssetsEndpoint
         self.cookies = cookies
+        self.assetManifestParser = assetManifestParser
     }
 
     public func toBuilder() -> EditorConfigurationBuilder {
@@ -94,7 +99,9 @@ public struct EditorConfiguration {
             webViewGlobals: webViewGlobals,
             editorSettings: editorSettings,
             locale: locale,
-            editorAssetsEndpoint: editorAssetsEndpoint
+            editorAssetsEndpoint: editorAssetsEndpoint,
+            cookies: cookies,
+            assetManifestParser: assetManifestParser
         )
     }
 
@@ -112,7 +119,7 @@ public struct EditorConfiguration {
         return String(data: jsonData, encoding: .utf8) ?? "undefined"
     }
 
-    public static let `default` = EditorConfigurationBuilder().build()
+    public static var `default` = EditorConfigurationBuilder().build()
 }
 
 public struct EditorConfigurationBuilder {
@@ -132,6 +139,8 @@ public struct EditorConfigurationBuilder {
     private var editorSettings: EditorSettings
     private var locale: String
     private var editorAssetsEndpoint: URL?
+    private var cookies: [HTTPCookie]
+    private var assetManifestParser: EditorAssetManifestParser
 
     public init(
         title: String = "",
@@ -149,7 +158,9 @@ public struct EditorConfigurationBuilder {
         webViewGlobals: [WebViewGlobal] = [],
         editorSettings: EditorSettings = [:],
         locale: String = "en",
-        editorAssetsEndpoint: URL? = nil
+        editorAssetsEndpoint: URL? = nil,
+        cookies: [HTTPCookie] = [],
+        assetManifestParser: EditorAssetManifestParser = AssetManifestParserProvider.default
     ){
         self.title = title
         self.content = content
@@ -167,6 +178,8 @@ public struct EditorConfigurationBuilder {
         self.editorSettings = editorSettings
         self.locale = locale
         self.editorAssetsEndpoint = editorAssetsEndpoint
+        self.cookies = cookies
+        self.assetManifestParser = assetManifestParser
     }
 
     public func setTitle(_ title: String) -> EditorConfigurationBuilder {
@@ -265,6 +278,18 @@ public struct EditorConfigurationBuilder {
         return copy
     }
 
+    public func setCookies(_ cookies: [HTTPCookie]) -> EditorConfigurationBuilder {
+        var copy = self
+        copy.cookies = cookies
+        return copy
+    }
+
+    public func setEditorAssetManifestParser(_ manifestParser: EditorAssetManifestParser) -> EditorConfigurationBuilder {
+        var copy = self
+        copy.assetManifestParser = manifestParser
+        return copy
+    }
+
     public func build() -> EditorConfiguration {
         EditorConfiguration(
             title: title,
@@ -282,7 +307,9 @@ public struct EditorConfigurationBuilder {
             webViewGlobals: webViewGlobals,
             editorSettings: editorSettings,
             locale: locale,
-            editorAssetsEndpoint: editorAssetsEndpoint
+            editorAssetsEndpoint: editorAssetsEndpoint,
+            cookies: cookies,
+            assetManifestParser: assetManifestParser
         )
     }
 }

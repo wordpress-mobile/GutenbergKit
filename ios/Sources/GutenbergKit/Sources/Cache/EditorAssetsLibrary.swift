@@ -1,11 +1,11 @@
 import Foundation
 import CryptoKit
-import SwiftSoup
 
 public actor EditorAssetsLibrary {
     enum ManifestError: Error {
         case unavailable
         case invalidServerResponse
+        case invalidSiteUrl
     }
 
     let urlSession: URLSession
@@ -47,10 +47,14 @@ public actor EditorAssetsLibrary {
     /// - SeeAlso: `EditorAssetsLibrary.addAsset`
     func manifestContentForEditor() async throws -> Data {
         // For scheme-less links (i.e. '//stats.wp.com/w.js'), use the scheme in `siteURL`.
-        let siteURLScheme = URL(string: configuration.siteURL)?.scheme
+        guard let siteURLScheme = URL(string: configuration.siteURL)?.scheme else {
+            throw ManifestError.invalidSiteUrl
+        }
+
         let data = try await loadManifestContent()
-        let manifest = try JSONDecoder().decode(EditorAssetsMainifest.self, from: data)
-        return try manifest.renderForEditor(defaultScheme: siteURLScheme)
+        let manifest = try EditorAssetManifest(data: data)
+
+        return try JSONEncoder().encode(manifest.applyingUrlScheme(siteURLScheme, using: configuration.assetManifestParser))
     }
 
     /// Fetches all assets in the `EditorConfiguration.editorAssetsEndpoint` manifest and stores them on the device.
@@ -61,23 +65,19 @@ public actor EditorAssetsLibrary {
         let siteURLScheme = URL(string: configuration.siteURL)?.scheme
 
         let data = try await loadManifestContent()
-        let manifest = try JSONDecoder().decode(EditorAssetsMainifest.self, from: data)
-        let assetLinks = try manifest.parseAssetLinks(defaultScheme: siteURLScheme)
+        let manifest = try EditorAssetManifest(data: data)
+            .applyingUrlScheme(siteURLScheme, using: configuration.assetManifestParser)
+        let assetUrls = try manifest.getAllAssetUrls(using: configuration.assetManifestParser)
 
-        for link in assetLinks {
-            guard let url = URL(string: link) else {
-                NSLog("Malformed asset link: \(link)")
-                continue
-            }
-
+        for url in assetUrls {
             guard url.scheme == "http" || url.scheme == "https" else {
-                NSLog("Unexpected asset link: \(link)")
+                NSLog("Unexpected asset link: \(url)")
                 continue
             }
 
-            _ = try await cacheAsset(from: url)
+            try await cacheAsset(from: url)
         }
-        NSLog("\(assetLinks.count) resources processed.")
+        NSLog("\(assetUrls.count) resources processed.")
     }
 
     /// Fetches one asset (JavaScript or stylesheet) and caches its content on the device.
@@ -85,6 +85,7 @@ public actor EditorAssetsLibrary {
     /// - Parameters:
     ///   - httpURL: The javascript or css URL.
     ///   - webViewURL: The corresponding URL requested by web view, which should the "GBK cache prefix" (`gbk-cache-https://`)
+    @discardableResult
     func cacheAsset(from httpURL: URL, webViewURL: URL? = nil) async throws -> (URLResponse, Data) {
         // The Web Inspector automatically requests ".js.map" files, we'll support it here for debugging purpose.
         let supportedResourceSuffixes = [".js", ".css", ".js.map"]
@@ -191,10 +192,27 @@ private extension String {
     }
 }
 
-struct EditorAssetsMainifest: Codable {
-    var scripts: String
-    var styles: String
-    var allowedBlockTypes: [String]
+public struct EditorAssetSchemeResolver {
+    // Takes a URL string and applies the given scheme to it.
+    //
+    // If there is no scheme present, the `defaultScheme` will be applied to it. If no `defaultScheme` is
+    // provided, `https` will be used.
+    public static func resolveSchemeFor(_ link: String, defaultScheme: String?) -> String {
+        if link.starts(with: "//") {
+            return "\(defaultScheme ?? "https"):\(link)"
+        }
+
+        return link
+    }
+}
+
+
+// An object representing the JSON response we receive from the server
+//
+public struct EditorAssetManifest: Codable {
+    public let scripts: String
+    public let styles: String
+    public let allowedBlockTypes: [String]
 
     enum CodingKeys: String, CodingKey {
         case scripts
@@ -202,94 +220,78 @@ struct EditorAssetsMainifest: Codable {
         case allowedBlockTypes = "allowed_block_types"
     }
 
-    func parseAssetLinks(defaultScheme: String?) throws -> [String] {
-        let html = """
-            <html>
-                <head>
-                \(scripts)
-                \(styles)
-                </head>
-                <body></body>
-            </html>
-            """
-        let document = try SwiftSoup.parse(html)
-
-        var assetLinks: [String] = []
-        assetLinks += try document.select("script[src]").map {
-            Self.resolveAssetLink(try $0.attr("src"), defaultScheme: defaultScheme)
-        }
-        assetLinks += try document.select(#"link[rel="stylesheet"][href]"#).map {
-            Self.resolveAssetLink(try $0.attr("href"), defaultScheme: defaultScheme)
-        }
-        return assetLinks
+    init(data: Data) throws {
+        self = try JSONDecoder().decode(EditorAssetManifest.self, from: data)
     }
 
-    func renderForEditor(defaultScheme: String?) throws -> Data {
-        var rendered = self
-        rendered.scripts = try Self.renderForEditor(scripts: self.scripts, defaultScheme: defaultScheme)
-        rendered.styles = try Self.renderForEditor(styles: self.styles, defaultScheme: defaultScheme)
-        return try JSONEncoder().encode(rendered)
+    init(scripts: String, styles: String, allowedBlockTypes: [String]) {
+        self.scripts = scripts
+        self.styles = styles
+        self.allowedBlockTypes = allowedBlockTypes
     }
 
-    private static func renderForEditor(scripts: String, defaultScheme: String?) throws -> String {
-        let html = """
-            <html>
-                <head>
-                \(scripts)
-                </head>
-                <body></body>
-            </html>
-            """
-        let document = try SwiftSoup.parse(html)
-
-        for script in try document.select("script[src]") {
-            if let src = try? script.attr("src") {
-                let link = Self.resolveAssetLink(src, defaultScheme: defaultScheme)
-                #if canImport(UIKit)
-                let newLink = CachedAssetSchemeHandler.cachedURL(forWebLink: link) ?? link
-                #else
-                let newLink = link
-                #endif
-                try script.attr("src", newLink)
-            }
-        }
-
-        let head = document.head()!
-        return try head.html()
+    func getScriptUrlStrings(using parser: EditorAssetManifestParser) throws -> [String] {
+        try parser.extractScriptURLs(from: self.scripts)
     }
 
-    private static func renderForEditor(styles: String, defaultScheme: String?) throws -> String {
-        let html = """
-            <html>
-                <head>
-                \(styles)
-                </head>
-                <body></body>
-            </html>
-            """
-        let document = try SwiftSoup.parse(html)
-
-        for stylesheet in try document.select(#"link[rel="stylesheet"][href]"#) {
-            if let href = try? stylesheet.attr("href") {
-                let link = Self.resolveAssetLink(href, defaultScheme: defaultScheme)
-                #if canImport(UIKit)
-                let newLink = CachedAssetSchemeHandler.cachedURL(forWebLink: link) ?? link
-                #else
-                let newLink = link
-                #endif
-                try stylesheet.attr("href", newLink)
-            }
-        }
-
-        let head = document.head()!
-        return try head.html()
+    func getScriptUrls(using parser: EditorAssetManifestParser) throws -> [URL] {
+        try getScriptUrlStrings(using: parser).compactMap(URL.init)
     }
 
-    private static func resolveAssetLink(_ link: String, defaultScheme: String?) -> String {
-        if link.starts(with: "//") {
-            return "\(defaultScheme ?? "https"):\(link)"
+    func getStyleUrlStrings(using parser: EditorAssetManifestParser) throws -> [String] {
+        try parser.extractStyleURLs(from: self.styles)
+    }
+
+    func getStyleUrls(using parser: EditorAssetManifestParser) throws -> [URL] {
+        try getStyleUrlStrings(using: parser).compactMap(URL.init)
+    }
+
+    func getAllAssetUrls(applyingDefaultScheme scheme: String? = nil, using parser: EditorAssetManifestParser) throws -> [URL] {
+        let scriptUrls = try self.getScriptUrls(using: parser)
+        let styleUrls = try self.getStyleUrls(using: parser)
+
+        return scriptUrls + styleUrls
+    }
+
+    func applyingUrlScheme(_ newScheme: String?, using manifestParser: EditorAssetManifestParser) throws -> Self {
+        var mutableStyles = self.styles
+        var mutableScripts = self.scripts
+
+        for rawLink in try getStyleUrlStrings(using: manifestParser) {
+            let resolvedLink = EditorAssetSchemeResolver.resolveSchemeFor(rawLink, defaultScheme: newScheme)
+            mutableStyles = mutableStyles.replacingOccurrences(of: rawLink, with: resolvedLink)
         }
 
-        return link
+        for rawLink in try getScriptUrlStrings(using: manifestParser) {
+            let resolvedLink = EditorAssetSchemeResolver.resolveSchemeFor(rawLink, defaultScheme: newScheme)
+            mutableScripts = mutableScripts.replacingOccurrences(of: rawLink, with: resolvedLink)
+        }
+
+        return EditorAssetManifest(
+            scripts: mutableScripts,
+            styles: mutableStyles,
+            allowedBlockTypes: self.allowedBlockTypes
+        )
+    }
+
+    func resolvingCachedUrls(using manifestParser: EditorAssetManifestParser) throws -> Self {
+        var mutableStyles = self.styles
+        var mutableScripts = self.scripts
+
+        for url in try getStyleUrls(using: manifestParser) {
+            let cachedLink = CachedAssetSchemeHandler.cachedURL(for: url)
+            mutableStyles = mutableStyles.replacingOccurrences(of: url.absoluteString, with: cachedLink.absoluteString)
+        }
+
+        for url in try getScriptUrls(using: manifestParser) {
+            let cachedLink = CachedAssetSchemeHandler.cachedURL(for: url)
+            mutableScripts = mutableScripts.replacingOccurrences(of: url.absoluteString, with: cachedLink.absoluteString)
+        }
+
+        return EditorAssetManifest(
+            scripts: mutableScripts,
+            styles: mutableStyles,
+            allowedBlockTypes: self.allowedBlockTypes
+        )
     }
 }

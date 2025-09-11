@@ -5,48 +5,49 @@ import Testing
 @Suite("Manifest Tests")
 struct EditorManifestTests {
 
+    let parser: EditorAssetManifestParser = AssetManifestParserProvider.default
+
     @Test
     func parseAssetLinks() throws {
         let json = try json(named: "manifest-test-case-1")
-        let manifest = try JSONDecoder().decode(EditorAssetsMainifest.self, from: json)
+        let manifest = try EditorAssetManifest(data: json)
 
-        let links = try manifest.parseAssetLinks(defaultScheme: nil)
-        let scripts = links.filter { $0.contains(".js") }
-        let styles = links.filter { $0.contains(".css") }
+        let scripts = try manifest.getScriptUrls(using: parser)
+        let styles = try manifest.getStyleUrls(using: parser)
 
-        #expect(scripts.count == 79)
+        #expect(scripts.count == 80)
         #expect(styles.count == 22)
     }
 
     @Test
     func editorWebViewGetsCachedLinks() throws {
         let json = try json(named: "manifest-test-case-1")
-        let original = try JSONDecoder().decode(EditorAssetsMainifest.self, from: json)
-        let forEditor = try JSONDecoder().decode(EditorAssetsMainifest.self, from: original.renderForEditor(defaultScheme: nil))
+        let original = try EditorAssetManifest(data: json)
+        let forEditor = try original.resolvingCachedUrls(using: parser)
 
-        #expect(try original.parseAssetLinks(defaultScheme: nil).count == forEditor.parseAssetLinks(defaultScheme: nil).count)
+        let originalAssetUrls = try original.getAllAssetUrls(using: parser)
+        let editorAssetUrls = try forEditor.getAllAssetUrls(using: parser)
 
-        for link in try original.parseAssetLinks(defaultScheme: nil) {
-            #expect(link.hasPrefix("http://"))
+        #expect(originalAssetUrls.count == editorAssetUrls.count)
+
+        for link in originalAssetUrls {
+            #expect(link.scheme == "http")
         }
 
-        #if canImport(UIKit)
-        for link in try forEditor.parseAssetLinks(defaultScheme: nil) {
-            #expect(link.hasPrefix("gbk-cache-http://"))
+        for link in editorAssetUrls {
+            #expect(link.scheme == "gbk-cache-http")
         }
-        #else
-        for link in try forEditor.parseAssetLinks(defaultScheme: nil) {
-            #expect(link.hasPrefix("http://"))
-        }
-        #endif
     }
 
     @Test
     func useDefaultScheme() throws {
         let scriptHTML = #"<script src="//w.org/lib.js"></script>"#
-        let manifest = EditorAssetsMainifest(scripts: scriptHTML, styles: "", allowedBlockTypes: [])
-        #expect(try manifest.parseAssetLinks(defaultScheme: "http") == ["http://w.org/lib.js"])
-        #expect(try manifest.parseAssetLinks(defaultScheme: "https") == ["https://w.org/lib.js"])
+        let defaultManifest = EditorAssetManifest(scripts: scriptHTML, styles: "", allowedBlockTypes: [])
+        let httpManifest = try defaultManifest.applyingUrlScheme("http", using: parser)
+        let httpsManifest = try defaultManifest.applyingUrlScheme("https", using: parser)
+
+        #expect(try httpManifest.getScriptUrlStrings(using: parser) == ["http://w.org/lib.js"])
+        #expect(try httpsManifest.getScriptUrlStrings(using: parser) == ["https://w.org/lib.js"])
     }
 
     private func json(named name: String) throws -> Data {

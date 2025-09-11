@@ -16,11 +16,14 @@ class CachedAssetSchemeHandler: NSObject, WKURLSchemeHandler {
         return components.url
     }
 
-    nonisolated static func cachedURL(forWebLink link: String) -> String? {
-        if link.starts(with: "http://") || link.starts(with: "https://") {
-            return cachedURLSchemePrefix + link
+    nonisolated static func cachedURL(for url: URL) -> URL {
+        if url.scheme == "http" || url.scheme == "https" {
+            var components = URLComponents(string: url.absoluteString)!
+            components.scheme = cachedURLSchemePrefix + (url.scheme ?? "")
+            return components.url!
         }
-        return nil
+
+        return url
     }
 
     let worker: Worker
@@ -105,4 +108,3 @@ class CachedAssetSchemeHandler: NSObject, WKURLSchemeHandler {
         }
     }
 }
-

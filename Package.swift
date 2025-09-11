@@ -7,7 +7,8 @@ let package = Package(
     name: "GutenbergKit",
     platforms: [.iOS(.v15), .macOS(.v14)],
     products: [
-        .library(name: "GutenbergKit", targets: ["GutenbergKit"])
+        .library(name: "GutenbergKit", targets: ["GutenbergKit"]),
+        .library(name: "GutenbergKitAssetManifestParser", targets: ["GutenbergKitAssetManifestParser"])
     ],
     dependencies: [
         .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.5"),
@@ -15,19 +16,35 @@ let package = Package(
     targets: [
         .target(
             name: "GutenbergKit",
-            dependencies: ["SwiftSoup"],
+            dependencies: [],
             path: "ios/Sources/GutenbergKit",
             exclude: [],
             resources: [.copy("Gutenberg")]
         ),
+        .target(
+            name: "GutenbergKitAssetManifestParser",
+            dependencies: ["GutenbergKit", "SwiftSoup"],
+            path: "ios/Sources/GutenbergKitAssetManifestParser",
+            exclude: [],
+            resources: []
+        ),
         .testTarget(
             name: "GutenbergKitTests",
             dependencies: ["GutenbergKit"],
-            path: "ios/Tests",
+            path: "ios/Tests/GutenbergKitTests",
             exclude: [],
             resources: [
-                .copy("GutenbergKitTests/Resources/manifest-test-case-1.json")
+                .copy("Resources/manifest-test-case-1.json")
             ]
         ),
+        .testTarget(
+            name: "GutenbergKitAssetManifestParserTests",
+            dependencies: ["GutenbergKitAssetManifestParser"],
+            path: "ios/Tests/GutenbergKitAssetManifestParserTests",
+            exclude: [],
+            resources: [
+                .copy("../GutenbergKitTests/Resources/manifest-test-case-1.json")
+            ]
+        )
     ]
 )
