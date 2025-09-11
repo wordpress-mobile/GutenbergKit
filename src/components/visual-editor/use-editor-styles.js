@@ -36,8 +36,15 @@ export function useEditorStyles() {
 	}, [] );
 
 	return useMemo( () => {
+		const presetStyles =
+			editorSettings.styles?.filter(
+				( style ) =>
+					style.__unstableType && style.__unstableType !== 'theme'
+			) ?? [];
+
 		const defaultEditorStyles = [
 			...( editorSettings?.defaultEditorStyles ?? [] ),
+			...presetStyles,
 		];
 
 		if ( ! editorSettings.disableLayoutStyles && ! hasThemeStyleSupport ) {
