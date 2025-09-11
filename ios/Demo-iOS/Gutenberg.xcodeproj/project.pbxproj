@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 60;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -13,6 +13,8 @@
 		0CE8E78E2C339B0600B9DC67 /* GutenbergApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CE8E7872C339B0600B9DC67 /* GutenbergApp.swift */; };
 		0CE8E78F2C339B0600B9DC67 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0CE8E7892C339B0600B9DC67 /* Preview Assets.xcassets */; };
 		0CF6E04C2BEFF60E00EDEE8A /* GutenbergKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0CF6E04B2BEFF60E00EDEE8A /* GutenbergKit */; };
+		24CA22122E72516A007E32F8 /* GutenbergKit in Frameworks */ = {isa = PBXBuildFile; productRef = 24CA22112E72516A007E32F8 /* GutenbergKit */; };
+		24CA22142E72516A007E32F8 /* GutenbergKitAssetManifestParser in Frameworks */ = {isa = PBXBuildFile; productRef = 24CA22132E72516A007E32F8 /* GutenbergKitAssetManifestParser */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -22,7 +24,6 @@
 		0CE8E7862C339B0600B9DC67 /* EditorView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
 		0CE8E7872C339B0600B9DC67 /* GutenbergApp.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GutenbergApp.swift; sourceTree = "<group>"; };
 		0CE8E7892C339B0600B9DC67 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
-		0CE8E7922C339B1B00B9DC67 /* GutenbergKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = GutenbergKit; path = ../..; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -31,6 +32,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				0CF6E04C2BEFF60E00EDEE8A /* GutenbergKit in Frameworks */,
+				24CA22142E72516A007E32F8 /* GutenbergKitAssetManifestParser in Frameworks */,
+				24CA22122E72516A007E32F8 /* GutenbergKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -40,7 +43,6 @@
 		0C4F59822BEFF4970028BD96 = {
 			isa = PBXGroup;
 			children = (
-				0CE8E7922C339B1B00B9DC67 /* GutenbergKit */,
 				0CE8E7882C339B0600B9DC67 /* Sources */,
 				0C83424D2C339B7F00CAA762 /* Resources */,
 				0CE8E78A2C339B0600B9DC67 /* PreviewContent */,
@@ -108,6 +110,8 @@
 			name = Gutenberg;
 			packageProductDependencies = (
 				0CF6E04B2BEFF60E00EDEE8A /* GutenbergKit */,
+				24CA22112E72516A007E32F8 /* GutenbergKit */,
+				24CA22132E72516A007E32F8 /* GutenbergKitAssetManifestParser */,
 			);
 			productName = Gutenberg;
 			productReference = 0C4F598B2BEFF4970028BD96 /* Gutenberg.app */;
@@ -137,6 +141,9 @@
 				Base,
 			);
 			mainGroup = 0C4F59822BEFF4970028BD96;
+			packageReferences = (
+				24CA22102E72516A007E32F8 /* XCLocalSwiftPackageReference "../../../GutenbergKit" */,
+			);
 			productRefGroup = 0C4F598C2BEFF4970028BD96 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -377,10 +384,25 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		24CA22102E72516A007E32F8 /* XCLocalSwiftPackageReference "../../../GutenbergKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../../GutenbergKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		0CF6E04B2BEFF60E00EDEE8A /* GutenbergKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = GutenbergKit;
+		};
+		24CA22112E72516A007E32F8 /* GutenbergKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = GutenbergKit;
+		};
+		24CA22132E72516A007E32F8 /* GutenbergKitAssetManifestParser */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = GutenbergKitAssetManifestParser;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

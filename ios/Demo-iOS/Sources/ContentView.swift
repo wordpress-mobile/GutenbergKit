@@ -1,5 +1,6 @@
 import SwiftUI
 import GutenbergKit
+import GutenbergKitAssetManifestParser
 
 let editorURL: URL? = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init)
 
@@ -78,6 +79,7 @@ private extension EditorConfiguration {
             .setSiteApiRoot(siteApiRoot)
             .setEditorAssetsEndpoint(URL(string: siteApiRoot)!.appendingPathComponent("wpcom/v2/editor-assets"))
             .setShouldUsePlugins(true)
+            .setEditorAssetManifestParser(GutenbergKitAssetManifestParser())
 
         return configuration.build()
     }
