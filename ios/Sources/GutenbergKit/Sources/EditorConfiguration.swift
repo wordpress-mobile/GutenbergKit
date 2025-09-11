@@ -27,7 +27,7 @@ public struct EditorConfiguration {
     /// Authorization header
     public let authHeader: String
     /// Raw block editor settings from the WordPress REST API
-    public let editorSettings: EditorSettings
+    public let editorSettings: String
     /// Locale used for translations
     public let locale: String
     /// Endpoint for loading editor assets, used when enabling `shouldUsePlugins`
@@ -50,7 +50,7 @@ public struct EditorConfiguration {
         siteApiNamespace: [String],
         namespaceExcludedPaths: [String],
         authHeader: String,
-        editorSettings: EditorSettings,
+        editorSettings: String,
         locale: String,
         editorAssetsEndpoint: URL? = nil,
         cookies: [HTTPCookie] = []
@@ -101,12 +101,6 @@ public struct EditorConfiguration {
         content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
     }
 
-    var editorSettingsJSON: String {
-        // `editorSettings` values are always `encodable` so this should never fail
-        let jsonData = try! JSONSerialization.data(withJSONObject: editorSettings, options: [])
-        return String(data: jsonData, encoding: .utf8) ?? "undefined"
-    }
-
     public static let `default` = EditorConfigurationBuilder().build()
 }
 
@@ -123,7 +117,7 @@ public struct EditorConfigurationBuilder {
     private var siteApiNamespace: [String]
     private var namespaceExcludedPaths: [String]
     private var authHeader: String
-    private var editorSettings: EditorSettings
+    private var editorSettings: String
     private var locale: String
     private var editorAssetsEndpoint: URL?
 
@@ -140,7 +134,7 @@ public struct EditorConfigurationBuilder {
         siteApiNamespace: [String] = [],
         namespaceExcludedPaths: [String] = [],
         authHeader: String = "",
-        editorSettings: EditorSettings = [:],
+        editorSettings: String = "undefined",
         locale: String = "en",
         editorAssetsEndpoint: URL? = nil
     ){
@@ -233,7 +227,7 @@ public struct EditorConfigurationBuilder {
         return copy
     }
 
-    public func setEditorSettings(_ editorSettings: EditorSettings) -> EditorConfigurationBuilder {
+    public func setEditorSettings(_ editorSettings: String) -> EditorConfigurationBuilder {
         var copy = self
         copy.editorSettings = editorSettings
         return copy

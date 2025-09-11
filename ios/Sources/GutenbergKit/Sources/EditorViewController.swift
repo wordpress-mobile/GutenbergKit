@@ -146,13 +146,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     private func getEditorConfiguration() -> WKUserScript {
 
-        // Generate JavaScript globals
-        let globalsJS = configuration.webViewGlobals.map { global in
-            "window[\"\(global.name)\"] = \(global.value.toJavaScript());"
-        }.joined(separator: "\n")
-
         let jsCode = """
-        \(globalsJS)
 
         window.GBKit = {
             siteURL: '\(configuration.siteURL)',
@@ -162,7 +156,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             authHeader: '\(configuration.authHeader)',
             themeStyles: \(configuration.shouldUseThemeStyles),
             hideTitle: \(configuration.shouldHideTitle),
-            editorSettings: \(configuration.editorSettingsJSON),
+            editorSettings: \(configuration.editorSettings),
             locale: '\(configuration.locale)',
             post: {
                 id: \(configuration.postID ?? -1),
