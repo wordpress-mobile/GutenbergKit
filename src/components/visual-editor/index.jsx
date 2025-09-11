@@ -59,7 +59,7 @@ function VisualEditor( { hideTitle } ) {
 
 	const {
 		renderingMode,
-		hasThemeStyleSupport,
+		hasThemeStyles,
 		themeHasDisabledLayoutStyles,
 		themeSupportsLayout,
 		hasRootPaddingAwareAlignments,
@@ -68,11 +68,14 @@ function VisualEditor( { hideTitle } ) {
 		const _renderingMode = getRenderingMode();
 		const { getSettings } = unlock( select( blockEditorStore ) );
 		const _settings = getSettings();
+		// Implies editor settings provided theme styles via the REST API.
+		const settingsHasStyles = _settings.styles?.length > 0;
 
 		return {
 			renderingMode: _renderingMode,
-			hasThemeStyleSupport:
-				select( editPostStore ).isFeatureActive( 'themeStyles' ),
+			hasThemeStyles:
+				select( editPostStore ).isFeatureActive( 'themeStyles' ) &&
+				settingsHasStyles,
 			themeSupportsLayout: _settings.supportsLayout,
 			themeHasDisabledLayoutStyles: _settings.disableLayoutStyles,
 			hasRootPaddingAwareAlignments:
@@ -86,12 +89,11 @@ function VisualEditor( { hideTitle } ) {
 		// context.
 		commonStyles,
 		// Add sensible default styles if theme styles are not present.
-		hasThemeStyleSupport ? '' : defaultThemeStyles
+		hasThemeStyles ? '' : defaultThemeStyles
 	);
 
 	const editorClasses = clsx( 'gutenberg-kit-visual-editor', {
-		'has-root-padding':
-			! hasThemeStyleSupport || ! hasRootPaddingAwareAlignments,
+		'has-root-padding': ! hasThemeStyles || ! hasRootPaddingAwareAlignments,
 	} );
 
 	const titleClasses = clsx(
@@ -99,7 +101,7 @@ function VisualEditor( { hideTitle } ) {
 		'editor-visual-editor__post-title-wrapper',
 		{
 			'has-global-padding':
-				hasThemeStyleSupport && hasRootPaddingAwareAlignments,
+				hasThemeStyles && hasRootPaddingAwareAlignments,
 		}
 	);
 
@@ -126,7 +128,7 @@ function VisualEditor( { hideTitle } ) {
 		{
 			'is-layout-flow': ! themeSupportsLayout,
 			'has-global-padding':
-				hasThemeStyleSupport && hasRootPaddingAwareAlignments,
+				hasThemeStyles && hasRootPaddingAwareAlignments,
 		}
 	);
 
