@@ -11,11 +11,6 @@ import { useMemo } from '@wordpress/element';
  * Internal dependencies
  */
 import { unlock } from '../../lock-unlock';
-// The Vite query parameter breaks the linter's import resolution
-// eslint-disable-next-line import/no-unresolved
-import defaultThemeStyles from './default-theme-styles.scss?inline';
-// eslint-disable-next-line import/no-unresolved
-import commonStyles from './wp-common-styles.scss?inline';
 
 const { getLayoutStyles } = unlock( blockEditorPrivateApis );
 
@@ -72,13 +67,6 @@ export function useEditorStyles( ...additionalStyles ) {
 			} );
 		}
 
-		// Add sensible default styles if theme styles are not present.
-		if ( ! hasThemeStyles ) {
-			defaultEditorStyles.push( {
-				css: defaultThemeStyles,
-			} );
-		}
-
 		const baseStyles = hasThemeStyles
 			? editorSettings.styles ?? []
 			: defaultEditorStyles;
@@ -87,10 +75,7 @@ export function useEditorStyles( ...additionalStyles ) {
 			return [ ...baseStyles, { css: addedStyles } ];
 		}
 
-		// `commonStyles` represent manually added notable styles that are missing.
-		// The styles likely absent due to them being injected by the WP Admin
-		// context.
-		return [ { css: commonStyles }, ...baseStyles ];
+		return baseStyles;
 	}, [
 		editorSettings.defaultEditorStyles,
 		editorSettings.disableLayoutStyles,
