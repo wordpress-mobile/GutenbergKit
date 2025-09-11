@@ -26,8 +26,6 @@ public struct EditorConfiguration {
     public let namespaceExcludedPaths: [String]
     /// Authorization header
     public let authHeader: String
-    /// Global variables to be made available to the editor
-    public let webViewGlobals: [WebViewGlobal]
     /// Raw block editor settings from the WordPress REST API
     public let editorSettings: EditorSettings
     /// Locale used for translations
@@ -52,7 +50,6 @@ public struct EditorConfiguration {
         siteApiNamespace: [String],
         namespaceExcludedPaths: [String],
         authHeader: String,
-        webViewGlobals: [WebViewGlobal],
         editorSettings: EditorSettings,
         locale: String,
         editorAssetsEndpoint: URL? = nil,
@@ -70,7 +67,6 @@ public struct EditorConfiguration {
         self.siteApiNamespace = siteApiNamespace
         self.namespaceExcludedPaths = namespaceExcludedPaths
         self.authHeader = authHeader
-        self.webViewGlobals = webViewGlobals
         self.editorSettings = editorSettings
         self.locale = locale
         self.editorAssetsEndpoint = editorAssetsEndpoint
@@ -91,7 +87,6 @@ public struct EditorConfiguration {
             siteApiNamespace: siteApiNamespace,
             namespaceExcludedPaths: namespaceExcludedPaths,
             authHeader: authHeader,
-            webViewGlobals: webViewGlobals,
             editorSettings: editorSettings,
             locale: locale,
             editorAssetsEndpoint: editorAssetsEndpoint
@@ -128,7 +123,6 @@ public struct EditorConfigurationBuilder {
     private var siteApiNamespace: [String]
     private var namespaceExcludedPaths: [String]
     private var authHeader: String
-    private var webViewGlobals: [WebViewGlobal]
     private var editorSettings: EditorSettings
     private var locale: String
     private var editorAssetsEndpoint: URL?
@@ -146,7 +140,6 @@ public struct EditorConfigurationBuilder {
         siteApiNamespace: [String] = [],
         namespaceExcludedPaths: [String] = [],
         authHeader: String = "",
-        webViewGlobals: [WebViewGlobal] = [],
         editorSettings: EditorSettings = [:],
         locale: String = "en",
         editorAssetsEndpoint: URL? = nil
@@ -163,7 +156,6 @@ public struct EditorConfigurationBuilder {
         self.siteApiNamespace = siteApiNamespace
         self.namespaceExcludedPaths = namespaceExcludedPaths
         self.authHeader = authHeader
-        self.webViewGlobals = webViewGlobals
         self.editorSettings = editorSettings
         self.locale = locale
         self.editorAssetsEndpoint = editorAssetsEndpoint
@@ -241,12 +233,6 @@ public struct EditorConfigurationBuilder {
         return copy
     }
 
-    public func setWebViewGlobals(_ webViewGlobals: [WebViewGlobal]) -> EditorConfigurationBuilder {
-        var copy = self
-        copy.webViewGlobals = webViewGlobals
-        return copy
-    }
-
     public func setEditorSettings(_ editorSettings: EditorSettings) -> EditorConfigurationBuilder {
         var copy = self
         copy.editorSettings = editorSettings
@@ -279,66 +265,10 @@ public struct EditorConfigurationBuilder {
             siteApiNamespace: siteApiNamespace,
             namespaceExcludedPaths: namespaceExcludedPaths,
             authHeader: authHeader,
-            webViewGlobals: webViewGlobals,
             editorSettings: editorSettings,
             locale: locale,
             editorAssetsEndpoint: editorAssetsEndpoint
         )
-    }
-}
-
-public struct WebViewGlobal: Equatable {
-    let name: String
-    let value: WebViewGlobalValue
-
-    public init(name: String, value: WebViewGlobalValue) throws {
-        // Validate name is a valid JavaScript identifier
-        guard Self.isValidJavaScriptIdentifier(name) else {
-            throw WebViewGlobalError.invalidIdentifier(name)
-        }
-        self.name = name
-        self.value = value
-    }
-
-    private static func isValidJavaScriptIdentifier(_ name: String) -> Bool {
-        // Add validation logic for JavaScript identifiers
-        return name.range(of: "^[a-zA-Z_$][a-zA-Z0-9_$]*$", options: .regularExpression) != nil
-    }
-}
-
-public enum WebViewGlobalError: Error {
-    case invalidIdentifier(String)
-}
-
-public enum WebViewGlobalValue: Equatable {
-    case string(String)
-    case number(Double)
-    case boolean(Bool)
-    case object([String: WebViewGlobalValue])
-    case array([WebViewGlobalValue])
-    case null
-
-    func toJavaScript() -> String {
-        switch self {
-        case .string(let str):
-            return "\"\(str.escaped)\""
-        case .number(let num):
-            return "\(num)"
-        case .boolean(let bool):
-            return "\(bool)"
-        case .object(let dict):
-            let sortedKeys = dict.keys.sorted()
-            var pairs: [String] = []
-            for key in sortedKeys {
-                let value = dict[key]!
-                pairs.append("\"\(key.escaped)\": \(value.toJavaScript())")
-            }
-            return "{\(pairs.joined(separator: ","))}"
-        case .array(let array):
-            return "[\(array.map { $0.toJavaScript() }.joined(separator: ","))]"
-        case .null:
-            return "null"
-        }
     }
 }
 
