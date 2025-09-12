@@ -26,6 +26,11 @@ import { useEditorStyles } from './use-editor-styles';
 import { unlock } from '../../lock-unlock';
 import DefaultBlockAppender from '../default-block-appender';
 import { useEditorVisible } from './use-editor-visible';
+// The Vite query parameter breaks the linter's import resolution
+// eslint-disable-next-line import/no-unresolved
+import defaultThemeStyles from './default-theme-styles.scss?inline';
+// eslint-disable-next-line import/no-unresolved
+import commonStyles from './wp-common-styles.scss?inline';
 
 const {
 	ExperimentalBlockCanvas: BlockCanvas,
@@ -54,7 +59,7 @@ function VisualEditor( { hideTitle } ) {
 
 	const {
 		renderingMode,
-		hasThemeStyleSupport,
+		hasThemeStyles,
 		themeHasDisabledLayoutStyles,
 		themeSupportsLayout,
 		hasRootPaddingAwareAlignments,
@@ -63,11 +68,14 @@ function VisualEditor( { hideTitle } ) {
 		const _renderingMode = getRenderingMode();
 		const { getSettings } = unlock( select( blockEditorStore ) );
 		const _settings = getSettings();
+		// Implies editor settings provided theme styles via the REST API.
+		const settingsHasStyles = _settings.styles?.length > 0;
 
 		return {
 			renderingMode: _renderingMode,
-			hasThemeStyleSupport:
-				select( editPostStore ).isFeatureActive( 'themeStyles' ),
+			hasThemeStyles:
+				select( editPostStore ).isFeatureActive( 'themeStyles' ) &&
+				settingsHasStyles,
 			themeSupportsLayout: _settings.supportsLayout,
 			themeHasDisabledLayoutStyles: _settings.disableLayoutStyles,
 			hasRootPaddingAwareAlignments:
@@ -75,11 +83,17 @@ function VisualEditor( { hideTitle } ) {
 		};
 	}, [] );
 
-	const styles = useEditorStyles();
+	const styles = useEditorStyles(
+		// `commonStyles` represent manually added notable styles that are missing.
+		// The styles likely absent due to them being injected by the WP Admin
+		// context.
+		commonStyles,
+		// Add sensible default styles if theme styles are not present.
+		hasThemeStyles ? '' : defaultThemeStyles
+	);
 
 	const editorClasses = clsx( 'gutenberg-kit-visual-editor', {
-		'has-root-padding':
-			! hasThemeStyleSupport || ! hasRootPaddingAwareAlignments,
+		'has-root-padding': ! hasThemeStyles || ! hasRootPaddingAwareAlignments,
 	} );
 
 	const titleClasses = clsx(
@@ -87,7 +101,7 @@ function VisualEditor( { hideTitle } ) {
 		'editor-visual-editor__post-title-wrapper',
 		{
 			'has-global-padding':
-				hasThemeStyleSupport && hasRootPaddingAwareAlignments,
+				hasThemeStyles && hasRootPaddingAwareAlignments,
 		}
 	);
 
@@ -114,7 +128,7 @@ function VisualEditor( { hideTitle } ) {
 		{
 			'is-layout-flow': ! themeSupportsLayout,
 			'has-global-padding':
-				hasThemeStyleSupport && hasRootPaddingAwareAlignments,
+				hasThemeStyles && hasRootPaddingAwareAlignments,
 		}
 	);
 
