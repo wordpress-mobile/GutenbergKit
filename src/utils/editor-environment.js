@@ -9,7 +9,7 @@ import {
 } from './bridge';
 import { configureLocale } from './localization';
 import { loadEditorAssets } from './editor-loader';
-import { initializeVideoPressAjaxBridge } from './videopress-bridge';
+import { initializeAjax } from './ajax';
 import { initializeFetchInterceptor } from './fetch-interceptor';
 import EditorLoadError from '../components/editor-load-error';
 import { setLogLevel, error } from './logger';
@@ -33,7 +33,6 @@ export async function setUpEditorEnvironment() {
 		await configureLocale();
 		await initializeWordPressGlobals();
 		await configureApiFetch();
-		initializeVideoPressAjaxBridge();
 		const pluginLoadResult = await loadPluginsIfEnabled();
 		await initializeEditor( pluginLoadResult );
 	} catch ( err ) {
@@ -138,6 +137,7 @@ async function loadPluginsIfEnabled() {
  * @return {Promise} Promise that resolves when the editor is initialized
  */
 async function initializeEditor( pluginLoadResult = {} ) {
+	initializeAjax();
 	const { initializeEditor: _initializeEditor } = await import( './editor' );
 	_initializeEditor( {
 		allowedBlockTypes: pluginLoadResult.allowedBlockTypes,
