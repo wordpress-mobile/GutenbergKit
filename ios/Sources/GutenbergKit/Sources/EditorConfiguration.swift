@@ -245,6 +245,28 @@ public struct EditorConfigurationBuilder {
         return copy
     }
 
+    /// Simplify conditionally applying a configuration change
+    ///
+    /// Sample Code:
+    /// ```swift
+    ///  // Before
+    ///  let configurationBuilder = EditorConfigurationBuilder()
+    ///  if let postID = post.id {
+    ///     configurationBuilder = configurationBuilder.setPostID(postID)
+    ///  }
+    ///
+    ///  // After
+    ///  let configurationBuilder = EditorConfigurationBuilder()
+    ///     .apply(post.id, { $0.setPostID($1 } )
+    /// ```
+    public func apply<T>(_ value: T?, _ closure: (EditorConfigurationBuilder, T) -> EditorConfigurationBuilder) -> Self {
+        guard let value else {
+            return self
+        }
+
+        return closure(self, value)
+    }
+
     public func build() -> EditorConfiguration {
         EditorConfiguration(
             title: title,
