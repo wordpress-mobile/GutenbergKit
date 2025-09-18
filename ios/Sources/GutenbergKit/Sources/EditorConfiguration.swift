@@ -252,7 +252,7 @@ public struct EditorConfigurationBuilder {
     ///
     ///  // After
     ///  let configurationBuilder = EditorConfigurationBuilder()
-    ///     .apply(post.id, { $0.setPostID($1 } )
+    ///     .apply(post.id, { $0.setPostID($1) } )
     /// ```
     public func apply<T>(_ value: T?, _ closure: (EditorConfigurationBuilder, T) -> EditorConfigurationBuilder) -> Self {
         guard let value else {
