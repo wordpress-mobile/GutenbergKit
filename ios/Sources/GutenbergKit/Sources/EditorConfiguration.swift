@@ -33,9 +33,6 @@ public struct EditorConfiguration {
     /// Endpoint for loading editor assets, used when enabling `shouldUsePlugins`
     public var editorAssetsEndpoint: URL?
 
-    // Cookies
-    public let cookies: [HTTPCookie]
-
     /// Deliberately non-public – consumers should use `EditorConfigurationBuilder` to construct a configuration
     init(
         title: String,
@@ -53,7 +50,6 @@ public struct EditorConfiguration {
         editorSettings: String,
         locale: String,
         editorAssetsEndpoint: URL? = nil,
-        cookies: [HTTPCookie] = []
     ) {
         self.title = title
         self.content = content
@@ -70,7 +66,6 @@ public struct EditorConfiguration {
         self.editorSettings = editorSettings
         self.locale = locale
         self.editorAssetsEndpoint = editorAssetsEndpoint
-        self.cookies = cookies
     }
 
     public func toBuilder() -> EditorConfigurationBuilder {
