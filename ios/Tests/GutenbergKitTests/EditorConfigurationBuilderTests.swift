@@ -156,4 +156,29 @@ struct EditorConfigurationBuilderTests {
     func editorConfigurationBuilderSetsEditorAssetsEndpointCorrectly() throws {
         #expect(EditorConfigurationBuilder().setEditorAssetsEndpoint(URL(string: "https://example.com/wp-content/plugins/gutenberg/build/")).build().editorAssetsEndpoint == URL(string: "https://example.com/wp-content/plugins/gutenberg/build/"))
     }
+
+    @Test("Applies values correctly")
+    func editorConfigurationBuilderAppliesValuesCorrectly() throws {
+        let string = "test"
+        let nilString: String? = nil
+
+        let int = 1
+        let nilInt: Int? = nil
+
+        #expect(EditorConfigurationBuilder().apply(string, { $0.setTitle($1) }).build().title == string)
+        #expect(EditorConfigurationBuilder().apply(nilString, { $0.setTitle($1)}).build().title == "")
+
+        #expect(EditorConfigurationBuilder().apply(int, { $0.setPostID($1) }).build().postID == int)
+        #expect(EditorConfigurationBuilder().apply(nilInt, { $0.setPostID($1)}).build().postID == nil)
+    }
+
+    @Test("apply never calls the closure if the value is nil")
+    func editorConfigurationBuilderApplyDoesNotCallClosureWithNilValue() throws {
+        let string: String? = nil
+
+        _ = EditorConfigurationBuilder().apply(string, { builder, value in
+            Issue.record("Closure was called")
+            return builder
+        })
+    }
 }
