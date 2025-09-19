@@ -32,7 +32,7 @@ export async function setUpEditorEnvironment() {
 		initializeFetchInterceptor();
 		await configureLocale();
 		await initializeWordPressGlobals();
-		await configureNetworkUtils();
+		await configureApiFetch();
 		const pluginLoadResult = await loadPluginsIfEnabled();
 		await initializeEditor( pluginLoadResult );
 	} catch ( err ) {
@@ -90,14 +90,12 @@ async function initializeWordPressGlobals() {
  * Configure `api-fetch` middleware and settings. Lazy-loaded to ensure
  * WordPress globals are available before importing `api-fetch` and
  * referencing `window.wp.apiFetch`.
- *
- * Also, configure AJAX URL and token authentication.
  */
-async function configureNetworkUtils() {
-	configureAjax();
-
-	const { configureApiFetch } = await import( './api-fetch' );
-	configureApiFetch();
+async function configureApiFetch() {
+	const { configureApiFetch: _configureApiFetch } = await import(
+		'./api-fetch'
+	);
+	_configureApiFetch();
 }
 
 /**
@@ -140,6 +138,8 @@ async function loadPluginsIfEnabled() {
  */
 async function initializeEditor( pluginLoadResult = {} ) {
 	const { initializeEditor: _initializeEditor } = await import( './editor' );
+	configureAjax(); // Configure AJAX URL and token authentication
+
 	_initializeEditor( {
 		allowedBlockTypes: pluginLoadResult.allowedBlockTypes,
 		pluginLoadFailed: pluginLoadResult.pluginLoadFailed,
