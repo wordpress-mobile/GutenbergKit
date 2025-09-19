@@ -9,7 +9,7 @@ import {
 } from './bridge';
 import { configureLocale } from './localization';
 import { loadEditorAssets } from './editor-loader';
-import { initializeAjax } from './ajax';
+import { configureAjax } from './ajax';
 import { initializeFetchInterceptor } from './fetch-interceptor';
 import EditorLoadError from '../components/editor-load-error';
 import { setLogLevel, error } from './logger';
@@ -32,7 +32,7 @@ export async function setUpEditorEnvironment() {
 		initializeFetchInterceptor();
 		await configureLocale();
 		await initializeWordPressGlobals();
-		await configureApiFetch();
+		await configureNetworkUtils();
 		const pluginLoadResult = await loadPluginsIfEnabled();
 		await initializeEditor( pluginLoadResult );
 	} catch ( err ) {
@@ -90,12 +90,14 @@ async function initializeWordPressGlobals() {
  * Configure `api-fetch` middleware and settings. Lazy-loaded to ensure
  * WordPress globals are available before importing `api-fetch` and
  * referencing `window.wp.apiFetch`.
+ *
+ * Also, configure AJAX URL and token authentication.
  */
-async function configureApiFetch() {
-	const { configureApiFetch: _configureApiFetch } = await import(
-		'./api-fetch'
-	);
-	_configureApiFetch();
+async function configureNetworkUtils() {
+	configureAjax();
+
+	const { configureApiFetch } = await import( './api-fetch' );
+	configureApiFetch();
 }
 
 /**
@@ -137,7 +139,6 @@ async function loadPluginsIfEnabled() {
  * @return {Promise} Promise that resolves when the editor is initialized
  */
 async function initializeEditor( pluginLoadResult = {} ) {
-	initializeAjax();
 	const { initializeEditor: _initializeEditor } = await import( './editor' );
 	_initializeEditor( {
 		allowedBlockTypes: pluginLoadResult.allowedBlockTypes,
