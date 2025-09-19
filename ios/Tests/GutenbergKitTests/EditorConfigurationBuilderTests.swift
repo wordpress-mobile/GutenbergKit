@@ -20,15 +20,14 @@ struct EditorConfigurationBuilderTests {
         #expect(builder.siteApiNamespace == [])
         #expect(builder.namespaceExcludedPaths == [])
         #expect(builder.authHeader == "")
-        #expect(builder.webViewGlobals == [])
-        #expect(builder.editorSettings.isEmpty)
+        #expect(builder.editorSettings == "undefined")
         #expect(builder.locale == "en")
         #expect(builder.editorAssetsEndpoint == nil)
     }
 
     @Test("Editor Configuration to Builder")
     func testThatEditorConfigurationToBuilder() throws {
-        let configuration = try EditorConfigurationBuilder()
+        let configuration = EditorConfigurationBuilder()
             .setTitle("Title")
             .setContent("Content")
             .setPostID(123)
@@ -41,8 +40,7 @@ struct EditorConfigurationBuilderTests {
             .setSiteApiNamespace(["wp", "v2"])
             .setNamespaceExcludedPaths(["jetpack"])
             .setAuthHeader("Bearer Token")
-            .setWebViewGlobals([WebViewGlobal(name: "foo", value: .string("bar"))])
-            .setEditorSettings(["foo":"bar"])
+            .setEditorSettings(#"{"foo":"bar"}"#)
             .setLocale("fr")
             .setEditorAssetsEndpoint(URL(string: "https://example.com/wp-content/plugins/gutenberg/build/"))
             .build()        // Convert to a configuration
@@ -61,8 +59,7 @@ struct EditorConfigurationBuilderTests {
         #expect(configuration.siteApiNamespace == ["wp", "v2"])
         #expect(configuration.namespaceExcludedPaths == ["jetpack"])
         #expect(configuration.authHeader == "Bearer Token")
-        #expect(configuration.webViewGlobals == [try WebViewGlobal(name: "foo", value: .string("bar"))])
-        #expect(configuration.editorSettingsJSON == #"{"foo":"bar"}"#)
+        #expect(configuration.editorSettings == #"{"foo":"bar"}"#)
         #expect(configuration.locale == "fr")
         #expect(configuration.editorAssetsEndpoint == URL(string: "https://example.com/wp-content/plugins/gutenberg/build/"))
     }
@@ -138,25 +135,15 @@ struct EditorConfigurationBuilderTests {
         #expect(EditorConfigurationBuilder().setAuthHeader("Bearer token").build().authHeader == "Bearer token")
     }
 
-    @Test("Sets webViewGlobals Correctly")
-    func editorConfigurationBuilderSetsWebViewGlobalsCorrectly() throws {
-        #expect(
-            try EditorConfigurationBuilder()
-                .setWebViewGlobals([WebViewGlobal(name: "foo", value: .string("bar"))])
-                .build()
-                .webViewGlobals
-            == [WebViewGlobal(name: "foo", value: .string("bar"))]
-        )
-    }
-
     @Test("Sets editorSettings Correctly")
     func editorConfigurationBuilderSetsEditorSettingsCorrectly() throws {
+        let json = #"{"foo":"bar"}"#
         #expect(
             EditorConfigurationBuilder()
-                .setEditorSettings(["foo": "bar"])
+                .setEditorSettings(json)
                 .build()
-                .editorSettingsJSON
-            == "{\"foo\":\"bar\"}"
+                .editorSettings
+            == json
         )
     }
 
@@ -168,5 +155,30 @@ struct EditorConfigurationBuilderTests {
     @Test("Sets editorAssetsEndpoint Correctly")
     func editorConfigurationBuilderSetsEditorAssetsEndpointCorrectly() throws {
         #expect(EditorConfigurationBuilder().setEditorAssetsEndpoint(URL(string: "https://example.com/wp-content/plugins/gutenberg/build/")).build().editorAssetsEndpoint == URL(string: "https://example.com/wp-content/plugins/gutenberg/build/"))
+    }
+
+    @Test("Applies values correctly")
+    func editorConfigurationBuilderAppliesValuesCorrectly() throws {
+        let string = "test"
+        let nilString: String? = nil
+
+        let int = 1
+        let nilInt: Int? = nil
+
+        #expect(EditorConfigurationBuilder().apply(string, { $0.setTitle($1) }).build().title == string)
+        #expect(EditorConfigurationBuilder().apply(nilString, { $0.setTitle($1)}).build().title == "")
+
+        #expect(EditorConfigurationBuilder().apply(int, { $0.setPostID($1) }).build().postID == int)
+        #expect(EditorConfigurationBuilder().apply(nilInt, { $0.setPostID($1)}).build().postID == nil)
+    }
+
+    @Test("apply never calls the closure if the value is nil")
+    func editorConfigurationBuilderApplyDoesNotCallClosureWithNilValue() throws {
+        let string: String? = nil
+
+        _ = EditorConfigurationBuilder().apply(string, { builder, value in
+            Issue.record("Closure was called")
+            return builder
+        })
     }
 }

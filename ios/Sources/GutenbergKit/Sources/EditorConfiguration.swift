@@ -26,17 +26,12 @@ public struct EditorConfiguration {
     public let namespaceExcludedPaths: [String]
     /// Authorization header
     public let authHeader: String
-    /// Global variables to be made available to the editor
-    public let webViewGlobals: [WebViewGlobal]
     /// Raw block editor settings from the WordPress REST API
-    public let editorSettings: EditorSettings
+    public let editorSettings: String
     /// Locale used for translations
     public let locale: String
     /// Endpoint for loading editor assets, used when enabling `shouldUsePlugins`
     public var editorAssetsEndpoint: URL?
-
-    // Cookies
-    public let cookies: [HTTPCookie]
 
     /// Deliberately non-public – consumers should use `EditorConfigurationBuilder` to construct a configuration
     init(
@@ -52,11 +47,9 @@ public struct EditorConfiguration {
         siteApiNamespace: [String],
         namespaceExcludedPaths: [String],
         authHeader: String,
-        webViewGlobals: [WebViewGlobal],
-        editorSettings: EditorSettings,
+        editorSettings: String,
         locale: String,
         editorAssetsEndpoint: URL? = nil,
-        cookies: [HTTPCookie] = []
     ) {
         self.title = title
         self.content = content
@@ -70,11 +63,9 @@ public struct EditorConfiguration {
         self.siteApiNamespace = siteApiNamespace
         self.namespaceExcludedPaths = namespaceExcludedPaths
         self.authHeader = authHeader
-        self.webViewGlobals = webViewGlobals
         self.editorSettings = editorSettings
         self.locale = locale
         self.editorAssetsEndpoint = editorAssetsEndpoint
-        self.cookies = cookies
     }
 
     public func toBuilder() -> EditorConfigurationBuilder {
@@ -91,7 +82,6 @@ public struct EditorConfiguration {
             siteApiNamespace: siteApiNamespace,
             namespaceExcludedPaths: namespaceExcludedPaths,
             authHeader: authHeader,
-            webViewGlobals: webViewGlobals,
             editorSettings: editorSettings,
             locale: locale,
             editorAssetsEndpoint: editorAssetsEndpoint
@@ -104,12 +94,6 @@ public struct EditorConfiguration {
 
     var escapedContent: String {
         content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
-    }
-
-    var editorSettingsJSON: String {
-        // `editorSettings` values are always `encodable` so this should never fail
-        let jsonData = try! JSONSerialization.data(withJSONObject: editorSettings, options: [])
-        return String(data: jsonData, encoding: .utf8) ?? "undefined"
     }
 
     public static let `default` = EditorConfigurationBuilder().build()
@@ -128,8 +112,7 @@ public struct EditorConfigurationBuilder {
     private var siteApiNamespace: [String]
     private var namespaceExcludedPaths: [String]
     private var authHeader: String
-    private var webViewGlobals: [WebViewGlobal]
-    private var editorSettings: EditorSettings
+    private var editorSettings: String
     private var locale: String
     private var editorAssetsEndpoint: URL?
 
@@ -146,8 +129,7 @@ public struct EditorConfigurationBuilder {
         siteApiNamespace: [String] = [],
         namespaceExcludedPaths: [String] = [],
         authHeader: String = "",
-        webViewGlobals: [WebViewGlobal] = [],
-        editorSettings: EditorSettings = [:],
+        editorSettings: String = "undefined",
         locale: String = "en",
         editorAssetsEndpoint: URL? = nil
     ){
@@ -163,7 +145,6 @@ public struct EditorConfigurationBuilder {
         self.siteApiNamespace = siteApiNamespace
         self.namespaceExcludedPaths = namespaceExcludedPaths
         self.authHeader = authHeader
-        self.webViewGlobals = webViewGlobals
         self.editorSettings = editorSettings
         self.locale = locale
         self.editorAssetsEndpoint = editorAssetsEndpoint
@@ -241,13 +222,7 @@ public struct EditorConfigurationBuilder {
         return copy
     }
 
-    public func setWebViewGlobals(_ webViewGlobals: [WebViewGlobal]) -> EditorConfigurationBuilder {
-        var copy = self
-        copy.webViewGlobals = webViewGlobals
-        return copy
-    }
-
-    public func setEditorSettings(_ editorSettings: EditorSettings) -> EditorConfigurationBuilder {
+    public func setEditorSettings(_ editorSettings: String) -> EditorConfigurationBuilder {
         var copy = self
         copy.editorSettings = editorSettings
         return copy
@@ -265,6 +240,28 @@ public struct EditorConfigurationBuilder {
         return copy
     }
 
+    /// Simplify conditionally applying a configuration change
+    ///
+    /// Sample Code:
+    /// ```swift
+    ///  // Before
+    ///  let configurationBuilder = EditorConfigurationBuilder()
+    ///  if let postID = post.id {
+    ///     configurationBuilder = configurationBuilder.setPostID(postID)
+    ///  }
+    ///
+    ///  // After
+    ///  let configurationBuilder = EditorConfigurationBuilder()
+    ///     .apply(post.id, { $0.setPostID($1) } )
+    /// ```
+    public func apply<T>(_ value: T?, _ closure: (EditorConfigurationBuilder, T) -> EditorConfigurationBuilder) -> Self {
+        guard let value else {
+            return self
+        }
+
+        return closure(self, value)
+    }
+
     public func build() -> EditorConfiguration {
         EditorConfiguration(
             title: title,
@@ -279,66 +276,10 @@ public struct EditorConfigurationBuilder {
             siteApiNamespace: siteApiNamespace,
             namespaceExcludedPaths: namespaceExcludedPaths,
             authHeader: authHeader,
-            webViewGlobals: webViewGlobals,
             editorSettings: editorSettings,
             locale: locale,
             editorAssetsEndpoint: editorAssetsEndpoint
         )
-    }
-}
-
-public struct WebViewGlobal: Equatable {
-    let name: String
-    let value: WebViewGlobalValue
-
-    public init(name: String, value: WebViewGlobalValue) throws {
-        // Validate name is a valid JavaScript identifier
-        guard Self.isValidJavaScriptIdentifier(name) else {
-            throw WebViewGlobalError.invalidIdentifier(name)
-        }
-        self.name = name
-        self.value = value
-    }
-
-    private static func isValidJavaScriptIdentifier(_ name: String) -> Bool {
-        // Add validation logic for JavaScript identifiers
-        return name.range(of: "^[a-zA-Z_$][a-zA-Z0-9_$]*$", options: .regularExpression) != nil
-    }
-}
-
-public enum WebViewGlobalError: Error {
-    case invalidIdentifier(String)
-}
-
-public enum WebViewGlobalValue: Equatable {
-    case string(String)
-    case number(Double)
-    case boolean(Bool)
-    case object([String: WebViewGlobalValue])
-    case array([WebViewGlobalValue])
-    case null
-
-    func toJavaScript() -> String {
-        switch self {
-        case .string(let str):
-            return "\"\(str.escaped)\""
-        case .number(let num):
-            return "\(num)"
-        case .boolean(let bool):
-            return "\(bool)"
-        case .object(let dict):
-            let sortedKeys = dict.keys.sorted()
-            var pairs: [String] = []
-            for key in sortedKeys {
-                let value = dict[key]!
-                pairs.append("\"\(key.escaped)\": \(value.toJavaScript())")
-            }
-            return "{\(pairs.joined(separator: ","))}"
-        case .array(let array):
-            return "[\(array.map { $0.toJavaScript() }.joined(separator: ","))]"
-        case .null:
-            return "null"
-        }
     }
 }
 
