@@ -16,7 +16,7 @@ import {
 import { loadEditorAssets } from './editor-loader.js';
 import EditorLoadError from '../components/editor-load-error/index.jsx';
 import { error } from './logger.js';
-import { initializeVideoPressAjaxBridge } from './videopress-bridge.js';
+import { configureAjax } from './ajax.js';
 import { initializeWordPressGlobals } from './wordpress-globals.js';
 import { configureLocale } from './localization.js';
 import { configureApiFetch } from './api-fetch.js';
@@ -27,7 +27,7 @@ vi.mock( './bridge.js' );
 vi.mock( './fetch-interceptor.js' );
 vi.mock( './logger.js' );
 vi.mock( './editor-styles.js' );
-vi.mock( './videopress-bridge.js' );
+vi.mock( './ajax.js' );
 
 vi.mock( './wordpress-globals.js', () => ( {
 	initializeWordPressGlobals: vi.fn(),
@@ -63,7 +63,7 @@ describe( 'setUpEditorEnvironment', () => {
 		initializeWordPressGlobals.mockImplementation( () => {} );
 		configureApiFetch.mockImplementation( () => {} );
 		initializeFetchInterceptor.mockImplementation( () => {} );
-		initializeVideoPressAjaxBridge.mockImplementation( () => {} );
+		configureAjax.mockImplementation( () => {} );
 		initializeEditor.mockImplementation( () => {} );
 		EditorLoadError.mockReturnValue( '<div>Error</div>' );
 		loadEditorAssets.mockResolvedValue( {
@@ -96,8 +96,8 @@ describe( 'setUpEditorEnvironment', () => {
 			callOrder.push( 'configureApiFetch' );
 		} );
 
-		initializeVideoPressAjaxBridge.mockImplementation( () => {
-			callOrder.push( 'initializeVideoPress' );
+		configureAjax.mockImplementation( () => {
+			callOrder.push( 'configureAjax' );
 		} );
 
 		initializeEditor.mockImplementation( () => {
@@ -112,7 +112,7 @@ describe( 'setUpEditorEnvironment', () => {
 			'configureLocale',
 			'loadRemainingGlobals',
 			'configureApiFetch',
-			'initializeVideoPress',
+			'configureAjax',
 			'initializeEditor',
 		] );
 	} );
