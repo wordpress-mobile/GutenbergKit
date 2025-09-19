@@ -10,7 +10,7 @@ import { warn, debug } from './logger';
  *
  * @return {void}
  */
-export function initializeAjax() {
+export function configureAjax() {
 	window.wp = window.wp || {};
 	window.wp.ajax = window.wp.ajax || {};
 	window.wp.ajax.settings = window.wp.ajax.settings || {};
