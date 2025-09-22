@@ -26,6 +26,9 @@ function configureAjaxUrl( siteURL ) {
 		return;
 	}
 
+	// Global used within WordPress admin pages
+	window.ajaxurl = `${ siteURL }/wp-admin/admin-ajax.php`;
+	// Global used by WordPress' JavaScript API
 	window.wp.ajax.settings.url = `${ siteURL }/wp-admin/admin-ajax.php`;
 
 	debug( 'AJAX URL configured' );
