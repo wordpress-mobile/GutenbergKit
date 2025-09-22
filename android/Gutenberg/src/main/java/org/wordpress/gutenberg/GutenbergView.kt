@@ -302,6 +302,7 @@ class GutenbergView : WebView {
 
         val gbKitConfig = """
             window.GBKit = {
+                "siteURL": "${configuration.siteURL}",
                 "siteApiRoot": "${configuration.siteApiRoot}",
                 "siteApiNamespace": ${configuration.siteApiNamespace.joinToString(",", "[", "]") { "\"$it\"" }},
                 "namespaceExcludedPaths": ${configuration.namespaceExcludedPaths.joinToString(",", "[", "]") { "\"$it\"" }},
