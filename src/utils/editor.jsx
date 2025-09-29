@@ -35,6 +35,11 @@ export function initializeEditor( { allowedBlockTypes } = {} ) {
 		themeStyles,
 	} );
 
+	// Force visual mode on initialization to ensure consistency with native UI,
+	// which defaults to visual mode. In the future, we could allow the native
+	// host app to configure the initial editor mode.
+	preferenceDispatch.set( 'core', 'editorMode', 'visual' );
+
 	registerCoreBlocks();
 	unregisterDisallowedBlocks( allowedBlockTypes );
 	const post = getPost();
