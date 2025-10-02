@@ -42,7 +42,8 @@ import org.wordpress.gutenberg.model.GBKitGlobal
 import org.wordpress.gutenberg.services.EditorService
 import java.util.Locale
 
-const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
+const val DEFAULT_ASSET_DOMAIN = "appassets.androidplatform.net"
+const val ASSET_PATH_INDEX = "/assets/index.html"
 
 /**
  * A WebView-based Gutenberg block editor for Android.
@@ -85,9 +86,8 @@ const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
 class GutenbergView : WebView {
     private var isEditorLoaded = false
     private var didFireEditorLoaded = false
-    private var assetLoader = WebViewAssetLoader.Builder()
-        .addPathHandler("/assets/", AssetsPathHandler(this.context))
-        .build()
+    private lateinit var assetLoader: WebViewAssetLoader
+    private lateinit var assetDomain: String
     private val configuration: EditorConfiguration
     private lateinit var dependencies: EditorDependencies
 
@@ -235,7 +235,7 @@ class GutenbergView : WebView {
             ): WebResourceResponse? {
                 if (request.url == null) {
                     return super.shouldInterceptRequest(view, request)
-                } else if (request.url.host?.contains("appassets.androidplatform.net") == true) {
+                } else if (request.url.host == assetDomain) {
                     return assetLoader.shouldInterceptRequest(request.url)
                 } else if (requestInterceptor.canIntercept(request)) {
                     return requestInterceptor.handleRequest(request)
@@ -268,7 +268,7 @@ class GutenbergView : WebView {
                 }
 
                 // Allow asset URLs
-                if (url.host == Uri.parse(ASSET_URL).host) {
+                if (url.host == assetDomain) {
                     return false
                 }
 
@@ -386,6 +386,15 @@ class GutenbergView : WebView {
     private fun loadEditor(dependencies: EditorDependencies) {
         this.dependencies = dependencies
 
+        // Set up asset loader domain
+        assetDomain = configuration.assetLoaderDomain ?: DEFAULT_ASSET_DOMAIN
+
+        // Initialize asset loader with configured domain
+        assetLoader = WebViewAssetLoader.Builder()
+            .setDomain(assetDomain)
+            .addPathHandler("/assets/", AssetsPathHandler(this.context))
+            .build()
+
         // Set up asset caching
         requestInterceptor = CachedAssetRequestInterceptor(
             dependencies.assetBundle,
@@ -398,13 +407,13 @@ class GutenbergView : WebView {
         initializeWebView()
 
         val editorUrl = BuildConfig.GUTENBERG_EDITOR_URL.ifEmpty {
-            ASSET_URL
+            "https://$assetDomain$ASSET_PATH_INDEX"
         }
 
         WebStorage.getInstance().deleteAllData()
         this.clearCache(true)
         // All cookies are third-party cookies because the root of this document
-        // lives under `https://appassets.androidplatform.net`
+        // lives under the configured asset domain (e.g., `https://appassets.androidplatform.net`)
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
 
         // Erase all local cookies before loading the URL – we don't want to persist
