@@ -6,6 +6,7 @@ import android.content.pm.ApplicationInfo
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -20,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -95,41 +97,48 @@ fun EditorScreen(
                             contentDescription = "Redo"
                         )
                     }
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = "More options"
-                        )
+                    TextButton(onClick = { }, enabled = false) {
+                        Text("PUBLISH")
                     }
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Save") },
-                            onClick = { },
-                            enabled = false
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Preview") },
-                            onClick = { },
-                            enabled = false
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Code Editor") },
-                            onClick = { },
-                            enabled = false
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Post Settings") },
-                            onClick = { },
-                            enabled = false
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Help") },
-                            onClick = { },
-                            enabled = false
-                        )
+
+                    // Overflow menu button and dropdown in Box for proper anchoring
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "More options"
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Save") },
+                                onClick = { },
+                                enabled = false
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Preview") },
+                                onClick = { },
+                                enabled = false
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Code editor") },
+                                onClick = { },
+                                enabled = false
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Post settings") },
+                                onClick = { },
+                                enabled = false
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Help") },
+                                onClick = { },
+                                enabled = false
+                            )
+                        }
                     }
                 }
             )
