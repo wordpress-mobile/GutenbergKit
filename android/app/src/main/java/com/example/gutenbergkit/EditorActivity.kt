@@ -3,26 +3,24 @@ package com.example.gutenbergkit
 import android.os.Bundle
 import android.webkit.WebView
 import android.content.pm.ApplicationInfo
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.viewinterop.AndroidView
 import org.wordpress.gutenberg.EditorConfiguration
 import org.wordpress.gutenberg.GutenbergView
 
-class EditorActivity : AppCompatActivity() {
+class EditorActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContentView(R.layout.activity_editor)
 
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.editor)) { v, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
-            insets
-        }
-
-        if (0 != (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)) {
+        if (0 != (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE)) {
             WebView.setWebContentsDebuggingEnabled(true)
         }
 
@@ -38,7 +36,32 @@ class EditorActivity : AppCompatActivity() {
                 intent.getParcelableExtra<EditorConfiguration>(MainActivity.EXTRA_CONFIGURATION)
             } ?: EditorConfiguration.builder().build()
 
-        val gbView = findViewById<GutenbergView>(R.id.gutenbergView)
-        gbView.start(configuration)
+        setContent {
+            EditorScreen(
+                configuration = configuration,
+                onClose = { finish() }
+            )
+        }
+    }
+}
+
+@Composable
+fun EditorScreen(
+    configuration: EditorConfiguration,
+    onClose: () -> Unit
+) {
+    Scaffold(
+        modifier = Modifier.fillMaxSize()
+    ) { innerPadding ->
+        AndroidView(
+            factory = { context ->
+                GutenbergView(context).apply {
+                    start(configuration)
+                }
+            },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        )
     }
 }
