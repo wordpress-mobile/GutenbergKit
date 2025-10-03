@@ -3,6 +3,7 @@ import GutenbergKit
 
 struct EditorView: View {
     private let configuration: EditorConfiguration
+    @Environment(\.dismiss) private var dismiss
 
     init(configuration: EditorConfiguration) {
         self.configuration = configuration
@@ -10,7 +11,16 @@ struct EditorView: View {
 
     var body: some View {
         _EditorView(configuration: configuration)
+            .navigationBarBackButtonHidden(true)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: {
+                        dismiss()
+                    }, label: {
+                        Image(systemName: "xmark")
+                    })
+                }
+
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button(action: {}, label: {
                         Image(systemName: "arrow.uturn.backward")
