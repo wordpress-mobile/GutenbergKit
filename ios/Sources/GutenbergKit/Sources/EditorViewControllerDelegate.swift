@@ -40,6 +40,16 @@ public protocol EditorViewControllerDelegate: AnyObject {
     ///
     /// - parameter type: The type of autocompleter that was triggered (e.g., "plus-symbol", "at-symbol").
     func editor(_ viewController: EditorViewController, didTriggerAutocompleter type: String)
+
+    /// Notifies the client that a modal dialog has opened in the web editor.
+    ///
+    /// - parameter dialogType: The type of modal dialog that opened (e.g., "block-inserter", "media-library").
+    func editor(_ viewController: EditorViewController, didOpenModalDialog dialogType: String)
+
+    /// Notifies the client that a modal dialog has closed in the web editor.
+    ///
+    /// - parameter dialogType: The type of modal dialog that closed (e.g., "block-inserter", "media-library").
+    func editor(_ viewController: EditorViewController, didCloseModalDialog dialogType: String)
 }
 #endif
 

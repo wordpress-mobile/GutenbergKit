@@ -129,6 +129,28 @@ export function onAutocompleterTriggered( type ) {
 }
 
 /**
+ * Notifies the native host that a modal dialog has opened.
+ *
+ * @param {string} dialogType The type of modal dialog that opened (e.g. 'block-inserter', 'media-library').
+ *
+ * @return {void}
+ */
+export function onModalDialogOpened( dialogType ) {
+	dispatchToBridge( 'onModalDialogOpened', { dialogType } );
+}
+
+/**
+ * Notifies the native host that a modal dialog has closed.
+ *
+ * @param {string} dialogType The type of modal dialog that closed (e.g. 'block-inserter', 'media-library').
+ *
+ * @return {void}
+ */
+export function onModalDialogClosed( dialogType ) {
+	dispatchToBridge( 'onModalDialogClosed', { dialogType } );
+}
+
+/**
  * @typedef GBKitConfig
  *
  * @property {boolean}  [themeStyles]            Controls if theme styles are applied to the editor.

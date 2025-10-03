@@ -318,6 +318,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             case .onAutocompleterTriggered:
                 let body = try message.decode(EditorJSMessage.AutocompleterTriggeredBody.self)
                 delegate?.editor(self, didTriggerAutocompleter: body.type)
+            case .onModalDialogOpened:
+                let body = try message.decode(EditorJSMessage.ModalDialogBody.self)
+                delegate?.editor(self, didOpenModalDialog: body.dialogType)
+            case .onModalDialogClosed:
+                let body = try message.decode(EditorJSMessage.ModalDialogBody.self)
+                delegate?.editor(self, didCloseModalDialog: body.dialogType)
             }
         } catch {
             fatalError("failed to decode message: \(error)")
