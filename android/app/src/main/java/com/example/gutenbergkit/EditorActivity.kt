@@ -8,8 +8,24 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import org.wordpress.gutenberg.EditorConfiguration
@@ -45,13 +61,79 @@ class EditorActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditorScreen(
     configuration: EditorConfiguration,
     onClose: () -> Unit
 ) {
+    var showMenu by remember { mutableStateOf(false) }
+
     Scaffold(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = { },
+                navigationIcon = {
+                    IconButton(onClick = onClose) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Close"
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { }, enabled = false) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Undo,
+                            contentDescription = "Undo"
+                        )
+                    }
+                    IconButton(onClick = { }, enabled = false) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Redo,
+                            contentDescription = "Redo"
+                        )
+                    }
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "More options"
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Save") },
+                            onClick = { },
+                            enabled = false
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Preview") },
+                            onClick = { },
+                            enabled = false
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Code Editor") },
+                            onClick = { },
+                            enabled = false
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Post Settings") },
+                            onClick = { },
+                            enabled = false
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Help") },
+                            onClick = { },
+                            enabled = false
+                        )
+                    }
+                }
+            )
+        }
     ) { innerPadding ->
         AndroidView(
             factory = { context ->
