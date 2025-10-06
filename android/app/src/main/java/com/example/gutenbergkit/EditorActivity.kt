@@ -75,7 +75,6 @@ fun EditorScreen(
     var gutenbergViewRef by remember { mutableStateOf<GutenbergView?>(null) }
 
     BackHandler(enabled = isModalDialogOpen) {
-        // Dismiss the topmost web modal/dialog/menu (simulates ESC key)
         gutenbergViewRef?.dismissTopModal()
     }
 
