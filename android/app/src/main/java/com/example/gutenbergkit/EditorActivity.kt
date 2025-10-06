@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.webkit.WebView
 import android.content.pm.ApplicationInfo
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
@@ -71,6 +72,11 @@ fun EditorScreen(
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var isModalDialogOpen by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = isModalDialogOpen) {
+        // Do nothing - prevent back navigation when modal is open
+        // The web layer will handle closing the modal
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
