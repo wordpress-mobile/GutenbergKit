@@ -71,7 +71,6 @@ fun EditorScreen(
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var isModalDialogOpen by remember { mutableStateOf(false) }
-    var currentDialogType by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -158,12 +157,10 @@ fun EditorScreen(
                     setModalDialogStateListener(object : GutenbergView.ModalDialogStateListener {
                         override fun onModalDialogOpened(dialogType: String) {
                             isModalDialogOpen = true
-                            currentDialogType = dialogType
                         }
 
                         override fun onModalDialogClosed(dialogType: String) {
                             isModalDialogOpen = false
-                            currentDialogType = null
                         }
                     })
                     start(configuration)
