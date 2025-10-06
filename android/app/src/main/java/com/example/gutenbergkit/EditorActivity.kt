@@ -70,6 +70,8 @@ fun EditorScreen(
     onClose: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    var isModalDialogOpen by remember { mutableStateOf(false) }
+    var currentDialogType by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -77,7 +79,10 @@ fun EditorScreen(
             TopAppBar(
                 title = { },
                 navigationIcon = {
-                    IconButton(onClick = onClose) {
+                    IconButton(
+                        onClick = onClose,
+                        enabled = !isModalDialogOpen
+                    ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Close"
@@ -103,7 +108,10 @@ fun EditorScreen(
 
                     // Overflow menu button and dropdown in Box for proper anchoring
                     Box {
-                        IconButton(onClick = { showMenu = true }) {
+                        IconButton(
+                            onClick = { showMenu = true },
+                            enabled = !isModalDialogOpen
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.MoreVert,
                                 contentDescription = "More options"
@@ -147,6 +155,17 @@ fun EditorScreen(
         AndroidView(
             factory = { context ->
                 GutenbergView(context).apply {
+                    setModalDialogStateListener(object : GutenbergView.ModalDialogStateListener {
+                        override fun onModalDialogOpened(dialogType: String) {
+                            isModalDialogOpen = true
+                            currentDialogType = dialogType
+                        }
+
+                        override fun onModalDialogClosed(dialogType: String) {
+                            isModalDialogOpen = false
+                            currentDialogType = null
+                        }
+                    })
                     start(configuration)
                 }
             },
