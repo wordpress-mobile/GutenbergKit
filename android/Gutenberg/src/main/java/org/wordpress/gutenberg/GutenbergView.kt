@@ -446,6 +446,12 @@ class GutenbergView : WebView {
         }
     }
 
+    fun dismissTopModal() {
+        handler.post {
+            this.evaluateJavascript("editor.dismissTopModal();", null)
+        }
+    }
+
     fun appendTextAtCursor(text: String) {
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't append text until the editor has loaded")

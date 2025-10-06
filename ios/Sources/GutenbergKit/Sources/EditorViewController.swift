@@ -216,6 +216,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         evaluate("editor.redo();")
     }
 
+    /// Dismisses the topmost modal dialog or menu in the editor
+    public func dismissTopModal() {
+        evaluate("editor.dismissTopModal();")
+    }
+
     /// Enables code editor.
     public var isCodeEditorEnabled: Bool = false {
         didSet {

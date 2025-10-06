@@ -93,6 +93,21 @@ export function useHostBridge( post, editorRef ) {
 			switchEditorMode( mode );
 		};
 
+		window.editor.dismissTopModal = () => {
+			const target =
+				editorRef.current.ownerDocument.activeElement || document.body;
+			target.dispatchEvent(
+				new KeyboardEvent( 'keydown', {
+					key: 'Escape',
+					keyCode: 27,
+					which: 27,
+					code: 'Escape',
+					bubbles: true,
+					cancelable: true,
+				} )
+			);
+		};
+
 		window.editor.appendTextAtCursor = ( text ) => {
 			const selectedBlockClientId = getSelectedBlockClientId();
 
@@ -159,6 +174,7 @@ export function useHostBridge( post, editorRef ) {
 			delete window.editor.undo;
 			delete window.editor.redo;
 			delete window.editor.switchEditorMode;
+			delete window.editor.dismissTopModal;
 			delete window.editor.appendTextAtCursor;
 		};
 	}, [

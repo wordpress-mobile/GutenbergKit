@@ -72,10 +72,11 @@ fun EditorScreen(
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var isModalDialogOpen by remember { mutableStateOf(false) }
+    var gutenbergViewRef by remember { mutableStateOf<GutenbergView?>(null) }
 
     BackHandler(enabled = isModalDialogOpen) {
-        // Do nothing - prevent back navigation when modal is open
-        // The web layer will handle closing the modal
+        // Dismiss the topmost web modal/dialog/menu (simulates ESC key)
+        gutenbergViewRef?.dismissTopModal()
     }
 
     Scaffold(
@@ -160,6 +161,7 @@ fun EditorScreen(
         AndroidView(
             factory = { context ->
                 GutenbergView(context).apply {
+                    gutenbergViewRef = this
                     setModalDialogStateListener(object : GutenbergView.ModalDialogStateListener {
                         override fun onModalDialogOpened(dialogType: String) {
                             isModalDialogOpen = true
