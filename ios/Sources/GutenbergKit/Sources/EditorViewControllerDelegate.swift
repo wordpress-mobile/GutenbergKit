@@ -1,6 +1,7 @@
 import Foundation
 
 #if canImport(UIKit)
+@MainActor
 public protocol EditorViewControllerDelegate: AnyObject {
     /// Called when the editor loads.
     func editorDidLoad(_ viewContoller: EditorViewController)
