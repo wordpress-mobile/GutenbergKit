@@ -4,6 +4,9 @@ import GutenbergKit
 struct EditorView: View {
     private let configuration: EditorConfiguration
     @State private var isModalDialogOpen = false
+    @State private var hasUndo = false
+    @State private var hasRedo = false
+    @State private var editorViewController: EditorViewController?
     @Environment(\.dismiss) private var dismiss
 
     init(configuration: EditorConfiguration) {
@@ -13,7 +16,10 @@ struct EditorView: View {
     var body: some View {
         _EditorView(
             configuration: configuration,
-            isModalDialogOpen: $isModalDialogOpen
+            isModalDialogOpen: $isModalDialogOpen,
+            hasUndo: $hasUndo,
+            hasRedo: $hasRedo,
+            editorViewController: $editorViewController
         )
             .navigationBarBackButtonHidden(true)
             .toolbar {
@@ -27,12 +33,19 @@ struct EditorView: View {
                 }
 
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button(action: {}, label: {
+                    Button(action: {
+                        editorViewController?.undo()
+                    }, label: {
                         Image(systemName: "arrow.uturn.backward")
-                    }).disabled(true)
-                    Button(action: {}, label: {
+                    })
+                    .disabled(!hasUndo || isModalDialogOpen)
+
+                    Button(action: {
+                        editorViewController?.redo()
+                    }, label: {
                         Image(systemName: "arrow.uturn.forward")
-                    }).disabled(true)
+                    })
+                    .disabled(!hasRedo || isModalDialogOpen)
                 }
 
                 ToolbarItemGroup(placement: .topBarTrailing) {
@@ -75,17 +88,30 @@ struct EditorView: View {
 private struct _EditorView: UIViewControllerRepresentable {
     private let configuration: EditorConfiguration
     @Binding var isModalDialogOpen: Bool
+    @Binding var hasUndo: Bool
+    @Binding var hasRedo: Bool
+    @Binding var editorViewController: EditorViewController?
 
     init(
         configuration: EditorConfiguration,
-        isModalDialogOpen: Binding<Bool>
+        isModalDialogOpen: Binding<Bool>,
+        hasUndo: Binding<Bool>,
+        hasRedo: Binding<Bool>,
+        editorViewController: Binding<EditorViewController?>
     ) {
         self.configuration = configuration
         self._isModalDialogOpen = isModalDialogOpen
+        self._hasUndo = hasUndo
+        self._hasRedo = hasRedo
+        self._editorViewController = editorViewController
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(isModalDialogOpen: $isModalDialogOpen)
+        Coordinator(
+            isModalDialogOpen: $isModalDialogOpen,
+            hasUndo: $hasUndo,
+            hasRedo: $hasRedo
+        )
     }
 
     func makeUIViewController(context: Context) -> EditorViewController {
@@ -96,6 +122,12 @@ private struct _EditorView: UIViewControllerRepresentable {
             viewController.webView.isInspectable = true
         }
         viewController.startEditorSetup()
+
+        // Store reference to view controller
+        DispatchQueue.main.async {
+            self.editorViewController = viewController
+        }
+
         return viewController
     }
 
@@ -106,9 +138,17 @@ private struct _EditorView: UIViewControllerRepresentable {
     @MainActor
     class Coordinator: NSObject, EditorViewControllerDelegate {
         @Binding var isModalDialogOpen: Bool
+        @Binding var hasUndo: Bool
+        @Binding var hasRedo: Bool
 
-        init(isModalDialogOpen: Binding<Bool>) {
+        init(
+            isModalDialogOpen: Binding<Bool>,
+            hasUndo: Binding<Bool>,
+            hasRedo: Binding<Bool>
+        ) {
             self._isModalDialogOpen = isModalDialogOpen
+            self._hasUndo = hasUndo
+            self._hasRedo = hasRedo
         }
 
         // MARK: - EditorViewControllerDelegate
@@ -130,7 +170,8 @@ private struct _EditorView: UIViewControllerRepresentable {
         }
 
         func editor(_ viewController: EditorViewController, didUpdateHistoryState state: EditorState) {
-            // No-op for demo
+            hasUndo = state.hasUndo
+            hasRedo = state.hasRedo
         }
 
         func editor(_ viewController: EditorViewController, didUpdateFeaturedImage mediaID: Int) {
