@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.webkit.WebView
 import android.content.pm.ApplicationInfo
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
@@ -70,6 +71,12 @@ fun EditorScreen(
     onClose: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    var isModalDialogOpen by remember { mutableStateOf(false) }
+    var gutenbergViewRef by remember { mutableStateOf<GutenbergView?>(null) }
+
+    BackHandler(enabled = isModalDialogOpen) {
+        gutenbergViewRef?.dismissTopModal()
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -77,7 +84,10 @@ fun EditorScreen(
             TopAppBar(
                 title = { },
                 navigationIcon = {
-                    IconButton(onClick = onClose) {
+                    IconButton(
+                        onClick = onClose,
+                        enabled = !isModalDialogOpen
+                    ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Close"
@@ -103,7 +113,10 @@ fun EditorScreen(
 
                     // Overflow menu button and dropdown in Box for proper anchoring
                     Box {
-                        IconButton(onClick = { showMenu = true }) {
+                        IconButton(
+                            onClick = { showMenu = true },
+                            enabled = !isModalDialogOpen
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.MoreVert,
                                 contentDescription = "More options"
@@ -147,6 +160,16 @@ fun EditorScreen(
         AndroidView(
             factory = { context ->
                 GutenbergView(context).apply {
+                    gutenbergViewRef = this
+                    setModalDialogStateListener(object : GutenbergView.ModalDialogStateListener {
+                        override fun onModalDialogOpened(dialogType: String) {
+                            isModalDialogOpen = true
+                        }
+
+                        override fun onModalDialogClosed(dialogType: String) {
+                            isModalDialogOpen = false
+                        }
+                    })
                     start(configuration)
                 }
             },

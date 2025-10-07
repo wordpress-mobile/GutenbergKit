@@ -3,6 +3,7 @@ import GutenbergKit
 
 struct EditorView: View {
     private let configuration: EditorConfiguration
+    @State private var isModalDialogOpen = false
     @Environment(\.dismiss) private var dismiss
 
     init(configuration: EditorConfiguration) {
@@ -10,7 +11,10 @@ struct EditorView: View {
     }
 
     var body: some View {
-        _EditorView(configuration: configuration)
+        _EditorView(
+            configuration: configuration,
+            isModalDialogOpen: $isModalDialogOpen
+        )
             .navigationBarBackButtonHidden(true)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -19,6 +23,7 @@ struct EditorView: View {
                     }, label: {
                         Image(systemName: "xmark")
                     })
+                    .disabled(isModalDialogOpen)
                 }
 
                 ToolbarItemGroup(placement: .topBarTrailing) {
@@ -32,6 +37,7 @@ struct EditorView: View {
 
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     moreMenu
+                        .disabled(isModalDialogOpen)
                 }
             }
     }
@@ -68,13 +74,23 @@ struct EditorView: View {
 
 private struct _EditorView: UIViewControllerRepresentable {
     private let configuration: EditorConfiguration
+    @Binding var isModalDialogOpen: Bool
 
-    init(editorURL: URL? = nil, configuration: EditorConfiguration) {
+    init(
+        configuration: EditorConfiguration,
+        isModalDialogOpen: Binding<Bool>
+    ) {
         self.configuration = configuration
+        self._isModalDialogOpen = isModalDialogOpen
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(isModalDialogOpen: $isModalDialogOpen)
     }
 
     func makeUIViewController(context: Context) -> EditorViewController {
         let viewController = EditorViewController(configuration: configuration)
+        viewController.delegate = context.coordinator
 
         if #available(iOS 16.4, *) {
             viewController.webView.isInspectable = true
@@ -85,6 +101,61 @@ private struct _EditorView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: EditorViewController, context: Context) {
         // Do nothing
+    }
+
+    @MainActor
+    class Coordinator: NSObject, EditorViewControllerDelegate {
+        @Binding var isModalDialogOpen: Bool
+
+        init(isModalDialogOpen: Binding<Bool>) {
+            self._isModalDialogOpen = isModalDialogOpen
+        }
+
+        // MARK: - EditorViewControllerDelegate
+
+        func editorDidLoad(_ viewContoller: EditorViewController) {
+            // No-op for demo
+        }
+
+        func editor(_ viewContoller: EditorViewController, didDisplayInitialContent content: String) {
+            // No-op for demo
+        }
+
+        func editor(_ viewContoller: EditorViewController, didEncounterCriticalError error: Error) {
+            // No-op for demo
+        }
+
+        func editor(_ viewController: EditorViewController, didUpdateContentWithState state: EditorState) {
+            // No-op for demo
+        }
+
+        func editor(_ viewController: EditorViewController, didUpdateHistoryState state: EditorState) {
+            // No-op for demo
+        }
+
+        func editor(_ viewController: EditorViewController, didUpdateFeaturedImage mediaID: Int) {
+            // No-op for demo
+        }
+
+        func editor(_ viewController: EditorViewController, didLogException error: GutenbergJSException) {
+            // No-op for demo
+        }
+
+        func editor(_ viewController: EditorViewController, didRequestMediaFromSiteMediaLibrary config: OpenMediaLibraryAction) {
+            // No-op for demo
+        }
+
+        func editor(_ viewController: EditorViewController, didTriggerAutocompleter type: String) {
+            // No-op for demo
+        }
+
+        func editor(_ viewController: EditorViewController, didOpenModalDialog dialogType: String) {
+            isModalDialogOpen = true
+        }
+
+        func editor(_ viewController: EditorViewController, didCloseModalDialog dialogType: String) {
+            isModalDialogOpen = false
+        }
     }
 }
 

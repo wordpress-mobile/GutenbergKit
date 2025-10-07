@@ -39,6 +39,10 @@ struct EditorJSMessage {
         case openMediaLibrary
         /// The user triggered an autocompleter.
         case onAutocompleterTriggered
+        /// A modal dialog has opened.
+        case onModalDialogOpened
+        /// A modal dialog has closed.
+        case onModalDialogClosed
     }
 
     struct DidUpdateBlocksBody: Decodable {
@@ -56,5 +60,9 @@ struct EditorJSMessage {
 
     struct AutocompleterTriggeredBody: Decodable {
         let type: String
+    }
+
+    struct ModalDialogBody: Decodable {
+        let dialogType: String
     }
 }

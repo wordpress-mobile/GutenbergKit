@@ -52,6 +52,7 @@ class GutenbergView : WebView {
     private var editorDidBecomeAvailableListener: EditorAvailableListener? = null
     private var logJsExceptionListener: LogJsExceptionListener? = null
     private var autocompleterTriggeredListener: AutocompleterTriggeredListener? = null
+    private var modalDialogStateListener: ModalDialogStateListener? = null
 
     var textEditorEnabled: Boolean = false
         set(value) {
@@ -84,6 +85,10 @@ class GutenbergView : WebView {
 
     fun setAutocompleterTriggeredListener(listener: AutocompleterTriggeredListener) {
         autocompleterTriggeredListener = listener
+    }
+
+    fun setModalDialogStateListener(listener: ModalDialogStateListener) {
+        modalDialogStateListener = listener
     }
 
     fun setOnFileChooserRequestedListener(listener: (Intent, Int) -> Unit) {
@@ -394,6 +399,11 @@ class GutenbergView : WebView {
         fun onAutocompleterTriggered(type: String)
     }
 
+    interface ModalDialogStateListener {
+        fun onModalDialogOpened(dialogType: String)
+        fun onModalDialogClosed(dialogType: String)
+    }
+
     fun getTitleAndContent(originalContent: CharSequence, callback: TitleAndContentCallback, completeComposition: Boolean = false) {
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
@@ -433,6 +443,12 @@ class GutenbergView : WebView {
     fun redo() {
         handler.post {
             this.evaluateJavascript("editor.redo();", null)
+        }
+    }
+
+    fun dismissTopModal() {
+        handler.post {
+            this.evaluateJavascript("editor.dismissTopModal();", null)
         }
     }
 
@@ -555,6 +571,20 @@ class GutenbergView : WebView {
         }
     }
 
+    @JavascriptInterface
+    fun onModalDialogOpened(dialogType: String) {
+        handler.post {
+            modalDialogStateListener?.onModalDialogOpened(dialogType)
+        }
+    }
+
+    @JavascriptInterface
+    fun onModalDialogClosed(dialogType: String) {
+        handler.post {
+            modalDialogStateListener?.onModalDialogClosed(dialogType)
+        }
+    }
+
     fun resetFilePathCallback() {
         filePathCallback = null
     }
@@ -571,6 +601,7 @@ class GutenbergView : WebView {
         filePathCallback = null
         onFileChooserRequested = null
         autocompleterTriggeredListener = null
+        modalDialogStateListener = null
         handler.removeCallbacksAndMessages(null)
         this.destroy()
     }

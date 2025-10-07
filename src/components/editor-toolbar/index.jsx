@@ -26,6 +26,7 @@ import { store as editorStore } from '@wordpress/editor';
  */
 import './style.scss';
 import { useModalize } from './use-modalize';
+import { useModalDialogState } from '../editor/use-modal-dialog-state';
 
 /**
  * Renders the editor toolbar containing block-related actions.
@@ -52,6 +53,9 @@ const EditorToolbar = ( { className } ) => {
 
 	useModalize( isInserterOpened );
 	useModalize( isBlockInspectorShown );
+
+	useModalDialogState( isInserterOpened, 'block-inserter' );
+	useModalDialogState( isBlockInspectorShown, 'block-inspector' );
 
 	function openSettings() {
 		setBlockInspectorShown( true );
