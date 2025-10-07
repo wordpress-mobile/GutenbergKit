@@ -3,26 +3,42 @@ package com.example.gutenbergkit
 import android.os.Bundle
 import android.webkit.WebView
 import android.content.pm.ApplicationInfo
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.viewinterop.AndroidView
 import org.wordpress.gutenberg.EditorConfiguration
 import org.wordpress.gutenberg.GutenbergView
 
-class EditorActivity : AppCompatActivity() {
+class EditorActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContentView(R.layout.activity_editor)
 
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.editor)) { v, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
-            insets
-        }
-
-        if (0 != (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)) {
+        if (0 != (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE)) {
             WebView.setWebContentsDebuggingEnabled(true)
         }
 
@@ -38,7 +54,105 @@ class EditorActivity : AppCompatActivity() {
                 intent.getParcelableExtra<EditorConfiguration>(MainActivity.EXTRA_CONFIGURATION)
             } ?: EditorConfiguration.builder().build()
 
-        val gbView = findViewById<GutenbergView>(R.id.gutenbergView)
-        gbView.start(configuration)
+        setContent {
+            EditorScreen(
+                configuration = configuration,
+                onClose = { finish() }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditorScreen(
+    configuration: EditorConfiguration,
+    onClose: () -> Unit
+) {
+    var showMenu by remember { mutableStateOf(false) }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = { },
+                navigationIcon = {
+                    IconButton(onClick = onClose) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Close"
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { }, enabled = false) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Undo,
+                            contentDescription = "Undo"
+                        )
+                    }
+                    IconButton(onClick = { }, enabled = false) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Redo,
+                            contentDescription = "Redo"
+                        )
+                    }
+                    TextButton(onClick = { }, enabled = false) {
+                        Text("PUBLISH")
+                    }
+
+                    // Overflow menu button and dropdown in Box for proper anchoring
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "More options"
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Save") },
+                                onClick = { },
+                                enabled = false
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Preview") },
+                                onClick = { },
+                                enabled = false
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Code editor") },
+                                onClick = { },
+                                enabled = false
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Post settings") },
+                                onClick = { },
+                                enabled = false
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Help") },
+                                onClick = { },
+                                enabled = false
+                            )
+                        }
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        AndroidView(
+            factory = { context ->
+                GutenbergView(context).apply {
+                    start(configuration)
+                }
+            },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        )
     }
 }
