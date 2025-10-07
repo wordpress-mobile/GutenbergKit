@@ -74,6 +74,7 @@ fun EditorScreen(
     var isModalDialogOpen by remember { mutableStateOf(false) }
     var hasUndoState by remember { mutableStateOf(false) }
     var hasRedoState by remember { mutableStateOf(false) }
+    var isCodeEditorEnabled by remember { mutableStateOf(false) }
     var gutenbergViewRef by remember { mutableStateOf<GutenbergView?>(null) }
 
     BackHandler(enabled = isModalDialogOpen) {
@@ -145,9 +146,12 @@ fun EditorScreen(
                                 enabled = false
                             )
                             DropdownMenuItem(
-                                text = { Text("Code editor") },
-                                onClick = { },
-                                enabled = false
+                                text = { Text(if (isCodeEditorEnabled) "Visual editor" else "Code editor") },
+                                onClick = {
+                                    isCodeEditorEnabled = !isCodeEditorEnabled
+                                    gutenbergViewRef?.textEditorEnabled = isCodeEditorEnabled
+                                    showMenu = false
+                                }
                             )
                             DropdownMenuItem(
                                 text = { Text("Post settings") },

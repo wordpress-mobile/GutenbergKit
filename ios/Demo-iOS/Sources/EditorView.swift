@@ -6,6 +6,7 @@ struct EditorView: View {
     @State private var isModalDialogOpen = false
     @State private var hasUndo = false
     @State private var hasRedo = false
+    @State private var isCodeEditorEnabled = false
     @State private var editorViewController: EditorViewController?
     @Environment(\.dismiss) private var dismiss
 
@@ -19,6 +20,7 @@ struct EditorView: View {
             isModalDialogOpen: $isModalDialogOpen,
             hasUndo: $hasUndo,
             hasRedo: $hasRedo,
+            isCodeEditorEnabled: $isCodeEditorEnabled,
             editorViewController: $editorViewController
         )
             .navigationBarBackButtonHidden(true)
@@ -58,9 +60,14 @@ struct EditorView: View {
     private var moreMenu: some View {
         Menu {
             Section {
-                Button(action: {}, label: {
-                    Label("Code Editor", systemImage: "curlybraces")
-                }).disabled(true)
+                Button(action: {
+                    isCodeEditorEnabled.toggle()
+                }, label: {
+                    Label(
+                        isCodeEditorEnabled ? "Visual Editor" : "Code Editor",
+                        systemImage: isCodeEditorEnabled ? "doc.richtext" : "curlybraces"
+                    )
+                })
                 Button(action: /*@START_MENU_TOKEN@*/{}/*@END_MENU_TOKEN@*/, label: {
                     Label("Preview", systemImage: "safari")
                 }).disabled(true)
@@ -90,6 +97,7 @@ private struct _EditorView: UIViewControllerRepresentable {
     @Binding var isModalDialogOpen: Bool
     @Binding var hasUndo: Bool
     @Binding var hasRedo: Bool
+    @Binding var isCodeEditorEnabled: Bool
     @Binding var editorViewController: EditorViewController?
 
     init(
@@ -97,12 +105,14 @@ private struct _EditorView: UIViewControllerRepresentable {
         isModalDialogOpen: Binding<Bool>,
         hasUndo: Binding<Bool>,
         hasRedo: Binding<Bool>,
+        isCodeEditorEnabled: Binding<Bool>,
         editorViewController: Binding<EditorViewController?>
     ) {
         self.configuration = configuration
         self._isModalDialogOpen = isModalDialogOpen
         self._hasUndo = hasUndo
         self._hasRedo = hasRedo
+        self._isCodeEditorEnabled = isCodeEditorEnabled
         self._editorViewController = editorViewController
     }
 
@@ -129,7 +139,7 @@ private struct _EditorView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: EditorViewController, context: Context) {
-        // Do nothing
+        uiViewController.isCodeEditorEnabled = isCodeEditorEnabled
     }
 
     @MainActor
