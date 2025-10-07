@@ -3,6 +3,7 @@ import GutenbergKit
 
 struct EditorView: View {
     private let configuration: EditorConfiguration
+    @Environment(\.dismiss) private var dismiss
 
     init(configuration: EditorConfiguration) {
         self.configuration = configuration
@@ -10,26 +11,26 @@ struct EditorView: View {
 
     var body: some View {
         _EditorView(configuration: configuration)
+            .navigationBarBackButtonHidden(true)
             .toolbar {
-                ToolbarItemGroup(placement: .topBarLeading) {
-                    Button(action: {}, label: {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: {
+                        dismiss()
+                    }, label: {
                         Image(systemName: "xmark")
                     })
                 }
+
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button(action: {}, label: {
                         Image(systemName: "arrow.uturn.backward")
-                    })
+                    }).disabled(true)
                     Button(action: {}, label: {
                         Image(systemName: "arrow.uturn.forward")
                     }).disabled(true)
                 }
 
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button(action: {}, label: {
-                        Image(systemName: "safari")
-                    })
-
                     moreMenu
                 }
             }
@@ -40,25 +41,19 @@ struct EditorView: View {
             Section {
                 Button(action: {}, label: {
                     Label("Code Editor", systemImage: "curlybraces")
-                })
-                Button(action: {}, label: {
-                    Label("Outline", systemImage: "list.bullet.indent")
-                })
+                }).disabled(true)
                 Button(action: /*@START_MENU_TOKEN@*/{}/*@END_MENU_TOKEN@*/, label: {
                     Label("Preview", systemImage: "safari")
-                })
-            }
-            Section {
+                }).disabled(true)
                 Button(action: /*@START_MENU_TOKEN@*/{}/*@END_MENU_TOKEN@*/, label: {
                     Label("Revisions (42)", systemImage: "clock.arrow.circlepath")
-                })
+                }).disabled(true)
                 Button(action: /*@START_MENU_TOKEN@*/{}/*@END_MENU_TOKEN@*/, label: {
                     Label("Post Settings", systemImage: "gearshape")
-                })
-
+                }).disabled(true)
                 Button(action: /*@START_MENU_TOKEN@*/{}/*@END_MENU_TOKEN@*/, label: {
                     Label("Help", systemImage: "questionmark.circle")
-                })
+                }).disabled(true)
             }
             Section {
                 Text("Blocks: 4, Words: 8, Characters: 15")
@@ -68,7 +63,6 @@ struct EditorView: View {
         } label: {
             Image(systemName: "ellipsis")
         }
-        .tint(Color.primary)
     }
 }
 
