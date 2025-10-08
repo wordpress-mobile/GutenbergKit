@@ -1,6 +1,6 @@
 import Foundation
 
-public struct EditorConfiguration {
+public struct EditorConfiguration: Sendable {
     /// Initial title for populating the editor
     public let title: String
     /// Initial content for populating the editor
