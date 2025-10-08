@@ -5,7 +5,7 @@ import PackageDescription
 
 let package = Package(
     name: "GutenbergKit",
-    platforms: [.iOS(.v15), .macOS(.v14)],
+    platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
         .library(name: "GutenbergKit", targets: ["GutenbergKit"])
     ],
