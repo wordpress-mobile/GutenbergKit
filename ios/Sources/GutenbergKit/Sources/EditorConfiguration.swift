@@ -16,6 +16,9 @@ public struct EditorConfiguration: Sendable {
     public let shouldUsePlugins: Bool
     /// Toggles visibility of the title field
     public let shouldHideTitle: Bool
+    /// If enabled, the editor automatically becomes focused when initialized
+    /// with an empty content.
+    public let shouldAutoFocus: Bool
     /// Root URL for the site
     public let siteURL: String
     /// Root URL for the site API
@@ -42,6 +45,7 @@ public struct EditorConfiguration: Sendable {
         shouldUseThemeStyles: Bool,
         shouldUsePlugins: Bool,
         shouldHideTitle: Bool,
+        shouldAutoFocus: Bool,
         siteURL: String,
         siteApiRoot: String,
         siteApiNamespace: [String],
@@ -58,6 +62,7 @@ public struct EditorConfiguration: Sendable {
         self.shouldUseThemeStyles = shouldUseThemeStyles
         self.shouldUsePlugins = shouldUsePlugins
         self.shouldHideTitle = shouldHideTitle
+        self.shouldAutoFocus = shouldAutoFocus
         self.siteURL = siteURL
         self.siteApiRoot = siteApiRoot
         self.siteApiNamespace = siteApiNamespace
@@ -77,6 +82,7 @@ public struct EditorConfiguration: Sendable {
             shouldUseThemeStyles: shouldUseThemeStyles,
             shouldUsePlugins: shouldUsePlugins,
             shouldHideTitle: shouldHideTitle,
+            shouldAutoFocus: shouldAutoFocus,
             siteURL: siteURL,
             siteApiRoot: siteApiRoot,
             siteApiNamespace: siteApiNamespace,
@@ -107,6 +113,7 @@ public struct EditorConfigurationBuilder {
     private var shouldUseThemeStyles: Bool
     private var shouldUsePlugins: Bool
     private var shouldHideTitle: Bool
+    private var shouldAutoFocus: Bool
     private var siteURL: String
     private var siteApiRoot: String
     private var siteApiNamespace: [String]
@@ -124,6 +131,7 @@ public struct EditorConfigurationBuilder {
         shouldUseThemeStyles: Bool = false,
         shouldUsePlugins: Bool = false,
         shouldHideTitle: Bool = false,
+        shouldAutoFocus: Bool = true,
         siteURL: String = "",
         siteApiRoot: String = "",
         siteApiNamespace: [String] = [],
@@ -140,6 +148,7 @@ public struct EditorConfigurationBuilder {
         self.shouldUseThemeStyles = shouldUseThemeStyles
         self.shouldUsePlugins = shouldUsePlugins
         self.shouldHideTitle = shouldHideTitle
+        self.shouldAutoFocus = shouldAutoFocus
         self.siteURL = siteURL
         self.siteApiRoot = siteApiRoot
         self.siteApiNamespace = siteApiNamespace
@@ -189,6 +198,12 @@ public struct EditorConfigurationBuilder {
     public func setShouldHideTitle(_ shouldHideTitle: Bool) -> EditorConfigurationBuilder {
         var copy = self
         copy.shouldHideTitle = shouldHideTitle
+        return copy
+    }
+
+    public func setShouldAutoFocus(_ shouldAutoFocus: Bool) -> EditorConfigurationBuilder {
+        var copy = self
+        copy.shouldAutoFocus = shouldAutoFocus
         return copy
     }
 
@@ -271,6 +286,7 @@ public struct EditorConfigurationBuilder {
             shouldUseThemeStyles: shouldUseThemeStyles,
             shouldUsePlugins: shouldUsePlugins,
             shouldHideTitle: shouldHideTitle,
+            shouldAutoFocus: shouldAutoFocus,
             siteURL: siteURL,
             siteApiRoot: siteApiRoot,
             siteApiNamespace: siteApiNamespace,
