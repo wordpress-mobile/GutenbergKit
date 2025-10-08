@@ -1,6 +1,6 @@
 import Foundation
 
-struct EditorBlockType: Decodable, Identifiable {
+struct EditorBlock: Decodable, Identifiable {
     var id: String { name }
 
     let name: String
