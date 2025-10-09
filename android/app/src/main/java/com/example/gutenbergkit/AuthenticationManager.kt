@@ -19,6 +19,10 @@ class AuthenticationManager(private val context: Context) {
 
     private var currentApiRootUrl: String? = null
 
+    companion object {
+        private const val APP_NAME_AUTH = "GutenbergKitAndroidDemoApp"
+    }
+
     fun startAuthentication(siteUrl: String, callback: AuthenticationCallback) {
         CoroutineScope(Dispatchers.IO).launch {
             when (val apiDiscoveryResult = WpLoginClient().apiDiscovery(siteUrl)) {
@@ -54,7 +58,7 @@ class AuthenticationManager(private val context: Context) {
         val uriBuilder = applicationPasswordAuthenticationUrl.toUri().buildUpon()
 
         uriBuilder
-            .appendQueryParameter("app_name", "GutenbergKitAndroidDemoApp")
+            .appendQueryParameter("app_name", APP_NAME_AUTH)
             .appendQueryParameter("app_id", "00000000-0000-4000-9000-000000000000")
             // Url scheme is defined in AndroidManifest file
             .appendQueryParameter("success_url", "gutenbergkit://authorized")
