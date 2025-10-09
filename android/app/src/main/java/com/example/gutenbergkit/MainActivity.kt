@@ -91,7 +91,8 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
                         configurations.remove(config)
                         configurationStorage.saveConfigurations(configurations)
                     },
-                    isDiscoveringSite = isDiscoveringSite.value
+                    isDiscoveringSite = isDiscoveringSite.value,
+                    onDismissDiscovering = { isDiscoveringSite.value = false }
                 )
             }
         }
@@ -164,7 +165,8 @@ fun MainScreen(
     onConfigurationLongClick: (ConfigurationItem) -> Boolean,
     onAddConfiguration: (String) -> Unit,
     onDeleteConfiguration: (ConfigurationItem) -> Unit,
-    isDiscoveringSite: Boolean = false
+    isDiscoveringSite: Boolean = false,
+    onDismissDiscovering: () -> Unit = {}
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf<ConfigurationItem.RemoteEditor?>(null) }
@@ -277,7 +279,7 @@ fun MainScreen(
     // Discovering Site Dialog
     if (isDiscoveringSite) {
         AlertDialog(
-            onDismissRequest = { },
+            onDismissRequest = onDismissDiscovering,
             title = { Text(stringResource(R.string.discovering_site)) },
             text = {
                 Column(
@@ -291,7 +293,12 @@ fun MainScreen(
                     Text(stringResource(R.string.connecting_to_api))
                 }
             },
-            confirmButton = { }
+            confirmButton = { },
+            dismissButton = {
+                TextButton(onClick = onDismissDiscovering) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
         )
     }
 }
