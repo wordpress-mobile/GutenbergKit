@@ -3,7 +3,7 @@
 
     <!-- Configuration Activity -->
     <string name="demo_title">GutenbergKit Demo</string>
-    <string name="bundled_editor">Bundled Editor</string>
+    <string name="bundled_editor">Bundled editor</string>
     <string name="bundled_editor_subtitle">Offline editor with bundled assets</string>
     <string name="add_remote_editor_description">Add remote editor</string>
 

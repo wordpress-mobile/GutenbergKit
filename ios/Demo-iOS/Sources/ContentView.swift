@@ -13,7 +13,7 @@ struct ContentView: View {
                 NavigationLink {
                     EditorView(configuration: .default)
                 } label: {
-                    Text("Bundled Editor")
+                    Text("Bundled editor")
                 }
             }
 
