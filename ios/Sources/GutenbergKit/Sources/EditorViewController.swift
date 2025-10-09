@@ -321,23 +321,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         print("gutenbergkit-measure_editor-first-render:", duration)
         delegate?.editorDidLoad(self)
 
-        if configuration.shouldAutoFocus, configuration.content.isEmpty {
-            autoFocusEditor()
+        if configuration.content.isEmpty {
+            evaluate("editor.focus();")
         }
-    }
-
-    // MARK: - Helpers
-
-    private func autoFocusEditor() {
-        evaluate("""
-        (function() {
-            const editable = document.querySelector('[contenteditable="true"]');
-            if (editable) {
-                editable.focus();
-                editable.click();
-            }
-        })();
-        """)
     }
 
     // MARK: - Warmup

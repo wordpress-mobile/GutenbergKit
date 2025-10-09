@@ -108,6 +108,16 @@ export function useHostBridge( post, editorRef ) {
 			);
 		};
 
+		window.editor.focus = () => {
+			const editable = document.querySelector(
+				'[contenteditable="true"]'
+			);
+			if ( editable ) {
+				editable.focus();
+				editable.click();
+			}
+		};
+
 		window.editor.appendTextAtCursor = ( text ) => {
 			const selectedBlockClientId = getSelectedBlockClientId();
 
