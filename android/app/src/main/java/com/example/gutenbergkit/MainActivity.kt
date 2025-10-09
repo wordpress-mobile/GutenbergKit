@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -239,6 +240,12 @@ fun MainScreen(
     showDeleteDialog?.let { config ->
         AlertDialog(
             onDismissRequest = { showDeleteDialog = null },
+            icon = {
+                Icon(
+                    imageVector = Icons.Outlined.Delete,
+                    contentDescription = null
+                )
+            },
             title = { Text(stringResource(R.string.delete_site_title)) },
             text = { Text(stringResource(R.string.delete_site_message)) },
             confirmButton = {
