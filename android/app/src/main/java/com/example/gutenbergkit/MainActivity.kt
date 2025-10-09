@@ -2,18 +2,49 @@ package com.example.gutenbergkit
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.EditText
-import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.floatingactionbutton.FloatingActionButton
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import com.example.gutenbergkit.ui.theme.AppTheme
 import org.wordpress.gutenberg.EditorConfiguration
 
-class MainActivity : AppCompatActivity(), AuthenticationManager.AuthenticationCallback {
-    private lateinit var recyclerView: RecyclerView
-    private lateinit var adapter: ConfigurationAdapter
-    private val configurations = mutableListOf<ConfigurationItem>()
+class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCallback {
+    private val configurations = mutableStateListOf<ConfigurationItem>()
     private lateinit var configurationStorage: ConfigurationStorage
     private lateinit var authenticationManager: AuthenticationManager
 
@@ -23,14 +54,10 @@ class MainActivity : AppCompatActivity(), AuthenticationManager.AuthenticationCa
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_configuration)
+        enableEdgeToEdge()
 
-        title = getString(R.string.demo_title)
         configurationStorage = ConfigurationStorage(this)
         authenticationManager = AuthenticationManager(this)
-
-        recyclerView = findViewById(R.id.configurationsRecyclerView)
-        recyclerView.layoutManager = LinearLayoutManager(this)
 
         // Add default bundled editor configuration
         configurations.add(ConfigurationItem.BundledEditor)
@@ -38,31 +65,31 @@ class MainActivity : AppCompatActivity(), AuthenticationManager.AuthenticationCa
         // Load saved configurations
         configurations.addAll(configurationStorage.loadConfigurations())
 
-        adapter = ConfigurationAdapter(
-            configurations,
-            onItemClick = { config ->
-                when (config) {
-                    is ConfigurationItem.BundledEditor -> launchEditor(createBundledConfiguration())
-                    is ConfigurationItem.RemoteEditor -> {
-                        launchEditor(createRemoteConfiguration(config))
+        setContent {
+            AppTheme {
+                MainScreen(
+                    configurations = configurations,
+                    onConfigurationClick = { config ->
+                        when (config) {
+                            is ConfigurationItem.BundledEditor -> launchEditor(createBundledConfiguration())
+                            is ConfigurationItem.RemoteEditor -> launchEditor(createRemoteConfiguration(config))
+                        }
+                    },
+                    onConfigurationLongClick = { config ->
+                        when (config) {
+                            is ConfigurationItem.BundledEditor -> false
+                            is ConfigurationItem.RemoteEditor -> true
+                        }
+                    },
+                    onAddConfiguration = { siteUrl ->
+                        authenticationManager.startAuthentication(siteUrl, this)
+                    },
+                    onDeleteConfiguration = { config ->
+                        configurations.remove(config)
+                        configurationStorage.saveConfigurations(configurations)
                     }
-                }
-            },
-            onItemLongClick = { config ->
-                when (config) {
-                    is ConfigurationItem.BundledEditor -> false // Can't delete bundled editor
-                    is ConfigurationItem.RemoteEditor -> {
-                        showDeleteDialog(config)
-                        true
-                    }
-                }
+                )
             }
-        )
-        recyclerView.adapter = adapter
-
-        // Add FAB for adding new remote configurations
-        findViewById<FloatingActionButton>(R.id.addConfigurationFab).setOnClickListener {
-            showAddConfigurationDialog()
         }
     }
 
@@ -101,24 +128,6 @@ class MainActivity : AppCompatActivity(), AuthenticationManager.AuthenticationCa
         startActivity(intent)
     }
 
-    private fun showAddConfigurationDialog() {
-        val dialogView = layoutInflater.inflate(R.layout.dialog_configuration, null)
-        val siteUrlInput = dialogView.findViewById<EditText>(R.id.siteUrlInput)
-
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.add_remote_configuration))
-            .setView(dialogView)
-            .setPositiveButton(getString(R.string.add)) { dialog, _ ->
-                val siteUrl = siteUrlInput.text.toString().trim()
-                if (siteUrl.isNotEmpty()) {
-                    dialog.dismiss()
-                    authenticationManager.startAuthentication(siteUrl, this)
-                }
-            }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
-    }
-
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         authenticationManager.processAuthenticationResult(intent, this)
@@ -133,30 +142,164 @@ class MainActivity : AppCompatActivity(), AuthenticationManager.AuthenticationCa
             authHeader = authToken
         )
         configurations.add(newConfig)
-        adapter.notifyItemInserted(configurations.size - 1)
         configurationStorage.saveConfigurations(configurations)
     }
 
     override fun onAuthenticationFailure(errorMessage: String) {
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.authentication_failed))
-            .setMessage(errorMessage)
-            .setPositiveButton(getString(R.string.ok), null)
-            .setCancelable(true)
-            .show()
+        // Error will be shown in Compose UI
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MainScreen(
+    configurations: List<ConfigurationItem>,
+    onConfigurationClick: (ConfigurationItem) -> Unit,
+    onConfigurationLongClick: (ConfigurationItem) -> Boolean,
+    onAddConfiguration: (String) -> Unit,
+    onDeleteConfiguration: (ConfigurationItem) -> Unit
+) {
+    var showAddDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf<ConfigurationItem.RemoteEditor?>(null) }
+    var siteUrlInput by remember { mutableStateOf("") }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.demo_title)) }
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showAddDialog = true }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = stringResource(R.string.add_remote_config_description)
+                )
+            }
+        }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(configurations) { config ->
+                ConfigurationCard(
+                    configuration = config,
+                    onClick = { onConfigurationClick(config) },
+                    onLongClick = {
+                        if (config is ConfigurationItem.RemoteEditor) {
+                            showDeleteDialog = config
+                        }
+                    }
+                )
+            }
+        }
     }
 
-    private fun showDeleteDialog(config: ConfigurationItem.RemoteEditor) {
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.delete_site_title))
-            .setMessage(getString(R.string.delete_site_message))
-            .setPositiveButton(getString(R.string.delete)) { _, _ ->
-                val index = configurations.indexOf(config)
-                configurations.removeAt(index)
-                adapter.notifyItemRemoved(index)
-                configurationStorage.saveConfigurations(configurations)
+    // Add Configuration Dialog
+    if (showAddDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddDialog = false },
+            title = { Text(stringResource(R.string.add_remote_configuration)) },
+            text = {
+                OutlinedTextField(
+                    value = siteUrlInput,
+                    onValueChange = { siteUrlInput = it },
+                    label = { Text(stringResource(R.string.site_url)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (siteUrlInput.isNotBlank()) {
+                            onAddConfiguration(siteUrlInput.trim())
+                            showAddDialog = false
+                            siteUrlInput = ""
+                        }
+                    }
+                ) {
+                    Text(stringResource(R.string.add))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
             }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
+        )
+    }
+
+    // Delete Configuration Dialog
+    showDeleteDialog?.let { config ->
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = null },
+            title = { Text(stringResource(R.string.delete_site_title)) },
+            text = { Text(stringResource(R.string.delete_site_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteConfiguration(config)
+                        showDeleteDialog = null
+                    }
+                ) {
+                    Text(stringResource(R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun ConfigurationCard(
+    configuration: ConfigurationItem,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        ListItem(
+            headlineContent = {
+                Text(
+                    when (configuration) {
+                        is ConfigurationItem.BundledEditor -> stringResource(R.string.bundled_editor)
+                        is ConfigurationItem.RemoteEditor -> configuration.name
+                    }
+                )
+            },
+            supportingContent = {
+                Text(
+                    when (configuration) {
+                        is ConfigurationItem.BundledEditor -> stringResource(R.string.bundled_editor_subtitle)
+                        is ConfigurationItem.RemoteEditor -> configuration.siteUrl
+                    }
+                )
+            },
+            leadingContent = {
+                Icon(
+                    imageVector = when (configuration) {
+                        is ConfigurationItem.BundledEditor -> Icons.Default.Computer
+                        is ConfigurationItem.RemoteEditor -> Icons.Default.Language
+                    },
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        )
     }
 }
