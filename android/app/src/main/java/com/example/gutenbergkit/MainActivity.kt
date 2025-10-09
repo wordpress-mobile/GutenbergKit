@@ -174,7 +174,7 @@ fun MainScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
-                    contentDescription = stringResource(R.string.add_remote_config_description)
+                    contentDescription = stringResource(R.string.add_remote_editor_description)
                 )
             }
         }
@@ -204,7 +204,7 @@ fun MainScreen(
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
-            title = { Text(stringResource(R.string.add_remote_configuration)) },
+            title = { Text(stringResource(R.string.add_remote_editor)) },
             text = {
                 OutlinedTextField(
                     value = siteUrlInput,
