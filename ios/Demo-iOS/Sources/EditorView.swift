@@ -3,11 +3,10 @@ import GutenbergKit
 
 struct EditorView: View {
     private let configuration: EditorConfiguration
-    @State private var isModalDialogOpen = false
-    @State private var hasUndo = false
-    @State private var hasRedo = false
-    @State private var isCodeEditorEnabled = false
+
+    @State private var viewModel = EditorViewModel()
     @State private var editorViewController: EditorViewController?
+
     @Environment(\.dismiss) private var dismiss
 
     init(configuration: EditorConfiguration) {
@@ -15,57 +14,56 @@ struct EditorView: View {
     }
 
     var body: some View {
-        _EditorView(
-            configuration: configuration,
-            isModalDialogOpen: $isModalDialogOpen,
-            hasUndo: $hasUndo,
-            hasRedo: $hasRedo,
-            isCodeEditorEnabled: $isCodeEditorEnabled,
-            editorViewController: $editorViewController
-        )
+        _EditorView(configuration: configuration, viewModel: viewModel)
             .navigationBarBackButtonHidden(true)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(action: {
-                        dismiss()
-                    }, label: {
-                        Image(systemName: "xmark")
-                    })
-                    .disabled(isModalDialogOpen)
-                }
+            .toolbar { toolbar }
+    }
 
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button(action: {
-                        editorViewController?.undo()
-                    }, label: {
-                        Image(systemName: "arrow.uturn.backward")
-                    })
-                    .disabled(!hasUndo || isModalDialogOpen)
-
-                    Button(action: {
-                        editorViewController?.redo()
-                    }, label: {
-                        Image(systemName: "arrow.uturn.forward")
-                    })
-                    .disabled(!hasRedo || isModalDialogOpen)
-                }
-
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    moreMenu
-                        .disabled(isModalDialogOpen)
-                }
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
             }
+            .disabled(viewModel.isModalDialogOpen)
+        }
+
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            Group {
+                Button {
+                    viewModel.perform(.undo)
+                } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                }
+                .disabled(!viewModel.hasUndo)
+
+                Button {
+                    viewModel.perform(.redo)
+                } label: {
+                    Image(systemName: "arrow.uturn.forward")
+                }
+                .disabled(!viewModel.hasRedo)
+            }
+            .disabled(viewModel.isModalDialogOpen)
+        }
+
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            moreMenu
+                .disabled(viewModel.isModalDialogOpen)
+        }
     }
 
     private var moreMenu: some View {
         Menu {
             Section {
                 Button(action: {
-                    isCodeEditorEnabled.toggle()
+                    viewModel.isCodeEditorEnabled.toggle()
                 }, label: {
                     Label(
-                        isCodeEditorEnabled ? "Visual Editor" : "Code Editor",
-                        systemImage: isCodeEditorEnabled ? "doc.richtext" : "curlybraces"
+                        viewModel.isCodeEditorEnabled ? "Visual Editor" : "Code Editor",
+                        systemImage: viewModel.isCodeEditorEnabled ? "doc.richtext" : "curlybraces"
                     )
                 })
                 Button(action: /*@START_MENU_TOKEN@*/{}/*@END_MENU_TOKEN@*/, label: {
@@ -94,34 +92,18 @@ struct EditorView: View {
 
 private struct _EditorView: UIViewControllerRepresentable {
     private let configuration: EditorConfiguration
-    @Binding var isModalDialogOpen: Bool
-    @Binding var hasUndo: Bool
-    @Binding var hasRedo: Bool
-    @Binding var isCodeEditorEnabled: Bool
-    @Binding var editorViewController: EditorViewController?
+    private let viewModel: EditorViewModel
 
     init(
         configuration: EditorConfiguration,
-        isModalDialogOpen: Binding<Bool>,
-        hasUndo: Binding<Bool>,
-        hasRedo: Binding<Bool>,
-        isCodeEditorEnabled: Binding<Bool>,
-        editorViewController: Binding<EditorViewController?>
+        viewModel: EditorViewModel,
     ) {
         self.configuration = configuration
-        self._isModalDialogOpen = isModalDialogOpen
-        self._hasUndo = hasUndo
-        self._hasRedo = hasRedo
-        self._isCodeEditorEnabled = isCodeEditorEnabled
-        self._editorViewController = editorViewController
+        self.viewModel = viewModel
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(
-            isModalDialogOpen: $isModalDialogOpen,
-            hasUndo: $hasUndo,
-            hasRedo: $hasRedo
-        )
+        Coordinator(viewModel: viewModel)
     }
 
     func makeUIViewController(context: Context) -> EditorViewController {
@@ -130,32 +112,26 @@ private struct _EditorView: UIViewControllerRepresentable {
         viewController.webView.isInspectable = true
         viewController.startEditorSetup()
 
-        // Store reference to view controller
-        DispatchQueue.main.async {
-            self.editorViewController = viewController
+        viewModel.perform = { [weak viewController] in
+            switch $0 {
+            case .redo: viewController?.redo()
+            case .undo: viewController?.undo()
+            }
         }
 
         return viewController
     }
 
-    func updateUIViewController(_ uiViewController: EditorViewController, context: Context) {
-        uiViewController.isCodeEditorEnabled = isCodeEditorEnabled
+    func updateUIViewController(_ viewController: EditorViewController, context: Context) {
+        viewController.isCodeEditorEnabled = viewModel.isCodeEditorEnabled
     }
 
     @MainActor
     class Coordinator: NSObject, EditorViewControllerDelegate {
-        @Binding var isModalDialogOpen: Bool
-        @Binding var hasUndo: Bool
-        @Binding var hasRedo: Bool
+        let viewModel: EditorViewModel
 
-        init(
-            isModalDialogOpen: Binding<Bool>,
-            hasUndo: Binding<Bool>,
-            hasRedo: Binding<Bool>
-        ) {
-            self._isModalDialogOpen = isModalDialogOpen
-            self._hasUndo = hasUndo
-            self._hasRedo = hasRedo
+        init(viewModel: EditorViewModel) {
+            self.viewModel = viewModel
         }
 
         // MARK: - EditorViewControllerDelegate
@@ -177,8 +153,8 @@ private struct _EditorView: UIViewControllerRepresentable {
         }
 
         func editor(_ viewController: EditorViewController, didUpdateHistoryState state: EditorState) {
-            hasUndo = state.hasUndo
-            hasRedo = state.hasRedo
+            viewModel.hasUndo = state.hasUndo
+            viewModel.hasRedo = state.hasRedo
         }
 
         func editor(_ viewController: EditorViewController, didUpdateFeaturedImage mediaID: Int) {
@@ -198,13 +174,28 @@ private struct _EditorView: UIViewControllerRepresentable {
         }
 
         func editor(_ viewController: EditorViewController, didOpenModalDialog dialogType: String) {
-            isModalDialogOpen = true
+            viewModel.isModalDialogOpen = true
         }
 
         func editor(_ viewController: EditorViewController, didCloseModalDialog dialogType: String) {
-            isModalDialogOpen = false
+            viewModel.isModalDialogOpen = false
         }
     }
+}
+
+@Observable
+private final class EditorViewModel {
+    var isModalDialogOpen = false
+    var hasUndo = false
+    var hasRedo = false
+    var isCodeEditorEnabled = false
+
+    enum Action {
+        case undo
+        case redo
+    }
+
+    var perform: (_ action: Action) -> Void = { _ in assertionFailure() }
 }
 
 #Preview {
