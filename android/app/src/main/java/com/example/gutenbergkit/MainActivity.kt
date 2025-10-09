@@ -7,7 +7,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,30 +16,26 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Inventory2
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.example.gutenbergkit.ui.dialogs.AddConfigurationDialog
+import com.example.gutenbergkit.ui.dialogs.DeleteConfigurationDialog
+import com.example.gutenbergkit.ui.dialogs.DiscoveringSiteDialog
 import com.example.gutenbergkit.ui.theme.AppTheme
 import org.wordpress.gutenberg.EditorConfiguration
 
@@ -168,9 +163,9 @@ fun MainScreen(
     isDiscoveringSite: Boolean = false,
     onDismissDiscovering: () -> Unit = {}
 ) {
-    var showAddDialog by remember { mutableStateOf(false) }
-    var showDeleteDialog by remember { mutableStateOf<ConfigurationItem.RemoteEditor?>(null) }
-    var siteUrlInput by remember { mutableStateOf("") }
+    var showAddDialog = remember { mutableStateOf(false) }
+    var showDeleteDialog = remember { mutableStateOf<ConfigurationItem.RemoteEditor?>(null) }
+    var siteUrlInput = remember { mutableStateOf("") }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -181,7 +176,7 @@ fun MainScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showAddDialog = true }
+                onClick = { showAddDialog.value = true }
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
@@ -203,7 +198,7 @@ fun MainScreen(
                     onClick = { onConfigurationClick(config) },
                     onLongClick = {
                         if (config is ConfigurationItem.RemoteEditor) {
-                            showDeleteDialog = config
+                            showDeleteDialog.value = config
                         }
                     }
                 )
@@ -211,94 +206,34 @@ fun MainScreen(
         }
     }
 
-    // Add Configuration Dialog
-    if (showAddDialog) {
-        AlertDialog(
-            onDismissRequest = { showAddDialog = false },
-            title = { Text(stringResource(R.string.add_remote_editor)) },
-            text = {
-                OutlinedTextField(
-                    value = siteUrlInput,
-                    onValueChange = { siteUrlInput = it },
-                    label = { Text(stringResource(R.string.site_url)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (siteUrlInput.isNotBlank()) {
-                            onAddConfiguration(siteUrlInput.trim())
-                            showAddDialog = false
-                            siteUrlInput = ""
-                        }
-                    }
-                ) {
-                    Text(stringResource(R.string.add))
+    if (showAddDialog.value) {
+        AddConfigurationDialog(
+            siteUrlInput = siteUrlInput.value,
+            onSiteUrlChange = { siteUrlInput.value = it },
+            onConfirm = {
+                if (siteUrlInput.value.isNotBlank()) {
+                    onAddConfiguration(siteUrlInput.value.trim())
+                    showAddDialog.value = false
+                    siteUrlInput.value = ""
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showAddDialog = false }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            }
+            onDismiss = { showAddDialog.value = false }
         )
     }
 
-    // Delete Configuration Dialog
-    showDeleteDialog?.let { config ->
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = null },
-            icon = {
-                Icon(
-                    imageVector = Icons.Outlined.Delete,
-                    contentDescription = null
-                )
+    showDeleteDialog.value?.let { config ->
+        DeleteConfigurationDialog(
+            onConfirm = {
+                onDeleteConfiguration(config)
+                showDeleteDialog.value = null
             },
-            title = { Text(stringResource(R.string.delete_site_title)) },
-            text = { Text(stringResource(R.string.delete_site_message)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onDeleteConfiguration(config)
-                        showDeleteDialog = null
-                    }
-                ) {
-                    Text(stringResource(R.string.delete))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = null }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            }
+            onDismiss = { showDeleteDialog.value = null }
         )
     }
 
-    // Discovering Site Dialog
     if (isDiscoveringSite) {
-        AlertDialog(
-            onDismissRequest = onDismissDiscovering,
-            title = { Text(stringResource(R.string.discovering_site)) },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 16.dp),
-                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(24.dp)
-                ) {
-                    CircularProgressIndicator()
-                    Text(stringResource(R.string.connecting_to_api))
-                }
-            },
-            confirmButton = { },
-            dismissButton = {
-                TextButton(onClick = onDismissDiscovering) {
-                    Text(stringResource(R.string.cancel))
-                }
-            }
+        DiscoveringSiteDialog(
+            onDismiss = onDismissDiscovering
         )
     }
 }
