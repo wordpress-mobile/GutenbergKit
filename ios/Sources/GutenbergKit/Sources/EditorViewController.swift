@@ -86,33 +86,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             setUpEditor()
             loadEditor()
         }
-
-        // TODO: register it when editor is loaded
-//        service.$rawBlockTypesResponseData.compactMap({ $0 }).sink { [weak self] data in
-//            guard let self else { return }
-//            assert(Thread.isMainThread)
-//
-//        }.store(in: &cancellables)
-    }
-
-    // TODO: move
-    private func registerBlockTypes(data: Data) async {
-        guard let string = String(data: data, encoding: .utf8),
-            let escapedString = string.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else {
-            assertionFailure("invalid block types")
-            return
-        }
-        do {
-            // TODO: simplify this
-            try await webView.evaluateJavaScript("""
-                const blockTypes = JSON.parse(decodeURIComponent('\(escapedString)'));
-                editor.registerBlocks(blockTypes);
-                "done";
-                """)
-        } catch {
-            NSLog("failed to register blocks \(error)")
-            // TOOD: relay to the client
-        }
     }
 
     private func setUpEditor() {
@@ -347,6 +320,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let duration = CFAbsoluteTimeGetCurrent() - timestampInit
         print("gutenbergkit-measure_editor-first-render:", duration)
         delegate?.editorDidLoad(self)
+
+        if configuration.content.isEmpty {
+            evaluate("editor.focus();")
+        }
     }
 
     // MARK: - Warmup
