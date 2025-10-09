@@ -71,3 +71,19 @@ $min-touch-target-size: 46px;
 	left: 6px;
 	right: 6px;
 }
+
+// Style the add block button with rounded black background
+.gutenberg-kit-editor-toolbar .gutenberg-kit-add-block-button {
+	svg {
+		background: #eae9ec;
+		border-radius: 18px;
+		color: wordpress.$black;
+		padding: 1px;
+		width: 32px;
+		height: 32px;
+		display: block;
+	}
+
+	// width: 50px;
+	margin-left: 8px;
+}

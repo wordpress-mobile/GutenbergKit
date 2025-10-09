@@ -30,6 +30,8 @@ public struct EditorConfiguration: Sendable {
     public let editorSettings: String
     /// Locale used for translations
     public let locale: String
+    /// Enables the native inserter UI in the editor
+    public let isNativeInserterEnabled: Bool
     /// Endpoint for loading editor assets, used when enabling `shouldUsePlugins`
     public var editorAssetsEndpoint: URL?
 
@@ -49,6 +51,7 @@ public struct EditorConfiguration: Sendable {
         authHeader: String,
         editorSettings: String,
         locale: String,
+        isNativeInserterEnabled: Bool,
         editorAssetsEndpoint: URL? = nil,
     ) {
         self.title = title
@@ -65,6 +68,7 @@ public struct EditorConfiguration: Sendable {
         self.authHeader = authHeader
         self.editorSettings = editorSettings
         self.locale = locale
+        self.isNativeInserterEnabled = isNativeInserterEnabled
         self.editorAssetsEndpoint = editorAssetsEndpoint
     }
 
@@ -84,6 +88,7 @@ public struct EditorConfiguration: Sendable {
             authHeader: authHeader,
             editorSettings: editorSettings,
             locale: locale,
+            isNativeInserterEnabled: isNativeInserterEnabled,
             editorAssetsEndpoint: editorAssetsEndpoint
         )
     }
@@ -114,6 +119,7 @@ public struct EditorConfigurationBuilder {
     private var authHeader: String
     private var editorSettings: String
     private var locale: String
+    private var isNativeInserterEnabled: Bool
     private var editorAssetsEndpoint: URL?
 
     public init(
@@ -131,6 +137,7 @@ public struct EditorConfigurationBuilder {
         authHeader: String = "",
         editorSettings: String = "undefined",
         locale: String = "en",
+        isNativeInserterEnabled: Bool = true,
         editorAssetsEndpoint: URL? = nil
     ){
         self.title = title
@@ -147,6 +154,7 @@ public struct EditorConfigurationBuilder {
         self.authHeader = authHeader
         self.editorSettings = editorSettings
         self.locale = locale
+        self.isNativeInserterEnabled = isNativeInserterEnabled
         self.editorAssetsEndpoint = editorAssetsEndpoint
     }
 
@@ -234,6 +242,12 @@ public struct EditorConfigurationBuilder {
         return copy
     }
 
+    public func setNativeInserterEnabled(_ isNativeInserterEnabled: Bool = true) -> EditorConfigurationBuilder {
+        var copy = self
+        copy.isNativeInserterEnabled = isNativeInserterEnabled
+        return copy
+    }
+
     public func setEditorAssetsEndpoint(_ editorAssetsEndpoint: URL?) -> EditorConfigurationBuilder {
         var copy = self
         copy.editorAssetsEndpoint = editorAssetsEndpoint
@@ -278,6 +292,7 @@ public struct EditorConfigurationBuilder {
             authHeader: authHeader,
             editorSettings: editorSettings,
             locale: locale,
+            isNativeInserterEnabled: isNativeInserterEnabled,
             editorAssetsEndpoint: editorAssetsEndpoint
         )
     }
@@ -296,3 +311,4 @@ private extension String {
             .replacingOccurrences(of: "\u{12}", with: "\\f")
     }
 }
+

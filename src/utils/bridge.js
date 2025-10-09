@@ -5,6 +5,7 @@ import parseException from './exception-parser';
 import { debug } from './logger';
 import { isDevMode } from './dev-mode';
 import { basicFetch } from './fetch';
+import { getBlockTypes } from '@wordpress/blocks';
 
 /**
  * Generic function to dispatch messages to both Android and iOS bridges.
@@ -91,8 +92,17 @@ export function onBlocksChanged( isEmpty = false ) {
  *
  * @return {void}
  */
-export function showBlockPicker() {
-	dispatchToBridge( 'showBlockPicker', {} );
+export function showBlockInserter() {
+	const blocks = getBlockTypes().map( ( blockType ) => {
+		return {
+			name: blockType.name,
+			title: blockType.title,
+			description: blockType.description,
+			category: blockType.category,
+			keywords: blockType.keywords || [],
+		};
+	} );
+	dispatchToBridge( 'showBlockInserter', { blocks } );
 }
 
 /**

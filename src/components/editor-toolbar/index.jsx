@@ -17,7 +17,7 @@ import {
 	ToolbarButton,
 } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
-import { close, cog } from '@wordpress/icons';
+import { close, cog, plus } from '@wordpress/icons';
 import clsx from 'clsx';
 import { store as editorStore } from '@wordpress/editor';
 
@@ -27,6 +27,8 @@ import { store as editorStore } from '@wordpress/editor';
 import './style.scss';
 import { useModalize } from './use-modalize';
 import { useModalDialogState } from '../editor/use-modal-dialog-state';
+import { showBlockInserter, getGBKit } from '../../utils/bridge';
+
 
 /**
  * Renders the editor toolbar containing block-related actions.
@@ -36,6 +38,8 @@ import { useModalDialogState } from '../editor/use-modal-dialog-state';
  * @return {JSX.Element} The rendered editor toolbar component.
  */
 const EditorToolbar = ( { className } ) => {
+	const { enableNativeBlockInserter } = getGBKit();
+
 	const [ isBlockInspectorShown, setBlockInspectorShown ] = useState( false );
 	const { isSelected } = useSelect( ( select ) => {
 		const { getSelectedBlockClientId } = select( blockEditorStore );
@@ -77,6 +81,29 @@ const EditorToolbar = ( { className } ) => {
 
 	const classes = clsx( 'gutenberg-kit-editor-toolbar', className );
 
+	const addBlockButton = enableNativeBlockInserter ? (
+		<ToolbarButton
+			title={ __( 'Add block' ) }
+			icon={ plus }
+			onClick={ () => {
+				if ( isInserterOpened ) {
+					setIsInserterOpened( false );
+				}
+				showBlockInserter();
+			} }
+			className="gutenberg-kit-add-block-button"
+		/>
+	) : (
+		<Inserter
+			popoverProps={ {
+				'aria-modal': true,
+				role: 'dialog',
+			} }
+			open={ isInserterOpened }
+			onToggle={ setIsInserterOpened }
+		/>
+	);	
+
 	return (
 		<>
 			<Toolbar
@@ -85,14 +112,7 @@ const EditorToolbar = ( { className } ) => {
 				variant="unstyled"
 			>
 				<ToolbarGroup>
-					<Inserter
-						popoverProps={ {
-							'aria-modal': true,
-							role: 'dialog',
-						} }
-						open={ isInserterOpened }
-						onToggle={ setIsInserterOpened }
-					/>
+					{ addBlockButton }
 				</ToolbarGroup>
 
 				{ isSelected && (
