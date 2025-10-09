@@ -96,8 +96,9 @@ private struct RemoteEditorRow: Identifiable {
 private extension EditorConfiguration {
 
     static var template: Self {
-        #warning("1. Update the siteURL and authHeader values below")
-        #warning("2. Install the Jetpack plugin to the site")
+        // Steps:
+        // 1. Update the siteURL and authHeader values below
+        // 2. Install the Jetpack plugin to the site
         let siteUrl: String = "https://modify-me.com"
         let authHeader: String = "Insert the Authorization header value here"
         let siteApiRoot: String = "\(siteUrl)/wp-json/"
