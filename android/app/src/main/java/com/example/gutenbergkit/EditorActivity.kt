@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.gutenbergkit.ui.theme.AppTheme
 import org.wordpress.gutenberg.EditorConfiguration
 import org.wordpress.gutenberg.GutenbergView
 
@@ -56,10 +57,12 @@ class EditorActivity : ComponentActivity() {
             } ?: EditorConfiguration.builder().build()
 
         setContent {
-            EditorScreen(
-                configuration = configuration,
-                onClose = { finish() }
-            )
+            AppTheme {
+                EditorScreen(
+                    configuration = configuration,
+                    onClose = { finish() }
+                )
+            }
         }
     }
 }
