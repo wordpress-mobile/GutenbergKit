@@ -10,6 +10,7 @@ import android.os.Looper
 import android.util.AttributeSet
 import android.util.Log
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
@@ -477,6 +478,18 @@ class GutenbergView : WebView {
                     .alpha(1f)
                     .setDuration(300)
                     .start()
+
+                if (configuration.content.isEmpty()) {
+                    // Focus the editor content
+                    this.evaluateJavascript("editor.focus();", null)
+
+                    // Request focus on the WebView and show the soft keyboard
+                    handler.postDelayed({
+                        this.requestFocus()
+                        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                        imm?.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
+                    }, 100)
+                }
             }
         }
     }
