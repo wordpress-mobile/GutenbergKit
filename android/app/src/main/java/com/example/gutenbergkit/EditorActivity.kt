@@ -72,6 +72,8 @@ fun EditorScreen(
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var isModalDialogOpen by remember { mutableStateOf(false) }
+    var hasUndoState by remember { mutableStateOf(false) }
+    var hasRedoState by remember { mutableStateOf(false) }
     var gutenbergViewRef by remember { mutableStateOf<GutenbergView?>(null) }
 
     BackHandler(enabled = isModalDialogOpen) {
@@ -95,13 +97,19 @@ fun EditorScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { }, enabled = false) {
+                    IconButton(
+                        onClick = { gutenbergViewRef?.undo() },
+                        enabled = hasUndoState && !isModalDialogOpen
+                    ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Undo,
                             contentDescription = "Undo"
                         )
                     }
-                    IconButton(onClick = { }, enabled = false) {
+                    IconButton(
+                        onClick = { gutenbergViewRef?.redo() },
+                        enabled = hasRedoState && !isModalDialogOpen
+                    ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Redo,
                             contentDescription = "Redo"
@@ -168,6 +176,12 @@ fun EditorScreen(
 
                         override fun onModalDialogClosed(dialogType: String) {
                             isModalDialogOpen = false
+                        }
+                    })
+                    setHistoryChangeListener(object : GutenbergView.HistoryChangeListener {
+                        override fun onHistoryChanged(hasUndo: Boolean, hasRedo: Boolean) {
+                            hasUndoState = hasUndo
+                            hasRedoState = hasRedo
                         }
                     })
                     start(configuration)
