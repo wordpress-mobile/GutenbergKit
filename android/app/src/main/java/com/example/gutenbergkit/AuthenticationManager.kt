@@ -50,14 +50,29 @@ class AuthenticationManager(private val context: Context) {
     }
 
     private fun showProgressDialog(onCreated: (AlertDialog) -> Unit) {
-        val progressView = android.view.LayoutInflater.from(context)
-            .inflate(android.R.layout.simple_list_item_1, null).apply {
-                findViewById<android.widget.TextView>(android.R.id.text1).apply {
-                    text = context.getString(R.string.finding_api_root)
-                    gravity = android.view.Gravity.CENTER
-                    setPadding(32, 32, 32, 32)
+        val progressView = android.widget.LinearLayout(context).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER
+            setPadding(64, 48, 64, 48)
+
+            // Add circular progress indicator
+            addView(android.widget.ProgressBar(context).apply {
+                isIndeterminate = true
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    setMargins(0, 0, 0, 32)
                 }
-            }
+            })
+
+            // Add message text
+            addView(android.widget.TextView(context).apply {
+                text = context.getString(R.string.connecting_to_api)
+                gravity = android.view.Gravity.CENTER
+                textSize = 16f
+            })
+        }
 
         val progressDialog = AlertDialog.Builder(context)
             .setTitle(context.getString(R.string.discovering_site))

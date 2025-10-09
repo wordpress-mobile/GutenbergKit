@@ -21,7 +21,7 @@
     <string name="authentication_failed">Authentication failed</string>
     <string name="ok">OK</string>
     <string name="discovering_site">Discovering site</string>
-    <string name="finding_api_root">Finding API root and authentication URL…</string>
+    <string name="connecting_to_api">Connecting to WordPress API…</string>
 
     <!-- Editor Activity -->
     <string name="editor">Editor</string>
