@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -44,6 +46,7 @@ import org.wordpress.gutenberg.EditorConfiguration
 
 class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCallback {
     private val configurations = mutableStateListOf<ConfigurationItem>()
+    private val isDiscoveringSite = mutableStateOf(false)
     private lateinit var configurationStorage: ConfigurationStorage
     private lateinit var authenticationManager: AuthenticationManager
 
@@ -81,12 +84,14 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
                         }
                     },
                     onAddConfiguration = { siteUrl ->
+                        isDiscoveringSite.value = true
                         authenticationManager.startAuthentication(siteUrl, this)
                     },
                     onDeleteConfiguration = { config ->
                         configurations.remove(config)
                         configurationStorage.saveConfigurations(configurations)
-                    }
+                    },
+                    isDiscoveringSite = isDiscoveringSite.value
                 )
             }
         }
@@ -133,6 +138,7 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
     }
 
     override fun onAuthenticationSuccess(siteUrl: String, siteApiRoot: String, authToken: String) {
+        isDiscoveringSite.value = false
         val siteName = siteUrl.removePrefix("https://").removePrefix("http://").substringBefore("/")
         val newConfig = ConfigurationItem.RemoteEditor(
             name = siteName,
@@ -145,6 +151,7 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
     }
 
     override fun onAuthenticationFailure(errorMessage: String) {
+        isDiscoveringSite.value = false
         // Error will be shown in Compose UI
     }
 }
@@ -156,7 +163,8 @@ fun MainScreen(
     onConfigurationClick: (ConfigurationItem) -> Unit,
     onConfigurationLongClick: (ConfigurationItem) -> Boolean,
     onAddConfiguration: (String) -> Unit,
-    onDeleteConfiguration: (ConfigurationItem) -> Unit
+    onDeleteConfiguration: (ConfigurationItem) -> Unit,
+    isDiscoveringSite: Boolean = false
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf<ConfigurationItem.RemoteEditor?>(null) }
@@ -263,6 +271,27 @@ fun MainScreen(
                     Text(stringResource(R.string.cancel))
                 }
             }
+        )
+    }
+
+    // Discovering Site Dialog
+    if (isDiscoveringSite) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text(stringResource(R.string.discovering_site)) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    CircularProgressIndicator()
+                    Text(stringResource(R.string.connecting_to_api))
+                }
+            },
+            confirmButton = { }
         )
     }
 }

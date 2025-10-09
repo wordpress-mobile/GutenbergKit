@@ -3,7 +3,6 @@ package com.example.gutenbergkit
 import android.content.Context
 import android.content.Intent
 import android.util.Base64
-import androidx.appcompat.app.AlertDialog
 import androidx.core.net.toUri
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,67 +20,28 @@ class AuthenticationManager(private val context: Context) {
     private var currentApiRootUrl: String? = null
 
     fun startAuthentication(siteUrl: String, callback: AuthenticationCallback) {
-        showProgressDialog { progressDialog ->
-            CoroutineScope(Dispatchers.IO).launch {
-                when (val apiDiscoveryResult = WpLoginClient().apiDiscovery(siteUrl)) {
-                    is ApiDiscoveryResult.Success -> {
-                        val success = apiDiscoveryResult.success
-                        val apiRootUrl = success.apiRootUrl.url()
-                        val applicationPasswordAuthenticationUrl =
-                            success.applicationPasswordsAuthenticationUrl.url()
-                        withContext(Dispatchers.Main) {
-                            progressDialog.dismiss()
-                            launchAuthenticationFlow(
-                                apiRootUrl,
-                                applicationPasswordAuthenticationUrl
-                            )
-                        }
+        CoroutineScope(Dispatchers.IO).launch {
+            when (val apiDiscoveryResult = WpLoginClient().apiDiscovery(siteUrl)) {
+                is ApiDiscoveryResult.Success -> {
+                    val success = apiDiscoveryResult.success
+                    val apiRootUrl = success.apiRootUrl.url()
+                    val applicationPasswordAuthenticationUrl =
+                        success.applicationPasswordsAuthenticationUrl.url()
+                    withContext(Dispatchers.Main) {
+                        launchAuthenticationFlow(
+                            apiRootUrl,
+                            applicationPasswordAuthenticationUrl
+                        )
                     }
+                }
 
-                    else -> {
-                        withContext(Dispatchers.Main) {
-                            progressDialog.dismiss()
-                            callback.onAuthenticationFailure("Failed to find api root: $apiDiscoveryResult")
-                        }
+                else -> {
+                    withContext(Dispatchers.Main) {
+                        callback.onAuthenticationFailure("Failed to find api root: $apiDiscoveryResult")
                     }
                 }
             }
         }
-    }
-
-    private fun showProgressDialog(onCreated: (AlertDialog) -> Unit) {
-        val progressView = android.widget.LinearLayout(context).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            gravity = android.view.Gravity.CENTER
-            setPadding(64, 48, 64, 48)
-
-            // Add circular progress indicator
-            addView(android.widget.ProgressBar(context).apply {
-                isIndeterminate = true
-                layoutParams = android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    setMargins(0, 0, 0, 32)
-                }
-            })
-
-            // Add message text
-            addView(android.widget.TextView(context).apply {
-                text = context.getString(R.string.connecting_to_api)
-                gravity = android.view.Gravity.CENTER
-                textSize = 16f
-            })
-        }
-
-        val progressDialog = AlertDialog.Builder(context)
-            .setTitle(context.getString(R.string.discovering_site))
-            .setView(progressView)
-            .setCancelable(false)
-            .create()
-            .also { it.show() }
-
-        onCreated(progressDialog)
     }
 
     private fun launchAuthenticationFlow(
