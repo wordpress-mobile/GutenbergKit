@@ -29,7 +29,6 @@ import { useModalize } from './use-modalize';
 import { useModalDialogState } from '../editor/use-modal-dialog-state';
 import { showBlockInserter, getGBKit } from '../../utils/bridge';
 
-
 /**
  * Renders the editor toolbar containing block-related actions.
  *
@@ -102,7 +101,7 @@ const EditorToolbar = ( { className } ) => {
 			open={ isInserterOpened }
 			onToggle={ setIsInserterOpened }
 		/>
-	);	
+	);
 
 	return (
 		<>
@@ -111,9 +110,7 @@ const EditorToolbar = ( { className } ) => {
 				label="Editor toolbar"
 				variant="unstyled"
 			>
-				<ToolbarGroup>
-					{ addBlockButton }
-				</ToolbarGroup>
+				<ToolbarGroup>{ addBlockButton }</ToolbarGroup>
 
 				{ isSelected && (
 					<ToolbarGroup>
