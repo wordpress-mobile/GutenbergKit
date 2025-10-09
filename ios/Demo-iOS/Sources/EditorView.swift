@@ -14,7 +14,6 @@ struct EditorView: View {
 
     var body: some View {
         _EditorView(configuration: configuration, viewModel: viewModel)
-            .navigationBarBackButtonHidden(true)
             .toolbar { toolbar }
     }
 

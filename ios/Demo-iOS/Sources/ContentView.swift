@@ -1,32 +1,32 @@
 import SwiftUI
 import GutenbergKit
 
-let editorURL: URL? = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init)
-
 struct ContentView: View {
+    private let remoteEditors: [RemoteEditorRow] = [
+        .init(id: "template", configuration: .template)
+    ]
 
-    let remoteEditorConfigurations: [EditorConfiguration] = [.template]
+    @State private var isDefaultEditorShown = false
+    @State private var selectedRemoteEditor: RemoteEditorRow?
+
+    @AppStorage("isNativeInserterEnabled") private var isNativeInserterEnabled = false
 
     var body: some View {
         List {
             Section {
-                NavigationLink {
-                    EditorView(configuration: .default)
-                } label: {
-                    Text("Bundled editor")
+                Button("Bundled Editor") {
+                    isDefaultEditorShown = true
                 }
             }
 
             Section {
-                ForEach(remoteEditorConfigurations, id: \.siteURL) { configuration in
-                    NavigationLink {
-                        EditorView(configuration: configuration)
-                    } label: {
-                        Text(URL(string: configuration.siteURL)?.host ?? configuration.siteURL)
+                ForEach(remoteEditors) { editor in
+                    Button(editor.title) {
+                        selectedRemoteEditor = editor
                     }
                 }
 
-                if remoteEditorConfigurations.isEmpty {
+                if remoteEditors.isEmpty {
                     Text("Add `EditorConfiguration` instances to the `remoteEditorConfigurations` array to launch remote editors here.")
                 }
             } header: {
@@ -38,18 +38,32 @@ struct ContentView: View {
                     Text("Note: The editor is backed by the compiled web app created by `make build`.")
                 }
             }
+
+            Section("Configuration") {
+                Toggle("Native Inserter", isOn: $isNativeInserterEnabled)
+            }
+        }
+        .fullScreenCover(isPresented: $isDefaultEditorShown) {
+            NavigationView {
+                EditorView(configuration: preconfigure(.default))
+            }
+        }
+        .fullScreenCover(item: $selectedRemoteEditor) { editor in
+            NavigationView {
+                EditorView(configuration: preconfigure(editor.configuration))
+            }
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     Task {
                         NSLog("Start to fetch assets")
-                        for configuration in remoteEditorConfigurations {
-                            let library = EditorAssetsLibrary(configuration: configuration)
+                        for editor in remoteEditors {
+                            let library = EditorAssetsLibrary(configuration: editor.configuration)
                             do {
                                 try await library.fetchAssets()
                             } catch {
-                                NSLog("Failed to fetch assets for \(configuration.siteURL): \(error)")
+                                NSLog("Failed to fetch assets for \(editor.configuration.siteURL): \(error)")
                             }
                         }
                         NSLog("Done fetching assets")
@@ -60,6 +74,22 @@ struct ContentView: View {
 
             }
         }
+    }
+
+    private func preconfigure(_ configuration: EditorConfiguration) -> EditorConfiguration {
+        configuration
+            .toBuilder()
+            .setNativeInserterEnabled(isNativeInserterEnabled)
+            .build()
+    }
+}
+
+private struct RemoteEditorRow: Identifiable {
+    let id: String
+    let configuration: EditorConfiguration
+
+    var title: String {
+        URL(string: configuration.siteURL)?.host ?? configuration.siteURL
     }
 }
 
