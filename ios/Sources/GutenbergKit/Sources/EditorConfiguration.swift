@@ -137,7 +137,7 @@ public struct EditorConfigurationBuilder {
         authHeader: String = "",
         editorSettings: String = "undefined",
         locale: String = "en",
-        isNativeInserterEnabled: Bool = true,
+        isNativeInserterEnabled: Bool = false,
         editorAssetsEndpoint: URL? = nil
     ){
         self.title = title
