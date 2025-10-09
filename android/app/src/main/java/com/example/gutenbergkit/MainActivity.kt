@@ -285,7 +285,7 @@ fun MainScreen(
                         .fillMaxWidth()
                         .padding(vertical = 16.dp),
                     horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
                     CircularProgressIndicator()
                     Text(stringResource(R.string.connecting_to_api))
