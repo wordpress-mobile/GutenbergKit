@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -30,7 +31,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.gutenbergkit.ui.theme.AppTheme
 import org.wordpress.gutenberg.EditorConfiguration
 import org.wordpress.gutenberg.GutenbergView
 
@@ -56,10 +59,12 @@ class EditorActivity : ComponentActivity() {
             } ?: EditorConfiguration.builder().build()
 
         setContent {
-            EditorScreen(
-                configuration = configuration,
-                onClose = { finish() }
-            )
+            AppTheme {
+                EditorScreen(
+                    configuration = configuration,
+                    onClose = { finish() }
+                )
+            }
         }
     }
 }
@@ -82,7 +87,9 @@ fun EditorScreen(
     }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .imePadding(),
         topBar = {
             TopAppBar(
                 title = { },
@@ -93,7 +100,7 @@ fun EditorScreen(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Close"
+                            contentDescription = stringResource(R.string.close)
                         )
                     }
                 },
@@ -104,7 +111,7 @@ fun EditorScreen(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Undo,
-                            contentDescription = "Undo"
+                            contentDescription = stringResource(R.string.undo)
                         )
                     }
                     IconButton(
@@ -113,11 +120,11 @@ fun EditorScreen(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Redo,
-                            contentDescription = "Redo"
+                            contentDescription = stringResource(R.string.redo)
                         )
                     }
                     TextButton(onClick = { }, enabled = false) {
-                        Text("PUBLISH")
+                        Text(stringResource(R.string.publish))
                     }
 
                     // Overflow menu button and dropdown in Box for proper anchoring
@@ -128,7 +135,7 @@ fun EditorScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.MoreVert,
-                                contentDescription = "More options"
+                                contentDescription = stringResource(R.string.more_options)
                             )
                         }
                         DropdownMenu(
@@ -136,17 +143,17 @@ fun EditorScreen(
                             onDismissRequest = { showMenu = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Save") },
+                                text = { Text(stringResource(R.string.save)) },
                                 onClick = { },
                                 enabled = false
                             )
                             DropdownMenuItem(
-                                text = { Text("Preview") },
+                                text = { Text(stringResource(R.string.preview)) },
                                 onClick = { },
                                 enabled = false
                             )
                             DropdownMenuItem(
-                                text = { Text(if (isCodeEditorEnabled) "Visual editor" else "Code editor") },
+                                text = { Text(stringResource(if (isCodeEditorEnabled) R.string.visual_editor else R.string.code_editor)) },
                                 onClick = {
                                     isCodeEditorEnabled = !isCodeEditorEnabled
                                     gutenbergViewRef?.textEditorEnabled = isCodeEditorEnabled
@@ -154,12 +161,12 @@ fun EditorScreen(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("Post settings") },
+                                text = { Text(stringResource(R.string.post_settings)) },
                                 onClick = { },
                                 enabled = false
                             )
                             DropdownMenuItem(
-                                text = { Text("Help") },
+                                text = { Text(stringResource(R.string.help)) },
                                 onClick = { },
                                 enabled = false
                             )
