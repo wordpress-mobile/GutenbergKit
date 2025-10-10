@@ -34,7 +34,7 @@ This demo app is useful for quickly testing changes made to the editor. By defau
 1. Launch Xcode and open the `ios/Demo-iOS/Gutenberg.xcodeproj` project.
 1. Select the `Gutenberg` target.
 1. Navigate to _Product_ → _Scheme_ → _Edit Scheme_.
-1. Add an environment variable named `GUTENBERG_EDITOR_URL` with the URL of the development server.
+1. Add an environment variable named `GUTENBERG_EDITOR_URL` with the development server URL.
 1. Run the app.
 
 <details>
@@ -48,17 +48,22 @@ This demo app is useful for quickly testing changes made to the editor. By defau
 
 1. Start the development server by running `make dev-server`.
 1. Launch Android Studio and open the `android` project.
-1. Modify the `android/local.properties` file to include an environment variable named `GUTENBERG_EDITOR_URL` with the URL of the development server.
-1. Run the app.
+1. Modify the `android/local.properties` file to include an environment variable named `GUTENBERG_EDITOR_URL` with the development server URL.
+1. Run the app on an emulator.
 
 <details>
 <summary>Example Android local.properties</summary>
 
 ```
-GUTENBERG_EDITOR_URL=http://<YOUR_LOCAL_IP>:5173/
+GUTENBERG_EDITOR_URL=http://10.0.2.2:5173/
 ```
 
 </details>
+
+> [!NOTE]
+> Android emulators route `http://10.0.2.2` to the host machine's IP address, allowing easy access to the development server from the emulator. For iOS simulators, the localhost URL is `http://localhost`. Appending the correct Vite development server port is required, which Vite logs when starting the server.
+>
+> To run the demo app on a physical device, see the [physical device setup guide](./docs/physical-device-setup.md).
 
 See the [architecture overview](./docs/architecture.md) for additional details regarding project organization and development tips.
 
