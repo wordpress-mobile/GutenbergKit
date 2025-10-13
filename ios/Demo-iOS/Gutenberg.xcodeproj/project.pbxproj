@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0C4F59A22BEFF4980028BD96 /* AddSiteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C4F59A32BEFF4980028BD96 /* AddSiteView.swift */; };
+		0C4F59A42BEFF4980028BD96 /* AuthenticationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C4F59A52BEFF4980028BD96 /* AuthenticationManager.swift */; };
+		0C4F59A62BEFF4980028BD96 /* ConfigurationItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C4F59A72BEFF4980028BD96 /* ConfigurationItem.swift */; };
+		0C4F59A82BEFF4980028BD96 /* ConfigurationStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C4F59A92BEFF4980028BD96 /* ConfigurationStorage.swift */; };
 		0CE8E78B2C339B0600B9DC67 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0CE8E7842C339B0600B9DC67 /* Assets.xcassets */; };
 		0CE8E78C2C339B0600B9DC67 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CE8E7852C339B0600B9DC67 /* ContentView.swift */; };
 		0CE8E78D2C339B0600B9DC67 /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CE8E7862C339B0600B9DC67 /* EditorView.swift */; };
@@ -17,6 +21,10 @@
 
 /* Begin PBXFileReference section */
 		0C4F598B2BEFF4970028BD96 /* Gutenberg.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Gutenberg.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0C4F59A32BEFF4980028BD96 /* AddSiteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddSiteView.swift; sourceTree = "<group>"; };
+		0C4F59A52BEFF4980028BD96 /* AuthenticationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationManager.swift; sourceTree = "<group>"; };
+		0C4F59A72BEFF4980028BD96 /* ConfigurationItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationItem.swift; sourceTree = "<group>"; };
+		0C4F59A92BEFF4980028BD96 /* ConfigurationStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationStorage.swift; sourceTree = "<group>"; };
 		0CE8E7842C339B0600B9DC67 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		0CE8E7852C339B0600B9DC67 /* ContentView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		0CE8E7862C339B0600B9DC67 /* EditorView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
@@ -68,6 +76,10 @@
 		0CE8E7882C339B0600B9DC67 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				0C4F59A32BEFF4980028BD96 /* AddSiteView.swift */,
+				0C4F59A52BEFF4980028BD96 /* AuthenticationManager.swift */,
+				0C4F59A72BEFF4980028BD96 /* ConfigurationItem.swift */,
+				0C4F59A92BEFF4980028BD96 /* ConfigurationStorage.swift */,
 				0CE8E7852C339B0600B9DC67 /* ContentView.swift */,
 				0CE8E7862C339B0600B9DC67 /* EditorView.swift */,
 				0CE8E7872C339B0600B9DC67 /* GutenbergApp.swift */,
@@ -108,6 +120,7 @@
 			name = Gutenberg;
 			packageProductDependencies = (
 				0CF6E04B2BEFF60E00EDEE8A /* GutenbergKit */,
+				0C4F59A12BEFF4980028BD96 /* WordPressAPI */,
 			);
 			productName = Gutenberg;
 			productReference = 0C4F598B2BEFF4970028BD96 /* Gutenberg.app */;
@@ -137,6 +150,9 @@
 				Base,
 			);
 			mainGroup = 0C4F59822BEFF4970028BD96;
+			packageReferences = (
+				0C4F59A02BEFF4980028BD96 /* XCRemoteSwiftPackageReference "wordpress-rs" */,
+			);
 			productRefGroup = 0C4F598C2BEFF4970028BD96 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -163,6 +179,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0C4F59A22BEFF4980028BD96 /* AddSiteView.swift in Sources */,
+				0C4F59A42BEFF4980028BD96 /* AuthenticationManager.swift in Sources */,
+				0C4F59A62BEFF4980028BD96 /* ConfigurationItem.swift in Sources */,
+				0C4F59A82BEFF4980028BD96 /* ConfigurationStorage.swift in Sources */,
 				0CE8E78E2C339B0600B9DC67 /* GutenbergApp.swift in Sources */,
 				0CE8E78C2C339B0600B9DC67 /* ContentView.swift in Sources */,
 				0CE8E78D2C339B0600B9DC67 /* EditorView.swift in Sources */,
@@ -304,6 +324,8 @@
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = PZYM8XX95Q;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleURLTypes = "$(INFOPLIST_KEY_CFBundleURLTypes)";
+				"INFOPLIST_KEY_CFBundleURLTypes[0]" = "{ CFBundleURLSchemes = (gutenbergkit); }";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -336,6 +358,8 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleURLTypes = "$(INFOPLIST_KEY_CFBundleURLTypes)";
+				"INFOPLIST_KEY_CFBundleURLTypes[0]" = "{ CFBundleURLSchemes = (gutenbergkit); }";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -379,7 +403,23 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		0C4F59A02BEFF4980028BD96 /* XCRemoteSwiftPackageReference "wordpress-rs" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Automattic/wordpress-rs";
+			requirement = {
+				kind = revision;
+				revision = "alpha-20250926";
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		0C4F59A12BEFF4980028BD96 /* WordPressAPI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0C4F59A02BEFF4980028BD96 /* XCRemoteSwiftPackageReference "wordpress-rs" */;
+			productName = WordPressAPI;
+		};
 		0CF6E04B2BEFF60E00EDEE8A /* GutenbergKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = GutenbergKit;
