@@ -26,16 +26,18 @@ Once finished, the web app can now be accessed in your browser by visiting the U
 
 ### Demo App
 
-This demo app is useful for quickly testing changes made to the editor. By default, the demo app uses a production build of the web app bundled with the GutenbergKit package—i.e., the output of the project's `make build` command. During development, however, it is more useful to run the web app with a server and provide the server URL as an environment variable for the demo app, so that changes are displayed in the app immediately.
+This demo app is useful for quickly testing changes made to the editor.
 
 #### iOS
+
+The iOS demo app loads the development server by default.
 
 1. Start the development server by running `make dev-server`.
 1. Launch Xcode and open the `ios/Demo-iOS/Gutenberg.xcodeproj` project.
 1. Select the `Gutenberg` target.
-1. Navigate to _Product_ → _Scheme_ → _Edit Scheme_.
-1. Add an environment variable named `GUTENBERG_EDITOR_URL` with the development server URL.
 1. Run the app.
+
+Alternatively, you can load a production build of the web app bundled with the GutenbergKit package by running `make build` and disabling the `GUTENBERG_EDITOR_URL` environment variable by navigating to _Product_ → _Scheme_ → _Edit Scheme_ in Xcode.
 
 <details>
 <summary>Example Xcode environment variable</summary>
@@ -45,6 +47,8 @@ This demo app is useful for quickly testing changes made to the editor. By defau
 </details>
 
 #### Android
+
+The Android demo app loads the production build of the web app bundled with the GutenbergKit package by default—i.e., the output of the project's `make build` command). It can be configured to load the development server by setting a `GUTENBERG_EDITOR_URL` environment variable in the `android/local.properties` file.
 
 1. Start the development server by running `make dev-server`.
 1. Launch Android Studio and open the `android` project.
