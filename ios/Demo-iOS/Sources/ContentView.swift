@@ -19,6 +19,18 @@ struct ContentView: View {
                 Button("Bundled Editor") {
                     selectedConfiguration = .bundledEditor
                 }
+            } header: {
+                if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"] != nil {
+                    Text("Note: The editor is backed by the dev server created by `make dev-server` and `make dev-server-remote`.")
+                        .textCase(nil)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Note: The editor is backed by the compiled web app created by `make build`.")
+                        .textCase(nil)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             } footer: {
                 Text("Local editor with no plugins")
             }
@@ -41,12 +53,6 @@ struct ContentView: View {
                 }
             } header: {
                 Text("Remote Editors")
-            } footer: {
-                if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"] != nil {
-                    Text("Note: The editor is backed by the dev server created by `make dev-server` and `make dev-server-remote`.")
-                } else {
-                    Text("Note: The editor is backed by the compiled web app created by `make build`.")
-                }
             }
 
             Section("Configuration") {
