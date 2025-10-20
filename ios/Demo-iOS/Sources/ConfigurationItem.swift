@@ -22,15 +22,6 @@ enum ConfigurationItem: Codable, Identifiable {
             return config.name
         }
     }
-
-    var subtitle: String {
-        switch self {
-        case .bundledEditor:
-            return "Local editor with no plugins"
-        case .remoteEditor(let config):
-            return config.siteUrl
-        }
-    }
 }
 
 /// Configuration for a remote editor

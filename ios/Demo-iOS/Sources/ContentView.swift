@@ -16,22 +16,31 @@ struct ContentView: View {
     var body: some View {
         List {
             Section {
-                ForEach(configurations) { config in
+                Button("Bundled Editor") {
+                    selectedConfiguration = .bundledEditor
+                }
+            } footer: {
+                Text("Local editor with no plugins")
+            }
+
+            Section {
+                ForEach(configurations.filter {
+                    if case .remoteEditor = $0 { return true }
+                    return false
+                }) { config in
                     Button(config.displayName) {
                         selectedConfiguration = config
                     }
                     .swipeActions(edge: .trailing) {
-                        if case .remoteEditor = config {
-                            Button(role: .destructive) {
-                                configurationToDelete = config
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
+                        Button(role: .destructive) {
+                            configurationToDelete = config
+                        } label: {
+                            Label("Delete", systemImage: "trash")
                         }
                     }
                 }
             } header: {
-                Text("Editors")
+                Text("Remote Editors")
             } footer: {
                 if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"] != nil {
                     Text("Note: The editor is backed by the dev server created by `make dev-server` and `make dev-server-remote`.")
