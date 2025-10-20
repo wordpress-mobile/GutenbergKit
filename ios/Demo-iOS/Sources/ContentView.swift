@@ -57,6 +57,8 @@ struct ContentView: View {
                 }
             } header: {
                 Text("Remote Editors")
+            } footer: {
+                Text("Site-specific editor with plugins")
             }
 
             Section("Configuration") {
