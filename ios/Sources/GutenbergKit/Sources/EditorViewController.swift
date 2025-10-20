@@ -128,6 +128,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             namespaceExcludedPaths: \(Array(configuration.namespaceExcludedPaths)),
             authHeader: '\(configuration.authHeader)',
             themeStyles: \(configuration.shouldUseThemeStyles),
+            enableNativeBlockInserter: \(configuration.isNativeInserterEnabled),
             hideTitle: \(configuration.shouldHideTitle),
             editorSettings: \(configuration.editorSettings),
             locale: '\(configuration.locale)',
@@ -238,14 +239,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     // MARK: - Internal (Block Inserter)
 
-    // TODO: wire with JS and pass blocks
-    private func showBlockInserter() {
-//        let viewModel = EditorBlockPickerViewModel(blockTypes: service.blockTypes)
-//        let view = NavigationView {
-//            EditorBlockPicker(viewModel: viewModel)
-//        }
-//        let host = UIHostingController(rootView: view)
-//        present(host, animated: true)
+    private func showBlockInserter(blocks: [EditorBlock]) {
+        present(UIHostingController(rootView: NavigationView {
+            List(blocks) {
+                Text($0.name)
+            }
+        }), animated: true)
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
@@ -288,8 +287,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                     return
                 }
                 delegate?.editor(self, didLogException: editorException)
-            case .showBlockPicker:
-                showBlockInserter()
+            case .showBlockInserter:
+                let body = try message.decode(EditorJSMessage.ShowBlockInserterBody.self)
+                showBlockInserter(blocks: body.blocks)
             case .openMediaLibrary:
                 let config = try message.decode(OpenMediaLibraryAction.self)
                 openMediaLibrary(config)

@@ -5,7 +5,6 @@ struct EditorView: View {
     private let configuration: EditorConfiguration
 
     @State private var viewModel = EditorViewModel()
-    @State private var editorViewController: EditorViewController?
 
     @Environment(\.dismiss) private var dismiss
 
@@ -15,7 +14,6 @@ struct EditorView: View {
 
     var body: some View {
         _EditorView(configuration: configuration, viewModel: viewModel)
-            .navigationBarBackButtonHidden(true)
             .toolbar { toolbar }
     }
 

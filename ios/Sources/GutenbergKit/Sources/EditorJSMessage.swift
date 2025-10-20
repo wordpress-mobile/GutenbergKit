@@ -34,7 +34,7 @@ struct EditorJSMessage {
         /// The editor logged an exception.
         case onEditorExceptionLogged
         /// The user tapped the inserter button.
-        case showBlockPicker
+        case showBlockInserter
         /// User requested the Media Library.
         case openMediaLibrary
         /// The user triggered an autocompleter.
@@ -64,5 +64,9 @@ struct EditorJSMessage {
 
     struct ModalDialogBody: Decodable {
         let dialogType: String
+    }
+
+    struct ShowBlockInserterBody: Decodable {
+        let blocks: [EditorBlock]
     }
 }
