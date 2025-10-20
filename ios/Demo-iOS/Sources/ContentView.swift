@@ -51,6 +51,10 @@ struct ContentView: View {
                         }
                     }
                 }
+
+                Button("Add New Remote Editor") {
+                    showAddDialog = true
+                }
             } header: {
                 Text("Remote Editors")
             }
