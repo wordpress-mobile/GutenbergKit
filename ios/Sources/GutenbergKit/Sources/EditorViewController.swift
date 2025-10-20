@@ -241,8 +241,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     private func showBlockInserter(blocks: [EditorBlock]) {
         present(UIHostingController(rootView: NavigationView {
-            List(blocks) {
-                Text($0.name)
+            BlockInserterView(blocks: blocks) {
+                print("did select:", $0)
             }
         }), animated: true)
     }

@@ -97,12 +97,43 @@ export async function showBlockInserter() {
 	// window.wp.blocks is defined before we access it.
 	const { getBlockTypes } = await import( '@wordpress/blocks' );
 	const blocks = getBlockTypes().map( ( blockType ) => {
+		// Extract and serialize icon
+		let icon = null;
+		if ( blockType.icon ) {
+			let iconSource = blockType.icon;
+
+			// If icon is an object with src property, extract src
+			if ( typeof iconSource === 'object' && iconSource.src ) {
+				iconSource = iconSource.src;
+			}
+
+			// Convert React element to SVG string
+			if (
+				typeof iconSource === 'object' &&
+				iconSource !== null &&
+				typeof iconSource.type !== 'undefined'
+			) {
+				try {
+					icon = renderToString( iconSource );
+				} catch ( error ) {
+					// If rendering fails, ignore the icon
+					debug(
+						`Failed to render icon for block ${ blockType.name }`,
+						error
+					);
+				}
+			} else if ( typeof iconSource === 'string' ) {
+				icon = iconSource;
+			}
+		}
+
 		return {
 			name: blockType.name,
 			title: blockType.title,
 			description: blockType.description,
 			category: blockType.category,
 			keywords: blockType.keywords || [],
+			icon,
 		};
 	} );
 	dispatchToBridge( 'showBlockInserter', { blocks } );
