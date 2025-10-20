@@ -20,7 +20,9 @@ struct ContentView: View {
                     selectedConfiguration = .bundledEditor
                 }
             } header: {
-                if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"] != nil {
+                if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"] != nil ||
+                   ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"] != nil
+                    {
                     Text("Note: The editor is backed by the dev server created by `make dev-server` and `make dev-server-remote`.")
                         .textCase(nil)
                         .font(.footnote)
