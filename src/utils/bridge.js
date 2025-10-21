@@ -5,7 +5,6 @@ import parseException from './exception-parser';
 import { debug } from './logger';
 import { isDevMode } from './dev-mode';
 import { basicFetch } from './fetch';
-import { getBlockTypes } from '@wordpress/blocks';
 
 /**
  * Generic function to dispatch messages to both Android and iOS bridges.
@@ -92,7 +91,11 @@ export function onBlocksChanged( isEmpty = false ) {
  *
  * @return {void}
  */
-export function showBlockInserter() {
+export async function showBlockInserter() {
+	// Lazy-load getBlockTypes to defer the import until this function is called.
+	// In the remote editor, dependencies are loaded asynchronously, so this ensures
+	// window.wp.blocks is defined before we access it.
+	const { getBlockTypes } = await import( '@wordpress/blocks' );
 	const blocks = getBlockTypes().map( ( blockType ) => {
 		return {
 			name: blockType.name,
