@@ -12,23 +12,26 @@ When running the demo app on a physical device, the device needs to access the d
 
 ## Prerequisites
 
-- Your physical device and development machine must be on the same network
-- The development server must be running (`make dev-server`)
-- You need to know your development machine's IP address
+-   Your physical device and development machine must be on the same network
+-   The development server must be running (`make dev-server`)
+-   You need to know your development machine's IP address
 
 ### Finding Your Development Machine's IP Address
 
 **macOS:**
+
 ```bash
 ipconfig getifaddr en0
 ```
 
 **Linux:**
+
 ```bash
 hostname -I | awk '{print $1}'
 ```
 
 **Windows:**
+
 ```bash
 ipconfig
 ```
@@ -42,7 +45,7 @@ Look for your local network IP address (typically in the format `192.168.x.x` or
 3. Select the `Gutenberg` target.
 4. Navigate to _Product_ → _Scheme_ → _Edit Scheme_.
 5. Add an environment variable named `GUTENBERG_EDITOR_URL` with your development machine's IP address and port.
-   - Example: `http://192.168.1.100:5173/`
+    - Example: `http://192.168.1.100:5173/`
 6. Connect your iOS device via USB or network.
 7. Select your device as the run destination in Xcode.
 8. Run the app.
@@ -57,7 +60,7 @@ Look for your local network IP address (typically in the format `192.168.x.x` or
 1. Start the development server by running `make dev-server`.
 2. Launch Android Studio and open the `android` project.
 3. Modify the `android/local.properties` file to include an environment variable named `GUTENBERG_EDITOR_URL` with your development machine's IP address and port.
-   - Example: `GUTENBERG_EDITOR_URL=http://192.168.1.100:5173/`
+    - Example: `GUTENBERG_EDITOR_URL=http://192.168.1.100:5173/`
 
 ### 2. Modify Network Security Configuration
 
@@ -90,19 +93,20 @@ Android requires explicit network security configuration to allow cleartext (htt
 
 ### Cannot Connect to Development Server
 
-- Verify both devices are on the same network
-- Check your firewall settings to ensure port 5173 (or your Vite dev server port) is accessible
-- Confirm the development server is running and accessible from your machine's browser
+-   Verify both devices are on the same network
+-   Check your firewall settings to ensure port 5173 (or your Vite dev server port) is accessible
+-   Confirm the development server is running and accessible from your machine's browser
 
 ### Android Network Security Errors
 
 If you see network security or cleartext traffic errors:
-- Verify you've added your IP address to `network_security_config.xml`
-- Confirm the IP address matches your development machine's current IP
-- Clean and rebuild the Android project
+
+-   Verify you've added your IP address to `network_security_config.xml`
+-   Confirm the IP address matches your development machine's current IP
+-   Clean and rebuild the Android project
 
 ### iOS Connection Refused
 
-- Verify the URL includes the correct protocol (`http://`)
-- Check that your iOS device is on the same network as your development machine
-- Ensure no VPN or network restrictions are blocking the connection
+-   Verify the URL includes the correct protocol (`http://`)
+-   Check that your iOS device is on the same network as your development machine
+-   Ensure no VPN or network restrictions are blocking the connection
