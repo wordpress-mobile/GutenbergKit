@@ -18,32 +18,25 @@ public struct EditorTitleAndContent: Decodable {
 }
 
 extension EditorBlock: Searchable {
+    /// Sets the searchable fields in the order of priority
     func searchableFields() -> [SearchableField] {
         var fields: [SearchableField] = []
 
-        // Title - highest weight
-        if let title = title {
+        if let title, !title.isEmpty {
             fields.append(SearchableField(content: title, weight: 10.0, allowFuzzyMatch: true))
         }
 
-        // Name - high weight, strip namespace for better matching
-        let simplifiedName = name.components(separatedBy: "/").last ?? name
-        fields.append(SearchableField(content: simplifiedName, weight: 8.0, allowFuzzyMatch: true))
+        fields.append(SearchableField(content: name, weight: 8.0, allowFuzzyMatch: false))
 
-        // Keywords - medium weight
-        if let keywords = keywords {
-            keywords.forEach { keyword in
-                fields.append(SearchableField( content: keyword, weight: 5.0, allowFuzzyMatch: true))
-            }
+        (keywords ?? []).forEach { keyword in
+            fields.append(SearchableField( content: keyword, weight: 5.0, allowFuzzyMatch: true))
         }
 
-        // Description - lower weight, no fuzzy matching
-        if let description = description {
-            fields.append(SearchableField(content: description, weight: 3.0, allowFuzzyMatch: false))
+        if let description, !description.isEmpty {
+            fields.append(SearchableField(content: description, weight: 2.0, allowFuzzyMatch: false))
         }
 
-        // Category - lowest weight
-        if let category = category {
+        if let category, !category.isEmpty {
             fields.append(SearchableField(content: category, weight: 2.0, allowFuzzyMatch: true))
         }
 
