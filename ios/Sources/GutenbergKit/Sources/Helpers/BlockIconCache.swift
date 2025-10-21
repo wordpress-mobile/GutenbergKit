@@ -24,7 +24,7 @@ final class BlockIconCache: ObservableObject {
         if let result = image.parseErrorsAndWarnings,
            let error = result.errorsFatal.firstObject {
 #if DEBUG
-            debugPrint("failed to parse SVG for block: \(block.name) with errors: \(String(describing: result.errorsFatal))")
+            debugPrint("failed to parse SVG for block: \(block.name) with errors: \(String(describing: result.errorsFatal))\n\n\(svg)")
 #endif
             throw (error as? Error) ?? BlockIconCacheError.unknown
         }
