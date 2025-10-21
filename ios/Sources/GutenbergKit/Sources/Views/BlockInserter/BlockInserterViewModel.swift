@@ -47,41 +47,26 @@ class BlockInserterViewModel: ObservableObject {
         }
     }
 
-    private static func createSections(from blockTypes: [EditorBlock]) -> [BlockInserterSection] {
-        let categoryOrder = BlockInserterConstants.categoryOrder
-        var grouped = Dictionary(grouping: blockTypes) { $0.category?.lowercased() ?? "common" }
-        
-        // Move core/embed from embed category to media category
-        if let embedBlocks = grouped["embed"],
-           let embedBlock = embedBlocks.first(where: { $0.name == "core/embed" }) {
-            // Add to media category
-            if var mediaBlocks = grouped["media"] {
-                mediaBlocks.append(embedBlock)
-                grouped["media"] = mediaBlocks
-            } else {
-                grouped["media"] = [embedBlock]
-            }
-            
-            // Remove from embed category
-            grouped["embed"] = embedBlocks.filter { $0.name != "core/embed" }
-            if grouped["embed"]?.isEmpty == true {
-                grouped.removeValue(forKey: "embed")
-            }
+    private static func createSections(from blocks: [EditorBlock]) -> [BlockInserterSection] {
+        let blocks = Dictionary(grouping: blocks) {
+            $0.category?.lowercased() ?? "common"
         }
-        
+
         var sections: [BlockInserterSection] = []
-        
-        // Add sections in WordPress standard order
-        for (categoryKey, displayName) in categoryOrder {
-            if let blocks = grouped[categoryKey] {
-                let sortedBlocks = sortBlocks(blocks, category: categoryKey)
-                sections.append(BlockInserterSection(category: categoryKey, name: displayName, blocks: sortedBlocks))
+
+        let categories = Constants.orderedCategories
+
+        // Add known categories in a predefined order
+        for (category, name) in categories {
+            if let blocks = blocks[category] {
+                let sortedBlocks = orderBlocks(blocks, category: category)
+                sections.append(BlockInserterSection(category: category, name: name, blocks: sortedBlocks))
             }
         }
         
         // Add any remaining categories
-        for (category, blocks) in grouped {
-            let isStandardCategory = categoryOrder.contains { $0.key == category }
+        for (category, blocks) in blocks {
+            let isStandardCategory = categories.contains { $0.key == category }
             if !isStandardCategory {
                 sections.append(BlockInserterSection(category: category, name: category.capitalized, blocks: blocks))
             }
@@ -89,43 +74,65 @@ class BlockInserterViewModel: ObservableObject {
         
         return sections
     }
-    
-    private static func sortBlocks(_ blocks: [EditorBlock], category: String) -> [EditorBlock] {
-        switch category {
-        case "text":
-            return sortWithOrder(blocks, order: BlockInserterConstants.textBlockOrder)
-        case "media":
-            return sortWithOrder(blocks, order: BlockInserterConstants.mediaBlockOrder)
-        case "design":
-            return sortWithOrder(blocks, order: BlockInserterConstants.designBlockOrder)
-        default:
-            return blocks
-        }
-    }
-    
-    private static func sortWithOrder(_ blocks: [EditorBlock], order: [String]) -> [EditorBlock] {
-        var orderedBlocks: [EditorBlock] = []
-        
-        // Add blocks in defined order
-        for blockName in order {
-            if let block = blocks.first(where: { $0.name == blockName }) {
-                orderedBlocks.append(block)
-            }
-        }
-        
-        // Add remaining blocks in their original order
-        let remainingBlocks = blocks.filter { block in
-            !order.contains(block.name)
-        }
-        
-        return orderedBlocks + remainingBlocks
+}
+
+// MARK: Ordering
+
+private func orderBlocks(_ blocks: [EditorBlock], category: String) -> [EditorBlock] {
+    switch category {
+    case "text":
+        return _orderBlocks(blocks, order: [
+            "core/paragraph",
+            "core/heading",
+            "core/list",
+            "core/list-item",
+            "core/quote",
+            "core/code",
+            "core/preformatted",
+            "core/verse",
+            "core/table"
+        ])
+    case "media":
+        return _orderBlocks(blocks, order: [
+            "core/image",
+            "core/video",
+            "core/gallery",
+            "core/embed",
+            "core/audio",
+            "core/file"
+        ])
+    case "design":
+        return _orderBlocks(blocks, order: [
+            "core/separator",
+            "core/spacer",
+            "core/columns",
+            "core/column"
+        ])
+    default:
+        return blocks
     }
 }
 
-// MARK: - Constants
+private func _orderBlocks(_ blocks: [EditorBlock], order: [String]) -> [EditorBlock] {
+    var orderedBlocks: [EditorBlock] = []
 
-enum BlockInserterConstants {
-    static let categoryOrder: [(key: String, displayName: String)] = [
+    // Add blocks in a predefined order
+    for name in order {
+        if let block = blocks.first(where: { $0.name == name }) {
+            orderedBlocks.append(block)
+        }
+    }
+
+    // Add remaining blocks in their original order
+    let remainingBlocks = blocks.filter { block in
+        !order.contains(block.name)
+    }
+
+    return orderedBlocks + remainingBlocks
+}
+
+private enum Constants {
+    static let orderedCategories: [(key: String, displayName: String)] = [
         ("text", "Text"),
         ("media", "Media"),
         ("design", "Design"),
@@ -133,41 +140,4 @@ enum BlockInserterConstants {
         ("theme", "Theme"),
         ("embed", "Embeds")
     ]
-    
-    static let textBlockOrder = [
-        "core/paragraph",
-        "core/heading",
-        "core/list",
-        "core/list-item",
-        "core/quote",
-        "core/code",
-        "core/preformatted",
-        "core/verse",
-        "core/table"
-    ]
-    
-    static let mediaBlockOrder = [
-        "core/image",
-        "core/video",
-        "core/gallery",
-        "core/embed",
-        "core/audio",
-        "core/file"
-    ]
-    
-    static let designBlockOrder = [
-        "core/separator",
-        "core/spacer",
-        "core/columns",
-        "core/column"
-    ]
-}
-
-// MARK: - Supporting Types
-
-struct BlockInserterSection: Identifiable {
-    var id: String { category }
-    let category: String
-    let name: String
-    let blocks: [EditorBlock]
 }

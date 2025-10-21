@@ -1,5 +1,11 @@
 import SwiftUI
-import PhotosUI
+
+struct BlockInserterSection: Identifiable {
+    var id: String { category }
+    let category: String
+    let name: String
+    let blocks: [EditorBlock]
+}
 
 struct BlockInserterSectionView: View {
     let section: BlockInserterSection
