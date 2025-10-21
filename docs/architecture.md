@@ -19,8 +19,8 @@ GutenbergKit/
 │   │   └── text-editor/    # HTML text editing interface
 │   ├── utils/              # Utility functions
 │   │   └── bridge.js       # Native-to-web communication
-│   ├── index.jsx           # Bundled editor entry point
-│   └── remote.jsx          # Remote editor entry point
+│   ├── index.js            # Bundled editor entry point
+│   └── remote.js           # Remote editor entry point
 ├── ios/                    # iOS Swift package
 │   └── Sources/
 │       └── GutenbergKit/
