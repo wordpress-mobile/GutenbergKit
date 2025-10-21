@@ -61,9 +61,7 @@ function getBlockIcon( blockType ) {
 			);
 			return null;
 		}
-	}
-
-	else if ( typeof iconSource === 'string' ) {
+	} else if ( typeof iconSource === 'string' ) {
 		return iconSource;
 	}
 
