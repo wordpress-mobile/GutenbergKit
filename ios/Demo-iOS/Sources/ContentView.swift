@@ -1,13 +1,15 @@
 import SwiftUI
 import GutenbergKit
+import AuthenticationServices
 
 struct ContentView: View {
-    private let remoteEditors: [RemoteEditorRow] = [
-        .init(id: "template", configuration: .template)
-    ]
-
-    @State private var isDefaultEditorShown = false
-    @State private var selectedRemoteEditor: RemoteEditorRow?
+    @State private var selectedConfiguration: ConfigurationItem?
+    @State private var configurations: [ConfigurationItem] = [.bundledEditor]
+    @State private var showAddDialog = false
+    @State private var siteUrlInput = ""
+    @State private var authenticationManager = AuthenticationManager()
+    @State private var configurationStorage = ConfigurationStorage()
+    @State private var configurationToDelete: ConfigurationItem?
 
     @AppStorage("isNativeInserterEnabled") private var isNativeInserterEnabled = false
 
@@ -15,64 +17,107 @@ struct ContentView: View {
         List {
             Section {
                 Button("Bundled Editor") {
-                    isDefaultEditorShown = true
+                    selectedConfiguration = .bundledEditor
                 }
+            } header: {
+                if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"] != nil ||
+                   ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"] != nil
+                    {
+                    Text("Note: The editor is backed by the dev server created by `make dev-server` and `make dev-server-remote`.")
+                        .textCase(nil)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Note: The editor is backed by the compiled web app created by `make build`.")
+                        .textCase(nil)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            } footer: {
+                Text("Local editor without plugin support")
             }
 
             Section {
-                ForEach(remoteEditors) { editor in
-                    Button(editor.title) {
-                        selectedRemoteEditor = editor
+                ForEach(configurations.filter {
+                    if case .remoteEditor = $0 { return true }
+                    return false
+                }) { config in
+                    Button(config.displayName) {
+                        selectedConfiguration = config
+                    }
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
+                            configurationToDelete = config
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
                     }
                 }
 
-                if remoteEditors.isEmpty {
-                    Text("Add `EditorConfiguration` instances to the `remoteEditorConfigurations` array to launch remote editors here.")
+                Button("Add New Remote Editor") {
+                    showAddDialog = true
                 }
             } header: {
                 Text("Remote Editors")
             } footer: {
-                if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"] != nil {
-                    Text("Note: The editor is backed by the dev server created by `make dev-server-remote`.")
-                } else {
-                    Text("Note: The editor is backed by the compiled web app created by `make build`.")
-                }
+                Text("Site-specific editor with plugins")
             }
 
             Section("Configuration") {
                 Toggle("Native Inserter", isOn: $isNativeInserterEnabled)
             }
         }
-        .fullScreenCover(isPresented: $isDefaultEditorShown) {
+        .fullScreenCover(item: $selectedConfiguration) { config in
             NavigationView {
-                EditorView(configuration: preconfigure(.default))
+                EditorView(configuration: preconfigure(createEditorConfiguration(for: config)))
             }
         }
-        .fullScreenCover(item: $selectedRemoteEditor) { editor in
-            NavigationView {
-                EditorView(configuration: preconfigure(editor.configuration))
-            }
-        }
+        .navigationTitle("GutenbergKit")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    Task {
-                        NSLog("Start to fetch assets")
-                        for editor in remoteEditors {
-                            let library = EditorAssetsLibrary(configuration: editor.configuration)
-                            do {
-                                try await library.fetchAssets()
-                            } catch {
-                                NSLog("Failed to fetch assets for \(editor.configuration.siteURL): \(error)")
-                            }
-                        }
-                        NSLog("Done fetching assets")
-                    }
+                    showAddDialog = true
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    Image(systemName: "plus")
                 }
-
             }
+        }
+        .sheet(isPresented: $showAddDialog) {
+            AddSiteView(
+                siteUrl: $siteUrlInput,
+                authenticationManager: authenticationManager,
+                onAdd: { config in
+                    configurations.append(.remoteEditor(config))
+                    configurationStorage.saveConfigurations(configurations)
+                    showAddDialog = false
+                    siteUrlInput = ""
+                },
+                onCancel: {
+                    showAddDialog = false
+                    siteUrlInput = ""
+                }
+            )
+        }
+        .onAppear {
+            loadConfigurations()
+        }
+        .alert(
+            "Delete Remote Editor?",
+            isPresented: Binding(
+                get: { configurationToDelete != nil },
+                set: { if !$0 { configurationToDelete = nil } }
+            ),
+            presenting: configurationToDelete
+        ) { config in
+            Button("Delete", role: .destructive) {
+                deleteConfiguration(config)
+                configurationToDelete = nil
+            }
+            Button("Cancel", role: .cancel) {
+                configurationToDelete = nil
+            }
+        } message: { config in
+            Text("Are you sure you want to delete \"\(config.displayName)\"?")
         }
     }
 
@@ -82,37 +127,43 @@ struct ContentView: View {
             .setNativeInserterEnabled(isNativeInserterEnabled)
             .build()
     }
-}
 
-private struct RemoteEditorRow: Identifiable {
-    let id: String
-    let configuration: EditorConfiguration
-
-    var title: String {
-        URL(string: configuration.siteURL)?.host ?? configuration.siteURL
+    private func loadConfigurations() {
+        let saved = configurationStorage.loadConfigurations()
+        configurations = [.bundledEditor] + saved
     }
-}
 
-private extension EditorConfiguration {
+    private func deleteConfiguration(_ config: ConfigurationItem) {
+        configurations.removeAll { $0.id == config.id }
+        configurationStorage.saveConfigurations(configurations)
+    }
 
-    static var template: Self {
-        // Steps:
-        // 1. Update the siteURL and authHeader values below
-        // 2. Install the Jetpack plugin to the site
-        let siteUrl: String = "https://modify-me.com"
-        let authHeader: String = "Insert the Authorization header value here"
-        let siteApiRoot: String = "\(siteUrl)/wp-json/"
+    private func createEditorConfiguration(for item: ConfigurationItem) -> EditorConfiguration {
+        switch item {
+        case .bundledEditor:
+            return createBundledConfiguration()
+        case .remoteEditor(let config):
+            return createRemoteConfiguration(config)
+        }
+    }
 
-        let configuration = EditorConfigurationBuilder()
-            .setSiteUrl(siteUrl)
-            .setAuthHeader(authHeader)
-            .setSiteApiRoot(siteApiRoot)
-            .setEditorAssetsEndpoint(URL(string: siteApiRoot)!.appendingPathComponent("wpcom/v2/editor-assets"))
+    private func createBundledConfiguration() -> EditorConfiguration {
+        EditorConfigurationBuilder()
+            .setShouldUsePlugins(false)
+            .setSiteUrl("")
+            .setSiteApiRoot("")
+            .setAuthHeader("")
+            .build()
+    }
+
+    private func createRemoteConfiguration(_ config: RemoteEditorConfiguration) -> EditorConfiguration {
+        EditorConfigurationBuilder()
             .setShouldUsePlugins(true)
-
-        return configuration.build()
+            .setSiteUrl(config.siteUrl)
+            .setSiteApiRoot(config.siteApiRoot)
+            .setAuthHeader(config.authHeader)
+            .build()
     }
-
 }
 
 #Preview {

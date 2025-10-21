@@ -19,8 +19,8 @@ GutenbergKit/
 │   │   └── text-editor/    # HTML text editing interface
 │   ├── utils/              # Utility functions
 │   │   └── bridge.js       # Native-to-web communication
-│   ├── index.jsx           # Local editor entry point
-│   └── remote.jsx          # Remote editor entry point
+│   ├── index.js            # Bundled editor entry point
+│   └── remote.js           # Remote editor entry point
 ├── ios/                    # iOS Swift package
 │   └── Sources/
 │       └── GutenbergKit/
@@ -90,28 +90,28 @@ The `make build` command builds both the local and remote editors by default. To
 Additionally, a `make dev-server-remote` command is available for serving the latest remote editor changes through a development server. To load the development server in the Demo app, add an environment variable named `GUTENBERG_EDITOR_REMOTE_URL` with the URL of the development server plus `/remote.html`—i.e., `http://<YOUR_LOCAL_IP>:5173/remote.html`.
 
 > [!TIP]
-> The remote editor redirects to the local editor when loading fails. If you need to debug the failure, disable redirects via the `?dev_mode` query parameter..
+> The remote editor redirects to the bundled editor when loading fails. If you need to debug the failure, disable redirects via the `?dev_mode` query parameter..
 
-### Local Editor (`index.html`)
+### Bundled Editor (`index.html`)
 
-The local editor bundles all WordPress packages and runs entirely within the WebView. This variant:
+The bundled editor relies upon local `@wordpress` packages. This variant:
 
 -   Provides offline capability
 -   Has faster initial load times
 -   Limited to core blocks only
 -   No plugin support
 
-**Entry point:** `src/index.jsx`
+**Entry point:** `src/index.js`
 
 ### Remote Editor (`remote.html`)
 
-The remote editor loads WordPress packages and plugins from a remote server. This variant:
+The remote editor loads `@wordpress` packages and plugins from a remote server. This variant:
 
 -   Supports custom blocks and plugins
 -   Requires network connectivity
 -   Used in production environments with custom implementations
 
-**Entry point:** `src/remote.jsx`
+**Entry point:** `src/remote.js`
 
 ## Testing
 

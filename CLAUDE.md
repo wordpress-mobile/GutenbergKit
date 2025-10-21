@@ -87,8 +87,8 @@ npm run dev:remote
 The web editor is built with React and WordPress packages:
 
 -   **Entry Points**:
-    -   `src/index.jsx` - Local editor entry
-    -   `src/remote.jsx` - Remote editor entry (for plugin support)
+    -   `src/index.js` - Bundled editor entry
+    -   `src/remote.js` - Remote editor entry (supports plugins)
 -   **Core Components**:
     -   `src/components/editor/` - Main editor component with host bridge integration
     -   `src/components/visual-editor/` - Visual editing interface
