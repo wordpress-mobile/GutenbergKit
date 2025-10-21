@@ -34,7 +34,7 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                 }
             } footer: {
-                Text("Local editor with no plugins")
+                Text("Local editor without plugin support")
             }
 
             Section {
