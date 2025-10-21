@@ -10,6 +10,8 @@ struct BlockInserterBlockView: View {
 
     @ScaledMetric(relativeTo: .largeTitle) private var iconSize = 44
 
+    @EnvironmentObject private var iconCache: BlockIconCache
+
     var body: some View {
         Button(action: {
             onSelected()
@@ -36,6 +38,7 @@ struct BlockInserterBlockView: View {
             }
         } preview: {
             BlockDetailedView(block: block)
+                .environmentObject(iconCache)
         }
     }
 

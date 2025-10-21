@@ -40,6 +40,7 @@ private struct SVGIconView: UIViewRepresentable {
 
     func updateUIView(_ uiView: SVGKFastImageView, context: Context) {
         view.image?.fillColor(color: UIColor.label)
+        view.setNeedsDisplay()
     }
 }
 
