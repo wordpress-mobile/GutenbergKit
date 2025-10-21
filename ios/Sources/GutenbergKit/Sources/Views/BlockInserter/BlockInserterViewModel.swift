@@ -36,7 +36,8 @@ class BlockInserterViewModel: ObservableObject {
             sections = allSections
         } else {
             sections = allSections.compactMap { section in
-                let filtered = filterBlocks(in: section, searchText: searchText)
+                let filtered = SearchEngine<EditorBlock>()
+                    .search(query: searchText, in: section.blocks)
                 return filtered.isEmpty ? nil : BlockInserterSection(
                     category: section.category,
                     name: section.name,
@@ -45,25 +46,7 @@ class BlockInserterViewModel: ObservableObject {
             }
         }
     }
-    
-    private func filterBlocks(in section: BlockInserterSection, searchText: String) -> [EditorBlock] {
-        let searchEngine = SearchEngine<EditorBlock>()
-        let filtered = searchEngine.search(query: searchText, in: section.blocks)
-        
-        // Maintain paragraph first in text category when showing all blocks
-        if searchText.isEmpty && section.name == "Text" && filtered.count > 1 {
-            return sortTextBlocks(filtered)
-        }
-        
-        return filtered
-    }
-    
-    private func sortTextBlocks(_ blocks: [EditorBlock]) -> [EditorBlock] {
-        let paragraphBlocks = blocks.filter { $0.name == "core/paragraph" }
-        let otherBlocks = blocks.filter { $0.name != "core/paragraph" }
-        return paragraphBlocks + otherBlocks
-    }
-    
+
     private static func createSections(from blockTypes: [EditorBlock]) -> [BlockInserterSection] {
         let categoryOrder = BlockInserterConstants.categoryOrder
         var grouped = Dictionary(grouping: blockTypes) { $0.category?.lowercased() ?? "common" }
