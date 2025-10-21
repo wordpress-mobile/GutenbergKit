@@ -28,13 +28,7 @@ struct BlockInserterView: View {
             .navigationBarTitleDisplayMode(.inline)
             .environmentObject(iconCache)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                    }
-                }
+                toolbar
             }
     }
 
@@ -54,7 +48,7 @@ struct BlockInserterView: View {
     }
 
     @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
+    private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
             Button {
                 dismiss()
