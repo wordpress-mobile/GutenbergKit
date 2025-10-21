@@ -43,6 +43,7 @@ function external( id ) {
 /**
  * Transform code by replacing WordPress imports with global definitions.
  * E.g., `import { __ } from '@wordpress/i18n';` becomes `const { __ } = window.wp.i18n;`
+ * Also transforms dynamic imports: `await import('@wordpress/blocks')` becomes `Promise.resolve(window.wp.blocks)`
  * This replicates Gutenberg's behavior in a browser environment, which relies upon
  * the `@wordpress/dependency-extraction-webpack-plugin` module.
  *
@@ -57,12 +58,12 @@ function wordPressExternals() {
 			const magicString = new MagicString( code );
 			let hasReplacements = false;
 
-			// Match WordPress and React JSX runtime import statements
-			const regex =
+			// Match static WordPress and React JSX runtime import statements
+			const staticImportRegex =
 				/import\s*(?:(?:(\w+)|{([^}]+)})\s*from\s*)?['"](@wordpress\/[^'"]+|react\/jsx-runtime)['"];/g;
 			let match;
 
-			while ( ( match = regex.exec( code ) ) !== null ) {
+			while ( ( match = staticImportRegex.exec( code ) ) !== null ) {
 				const [ fullMatch, defaultImport, namedImports, module ] =
 					match;
 				const imports = defaultImport || namedImports;
@@ -113,6 +114,37 @@ function wordPressExternals() {
 						', '
 					) } } = window.${ definitionArray.join( '.' ) };`;
 				}
+				magicString.overwrite(
+					match.index,
+					match.index + fullMatch.length,
+					replacement
+				);
+			}
+
+			// Match dynamic WordPress imports
+			const dynamicImportRegex =
+				/import\s*\(\s*['"](@wordpress\/[^'"]+)['"]\s*\)/g;
+
+			while ( ( match = dynamicImportRegex.exec( code ) ) !== null ) {
+				const [ fullMatch, module ] = match;
+
+				const externalDefinition = defaultRequestToExternal( module );
+
+				if ( ! externalDefinition ) {
+					continue; // Exclude the module from externalization
+				}
+
+				hasReplacements = true;
+
+				const definitionArray = Array.isArray( externalDefinition )
+					? externalDefinition
+					: [ externalDefinition ];
+
+				// Transform to Promise that resolves with the global
+				const replacement = `Promise.resolve(window.${ definitionArray.join(
+					'.'
+				) })`;
+
 				magicString.overwrite(
 					match.index,
 					match.index + fullMatch.length,
