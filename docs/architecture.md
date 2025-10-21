@@ -101,7 +101,7 @@ The bundled editor relies upon local `@wordpress` packages. This variant:
 -   Limited to core blocks only
 -   No plugin support
 
-**Entry point:** `src/index.jsx`
+**Entry point:** `src/index.js`
 
 ### Remote Editor (`remote.html`)
 
@@ -111,7 +111,7 @@ The remote editor loads `@wordpress` packages and plugins from a remote server. 
 -   Requires network connectivity
 -   Used in production environments with custom implementations
 
-**Entry point:** `src/remote.jsx`
+**Entry point:** `src/remote.js`
 
 ## Testing
 
