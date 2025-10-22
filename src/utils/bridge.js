@@ -5,7 +5,6 @@ import parseException from './exception-parser';
 import { debug } from './logger';
 import { isDevMode } from './dev-mode';
 import { basicFetch } from './fetch';
-import { getSerializedBlocks } from './blocks';
 
 /**
  * Generic function to dispatch messages to both Android and iOS bridges.
@@ -92,8 +91,11 @@ export function onBlocksChanged( isEmpty = false ) {
  *
  * @return {void}
  */
-export function showBlockInserter() {
-	const blocks = getSerializedBlocks();
+export async function showBlockInserter() {
+	// Lazy load this utility to avoid the remote editor referencing `@wordpress`
+	// module globals before they are loaded.
+	const { getSerializedBlocks } = await import( './blocks' );
+	const blocks = await getSerializedBlocks();
 	dispatchToBridge( 'showBlockInserter', { blocks } );
 }
 
