@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { unregisterBlockType } from '@wordpress/blocks';
+import { unregisterBlockType, getBlockTypes } from '@wordpress/blocks';
 import { renderToString } from '@wordpress/element';
 import { debug } from './logger';
 
@@ -74,7 +74,6 @@ function getBlockIcon( blockType ) {
  * @return {Array} Array of serialized block objects.
  */
 export function getSerializedBlocks() {
-	const { getBlockTypes } = await import( '@wordpress/blocks' );
 	return getBlockTypes().map( ( blockType ) => {
 		return {
 			name: blockType.name,
