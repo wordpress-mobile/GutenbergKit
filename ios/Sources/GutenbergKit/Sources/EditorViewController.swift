@@ -14,6 +14,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     public var configuration: EditorConfiguration
     private var _isEditorRendered = false
     private var _isEditorSetup = false
+    private let mediaPicker: MediaPickerController?
     private let controller: GutenbergEditorController
     private let timestampInit = CFAbsoluteTimeGetCurrent()
 
@@ -28,8 +29,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let isWarmupMode: Bool
 
     /// Initalizes the editor with the initial content (Gutenberg).
-    public init(configuration: EditorConfiguration = .default, isWarmupMode: Bool = false) {
+    public init(
+        configuration: EditorConfiguration = .default,
+        mediaPicker: MediaPickerController? = nil,
+        isWarmupMode: Bool = false
+    ) {
         self.configuration = configuration
+        self.mediaPicker = mediaPicker
         self.assetsLibrary = EditorAssetsLibrary(configuration: configuration)
         self.controller = GutenbergEditorController(configuration: configuration)
 
@@ -240,11 +246,25 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // MARK: - Internal (Block Inserter)
 
     private func showBlockInserter(blocks: [EditorBlock]) {
-        present(UIHostingController(rootView: NavigationView {
-            BlockInserterView(blocks: blocks) {
-                print("did select:", $0)
-            }
-        }), animated: true)
+        let context = MediaPickerPresentationContext()
+
+        let host = UIHostingController(rootView: NavigationStack {
+            BlockInserterView(
+                blocks: blocks,
+                mediaPicker: mediaPicker,
+                presentationContext: context,
+                onBlockSelected: {
+                    print("insert blocks:", $0)
+                },
+                onMediaSelected: {
+                    print("insert media:", $0)
+                }
+            )
+        })
+
+        context.viewController = host
+
+        present(host, animated: true)
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
