@@ -92,19 +92,10 @@ export function onBlocksChanged( isEmpty = false ) {
  * @return {void}
  */
 export async function showBlockInserter() {
-	// Lazy-load getBlockTypes to defer the import until this function is called.
-	// In the remote editor, dependencies are loaded asynchronously, so this ensures
-	// window.wp.blocks is defined before we access it.
-	const { getBlockTypes } = await import( '@wordpress/blocks' );
-	const blocks = getBlockTypes().map( ( blockType ) => {
-		return {
-			name: blockType.name,
-			title: blockType.title,
-			description: blockType.description,
-			category: blockType.category,
-			keywords: blockType.keywords || [],
-		};
-	} );
+	// Lazy load this utility to avoid the remote editor referencing `@wordpress`
+	// module globals before they are loaded.
+	const { getSerializedBlocks } = await import( './blocks' );
+	const blocks = await getSerializedBlocks();
 	dispatchToBridge( 'showBlockInserter', { blocks } );
 }
 

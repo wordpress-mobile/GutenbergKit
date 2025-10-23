@@ -11,11 +11,12 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.5"),
+        .package(url: "https://github.com/SVGKit/SVGKit", from: "3.0.0"),
     ],
     targets: [
         .target(
             name: "GutenbergKit",
-            dependencies: ["SwiftSoup"],
+            dependencies: ["SwiftSoup", "SVGKit"],
             path: "ios/Sources/GutenbergKit",
             exclude: [],
             resources: [.copy("Gutenberg")]
