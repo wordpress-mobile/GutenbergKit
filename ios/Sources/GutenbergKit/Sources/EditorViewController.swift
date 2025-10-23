@@ -302,6 +302,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             case .onModalDialogClosed:
                 let body = try message.decode(EditorJSMessage.ModalDialogBody.self)
                 delegate?.editor(self, didCloseModalDialog: body.dialogType)
+            case .log:
+                let log = try message.decode(EditorJSMessage.LogMessage.self)
+
+                if log.level >= controller.configuration.logLevel {
+                    print(log.message)
+                }
             }
         } catch {
             fatalError("failed to decode message: \(error)")
@@ -349,7 +355,7 @@ private protocol GutenbergEditorControllerDelegate: AnyObject {
 /// Hiding the conformances, and breaking retain cycles.
 private final class GutenbergEditorController: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
     weak var delegate: GutenbergEditorControllerDelegate?
-    private let configuration: EditorConfiguration
+    let configuration: EditorConfiguration
     private let editorURL: URL?
 
     init(configuration: EditorConfiguration) {

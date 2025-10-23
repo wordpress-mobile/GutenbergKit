@@ -66,7 +66,7 @@ struct AppRootView: View {
                     .setSiteApiRoot(config.siteApiRoot)
                     .setAuthHeader(config.authHeader)
                     .setNativeInserterEnabled(isNativeInserterEnabled)
-//                    .setLogLevel(.debug)
+                    .setLogLevel(.debug)
                     .build()
 
                 await MainActor.run {
