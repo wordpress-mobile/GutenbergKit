@@ -3,41 +3,41 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0C4F59A22BEFF4980028BD96 /* AddSiteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C4F59A32BEFF4980028BD96 /* AddSiteView.swift */; };
-		0C4F59A42BEFF4980028BD96 /* AuthenticationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C4F59A52BEFF4980028BD96 /* AuthenticationManager.swift */; };
 		0C4F59A62BEFF4980028BD96 /* ConfigurationItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C4F59A72BEFF4980028BD96 /* ConfigurationItem.swift */; };
-		0C4F59A82BEFF4980028BD96 /* ConfigurationStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C4F59A92BEFF4980028BD96 /* ConfigurationStorage.swift */; };
 		0CE8E78B2C339B0600B9DC67 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0CE8E7842C339B0600B9DC67 /* Assets.xcassets */; };
-		0CE8E78C2C339B0600B9DC67 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CE8E7852C339B0600B9DC67 /* ContentView.swift */; };
-		0CE8E78D2C339B0600B9DC67 /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CE8E7862C339B0600B9DC67 /* EditorView.swift */; };
 		0CE8E78E2C339B0600B9DC67 /* GutenbergApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CE8E7872C339B0600B9DC67 /* GutenbergApp.swift */; };
 		0CE8E78F2C339B0600B9DC67 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0CE8E7892C339B0600B9DC67 /* Preview Assets.xcassets */; };
 		0CF6E04C2BEFF60E00EDEE8A /* GutenbergKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0CF6E04B2BEFF60E00EDEE8A /* GutenbergKit */; };
+		246852562EAABB7800ED1F09 /* WordPressAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 0C4F59A12BEFF4980028BD96 /* WordPressAPI */; };
+		2468526B2EAACCA100ED1F09 /* AuthenticationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246852682EAACCA100ED1F09 /* AuthenticationManager.swift */; };
+		2468526C2EAACCA100ED1F09 /* ConfigurationStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246852692EAACCA100ED1F09 /* ConfigurationStorage.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		0C4F598B2BEFF4970028BD96 /* Gutenberg.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Gutenberg.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		0C4F59A32BEFF4980028BD96 /* AddSiteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddSiteView.swift; sourceTree = "<group>"; };
-		0C4F59A52BEFF4980028BD96 /* AuthenticationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationManager.swift; sourceTree = "<group>"; };
 		0C4F59A72BEFF4980028BD96 /* ConfigurationItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationItem.swift; sourceTree = "<group>"; };
-		0C4F59A92BEFF4980028BD96 /* ConfigurationStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationStorage.swift; sourceTree = "<group>"; };
 		0CE8E7842C339B0600B9DC67 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		0CE8E7852C339B0600B9DC67 /* ContentView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		0CE8E7862C339B0600B9DC67 /* EditorView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
 		0CE8E7872C339B0600B9DC67 /* GutenbergApp.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GutenbergApp.swift; sourceTree = "<group>"; };
 		0CE8E7892C339B0600B9DC67 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		0CE8E7922C339B1B00B9DC67 /* GutenbergKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = GutenbergKit; path = ../..; sourceTree = "<group>"; };
+		246852682EAACCA100ED1F09 /* AuthenticationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationManager.swift; sourceTree = "<group>"; };
+		246852692EAACCA100ED1F09 /* ConfigurationStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationStorage.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		2468525B2EAAC62B00ED1F09 /* Views */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Views; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		0C4F59882BEFF4970028BD96 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				246852562EAABB7800ED1F09 /* WordPressAPI in Frameworks */,
 				0CF6E04C2BEFF60E00EDEE8A /* GutenbergKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -76,12 +76,9 @@
 		0CE8E7882C339B0600B9DC67 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
-				0C4F59A32BEFF4980028BD96 /* AddSiteView.swift */,
-				0C4F59A52BEFF4980028BD96 /* AuthenticationManager.swift */,
+				2468526A2EAACCA100ED1F09 /* Services */,
+				2468525B2EAAC62B00ED1F09 /* Views */,
 				0C4F59A72BEFF4980028BD96 /* ConfigurationItem.swift */,
-				0C4F59A92BEFF4980028BD96 /* ConfigurationStorage.swift */,
-				0CE8E7852C339B0600B9DC67 /* ContentView.swift */,
-				0CE8E7862C339B0600B9DC67 /* EditorView.swift */,
 				0CE8E7872C339B0600B9DC67 /* GutenbergApp.swift */,
 			);
 			path = Sources;
@@ -102,6 +99,15 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		2468526A2EAACCA100ED1F09 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				246852682EAACCA100ED1F09 /* AuthenticationManager.swift */,
+				246852692EAACCA100ED1F09 /* ConfigurationStorage.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -116,6 +122,9 @@
 			buildRules = (
 			);
 			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				2468525B2EAAC62B00ED1F09 /* Views */,
 			);
 			name = Gutenberg;
 			packageProductDependencies = (
@@ -134,7 +143,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1510;
-				LastUpgradeCheck = 1510;
+				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					0C4F598A2BEFF4970028BD96 = {
 						CreatedOnToolsVersion = 15.1;
@@ -179,13 +188,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0C4F59A22BEFF4980028BD96 /* AddSiteView.swift in Sources */,
-				0C4F59A42BEFF4980028BD96 /* AuthenticationManager.swift in Sources */,
 				0C4F59A62BEFF4980028BD96 /* ConfigurationItem.swift in Sources */,
-				0C4F59A82BEFF4980028BD96 /* ConfigurationStorage.swift in Sources */,
 				0CE8E78E2C339B0600B9DC67 /* GutenbergApp.swift in Sources */,
-				0CE8E78C2C339B0600B9DC67 /* ContentView.swift in Sources */,
-				0CE8E78D2C339B0600B9DC67 /* EditorView.swift in Sources */,
+				2468526B2EAACCA100ED1F09 /* AuthenticationManager.swift in Sources */,
+				2468526C2EAACCA100ED1F09 /* ConfigurationStorage.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -250,6 +256,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -306,6 +313,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -325,7 +333,6 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleURLTypes = "$(INFOPLIST_KEY_CFBundleURLTypes)";
-				"INFOPLIST_KEY_CFBundleURLTypes[0]" = "{ CFBundleURLSchemes = (gutenbergkit); }";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -359,7 +366,6 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleURLTypes = "$(INFOPLIST_KEY_CFBundleURLTypes)";
-				"INFOPLIST_KEY_CFBundleURLTypes[0]" = "{ CFBundleURLSchemes = (gutenbergkit); }";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
