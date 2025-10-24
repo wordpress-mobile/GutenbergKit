@@ -89,13 +89,13 @@ const error = ( message, data ) => {
 		if ( typeof window !== 'undefined' && window.webkit ) {
 			window.webkit.messageHandlers.editorDelegate.postMessage( {
 				message: 'log',
-				body: { 
+				body: {
 					level: 'error',
-					message: message,
-					data: data,
+					message,
+					data,
 				},
 			} );
-		}	
+		}
 	}
 };
 
@@ -112,10 +112,10 @@ const warn = ( message, data ) => {
 		if ( typeof window !== 'undefined' && window.webkit ) {
 			window.webkit.messageHandlers.editorDelegate.postMessage( {
 				message: 'log',
-				body: { 
+				body: {
 					level: 'warn',
-					message: message,
-					data: data,
+					message,
+					data,
 				},
 			} );
 		}
@@ -135,10 +135,10 @@ const info = ( message, data ) => {
 		if ( typeof window !== 'undefined' && window.webkit ) {
 			window.webkit.messageHandlers.editorDelegate.postMessage( {
 				message: 'log',
-				body: { 
+				body: {
 					level: 'warn',
-					message: message,
-					data: data,
+					message,
+					data,
 				},
 			} );
 		}
@@ -158,10 +158,10 @@ const debug = ( message, data ) => {
 		if ( typeof window !== 'undefined' && window.webkit ) {
 			window.webkit.messageHandlers.editorDelegate.postMessage( {
 				message: 'log',
-				body: { 
+				body: {
 					level: 'debug',
-					message: message,
-					data: data,
+					message,
+					data,
 				},
 			} );
 		}

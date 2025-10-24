@@ -12,6 +12,7 @@
 		"dev:remote": "vite --host --config vite.config.remote.js",
 		"build": "vite --emptyOutDir build && vite build --emptyOutDir=false --config vite.config.remote.js",
 		"lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+		"lintfix": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0 --fix",
 		"format": "prettier --write .",
 		"postinstall": "patch-package && npm run prep-translations",
 		"prep-translations": "node bin/prep-translations.js",
