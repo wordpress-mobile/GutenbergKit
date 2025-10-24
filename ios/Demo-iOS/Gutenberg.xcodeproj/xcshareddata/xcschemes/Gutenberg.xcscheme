@@ -58,7 +58,7 @@
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "GUTENBERG_EDITOR_REMOTE_URL"
-            value = "http://localhost:5173/remote.html"
+            value = "http://localhost:5174/remote.html"
             isEnabled = "YES">
          </EnvironmentVariable>
       </EnvironmentVariables>
