@@ -55,7 +55,7 @@ public struct EditorConfiguration: Sendable {
         locale: String,
         isNativeInserterEnabled: Bool,
         editorAssetsEndpoint: URL? = nil,
-        logLevel: LogLevel = .warn
+        logLevel: LogLevel
     ) {
         self.title = title
         self.content = content
@@ -144,7 +144,7 @@ public struct EditorConfigurationBuilder {
         locale: String = "en",
         isNativeInserterEnabled: Bool = false,
         editorAssetsEndpoint: URL? = nil,
-        logLevel: LogLevel = .warn
+        logLevel: LogLevel = .error
     ){
         self.title = title
         self.content = content

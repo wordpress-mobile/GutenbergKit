@@ -1,3 +1,5 @@
+import { getGBKit } from './bridge';
+
 // Log levels in order of verbosity
 const LOG_LEVELS = {
 	ERROR: 0,
@@ -21,6 +23,16 @@ if ( typeof process !== 'undefined' && process?.env?.LOG_LEVEL ) {
 const urlLogLevel = getLogLevelFromURL();
 if ( urlLogLevel ) {
 	const upperCaseLevel = urlLogLevel.toUpperCase();
+	if ( LOG_LEVELS[ upperCaseLevel ] !== undefined ) {
+		currentLogLevel = LOG_LEVELS[ upperCaseLevel ];
+	}
+}
+
+// If the GBKit constant has a logLevel, use it to set the log level
+const gbKit = getGBKit();
+if ( gbKit.logLevel ) {
+	const upperCaseLevel = gbKit.logLevel.toUpperCase();
+
 	if ( LOG_LEVELS[ upperCaseLevel ] !== undefined ) {
 		currentLogLevel = LOG_LEVELS[ upperCaseLevel ];
 	}
@@ -73,17 +85,17 @@ const error = ( message, data ) => {
 	if ( shouldLog( LOG_LEVELS.ERROR ) ) {
 		// eslint-disable-next-line no-console
 		console.error( `[GBK] ${ message }`, data || '' );
-	}
 
-	if ( typeof window !== 'undefined' && window.webkit ) {
-		window.webkit.messageHandlers.editorDelegate.postMessage( {
-			message: 'log',
-			body: { 
-				level: 'error',
-				message: message,
-				data: data,
-			},
-		} );
+		if ( typeof window !== 'undefined' && window.webkit ) {
+			window.webkit.messageHandlers.editorDelegate.postMessage( {
+				message: 'log',
+				body: { 
+					level: 'error',
+					message: message,
+					data: data,
+				},
+			} );
+		}	
 	}
 };
 
@@ -96,17 +108,17 @@ const warn = ( message, data ) => {
 	if ( shouldLog( LOG_LEVELS.WARN ) ) {
 		// eslint-disable-next-line no-console
 		console.warn( `[GBK] ${ message }`, data || '' );
-	}
 
-	if ( typeof window !== 'undefined' && window.webkit ) {
-		window.webkit.messageHandlers.editorDelegate.postMessage( {
-			message: 'log',
-			body: { 
-				level: 'warn',
-				message: message,
-				data: data,
-			},
-		} );
+		if ( typeof window !== 'undefined' && window.webkit ) {
+			window.webkit.messageHandlers.editorDelegate.postMessage( {
+				message: 'log',
+				body: { 
+					level: 'warn',
+					message: message,
+					data: data,
+				},
+			} );
+		}
 	}
 };
 
@@ -119,17 +131,17 @@ const info = ( message, data ) => {
 	if ( shouldLog( LOG_LEVELS.INFO ) ) {
 		// eslint-disable-next-line no-console
 		console.info( `[GBK] ${ message }`, data || '' );
-	}
 
-	if ( typeof window !== 'undefined' && window.webkit ) {
-		window.webkit.messageHandlers.editorDelegate.postMessage( {
-			message: 'log',
-			body: { 
-				level: 'info',
-				message: message,
-				data: data,
-			},
-		} );
+		if ( typeof window !== 'undefined' && window.webkit ) {
+			window.webkit.messageHandlers.editorDelegate.postMessage( {
+				message: 'log',
+				body: { 
+					level: 'warn',
+					message: message,
+					data: data,
+				},
+			} );
+		}
 	}
 };
 
@@ -142,17 +154,17 @@ const debug = ( message, data ) => {
 	if ( shouldLog( LOG_LEVELS.DEBUG ) ) {
 		// eslint-disable-next-line no-console
 		console.debug( `[GBK] ${ message }`, data || '' );
-	}
 
-	if ( typeof window !== 'undefined' && window.webkit ) {
-		window.webkit.messageHandlers.editorDelegate.postMessage( {
-			message: 'log',
-			body: { 
-				level: 'debug',
-				message: message,
-				data: data,
-			},
-		} );
+		if ( typeof window !== 'undefined' && window.webkit ) {
+			window.webkit.messageHandlers.editorDelegate.postMessage( {
+				message: 'log',
+				body: { 
+					level: 'debug',
+					message: message,
+					data: data,
+				},
+			} );
+		}
 	}
 };
 

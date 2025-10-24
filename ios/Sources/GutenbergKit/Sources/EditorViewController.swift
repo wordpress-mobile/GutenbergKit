@@ -137,6 +137,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 title: '\(configuration.escapedTitle)',
                 content: '\(configuration.escapedContent)'
             },
+            logLevel: '\(configuration.logLevel)'
         };
 
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
@@ -304,10 +305,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 delegate?.editor(self, didCloseModalDialog: body.dialogType)
             case .log:
                 let log = try message.decode(EditorJSMessage.LogMessage.self)
-
-                if log.level >= controller.configuration.logLevel {
-                    print(log.message)
-                }
+                delegate?.editor(self, didLogMessage: log.message, level: log.level)
             }
         } catch {
             fatalError("failed to decode message: \(error)")
