@@ -4,26 +4,39 @@ import AuthenticationServices
 import WordPressAPI
 
 struct AppRootView: View {
+
+    @EnvironmentObject
+    private var configurationStorage: ConfigurationStorage
+
+    @EnvironmentObject
+    private var authenticationManager: AuthenticationManager
+
     @State private var selectedConfiguration: ConfigurationItem?
     @State private var configurations: [ConfigurationItem] = [.bundledEditor]
     @State private var siteUrlInput = ""
-    @State private var authenticationManager = AuthenticationManager()
-    @State private var configurationStorage = ConfigurationStorage()
 
     @State private var editorRemoteConfiguration: EditorConfiguration? = nil
-    @State private var error: Error? = nil
+
+    @State private var hasError: Bool = false
+    @State private var error: AppError? = nil
 
     @AppStorage("isNativeInserterEnabled") private var isNativeInserterEnabled = false
 
     var body: some View {
         EditorList(isNativeInserterEnabled: $isNativeInserterEnabled, selectedConfiguration: $selectedConfiguration)
-        .overlay {
-            if let error {
-                Text(error.localizedDescription)
-            }
-        }
+        .alert(isPresented: $hasError, error: error, actions: {
+            Button {
+                self.hasError = false
+            } label: {
+                HStack {
+                    Spacer()
+                    Text("Dismiss")
+                    Spacer()
+                }
+            }.buttonStyle(.borderedProminent)
+        })
         .fullScreenCover(item: $selectedConfiguration) { config in
-            editorOverlay
+            editor
         }
         .onChange(of: self.selectedConfiguration) { oldValue, newValue in
             switch newValue {
@@ -35,7 +48,7 @@ struct AppRootView: View {
     }
 
     @ViewBuilder
-    var editorOverlay: some View {
+    var editor: some View {
         NavigationView {
             if let editorRemoteConfiguration {
                 EditorView(configuration: editorRemoteConfiguration)
@@ -69,11 +82,10 @@ struct AppRootView: View {
                     .setLogLevel(.debug)
                     .build()
 
-                await MainActor.run {
-                    self.editorRemoteConfiguration = updatedConfiguration
-                }
+                self.editorRemoteConfiguration = updatedConfiguration
             } catch {
-                self.error = error
+                self.hasError = true
+                self.error = AppError(errorDescription: error.localizedDescription)
             }
         }
     }
@@ -92,6 +104,10 @@ struct AppRootView: View {
             .setNativeInserterEnabled(isNativeInserterEnabled)
             .build()
     }
+}
+
+struct AppError: LocalizedError {
+    let errorDescription: String
 }
 
 #Preview {
