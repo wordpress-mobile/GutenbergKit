@@ -1,5 +1,3 @@
-import { getGBKit } from './bridge';
-
 // Log levels in order of verbosity
 const LOG_LEVELS = {
 	ERROR: 0,
@@ -23,16 +21,6 @@ if ( typeof process !== 'undefined' && process?.env?.LOG_LEVEL ) {
 const urlLogLevel = getLogLevelFromURL();
 if ( urlLogLevel ) {
 	const upperCaseLevel = urlLogLevel.toUpperCase();
-	if ( LOG_LEVELS[ upperCaseLevel ] !== undefined ) {
-		currentLogLevel = LOG_LEVELS[ upperCaseLevel ];
-	}
-}
-
-// If the GBKit constant has a logLevel, use it to set the log level
-const gbKit = getGBKit();
-if ( gbKit.logLevel ) {
-	const upperCaseLevel = gbKit.logLevel.toUpperCase();
-
 	if ( LOG_LEVELS[ upperCaseLevel ] !== undefined ) {
 		currentLogLevel = LOG_LEVELS[ upperCaseLevel ];
 	}
