@@ -73,6 +73,17 @@ const error = ( message, data ) => {
 	if ( shouldLog( LOG_LEVELS.ERROR ) ) {
 		// eslint-disable-next-line no-console
 		console.error( `[GBK] ${ message }`, data || '' );
+
+		if ( typeof window !== 'undefined' && window.webkit ) {
+			window.webkit.messageHandlers.editorDelegate.postMessage( {
+				message: 'log',
+				body: {
+					level: 'error',
+					message,
+					data,
+				},
+			} );
+		}
 	}
 };
 
@@ -85,6 +96,17 @@ const warn = ( message, data ) => {
 	if ( shouldLog( LOG_LEVELS.WARN ) ) {
 		// eslint-disable-next-line no-console
 		console.warn( `[GBK] ${ message }`, data || '' );
+
+		if ( typeof window !== 'undefined' && window.webkit ) {
+			window.webkit.messageHandlers.editorDelegate.postMessage( {
+				message: 'log',
+				body: {
+					level: 'warn',
+					message,
+					data,
+				},
+			} );
+		}
 	}
 };
 
@@ -97,6 +119,17 @@ const info = ( message, data ) => {
 	if ( shouldLog( LOG_LEVELS.INFO ) ) {
 		// eslint-disable-next-line no-console
 		console.info( `[GBK] ${ message }`, data || '' );
+
+		if ( typeof window !== 'undefined' && window.webkit ) {
+			window.webkit.messageHandlers.editorDelegate.postMessage( {
+				message: 'log',
+				body: {
+					level: 'warn',
+					message,
+					data,
+				},
+			} );
+		}
 	}
 };
 
@@ -109,6 +142,17 @@ const debug = ( message, data ) => {
 	if ( shouldLog( LOG_LEVELS.DEBUG ) ) {
 		// eslint-disable-next-line no-console
 		console.debug( `[GBK] ${ message }`, data || '' );
+
+		if ( typeof window !== 'undefined' && window.webkit ) {
+			window.webkit.messageHandlers.editorDelegate.postMessage( {
+				message: 'log',
+				body: {
+					level: 'debug',
+					message,
+					data,
+				},
+			} );
+		}
 	}
 };
 
