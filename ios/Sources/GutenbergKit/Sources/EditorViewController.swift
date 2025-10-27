@@ -255,7 +255,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 mediaPicker: mediaPicker,
                 presentationContext: context,
                 onBlockSelected: { [weak self] block in
-                    self?.insertBlockFromInserter(block.name)
+                    self?.insertBlockFromInserter(block.id)
                 },
                 onMediaSelected: {
                     print("insert media:", $0)
@@ -268,8 +268,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         present(host, animated: true)
     }
 
-    private func insertBlockFromInserter(_ blockName: String) {
-        evaluate("window.blockInserter.insertBlock('\(blockName)')")
+    private func insertBlockFromInserter(_ blockId: String) {
+        evaluate("window.blockInserter.insertBlock('\(blockId)')")
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {

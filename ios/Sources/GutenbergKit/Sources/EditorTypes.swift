@@ -1,8 +1,11 @@
 import Foundation
 
 struct EditorBlock: Decodable, Identifiable {
-    var id: String { name }
-
+    /// Unique identifier for this block variant. Note that this is NOT the same as `name`.
+    /// Multiple blocks can share the same `name` but have different `id` values to represent
+    /// different variants with different initial attributes (e.g., core/embed variants for
+    /// YouTube, Vimeo, etc.).
+    let id: String
     let name: String
     let title: String?
     let description: String?

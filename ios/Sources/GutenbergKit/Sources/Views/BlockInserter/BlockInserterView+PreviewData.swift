@@ -5,6 +5,7 @@ extension EditorBlock {
     static let mocks: [EditorBlock] = [
         // Text blocks
         EditorBlock(
+            id: "core/paragraph",
             name: "core/paragraph",
             title: "Paragraph",
             description: "Start with the basic building block of all narrative.",
@@ -13,6 +14,7 @@ extension EditorBlock {
             icon: paragraphSVG
         ),
         EditorBlock(
+            id: "core/heading",
             name: "core/heading",
             title: "Heading",
             description: "Introduce new sections and organize content to help visitors find what they need.",
@@ -21,6 +23,7 @@ extension EditorBlock {
             icon: headingSVG
         ),
         EditorBlock(
+            id: "core/list",
             name: "core/list",
             title: "List",
             description: "Create a bulleted or numbered list.",
@@ -29,6 +32,7 @@ extension EditorBlock {
             icon: listSVG
         ),
         EditorBlock(
+            id: "core/quote",
             name: "core/quote",
             title: "Quote",
             description: "Give quoted text visual emphasis.",
@@ -37,6 +41,7 @@ extension EditorBlock {
             icon: quoteSVG
         ),
         EditorBlock(
+            id: "core/code",
             name: "core/code",
             title: "Code",
             description: "Display code snippets that respect your spacing and tabs.",
@@ -45,6 +50,7 @@ extension EditorBlock {
             icon: codeSVG
         ),
         EditorBlock(
+            id: "core/preformatted",
             name: "core/preformatted",
             title: "Preformatted",
             description: "Add text that respects your spacing and tabs, and also allows styling.",
@@ -53,6 +59,7 @@ extension EditorBlock {
             icon: nil
         ),
         EditorBlock(
+            id: "core/pullquote",
             name: "core/pullquote",
             title: "Pullquote",
             description: "Give special visual emphasis to a quote from your text.",
@@ -61,6 +68,7 @@ extension EditorBlock {
             icon: quoteSVG
         ),
         EditorBlock(
+            id: "core/verse",
             name: "core/verse",
             title: "Verse",
             description: "Insert poetry. Use special spacing formats. Or quote song lyrics.",
@@ -69,6 +77,7 @@ extension EditorBlock {
             icon: nil
         ),
         EditorBlock(
+            id: "core/table",
             name: "core/table",
             title: "Table",
             description: "Create structured content in rows and columns to display information.",
@@ -79,6 +88,7 @@ extension EditorBlock {
 
         // Media blocks
         EditorBlock(
+            id: "core/image",
             name: "core/image",
             title: "Image",
             description: "Insert an image to make a visual statement.",
@@ -87,6 +97,7 @@ extension EditorBlock {
             icon: imageSVG
         ),
         EditorBlock(
+            id: "core/gallery",
             name: "core/gallery",
             title: "Gallery",
             description: "Display multiple images in a rich gallery.",
@@ -95,6 +106,7 @@ extension EditorBlock {
             icon: imageSVG
         ),
         EditorBlock(
+            id: "core/audio",
             name: "core/audio",
             title: "Audio",
             description: "Embed a simple audio player.",
@@ -103,6 +115,7 @@ extension EditorBlock {
             icon: nil
         ),
         EditorBlock(
+            id: "core/video",
             name: "core/video",
             title: "Video",
             description: "Embed a video from your media library or upload a new one.",
@@ -111,6 +124,7 @@ extension EditorBlock {
             icon: videoSVG
         ),
         EditorBlock(
+            id: "core/cover",
             name: "core/cover",
             title: "Cover",
             description: "Add an image or video with a text overlay.",
@@ -119,6 +133,7 @@ extension EditorBlock {
             icon: nil
         ),
         EditorBlock(
+            id: "core/file",
             name: "core/file",
             title: "File",
             description: "Add a link to a downloadable file.",
@@ -127,6 +142,7 @@ extension EditorBlock {
             icon: nil
         ),
         EditorBlock(
+            id: "core/media-text",
             name: "core/media-text",
             title: "Media & Text",
             description: "Set media and words side-by-side for a richer layout.",
@@ -137,6 +153,7 @@ extension EditorBlock {
 
         // Design blocks
         EditorBlock(
+            id: "core/columns",
             name: "core/columns",
             title: "Columns",
             description: "Display content in multiple columns.",
@@ -145,6 +162,7 @@ extension EditorBlock {
             icon: nil
         ),
         EditorBlock(
+            id: "core/group",
             name: "core/group",
             title: "Group",
             description: "Gather blocks in a container.",
@@ -153,6 +171,7 @@ extension EditorBlock {
             icon: nil
         ),
         EditorBlock(
+            id: "core/separator",
             name: "core/separator",
             title: "Separator",
             description: "Create a break between ideas or sections.",
@@ -161,6 +180,7 @@ extension EditorBlock {
             icon: nil
         ),
         EditorBlock(
+            id: "core/spacer",
             name: "core/spacer",
             title: "Spacer",
             description: "Add white space between blocks.",
@@ -169,6 +189,7 @@ extension EditorBlock {
             icon: nil
         ),
         EditorBlock(
+            id: "core/buttons",
             name: "core/buttons",
             title: "Buttons",
             description: "Prompt visitors to take action with a group of button-style links.",
@@ -177,6 +198,7 @@ extension EditorBlock {
             icon: buttonSVG
         ),
         EditorBlock(
+            id: "core/more",
             name: "core/more",
             title: "More",
             description: "Content before this block will be shown in the excerpt on your archives page.",
@@ -187,13 +209,15 @@ extension EditorBlock {
 
         // Widget blocks
         EditorBlock(
+            id: "core/search",
             name: "core/search",
             title: "Search",
             description: "Help visitors find your content.",
             category: "widgets",
-            keywords: ["find", "search"],
+            keywords: ["find", "search"]
         ),
         EditorBlock(
+            id: "core/archives",
             name: "core/archives",
             title: "Archives",
             description: "Display a date archive of your posts.",
@@ -202,6 +226,7 @@ extension EditorBlock {
             icon: nil
         ),
         EditorBlock(
+            id: "core/categories",
             name: "core/categories",
             title: "Categories",
             description: "Display a list of all categories.",
@@ -212,6 +237,7 @@ extension EditorBlock {
 
         // Embed blocks
         EditorBlock(
+            id: "core-embed/youtube",
             name: "core-embed/youtube",
             title: "YouTube",
             description: "Embed a YouTube video.",
@@ -220,6 +246,7 @@ extension EditorBlock {
             icon: nil
         ),
         EditorBlock(
+            id: "core-embed/twitter",
             name: "core-embed/twitter",
             title: "Twitter",
             description: "Embed a tweet.",
@@ -228,6 +255,7 @@ extension EditorBlock {
             icon: nil
         ),
         EditorBlock(
+            id: "core-embed/vimeo",
             name: "core-embed/vimeo",
             title: "Vimeo",
             description: "Embed a Vimeo video.",
@@ -236,6 +264,7 @@ extension EditorBlock {
             icon: nil
         ),
         EditorBlock(
+            id: "core-embed/instagram",
             name: "core-embed/instagram",
             title: "Instagram",
             description: "Embed an Instagram post.",
@@ -246,6 +275,7 @@ extension EditorBlock {
 
         // Additional common blocks
         EditorBlock(
+            id: "core/html",
             name: "core/html",
             title: "Custom HTML",
             description: "Add custom HTML code and preview it as you edit.",
@@ -254,6 +284,7 @@ extension EditorBlock {
             icon: codeSVG
         ),
         EditorBlock(
+            id: "core/shortcode",
             name: "core/shortcode",
             title: "Shortcode",
             description: "Insert additional custom elements with WordPress shortcodes.",
@@ -262,6 +293,7 @@ extension EditorBlock {
             icon: nil
         ),
         EditorBlock(
+            id: "core/social-links",
             name: "core/social-links",
             title: "Social Icons",
             description: "Display icons linking to your social media profiles.",

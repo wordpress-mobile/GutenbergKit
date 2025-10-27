@@ -77,6 +77,7 @@ export function getBlockIcon( item ) {
 export function serializeBlocksForNative( inserterItems ) {
 	return inserterItems.map( ( item ) => {
 		return {
+			id: item.id,
 			name: item.name,
 			title: item.title,
 			description: item.description,
