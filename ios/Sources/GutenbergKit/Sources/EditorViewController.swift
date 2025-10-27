@@ -174,6 +174,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         try await webView.evaluateJavaScript("editor.getContent();") as! String
     }
 
+    public struct EditorTitleAndContent: Decodable {
+        public let title: String
+        public let content: String
+        public let changed: Bool
+    }
+
     /// Returns the current editor title and content.
     public func getTitleAndContent() async throws -> EditorTitleAndContent {
         let result = try await webView.evaluateJavaScript("editor.getTitleAndContent();")

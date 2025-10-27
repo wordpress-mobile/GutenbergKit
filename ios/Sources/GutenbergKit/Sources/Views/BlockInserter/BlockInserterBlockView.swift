@@ -2,7 +2,7 @@ import SwiftUI
 import SVGKit
 
 struct BlockInserterBlockView: View {
-    let block: EditorBlock
+    let block: BlockType
     let action: () -> Void
     
     @State private var isPressed = false
@@ -57,7 +57,7 @@ struct BlockInserterBlockView: View {
 }
 
 private struct BlockDetailedView: View {
-    let block: EditorBlock
+    let block: BlockType
 
     var body: some View {
         HStack(spacing: 16) {

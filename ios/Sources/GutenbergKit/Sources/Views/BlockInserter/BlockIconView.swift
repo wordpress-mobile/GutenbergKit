@@ -2,7 +2,7 @@ import SwiftUI
 import SVGKit
 
 struct BlockIconView: View {
-    let block: EditorBlock
+    let block: BlockType
     let size: CGFloat
 
     @EnvironmentObject private var cache: BlockIconCache

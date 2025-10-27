@@ -4,12 +4,12 @@ struct BlockInserterSection: Identifiable {
     var id: String { category }
     let category: String
     let name: String?
-    let blocks: [EditorBlock]
+    let blocks: [BlockType]
 }
 
 struct BlockInserterSectionView: View {
     let section: BlockInserterSection
-    let onBlockSelected: (EditorBlock) -> Void
+    let onBlockSelected: (BlockType) -> Void
 
     @ScaledMetric(relativeTo: .largeTitle) private var miniumSize = 80
     @ScaledMetric(relativeTo: .largeTitle) private var padding = 20

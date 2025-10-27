@@ -7,11 +7,11 @@ class BlockInserterViewModel: ObservableObject {
     @Published var searchText = ""
     @Published private(set) var sections: [BlockInserterSection] = []
 
-    private let blocks: [EditorBlock]
+    private let blocks: [BlockType]
     private let allSections: [BlockInserterSection]
     private var cancellables = Set<AnyCancellable>()
 
-    init(blocks: [EditorBlock], destinationBlockName: String?) {
+    init(blocks: [BlockType], destinationBlockName: String?) {
         let blocks = blocks.filter { $0.name != "core/missing" }
 
         self.blocks = blocks
@@ -36,7 +36,7 @@ class BlockInserterViewModel: ObservableObject {
             sections = allSections
         } else {
             sections = allSections.compactMap { section in
-                let filtered = SearchEngine<EditorBlock>()
+                let filtered = SearchEngine<BlockType>()
                     .search(query: searchText, in: section.blocks)
                 return filtered.isEmpty ? nil : BlockInserterSection(
                     category: section.category,
@@ -47,7 +47,7 @@ class BlockInserterViewModel: ObservableObject {
         }
     }
 
-    private static func createSections(from blocks: [EditorBlock], destinationBlockName: String?) -> [BlockInserterSection] {
+    private static func createSections(from blocks: [BlockType], destinationBlockName: String?) -> [BlockInserterSection] {
         var sections: [BlockInserterSection] = []
 
         // Separate contextual blocks (specifically allowed in current parent block)
@@ -93,7 +93,7 @@ class BlockInserterViewModel: ObservableObject {
 
 // MARK: Ordering
 
-private func orderBlocks(_ blocks: [EditorBlock], category: String) -> [EditorBlock] {
+private func orderBlocks(_ blocks: [BlockType], category: String) -> [BlockType] {
     switch category {
     case "text":
         return _orderBlocks(blocks, order: [
@@ -128,8 +128,8 @@ private func orderBlocks(_ blocks: [EditorBlock], category: String) -> [EditorBl
     }
 }
 
-private func _orderBlocks(_ blocks: [EditorBlock], order: [String]) -> [EditorBlock] {
-    var orderedBlocks: [EditorBlock] = []
+private func _orderBlocks(_ blocks: [BlockType], order: [String]) -> [BlockType] {
+    var orderedBlocks: [BlockType] = []
 
     // Add blocks in a predefined order
     for name in order {

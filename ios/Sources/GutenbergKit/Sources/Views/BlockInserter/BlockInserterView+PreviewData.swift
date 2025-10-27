@@ -1,10 +1,10 @@
 #if DEBUG
 import Foundation
 
-extension EditorBlock {
-    static let mocks: [EditorBlock] = [
+extension BlockType {
+    static let mocks: [BlockType] = [
         // Text blocks
-        EditorBlock(
+        BlockType(
             id: "core/paragraph",
             name: "core/paragraph",
             title: "Paragraph",
@@ -13,7 +13,7 @@ extension EditorBlock {
             keywords: ["text", "paragraph"],
             icon: paragraphSVG
         ),
-        EditorBlock(
+        BlockType(
             id: "core/heading",
             name: "core/heading",
             title: "Heading",
@@ -22,7 +22,7 @@ extension EditorBlock {
             keywords: ["title", "heading"],
             icon: headingSVG
         ),
-        EditorBlock(
+        BlockType(
             id: "core/list",
             name: "core/list",
             title: "List",
@@ -31,7 +31,7 @@ extension EditorBlock {
             keywords: ["bullet", "number", "list"],
             icon: listSVG
         ),
-        EditorBlock(
+        BlockType(
             id: "core/quote",
             name: "core/quote",
             title: "Quote",
@@ -40,7 +40,7 @@ extension EditorBlock {
             keywords: ["quote", "citation"],
             icon: quoteSVG
         ),
-        EditorBlock(
+        BlockType(
             id: "core/code",
             name: "core/code",
             title: "Code",
@@ -49,7 +49,7 @@ extension EditorBlock {
             keywords: ["code", "programming"],
             icon: codeSVG
         ),
-        EditorBlock(
+        BlockType(
             id: "core/preformatted",
             name: "core/preformatted",
             title: "Preformatted",
@@ -58,7 +58,7 @@ extension EditorBlock {
             keywords: ["preformatted", "monospace"],
             icon: nil
         ),
-        EditorBlock(
+        BlockType(
             id: "core/pullquote",
             name: "core/pullquote",
             title: "Pullquote",
@@ -67,7 +67,7 @@ extension EditorBlock {
             keywords: ["pullquote", "quote"],
             icon: quoteSVG
         ),
-        EditorBlock(
+        BlockType(
             id: "core/verse",
             name: "core/verse",
             title: "Verse",
@@ -76,7 +76,7 @@ extension EditorBlock {
             keywords: ["poetry", "verse"],
             icon: nil
         ),
-        EditorBlock(
+        BlockType(
             id: "core/table",
             name: "core/table",
             title: "Table",
@@ -87,7 +87,7 @@ extension EditorBlock {
         ),
 
         // Media blocks
-        EditorBlock(
+        BlockType(
             id: "core/image",
             name: "core/image",
             title: "Image",
@@ -96,7 +96,7 @@ extension EditorBlock {
             keywords: ["photo", "picture"],
             icon: imageSVG
         ),
-        EditorBlock(
+        BlockType(
             id: "core/gallery",
             name: "core/gallery",
             title: "Gallery",
@@ -105,7 +105,7 @@ extension EditorBlock {
             keywords: ["images", "photos"],
             icon: imageSVG
         ),
-        EditorBlock(
+        BlockType(
             id: "core/audio",
             name: "core/audio",
             title: "Audio",
@@ -114,7 +114,7 @@ extension EditorBlock {
             keywords: ["music", "sound", "podcast"],
             icon: nil
         ),
-        EditorBlock(
+        BlockType(
             id: "core/video",
             name: "core/video",
             title: "Video",
@@ -123,7 +123,7 @@ extension EditorBlock {
             keywords: ["movie", "film"],
             icon: videoSVG
         ),
-        EditorBlock(
+        BlockType(
             id: "core/cover",
             name: "core/cover",
             title: "Cover",
@@ -132,7 +132,7 @@ extension EditorBlock {
             keywords: ["banner", "hero", "cover"],
             icon: nil
         ),
-        EditorBlock(
+        BlockType(
             id: "core/file",
             name: "core/file",
             title: "File",
@@ -141,7 +141,7 @@ extension EditorBlock {
             keywords: ["download", "pdf", "document"],
             icon: nil
         ),
-        EditorBlock(
+        BlockType(
             id: "core/media-text",
             name: "core/media-text",
             title: "Media & Text",
@@ -152,7 +152,7 @@ extension EditorBlock {
         ),
 
         // Design blocks
-        EditorBlock(
+        BlockType(
             id: "core/columns",
             name: "core/columns",
             title: "Columns",
@@ -161,7 +161,7 @@ extension EditorBlock {
             keywords: ["layout", "columns"],
             icon: nil
         ),
-        EditorBlock(
+        BlockType(
             id: "core/group",
             name: "core/group",
             title: "Group",
@@ -170,7 +170,7 @@ extension EditorBlock {
             keywords: ["container", "wrapper", "group"],
             icon: nil
         ),
-        EditorBlock(
+        BlockType(
             id: "core/separator",
             name: "core/separator",
             title: "Separator",
@@ -179,7 +179,7 @@ extension EditorBlock {
             keywords: ["divider", "hr"],
             icon: nil
         ),
-        EditorBlock(
+        BlockType(
             id: "core/spacer",
             name: "core/spacer",
             title: "Spacer",
@@ -188,7 +188,7 @@ extension EditorBlock {
             keywords: ["space", "gap"],
             icon: nil
         ),
-        EditorBlock(
+        BlockType(
             id: "core/buttons",
             name: "core/buttons",
             title: "Buttons",
@@ -197,7 +197,7 @@ extension EditorBlock {
             keywords: ["button", "link", "cta"],
             icon: buttonSVG
         ),
-        EditorBlock(
+        BlockType(
             id: "core/more",
             name: "core/more",
             title: "More",
@@ -208,7 +208,7 @@ extension EditorBlock {
         ),
 
         // Widget blocks
-        EditorBlock(
+        BlockType(
             id: "core/search",
             name: "core/search",
             title: "Search",
@@ -216,7 +216,7 @@ extension EditorBlock {
             category: "widgets",
             keywords: ["find", "search"]
         ),
-        EditorBlock(
+        BlockType(
             id: "core/archives",
             name: "core/archives",
             title: "Archives",
@@ -225,7 +225,7 @@ extension EditorBlock {
             keywords: ["archive", "history"],
             icon: nil
         ),
-        EditorBlock(
+        BlockType(
             id: "core/categories",
             name: "core/categories",
             title: "Categories",
@@ -236,7 +236,7 @@ extension EditorBlock {
         ),
 
         // Embed blocks
-        EditorBlock(
+        BlockType(
             id: "core-embed/youtube",
             name: "core-embed/youtube",
             title: "YouTube",
@@ -245,7 +245,7 @@ extension EditorBlock {
             keywords: ["video", "youtube"],
             icon: nil
         ),
-        EditorBlock(
+        BlockType(
             id: "core-embed/twitter",
             name: "core-embed/twitter",
             title: "Twitter",
@@ -254,7 +254,7 @@ extension EditorBlock {
             keywords: ["tweet", "twitter"],
             icon: nil
         ),
-        EditorBlock(
+        BlockType(
             id: "core-embed/vimeo",
             name: "core-embed/vimeo",
             title: "Vimeo",
@@ -263,7 +263,7 @@ extension EditorBlock {
             keywords: ["video", "vimeo"],
             icon: nil
         ),
-        EditorBlock(
+        BlockType(
             id: "core-embed/instagram",
             name: "core-embed/instagram",
             title: "Instagram",
@@ -274,7 +274,7 @@ extension EditorBlock {
         ),
 
         // Additional common blocks
-        EditorBlock(
+        BlockType(
             id: "core/html",
             name: "core/html",
             title: "Custom HTML",
@@ -283,7 +283,7 @@ extension EditorBlock {
             keywords: ["html", "code", "custom"],
             icon: codeSVG
         ),
-        EditorBlock(
+        BlockType(
             id: "core/shortcode",
             name: "core/shortcode",
             title: "Shortcode",
@@ -292,7 +292,7 @@ extension EditorBlock {
             keywords: ["shortcode", "custom"],
             icon: nil
         ),
-        EditorBlock(
+        BlockType(
             id: "core/social-links",
             name: "core/social-links",
             title: "Social Icons",
