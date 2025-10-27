@@ -1,7 +1,7 @@
 import Foundation
 
 /// Represents a configuration item for the editor
-enum ConfigurationItem: Codable, Identifiable {
+enum ConfigurationItem: Codable, Identifiable, Equatable {
     case bundledEditor
     case remoteEditor(RemoteEditorConfiguration)
 
@@ -25,7 +25,7 @@ enum ConfigurationItem: Codable, Identifiable {
 }
 
 /// Configuration for a remote editor
-struct RemoteEditorConfiguration: Codable, Identifiable {
+struct RemoteEditorConfiguration: Codable, Identifiable, Equatable {
     let id: String
     let name: String
     let siteUrl: String

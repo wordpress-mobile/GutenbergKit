@@ -1,12 +1,20 @@
 import SwiftUI
 import AuthenticationServices
+import GutenbergKit
 
 /// View for adding a new remote editor site
 struct AddSiteView: View {
-    @Binding var siteUrl: String
-    @ObservedObject var authenticationManager: AuthenticationManager
-    let onAdd: (RemoteEditorConfiguration) -> Void
-    let onCancel: () -> Void
+
+    @EnvironmentObject
+    private var configurationStorage: ConfigurationStorage
+
+    @EnvironmentObject
+    private var authenticationManager: AuthenticationManager
+
+    @Environment(\.dismiss)
+    private var dismiss: DismissAction
+
+    @State private var siteUrl: String = ""
 
     @State private var presentationContextProvider = WebAuthPresentationContextProvider()
 
@@ -68,6 +76,17 @@ struct AddSiteView: View {
         ) { configuration in
             onAdd(configuration)
         }
+    }
+
+    private func onAdd(_ configuration: RemoteEditorConfiguration) {
+        configurationStorage.addConfiguration(.remoteEditor(configuration))
+        self.siteUrl = ""
+        self.dismiss()
+    }
+
+    private func onCancel() {
+        self.siteUrl = ""
+        self.dismiss()
     }
 }
 

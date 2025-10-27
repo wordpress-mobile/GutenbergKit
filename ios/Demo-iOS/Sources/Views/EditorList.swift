@@ -1,0 +1,107 @@
+import SwiftUI
+
+struct EditorList: View {
+
+    @EnvironmentObject
+    private var configurationStorage: ConfigurationStorage
+
+    @State private var showAddDialog = false
+    @Binding var isNativeInserterEnabled: Bool
+
+    @Binding var selectedConfiguration: ConfigurationItem?
+
+    @State var configurationToDelete: ConfigurationItem?
+
+    var body: some View {
+        List {
+            Section {
+                Button("Bundled Editor") {
+                    selectedConfiguration = .bundledEditor
+                }
+            } header: {
+                if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"] != nil ||
+                   ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"] != nil
+                    {
+                    Text("Note: The editor is backed by the dev server created by `make dev-server` and `make dev-server-remote`.")
+                        .textCase(nil)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Note: The editor is backed by the compiled web app created by `make build`.")
+                        .textCase(nil)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            } footer: {
+                Text("Local editor without plugin support")
+            }
+
+            Section {
+                remoteEditors
+
+                Button("Add New Remote Editor") {
+                    showAddDialog = true
+                }
+            } header: {
+                Text("Remote Editors")
+            } footer: {
+                Text("Site-specific editor with plugins")
+            }
+
+            Section("Configuration") {
+                Toggle("Native Inserter", isOn: $isNativeInserterEnabled)
+            }
+        }
+        .alert(
+            "Delete Remote Editor?",
+            isPresented: Binding(
+                get: { configurationToDelete != nil },
+                set: { if !$0 { configurationToDelete = nil } }
+            ),
+            presenting: configurationToDelete
+        ) { config in
+            Button("Delete", role: .destructive) {
+                self.configurationStorage.deleteConfiguration(config)
+                configurationToDelete = nil
+            }
+            Button("Cancel", role: .cancel) {
+                configurationToDelete = nil
+            }
+        } message: { config in
+            Text("Are you sure you want to delete \"\(config.displayName)\"?")
+        }
+        .sheet(isPresented: $showAddDialog) {
+            AddSiteView()
+        }
+        .navigationTitle("GutenbergKit")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showAddDialog = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+            }
+        }.onAppear {
+            configurationStorage.loadConfigurations()
+        }
+    }
+
+    var remoteEditors: some View {
+        ForEach(configurationStorage.remoteEditors.filter {
+            if case .remoteEditor = $0 { return true }
+            return false
+        }) { config in
+            Button(config.displayName) {
+                self.selectedConfiguration = config
+            }
+            .swipeActions(edge: .trailing) {
+                Button(role: .destructive) {
+                    configurationToDelete = config
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+        }
+    }
+}

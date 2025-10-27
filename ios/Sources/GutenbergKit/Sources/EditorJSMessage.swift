@@ -43,6 +43,8 @@ struct EditorJSMessage {
         case onModalDialogOpened
         /// A modal dialog has closed.
         case onModalDialogClosed
+        /// The app is emitting logging data
+        case log
     }
 
     struct DidUpdateBlocksBody: Decodable {
@@ -69,5 +71,10 @@ struct EditorJSMessage {
     struct ShowBlockInserterBody: Decodable {
         let blocks: [BlockType]
         let destinationBlockName: String?
+    }
+
+    struct LogMessage: Decodable {
+        let message: String
+        let level: LogLevel
     }
 }

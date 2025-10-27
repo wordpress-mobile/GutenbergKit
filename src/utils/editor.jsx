@@ -10,6 +10,7 @@ import { registerCoreBlocks } from '@wordpress/block-library';
 import { unregisterDisallowedBlocks } from './blocks';
 import { getGBKit, getPost } from './bridge';
 import { getDefaultEditorSettings } from './editor-settings';
+import { setLogLevel } from './logger';
 
 /**
  * Configure editor settings and styles, and render the editor.
@@ -22,7 +23,7 @@ import { getDefaultEditorSettings } from './editor-settings';
  * @param {Array}  [options.allowedBlockTypes]
  */
 export function initializeEditor( { allowedBlockTypes } = {} ) {
-	const { themeStyles, hideTitle, editorSettings } = getGBKit();
+	const { themeStyles, hideTitle, editorSettings, logLevel } = getGBKit();
 
 	const settings = editorSettings || getDefaultEditorSettings();
 	dispatch( editorStore ).updateEditorSettings( settings );
@@ -34,6 +35,8 @@ export function initializeEditor( { allowedBlockTypes } = {} ) {
 	preferenceDispatch.setDefaults( 'core/edit-post', {
 		themeStyles,
 	} );
+
+	setLogLevel( logLevel );
 
 	// Force visual mode on initialization to ensure consistency with native UI,
 	// which defaults to visual mode. In the future, we could allow the native
