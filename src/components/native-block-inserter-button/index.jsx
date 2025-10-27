@@ -3,6 +3,9 @@
  */
 import { useEffect } from '@wordpress/element';
 import { useSelect } from '@wordpress/data';
+import { Button } from '@wordpress/components';
+import { __ } from '@wordpress/i18n';
+import { plus } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -30,17 +33,17 @@ import useBlockTypesState from '@wordpress/block-editor/build-module/components/
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { debug } from '../../utils/logger';
 import { serializeBlocksForNative } from '../../utils/blocks';
+import { showBlockInserter } from '../../utils/bridge';
 
 /**
- * Block Inserter Bridge Component
+ * Native Block Inserter Button Component
  *
- * This component uses WordPress hooks (useInsertionPoint and useBlockTypesState)
- * to manage block insertion state, just like QuickInserter does. It exposes the
- * current inserter state globally for the native side to access.
- *
- * The component never renders any UI - it only manages state and provides a bridge.
+ * This component combines the block inserter button UI with the bridge logic
+ * that manages block insertion state for native platforms. It uses WordPress
+ * hooks (useInsertionPoint and useBlockTypesState) to manage block insertion
+ * state and exposes the current inserter state globally for the native side.
  */
-export default function BlockInserterBridge() {
+export default function NativeBlockInserterButton() {
 	// Get current selection for insertion context and destination block info
 	const { selectedBlockClientId, destinationBlockName } = useSelect(
 		( select ) => {
@@ -112,6 +115,15 @@ export default function BlockInserterBridge() {
 		};
 	}, [ blocks, destinationBlockName, inserterItems, onSelectItem ] );
 
-	// This component doesn't render anything
-	return null;
+	return (
+		<Button
+			title={ __( 'Add block' ) }
+			icon={ plus }
+			onClick={ ( e ) => {
+				e.preventDefault();
+				showBlockInserter();
+			} }
+			className="gutenberg-kit-add-block-button"
+		/>
+	);
 }

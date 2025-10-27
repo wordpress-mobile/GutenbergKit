@@ -21,7 +21,6 @@ import { useSyncFeaturedImage } from './use-sync-featured-image';
 import { useDevModeNotice } from './use-dev-mode-notice';
 import { useAtAutocompleter } from './use-at-autocompleter';
 import { usePlusAutocompleter } from './use-plus-autocompleter';
-import BlockInserterBridge from '../block-inserter-bridge';
 
 /**
  * @typedef {import('../utils/bridge').Post} Post
