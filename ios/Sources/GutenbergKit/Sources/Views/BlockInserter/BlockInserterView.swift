@@ -3,7 +3,10 @@ import PhotosUI
 import UIKit
 
 struct BlockInserterView: View {
+    let mediaPicker: MediaPickerController?
+    let presentationContext: MediaPickerPresentationContext
     let onBlockSelected: (EditorBlock) -> Void
+    let onMediaSelected: ([MediaInfo]) -> Void
 
     @StateObject private var viewModel: BlockInserterViewModel
     @StateObject private var iconCache = BlockIconCache()
@@ -11,16 +14,22 @@ struct BlockInserterView: View {
     private let maxSelectionCount = 10
 
     @Environment(\.dismiss) private var dismiss
-    
+
     init(
         blocks: [EditorBlock],
+        mediaPicker: MediaPickerController?,
+        presentationContext: MediaPickerPresentationContext,
         onBlockSelected: @escaping (EditorBlock) -> Void,
+        onMediaSelected: @escaping ([MediaInfo]) -> Void
     ) {
+        self.mediaPicker = mediaPicker
+        self.presentationContext = presentationContext
         self.onBlockSelected = onBlockSelected
-        let viewModel = BlockInserterViewModel(blocks: blocks)
-        self._viewModel = StateObject(wrappedValue: viewModel)
+        self.onMediaSelected = onMediaSelected
+
+        self._viewModel = StateObject(wrappedValue: BlockInserterViewModel(blocks: blocks))
     }
-    
+
     var body: some View {
         content
             .background(Material.ultraThin)
@@ -57,13 +66,22 @@ struct BlockInserterView: View {
             }
             .tint(Color.primary)
         }
+
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            if let mediaPicker {
+                MediaPickerMenu(picker: mediaPicker, context: presentationContext) {
+                    dismiss()
+                    onMediaSelected($0)
+                }
+            }
+        }
     }
 
     // MARK: - Actions
 
-    private func insertBlock(_ blockType: EditorBlock) {
+    private func insertBlock(_ block: EditorBlock) {
         dismiss()
-        onBlockSelected(blockType)
+        onBlockSelected(block)
     }
 }
 
@@ -74,10 +92,29 @@ struct BlockInserterView: View {
     NavigationStack {
         BlockInserterView(
             blocks: EditorBlock.mocks,
+            mediaPicker: MockMediaPickerController(),
+            presentationContext: MediaPickerPresentationContext(),
             onBlockSelected: {
                 print("block selected: \($0.name)")
+            },
+            onMediaSelected: {
+                print("media selected: \($0)")
             }
         )
+    }
+}
+
+struct MockMediaPickerController: MediaPickerController {
+    func getActions(for parameters: MediaPickerParameters) -> [MediaPickerActionGroup] {
+        let group = MediaPickerActionGroup(id: "extra", actions: [
+            MediaPickerAction(id: "files", title: "Files", image: UIImage(systemName: "folder")!)
+        ])
+        return [group]
+    }
+
+    func perform(_ action: MediaPickerAction, parameters: MediaPickerParameters, from presentingViewController: UIViewController) async -> [MediaInfo] {
+        print("action selected:", action)
+        return []
     }
 }
 #endif
