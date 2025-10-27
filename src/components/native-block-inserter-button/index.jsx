@@ -66,9 +66,10 @@ export default function NativeBlockInserterButton() {
 		[]
 	);
 
-	//  - rootClientId - "insertion will be into the block with this ID."
+	// When cursor is in title, selectedBlockClientId is null.
+	// Use undefined to insert at the beginning of content.
 	const [ destinationRootClientId, onInsertBlocks ] = useInsertionPoint( {
-		rootClientId: selectedBlockClientId,
+		rootClientId: selectedBlockClientId ?? undefined,
 		isAppender: false,
 		selectBlockOnInsert: true,
 	} );
