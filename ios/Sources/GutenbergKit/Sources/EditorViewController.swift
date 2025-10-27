@@ -274,8 +274,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         present(host, animated: true)
     }
 
-    private func insertBlockFromInserter(_ blockId: String) {
-        evaluate("window.blockInserter.insertBlock('\(blockId)')")
+    private func insertBlockFromInserter(_ blockID: String) {
+        evaluate("window.blockInserter.insertBlock('\(blockID)')")
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
