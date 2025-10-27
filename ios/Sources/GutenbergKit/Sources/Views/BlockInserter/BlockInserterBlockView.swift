@@ -1,5 +1,4 @@
 import SwiftUI
-import SVGKit
 
 struct BlockInserterBlockView: View {
     let block: BlockType

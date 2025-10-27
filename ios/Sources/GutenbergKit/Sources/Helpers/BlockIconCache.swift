@@ -1,11 +1,11 @@
 import Foundation
-import SVGKit
+import SVGView
 
 @MainActor
 final class BlockIconCache: ObservableObject {
-    var icons: [String: Result<SVGKImage, Error>] = [:]
+    var icons: [String: Result<SVGNode, Error>] = [:]
 
-    func getIcon(for block: BlockType) -> SVGKImage? {
+    func getIcon(for block: BlockType) -> SVGNode? {
         if let result = icons[block.id] {
             return try? result.get()
         }
@@ -14,19 +14,15 @@ final class BlockIconCache: ObservableObject {
         return try? result.get()
     }
 
-    private func _getIcon(for block: BlockType) throws -> SVGKImage {
-        guard let svg = block.icon,
-              !svg.isEmpty,
-              let source = SVGKSourceString.source(fromContentsOf: svg),
-              let image = SVGKImage(source: source) else {
+    private func _getIcon(for block: BlockType) throws -> SVGNode {
+        guard let svg = block.icon, !svg.isEmpty else {
             throw BlockIconCacheError.unknown
         }
-        if let result = image.parseErrorsAndWarnings,
-           let error = result.errorsFatal.firstObject {
+        guard let image = SVGParser.parse(string: svg) else {
 #if DEBUG
-            debugPrint("failed to parse SVG for block: \(block.name) with errors: \(String(describing: result.errorsFatal))\n\n\(svg)")
+            debugPrint("failed to parse SVG for block: \(block.name), svg: \(svg)")
 #endif
-            throw (error as? Error) ?? BlockIconCacheError.unknown
+            throw BlockIconCacheError.unknown
         }
         return image
     }
