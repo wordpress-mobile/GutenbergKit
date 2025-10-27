@@ -5,7 +5,7 @@ An experimental Gutenberg block editor for native iOS and Android apps relying u
 <img width="320" alt="GutenbergKit running on an iPhone" src="./docs/gutenberg-kit-preview.png">
 
 ## Development
-
+ 
 ### Preqrequisites
 
 In order to build GutenbergKit, the following tools must be installed on your development machine:
@@ -13,6 +13,24 @@ In order to build GutenbergKit, the following tools must be installed on your de
 -   [Node.js](https://nodejs.org/en/download/) - Required for building the web app; recommend using [Node Version Manager](https://github.com/nvm-sh/nvm).
 -   [Xcode](https://developer.apple.com/xcode/) - Required if building iOS demo app.
 -   [Android Studio](https://developer.android.com/studio) - Required if building Android demo app.
+
+### Compatibility Matrix
+| Feature                   | WordPress Core (no plugins) | WordPress.com              | Self Hosted + Gutenberg Plugin | Self Hosted + Jetpack Plugin| Self Hosted + Jetpack + Gutenberg |
+|-------------------------- |---------------------------- |--------------------------- |--------------------------------|-----------------------------|-----------------------------------|
+| Post Editing              | ✅ Supported                | ✅ Supported               | ✅ Supported                   | ✅ Supported                | ✅ Supported                      |
+| Native Block Inserter [3] | ✅ Supported                | ✅ Supported               | ✅ Supported                   | 🔴 Not Supported            | ✅ Supported                      |
+| Third-Party Blocks    [5] | 🔴 Not Supported            | ⚠️ Only Jetpack Blocks [2] | 🔴 Not Supported               | ⚠️ Limited Support      [4] | ⚠️ Limited Support            [4] |
+| Theme Styles          [6] | 🔴 Not Supported            | ✅ Supported               | ✅ Supported                   | 🔴 Not Supported            | ✅ Supported                      |
+
+[1] Works for sites that don't support third-party blocks or theme styles.
+[2] Currently, only Jetpack blocks are supported on WordPress.com.
+[3] Requires the following Gutenberg private APIs:
+- `useInsertionPoint`
+- `useBlockTypesState`
+
+[4] The Jetpack plugin has been updated to ensure its blocks are supported. Most third-party blocks should work if they follow common conventions.
+[5] Requires Block Asset REST API [link to GH issue / trac ticket]()
+[6] Requires Theme Style enumeration API [link to GH issue / trac ticket]()
 
 ### Web App
 
