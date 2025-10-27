@@ -29,16 +29,16 @@ export function unregisterDisallowedBlocks( allowedBlockTypes ) {
 /**
  * Extract and serialize a block's icon.
  *
- * @param {Object} blockType The block type object.
+ * @param {Object} item The block type or inserter item object.
  *
  * @return {string|null} The serialized icon string or null.
  */
-function getBlockIcon( blockType ) {
-	if ( ! blockType.icon ) {
+export function getBlockIcon( item ) {
+	if ( ! item.icon ) {
 		return null;
 	}
 
-	let iconSource = blockType.icon;
+	let iconSource = item.icon;
 
 	// If icon is an object with src property, extract src
 	if ( typeof iconSource === 'object' && iconSource.src ) {
@@ -55,10 +55,7 @@ function getBlockIcon( blockType ) {
 			return renderToString( iconSource );
 		} catch ( error ) {
 			// If rendering fails, ignore the icon
-			debug(
-				`Failed to render icon for block ${ blockType.name }`,
-				error
-			);
+			debug( `Failed to render icon for block ${ item.name }`, error );
 			return null;
 		}
 	} else if ( typeof iconSource === 'string' ) {
@@ -69,19 +66,26 @@ function getBlockIcon( blockType ) {
 }
 
 /**
- * Get serialized block data for all registered block types.
+ * Serializes inserter items to a format suitable for native consumption.
+ * Extracts only the properties needed by the native side and ensures
+ * proper formatting (e.g., converting React icon elements to SVG strings).
  *
- * @return {Array} Array of serialized block objects.
+ * @param {Array} inserterItems Array of block inserter items from WordPress.
+ *
+ * @return {Array} Array of serialized block objects for native consumption.
  */
-export function getSerializedBlocks() {
-	return getBlockTypes().map( ( blockType ) => {
+export function serializeBlocksForNative( inserterItems ) {
+	return inserterItems.map( ( item ) => {
 		return {
-			name: blockType.name,
-			title: blockType.title,
-			description: blockType.description,
-			category: blockType.category,
-			keywords: blockType.keywords || [],
-			icon: getBlockIcon( blockType ),
+			name: item.name,
+			title: item.title,
+			description: item.description,
+			category: item.category,
+			keywords: item.keywords || [],
+			icon: getBlockIcon( item ),
+			frecency: item.frecency || 0,
+			isDisabled: item.isDisabled || false,
+			parents: item.parent || [],
 		};
 	} );
 }

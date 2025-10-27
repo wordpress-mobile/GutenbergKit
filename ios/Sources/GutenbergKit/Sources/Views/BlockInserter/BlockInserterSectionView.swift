@@ -3,7 +3,7 @@ import SwiftUI
 struct BlockInserterSection: Identifiable {
     var id: String { category }
     let category: String
-    let name: String
+    let name: String?
     let blocks: [EditorBlock]
 }
 
@@ -16,8 +16,8 @@ struct BlockInserterSectionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            if section.category != "text" {
-                Text(section.name)
+            if let name = section.name {
+                Text(name)
                     .font(.headline)
                     .foregroundStyle(Color.secondary)
                     .padding(.leading, padding)
@@ -25,7 +25,7 @@ struct BlockInserterSectionView: View {
             }
             grid
         }
-        .padding(.top, section.category != "text" ? 20 : 24)
+        .padding(.top, section.name != nil ? 20 : 24)
         .padding(.bottom, 10)
         .cardStyle()
     }

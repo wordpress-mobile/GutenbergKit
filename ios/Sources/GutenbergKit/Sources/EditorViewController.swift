@@ -245,16 +245,17 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     // MARK: - Internal (Block Inserter)
 
-    private func showBlockInserter(blocks: [EditorBlock]) {
+    private func showBlockInserter(data: EditorJSMessage.ShowBlockInserterBody) {
         let context = MediaPickerPresentationContext()
 
         let host = UIHostingController(rootView: NavigationStack {
             BlockInserterView(
-                blocks: blocks,
+                blocks: data.blocks,
+                destinationBlockName: data.destinationBlockName,
                 mediaPicker: mediaPicker,
                 presentationContext: context,
-                onBlockSelected: {
-                    print("insert blocks:", $0)
+                onBlockSelected: { [weak self] block in
+                    self?.insertBlockFromInserter(block.name)
                 },
                 onMediaSelected: {
                     print("insert media:", $0)
@@ -265,6 +266,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         context.viewController = host
 
         present(host, animated: true)
+    }
+
+    private func insertBlockFromInserter(_ blockName: String) {
+        evaluate("window.blockInserter.insertBlock('\(blockName)')")
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
@@ -309,7 +314,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 delegate?.editor(self, didLogException: editorException)
             case .showBlockInserter:
                 let body = try message.decode(EditorJSMessage.ShowBlockInserterBody.self)
-                showBlockInserter(blocks: body.blocks)
+                showBlockInserter(data: body)
             case .openMediaLibrary:
                 let config = try message.decode(OpenMediaLibraryAction.self)
                 openMediaLibrary(config)

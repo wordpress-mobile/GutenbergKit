@@ -11,12 +11,12 @@ class BlockInserterViewModel: ObservableObject {
     private let allSections: [BlockInserterSection]
     private var cancellables = Set<AnyCancellable>()
 
-    init(blocks: [EditorBlock]) {
+    init(blocks: [EditorBlock], destinationBlockName: String?) {
         let blocks = blocks.filter { $0.name != "core/missing" }
 
         self.blocks = blocks
 
-        self.allSections = BlockInserterViewModel.createSections(from: blocks)
+        self.allSections = BlockInserterViewModel.createSections(from: blocks, destinationBlockName: destinationBlockName)
         self.sections = allSections
 
         setupSearchObserver()
@@ -47,31 +47,46 @@ class BlockInserterViewModel: ObservableObject {
         }
     }
 
-    private static func createSections(from blocks: [EditorBlock]) -> [BlockInserterSection] {
-        let blocks = Dictionary(grouping: blocks) {
-            $0.category?.lowercased() ?? "common"
+    private static func createSections(from blocks: [EditorBlock], destinationBlockName: String?) -> [BlockInserterSection] {
+        var sections: [BlockInserterSection] = []
+
+        // Separate contextual blocks (specifically allowed in current parent block)
+        // A block is contextual if the destination block name is in its parents array
+        let contextualBlocks = blocks.filter { block in
+            guard let destinationBlockName = destinationBlockName else { return false }
+            return !block.parents.isEmpty && block.parents.contains(destinationBlockName)
+        }
+ 
+        // Add contextual section at the top if there are contextual blocks
+        if !contextualBlocks.isEmpty {
+            sections.append(BlockInserterSection(category: "gbk-contextual", name: nil, blocks: contextualBlocks))
         }
 
-        var sections: [BlockInserterSection] = []
+        // Group regular blocks by category
+        let blocksByCategory = Dictionary(grouping: blocks) {
+            $0.category?.lowercased() ?? "common"
+        }
 
         let categories = Constants.orderedCategories
 
         // Add known categories in a predefined order
         for (category, name) in categories {
-            if let blocks = blocks[category] {
+            if let blocks = blocksByCategory[category] {
                 let sortedBlocks = orderBlocks(blocks, category: category)
-                sections.append(BlockInserterSection(category: category, name: name, blocks: sortedBlocks))
+                // Use nil for text category, otherwise use the display name
+                let displayName = (category == "text" && contextualBlocks.isEmpty) ? nil : name
+                sections.append(BlockInserterSection(category: category, name: displayName, blocks: sortedBlocks))
             }
         }
-        
+
         // Add any remaining categories
-        for (category, blocks) in blocks {
+        for (category, blocks) in blocksByCategory {
             let isStandardCategory = categories.contains { $0.key == category }
             if !isStandardCategory {
                 sections.append(BlockInserterSection(category: category, name: category.capitalized, blocks: blocks))
             }
         }
-        
+
         return sections
     }
 }

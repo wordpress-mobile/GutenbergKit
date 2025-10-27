@@ -81,13 +81,11 @@ const EditorToolbar = ( { className } ) => {
 	const classes = clsx( 'gutenberg-kit-editor-toolbar', className );
 
 	const addBlockButton = enableNativeBlockInserter ? (
-		<ToolbarButton
+		<Button
 			title={ __( 'Add block' ) }
 			icon={ plus }
-			onClick={ () => {
-				if ( isInserterOpened ) {
-					setIsInserterOpened( false );
-				}
+			onTouchEnd={ ( e ) => {
+				e.preventDefault();
 				showBlockInserter();
 			} }
 			className="gutenberg-kit-add-block-button"

@@ -3,6 +3,8 @@ import PhotosUI
 import UIKit
 
 struct BlockInserterView: View {
+    let blocks: [EditorBlock]
+    let destinationBlockName: String?
     let mediaPicker: MediaPickerController?
     let presentationContext: MediaPickerPresentationContext
     let onBlockSelected: (EditorBlock) -> Void
@@ -17,17 +19,21 @@ struct BlockInserterView: View {
 
     init(
         blocks: [EditorBlock],
+        destinationBlockName: String?,
         mediaPicker: MediaPickerController?,
         presentationContext: MediaPickerPresentationContext,
         onBlockSelected: @escaping (EditorBlock) -> Void,
         onMediaSelected: @escaping ([MediaInfo]) -> Void
     ) {
+        self.blocks = blocks
+        self.destinationBlockName = destinationBlockName
         self.mediaPicker = mediaPicker
         self.presentationContext = presentationContext
         self.onBlockSelected = onBlockSelected
         self.onMediaSelected = onMediaSelected
 
-        self._viewModel = StateObject(wrappedValue: BlockInserterViewModel(blocks: blocks))
+        let viewModel = BlockInserterViewModel(blocks: blocks, destinationBlockName: destinationBlockName)
+        self._viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -92,6 +98,7 @@ struct BlockInserterView: View {
     NavigationStack {
         BlockInserterView(
             blocks: EditorBlock.mocks,
+            destinationBlockName: nil,
             mediaPicker: MockMediaPickerController(),
             presentationContext: MediaPickerPresentationContext(),
             onBlockSelected: {

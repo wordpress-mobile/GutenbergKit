@@ -89,14 +89,27 @@ export function onBlocksChanged( isEmpty = false ) {
 /**
  * Requests the native host to show the block picker.
  *
+ * The BlockInserterBridge component maintains the current inserter state
+ * at window.blockInserter, which automatically stays in sync with the editor
+ * via WordPress hooks (useInsertionPoint and useBlockTypesState).
+ *
  * @return {void}
  */
-export async function showBlockInserter() {
-	// Lazy load this utility to avoid the remote editor referencing `@wordpress`
-	// module globals before they are loaded.
-	const { getSerializedBlocks } = await import( './blocks' );
-	const blocks = await getSerializedBlocks();
-	dispatchToBridge( 'showBlockInserter', { blocks } );
+export function showBlockInserter() {
+	if ( ! window.blockInserter ) {
+		debug(
+			'BlockInserterBridge not available. Ensure editor is initialized.'
+		);
+		return;
+	}
+
+	// Send blocks and destination block name to native
+	// The native side will use destinationBlockName to determine contextual blocks
+	// based on the block.parents field
+	dispatchToBridge( 'showBlockInserter', {
+		blocks: window.blockInserter.blocks,
+		destinationBlockName: window.blockInserter.destinationBlockName,
+	} );
 }
 
 /**

@@ -21,6 +21,7 @@ import { useSyncFeaturedImage } from './use-sync-featured-image';
 import { useDevModeNotice } from './use-dev-mode-notice';
 import { useAtAutocompleter } from './use-at-autocompleter';
 import { usePlusAutocompleter } from './use-plus-autocompleter';
+import BlockInserterBridge from '../block-inserter-bridge';
 
 /**
  * @typedef {import('../utils/bridge').Post} Post
@@ -90,6 +91,8 @@ export default function Editor( { post, children, hideTitle } ) {
 				settings={ settings }
 				useSubRegistry={ false }
 			>
+				<BlockInserterBridge />
+
 				{ mode === 'visual' && isRichEditingEnabled && (
 					<VisualEditor hideTitle={ hideTitle } />
 				) }

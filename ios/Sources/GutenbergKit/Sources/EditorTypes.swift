@@ -9,6 +9,9 @@ struct EditorBlock: Decodable, Identifiable {
     let category: String?
     let keywords: [String]?
     var icon: String?
+    var frecency: Double = 0.0
+    var isDisabled = false
+    var parents: [String] = []
 }
 
 public struct EditorTitleAndContent: Decodable {
