@@ -28,6 +28,7 @@ import './style.scss';
 import { useModalize } from './use-modalize';
 import { useModalDialogState } from '../editor/use-modal-dialog-state';
 import { showBlockInserter, getGBKit } from '../../utils/bridge';
+import BlockInserterBridge from '../block-inserter-bridge';
 
 /**
  * Renders the editor toolbar containing block-related actions.
@@ -103,6 +104,7 @@ const EditorToolbar = ( { className } ) => {
 
 	return (
 		<>
+			{ enableNativeBlockInserter && <BlockInserterBridge /> }
 			<Toolbar
 				className={ classes }
 				label="Editor toolbar"

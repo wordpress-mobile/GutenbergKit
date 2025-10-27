@@ -91,8 +91,6 @@ export default function Editor( { post, children, hideTitle } ) {
 				settings={ settings }
 				useSubRegistry={ false }
 			>
-				<BlockInserterBridge />
-
 				{ mode === 'visual' && isRichEditingEnabled && (
 					<VisualEditor hideTitle={ hideTitle } />
 				) }
