@@ -331,13 +331,27 @@ export function awaitGBKitGlobal( timeoutMs = 3000 ) {
  * @return {Promise<{scripts: string, styles: string, allowed_block_types: string[]}>} Promise that resolves with the assets object.
  */
 export async function fetchEditorAssets() {
+	const { siteApiRoot, editorAssetsEndpoint, authHeader } = getGBKit();
+
+	// TODO: Determine best mechanism for conditionally fetching editor assets
+	// on both iOS and Android.
+	if ( ! editorAssetsEndpoint && ! siteApiRoot ) {
+		debug(
+			'Skipping editor assets fetch because site API root or editor assets endpoint is not found'
+		);
+		return Promise.resolve( {
+			scripts: '',
+			styles: '',
+			allowed_block_types: [],
+		} );
+	}
+
 	if ( window.webkit ) {
 		return await window.webkit.messageHandlers.loadFetchedEditorAssets.postMessage(
 			{ asset: 'manifest' }
 		);
 	}
 
-	const { siteApiRoot, editorAssetsEndpoint, authHeader } = getGBKit();
 	const url =
 		editorAssetsEndpoint || `${ siteApiRoot }wpcom/v2/editor-assets`;
 	// Use our fetch utility, as we have not yet loaded the `wp.apiFetch` utility
