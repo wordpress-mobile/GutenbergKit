@@ -5,11 +5,20 @@ import Combine
 @MainActor
 class BlockInserterViewModel: ObservableObject {
     @Published var searchText = ""
+    @Published var error: MediaError?
     @Published private(set) var sections: [BlockInserterSection] = []
+    @Published private(set) var isProcessingMedia = false
 
     private let blocks: [BlockType]
     private let allSections: [BlockInserterSection]
+    private let fileManager: MediaFileManager = .shared
+    private var processingTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
+
+    struct MediaError: Identifiable {
+        let id = UUID()
+        let message: String
+    }
 
     init(blocks: [BlockType], destinationBlockName: String?) {
         let blocks = blocks.filter { $0.name != "core/missing" }
@@ -89,6 +98,47 @@ class BlockInserterViewModel: ObservableObject {
 
         return sections
     }
+
+    // MARK: - Media Processing
+
+    func processMediaItems(_ items: [PhotosPickerItem], completion: @escaping ([MediaInfo]) -> Void) async {
+        isProcessingMedia = true
+        defer { isProcessingMedia = false }
+
+        processingTask = Task { @MainActor in
+            var results: [MediaInfo] = []
+            var anyError: Error?
+            await withTaskGroup(of: Void.self) { group in
+                for item in items {
+                    group.addTask {
+                        do {
+                            let item = try await self.fileManager.import(item)
+                            results.append(item)
+                        } catch {
+                            anyError = error
+                        }
+                    }
+                }
+            }
+
+            guard !Task.isCancelled else { return }
+
+            if results.isEmpty {
+                // TODO: fix error handling
+                self.error = MediaError(message: anyError?.localizedDescription ?? "")
+            }
+
+            completion(results)
+        }
+
+        await processingTask?.value
+    }
+
+    func cancelProcessing() {
+         processingTask?.cancel()
+         processingTask = nil
+         isProcessingMedia = false
+     }
 }
 
 // MARK: Ordering
