@@ -110,7 +110,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 name: "loadFetchedEditorAssets"
             )
 
-            if let remoteURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"].flatMap(URL.init) {
+            if let remoteURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
                 webView.load(URLRequest(url: remoteURL))
             } else {
                 let remoteURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg")!

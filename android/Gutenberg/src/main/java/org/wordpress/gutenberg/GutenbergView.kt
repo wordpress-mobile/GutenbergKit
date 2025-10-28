@@ -263,8 +263,8 @@ class GutenbergView : WebView {
 
         initializeWebView()
 
-        val editorUrl = if (configuration.plugins && BuildConfig.GUTENBERG_EDITOR_REMOTE_URL.isNotEmpty()) {
-            BuildConfig.GUTENBERG_EDITOR_REMOTE_URL
+        val editorUrl = if (configuration.plugins && BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
+            BuildConfig.GUTENBERG_EDITOR_URL
         } else if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
             BuildConfig.GUTENBERG_EDITOR_URL
         } else if (configuration.plugins) {
