@@ -9,6 +9,7 @@ import { createRoot, StrictMode } from '@wordpress/element';
 import { initializeApiFetch } from './api-fetch';
 import { awaitGBKitGlobal, editorLoaded } from './bridge';
 import { configureLocale } from './localization';
+import { loadEditorAssets } from './editor-loader';
 import EditorLoadError from '../components/editor-load-error';
 import { error } from './logger';
 import './editor-styles.js';
@@ -33,6 +34,7 @@ export function initializeBundledEditor() {
 		.then( initializeApiAndLocale )
 		.then( importEditor )
 		.then( initializeEditor )
+		.then( loadEditorAssets )
 		.catch( handleError );
 }
 
