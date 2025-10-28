@@ -81,7 +81,15 @@ function wordPressExternals() {
 				hasReplacements = true;
 
 				if ( ! imports ) {
-					// Remove the side effect import entirely
+					// Preserve CSS side-effect imports
+					if (
+						module.endsWith( '.css' ) ||
+						module.includes( '.css?' )
+					) {
+						continue;
+					}
+
+					// Remove non-CSS side effect imports
 					magicString.remove(
 						match.index,
 						match.index + fullMatch.length
