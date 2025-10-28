@@ -55,6 +55,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         for scheme in CachedAssetSchemeHandler.supportedURLSchemes {
             config.setURLSchemeHandler(schemeHandler, forURLScheme: scheme)
         }
+        config.setURLSchemeHandler(MediaFileSchemeHandler(), forURLScheme: MediaFileSchemeHandler.scheme)
 
         self.webView = GBWebView(frame: .zero, configuration: config)
         self.webView.scrollView.keyboardDismissMode = .interactive
@@ -263,8 +264,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 onBlockSelected: { [weak self] block in
                     self?.insertBlockFromInserter(block.id)
                 },
-                onMediaSelected: {
-                    print("insert media:", $0)
+                onMediaSelected: { [weak self] selection in
+                    self?.insertMediaFromInserter(selection)
                 }
             )
         })
@@ -276,6 +277,17 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     private func insertBlockFromInserter(_ blockID: String) {
         evaluate("window.blockInserter.insertBlock('\(blockID)')")
+    }
+
+    private func insertMediaFromInserter(_ selection: [MediaInfo]) {
+        guard !selection.isEmpty else { return }
+
+        guard let data = try? JSONEncoder().encode(selection),
+              let string = String(data: data, encoding: .utf8) else {
+            debugPrint("Failed to serialize media array to JSON")
+            return
+        }
+        evaluate("window.blockInserter.insertMedia(\(string))")
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
