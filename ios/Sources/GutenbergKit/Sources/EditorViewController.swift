@@ -55,6 +55,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         for scheme in CachedAssetSchemeHandler.supportedURLSchemes {
             config.setURLSchemeHandler(schemeHandler, forURLScheme: scheme)
         }
+        config.setURLSchemeHandler(MediaFileSchemeHandler(), forURLScheme: MediaFileSchemeHandler.scheme)
 
         self.webView = GBWebView(frame: .zero, configuration: config)
         self.webView.scrollView.keyboardDismissMode = .interactive
@@ -264,8 +265,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 onBlockSelected: { [weak self] block in
                     self?.insertBlockFromInserter(block.id)
                 },
-                onMediaSelected: {
-                    print("insert media:", $0)
+                onMediaSelected: { [weak self] mediaInfos in
+                    self?.insertMediaFromInserter(mediaInfos)
                 }
             )
         })
@@ -277,6 +278,46 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     private func insertBlockFromInserter(_ blockID: String) {
         evaluate("window.blockInserter.insertBlock('\(blockID)')")
+    }
+
+    private func insertMediaFromInserter(_ mediaInfos: [MediaInfo]) {
+        guard !mediaInfos.isEmpty else { return }
+
+        // Convert MediaInfo array to JSON format expected by JavaScript
+        let mediaArray: [[String: Any]] = mediaInfos.map { info in
+            var dict: [String: Any] = [:]
+
+            // Only include non-nil values
+            if let id = info.id {
+                dict["id"] = id
+            }
+            if let url = info.url {
+                dict["url"] = url
+            }
+            if let type = info.type {
+                dict["type"] = type
+            }
+            if let caption = info.caption {
+                dict["caption"] = caption
+            }
+            if let alt = info.alt {
+                dict["alt"] = alt
+            }
+            if let title = info.title {
+                dict["title"] = title
+            }
+
+            return dict
+        }
+
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: mediaArray),
+              let jsonString = String(data: jsonData, encoding: .utf8) else {
+            debugPrint("Failed to serialize media array to JSON")
+            return
+        }
+
+        let script = "window.blockInserter.insertMedia(\(jsonString))"
+        evaluate(script)
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
