@@ -231,18 +231,12 @@ export function preprocessBlockTypesForNativeInserter(
 		);
 	} );
 
-	// Determine blocks to show in contextual section
-	let contextualSectionBlocks;
-	if ( contextualBlocks.length > 0 ) {
-		contextualSectionBlocks = contextualBlocks;
-	} else {
-		// Show most-used blocks in the order specified by MOST_USED_BLOCKS
-		contextualSectionBlocks = [];
-		for ( const blockName of MOST_USED_BLOCKS ) {
-			const block = serializedBlocks.find( ( b ) => b.name === blockName );
-			if ( block ) {
-				contextualSectionBlocks.push( block );
-			}
+	// Build most-used blocks in the order specified by MOST_USED_BLOCKS
+	const mostUsedBlocks = [];
+	for ( const blockName of MOST_USED_BLOCKS ) {
+		const block = serializedBlocks.find( ( b ) => b.name === blockName );
+		if ( block ) {
+			mostUsedBlocks.push( block );
 		}
 	}
 
@@ -258,12 +252,21 @@ export function preprocessBlockTypesForNativeInserter(
 
 	const sections = [];
 
-	// Add contextual section
-	if ( contextualSectionBlocks.length > 0 ) {
+	// Add contextual section (only if there are parent-based contextual blocks)
+	if ( contextualBlocks.length > 0 ) {
 		sections.push( {
 			category: 'gbk-contextual',
 			name: null,
-			blocks: contextualSectionBlocks,
+			blocks: contextualBlocks,
+		} );
+	}
+
+	// Add most-used section (always shown)
+	if ( mostUsedBlocks.length > 0 ) {
+		sections.push( {
+			category: 'gbk-most-used',
+			name: null,
+			blocks: mostUsedBlocks,
 		} );
 	}
 
