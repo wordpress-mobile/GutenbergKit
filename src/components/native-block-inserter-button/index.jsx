@@ -7,9 +7,6 @@ import { Button } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { plus } from '@wordpress/icons';
 
-/**
- * Internal dependencies
- */
 // NOTE: These hooks are internal WordPress APIs not available via public exports
 // or privateApis. We import from build-module as the only way to access the
 // block insertion logic without reimplementing it ourselves.
@@ -30,6 +27,10 @@ import { plus } from '@wordpress/icons';
 // - We're building a WordPress editor integration, not a general library
 import useInsertionPoint from '@wordpress/block-editor/build-module/components/inserter/hooks/use-insertion-point';
 import useBlockTypesState from '@wordpress/block-editor/build-module/components/inserter/hooks/use-block-types-state';
+
+/**
+ * Internal dependencies
+ */
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { debug } from '../../utils/logger';
 import { serializeBlocksForNative } from '../../utils/blocks';
