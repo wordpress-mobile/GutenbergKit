@@ -12,8 +12,6 @@ class BlockInserterViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     init(blocks: [BlockType], destinationBlockName: String?) {
-        let blocks = blocks.filter { $0.name != "core/missing" }
-
         self.blocks = blocks
 
         self.allSections = BlockInserterViewModel.createSections(from: blocks, destinationBlockName: destinationBlockName)
