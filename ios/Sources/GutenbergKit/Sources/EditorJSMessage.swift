@@ -67,7 +67,6 @@ struct EditorJSMessage {
     }
 
     struct ShowBlockInserterBody: Decodable {
-        let blocks: [BlockType]
-        let destinationBlockName: String?
+        let sections: [BlockInserterSection]
     }
 }
