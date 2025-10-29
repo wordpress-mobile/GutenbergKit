@@ -33,7 +33,7 @@ import useBlockTypesState from '@wordpress/block-editor/build-module/components/
  */
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { debug } from '../../utils/logger';
-import { serializeBlocksForNative } from '../../utils/blocks';
+import { preprocessBlockTypesForNativeInserter } from '../../utils/blocks';
 import { showBlockInserter } from '../../utils/bridge';
 
 /**
@@ -75,28 +75,30 @@ export default function NativeBlockInserterButton() {
 		selectBlockOnInsert: true,
 	} );
 
-	const [ inserterItems, , , onSelectItem ] = useBlockTypesState(
+	const [ inserterItems, categories, , onSelectItem ] = useBlockTypesState(
 		destinationRootClientId,
 		onInsertBlocks,
 		false // isQuick
 	);
 
-	// Serialize blocks for native consumption
-	const blocks = serializeBlocksForNative( inserterItems );
+	// Preprocess blocks into sections for native consumption
+	// Categories are passed to get localized category names
+	const sections = preprocessBlockTypesForNativeInserter(
+		inserterItems,
+		destinationBlockName,
+		categories
+	);
 
 	// Expose the current inserter state globally for native access
 	// This automatically stays in sync with editor state via hooks
 	useEffect( () => {
 		window.blockInserter = {
-			blocks,
-			destinationBlockName,
-			insertBlock: ( blockName ) => {
-				const item = inserterItems.find(
-					( i ) => i.name === blockName
-				);
+			sections,
+			insertBlock: ( blockId ) => {
+				const item = inserterItems.find( ( i ) => i.id === blockId );
 				if ( ! item ) {
 					debug(
-						`Block "${ blockName }" not found in inserter items`
+						`Block with ID "${ blockId }" not found in inserter items`
 					);
 					return false;
 				}
@@ -115,7 +117,7 @@ export default function NativeBlockInserterButton() {
 		return () => {
 			delete window.blockInserter;
 		};
-	}, [ blocks, destinationBlockName, inserterItems, onSelectItem ] );
+	}, [ sections, inserterItems, categories, onSelectItem ] );
 
 	return (
 		<Button

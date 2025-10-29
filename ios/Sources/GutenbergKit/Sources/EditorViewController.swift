@@ -174,6 +174,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         try await webView.evaluateJavaScript("editor.getContent();") as! String
     }
 
+    public struct EditorTitleAndContent: Decodable {
+        public let title: String
+        public let content: String
+        public let changed: Bool
+    }
+
     /// Returns the current editor title and content.
     public func getTitleAndContent() async throws -> EditorTitleAndContent {
         let result = try await webView.evaluateJavaScript("editor.getTitleAndContent();")
@@ -250,12 +256,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         let host = UIHostingController(rootView: NavigationStack {
             BlockInserterView(
-                blocks: data.blocks,
-                destinationBlockName: data.destinationBlockName,
+                sections: data.sections,
                 mediaPicker: mediaPicker,
                 presentationContext: context,
                 onBlockSelected: { [weak self] block in
-                    self?.insertBlockFromInserter(block.name)
+                    self?.insertBlockFromInserter(block.id)
                 },
                 onMediaSelected: {
                     print("insert media:", $0)
@@ -268,8 +273,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         present(host, animated: true)
     }
 
-    private func insertBlockFromInserter(_ blockName: String) {
-        evaluate("window.blockInserter.insertBlock('\(blockName)')")
+    private func insertBlockFromInserter(_ blockID: String) {
+        evaluate("window.blockInserter.insertBlock('\(blockID)')")
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {

@@ -93,6 +93,9 @@ export function onBlocksChanged( isEmpty = false ) {
  * at window.blockInserter, which automatically stays in sync with the editor
  * via WordPress hooks (useInsertionPoint and useBlockTypesState).
  *
+ * The sections array is preprocessed by preprocessBlockTypesForNativeInserter()
+ * which handles ordering, contextual filtering, and localized section names.
+ *
  * @return {void}
  */
 export function showBlockInserter() {
@@ -103,12 +106,9 @@ export function showBlockInserter() {
 		return;
 	}
 
-	// Send blocks and destination block name to native
-	// The native side will use destinationBlockName to determine contextual blocks
-	// based on the block.parents field
+	// Send preprocessed sections to native
 	dispatchToBridge( 'showBlockInserter', {
-		blocks: window.blockInserter.blocks,
-		destinationBlockName: window.blockInserter.destinationBlockName,
+		sections: window.blockInserter.sections,
 	} );
 }
 

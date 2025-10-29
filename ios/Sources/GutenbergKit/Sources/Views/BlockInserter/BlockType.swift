@@ -1,8 +1,11 @@
 import Foundation
 
-struct EditorBlock: Decodable, Identifiable {
-    var id: String { name }
-
+struct BlockType: Decodable, Identifiable {
+    /// Unique identifier for this block variant. Note that this is NOT the same as `name`.
+    /// Multiple blocks can share the same `name` but have different `id` values to represent
+    /// different variants with different initial attributes (e.g., core/embed variants for
+    /// YouTube, Vimeo, etc.).
+    let id: String
     let name: String
     let title: String?
     let description: String?
@@ -14,13 +17,7 @@ struct EditorBlock: Decodable, Identifiable {
     var parents: [String] = []
 }
 
-public struct EditorTitleAndContent: Decodable {
-    public let title: String
-    public let content: String
-    public let changed: Bool
-}
-
-extension EditorBlock: Searchable {
+extension BlockType: Searchable {
     /// Sets the searchable fields in the order of priority
     func searchableFields() -> [SearchableField] {
         var fields: [SearchableField] = []
