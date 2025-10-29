@@ -107,6 +107,20 @@ const BLOCK_ORDER_BY_CATEGORY = {
 		'core/columns',
 		'core/column',
 	],
+	embed: [
+		'core/embed', // Generic embed - always first
+		'core/embed/youtube',
+		'core/embed/vimeo',
+		'core/embed/tiktok',
+		'core/embed/wordpress',
+		'core/embed/tumblr',
+		'core/embed/videopress',
+		'core/embed/pocket-casts',
+		'core/embed/reddit',
+		'core/embed/pinterest',
+		'core/embed/spotify',
+		'core/embed/soundcloud',
+	],
 };
 
 /**
@@ -148,9 +162,9 @@ function orderBlocksInCategory( blocks, category ) {
 
 	const orderedBlocks = [];
 
-	// Add blocks in predefined order
-	for ( const name of order ) {
-		const block = blocks.find( ( b ) => b.name === name );
+	// Add blocks in predefined order (using block ID for matching)
+	for ( const id of order ) {
+		const block = blocks.find( ( b ) => b.id === id );
 		if ( block ) {
 			orderedBlocks.push( block );
 		}
@@ -158,7 +172,7 @@ function orderBlocksInCategory( blocks, category ) {
 
 	// Add remaining blocks in their original order
 	const remainingBlocks = blocks.filter(
-		( block ) => ! order.includes( block.name )
+		( block ) => ! order.includes( block.id )
 	);
 
 	return [ ...orderedBlocks, ...remainingBlocks ];

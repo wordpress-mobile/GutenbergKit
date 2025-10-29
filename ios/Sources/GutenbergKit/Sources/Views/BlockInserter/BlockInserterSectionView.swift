@@ -69,10 +69,11 @@ struct BlockInserterSectionView: View {
                 Text(isExpanded ? "Show Less" : "Show More")
                     .font(.subheadline)
                     .fontWeight(.medium)
+                    .foregroundStyle(Color.secondary)
                 Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                     .font(.caption)
+                    .foregroundStyle(Color.primary)
             }
-            .foregroundStyle(Color.primary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
         }
