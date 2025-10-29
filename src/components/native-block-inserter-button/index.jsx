@@ -32,9 +32,11 @@ import useBlockTypesState from '@wordpress/block-editor/build-module/components/
  * Internal dependencies
  */
 import { store as blockEditorStore } from '@wordpress/block-editor';
+import { createBlock, parse } from '@wordpress/blocks';
 import { debug } from '../../utils/logger';
 import { preprocessBlockTypesForNativeInserter } from '../../utils/blocks';
 import { showBlockInserter } from '../../utils/bridge';
+import { generatePatternPreview } from '../../utils/pattern-preview-generator';
 
 /**
  * Native Block Inserter Button Component
@@ -191,6 +193,37 @@ export default function NativeBlockInserterButton() {
 		}
 	};
 
+	const insertPattern = ( patternName ) => {
+		const pattern = patterns.find(
+			( p ) => p.name === patternName
+		);
+		if ( ! pattern ) {
+			debug( `Pattern "${ patternName }" not found` );
+			return false;
+		}
+
+		try {
+			// For synced user patterns, insert as reference
+			if (
+				pattern.type === 'user' &&
+				pattern.syncStatus === 'fully'
+			) {
+				const block = createBlock( 'core/block', {
+					ref: pattern.id,
+				} );
+				onInsertBlocks( [ block ] );
+			} else {
+				// Parse and insert pattern blocks
+				const blocks = parse( pattern.content );
+				onInsertBlocks( blocks );
+			}
+			return true;
+		} catch ( error ) {
+			debug( 'Failed to insert pattern:', error );
+			return false;
+		}
+	};
+
 	return (
 		<Button
 			title={ __( 'Add block' ) }
@@ -204,6 +237,7 @@ export default function NativeBlockInserterButton() {
 				window.blockInserter = {
 					sections,
 					insertBlock,
+					insertPattern,
 					insertMedia,
 				};
 				showBlockInserter();

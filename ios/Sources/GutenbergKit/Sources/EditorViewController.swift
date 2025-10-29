@@ -254,15 +254,22 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // MARK: - Internal (Block Inserter)
 
     private func showBlockInserter(data: EditorJSMessage.ShowBlockInserterBody) {
+        // Configure pattern preview loader with the WebView
+        PatternPreviewLoader.shared.configure(webView: webView)
+
         let context = MediaPickerPresentationContext()
 
         let host = UIHostingController(rootView: NavigationStack {
             BlockInserterView(
                 sections: data.sections,
+                patterns: data.patterns,
                 mediaPicker: mediaPicker,
                 presentationContext: context,
                 onBlockSelected: { [weak self] block in
                     self?.insertBlockFromInserter(block.id)
+                },
+                onPatternSelected: { [weak self] patternName in
+                    self?.insertPatternFromInserter(patternName)
                 },
                 onMediaSelected: { [weak self] selection in
                     self?.insertMediaFromInserter(selection)
@@ -288,6 +295,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             return
         }
         evaluate("window.blockInserter.insertMedia(\(string))")
+    }
+
+    private func insertPatternFromInserter(_ patternName: String) {
+        let escapedName = patternName.replacingOccurrences(of: "'", with: "\\'")
+        evaluate("window.blockInserter.insertPattern('\(escapedName)')")
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {

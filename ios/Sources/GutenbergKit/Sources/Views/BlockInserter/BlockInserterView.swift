@@ -4,9 +4,11 @@ import UIKit
 
 struct BlockInserterView: View {
     let sections: [BlockInserterSection]
+    let patterns: [PatternType]
     let mediaPicker: MediaPickerController?
     let presentationContext: MediaPickerPresentationContext
     let onBlockSelected: (BlockType) -> Void
+    let onPatternSelected: (String) -> Void
     let onMediaSelected: ([MediaInfo]) -> Void
 
     @StateObject private var viewModel: BlockInserterViewModel
@@ -17,18 +19,23 @@ struct BlockInserterView: View {
     private let maxSelectionCount = 10
 
     @Environment(\.dismiss) private var dismiss
+    @State private var showingPatterns = false
 
     init(
         sections: [BlockInserterSection],
+        patterns: [PatternType] = [],
         mediaPicker: MediaPickerController?,
         presentationContext: MediaPickerPresentationContext,
         onBlockSelected: @escaping (BlockType) -> Void,
+        onPatternSelected: @escaping (String) -> Void,
         onMediaSelected: @escaping ([MediaInfo]) -> Void
     ) {
         self.sections = sections
+        self.patterns = patterns
         self.mediaPicker = mediaPicker
         self.presentationContext = presentationContext
         self.onBlockSelected = onBlockSelected
+        self.onPatternSelected = onPatternSelected
         self.onMediaSelected = onMediaSelected
 
         let viewModel = BlockInserterViewModel(sections: sections)
@@ -49,6 +56,17 @@ struct BlockInserterView: View {
             .onDisappear {
                 if viewModel.isProcessingMedia {
                     viewModel.cancelProcessing()
+                }
+            }
+            .sheet(isPresented: $showingPatterns) {
+                NavigationStack {
+                    PatternsView(
+                        patterns: patterns,
+                        onPatternSelected: { patternName in
+                            showingPatterns = false
+                            insertPattern(patternName)
+                        }
+                    )
                 }
             }
     }
@@ -89,6 +107,12 @@ struct BlockInserterView: View {
                 }
                 selectedMediaItems = []
             }
+            Button {
+                showingPatterns = true
+            } label: {
+                Image(systemName: "square.grid.2x2")
+            }
+            .tint(Color.primary)
 
             if let mediaPicker {
                 MediaPickerMenu(picker: mediaPicker, context: presentationContext) {
@@ -115,6 +139,11 @@ struct BlockInserterView: View {
             }
         }
     }
+
+    private func insertPattern(_ patternName: String) {
+        dismiss()
+        onPatternSelected(patternName)
+    }
 }
 
 // MARK: - Preview
@@ -130,6 +159,9 @@ struct BlockInserterView: View {
             presentationContext: MediaPickerPresentationContext(),
             onBlockSelected: {
                 print("block selected: \($0.name)")
+            },
+            onPatternSelected: {
+                print("pattern selected: \($0)")
             },
             onMediaSelected: {
                 print("media selected: \($0)")

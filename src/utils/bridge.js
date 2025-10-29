@@ -106,9 +106,10 @@ export function showBlockInserter() {
 		return;
 	}
 
-	// Send preprocessed sections to native
+	// Send preprocessed sections and patterns to native
 	dispatchToBridge( 'showBlockInserter', {
 		sections: window.blockInserter.sections,
+		patterns: window.blockInserter.patterns,
 	} );
 }
 
