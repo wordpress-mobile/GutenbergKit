@@ -222,7 +222,6 @@ export function preprocessBlockTypesForNativeInserter(
 	const sections = [];
 
 	// Add contextual section
-	const hasContextualBlocks = contextualBlocks.length > 0;
 	if ( contextualSectionBlocks.length > 0 ) {
 		sections.push( {
 			category: 'gbk-contextual',
@@ -236,15 +235,10 @@ export function preprocessBlockTypesForNativeInserter(
 		const blocks = blocksByCategory[ category ];
 		if ( blocks ) {
 			const orderedBlocks = orderBlocksInCategory( blocks, category );
-			// Use null for text category name if no contextual blocks, otherwise use display name
-			const sectionName =
-				category === 'text' && ! hasContextualBlocks
-					? null
-					: displayName;
 
 			sections.push( {
 				category,
-				name: sectionName,
+				name: displayName,
 				blocks: orderedBlocks,
 			} );
 		}
