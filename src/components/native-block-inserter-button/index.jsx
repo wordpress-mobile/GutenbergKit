@@ -81,7 +81,10 @@ export default function NativeBlockInserterButton() {
 	);
 
 	// Serialize blocks for native consumption
-	const blocks = serializeBlocksForNative( inserterItems );
+	const blocks = serializeBlocksForNative(
+		inserterItems,
+		destinationBlockName
+	);
 
 	// Expose the current inserter state globally for native access
 	// This automatically stays in sync with editor state via hooks
