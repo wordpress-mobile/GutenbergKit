@@ -111,12 +111,25 @@ const BLOCK_ORDER_BY_CATEGORY = {
 
 /**
  * Most used blocks to show when there are no contextual blocks.
+ * Optimized for mobile usage patterns where users frequently create content
+ * with text, media from device cameras, and visual formatting.
  */
 const MOST_USED_BLOCKS = [
+	// Fundamentals
 	'core/paragraph',
 	'core/heading',
 	'core/list',
 	'core/quote',
+	// Layout and more
+	'core/table',
+	'core/separator',
+	'core/code',
+	'core/preformatted',
+	// Media blocks - very popular on mobile (camera/photo usage)
+	'core/image',
+	'core/gallery',
+	'core/video',
+	'core/embed',
 ];
 
 /**
@@ -219,12 +232,19 @@ export function preprocessBlockTypesForNativeInserter(
 	} );
 
 	// Determine blocks to show in contextual section
-	const contextualSectionBlocks =
-		contextualBlocks.length > 0
-			? contextualBlocks
-			: serializedBlocks.filter( ( block ) =>
-					MOST_USED_BLOCKS.includes( block.name )
-			  );
+	let contextualSectionBlocks;
+	if ( contextualBlocks.length > 0 ) {
+		contextualSectionBlocks = contextualBlocks;
+	} else {
+		// Show most-used blocks in the order specified by MOST_USED_BLOCKS
+		contextualSectionBlocks = [];
+		for ( const blockName of MOST_USED_BLOCKS ) {
+			const block = serializedBlocks.find( ( b ) => b.name === blockName );
+			if ( block ) {
+				contextualSectionBlocks.push( block );
+			}
+		}
+	}
 
 	// Group regular blocks by category
 	const blocksByCategory = {};
