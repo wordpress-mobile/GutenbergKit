@@ -29,6 +29,7 @@ struct BlockInserterBlockView: View {
             .padding(.horizontal, 4)
         }
         .buttonStyle(.plain)
+        .disabled(block.isDisabled)
         .frame(maxWidth: .infinity, alignment: .center)
         .contextMenu {
             Button {
