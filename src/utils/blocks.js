@@ -101,12 +101,7 @@ const BLOCK_ORDER_BY_CATEGORY = {
 		'core/audio',
 		'core/file',
 	],
-	design: [
-		'core/separator',
-		'core/spacer',
-		'core/columns',
-		'core/column',
-	],
+	design: [ 'core/separator', 'core/spacer', 'core/columns', 'core/column' ],
 	embed: [
 		'core/embed', // Generic embed - always first
 		'core/embed/youtube',
@@ -215,7 +210,9 @@ export function preprocessBlockTypesForNativeInserter(
 	// Create ordered categories list with localized names
 	const orderedCategories = ORDERED_CATEGORIES.map( ( { key } ) => ( {
 		key,
-		displayName: categoryMap[ key ] || key.charAt( 0 ).toUpperCase() + key.slice( 1 ),
+		displayName:
+			categoryMap[ key ] ||
+			key.charAt( 0 ).toUpperCase() + key.slice( 1 ),
 	} ) );
 
 	// First, serialize all blocks
