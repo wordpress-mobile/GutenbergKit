@@ -70,6 +70,11 @@ export function getBlockIcon( item ) {
  * Extracts only the properties needed by the native side and ensures
  * proper formatting (e.g., converting React icon elements to SVG strings).
  *
+ * WARNING: This function eliminates 90+% of JSON payload by compacting
+ * otherwise duplicated block variants. Do not add unnecessary properties
+ * or modify the compact format without careful consideration of the
+ * performance impact on the native bridge.
+ *
  * @param {Array} inserterItems Array of block inserter items from WordPress.
  *
  * @return {Array} Array of serialized block objects for native consumption.
