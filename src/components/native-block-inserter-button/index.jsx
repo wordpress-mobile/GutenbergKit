@@ -120,9 +120,11 @@ export default function NativeBlockInserterButton() {
 		<Button
 			title={ __( 'Add block' ) }
 			icon={ plus }
-			onClick={ ( e ) => {
-				e.preventDefault();
+			onClick={ () => {
 				showBlockInserter();
+			} }
+			onMouseDown={ ( e ) => {
+				e.preventDefault();
 			} }
 			className="gutenberg-kit-add-block-button"
 		/>
