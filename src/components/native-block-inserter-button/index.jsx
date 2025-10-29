@@ -93,7 +93,7 @@ export default function NativeBlockInserterButton() {
 				const item = inserterItems.find( ( i ) => i.id === blockId );
 				if ( ! item ) {
 					debug(
-						`Block with id "${ blockId }" not found in inserter items`
+						`Block with ID "${ blockId }" not found in inserter items`
 					);
 					return false;
 				}
