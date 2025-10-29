@@ -175,6 +175,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         try await webView.evaluateJavaScript("editor.getContent();") as! String
     }
 
+    public struct EditorTitleAndContent: Decodable {
+        public let title: String
+        public let content: String
+        public let changed: Bool
+    }
+
     /// Returns the current editor title and content.
     public func getTitleAndContent() async throws -> EditorTitleAndContent {
         let result = try await webView.evaluateJavaScript("editor.getTitleAndContent();")
@@ -246,16 +252,16 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     // MARK: - Internal (Block Inserter)
 
-    private func showBlockInserter(blocks: [EditorBlock]) {
+    private func showBlockInserter(data: EditorJSMessage.ShowBlockInserterBody) {
         let context = MediaPickerPresentationContext()
 
         let host = UIHostingController(rootView: NavigationStack {
             BlockInserterView(
-                blocks: blocks,
+                sections: data.sections,
                 mediaPicker: mediaPicker,
                 presentationContext: context,
-                onBlockSelected: {
-                    print("insert blocks:", $0)
+                onBlockSelected: { [weak self] block in
+                    self?.insertBlockFromInserter(block.id)
                 },
                 onMediaSelected: {
                     print("insert media:", $0)
@@ -266,6 +272,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         context.viewController = host
 
         present(host, animated: true)
+    }
+
+    private func insertBlockFromInserter(_ blockID: String) {
+        evaluate("window.blockInserter.insertBlock('\(blockID)')")
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
@@ -310,7 +320,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 delegate?.editor(self, didLogException: editorException)
             case .showBlockInserter:
                 let body = try message.decode(EditorJSMessage.ShowBlockInserterBody.self)
-                showBlockInserter(blocks: body.blocks)
+                showBlockInserter(data: body)
             case .openMediaLibrary:
                 let config = try message.decode(OpenMediaLibraryAction.self)
                 openMediaLibrary(config)

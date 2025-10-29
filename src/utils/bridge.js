@@ -89,14 +89,27 @@ export function onBlocksChanged( isEmpty = false ) {
 /**
  * Requests the native host to show the block picker.
  *
+ * The BlockInserterBridge component maintains the current inserter state
+ * at window.blockInserter, which automatically stays in sync with the editor
+ * via WordPress hooks (useInsertionPoint and useBlockTypesState).
+ *
+ * The sections array is preprocessed by preprocessBlockTypesForNativeInserter()
+ * which handles ordering, contextual filtering, and localized section names.
+ *
  * @return {void}
  */
-export async function showBlockInserter() {
-	// Lazy load this utility to avoid the remote editor referencing `@wordpress`
-	// module globals before they are loaded.
-	const { getSerializedBlocks } = await import( './blocks' );
-	const blocks = await getSerializedBlocks();
-	dispatchToBridge( 'showBlockInserter', { blocks } );
+export function showBlockInserter() {
+	if ( ! window.blockInserter ) {
+		debug(
+			'BlockInserterBridge not available. Ensure editor is initialized.'
+		);
+		return;
+	}
+
+	// Send preprocessed sections to native
+	dispatchToBridge( 'showBlockInserter', {
+		sections: window.blockInserter.sections,
+	} );
 }
 
 /**

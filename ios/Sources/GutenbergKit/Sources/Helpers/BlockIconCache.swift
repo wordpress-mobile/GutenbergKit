@@ -5,7 +5,7 @@ import SVGKit
 final class BlockIconCache: ObservableObject {
     var icons: [String: Result<SVGKImage, Error>] = [:]
 
-    func getIcon(for block: EditorBlock) -> SVGKImage? {
+    func getIcon(for block: BlockType) -> SVGKImage? {
         if let result = icons[block.id] {
             return try? result.get()
         }
@@ -14,7 +14,7 @@ final class BlockIconCache: ObservableObject {
         return try? result.get()
     }
 
-    private func _getIcon(for block: EditorBlock) throws -> SVGKImage {
+    private func _getIcon(for block: BlockType) throws -> SVGKImage {
         guard let svg = block.icon,
               !svg.isEmpty,
               let source = SVGKSourceString.source(fromContentsOf: svg),

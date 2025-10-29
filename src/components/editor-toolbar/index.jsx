@@ -17,7 +17,7 @@ import {
 	ToolbarButton,
 } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
-import { close, cog, plus } from '@wordpress/icons';
+import { close, cog } from '@wordpress/icons';
 import clsx from 'clsx';
 import { store as editorStore } from '@wordpress/editor';
 
@@ -27,7 +27,8 @@ import { store as editorStore } from '@wordpress/editor';
 import './style.scss';
 import { useModalize } from './use-modalize';
 import { useModalDialogState } from '../editor/use-modal-dialog-state';
-import { showBlockInserter, getGBKit } from '../../utils/bridge';
+import { getGBKit } from '../../utils/bridge';
+import NativeBlockInserterButton from '../native-block-inserter-button';
 
 /**
  * Renders the editor toolbar containing block-related actions.
@@ -81,17 +82,7 @@ const EditorToolbar = ( { className } ) => {
 	const classes = clsx( 'gutenberg-kit-editor-toolbar', className );
 
 	const addBlockButton = enableNativeBlockInserter ? (
-		<ToolbarButton
-			title={ __( 'Add block' ) }
-			icon={ plus }
-			onClick={ () => {
-				if ( isInserterOpened ) {
-					setIsInserterOpened( false );
-				}
-				showBlockInserter();
-			} }
-			className="gutenberg-kit-add-block-button"
-		/>
+		<NativeBlockInserterButton />
 	) : (
 		<Inserter
 			popoverProps={ {
