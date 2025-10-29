@@ -74,16 +74,18 @@ export default function NativeBlockInserterButton() {
 		selectBlockOnInsert: true,
 	} );
 
-	const [ inserterItems, , , onSelectItem ] = useBlockTypesState(
+	const [ inserterItems, categories, , onSelectItem ] = useBlockTypesState(
 		destinationRootClientId,
 		onInsertBlocks,
 		false // isQuick
 	);
 
 	// Preprocess blocks into sections for native consumption
+	// Categories are passed to get localized category names
 	const sections = preprocessBlockTypesForNativeInserter(
 		inserterItems,
-		destinationBlockName
+		destinationBlockName,
+		categories
 	);
 
 	// Expose the current inserter state globally for native access
@@ -114,7 +116,7 @@ export default function NativeBlockInserterButton() {
 		return () => {
 			delete window.blockInserter;
 		};
-	}, [ sections, inserterItems, onSelectItem ] );
+	}, [ sections, inserterItems, categories, onSelectItem ] );
 
 	return (
 		<Button

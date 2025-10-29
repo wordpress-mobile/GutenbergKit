@@ -67,14 +67,15 @@ export function getBlockIcon( item ) {
 
 /**
  * Predefined category ordering.
+ * Display names will be retrieved from WordPress categories for proper localization.
  */
 const ORDERED_CATEGORIES = [
-	{ key: 'text', displayName: 'Text' },
-	{ key: 'media', displayName: 'Media' },
-	{ key: 'design', displayName: 'Design' },
-	{ key: 'widgets', displayName: 'Widgets' },
-	{ key: 'theme', displayName: 'Theme' },
-	{ key: 'embed', displayName: 'Embeds' },
+	{ key: 'text' },
+	{ key: 'media' },
+	{ key: 'design' },
+	{ key: 'widgets' },
+	{ key: 'theme' },
+	{ key: 'embed' },
 ];
 
 /**
@@ -159,6 +160,7 @@ function orderBlocksInCategory( blocks, category ) {
  * - Creating a contextual section for blocks specifically allowed in the current parent
  * - Falling back to most-used blocks when no contextual blocks exist
  * - Serializing block data to a compact format for the native bridge
+ * - Using localized category names from WordPress
  *
  * WARNING: This function eliminates 90+% of JSON payload by compacting
  * otherwise duplicated block variants. Do not add unnecessary properties
@@ -167,13 +169,28 @@ function orderBlocksInCategory( blocks, category ) {
  *
  * @param {Array}  inserterItems        Array of block inserter items from WordPress.
  * @param {string} destinationBlockName Name of the parent block where new blocks will be inserted.
+ * @param {Array}  categories           Array of category objects from WordPress with localized titles.
  *
  * @return {Array} Array of sections, each containing category, name, and blocks array.
  */
 export function preprocessBlockTypesForNativeInserter(
 	inserterItems,
-	destinationBlockName = null
+	destinationBlockName = null,
+	categories = []
 ) {
+	// Build category map with localized names from WordPress
+	// Falls back to hardcoded names if categories not provided
+	const categoryMap = {};
+	for ( const category of categories ) {
+		categoryMap[ category.slug ] = category.title;
+	}
+
+	// Create ordered categories list with localized names
+	const orderedCategories = ORDERED_CATEGORIES.map( ( { key } ) => ( {
+		key,
+		displayName: categoryMap[ key ] || key.charAt( 0 ).toUpperCase() + key.slice( 1 ),
+	} ) );
+
 	// First, serialize all blocks
 	const serializedBlocks = inserterItems.map( ( item ) => {
 		return {
@@ -231,7 +248,7 @@ export function preprocessBlockTypesForNativeInserter(
 	}
 
 	// Add blocks by category in predefined order
-	for ( const { key: category, displayName } of ORDERED_CATEGORIES ) {
+	for ( const { key: category, displayName } of orderedCategories ) {
 		const blocks = blocksByCategory[ category ];
 		if ( blocks ) {
 			const orderedBlocks = orderBlocksInCategory( blocks, category );
@@ -244,13 +261,15 @@ export function preprocessBlockTypesForNativeInserter(
 		}
 	}
 
-	// Add any remaining categories
-	const knownCategories = ORDERED_CATEGORIES.map( ( c ) => c.key );
+	// Add any remaining categories with localized names if available
+	const knownCategories = orderedCategories.map( ( c ) => c.key );
 	for ( const [ category, blocks ] of Object.entries( blocksByCategory ) ) {
 		if ( ! knownCategories.includes( category ) ) {
 			sections.push( {
 				category,
-				name: category.charAt( 0 ).toUpperCase() + category.slice( 1 ),
+				name:
+					categoryMap[ category ] ||
+					category.charAt( 0 ).toUpperCase() + category.slice( 1 ),
 				blocks,
 			} );
 		}
