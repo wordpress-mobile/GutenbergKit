@@ -15,10 +15,6 @@ struct BlockType: Decodable, Identifiable {
     var frecency: Double = 0.0
     var isDisabled = false
     var parents: [String] = []
-
-    // Section metadata provided by JavaScript
-    var sectionCategory: String?
-    var sectionName: String?
 }
 
 extension BlockType: Searchable {

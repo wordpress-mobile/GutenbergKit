@@ -32,7 +32,7 @@ import useInsertionPoint from '@wordpress/block-editor/build-module/components/i
 import useBlockTypesState from '@wordpress/block-editor/build-module/components/inserter/hooks/use-block-types-state';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { debug } from '../../utils/logger';
-import { serializeBlocksForNative } from '../../utils/blocks';
+import { preprocessBlockTypesForNativeInserter } from '../../utils/blocks';
 import { showBlockInserter } from '../../utils/bridge';
 
 /**
@@ -80,8 +80,8 @@ export default function NativeBlockInserterButton() {
 		false // isQuick
 	);
 
-	// Serialize blocks for native consumption
-	const blocks = serializeBlocksForNative(
+	// Preprocess blocks into sections for native consumption
+	const sections = preprocessBlockTypesForNativeInserter(
 		inserterItems,
 		destinationBlockName
 	);
@@ -90,8 +90,7 @@ export default function NativeBlockInserterButton() {
 	// This automatically stays in sync with editor state via hooks
 	useEffect( () => {
 		window.blockInserter = {
-			blocks,
-			destinationBlockName,
+			sections,
 			insertBlock: ( blockId ) => {
 				const item = inserterItems.find( ( i ) => i.id === blockId );
 				if ( ! item ) {
@@ -115,7 +114,7 @@ export default function NativeBlockInserterButton() {
 		return () => {
 			delete window.blockInserter;
 		};
-	}, [ blocks, destinationBlockName, inserterItems, onSelectItem ] );
+	}, [ sections, inserterItems, onSelectItem ] );
 
 	return (
 		<Button

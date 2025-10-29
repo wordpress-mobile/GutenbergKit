@@ -151,13 +151,14 @@ function orderBlocksInCategory( blocks, category ) {
 }
 
 /**
- * Serializes inserter items to a format suitable for native consumption.
- * Extracts only the properties needed by the native side and ensures
- * proper formatting (e.g., converting React icon elements to SVG strings).
+ * Preprocesses inserter items for the native block inserter.
+ * Organizes blocks into sections with proper ordering and contextual filtering.
  *
- * This function also handles ordering of blocks by category and within categories,
- * as well as creating a contextual section for blocks that are specifically allowed
- * in the current parent block.
+ * This function handles:
+ * - Ordering blocks by category and within categories
+ * - Creating a contextual section for blocks specifically allowed in the current parent
+ * - Falling back to most-used blocks when no contextual blocks exist
+ * - Serializing block data to a compact format for the native bridge
  *
  * WARNING: This function eliminates 90+% of JSON payload by compacting
  * otherwise duplicated block variants. Do not add unnecessary properties
@@ -167,9 +168,9 @@ function orderBlocksInCategory( blocks, category ) {
  * @param {Array}  inserterItems        Array of block inserter items from WordPress.
  * @param {string} destinationBlockName Name of the parent block where new blocks will be inserted.
  *
- * @return {Array} Array of serialized block objects for native consumption, ordered and with section metadata.
+ * @return {Array} Array of sections, each containing category, name, and blocks array.
  */
-export function serializeBlocksForNative(
+export function preprocessBlockTypesForNativeInserter(
 	inserterItems,
 	destinationBlockName = null
 ) {
@@ -218,15 +219,15 @@ export function serializeBlocksForNative(
 		blocksByCategory[ category ].push( block );
 	}
 
-	const result = [];
+	const sections = [];
 
 	// Add contextual section
 	const hasContextualBlocks = contextualBlocks.length > 0;
-	for ( const block of contextualSectionBlocks ) {
-		result.push( {
-			...block,
-			sectionCategory: 'gbk-contextual',
-			sectionName: null,
+	if ( contextualSectionBlocks.length > 0 ) {
+		sections.push( {
+			category: 'gbk-contextual',
+			name: null,
+			blocks: contextualSectionBlocks,
 		} );
 	}
 
@@ -241,13 +242,11 @@ export function serializeBlocksForNative(
 					? null
 					: displayName;
 
-			for ( const block of orderedBlocks ) {
-				result.push( {
-					...block,
-					sectionCategory: category,
-					sectionName,
-				} );
-			}
+			sections.push( {
+				category,
+				name: sectionName,
+				blocks: orderedBlocks,
+			} );
 		}
 	}
 
@@ -255,17 +254,13 @@ export function serializeBlocksForNative(
 	const knownCategories = ORDERED_CATEGORIES.map( ( c ) => c.key );
 	for ( const [ category, blocks ] of Object.entries( blocksByCategory ) ) {
 		if ( ! knownCategories.includes( category ) ) {
-			for ( const block of blocks ) {
-				result.push( {
-					...block,
-					sectionCategory: category,
-					sectionName:
-						category.charAt( 0 ).toUpperCase() +
-						category.slice( 1 ),
-				} );
-			}
+			sections.push( {
+				category,
+				name: category.charAt( 0 ).toUpperCase() + category.slice( 1 ),
+				blocks,
+			} );
 		}
 	}
 
-	return result;
+	return sections;
 }

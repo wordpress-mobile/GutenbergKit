@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct BlockInserterSection: Identifiable {
+struct BlockInserterSection: Identifiable, Decodable {
     var id: String { category }
     let category: String
     let name: String?
