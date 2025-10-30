@@ -114,54 +114,6 @@ private struct PatternDetailedView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                // Categories
-                if let categories = pattern.categories, !categories.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Categories")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundColor(.secondary)
-                            .textCase(.uppercase)
-
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(categories, id: \.self) { category in
-                                    Text(category.capitalized)
-                                        .font(.caption)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color(uiColor: .secondarySystemBackground))
-                                        .cornerRadius(6)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Keywords
-                if let keywords = pattern.keywords, !keywords.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Keywords")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundColor(.secondary)
-                            .textCase(.uppercase)
-
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(keywords, id: \.self) { keyword in
-                                    Text(keyword)
-                                        .font(.caption)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color(uiColor: .secondarySystemBackground))
-                                        .cornerRadius(6)
-                                }
-                            }
-                        }
-                    }
-                }
-
                 // Source
                 if let source = pattern.source, !source.isEmpty {
                     HStack(spacing: 4) {

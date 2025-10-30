@@ -106,11 +106,16 @@ struct SearchEngine<Item: Searchable> {
     
     /// Calculate score for a single field
     private func calculateFieldScore(field: String, query: String, weight: Double, allowFuzzy: Bool) -> Double {
+        // Defensive check: skip empty field or query
+        guard !field.isEmpty, !query.isEmpty else {
+            return 0
+        }
+
         // Exact match
         if field == query {
             return weight * configuration.exactMatchMultiplier
         }
-        
+
         // Contains match
         if field.contains(query) {
             // Higher score if it starts with the query
@@ -151,14 +156,19 @@ struct SearchEngine<Item: Searchable> {
     
     /// Calculate similarity between two strings using normalized edit distance
     private func calculateSimilarity(_ str1: String, _ str2: String) -> Double {
+        // Defensive check: return 0 for empty strings
+        guard !str1.isEmpty, !str2.isEmpty else {
+            return 0
+        }
+
         let distance = levenshteinDistance(str1, str2)
         let maxLength = max(str1.count, str2.count)
-        
+
         // Don't allow too many edits relative to string length
         if distance > min(configuration.maxEditDistance, maxLength / 3) {
             return 0
         }
-        
+
         return 1.0 - (Double(distance) / Double(maxLength))
     }
     
