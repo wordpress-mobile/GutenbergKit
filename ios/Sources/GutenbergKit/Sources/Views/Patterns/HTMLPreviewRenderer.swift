@@ -49,9 +49,9 @@ final class HTMLPreviewRenderer {
             let config = WKWebViewConfiguration()
             config.suppressesIncrementalRendering = true
 
-            // Create web view with initial frame for off-screen rendering
-            // Frame will be adjusted per render based on viewport width
-            webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1200, height: 2000), configuration: config)
+            // Create web view with small initial frame for off-screen rendering
+            // Frame will be adjusted per render based on viewport width and content height
+            webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1200, height: 100), configuration: config)
             webView.backgroundColor = .clear
             webView.isOpaque = false // gets rid of the white flash upon content load in dark mode.
             webView.translatesAutoresizingMaskIntoConstraints = false
@@ -233,9 +233,11 @@ final class HTMLPreviewRenderer {
         let webView = pooledView.webView
         let delegate = pooledView.delegate
 
-        // Set initial frame with viewport width and large height to accommodate content
+        // Set initial frame with small height so content can expand naturally
+        // This ensures scrollHeight returns actual content height, not viewport height
         let width = CGFloat(viewportWidth)
-        webView.frame = CGRect(x: 0, y: 0, width: width, height: maxContentHeight)
+        let minHeight: CGFloat = 100
+        webView.frame = CGRect(x: 0, y: 0, width: width, height: minHeight)
 
         // Generate full HTML with styling
         let fullHTML = generateFullHTML(content: html, viewportWidth: viewportWidth)
@@ -311,42 +313,21 @@ final class HTMLPreviewRenderer {
     }
 
     private func generateFullHTML(content: String, viewportWidth: Int) -> String {
-        // Base styles matching Gutenberg's BlockPreview component
-        // These match the auto.js implementation for pattern previews
-        let baseStyles = """
-            /* Base container styles */
-            * {
-                box-sizing: border-box;
-            }
-
-            html {
-                margin: 0;
-                padding: 0;
-            }
-
-            /* Matches Gutenberg's BlockPreview iframe body styles */
-            body {
-                height: auto;
-                overflow: hidden;
-                border: none;
-                padding: 16px;
-                margin: 0;
-                width: \(viewportWidth)px;
-                background: white;
-                box-sizing: border-box;
-            }
-        """
-
         return """
         <!DOCTYPE html>
-        <html>
+        <html style="margin: 0; padding: 0;">
         <head>
             <meta name="viewport" content="width=\(viewportWidth), initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
             <style>
-                \(baseStyles)
+                * { box-sizing: border-box; }
+                body {
+                    margin: 0;
+                    padding: 0;
+                    width: \(viewportWidth)px;
+                    background: white;
+                }
             </style>
             <style>
-                /* Gutenberg Editor Styles */
                 \(gutenbergCSS)
             </style>
         </head>
