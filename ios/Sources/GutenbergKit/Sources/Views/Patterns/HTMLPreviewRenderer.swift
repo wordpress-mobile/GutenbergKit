@@ -106,6 +106,44 @@ final class HTMLPreviewRenderer {
         }
     }
 
+    // MARK: - CSS Loading
+
+    /// Lazily loaded Gutenberg CSS from bundled assets
+    private lazy var gutenbergCSS: String = {
+        loadGutenbergCSS() ?? ""
+    }()
+
+    /// Loads the Gutenberg CSS from the bundled assets
+    /// - Returns: The CSS content, or nil if not found
+    private func loadGutenbergCSS() -> String? {
+        // Find the Gutenberg assets directory
+        guard let assetsURL = Bundle.module.url(forResource: "Gutenberg", withExtension: nil),
+              let assetsPath = try? FileManager.default.contentsOfDirectory(
+                at: assetsURL.appendingPathComponent("assets"),
+                includingPropertiesForKeys: nil
+              ) else {
+            print("Warning: Could not find Gutenberg assets directory")
+            return nil
+        }
+
+        // Find the main CSS file (starts with "index-" and ends with ".css")
+        guard let cssURL = assetsPath.first(where: { url in
+            let filename = url.lastPathComponent
+            return filename.hasPrefix("index-") && filename.hasSuffix(".css")
+        }) else {
+            print("Warning: Could not find Gutenberg CSS file")
+            return nil
+        }
+
+        // Read the CSS content
+        guard let cssContent = try? String(contentsOf: cssURL, encoding: .utf8) else {
+            print("Warning: Could not read Gutenberg CSS file")
+            return nil
+        }
+
+        return cssContent
+    }
+
     // MARK: - Initialization
 
     private init() {
@@ -273,129 +311,42 @@ final class HTMLPreviewRenderer {
     }
 
     private func generateFullHTML(content: String, viewportWidth: Int) -> String {
+        // Base styles for the preview container
+        // These are minimal styles needed for proper rendering that aren't in Gutenberg CSS
+        let baseStyles = """
+            /* Preview container base styles */
+            * {
+                box-sizing: border-box;
+            }
+
+            html, body {
+                margin: 0;
+                padding: 16px;
+                background: white;
+            }
+
+            body {
+                width: \(viewportWidth)px;
+            }
+        """
+
         return """
         <!DOCTYPE html>
         <html>
         <head>
             <meta name="viewport" content="width=\(viewportWidth), initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
             <style>
-                * {
-                    box-sizing: border-box;
-                }
-
-                html, body {
-                    margin: 0;
-                    padding: 16px;
-                    background: white;
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
-                    font-size: 16px;
-                    line-height: 1.5;
-                    color: #1e1e1e;
-                }
-
-                body {
-                    width: \(viewportWidth)px;
-                }
-
-                /* WordPress block styles */
-                .wp-block-image img {
-                    max-width: 100%;
-                    height: auto;
-                }
-
-                .wp-block-image {
-                    margin: 0 0 1em 0;
-                }
-
-                .wp-block-heading,
-                h1, h2, h3, h4, h5, h6 {
-                    font-weight: 600;
-                    margin: 0.67em 0;
-                    line-height: 1.3;
-                }
-
-                .wp-block-paragraph,
-                p {
-                    margin: 0 0 1em 0;
-                }
-
-                .wp-block-quote {
-                    margin: 1em 0;
-                    padding-left: 1em;
-                    border-left: 4px solid #e0e0e0;
-                }
-
-                .wp-block-list,
-                ul, ol {
-                    margin: 0 0 1em 0;
-                    padding-left: 1.5em;
-                }
-
-                .wp-block-button {
-                    margin: 0.5em 0;
-                }
-
-                .wp-block-button__link {
-                    background-color: #007cba;
-                    border: none;
-                    border-radius: 4px;
-                    color: white;
-                    padding: 0.5em 1em;
-                    text-decoration: none;
-                    display: inline-block;
-                }
-
-                .wp-block-columns {
-                    display: flex;
-                    gap: 2em;
-                    margin: 1em 0;
-                }
-
-                .wp-block-column {
-                    flex: 1;
-                }
-
-                .wp-block-group {
-                    margin: 1em 0;
-                }
-
-                /* Hide elements that don't render well in preview */
-                .wp-block-embed,
-                .wp-block-video,
-                .wp-block-audio {
-                    background: #f0f0f0;
-                    padding: 2em;
-                    text-align: center;
-                    color: #666;
-                }
-
-                /* Ensure images load properly */
-                img {
-                    max-width: 100%;
-                    height: auto;
-                    display: block;
-                }
-
-                /* Figcaption styling */
-                figcaption {
-                    font-size: 0.875em;
-                    color: #666;
-                    margin-top: 0.5em;
-                }
-
-                /* Cover block */
-                .wp-block-cover {
-                    min-height: 200px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    padding: 1em;
-                    background: #f0f0f0;
-                }
+                \(baseStyles)
+            </style>
+            <style>
+                /* Gutenberg Editor Styles */
+                \(gutenbergCSS)
             </style>
         </head>
-        <body>
-            \(content)
+        <body class="gutenberg-kit wp-embed-responsive">
+            <div class="editor-styles-wrapper">
+                \(content)
+            </div>
         </body>
         </html>
         """
