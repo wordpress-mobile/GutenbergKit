@@ -67,6 +67,8 @@ export default function NativeBlockInserterButton() {
 		[]
 	);
 
+	const { canInsertBlockType } = useSelect( blockEditorStore );
+
 	const { updateBlockAttributes } = useDispatch( blockEditorStore );
 
 	// When cursor is in title, selectedBlockClientId is null.
@@ -153,7 +155,10 @@ export default function NativeBlockInserterButton() {
 				getBlockTransforms( 'from' ),
 				( transform ) =>
 					transform.type === 'files' &&
-					transform.isMatch &&
+					canInsertBlockType(
+						transform.blockName,
+						destinationRootClientId
+					) &&
 					transform.isMatch( validFiles )
 			);
 
