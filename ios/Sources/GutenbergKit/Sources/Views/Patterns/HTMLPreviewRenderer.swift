@@ -1,5 +1,6 @@
 import UIKit
 import WebKit
+import CryptoKit
 
 /// Renders HTML content to images using a pool of WKWebView instances
 ///
@@ -7,7 +8,7 @@ import WebKit
 /// render HTML content off-screen and capture screenshots. It includes:
 /// - WKWebView pooling to reduce memory overhead
 /// - Off-screen rendering for performance
-/// - Image caching to avoid redundant renders
+/// - Memory and disk image caching to avoid redundant renders
 /// - Concurrent rendering with request queuing
 @MainActor
 final class HTMLPreviewRenderer {
@@ -17,18 +18,19 @@ final class HTMLPreviewRenderer {
 
     private let poolSize = 3
     private let maxContentHeight: CGFloat = 2000 // Maximum height to prevent excessive memory usage
-    private let cacheLimit = 50
+    private let memoryCacheLimit = 50
 
     // MARK: - State
 
     private var webViewPool: [PooledWebView] = []
-    private var cache: NSCache<NSString, UIImage> = {
+    private var memoryCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 50
         return cache
     }()
     private var pendingRequests: [RenderRequest] = []
     private var activeRenders: Set<String> = []
+    private let diskCache: DiskCache
 
     // MARK: - Types
 
@@ -106,51 +108,31 @@ final class HTMLPreviewRenderer {
         }
     }
 
-    // MARK: - CSS Loading
-
-    /// Lazily loaded Gutenberg CSS from bundled assets
-    private lazy var gutenbergCSS: String = {
-        loadGutenbergCSS() ?? ""
-    }()
-
-    /// Loads the Gutenberg CSS from the bundled assets
-    /// - Returns: The CSS content, or nil if not found
-    private func loadGutenbergCSS() -> String? {
-        // Find the Gutenberg assets directory
-        guard let assetsURL = Bundle.module.url(forResource: "Gutenberg", withExtension: nil),
-              let assetsPath = try? FileManager.default.contentsOfDirectory(
-                at: assetsURL.appendingPathComponent("assets"),
-                includingPropertiesForKeys: nil
-              ) else {
-            print("Warning: Could not find Gutenberg assets directory")
-            return nil
-        }
-
-        // Find the main CSS file (starts with "index-" and ends with ".css")
-        guard let cssURL = assetsPath.first(where: { url in
-            let filename = url.lastPathComponent
-            return filename.hasPrefix("index-") && filename.hasSuffix(".css")
-        }) else {
-            print("Warning: Could not find Gutenberg CSS file")
-            return nil
-        }
-
-        // Read the CSS content
-        guard let cssContent = try? String(contentsOf: cssURL, encoding: .utf8) else {
-            print("Warning: Could not read Gutenberg CSS file")
-            return nil
-        }
-
-        return cssContent
-    }
 
     // MARK: - Initialization
 
     private init() {
+        // Initialize disk cache
+        self.diskCache = DiskCache()
+
+        // Check CSS hash and clear cache if changed
+        let currentCSSHash = Self.hashString(GutenbergCSSLoader.shared.css)
+        if diskCache.cssHashChanged(currentHash: currentCSSHash) {
+            diskCache.clearCache()
+            diskCache.saveCSSHash(currentCSSHash)
+        }
+
         // Pre-populate the pool
         for _ in 0..<poolSize {
             webViewPool.append(PooledWebView())
         }
+    }
+
+    /// Creates a SHA256 hash of a string
+    private static func hashString(_ string: String) -> String {
+        let data = Data(string.utf8)
+        let hash = SHA256.hash(data: data)
+        return hash.compactMap { String(format: "%02x", $0) }.joined()
     }
 
     // MARK: - Public API
@@ -162,9 +144,19 @@ final class HTMLPreviewRenderer {
     ///   - cacheKey: Unique key for caching (typically pattern name)
     /// - Returns: Rendered image
     func render(html: String, viewportWidth: Int, cacheKey: String) async throws -> UIImage {
-        // Check cache first
-        if let cachedImage = cache.object(forKey: cacheKey as NSString) {
+        // Generate cache key from HTML and viewport width
+        let diskCacheKey = Self.generateCacheKey(html: html, viewportWidth: viewportWidth)
+
+        // Check memory cache first
+        if let cachedImage = memoryCache.object(forKey: cacheKey as NSString) {
             return cachedImage
+        }
+
+        // Check disk cache
+        if let diskImage = diskCache.loadImage(forKey: diskCacheKey) {
+            // Store in memory cache for faster access next time
+            memoryCache.setObject(diskImage, forKey: cacheKey as NSString)
+            return diskImage
         }
 
         // Check if already rendering this content
@@ -199,17 +191,29 @@ final class HTMLPreviewRenderer {
             }
         }
 
-        return try await performRender(
+        let image = try await performRender(
             html: html,
             viewportWidth: viewportWidth,
             cacheKey: cacheKey,
             pooledView: pooledView
         )
+
+        // Save to disk cache
+        diskCache.saveImage(image, forKey: diskCacheKey)
+
+        return image
+    }
+
+    /// Generates a cache key from HTML content and viewport width
+    private static func generateCacheKey(html: String, viewportWidth: Int) -> String {
+        let combined = "\(html)-\(viewportWidth)"
+        return hashString(combined)
     }
 
     /// Clears the image cache
     func clearCache() {
-        cache.removeAllObjects()
+        memoryCache.removeAllObjects()
+        diskCache.clearCache()
     }
 
     // MARK: - Private Methods
@@ -271,8 +275,8 @@ final class HTMLPreviewRenderer {
         // Clear the delegate callback
         delegate.onRenderComplete = nil
 
-        // Cache the result
-        cache.setObject(image, forKey: cacheKey as NSString)
+        // Cache the result in memory
+        memoryCache.setObject(image, forKey: cacheKey as NSString)
 
         // Notify any waiting requests
         notifyPendingRequests(for: cacheKey, with: image)
@@ -328,7 +332,7 @@ final class HTMLPreviewRenderer {
                 }
             </style>
             <style>
-                \(gutenbergCSS)
+                \(GutenbergCSSLoader.shared.css)
             </style>
         </head>
         <body class="block-editor-iframe__body editor-styles-wrapper wp-embed-responsive">
@@ -336,5 +340,116 @@ final class HTMLPreviewRenderer {
         </body>
         </html>
         """
+    }
+}
+
+// MARK: - Disk Cache
+
+/// Manages disk caching of rendered preview images
+class DiskCache {
+    private let fileManager = FileManager.default
+    private let cacheDirectory: URL
+    private let manifestURL: URL
+
+    init() {
+        // Create cache directory in Caches folder
+        let cachesDirectory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        self.cacheDirectory = cachesDirectory.appendingPathComponent("pattern-previews", isDirectory: true)
+        self.manifestURL = cacheDirectory.appendingPathComponent("manifest.json")
+
+        // Create directory if needed
+        try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+    }
+
+    /// Check if CSS hash has changed
+    func cssHashChanged(currentHash: String) -> Bool {
+        guard let manifest = loadManifest() else {
+            return true // No manifest means first run or cache cleared
+        }
+        return manifest.cssHash != currentHash
+    }
+
+    /// Save CSS hash to manifest
+    func saveCSSHash(_ hash: String) {
+        let manifest = CacheManifest(cssHash: hash)
+        guard let data = try? JSONEncoder().encode(manifest) else { return }
+        try? data.write(to: manifestURL)
+    }
+
+    /// Load image from disk cache
+    func loadImage(forKey key: String) -> UIImage? {
+        let fileURL = cacheDirectory.appendingPathComponent("\(key).png")
+        guard let data = try? Data(contentsOf: fileURL),
+              let image = UIImage(data: data) else {
+            return nil
+        }
+        return image
+    }
+
+    /// Save image to disk cache
+    func saveImage(_ image: UIImage, forKey key: String) {
+        let fileURL = cacheDirectory.appendingPathComponent("\(key).png")
+        guard let data = image.pngData() else { return }
+        try? data.write(to: fileURL)
+    }
+
+    /// Clear all cached images
+    func clearCache() {
+        guard let contents = try? fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: nil) else {
+            return
+        }
+
+        for fileURL in contents {
+            // Keep manifest, delete everything else
+            if fileURL != manifestURL {
+                try? fileManager.removeItem(at: fileURL)
+            }
+        }
+    }
+
+    private func loadManifest() -> CacheManifest? {
+        guard let data = try? Data(contentsOf: manifestURL),
+              let manifest = try? JSONDecoder().decode(CacheManifest.self, from: data) else {
+            return nil
+        }
+        return manifest
+    }
+
+    private struct CacheManifest: Codable {
+        let cssHash: String
+    }
+}
+
+// MARK: - Shared CSS Loader
+
+@MainActor
+class GutenbergCSSLoader {
+    static let shared = GutenbergCSSLoader()
+
+    /// Cached Gutenberg CSS loaded once
+    let css: String
+
+    private init() {
+        self.css = Self.loadGutenbergCSS() ?? ""
+    }
+
+    /// Loads the Gutenberg CSS from the bundled assets
+    private static func loadGutenbergCSS() -> String? {
+        guard let assetsURL = Bundle.module.url(forResource: "Gutenberg", withExtension: nil),
+              let assetsPath = try? FileManager.default.contentsOfDirectory(
+                at: assetsURL.appendingPathComponent("assets"),
+                includingPropertiesForKeys: nil
+              ) else {
+            return nil
+        }
+
+        guard let cssURL = assetsPath.first(where: { url in
+            let filename = url.lastPathComponent
+            return filename.hasPrefix("index-") && filename.hasSuffix(".css")
+        }) else {
+            return nil
+        }
+
+        return try? String(contentsOf: cssURL, encoding: .utf8)
     }
 }
