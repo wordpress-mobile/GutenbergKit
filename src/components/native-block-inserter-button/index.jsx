@@ -5,7 +5,12 @@ import { Button } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { plus } from '@wordpress/icons';
 import { useSelect, useDispatch } from '@wordpress/data';
-import { findTransform, getBlockTransforms } from '@wordpress/blocks';
+import {
+	findTransform,
+	getBlockTransforms,
+	createBlock,
+	parse,
+} from '@wordpress/blocks';
 
 // NOTE: These hooks are internal WordPress APIs not available via public exports
 // or privateApis. We import from build-module as the only way to access the
@@ -32,11 +37,10 @@ import useBlockTypesState from '@wordpress/block-editor/build-module/components/
  * Internal dependencies
  */
 import { store as blockEditorStore } from '@wordpress/block-editor';
-import { createBlock, parse } from '@wordpress/blocks';
 import { debug } from '../../utils/logger';
 import { preprocessBlockTypesForNativeInserter } from '../../utils/blocks';
 import { showBlockInserter } from '../../utils/bridge';
-import { generatePatternPreview } from '../../utils/pattern-preview-generator';
+import { unlock } from '../../lock-unlock';
 
 /**
  * Native Block Inserter Button Component
@@ -85,6 +89,17 @@ export default function NativeBlockInserterButton() {
 		destinationRootClientId,
 		onInsertBlocks,
 		false // isQuick
+	);
+
+	// Get patterns for the inserter
+	const patterns = useSelect(
+		( select ) => {
+			const { __experimentalGetAllowedPatterns } = unlock(
+				select( blockEditorStore )
+			);
+			return __experimentalGetAllowedPatterns( destinationRootClientId );
+		},
+		[ destinationRootClientId ]
 	);
 
 	const insertBlock = ( blockId ) => {
@@ -194,9 +209,7 @@ export default function NativeBlockInserterButton() {
 	};
 
 	const insertPattern = ( patternName ) => {
-		const pattern = patterns.find(
-			( p ) => p.name === patternName
-		);
+		const pattern = patterns?.find( ( p ) => p.name === patternName );
 		if ( ! pattern ) {
 			debug( `Pattern "${ patternName }" not found` );
 			return false;
@@ -204,10 +217,7 @@ export default function NativeBlockInserterButton() {
 
 		try {
 			// For synced user patterns, insert as reference
-			if (
-				pattern.type === 'user' &&
-				pattern.syncStatus === 'fully'
-			) {
+			if ( pattern.type === 'user' && pattern.syncStatus === 'fully' ) {
 				const block = createBlock( 'core/block', {
 					ref: pattern.id,
 				} );
@@ -222,6 +232,39 @@ export default function NativeBlockInserterButton() {
 			debug( 'Failed to insert pattern:', error );
 			return false;
 		}
+	};
+
+	/**
+	 * Get patterns formatted for native platform consumption.
+	 *
+	 * Transforms WordPress patterns into the format expected by the native
+	 * platforms (iOS/Android). Each pattern includes:
+	 * - Basic metadata (id, name, title, description)
+	 * - Categorization (category, keywords)
+	 * - Content and rendering info (content, viewportWidth)
+	 * - Pattern source type (user/theme/directory)
+	 * - Sync status for user patterns
+	 *
+	 * @return {Array} Array of formatted pattern objects
+	 */
+	const getPatterns = () => {
+		if ( ! patterns || patterns.length === 0 ) {
+			debug( 'No patterns available' );
+			return [];
+		}
+
+		return patterns.map( ( pattern ) => ( {
+			id: String( pattern.id ?? pattern.name ),
+			name: pattern.name,
+			title: pattern.title,
+			description: pattern.description ?? null,
+			category: pattern.categories?.[ 0 ] ?? null,
+			keywords: pattern.keywords ?? [],
+			content: pattern.content,
+			patternType: pattern.type ?? 'theme',
+			syncStatus: pattern.syncStatus ?? null,
+			viewportWidth: pattern.viewportWidth ?? 1200,
+		} ) );
 	};
 
 	return (
@@ -239,6 +282,7 @@ export default function NativeBlockInserterButton() {
 					insertBlock,
 					insertPattern,
 					insertMedia,
+					getPatterns,
 				};
 				showBlockInserter();
 			} }

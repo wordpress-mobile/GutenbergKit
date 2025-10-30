@@ -262,7 +262,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let host = UIHostingController(rootView: NavigationStack {
             BlockInserterView(
                 sections: data.sections,
-                patterns: data.patterns,
+                webView: webView,
                 mediaPicker: mediaPicker,
                 presentationContext: context,
                 onBlockSelected: { [weak self] block in

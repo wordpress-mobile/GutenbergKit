@@ -104,7 +104,9 @@ export async function generatePatternPreview( pattern ) {
 		// Cleanup
 		document.body.removeChild( container );
 
-		debug( `Generated preview for pattern, size: ${ dataURL.length } bytes` );
+		debug(
+			`Generated preview for pattern, size: ${ dataURL.length } bytes`
+		);
 
 		return dataURL;
 	} catch ( error ) {
