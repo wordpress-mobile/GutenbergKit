@@ -70,6 +70,7 @@ struct EditorJSMessage {
 
     struct ShowBlockInserterBody: Decodable {
         let sections: [BlockInserterSection]
+        let patterns: [PatternType]
     }
 
     struct LogMessage: Decodable {

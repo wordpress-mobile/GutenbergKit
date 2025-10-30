@@ -16,7 +16,7 @@ final class HTMLPreviewRenderer {
     // MARK: - Configuration
 
     private let poolSize = 3
-    private let previewHeight: CGFloat = 120
+    private let maxContentHeight: CGFloat = 2000 // Maximum height to prevent excessive memory usage
     private let cacheLimit = 50
 
     // MARK: - State
@@ -39,20 +39,53 @@ final class HTMLPreviewRenderer {
         let continuation: CheckedContinuation<UIImage, Error>
     }
 
+    @MainActor
     private class PooledWebView {
         let webView: WKWebView
+        let delegate: RenderDelegate
         var isAvailable: Bool = true
 
         init() {
             let config = WKWebViewConfiguration()
             config.suppressesIncrementalRendering = true
 
-            // Create web view with fixed frame for off-screen rendering
-            self.webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 800, height: 480), configuration: config)
-            self.webView.scrollView.isScrollEnabled = false
-            self.webView.scrollView.bounces = false
-            self.webView.isOpaque = false
-            self.webView.backgroundColor = .white
+            // Create web view with initial frame for off-screen rendering
+            // Frame will be adjusted per render based on viewport width
+            webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1200, height: 2000), configuration: config)
+            webView.backgroundColor = .clear
+            webView.isOpaque = false // gets rid of the white flash upon content load in dark mode.
+            webView.translatesAutoresizingMaskIntoConstraints = false
+            webView.scrollView.bounces = false
+            webView.scrollView.showsVerticalScrollIndicator = false
+            webView.scrollView.backgroundColor = .clear
+
+            delegate = RenderDelegate()
+            webView.navigationDelegate = delegate
+        }
+    }
+
+    private class RenderDelegate: NSObject, WKNavigationDelegate {
+        var onRenderComplete: ((CGFloat) -> Void)?
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            // Wait until the HTML document finished loading
+            // This also waits for all resources within the HTML (images, videos) to be fully loaded
+            webView.evaluateJavaScript("document.readyState") { [weak self] complete, _ in
+                guard complete != nil else {
+                    return
+                }
+
+                // Get content height using document.documentElement.scrollHeight
+                // This captures margins on <html> tag, unlike document.body.scrollHeight
+                webView.evaluateJavaScript("document.documentElement.scrollHeight") { height, _ in
+                    guard let height = height as? CGFloat else {
+                        self?.onRenderComplete?(480) // Fallback height
+                        return
+                    }
+
+                    self?.onRenderComplete?(height)
+                }
+            }
         }
     }
 
@@ -160,28 +193,43 @@ final class HTMLPreviewRenderer {
         }
 
         let webView = pooledView.webView
+        let delegate = pooledView.delegate
 
-        // Update web view frame based on viewport width
-        let scale = previewHeight / 480.0 // Scale to fit preview height
-        let adjustedWidth = CGFloat(viewportWidth) * scale
-        webView.frame = CGRect(x: 0, y: 0, width: adjustedWidth, height: previewHeight)
+        // Set initial frame with viewport width and large height to accommodate content
+        let width = CGFloat(viewportWidth)
+        webView.frame = CGRect(x: 0, y: 0, width: width, height: maxContentHeight)
 
         // Generate full HTML with styling
         let fullHTML = generateFullHTML(content: html, viewportWidth: viewportWidth)
 
-        // Load HTML
-        webView.loadHTMLString(fullHTML, baseURL: nil)
+        // Wait for rendering to complete using the delegate
+        let contentHeight = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<CGFloat, Error>) in
+            delegate.onRenderComplete = { height in
+                continuation.resume(returning: height)
+            }
 
-        // Wait for load to complete
-        try await waitForLoad(webView: webView)
+            // Load HTML - the delegate will notify when ready
+            webView.loadHTMLString(fullHTML, baseURL: nil)
+        }
 
-        // Take screenshot
+        let finalHeight = min(contentHeight, maxContentHeight)
+
+        // Update frame to actual content size
+        webView.frame = CGRect(x: 0, y: 0, width: width, height: finalHeight)
+
+        // Force layout update
+        webView.layoutIfNeeded()
+
+        // Take screenshot of entire content
         let config = WKSnapshotConfiguration()
-        config.rect = CGRect(x: 0, y: 0, width: adjustedWidth, height: previewHeight)
+        config.rect = CGRect(x: 0, y: 0, width: width, height: finalHeight)
 
         guard let image = try? await webView.takeSnapshot(configuration: config) else {
             throw PreviewError.screenshotFailed
         }
+
+        // Clear the delegate callback
+        delegate.onRenderComplete = nil
 
         // Cache the result
         cache.setObject(image, forKey: cacheKey as NSString)
@@ -190,30 +238,6 @@ final class HTMLPreviewRenderer {
         notifyPendingRequests(for: cacheKey, with: image)
 
         return image
-    }
-
-    private func waitForLoad(webView: WKWebView) async throws {
-        // Wait for web view to finish loading
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            var observer: NSKeyValueObservation?
-
-            observer = webView.observe(\.isLoading, options: [.new]) { webView, _ in
-                if !webView.isLoading {
-                    observer?.invalidate()
-                    // Give a small delay for rendering to stabilize
-                    Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
-                        continuation.resume()
-                    }
-                }
-            }
-
-            // If already loaded, resume immediately
-            if !webView.isLoading {
-                observer?.invalidate()
-                continuation.resume()
-            }
-        }
     }
 
     private func processNextRequest() {
@@ -267,12 +291,10 @@ final class HTMLPreviewRenderer {
                     font-size: 16px;
                     line-height: 1.5;
                     color: #1e1e1e;
-                    overflow: hidden;
                 }
 
                 body {
                     width: \(viewportWidth)px;
-                    min-height: 100vh;
                 }
 
                 /* WordPress block styles */

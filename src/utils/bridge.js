@@ -96,8 +96,7 @@ export function onBlocksChanged( isEmpty = false ) {
  * The sections array is preprocessed by preprocessBlockTypesForNativeInserter()
  * which handles ordering, contextual filtering, and localized section names.
  *
- * Patterns are not sent initially - the native side can request them on demand
- * using window.blockInserter.getPatterns().
+ * Patterns are included in the payload for immediate display.
  *
  * @return {void}
  */
@@ -109,10 +108,10 @@ export function showBlockInserter() {
 		return;
 	}
 
-	// Send preprocessed sections to native
-	// Patterns are loaded on demand when the user navigates to the patterns tab
+	// Send preprocessed sections and patterns to native
 	dispatchToBridge( 'showBlockInserter', {
 		sections: window.blockInserter.sections,
+		patterns: window.blockInserter.patterns,
 	} );
 }
 

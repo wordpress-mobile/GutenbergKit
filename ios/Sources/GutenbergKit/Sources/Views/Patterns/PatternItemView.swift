@@ -42,7 +42,7 @@ struct PatternItemView: View {
         if let previewImage {
             Image(uiImage: previewImage)
                 .resizable()
-                .aspectRatio(contentMode: .fit)
+                .aspectRatio(contentMode: .fill)
                 .frame(maxWidth: .infinity)
                 .frame(height: 120)
                 .background(Color.white)
@@ -90,7 +90,7 @@ struct PatternItemView: View {
         do {
             let image = try await HTMLPreviewRenderer.shared.render(
                 html: pattern.previewHTML,
-                viewportWidth: pattern.viewportWidth,
+                viewportWidth: pattern.viewportWidth ?? 1200,
                 cacheKey: pattern.name
             )
             previewImage = image

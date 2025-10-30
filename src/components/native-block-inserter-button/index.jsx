@@ -5,12 +5,7 @@ import { Button } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { plus } from '@wordpress/icons';
 import { useSelect, useDispatch } from '@wordpress/data';
-import {
-	findTransform,
-	getBlockTransforms,
-	createBlock,
-	parse,
-} from '@wordpress/blocks';
+import { findTransform, getBlockTransforms, parse } from '@wordpress/blocks';
 
 // NOTE: These hooks are internal WordPress APIs not available via public exports
 // or privateApis. We import from build-module as the only way to access the
@@ -216,76 +211,14 @@ export default function NativeBlockInserterButton() {
 		}
 
 		try {
-			// For synced user patterns, insert as reference
-			if ( pattern.type === 'user' && pattern.syncStatus === 'fully' ) {
-				const block = createBlock( 'core/block', {
-					ref: pattern.id,
-				} );
-				onInsertBlocks( [ block ] );
-			} else {
-				// Parse and insert pattern blocks
-				const blocks = parse( pattern.content );
-				onInsertBlocks( blocks );
-			}
+			// Parse and insert pattern blocks
+			const blocks = parse( pattern.content );
+			onInsertBlocks( blocks );
 			return true;
 		} catch ( error ) {
 			debug( 'Failed to insert pattern:', error );
 			return false;
 		}
-	};
-
-	/**
-	 * Get patterns formatted for native platform consumption.
-	 *
-	 * Transforms WordPress patterns into the format expected by the native
-	 * platforms (iOS/Android). Each pattern includes:
-	 * - Basic metadata (id, name, title, description)
-	 * - Categorization (category, keywords)
-	 * - Content and rendering info (content, viewportWidth)
-	 * - Pattern source type (user/theme/directory)
-	 * - Sync status for user patterns
-	 * - Preview HTML (serialized blocks for rendering)
-	 *
-	 * @return {Array} Array of formatted pattern objects
-	 */
-	const getPatterns = () => {
-		if ( ! patterns || patterns.length === 0 ) {
-			debug( 'No patterns available' );
-			return [];
-		}
-
-		return patterns.map( ( pattern ) => {
-			// Parse and serialize the pattern content to get clean HTML
-			let previewHTML = '';
-			try {
-				const blocks = parse( pattern.content );
-				previewHTML = blocks
-					.map( ( block ) => {
-						// Use serialize to get the HTML representation
-						const html = block.originalContent || '';
-						return html;
-					} )
-					.join( '\n' );
-			} catch ( error ) {
-				debug( 'Failed to parse pattern content:', error );
-				// Fallback to raw content
-				previewHTML = pattern.content;
-			}
-
-			return {
-				id: String( pattern.id ?? pattern.name ),
-				name: pattern.name,
-				title: pattern.title,
-				description: pattern.description ?? null,
-				category: pattern.categories?.[ 0 ] ?? null,
-				keywords: pattern.keywords ?? [],
-				content: pattern.content,
-				previewHTML,
-				patternType: pattern.type ?? 'theme',
-				syncStatus: pattern.syncStatus ?? null,
-				viewportWidth: pattern.viewportWidth ?? 1200,
-			};
-		} );
 	};
 
 	return (
@@ -298,12 +231,28 @@ export default function NativeBlockInserterButton() {
 					destinationBlockName,
 					categories
 				);
+
+				// Format patterns for native consumption
+				const formattedPatterns =
+					patterns?.map( ( pattern ) => ( {
+						name: pattern.name,
+						title: pattern.title,
+						content: pattern.content,
+						previewHTML: pattern.content,
+						blockTypes: pattern.blockTypes ?? null,
+						categories: pattern.categories ?? null,
+						description: pattern.description ?? null,
+						keywords: pattern.keywords ?? null,
+						source: pattern.source ?? null,
+						viewportWidth: pattern.viewportWidth ?? null,
+					} ) ) ?? [];
+
 				window.blockInserter = {
 					sections,
+					patterns: formattedPatterns,
 					insertBlock,
 					insertPattern,
 					insertMedia,
-					getPatterns,
 				};
 				showBlockInserter();
 			} }

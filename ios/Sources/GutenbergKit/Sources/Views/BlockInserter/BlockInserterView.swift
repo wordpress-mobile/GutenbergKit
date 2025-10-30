@@ -5,12 +5,12 @@ import WebKit
 
 struct BlockInserterView: View {
     let sections: [BlockInserterSection]
+    let patterns: [PatternType]
     let mediaPicker: MediaPickerController?
     let presentationContext: MediaPickerPresentationContext
     let onBlockSelected: (BlockType) -> Void
     let onPatternSelected: (String) -> Void
     let onMediaSelected: ([MediaInfo]) -> Void
-    let loadPatterns: () async throws -> [PatternType]
 
     @StateObject private var viewModel: BlockInserterViewModel
     @StateObject private var iconCache = BlockIconCache()
@@ -24,20 +24,20 @@ struct BlockInserterView: View {
 
     init(
         sections: [BlockInserterSection],
+        patterns: [PatternType],
         mediaPicker: MediaPickerController?,
         presentationContext: MediaPickerPresentationContext,
         onBlockSelected: @escaping (BlockType) -> Void,
         onPatternSelected: @escaping (String) -> Void,
-        onMediaSelected: @escaping ([MediaInfo]) -> Void,
-        loadPatterns: @escaping () async throws -> [PatternType]
+        onMediaSelected: @escaping ([MediaInfo]) -> Void
     ) {
         self.sections = sections
+        self.patterns = patterns
         self.mediaPicker = mediaPicker
         self.presentationContext = presentationContext
         self.onBlockSelected = onBlockSelected
         self.onPatternSelected = onPatternSelected
         self.onMediaSelected = onMediaSelected
-        self.loadPatterns = loadPatterns
 
         let viewModel = BlockInserterViewModel(sections: sections)
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -62,7 +62,7 @@ struct BlockInserterView: View {
             .sheet(isPresented: $showingPatterns) {
                 NavigationStack {
                     PatternsView(
-                        loadPatterns: loadPatterns,
+                        patterns: patterns,
                         onPatternSelected: { patternName in
                             showingPatterns = false
                             insertPattern(patternName)
@@ -156,6 +156,7 @@ struct BlockInserterView: View {
             sections: [
                 BlockInserterSection(category: "text", name: "Text", blocks: BlockType.mocks)
             ],
+            patterns: [],
             mediaPicker: MockMediaPickerController(),
             presentationContext: MediaPickerPresentationContext(),
             onBlockSelected: {
@@ -166,9 +167,6 @@ struct BlockInserterView: View {
             },
             onMediaSelected: {
                 print("media selected: \($0)")
-            },
-            loadPatterns: {
-                return []
             }
         )
     }

@@ -259,6 +259,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let host = UIHostingController(rootView: NavigationStack {
             BlockInserterView(
                 sections: data.sections,
+                patterns: data.patterns,
                 mediaPicker: mediaPicker,
                 presentationContext: context,
                 onBlockSelected: { [weak self] block in
@@ -269,9 +270,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 },
                 onMediaSelected: { [weak self] selection in
                     self?.insertMediaFromInserter(selection)
-                },
-                loadPatterns: { [weak self] in
-                    try await self?.loadPatterns() ?? []
                 }
             )
         })
@@ -299,23 +297,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private func insertPatternFromInserter(_ patternName: String) {
         let escapedName = patternName.replacingOccurrences(of: "'", with: "\\'")
         evaluate("window.blockInserter.insertPattern('\(escapedName)')")
-    }
-
-    private func loadPatterns() async throws -> [PatternType] {
-        let script = "window.blockInserter.getPatterns()"
-        let result = try await webView.evaluateJavaScript(script)
-
-        guard let patternsData = result as? [[String: Any]] else {
-            throw NSError(domain: "GutenbergKit", code: -1, userInfo: [
-                NSLocalizedDescriptionKey: "Failed to parse patterns data"
-            ])
-        }
-
-        // Decode the patterns
-        let jsonData = try JSONSerialization.data(withJSONObject: patternsData)
-        let decodedPatterns = try JSONDecoder().decode([PatternType].self, from: jsonData)
-
-        return decodedPatterns
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {

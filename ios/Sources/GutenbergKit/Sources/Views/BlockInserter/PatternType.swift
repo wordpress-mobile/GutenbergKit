@@ -1,27 +1,23 @@
 import Foundation
 
 struct PatternType: Decodable, Identifiable {
-    let id: String
     let name: String
     let title: String
-    let description: String?
-    let category: String?
-    let keywords: [String]?
     let content: String
     let previewHTML: String
-    let patternType: PatternSource
-    let syncStatus: SyncStatus?
-    let viewportWidth: Int
+    let blockTypes: [String]?
+    let categories: [String]?
+    let description: String?
+    let keywords: [String]?
+    let source: String?
+    let viewportWidth: Int?
 
-    enum PatternSource: String, Decodable {
-        case user
-        case theme
-        case directory
-    }
+    // Computed property for Identifiable
+    var id: String { name }
 
-    enum SyncStatus: String, Decodable {
-        case synced = "fully"
-        case unsynced
+    // Get primary category for display
+    var category: String? {
+        categories?.first
     }
 }
 
