@@ -44,7 +44,7 @@ public final class HTMLPreviewRenderer {
         let diskCacheKey: String
         let html: String
         let viewportWidth: Int
-        let maxHeight: CGFloat
+        let maximumDimension: MaximumDimension
         let continuation: CheckedContinuation<UIImage, Error>
     }
 
@@ -185,18 +185,31 @@ public final class HTMLPreviewRenderer {
 
     // MARK: - Public API
 
+    /// Maximum dimension constraint for thumbnail generation
+    enum MaximumDimension {
+        case width(CGFloat)
+        case height(CGFloat)
+
+        var value: CGFloat {
+            switch self {
+            case .width(let value), .height(let value):
+                return value
+            }
+        }
+    }
+
     /// Renders HTML content to an image
     /// - Parameters:
     ///   - html: The HTML content to render
     ///   - viewportWidth: The viewport width for rendering
-    ///   - maxHeight: Maximum height for the rendered image (for memory optimization)
-    /// - Returns: Rendered image resized to maxHeight
-    func render(html: String, viewportWidth: Int, maxHeight: CGFloat) async throws -> UIImage {
+    ///   - maximumDimension: Maximum dimension constraint (width or height) for the thumbnail
+    /// - Returns: Thumbnail image constrained by the specified dimension
+    func render(html: String, viewportWidth: Int, maximumDimension: MaximumDimension) async throws -> UIImage {
         // Generate disk cache key (HTML + viewport width only)
         let diskCacheKey = await generateDiskCacheKey(html: html, viewportWidth: viewportWidth)
 
-        // Generate memory cache key (includes max height)
-        let memoryCacheKey = await generateMemoryCacheKey(diskKey: diskCacheKey, maxHeight: maxHeight)
+        // Generate memory cache key (includes maximum dimension)
+        let memoryCacheKey = await generateMemoryCacheKey(diskKey: diskCacheKey, maximumDimension: maximumDimension)
 
         // Check memory cache first (stores thumbnails at specific sizes)
         if let cachedImage = memoryCache.object(forKey: memoryCacheKey as NSString) {
@@ -206,7 +219,7 @@ public final class HTMLPreviewRenderer {
         // Check disk cache (stores full-size images at viewport width)
         if let diskImage = await diskCache.loadImage(forKey: diskCacheKey) {
             // Create thumbnail from disk image using preparingThumbnail
-            let thumbnail = await createThumbnail(from: diskImage, maxHeight: maxHeight)
+            let thumbnail = await createThumbnail(from: diskImage, maximumDimension: maximumDimension)
             memoryCache.setObject(thumbnail, forKey: memoryCacheKey as NSString)
             return thumbnail
         }
@@ -219,7 +232,7 @@ public final class HTMLPreviewRenderer {
                     diskCacheKey: diskCacheKey,
                     html: html,
                     viewportWidth: viewportWidth,
-                    maxHeight: maxHeight,
+                    maximumDimension: maximumDimension,
                     continuation: continuation
                 )
                 pendingRequests.append(request)
@@ -237,7 +250,7 @@ public final class HTMLPreviewRenderer {
                     diskCacheKey: diskCacheKey,
                     html: html,
                     viewportWidth: viewportWidth,
-                    maxHeight: maxHeight,
+                    maximumDimension: maximumDimension,
                     continuation: continuation
                 )
                 pendingRequests.append(request)
@@ -256,8 +269,8 @@ public final class HTMLPreviewRenderer {
         // Save full-size image to disk cache (background operation)
         await diskCache.saveImage(fullSizeImage, forKey: diskCacheKey)
 
-        // Create thumbnail for the requested size
-        let thumbnail = await createThumbnail(from: fullSizeImage, maxHeight: maxHeight)
+        // Create thumbnail for the requested dimension
+        let thumbnail = await createThumbnail(from: fullSizeImage, maximumDimension: maximumDimension)
 
         // Cache thumbnail in memory
         memoryCache.setObject(thumbnail, forKey: memoryCacheKey as NSString)
@@ -363,11 +376,11 @@ public final class HTMLPreviewRenderer {
                 // Save full-size image to disk
                 await diskCache.saveImage(fullSizeImage, forKey: request.diskCacheKey)
 
-                // Create thumbnail for requested size
-                let thumbnail = await createThumbnail(from: fullSizeImage, maxHeight: request.maxHeight)
+                // Create thumbnail for requested dimension
+                let thumbnail = await createThumbnail(from: fullSizeImage, maximumDimension: request.maximumDimension)
 
                 // Cache thumbnail in memory
-                let memoryCacheKey = await generateMemoryCacheKey(diskKey: request.diskCacheKey, maxHeight: request.maxHeight)
+                let memoryCacheKey = await generateMemoryCacheKey(diskKey: request.diskCacheKey, maximumDimension: request.maximumDimension)
                 memoryCache.setObject(thumbnail, forKey: memoryCacheKey as NSString)
 
                 request.continuation.resume(returning: thumbnail)
@@ -381,13 +394,13 @@ public final class HTMLPreviewRenderer {
         let matchingRequests = pendingRequests.filter { $0.diskCacheKey == diskCacheKey }
         pendingRequests.removeAll { $0.diskCacheKey == diskCacheKey }
 
-        // Each pending request needs its own thumbnail at its target size
+        // Each pending request needs its own thumbnail at its target dimension
         for request in matchingRequests {
             Task {
-                let thumbnail = await createThumbnail(from: fullSizeImage, maxHeight: request.maxHeight)
+                let thumbnail = await createThumbnail(from: fullSizeImage, maximumDimension: request.maximumDimension)
 
                 // Cache the thumbnail in memory
-                let memoryCacheKey = await generateMemoryCacheKey(diskKey: diskCacheKey, maxHeight: request.maxHeight)
+                let memoryCacheKey = await generateMemoryCacheKey(diskKey: diskCacheKey, maximumDimension: request.maximumDimension)
                 memoryCache.setObject(thumbnail, forKey: memoryCacheKey as NSString)
 
                 request.continuation.resume(returning: thumbnail)
@@ -412,27 +425,46 @@ private func generateDiskCacheKey(html: String, viewportWidth: Int) async -> Str
     return await hashString(combined)
 }
 
-/// Generates a memory cache key from disk key and max height
-private func generateMemoryCacheKey(diskKey: String, maxHeight: CGFloat) async -> String {
-    let combined = "\(diskKey)-h\(Int(maxHeight))"
+/// Generates a memory cache key from disk key and maximum dimension
+private func generateMemoryCacheKey(diskKey: String, maximumDimension: HTMLPreviewRenderer.MaximumDimension) async -> String {
+    let suffix: String
+    switch maximumDimension {
+    case .width(let value):
+        suffix = "w\(Int(value))"
+    case .height(let value):
+        suffix = "h\(Int(value))"
+    }
+    let combined = "\(diskKey)-\(suffix)"
     return await hashString(combined)
 }
 
 /// Creates a thumbnail from an image using preparingThumbnail (runs in background)
-private func createThumbnail(from image: UIImage, maxHeight: CGFloat) async -> UIImage {
+private func createThumbnail(from image: UIImage, maximumDimension: HTMLPreviewRenderer.MaximumDimension) async -> UIImage {
     let scale = await UIScreen.main.scale
 
     // Calculate the thumbnail size in points maintaining aspect ratio
     // Note: image.size is already in points (accounts for scale)
     let aspectRatio = image.size.width / image.size.height
-    let thumbnailHeightPoints = min(maxHeight, image.size.height)
-    let thumbnailWidthPoints = thumbnailHeightPoints * aspectRatio
+
+    let thumbnailSizePoints: CGSize
+    switch maximumDimension {
+    case .width(let maxWidth):
+        // Constrain by width
+        let thumbnailWidthPoints = min(maxWidth, image.size.width)
+        let thumbnailHeightPoints = thumbnailWidthPoints / aspectRatio
+        thumbnailSizePoints = CGSize(width: thumbnailWidthPoints, height: thumbnailHeightPoints)
+    case .height(let maxHeight):
+        // Constrain by height
+        let thumbnailHeightPoints = min(maxHeight, image.size.height)
+        let thumbnailWidthPoints = thumbnailHeightPoints * aspectRatio
+        thumbnailSizePoints = CGSize(width: thumbnailWidthPoints, height: thumbnailHeightPoints)
+    }
 
     // Convert to pixel dimensions for preparingThumbnail
     // We render at screen scale to maintain quality
     let thumbnailSizePixels = CGSize(
-        width: thumbnailWidthPoints * scale,
-        height: thumbnailHeightPoints * scale
+        width: thumbnailSizePoints.width * scale,
+        height: thumbnailSizePoints.height * scale
     )
 
     // Use preparingThumbnail for efficient thumbnail generation
@@ -443,7 +475,6 @@ private func createThumbnail(from image: UIImage, maxHeight: CGFloat) async -> U
     }
 
     // Fallback if preparingThumbnail fails - use UIGraphicsImageRenderer which handles scale
-    let thumbnailSizePoints = CGSize(width: thumbnailWidthPoints, height: thumbnailHeightPoints)
     let format = UIGraphicsImageRendererFormat()
     format.scale = scale
     let renderer = UIGraphicsImageRenderer(size: thumbnailSizePoints, format: format)

@@ -4,8 +4,7 @@ import UIKit
 /// A view that displays a block pattern preview using HTMLPreviewRenderer
 struct BlockPreviewView: View {
     let pattern: PatternType
-
-    private let previewHeight: CGFloat = 120
+    let maximumDimension: HTMLPreviewRenderer.MaximumDimension
 
     @State private var previewImage: UIImage?
     @State private var isLoadingPreview = false
@@ -63,7 +62,7 @@ struct BlockPreviewView: View {
             let image = try await HTMLPreviewRenderer.shared.render(
                 html: pattern.previewHTML,
                 viewportWidth: pattern.viewportWidth ?? 1200,
-                maxHeight: previewHeight
+                maximumDimension: maximumDimension
             )
             previewImage = image
         } catch {

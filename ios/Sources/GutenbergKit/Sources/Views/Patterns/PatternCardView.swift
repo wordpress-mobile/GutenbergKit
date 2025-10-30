@@ -13,7 +13,7 @@ struct PatternCardView: View {
 
     var body: some View {
         Button(action: onSelected) {
-            BlockPreviewView(pattern: pattern)
+            BlockPreviewView(pattern: pattern, maximumDimension: style.maximumDimension)
                 .frame(
                     minWidth: style.minWidth,
                     maxWidth: style.maxWidth,
@@ -42,6 +42,17 @@ struct PatternCardView: View {
 }
 
 private extension PatternCardView.Style {
+    var maximumDimension: HTMLPreviewRenderer.MaximumDimension {
+        switch self {
+        case .horizontal(let height, _):
+            // In horizontal scroll, constrain by height
+            return .height(height)
+        case .fullWidth:
+            // In full-width list, constrain by width (use screen width)
+            return .width(UIScreen.main.bounds.width - 32) // Account for padding
+        }
+    }
+
     var minWidth: CGFloat? {
         switch self {
         case .horizontal:
@@ -86,7 +97,7 @@ private struct PatternDetailedView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Large preview
-            BlockPreviewView(pattern: pattern)
+            BlockPreviewView(pattern: pattern, maximumDimension: .width(400))
                 .frame(maxWidth: .infinity)
                 .frame(height: 300)
                 .background(Color(uiColor: .white))
