@@ -311,22 +311,29 @@ final class HTMLPreviewRenderer {
     }
 
     private func generateFullHTML(content: String, viewportWidth: Int) -> String {
-        // Base styles for the preview container
-        // These are minimal styles needed for proper rendering that aren't in Gutenberg CSS
+        // Base styles matching Gutenberg's BlockPreview component
+        // These match the auto.js implementation for pattern previews
         let baseStyles = """
-            /* Preview container base styles */
+            /* Base container styles */
             * {
                 box-sizing: border-box;
             }
 
-            html, body {
+            html {
                 margin: 0;
-                padding: 16px;
-                background: white;
+                padding: 0;
             }
 
+            /* Matches Gutenberg's BlockPreview iframe body styles */
             body {
+                height: auto;
+                overflow: hidden;
+                border: none;
+                padding: 16px;
+                margin: 0;
                 width: \(viewportWidth)px;
+                background: white;
+                box-sizing: border-box;
             }
         """
 
@@ -343,10 +350,8 @@ final class HTMLPreviewRenderer {
                 \(gutenbergCSS)
             </style>
         </head>
-        <body class="gutenberg-kit wp-embed-responsive">
-            <div class="editor-styles-wrapper">
-                \(content)
-            </div>
+        <body class="block-editor-iframe__body editor-styles-wrapper wp-embed-responsive">
+            \(content)
         </body>
         </html>
         """

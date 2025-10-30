@@ -42,7 +42,7 @@ struct PatternItemView: View {
         if let previewImage {
             Image(uiImage: previewImage)
                 .resizable()
-                .aspectRatio(contentMode: .fill)
+                .aspectRatio(contentMode: .fit)
                 .frame(maxWidth: .infinity)
                 .frame(height: 120)
                 .background(Color.white)
