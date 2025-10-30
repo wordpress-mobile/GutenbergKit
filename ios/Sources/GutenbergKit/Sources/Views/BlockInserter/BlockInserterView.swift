@@ -12,6 +12,8 @@ struct BlockInserterView: View {
     @StateObject private var viewModel: BlockInserterViewModel
     @StateObject private var iconCache = BlockIconCache()
 
+    @State private var selectedMediaItems: [PhotosPickerItem] = []
+
     private let maxSelectionCount = 10
 
     @Environment(\.dismiss) private var dismiss
@@ -38,9 +40,16 @@ struct BlockInserterView: View {
             .background(Material.ultraThin)
             .searchable(text: $viewModel.searchText)
             .navigationBarTitleDisplayMode(.inline)
+            .disabled(viewModel.isProcessingMedia)
+            .animation(.smooth(duration: 2), value: viewModel.isProcessingMedia)
             .environmentObject(iconCache)
             .toolbar {
                 toolbar
+            }
+            .onDisappear {
+                if viewModel.isProcessingMedia {
+                    viewModel.cancelProcessing()
+                }
             }
     }
 
@@ -71,6 +80,16 @@ struct BlockInserterView: View {
         }
 
         ToolbarItemGroup(placement: .topBarTrailing) {
+            PhotosPicker(selection: $selectedMediaItems, preferredItemEncoding: .compatible) {
+                Image(systemName: "photo.on.rectangle.angled")
+            }
+            .onChange(of: selectedMediaItems) { _, selection in
+                if !selection.isEmpty {
+                    insertMedia(selection)
+                }
+                selectedMediaItems = []
+            }
+
             if let mediaPicker {
                 MediaPickerMenu(picker: mediaPicker, context: presentationContext) {
                     dismiss()
@@ -85,6 +104,16 @@ struct BlockInserterView: View {
     private func insertBlock(_ block: BlockType) {
         dismiss()
         onBlockSelected(block)
+    }
+
+    private func insertMedia(_ items: [PhotosPickerItem]) {
+        Task {
+            let items = await viewModel.processSelectedPhotosPickerItems(items)
+            if !items.isEmpty {
+                dismiss()
+                onMediaSelected(items)
+            }
+        }
     }
 }
 

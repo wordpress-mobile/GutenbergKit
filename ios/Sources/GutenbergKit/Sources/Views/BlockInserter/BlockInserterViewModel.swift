@@ -5,10 +5,19 @@ import Combine
 @MainActor
 class BlockInserterViewModel: ObservableObject {
     @Published var searchText = ""
+    @Published var error: MediaError?
     @Published private(set) var sections: [BlockInserterSection] = []
+    @Published private(set) var isProcessingMedia = false
 
     private let allSections: [BlockInserterSection]
+    private let fileManager: MediaFileManager = .shared
+    private var processingTask: Task<[MediaInfo], Never>?
     private var cancellables = Set<AnyCancellable>()
+
+    struct MediaError: Identifiable {
+        let id = UUID()
+        let message: String
+    }
 
     init(sections: [BlockInserterSection]) {
         self.allSections = sections
@@ -41,4 +50,47 @@ class BlockInserterViewModel: ObservableObject {
             }
         }
     }
+
+    // MARK: - Media Processing
+
+    func processSelectedPhotosPickerItems(_ items: [PhotosPickerItem]) async -> [MediaInfo] {
+        isProcessingMedia = true
+        defer { isProcessingMedia = false }
+
+        let task = Task<[MediaInfo], Never> { @MainActor in
+            var results: [MediaInfo] = []
+            var anyError: Error?
+            await withTaskGroup(of: Void.self) { group in
+                for item in items {
+                    group.addTask {
+                        do {
+                            let item = try await self.fileManager.import(item)
+                            results.append(item)
+                        } catch {
+                            anyError = error
+                        }
+                    }
+                }
+            }
+
+            guard !Task.isCancelled else {
+                return []
+            }
+
+            if results.isEmpty {
+                // TODO: CMM-874 add localization
+                self.error = MediaError(message: anyError?.localizedDescription ?? "Failed to insert media")
+            }
+
+            return results
+        }
+        processingTask = task
+        return await task.value
+    }
+
+    func cancelProcessing() {
+         processingTask?.cancel()
+         processingTask = nil
+         isProcessingMedia = false
+     }
 }
