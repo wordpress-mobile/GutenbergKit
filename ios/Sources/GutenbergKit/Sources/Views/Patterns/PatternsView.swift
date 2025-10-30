@@ -39,9 +39,9 @@ struct PatternsView: View {
                     description: Text(viewModel.searchText.isEmpty ? "There are no patterns available" : "Try a different search")
                 )
             } else {
-                List {
-                    ForEach(viewModel.sections) { section in
-                        Section {
+                ScrollView {
+                    LazyVStack(spacing: 24) {
+                        ForEach(viewModel.sections) { section in
                             PatternGridSection(
                                 section: section,
                                 onPatternSelected: { pattern in
@@ -49,15 +49,10 @@ struct PatternsView: View {
                                     onPatternSelected(pattern.name)
                                 }
                             )
-                        } header: {
-                            Text(section.name)
-                                .font(.headline)
-                                .foregroundStyle(Color.secondary)
                         }
                     }
+                    .padding(.vertical, 12)
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
             }
         }
     }

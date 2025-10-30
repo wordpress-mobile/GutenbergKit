@@ -17,22 +17,26 @@ struct BlockPreviewView: View {
                 Image(uiImage: previewImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: previewHeight)
-                    .background(Color.white)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(8)
+                    .background(Color(uiColor: .secondarySystemBackground).opacity(0.5))
                     .cornerRadius(8)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(Color(uiColor: .separator).opacity(0.2), lineWidth: 0.5)
+                    }
                     .clipped()
             } else if isLoadingPreview {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color(uiColor: .tertiarySystemBackground))
-                    .frame(height: previewHeight)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .overlay {
                         ProgressView()
                     }
             } else if previewError {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color(uiColor: .tertiarySystemBackground))
-                    .frame(height: previewHeight)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .overlay {
                         VStack(spacing: 4) {
                             Image(systemName: "square.grid.2x2")
@@ -46,7 +50,7 @@ struct BlockPreviewView: View {
             } else {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color(uiColor: .tertiarySystemBackground))
-                    .frame(height: previewHeight)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .task {
                         await loadPreview()
                     }
