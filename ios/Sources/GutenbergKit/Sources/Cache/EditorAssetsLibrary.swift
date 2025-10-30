@@ -22,10 +22,14 @@ public actor EditorAssetsLibrary {
     /// reused on future calls.
     func loadManifestContent() async throws -> Data {
         let endpoint: URL
+        // The GutenbergKit bundle includes the required `@wordpress` modules
+        let excludeParam = URLQueryItem(name: "exclude", value: "core,gutenberg")
         if let url = configuration.editorAssetsEndpoint {
-            endpoint = url
+            endpoint = url.appending(queryItems: [excludeParam])
         } else if !configuration.siteApiRoot.isEmpty, let apiRoot = URL(string: configuration.siteApiRoot) {
-            endpoint = apiRoot.appendingPathComponent("wpcom/v2/editor-assets")
+            endpoint = apiRoot
+                .appendingPathComponent("wpcom/v2/editor-assets")
+                .appending(queryItems: [excludeParam])
         } else {
             throw ManifestError.unavailable
         }
