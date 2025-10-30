@@ -26,10 +26,14 @@ extension BlockType: Searchable {
             fields.append(SearchableField(content: title, weight: 10.0, allowFuzzyMatch: true))
         }
 
-        fields.append(SearchableField(content: name, weight: 8.0, allowFuzzyMatch: false))
+        if !name.isEmpty {
+            fields.append(SearchableField(content: name, weight: 8.0, allowFuzzyMatch: false))
+        }
 
         (keywords ?? []).forEach { keyword in
-            fields.append(SearchableField( content: keyword, weight: 5.0, allowFuzzyMatch: true))
+            if !keyword.isEmpty {
+                fields.append(SearchableField(content: keyword, weight: 5.0, allowFuzzyMatch: true))
+            }
         }
 
         if let description, !description.isEmpty {

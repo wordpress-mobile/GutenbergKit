@@ -88,9 +88,14 @@ struct SearchEngine<Item: Searchable> {
     /// Calculate weighted score for an item based on query match
     private func calculateScore(for item: Item, query: String) -> Double {
         let fields = item.searchableFields()
-        
+
         return fields.reduce(0.0) { totalScore, field in
-            totalScore + calculateFieldScore(
+            // Skip empty fields
+            guard !field.content.isEmpty else {
+                return totalScore
+            }
+
+            return totalScore + calculateFieldScore(
                 field: field.content.lowercased(),
                 query: query,
                 weight: field.weight,
@@ -161,10 +166,18 @@ struct SearchEngine<Item: Searchable> {
     private func levenshteinDistance(_ str1: String, _ str2: String) -> Int {
         let str1Array = Array(str1)
         let str2Array = Array(str2)
-        
+
+        // Handle empty strings
+        guard !str1Array.isEmpty else {
+            return str2Array.count
+        }
+        guard !str2Array.isEmpty else {
+            return str1Array.count
+        }
+
         // Create matrix
         var matrix = Array(repeating: Array(repeating: 0, count: str2Array.count + 1), count: str1Array.count + 1)
-        
+
         // Initialize first row and column
         for i in 0...str1Array.count {
             matrix[i][0] = i
@@ -172,7 +185,7 @@ struct SearchEngine<Item: Searchable> {
         for j in 0...str2Array.count {
             matrix[0][j] = j
         }
-        
+
         // Fill matrix
         for i in 1...str1Array.count {
             for j in 1...str2Array.count {
@@ -184,7 +197,7 @@ struct SearchEngine<Item: Searchable> {
                 )
             }
         }
-        
+
         return matrix[str1Array.count][str2Array.count]
     }
 }
