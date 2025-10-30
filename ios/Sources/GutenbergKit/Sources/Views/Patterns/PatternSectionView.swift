@@ -5,12 +5,6 @@ struct PatternGridSection: View {
     let section: PatternSection
     let onPatternSelected: (PatternType) -> Void
 
-    private let previewCount = 6
-
-    private var displayedPatterns: [PatternType] {
-        Array(section.patterns.prefix(previewCount))
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Category header with navigation
@@ -42,10 +36,10 @@ struct PatternGridSection: View {
             }
             .buttonStyle(.plain)
 
-            // Horizontal scrolling previews
+            // Horizontal scrolling previews - shows all patterns
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    ForEach(displayedPatterns) { pattern in
+                    ForEach(section.patterns) { pattern in
                         PatternCardView(
                             pattern: pattern,
                             onSelected: {
