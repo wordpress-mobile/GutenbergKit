@@ -47,11 +47,12 @@ struct DebugSettingsView: View {
     }
 
     private func clearCache() {
-        HTMLPreviewRenderer.shared.clearCache()
-        cacheCleared = true
+        Task {
+            await HTMLPreviewRenderer.shared.clearCache()
+            cacheCleared = true
 
-        // Reset the checkmark after 2 seconds
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            // Reset the checkmark after 2 seconds
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
             cacheCleared = false
         }
     }

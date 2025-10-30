@@ -26,7 +26,9 @@ struct PatternsView: View {
             .onDisappear {
                 // Clear memory cache when view is closed to free up memory
                 // Disk cache is preserved for faster subsequent loads
-                HTMLPreviewRenderer.shared.clearMemoryCache()
+                Task {
+                    await HTMLPreviewRenderer.shared.clearMemoryCache()
+                }
             }
     }
 
