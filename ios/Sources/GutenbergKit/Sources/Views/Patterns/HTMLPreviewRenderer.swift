@@ -2,41 +2,39 @@ import UIKit
 import WebKit
 import CryptoKit
 
-/// Renders HTML content to images using a pool of WKWebView instances
+/// Renders HTML content to images using a pool of WKWebView instances.
 ///
-/// This actor manages a pool of reusable WKWebView instances to efficiently
+/// This class manages a pool of reusable WKWebView instances to efficiently
 /// render HTML content off-screen and capture screenshots. It includes:
 /// - WKWebView pooling to reduce memory overhead
 /// - Off-screen rendering for performance
 /// - Memory and disk image caching to avoid redundant renders
 /// - Concurrent rendering with request queuing
 /// - Background execution of disk I/O operations
-public actor HTMLPreviewRenderer {
-    nonisolated public static let shared = HTMLPreviewRenderer()
+@MainActor
+public final class HTMLPreviewRenderer {
+    public static let shared = HTMLPreviewRenderer()
 
     // MARK: - Configuration
 
-    private let poolSize = 3
+    private let poolSize = 2
     private let maxContentHeight: CGFloat = 2000 // Maximum height to prevent excessive memory usage
     private let memoryCacheLimit = 50
 
     // MARK: - State
 
-    // MainActor-only state (WKWebView and NSCache)
-    // Marked nonisolated(unsafe) and only accessed from @MainActor methods
-    nonisolated(unsafe) private var webViewPool: [PooledWebView] = []
-    nonisolated(unsafe) private var memoryCache: NSCache<NSString, UIImage> = {
+    private var webViewPool: [PooledWebView] = []
+    private var memoryCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 50
         return cache
     }()
-
-    // Actor-isolated state for request queuing
     private var pendingRequests: [RenderRequest] = []
     private var activeRenders: Set<String> = []
-
-    // Background-safe disk cache
     private let diskCache: DiskCache
+
+    // Cached CSS for background HTML generation
+    private let gutenbergCSS: String
 
     // MARK: - Types
 
@@ -121,35 +119,32 @@ public actor HTMLPreviewRenderer {
         // Initialize disk cache
         self.diskCache = DiskCache()
 
-        // Check CSS hash and clear cache if changed
-        // This runs in background (not on MainActor)
-        Task.detached {
-            let currentCSSHash = await Self.getGutenbergCSSHash()
-            if await self.diskCache.cssHashChanged(currentHash: currentCSSHash) {
-                await self.diskCache.clearCache()
-                await self.diskCache.saveCSSHash(currentCSSHash)
-            }
+        // Cache CSS for background access
+        self.gutenbergCSS = GutenbergCSSLoader.shared.css
+
+        // Pre-populate the web view pool
+        for _ in 0..<poolSize {
+            webViewPool.append(PooledWebView())
         }
 
-        // Pre-populate the web view pool on MainActor
-        Task { @MainActor in
-            for _ in 0..<self.poolSize {
-                self.webViewPool.append(PooledWebView())
+        // Check CSS hash and clear cache if changed (in background)
+        Task.detached { [diskCache, gutenbergCSS] in
+            let currentCSSHash = await Self.hashString(gutenbergCSS)
+            if await diskCache.cssHashChanged(currentHash: currentCSSHash) {
+                await diskCache.clearCache()
+                await diskCache.saveCSSHash(currentCSSHash)
             }
         }
-    }
-
-    /// Gets the Gutenberg CSS hash on MainActor
-    @MainActor
-    private static func getGutenbergCSSHash() -> String {
-        return hashString(GutenbergCSSLoader.shared.css)
     }
 
     /// Creates a SHA256 hash of a string
-    nonisolated private static func hashString(_ string: String) -> String {
-        let data = Data(string.utf8)
-        let hash = SHA256.hash(data: data)
-        return hash.compactMap { String(format: "%02x", $0) }.joined()
+    private static func hashString(_ string: String) async -> String {
+        // Run SHA256 hashing in background to avoid blocking main thread
+        return await Task.detached {
+            let data = Data(string.utf8)
+            let hash = SHA256.hash(data: data)
+            return hash.compactMap { String(format: "%02x", $0) }.joined()
+        }.value
     }
 
     // MARK: - Public API
@@ -160,23 +155,23 @@ public actor HTMLPreviewRenderer {
     ///   - viewportWidth: The viewport width for rendering
     ///   - cacheKey: Unique key for caching (typically pattern name)
     /// - Returns: Rendered image
-    public func render(html: String, viewportWidth: Int, cacheKey: String) async throws -> UIImage {
-        // Generate cache key from HTML and viewport width (background-safe)
-        let diskCacheKey = Self.generateCacheKey(html: html, viewportWidth: viewportWidth)
+    func render(html: String, viewportWidth: Int, cacheKey: String) async throws -> UIImage {
+        // Generate cache key from HTML and viewport width (in background)
+        let diskCacheKey = await Self.generateCacheKey(html: html, viewportWidth: viewportWidth)
 
-        // Check memory cache first (MainActor)
-        if let cachedImage = await checkMemoryCache(cacheKey: cacheKey) {
+        // Check memory cache first
+        if let cachedImage = memoryCache.object(forKey: cacheKey as NSString) {
             return cachedImage
         }
 
         // Check disk cache (background operation)
         if let diskImage = await diskCache.loadImage(forKey: diskCacheKey) {
-            // Store in memory cache for faster access next time (MainActor)
-            await storeInMemoryCache(image: diskImage, cacheKey: cacheKey)
+            // Store in memory cache for faster access next time
+            memoryCache.setObject(diskImage, forKey: cacheKey as NSString)
             return diskImage
         }
 
-        // Check if already rendering this content (actor-isolated)
+        // Check if already rendering this content
         if activeRenders.contains(cacheKey) {
             // Wait for existing render to complete by creating a new request
             return try await withCheckedThrowingContinuation { continuation in
@@ -190,12 +185,12 @@ public actor HTMLPreviewRenderer {
             }
         }
 
-        // Mark as actively rendering (actor-isolated)
+        // Mark as actively rendering
         activeRenders.insert(cacheKey)
         defer { activeRenders.remove(cacheKey) }
 
-        // Get available web view or queue the request (MainActor)
-        guard let pooledView = await getAvailableWebView() else {
+        // Get available web view or queue the request
+        guard let pooledView = getAvailableWebView() else {
             return try await withCheckedThrowingContinuation { continuation in
                 let request = RenderRequest(
                     id: cacheKey,
@@ -204,13 +199,11 @@ public actor HTMLPreviewRenderer {
                     continuation: continuation
                 )
                 pendingRequests.append(request)
-                Task {
-                    await processNextRequest()
-                }
+                processNextRequest()
             }
         }
 
-        // Perform actual rendering (MainActor)
+        // Perform actual rendering
         let image = try await performRender(
             html: html,
             viewportWidth: viewportWidth,
@@ -225,48 +218,28 @@ public actor HTMLPreviewRenderer {
     }
 
     /// Generates a cache key from HTML content and viewport width
-    nonisolated private static func generateCacheKey(html: String, viewportWidth: Int) -> String {
+    private static func generateCacheKey(html: String, viewportWidth: Int) async -> String {
         let combined = "\(html)-\(viewportWidth)"
-        return hashString(combined)
+        return await hashString(combined)
     }
 
     /// Clears the image cache (both memory and disk)
     public func clearCache() async {
-        await clearMemoryCacheInternal()
+        memoryCache.removeAllObjects()
         await diskCache.clearCache()
     }
 
     /// Clears only the memory cache (keeps disk cache intact)
-    public func clearMemoryCache() async {
-        await clearMemoryCacheInternal()
+    func clearMemoryCache() {
+        memoryCache.removeAllObjects()
     }
 
     // MARK: - Private Methods
 
-    /// Checks memory cache on MainActor
-    @MainActor
-    private func checkMemoryCache(cacheKey: String) -> UIImage? {
-        return memoryCache.object(forKey: cacheKey as NSString)
-    }
-
-    /// Stores image in memory cache on MainActor
-    @MainActor
-    private func storeInMemoryCache(image: UIImage, cacheKey: String) {
-        memoryCache.setObject(image, forKey: cacheKey as NSString)
-    }
-
-    /// Clears memory cache on MainActor
-    @MainActor
-    private func clearMemoryCacheInternal() {
-        memoryCache.removeAllObjects()
-    }
-
-    @MainActor
     private func getAvailableWebView() -> PooledWebView? {
         return webViewPool.first { $0.isAvailable }
     }
 
-    @MainActor
     private func performRender(
         html: String,
         viewportWidth: Int,
@@ -276,9 +249,7 @@ public actor HTMLPreviewRenderer {
         pooledView.isAvailable = false
         defer {
             pooledView.isAvailable = true
-            Task {
-                await processNextRequest()
-            }
+            processNextRequest()
         }
 
         let webView = pooledView.webView
@@ -290,8 +261,8 @@ public actor HTMLPreviewRenderer {
         let minHeight: CGFloat = 100
         webView.frame = CGRect(x: 0, y: 0, width: width, height: minHeight)
 
-        // Generate full HTML with styling
-        let fullHTML = await generateFullHTML(content: html, viewportWidth: viewportWidth)
+        // Generate full HTML with styling (in background)
+        let fullHTML = await Self.generateFullHTML(content: html, viewportWidth: viewportWidth, css: gutenbergCSS)
 
         // Wait for rendering to complete using the delegate
         let contentHeight = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<CGFloat, Error>) in
@@ -326,17 +297,14 @@ public actor HTMLPreviewRenderer {
         memoryCache.setObject(image, forKey: cacheKey as NSString)
 
         // Notify any waiting requests
-        await notifyPendingRequests(for: cacheKey, with: image)
+        notifyPendingRequests(for: cacheKey, with: image)
 
         return image
     }
 
-    private func processNextRequest() async {
-        guard !pendingRequests.isEmpty else {
-            return
-        }
-
-        guard let pooledView = await getAvailableWebView() else {
+    private func processNextRequest() {
+        guard !pendingRequests.isEmpty,
+              let pooledView = getAvailableWebView() else {
             return
         }
 
@@ -366,31 +334,33 @@ public actor HTMLPreviewRenderer {
         }
     }
 
-    @MainActor
-    private func generateFullHTML(content: String, viewportWidth: Int) -> String {
-        return """
-        <!DOCTYPE html>
-        <html style="margin: 0; padding: 0;">
-        <head>
-            <meta name="viewport" content="width=\(viewportWidth), initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-            <style>
-                * { box-sizing: border-box; }
-                body {
-                    margin: 0;
-                    padding: 0;
-                    width: \(viewportWidth)px;
-                    background: white;
-                }
-            </style>
-            <style>
-                \(GutenbergCSSLoader.shared.css)
-            </style>
-        </head>
-        <body class="block-editor-iframe__body editor-styles-wrapper wp-embed-responsive">
-            \(content)
-        </body>
-        </html>
-        """
+    /// Generates full HTML with styling in background
+    private static func generateFullHTML(content: String, viewportWidth: Int, css: String) async -> String {
+        return await Task.detached {
+            return """
+            <!DOCTYPE html>
+            <html style="margin: 0; padding: 0;">
+            <head>
+                <meta name="viewport" content="width=\(viewportWidth), initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+                <style>
+                    * { box-sizing: border-box; }
+                    body {
+                        margin: 0;
+                        padding: 0;
+                        width: \(viewportWidth)px;
+                        background: white;
+                    }
+                </style>
+                <style>
+                    \(css)
+                </style>
+            </head>
+            <body class="block-editor-iframe__body editor-styles-wrapper wp-embed-responsive">
+                \(content)
+            </body>
+            </html>
+            """
+        }.value
     }
 }
 
@@ -398,13 +368,13 @@ public actor HTMLPreviewRenderer {
 
 /// Manages disk caching of rendered preview images
 /// All operations are async and run on background threads for better performance
-actor DiskCache {
-    private let fileManager = FileManager.default
+final class DiskCache {
     private let cacheDirectory: URL
     private let manifestURL: URL
 
     init() {
         // Create cache directory in Caches folder
+        let fileManager = FileManager.default
         let cachesDirectory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
         self.cacheDirectory = cachesDirectory.appendingPathComponent("pattern-previews", isDirectory: true)
         self.manifestURL = cacheDirectory.appendingPathComponent("manifest.json")
@@ -413,58 +383,62 @@ actor DiskCache {
         try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
     }
 
-    /// Check if CSS hash has changed
+    /// Check if CSS hash has changed (runs in background)
     func cssHashChanged(currentHash: String) async -> Bool {
-        guard let manifest = await loadManifest() else {
-            return true // No manifest means first run or cache cleared
-        }
-        return manifest.cssHash != currentHash
-    }
-
-    /// Save CSS hash to manifest
-    func saveCSSHash(_ hash: String) async {
-        let manifest = CacheManifest(cssHash: hash)
-        guard let data = try? JSONEncoder().encode(manifest) else { return }
-        try? data.write(to: manifestURL)
-    }
-
-    /// Load image from disk cache (background operation)
-    func loadImage(forKey key: String) async -> UIImage? {
-        let fileURL = cacheDirectory.appendingPathComponent("\(key).png")
-        guard let data = try? Data(contentsOf: fileURL),
-              let image = UIImage(data: data) else {
-            return nil
-        }
-        return image
-    }
-
-    /// Save image to disk cache (background operation)
-    func saveImage(_ image: UIImage, forKey key: String) async {
-        let fileURL = cacheDirectory.appendingPathComponent("\(key).png")
-        guard let data = image.pngData() else { return }
-        try? data.write(to: fileURL)
-    }
-
-    /// Clear all cached images (background operation)
-    func clearCache() async {
-        guard let contents = try? fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: nil) else {
-            return
-        }
-
-        for fileURL in contents {
-            // Keep manifest, delete everything else
-            if fileURL != manifestURL {
-                try? fileManager.removeItem(at: fileURL)
+        await Task.detached { [manifestURL] in
+            guard let data = try? Data(contentsOf: manifestURL),
+                  let manifest = try? JSONDecoder().decode(CacheManifest.self, from: data) else {
+                return true // No manifest means first run or cache cleared
             }
-        }
+            return manifest.cssHash != currentHash
+        }.value
     }
 
-    private func loadManifest() async -> CacheManifest? {
-        guard let data = try? Data(contentsOf: manifestURL),
-              let manifest = try? JSONDecoder().decode(CacheManifest.self, from: data) else {
-            return nil
-        }
-        return manifest
+    /// Save CSS hash to manifest (runs in background)
+    func saveCSSHash(_ hash: String) async {
+        await Task.detached { [manifestURL] in
+            let manifest = CacheManifest(cssHash: hash)
+            guard let data = try? JSONEncoder().encode(manifest) else { return }
+            try? data.write(to: manifestURL)
+        }.value
+    }
+
+    /// Load image from disk cache (runs in background)
+    func loadImage(forKey key: String) async -> UIImage? {
+        await Task.detached { [cacheDirectory] in
+            let fileURL = cacheDirectory.appendingPathComponent("\(key).png")
+            guard let data = try? Data(contentsOf: fileURL),
+                  let image = UIImage(data: data) else {
+                return nil
+            }
+            return image
+        }.value
+    }
+
+    /// Save image to disk cache (runs in background)
+    func saveImage(_ image: UIImage, forKey key: String) async {
+        await Task.detached { [cacheDirectory] in
+            let fileURL = cacheDirectory.appendingPathComponent("\(key).png")
+            guard let data = image.pngData() else { return }
+            try? data.write(to: fileURL)
+        }.value
+    }
+
+    /// Clear all cached images (runs in background)
+    func clearCache() async {
+        await Task.detached { [cacheDirectory, manifestURL] in
+            let fileManager = FileManager.default
+            guard let contents = try? fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: nil) else {
+                return
+            }
+
+            for fileURL in contents {
+                // Keep manifest, delete everything else
+                if fileURL != manifestURL {
+                    try? fileManager.removeItem(at: fileURL)
+                }
+            }
+        }.value
     }
 
     private struct CacheManifest: Codable {
