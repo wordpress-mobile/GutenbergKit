@@ -7,6 +7,7 @@ struct PatternsView: View {
 
     @StateObject private var viewModel: PatternsViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var contentOpacity: Double = 0
 
     init(patterns: [PatternType], onPatternSelected: @escaping (String) -> Void) {
         self.patterns = patterns
@@ -16,12 +17,22 @@ struct PatternsView: View {
 
     var body: some View {
         content
+            .opacity(contentOpacity)
             .background(Material.ultraThin)
             .searchable(text: $viewModel.searchText)
             .navigationTitle("Patterns")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 toolbar
+            }
+            .onAppear {
+                // Small delay to allow cache warmup before showing content
+                Task {
+                    try await Task.sleep(for: .milliseconds(330))
+                    withAnimation(.easeIn(duration: 0.2)) {
+                        contentOpacity = 1.0
+                    }
+                }
             }
             .onDisappear {
                 // Clear memory cache when view is closed to free up memory

@@ -19,7 +19,6 @@ struct BlockPreviewView: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(8)
-                    .background(Color(uiColor: .secondarySystemBackground).opacity(0.5))
                     .cornerRadius(8)
                     .overlay {
                         RoundedRectangle(cornerRadius: 8)
@@ -30,9 +29,6 @@ struct BlockPreviewView: View {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color(uiColor: .tertiarySystemBackground))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .overlay {
-                        ProgressView()
-                    }
             } else if previewError {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color(uiColor: .tertiarySystemBackground))
@@ -41,9 +37,6 @@ struct BlockPreviewView: View {
                         VStack(spacing: 4) {
                             Image(systemName: "square.grid.2x2")
                                 .font(.title2)
-                                .foregroundStyle(Color.secondary)
-                            Text("Preview unavailable")
-                                .font(.caption2)
                                 .foregroundStyle(Color.secondary)
                         }
                     }

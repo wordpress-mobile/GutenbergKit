@@ -51,7 +51,7 @@ struct PatternGridSection: View {
                             onSelected: {
                                 onPatternSelected(pattern)
                             },
-                            style: .horizontal(height: 140)
+                            style: .horizontal(height: 140, maxWidth: 240)
                         )
                     }
                 }

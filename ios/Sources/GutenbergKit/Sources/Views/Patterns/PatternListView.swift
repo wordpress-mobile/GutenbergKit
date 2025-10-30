@@ -17,7 +17,7 @@ struct PatternListView: View {
                             dismiss()
                             onPatternSelected(pattern)
                         },
-                        style: .fullWidth
+                        style: .fullWidth(maxHeight: 400)
                     )
                 }
             }

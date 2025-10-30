@@ -7,38 +7,64 @@ struct PatternCardView: View {
     let style: Style
 
     enum Style {
-        case horizontal(height: CGFloat)
-        case fullWidth
+        case horizontal(height: CGFloat, maxWidth: CGFloat)
+        case fullWidth(maxHeight: CGFloat)
     }
 
     var body: some View {
         Button(action: onSelected) {
             BlockPreviewView(pattern: pattern)
-                .frame(maxWidth: style.maxWidth, maxHeight: style.maxHeight)
-                .background(Color(uiColor: .systemBackground))
-                .cornerRadius(12)
-                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+                .frame(
+                    minWidth: style.minWidth,
+                    maxWidth: style.maxWidth,
+                    minHeight: style.minHeight,
+                    maxHeight: style.maxHeight
+                )
+                .background(Color(uiColor: .white))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color(uiColor: .opaqueSeparator), lineWidth: 0.5)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
     }
 }
 
 private extension PatternCardView.Style {
-    var maxWidth: CGFloat? {
+    var minWidth: CGFloat? {
         switch self {
         case .horizontal:
-            return nil // Let aspect ratio determine width
+            return 120
+        case .fullWidth:
+            return 200
+        }
+    }
+
+    var maxWidth: CGFloat? {
+        switch self {
+        case .horizontal(_, let maxWidth):
+            return maxWidth
         case .fullWidth:
             return .infinity
         }
     }
 
-    var maxHeight: CGFloat? {
+    var minHeight: CGFloat? {
         switch self {
-        case .horizontal(let height):
+        case .horizontal(let height, _):
             return height
         case .fullWidth:
-            return nil // Let aspect ratio determine height
+            return 150
+        }
+    }
+
+    var maxHeight: CGFloat? {
+        switch self {
+        case .horizontal(let height, _):
+            return height
+        case .fullWidth(let maxHeight):
+            return maxHeight
         }
     }
 }

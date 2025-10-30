@@ -420,22 +420,35 @@ private func generateMemoryCacheKey(diskKey: String, maxHeight: CGFloat) async -
 
 /// Creates a thumbnail from an image using preparingThumbnail (runs in background)
 private func createThumbnail(from image: UIImage, maxHeight: CGFloat) async -> UIImage {
-    // Calculate the thumbnail size maintaining aspect ratio
+    let scale = await UIScreen.main.scale
+
+    // Calculate the thumbnail size in points maintaining aspect ratio
+    // Note: image.size is already in points (accounts for scale)
     let aspectRatio = image.size.width / image.size.height
-    let thumbnailHeight = min(maxHeight, image.size.height) // Don't upscale
-    let thumbnailWidth = thumbnailHeight * aspectRatio
-    let thumbnailSize = CGSize(width: thumbnailWidth, height: thumbnailHeight)
+    let thumbnailHeightPoints = min(maxHeight, image.size.height)
+    let thumbnailWidthPoints = thumbnailHeightPoints * aspectRatio
+
+    // Convert to pixel dimensions for preparingThumbnail
+    // We render at screen scale to maintain quality
+    let thumbnailSizePixels = CGSize(
+        width: thumbnailWidthPoints * scale,
+        height: thumbnailHeightPoints * scale
+    )
 
     // Use preparingThumbnail for efficient thumbnail generation
     // This method downsamples the image efficiently without loading full resolution
-    if let thumbnail = image.preparingThumbnail(of: thumbnailSize) {
-        return thumbnail
+    if let thumbnailCGImage = image.preparingThumbnail(of: thumbnailSizePixels)?.cgImage {
+        // Create UIImage with correct scale factor so it displays at the right size
+        return UIImage(cgImage: thumbnailCGImage, scale: scale, orientation: image.imageOrientation)
     }
 
-    // Fallback if preparingThumbnail fails
-    let renderer = UIGraphicsImageRenderer(size: thumbnailSize)
+    // Fallback if preparingThumbnail fails - use UIGraphicsImageRenderer which handles scale
+    let thumbnailSizePoints = CGSize(width: thumbnailWidthPoints, height: thumbnailHeightPoints)
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = scale
+    let renderer = UIGraphicsImageRenderer(size: thumbnailSizePoints, format: format)
     return renderer.image { context in
-        image.draw(in: CGRect(origin: .zero, size: thumbnailSize))
+        image.draw(in: CGRect(origin: .zero, size: thumbnailSizePoints))
     }
 }
 
