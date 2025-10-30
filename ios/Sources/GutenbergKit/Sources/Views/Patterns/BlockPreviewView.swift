@@ -66,6 +66,7 @@ struct BlockPreviewView: View {
             let image = try await HTMLPreviewRenderer.shared.render(
                 html: pattern.previewHTML,
                 viewportWidth: pattern.viewportWidth ?? 1200,
+                maxHeight: previewHeight,
                 cacheKey: pattern.name
             )
             previewImage = image

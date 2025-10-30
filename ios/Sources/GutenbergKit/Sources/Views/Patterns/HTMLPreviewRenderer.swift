@@ -153,20 +153,21 @@ public final class HTMLPreviewRenderer {
     /// - Parameters:
     ///   - html: The HTML content to render
     ///   - viewportWidth: The viewport width for rendering
+    ///   - maxHeight: Maximum height for the rendered image (for memory optimization)
     ///   - cacheKey: Unique key for caching (typically pattern name)
-    /// - Returns: Rendered image
-    func render(html: String, viewportWidth: Int, cacheKey: String) async throws -> UIImage {
-        // Generate cache key from HTML and viewport width (in background)
-        let diskCacheKey = await Self.generateCacheKey(html: html, viewportWidth: viewportWidth)
+    /// - Returns: Rendered image resized to maxHeight
+    func render(html: String, viewportWidth: Int, maxHeight: CGFloat, cacheKey: String) async throws -> UIImage {
+        // Generate cache key from HTML, viewport width, and maxHeight (in background)
+        let diskCacheKey = await Self.generateCacheKey(html: html, viewportWidth: viewportWidth, maxHeight: maxHeight)
 
-        // Check memory cache first
+        // Check memory cache first (stores resized images)
         if let cachedImage = memoryCache.object(forKey: cacheKey as NSString) {
             return cachedImage
         }
 
-        // Check disk cache (background operation)
+        // Check disk cache (background operation, stores resized images)
         if let diskImage = await diskCache.loadImage(forKey: diskCacheKey) {
-            // Store in memory cache for faster access next time
+            // Disk cache already has resized and prepared images
             memoryCache.setObject(diskImage, forKey: cacheKey as NSString)
             return diskImage
         }
@@ -203,24 +204,56 @@ public final class HTMLPreviewRenderer {
             }
         }
 
-        // Perform actual rendering
-        let image = try await performRender(
+        // Perform actual rendering (returns full-size image)
+        let fullSizeImage = try await performRender(
             html: html,
             viewportWidth: viewportWidth,
             cacheKey: cacheKey,
             pooledView: pooledView
         )
 
-        // Save to disk cache (background operation)
-        await diskCache.saveImage(image, forKey: diskCacheKey)
+        // Resize and prepare for display (background operation)
+        let resizedImage = await Self.resizeAndPrepare(image: fullSizeImage, maxHeight: maxHeight)
 
-        return image
+        // Save resized image to disk cache (background operation)
+        await diskCache.saveImage(resizedImage, forKey: diskCacheKey)
+
+        // Cache resized image in memory
+        memoryCache.setObject(resizedImage, forKey: cacheKey as NSString)
+
+        return resizedImage
     }
 
-    /// Generates a cache key from HTML content and viewport width
-    private static func generateCacheKey(html: String, viewportWidth: Int) async -> String {
-        let combined = "\(html)-\(viewportWidth)"
+    /// Generates a cache key from HTML content, viewport width, and max height
+    private static func generateCacheKey(html: String, viewportWidth: Int, maxHeight: CGFloat) async -> String {
+        let combined = "\(html)-\(viewportWidth)-\(Int(maxHeight))"
         return await hashString(combined)
+    }
+
+    /// Resizes image to maxHeight and prepares for display (runs in background)
+    private static func resizeAndPrepare(image: UIImage, maxHeight: CGFloat) async -> UIImage {
+        return await Task.detached {
+            let aspectRatio = image.size.width / image.size.height
+            let targetWidth = maxHeight * aspectRatio
+            let targetSize = CGSize(width: targetWidth, height: maxHeight)
+
+            // Use preparingForDisplay for better performance
+            // This decodes and downsamples the image on a background thread
+            if let prepared = image.preparingForDisplay() {
+                // Now resize to target dimensions
+                let renderer = UIGraphicsImageRenderer(size: targetSize)
+                let resized = renderer.image { context in
+                    prepared.draw(in: CGRect(origin: .zero, size: targetSize))
+                }
+                return resized
+            }
+
+            // Fallback if preparingForDisplay fails
+            let renderer = UIGraphicsImageRenderer(size: targetSize)
+            return renderer.image { context in
+                image.draw(in: CGRect(origin: .zero, size: targetSize))
+            }
+        }.value
     }
 
     /// Clears the image cache (both memory and disk)
