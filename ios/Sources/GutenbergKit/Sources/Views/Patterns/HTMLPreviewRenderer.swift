@@ -39,7 +39,7 @@ public final class HTMLPreviewRenderer {
     // MARK: - Types
 
     private struct RenderRequest {
-        let id: String
+        let diskCacheKey: String
         let html: String
         let viewportWidth: Int
         let continuation: CheckedContinuation<UIImage, Error>
@@ -135,7 +135,7 @@ public final class HTMLPreviewRenderer {
 
         // Check CSS hash and clear cache if changed (in background)
         Task.detached { [diskCache, gutenbergCSS] in
-            let currentCSSHash = await Self.hashString(gutenbergCSS)
+            let currentCSSHash = await hashString(gutenbergCSS)
             if await diskCache.cssHashChanged(currentHash: currentCSSHash) {
                 await diskCache.clearCache()
                 await diskCache.saveCSSHash(currentCSSHash)
@@ -179,15 +179,6 @@ public final class HTMLPreviewRenderer {
         return css
     }
 
-    /// Creates a SHA256 hash of a string
-    private static func hashString(_ string: String) async -> String {
-        // Run SHA256 hashing in background to avoid blocking main thread
-        return await Task.detached {
-            let data = Data(string.utf8)
-            let hash = SHA256.hash(data: data)
-            return hash.compactMap { String(format: "%02x", $0) }.joined()
-        }.value
-    }
 
     // MARK: - Public API
 
@@ -196,30 +187,29 @@ public final class HTMLPreviewRenderer {
     ///   - html: The HTML content to render
     ///   - viewportWidth: The viewport width for rendering
     ///   - maxHeight: Maximum height for the rendered image (for memory optimization)
-    ///   - cacheKey: Unique key for caching (typically pattern name)
     /// - Returns: Rendered image resized to maxHeight
-    func render(html: String, viewportWidth: Int, maxHeight: CGFloat, cacheKey: String) async throws -> UIImage {
+    func render(html: String, viewportWidth: Int, maxHeight: CGFloat) async throws -> UIImage {
         // Generate cache key from HTML, viewport width, and maxHeight (in background)
-        let diskCacheKey = await Self.generateCacheKey(html: html, viewportWidth: viewportWidth, maxHeight: maxHeight)
+        let diskCacheKey = await generateCacheKey(html: html, viewportWidth: viewportWidth, maxHeight: maxHeight)
 
         // Check memory cache first (stores resized images)
-        if let cachedImage = memoryCache.object(forKey: cacheKey as NSString) {
+        if let cachedImage = memoryCache.object(forKey: diskCacheKey as NSString) {
             return cachedImage
         }
 
         // Check disk cache (background operation, stores resized images)
         if let diskImage = await diskCache.loadImage(forKey: diskCacheKey) {
             // Disk cache already has resized and prepared images
-            memoryCache.setObject(diskImage, forKey: cacheKey as NSString)
+            memoryCache.setObject(diskImage, forKey: diskCacheKey as NSString)
             return diskImage
         }
 
         // Check if already rendering this content
-        if activeRenders.contains(cacheKey) {
+        if activeRenders.contains(diskCacheKey) {
             // Wait for existing render to complete by creating a new request
             return try await withCheckedThrowingContinuation { continuation in
                 let request = RenderRequest(
-                    id: cacheKey,
+                    diskCacheKey: diskCacheKey,
                     html: html,
                     viewportWidth: viewportWidth,
                     continuation: continuation
@@ -229,14 +219,14 @@ public final class HTMLPreviewRenderer {
         }
 
         // Mark as actively rendering
-        activeRenders.insert(cacheKey)
-        defer { activeRenders.remove(cacheKey) }
+        activeRenders.insert(diskCacheKey)
+        defer { activeRenders.remove(diskCacheKey) }
 
         // Get available web view or queue the request
         guard let pooledView = getAvailableWebView() else {
             return try await withCheckedThrowingContinuation { continuation in
                 let request = RenderRequest(
-                    id: cacheKey,
+                    diskCacheKey: diskCacheKey,
                     html: html,
                     viewportWidth: viewportWidth,
                     continuation: continuation
@@ -250,53 +240,23 @@ public final class HTMLPreviewRenderer {
         let fullSizeImage = try await performRender(
             html: html,
             viewportWidth: viewportWidth,
-            cacheKey: cacheKey,
+            diskCacheKey: diskCacheKey,
             pooledView: pooledView
         )
 
         // Resize and prepare for display (background operation)
-        let resizedImage = await Self.resizeAndPrepare(image: fullSizeImage, maxHeight: maxHeight)
+        let resizedImage = await resizeAndPrepare(image: fullSizeImage, maxHeight: maxHeight)
 
         // Save resized image to disk cache (background operation)
         await diskCache.saveImage(resizedImage, forKey: diskCacheKey)
 
         // Cache resized image in memory
-        memoryCache.setObject(resizedImage, forKey: cacheKey as NSString)
+        memoryCache.setObject(resizedImage, forKey: diskCacheKey as NSString)
 
         return resizedImage
     }
 
-    /// Generates a cache key from HTML content, viewport width, and max height
-    private static func generateCacheKey(html: String, viewportWidth: Int, maxHeight: CGFloat) async -> String {
-        let combined = "\(html)-\(viewportWidth)-\(Int(maxHeight))"
-        return await hashString(combined)
-    }
 
-    /// Resizes image to maxHeight and prepares for display (runs in background)
-    private static func resizeAndPrepare(image: UIImage, maxHeight: CGFloat) async -> UIImage {
-        return await Task.detached {
-            let aspectRatio = image.size.width / image.size.height
-            let targetWidth = maxHeight * aspectRatio
-            let targetSize = CGSize(width: targetWidth, height: maxHeight)
-
-            // Use preparingForDisplay for better performance
-            // This decodes and downsamples the image on a background thread
-            if let prepared = image.preparingForDisplay() {
-                // Now resize to target dimensions
-                let renderer = UIGraphicsImageRenderer(size: targetSize)
-                let resized = renderer.image { context in
-                    prepared.draw(in: CGRect(origin: .zero, size: targetSize))
-                }
-                return resized
-            }
-
-            // Fallback if preparingForDisplay fails
-            let renderer = UIGraphicsImageRenderer(size: targetSize)
-            return renderer.image { context in
-                image.draw(in: CGRect(origin: .zero, size: targetSize))
-            }
-        }.value
-    }
 
     /// Clears the image cache (both memory and disk)
     public func clearCache() async {
@@ -318,7 +278,7 @@ public final class HTMLPreviewRenderer {
     private func performRender(
         html: String,
         viewportWidth: Int,
-        cacheKey: String,
+        diskCacheKey: String,
         pooledView: PooledWebView
     ) async throws -> UIImage {
         pooledView.isAvailable = false
@@ -337,7 +297,7 @@ public final class HTMLPreviewRenderer {
         webView.frame = CGRect(x: 0, y: 0, width: width, height: minHeight)
 
         // Generate full HTML with styling (in background)
-        let fullHTML = await Self.generateFullHTML(content: html, viewportWidth: viewportWidth, css: gutenbergCSS)
+        let fullHTML = await generateFullHTML(content: html, viewportWidth: viewportWidth, css: gutenbergCSS)
 
         // Wait for rendering to complete using the delegate
         let contentHeight = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<CGFloat, Error>) in
@@ -368,11 +328,8 @@ public final class HTMLPreviewRenderer {
         // Clear the delegate callback
         delegate.onRenderComplete = nil
 
-        // Cache the result in memory
-        memoryCache.setObject(image, forKey: cacheKey as NSString)
-
         // Notify any waiting requests
-        notifyPendingRequests(for: cacheKey, with: image)
+        notifyPendingRequests(for: diskCacheKey, with: image)
 
         return image
     }
@@ -390,7 +347,7 @@ public final class HTMLPreviewRenderer {
                 let image = try await performRender(
                     html: request.html,
                     viewportWidth: request.viewportWidth,
-                    cacheKey: request.id,
+                    diskCacheKey: request.diskCacheKey,
                     pooledView: pooledView
                 )
                 request.continuation.resume(returning: image)
@@ -400,108 +357,138 @@ public final class HTMLPreviewRenderer {
         }
     }
 
-    private func notifyPendingRequests(for cacheKey: String, with image: UIImage) {
-        let matchingRequests = pendingRequests.filter { $0.id == cacheKey }
-        pendingRequests.removeAll { $0.id == cacheKey }
+    private func notifyPendingRequests(for diskCacheKey: String, with image: UIImage) {
+        let matchingRequests = pendingRequests.filter { $0.diskCacheKey == diskCacheKey }
+        pendingRequests.removeAll { $0.diskCacheKey == diskCacheKey }
 
         for request in matchingRequests {
             request.continuation.resume(returning: image)
         }
     }
 
-    /// Generates full HTML with styling in background
-    private static func generateFullHTML(content: String, viewportWidth: Int, css: String) async -> String {
-        return await Task.detached {
-            return """
-            <!DOCTYPE html>
-            <html style="margin: 0; padding: 0;">
-            <head>
-                <meta name="viewport" content="width=\(viewportWidth), initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-                <style>
-                    * { box-sizing: border-box; }
-                    body {
-                        margin: 0;
-                        padding: 0;
-                        width: \(viewportWidth)px;
-                        background: white;
-                    }
-                </style>
-                <style>
-                    \(css)
-                </style>
-            </head>
-            <body class="block-editor-iframe__body editor-styles-wrapper wp-embed-responsive">
-                \(content)
-            </body>
-            </html>
-            """
-        }.value
+}
+
+// MARK: - Private Helper Functions
+
+/// Creates a SHA256 hash of a string (runs in background)
+private func hashString(_ string: String) async -> String {
+    let data = Data(string.utf8)
+    let hash = SHA256.hash(data: data)
+    return hash.compactMap { String(format: "%02x", $0) }.joined()
+}
+
+/// Generates a cache key from HTML content, viewport width, and max height
+private func generateCacheKey(html: String, viewportWidth: Int, maxHeight: CGFloat) async -> String {
+    let combined = "\(html)-\(viewportWidth)-\(Int(maxHeight))"
+    return await hashString(combined)
+}
+
+/// Resizes image to maxHeight and prepares for display (runs in background)
+private func resizeAndPrepare(image: UIImage, maxHeight: CGFloat) async -> UIImage {
+    let aspectRatio = image.size.width / image.size.height
+    let targetWidth = maxHeight * aspectRatio
+    let targetSize = CGSize(width: targetWidth, height: maxHeight)
+
+    // Use preparingForDisplay for better performance
+    // This decodes and downsamples the image on a background thread
+    if let prepared = image.preparingForDisplay() {
+        // Now resize to target dimensions
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        let resized = renderer.image { context in
+            prepared.draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+        return resized
     }
+
+    // Fallback if preparingForDisplay fails
+    let renderer = UIGraphicsImageRenderer(size: targetSize)
+    return renderer.image { context in
+        image.draw(in: CGRect(origin: .zero, size: targetSize))
+    }
+}
+
+/// Generates full HTML with styling (runs in background)
+private func generateFullHTML(content: String, viewportWidth: Int, css: String) async -> String {
+    return """
+    <!DOCTYPE html>
+    <html style="margin: 0; padding: 0;">
+    <head>
+        <meta name="viewport" content="width=\(viewportWidth), initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <style>
+            * { box-sizing: border-box; }
+            body {
+                margin: 0;
+                padding: 0;
+                width: \(viewportWidth)px;
+                background: white;
+            }
+        </style>
+        <style>
+            \(css)
+        </style>
+    </head>
+    <body class="block-editor-iframe__body editor-styles-wrapper wp-embed-responsive">
+        \(content)
+    </body>
+    </html>
+    """
 }
 
 // MARK: - Disk Cache
 
-/// Manages disk caching of rendered preview images
-/// All operations are async and run on background threads for better performance
-final class DiskCache {
-    private let cacheDirectory: URL
-    private let manifestURL: URL
+extension HTMLPreviewRenderer {
+    /// Manages disk caching of rendered preview images
+    /// All operations run on actor's isolated context for thread safety
+    private actor DiskCache {
+        private let cacheDirectory: URL
+        private let manifestURL: URL
 
-    init() {
-        // Create cache directory in Caches folder
-        let fileManager = FileManager.default
-        let cachesDirectory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        self.cacheDirectory = cachesDirectory.appendingPathComponent("pattern-previews", isDirectory: true)
-        self.manifestURL = cacheDirectory.appendingPathComponent("manifest.json")
+        init() {
+            // Create cache directory in Caches folder
+            let fileManager = FileManager.default
+            let cachesDirectory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            self.cacheDirectory = cachesDirectory.appendingPathComponent("pattern-previews", isDirectory: true)
+            self.manifestURL = cacheDirectory.appendingPathComponent("manifest.json")
 
-        // Create directory if needed
-        try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-    }
+            // Create directory if needed
+            try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        }
 
-    /// Check if CSS hash has changed (runs in background)
-    func cssHashChanged(currentHash: String) async -> Bool {
-        await Task.detached { [manifestURL] in
+        /// Check if CSS hash has changed
+        func cssHashChanged(currentHash: String) -> Bool {
             guard let data = try? Data(contentsOf: manifestURL),
                   let manifest = try? JSONDecoder().decode(CacheManifest.self, from: data) else {
                 return true // No manifest means first run or cache cleared
             }
             return manifest.cssHash != currentHash
-        }.value
-    }
+        }
 
-    /// Save CSS hash to manifest (runs in background)
-    func saveCSSHash(_ hash: String) async {
-        await Task.detached { [manifestURL] in
+        /// Save CSS hash to manifest
+        func saveCSSHash(_ hash: String) {
             let manifest = CacheManifest(cssHash: hash)
             guard let data = try? JSONEncoder().encode(manifest) else { return }
             try? data.write(to: manifestURL)
-        }.value
-    }
+        }
 
-    /// Load image from disk cache (runs in background)
-    func loadImage(forKey key: String) async -> UIImage? {
-        await Task.detached { [cacheDirectory] in
+        /// Load image from disk cache
+        func loadImage(forKey key: String) -> UIImage? {
             let fileURL = cacheDirectory.appendingPathComponent("\(key).png")
             guard let data = try? Data(contentsOf: fileURL),
                   let image = UIImage(data: data) else {
                 return nil
             }
             return image
-        }.value
-    }
+        }
 
-    /// Save image to disk cache (runs in background)
-    func saveImage(_ image: UIImage, forKey key: String) async {
-        await Task.detached { [cacheDirectory] in
+        /// Save image to disk cache
+        func saveImage(_ image: UIImage, forKey key: String) {
             let fileURL = cacheDirectory.appendingPathComponent("\(key).png")
             guard let data = image.pngData() else { return }
             try? data.write(to: fileURL)
-        }.value
-    }
+        }
 
-    /// Clear all cached images (runs in background)
-    func clearCache() async {
-        await Task.detached { [cacheDirectory, manifestURL] in
+        /// Clear all cached images
+        func clearCache() {
             let fileManager = FileManager.default
             guard let contents = try? fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: nil) else {
                 return
@@ -513,10 +500,10 @@ final class DiskCache {
                     try? fileManager.removeItem(at: fileURL)
                 }
             }
-        }.value
-    }
+        }
 
-    private struct CacheManifest: Codable {
-        let cssHash: String
+        private struct CacheManifest: Codable {
+            let cssHash: String
+        }
     }
 }
