@@ -11,10 +11,14 @@ struct PatternListView: View {
         ScrollView {
             LazyVStack(spacing: 16) {
                 ForEach(section.patterns) { pattern in
-                    PatternCardView(pattern: pattern) {
-                        dismiss()
-                        onPatternSelected(pattern)
-                    }
+                    PatternCardView(
+                        pattern: pattern,
+                        onSelected: {
+                            dismiss()
+                            onPatternSelected(pattern)
+                        },
+                        style: .fullWidth
+                    )
                 }
             }
             .padding(.horizontal, 16)

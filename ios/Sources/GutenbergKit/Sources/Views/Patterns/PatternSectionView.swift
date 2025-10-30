@@ -46,9 +46,13 @@ struct PatternGridSection: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(displayedPatterns) { pattern in
-                        PatternCardView(pattern: pattern) {
-                            onPatternSelected(pattern)
-                        }
+                        PatternCardView(
+                            pattern: pattern,
+                            onSelected: {
+                                onPatternSelected(pattern)
+                            },
+                            style: .horizontal(height: 140)
+                        )
                     }
                 }
                 .padding(.horizontal, 16)
