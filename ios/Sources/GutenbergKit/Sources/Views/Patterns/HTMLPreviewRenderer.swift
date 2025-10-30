@@ -119,8 +119,14 @@ public final class HTMLPreviewRenderer {
         // Initialize disk cache
         self.diskCache = DiskCache()
 
-        // Cache CSS for background access
-        self.gutenbergCSS = GutenbergCSSLoader.shared.css
+        // Load Gutenberg CSS from bundled assets
+        self.gutenbergCSS = Self.loadGutenbergCSS() ?? ""
+
+        // Assert that CSS loaded successfully
+        assert(
+            !gutenbergCSS.isEmpty,
+            "Failed to load Gutenberg CSS from bundle. Previews will not render correctly."
+        )
 
         // Pre-populate the web view pool
         for _ in 0..<poolSize {
@@ -135,6 +141,42 @@ public final class HTMLPreviewRenderer {
                 await diskCache.saveCSSHash(currentCSSHash)
             }
         }
+    }
+
+    /// Loads the Gutenberg CSS from the bundled assets
+    private static func loadGutenbergCSS() -> String? {
+        // Check if Gutenberg resource exists in bundle
+        guard let assetsURL = Bundle.module.url(forResource: "Gutenberg", withExtension: nil) else {
+            assertionFailure("Gutenberg resource not found in bundle")
+            return nil
+        }
+
+        // Check if assets directory exists
+        let assetsDirectory = assetsURL.appendingPathComponent("assets")
+        guard let assetsPath = try? FileManager.default.contentsOfDirectory(
+            at: assetsDirectory,
+            includingPropertiesForKeys: nil
+        ) else {
+            assertionFailure("Failed to read assets directory at: \(assetsDirectory.path)")
+            return nil
+        }
+
+        // Find CSS file matching pattern: index-*.css
+        guard let cssURL = assetsPath.first(where: { url in
+            let filename = url.lastPathComponent
+            return filename.hasPrefix("index-") && filename.hasSuffix(".css")
+        }) else {
+            assertionFailure("No CSS file matching 'index-*.css' found in assets. Available files: \(assetsPath.map { $0.lastPathComponent })")
+            return nil
+        }
+
+        // Load CSS file contents
+        guard let css = try? String(contentsOf: cssURL, encoding: .utf8) else {
+            assertionFailure("Failed to load CSS from: \(cssURL.path)")
+            return nil
+        }
+
+        return css
     }
 
     /// Creates a SHA256 hash of a string
@@ -476,39 +518,5 @@ final class DiskCache {
 
     private struct CacheManifest: Codable {
         let cssHash: String
-    }
-}
-
-// MARK: - Shared CSS Loader
-
-@MainActor
-class GutenbergCSSLoader {
-    static let shared = GutenbergCSSLoader()
-
-    /// Cached Gutenberg CSS loaded once
-    let css: String
-
-    private init() {
-        self.css = Self.loadGutenbergCSS() ?? ""
-    }
-
-    /// Loads the Gutenberg CSS from the bundled assets
-    private static func loadGutenbergCSS() -> String? {
-        guard let assetsURL = Bundle.module.url(forResource: "Gutenberg", withExtension: nil),
-              let assetsPath = try? FileManager.default.contentsOfDirectory(
-                at: assetsURL.appendingPathComponent("assets"),
-                includingPropertiesForKeys: nil
-              ) else {
-            return nil
-        }
-
-        guard let cssURL = assetsPath.first(where: { url in
-            let filename = url.lastPathComponent
-            return filename.hasPrefix("index-") && filename.hasSuffix(".css")
-        }) else {
-            return nil
-        }
-
-        return try? String(contentsOf: cssURL, encoding: .utf8)
     }
 }
