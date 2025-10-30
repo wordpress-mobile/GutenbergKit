@@ -5,7 +5,6 @@ struct PatternSectionView: View {
     let onPatternSelected: (PatternType) -> Void
 
     @ScaledMetric(relativeTo: .largeTitle) private var columnWidth = 150
-    @ScaledMetric(relativeTo: .largeTitle) private var padding = 20
     @State private var isExpanded = false
 
     private let initialDisplayCount = 12
@@ -22,11 +21,10 @@ struct PatternSectionView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 16) {
             Text(section.name)
                 .font(.headline)
                 .foregroundStyle(Color.secondary)
-                .padding(.leading, padding)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             grid
@@ -35,9 +33,6 @@ struct PatternSectionView: View {
                 toggleButton
             }
         }
-        .padding(.top, 20)
-        .padding(.bottom, 10)
-        .cardStyle()
     }
 
     private var grid: some View {
@@ -48,7 +43,6 @@ struct PatternSectionView: View {
                 }
             }
         }
-        .padding(.horizontal, 12)
     }
 
     private var toggleButton: some View {
@@ -70,6 +64,5 @@ struct PatternSectionView: View {
             .padding(.vertical, 8)
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 12)
     }
 }

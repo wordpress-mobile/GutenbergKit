@@ -47,7 +47,7 @@ struct PatternsView: View {
                 )
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 32) {
                         ForEach(viewModel.sections) { section in
                             PatternSectionView(
                                 section: section,
@@ -56,10 +56,10 @@ struct PatternsView: View {
                                     onPatternSelected(pattern.name)
                                 }
                             )
-                            .padding(.horizontal)
                         }
                     }
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 16)
                 }
                 .scrollContentBackground(.hidden)
             }

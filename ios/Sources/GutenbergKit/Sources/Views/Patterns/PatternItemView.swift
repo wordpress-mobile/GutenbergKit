@@ -30,8 +30,9 @@ struct PatternItemView: View {
                 }
             }
             .padding(12)
-            .background(Color(uiColor: .secondarySystemBackground))
+            .background(Color(uiColor: .systemBackground))
             .cornerRadius(12)
+            .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
         }
         .buttonStyle(.plain)
     }
