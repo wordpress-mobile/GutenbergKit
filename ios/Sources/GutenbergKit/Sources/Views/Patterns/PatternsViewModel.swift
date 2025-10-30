@@ -4,10 +4,29 @@ import Combine
 @MainActor
 final class PatternsViewModel: ObservableObject {
     @Published var searchText = ""
-    private let allPatterns: [PatternType]
+    @Published var isLoading = false
+    @Published var error: Error?
+    @Published private var allPatterns: [PatternType] = []
 
-    init(patterns: [PatternType]) {
-        self.allPatterns = patterns
+    init() {}
+
+    func loadPatterns(using loader: () async throws -> [PatternType]) async {
+        // Don't reload if already loaded or loading
+        guard !isLoading && allPatterns.isEmpty else {
+            return
+        }
+
+        isLoading = true
+        error = nil
+        defer { isLoading = false }
+
+        do {
+            let patterns = try await loader()
+            self.allPatterns = patterns
+        } catch {
+            self.error = error
+            print("Failed to load patterns: \(error)")
+        }
     }
 
     var sections: [PatternSection] {

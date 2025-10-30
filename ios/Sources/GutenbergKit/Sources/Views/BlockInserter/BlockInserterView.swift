@@ -5,12 +5,12 @@ import WebKit
 
 struct BlockInserterView: View {
     let sections: [BlockInserterSection]
-    let webView: WKWebView
     let mediaPicker: MediaPickerController?
     let presentationContext: MediaPickerPresentationContext
     let onBlockSelected: (BlockType) -> Void
     let onPatternSelected: (String) -> Void
     let onMediaSelected: ([MediaInfo]) -> Void
+    let loadPatterns: () async throws -> [PatternType]
 
     @StateObject private var viewModel: BlockInserterViewModel
     @StateObject private var iconCache = BlockIconCache()
@@ -21,25 +21,23 @@ struct BlockInserterView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var showingPatterns = false
-    @State private var patterns: [PatternType] = []
-    @State private var isLoadingPatterns = false
 
     init(
         sections: [BlockInserterSection],
-        webView: WKWebView,
         mediaPicker: MediaPickerController?,
         presentationContext: MediaPickerPresentationContext,
         onBlockSelected: @escaping (BlockType) -> Void,
         onPatternSelected: @escaping (String) -> Void,
-        onMediaSelected: @escaping ([MediaInfo]) -> Void
+        onMediaSelected: @escaping ([MediaInfo]) -> Void,
+        loadPatterns: @escaping () async throws -> [PatternType]
     ) {
         self.sections = sections
-        self.webView = webView
         self.mediaPicker = mediaPicker
         self.presentationContext = presentationContext
         self.onBlockSelected = onBlockSelected
         self.onPatternSelected = onPatternSelected
         self.onMediaSelected = onMediaSelected
+        self.loadPatterns = loadPatterns
 
         let viewModel = BlockInserterViewModel(sections: sections)
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -64,7 +62,7 @@ struct BlockInserterView: View {
             .sheet(isPresented: $showingPatterns) {
                 NavigationStack {
                     PatternsView(
-                        patterns: patterns,
+                        loadPatterns: loadPatterns,
                         onPatternSelected: { patternName in
                             showingPatterns = false
                             insertPattern(patternName)
@@ -111,19 +109,11 @@ struct BlockInserterView: View {
                 selectedMediaItems = []
             }
             Button {
-                Task {
-                    await loadPatterns()
-                    showingPatterns = true
-                }
+                showingPatterns = true
             } label: {
-                if isLoadingPatterns {
-                    ProgressView()
-                } else {
-                    Image(systemName: "square.grid.2x2")
-                }
+                Image(systemName: "square.grid.2x2")
             }
             .tint(Color.primary)
-            .disabled(isLoadingPatterns)
 
             if let mediaPicker {
                 MediaPickerMenu(picker: mediaPicker, context: presentationContext) {
@@ -155,35 +145,6 @@ struct BlockInserterView: View {
         dismiss()
         onPatternSelected(patternName)
     }
-
-    @MainActor
-    private func loadPatterns() async {
-        // Don't reload if already loaded
-        guard patterns.isEmpty, !isLoadingPatterns else {
-            return
-        }
-
-        isLoadingPatterns = true
-        defer { isLoadingPatterns = false }
-
-        do {
-            let script = "window.blockInserter.getPatterns()"
-            let result = try await webView.evaluateJavaScript(script)
-
-            guard let patternsData = result as? [[String: Any]] else {
-                print("Failed to parse patterns data")
-                return
-            }
-
-            // Decode the patterns
-            let jsonData = try JSONSerialization.data(withJSONObject: patternsData)
-            let decodedPatterns = try JSONDecoder().decode([PatternType].self, from: jsonData)
-
-            patterns = decodedPatterns
-        } catch {
-            print("Failed to load patterns: \(error)")
-        }
-    }
 }
 
 // MARK: - Preview
@@ -195,7 +156,6 @@ struct BlockInserterView: View {
             sections: [
                 BlockInserterSection(category: "text", name: "Text", blocks: BlockType.mocks)
             ],
-            webView: WKWebView(),
             mediaPicker: MockMediaPickerController(),
             presentationContext: MediaPickerPresentationContext(),
             onBlockSelected: {
@@ -206,6 +166,9 @@ struct BlockInserterView: View {
             },
             onMediaSelected: {
                 print("media selected: \($0)")
+            },
+            loadPatterns: {
+                return []
             }
         )
     }

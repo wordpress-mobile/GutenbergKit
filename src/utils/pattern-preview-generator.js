@@ -1,7 +1,6 @@
 /**
  * WordPress dependencies
  */
-import { createRoot } from '@wordpress/element';
 import { parse, serialize } from '@wordpress/blocks';
 
 /**
@@ -35,11 +34,10 @@ async function loadHtml2Canvas() {
 /**
  * Generates a preview image data URL for a pattern
  *
- * @param {Object} pattern              Pattern object with content and viewportWidth
- * @param {string} pattern.content      Serialized block HTML
+ * @param {Object} pattern               Pattern object with content and viewportWidth
+ * @param {string} pattern.content       Serialized block HTML
  * @param {number} pattern.viewportWidth Preview viewport width (default 1200)
- *
- * @return {Promise<string|null>} Data URL of the preview image or null if generation fails
+ * @return {Promise<string|null>}        Data URL of the preview image or null if generation fails
  */
 export async function generatePatternPreview( pattern ) {
 	const { content, viewportWidth = 1200 } = pattern;

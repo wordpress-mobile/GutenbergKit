@@ -2,16 +2,16 @@ import SwiftUI
 import WebKit
 
 struct PatternsView: View {
-    let patterns: [PatternType]
+    let loadPatterns: () async throws -> [PatternType]
     let onPatternSelected: (String) -> Void
 
     @StateObject private var viewModel: PatternsViewModel
     @Environment(\.dismiss) private var dismiss
 
-    init(patterns: [PatternType], onPatternSelected: @escaping (String) -> Void) {
-        self.patterns = patterns
+    init(loadPatterns: @escaping () async throws -> [PatternType], onPatternSelected: @escaping (String) -> Void) {
+        self.loadPatterns = loadPatterns
         self.onPatternSelected = onPatternSelected
-        self._viewModel = StateObject(wrappedValue: PatternsViewModel(patterns: patterns))
+        self._viewModel = StateObject(wrappedValue: PatternsViewModel())
     }
 
     var body: some View {
@@ -23,11 +23,23 @@ struct PatternsView: View {
             .toolbar {
                 toolbar
             }
+            .task {
+                await viewModel.loadPatterns(using: loadPatterns)
+            }
     }
 
     private var content: some View {
         Group {
-            if viewModel.sections.isEmpty {
+            if viewModel.isLoading {
+                ProgressView()
+                    .controlSize(.large)
+            } else if viewModel.error != nil {
+                ContentUnavailableView(
+                    "Failed to Load Patterns",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text("An error occurred while loading patterns")
+                )
+            } else if viewModel.sections.isEmpty {
                 ContentUnavailableView(
                     "No Patterns Found",
                     systemImage: "square.grid.2x2",
@@ -71,7 +83,9 @@ struct PatternsView: View {
 #Preview {
     NavigationStack {
         PatternsView(
-            patterns: [],
+            loadPatterns: {
+                return []
+            },
             onPatternSelected: { patternName in
                 print("pattern selected: \(patternName)")
             }
