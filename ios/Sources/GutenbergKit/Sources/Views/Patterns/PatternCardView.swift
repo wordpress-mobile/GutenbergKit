@@ -28,6 +28,16 @@ struct PatternCardView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                onSelected()
+            } label: {
+                // TODO: CMM-874 l10n
+                Label("Insert Pattern", systemImage: "plus")
+            }
+        } preview: {
+            PatternDetailedView(pattern: pattern, onSelected: onSelected)
+        }
     }
 }
 
@@ -66,5 +76,108 @@ private extension PatternCardView.Style {
         case .fullWidth(let maxHeight):
             return maxHeight
         }
+    }
+}
+
+private struct PatternDetailedView: View {
+    let pattern: PatternType
+    let onSelected: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Large preview
+            BlockPreviewView(pattern: pattern)
+                .frame(maxWidth: .infinity)
+                .frame(height: 300)
+                .background(Color(uiColor: .white))
+                .clipped()
+
+            // Pattern information
+            VStack(alignment: .leading, spacing: 20) {
+                // Title and name
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(pattern.title)
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+
+                    Text(pattern.name)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                // Description
+                if let description = pattern.description, !description.isEmpty {
+                    Text(description)
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                // Categories
+                if let categories = pattern.categories, !categories.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Categories")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.secondary)
+                            .textCase(.uppercase)
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(categories, id: \.self) { category in
+                                    Text(category.capitalized)
+                                        .font(.caption)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color(uiColor: .secondarySystemBackground))
+                                        .cornerRadius(6)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Keywords
+                if let keywords = pattern.keywords, !keywords.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Keywords")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.secondary)
+                            .textCase(.uppercase)
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(keywords, id: \.self) { keyword in
+                                    Text(keyword)
+                                        .font(.caption)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color(uiColor: .secondarySystemBackground))
+                                        .cornerRadius(6)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Source
+                if let source = pattern.source, !source.isEmpty {
+                    HStack(spacing: 4) {
+                        Text("Source:")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.secondary)
+                        Text(source)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .padding(20)
+        }
+        .frame(width: 400)
+        .background(Color(uiColor: .systemBackground))
     }
 }

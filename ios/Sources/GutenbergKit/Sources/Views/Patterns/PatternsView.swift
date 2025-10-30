@@ -16,6 +16,7 @@ struct PatternsView: View {
     }
 
     var body: some View {
+        // TODO: CMM-874 l10n
         content
             .opacity(contentOpacity)
             .background(Material.ultraThin)
@@ -44,6 +45,7 @@ struct PatternsView: View {
     private var content: some View {
         Group {
             if viewModel.sections.isEmpty {
+                // TODO: CMM-874 l10n
                 ContentUnavailableView(
                     "No Patterns Found",
                     systemImage: "square.grid.2x2",
