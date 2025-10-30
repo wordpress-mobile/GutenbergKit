@@ -11,8 +11,8 @@ import CryptoKit
 /// - Memory and disk image caching to avoid redundant renders
 /// - Concurrent rendering with request queuing
 @MainActor
-final class HTMLPreviewRenderer {
-    static let shared = HTMLPreviewRenderer()
+public final class HTMLPreviewRenderer {
+    public static let shared = HTMLPreviewRenderer()
 
     // MARK: - Configuration
 
@@ -210,10 +210,15 @@ final class HTMLPreviewRenderer {
         return hashString(combined)
     }
 
-    /// Clears the image cache
-    func clearCache() {
+    /// Clears the image cache (both memory and disk)
+    public func clearCache() {
         memoryCache.removeAllObjects()
         diskCache.clearCache()
+    }
+
+    /// Clears only the memory cache (keeps disk cache intact)
+    public func clearMemoryCache() {
+        memoryCache.removeAllObjects()
     }
 
     // MARK: - Private Methods

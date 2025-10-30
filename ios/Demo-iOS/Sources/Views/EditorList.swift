@@ -6,6 +6,7 @@ struct EditorList: View {
     private var configurationStorage: ConfigurationStorage
 
     @State private var showAddDialog = false
+    @State private var showDebugSettings = false
     @Binding var isNativeInserterEnabled: Bool
 
     @Binding var selectedConfiguration: ConfigurationItem?
@@ -73,6 +74,11 @@ struct EditorList: View {
         .sheet(isPresented: $showAddDialog) {
             AddSiteView()
         }
+        .sheet(isPresented: $showDebugSettings) {
+            NavigationStack {
+                DebugSettingsView()
+            }
+        }
         .navigationTitle("GutenbergKit")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -80,6 +86,14 @@ struct EditorList: View {
                     showAddDialog = true
                 } label: {
                     Image(systemName: "plus")
+                }
+            }
+
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showDebugSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
                 }
             }
         }.onAppear {
