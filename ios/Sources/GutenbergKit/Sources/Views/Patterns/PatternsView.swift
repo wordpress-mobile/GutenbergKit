@@ -34,21 +34,24 @@ struct PatternsView: View {
                     description: Text(viewModel.searchText.isEmpty ? "There are no patterns available" : "Try a different search")
                 )
             } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 32) {
-                        ForEach(viewModel.sections) { section in
-                            PatternSectionView(
+                List {
+                    ForEach(viewModel.sections) { section in
+                        Section {
+                            PatternGridSection(
                                 section: section,
                                 onPatternSelected: { pattern in
                                     dismiss()
                                     onPatternSelected(pattern.name)
                                 }
                             )
+                        } header: {
+                            Text(section.name)
+                                .font(.headline)
+                                .foregroundStyle(Color.secondary)
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 16)
                 }
+                .listStyle(.plain)
                 .scrollContentBackground(.hidden)
             }
         }
