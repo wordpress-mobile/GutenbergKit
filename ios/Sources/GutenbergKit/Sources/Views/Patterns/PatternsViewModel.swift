@@ -4,22 +4,19 @@ import Combine
 @MainActor
 final class PatternsViewModel: ObservableObject {
     @Published var searchText = ""
-    private let allPatterns: [PatternType]
+    @Published private(set) var sections: [PatternSection] = []
+
+    private let allSections: [PatternSection]
+    private var cancellables = Set<AnyCancellable>()
 
     init(patterns: [PatternType]) {
-        self.allPatterns = patterns
-    }
-
-    var sections: [PatternSection] {
-        let patterns = filteredPatterns
-
-        // Group patterns by category
+        // Group patterns by category to create sections
         let grouped = Dictionary(grouping: patterns) { pattern in
             pattern.category ?? "other"
         }
 
         // Create sections sorted by category name
-        return grouped.map { category, patterns in
+        self.allSections = grouped.map { category, patterns in
             PatternSection(
                 category: category,
                 name: category.capitalized,
@@ -27,18 +24,34 @@ final class PatternsViewModel: ObservableObject {
             )
         }
         .sorted { $0.name < $1.name }
+
+        self.sections = allSections
+
+        setupSearchObserver()
     }
 
-    private var filteredPatterns: [PatternType] {
-        guard !searchText.isEmpty else {
-            return allPatterns
-        }
+    private func setupSearchObserver() {
+        $searchText
+            .debounce(for: .milliseconds(200), scheduler: RunLoop.main)
+            .sink { [weak self] searchText in
+                self?.updateFilteredSections(searchText: searchText)
+            }
+            .store(in: &cancellables)
+    }
 
-        return allPatterns.filter { pattern in
-//            pattern.matches(query: searchText)
-
-            // TODO: add search
-            true
+    private func updateFilteredSections(searchText: String) {
+        if searchText.isEmpty {
+            sections = allSections
+        } else {
+            sections = allSections.compactMap { section in
+                let filtered = SearchEngine<PatternType>()
+                    .search(query: searchText, in: section.patterns)
+                return filtered.isEmpty ? nil : PatternSection(
+                    category: section.category,
+                    name: section.name,
+                    patterns: filtered
+                )
+            }
         }
     }
 }
