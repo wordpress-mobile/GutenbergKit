@@ -13,6 +13,7 @@ import { loadEditorAssets } from './editor-loader';
 import EditorLoadError from '../components/editor-load-error';
 import { error } from './logger';
 import './editor-styles.js';
+import { unregisterDisallowedBlocks } from './blocks';
 
 /**
  * Initialize the bundled editor by loading assets and configuring modules
@@ -35,6 +36,9 @@ export function initializeBundledEditor() {
 		.then( importEditor )
 		.then( initializeEditor )
 		.then( loadEditorAssets )
+		.then( ( { allowedBlockTypes } ) => {
+			unregisterDisallowedBlocks( allowedBlockTypes );
+		} )
 		.catch( handleError );
 }
 
