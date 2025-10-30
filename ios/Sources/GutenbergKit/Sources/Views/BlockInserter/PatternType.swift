@@ -8,6 +8,7 @@ struct PatternType: Decodable, Identifiable {
     let category: String?
     let keywords: [String]?
     let content: String
+    let previewHTML: String
     let patternType: PatternSource
     let syncStatus: SyncStatus?
     let viewportWidth: Int

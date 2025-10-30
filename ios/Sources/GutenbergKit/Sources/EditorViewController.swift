@@ -254,9 +254,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // MARK: - Internal (Block Inserter)
 
     private func showBlockInserter(data: EditorJSMessage.ShowBlockInserterBody) {
-        // Configure pattern preview loader with the WebView
-        PatternPreviewLoader.shared.configure(webView: webView)
-
         let context = MediaPickerPresentationContext()
 
         let host = UIHostingController(rootView: NavigationStack {

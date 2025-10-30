@@ -244,6 +244,7 @@ export default function NativeBlockInserterButton() {
 	 * - Content and rendering info (content, viewportWidth)
 	 * - Pattern source type (user/theme/directory)
 	 * - Sync status for user patterns
+	 * - Preview HTML (serialized blocks for rendering)
 	 *
 	 * @return {Array} Array of formatted pattern objects
 	 */
@@ -253,18 +254,38 @@ export default function NativeBlockInserterButton() {
 			return [];
 		}
 
-		return patterns.map( ( pattern ) => ( {
-			id: String( pattern.id ?? pattern.name ),
-			name: pattern.name,
-			title: pattern.title,
-			description: pattern.description ?? null,
-			category: pattern.categories?.[ 0 ] ?? null,
-			keywords: pattern.keywords ?? [],
-			content: pattern.content,
-			patternType: pattern.type ?? 'theme',
-			syncStatus: pattern.syncStatus ?? null,
-			viewportWidth: pattern.viewportWidth ?? 1200,
-		} ) );
+		return patterns.map( ( pattern ) => {
+			// Parse and serialize the pattern content to get clean HTML
+			let previewHTML = '';
+			try {
+				const blocks = parse( pattern.content );
+				previewHTML = blocks
+					.map( ( block ) => {
+						// Use serialize to get the HTML representation
+						const html = block.originalContent || '';
+						return html;
+					} )
+					.join( '\n' );
+			} catch ( error ) {
+				debug( 'Failed to parse pattern content:', error );
+				// Fallback to raw content
+				previewHTML = pattern.content;
+			}
+
+			return {
+				id: String( pattern.id ?? pattern.name ),
+				name: pattern.name,
+				title: pattern.title,
+				description: pattern.description ?? null,
+				category: pattern.categories?.[ 0 ] ?? null,
+				keywords: pattern.keywords ?? [],
+				content: pattern.content,
+				previewHTML,
+				patternType: pattern.type ?? 'theme',
+				syncStatus: pattern.syncStatus ?? null,
+				viewportWidth: pattern.viewportWidth ?? 1200,
+			};
+		} );
 	};
 
 	return (
