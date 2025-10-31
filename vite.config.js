@@ -6,9 +6,9 @@ import { defaultRequestToExternal } from '@wordpress/dependency-extraction-webpa
 /**
  * External dependencies
  */
-import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import MagicString from 'magic-string';
 
 export default defineConfig( {
