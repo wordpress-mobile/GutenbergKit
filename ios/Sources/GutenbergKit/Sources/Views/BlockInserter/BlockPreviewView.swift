@@ -111,43 +111,32 @@ struct BlockPreviewView: View {
         let scale = await UIScreen.main.scale
 
         // Calculate the thumbnail size in points maintaining aspect ratio
-        // Note: image.size is already in points (accounts for scale)
         let aspectRatio = image.size.width / image.size.height
 
         let thumbnailSizePoints: CGSize
         switch maximumDimension {
         case .width(let maxWidth):
-            // Constrain by width
             let thumbnailWidthPoints = min(maxWidth, image.size.width)
             let thumbnailHeightPoints = thumbnailWidthPoints / aspectRatio
             thumbnailSizePoints = CGSize(width: thumbnailWidthPoints, height: thumbnailHeightPoints)
         case .height(let maxHeight):
-            // Constrain by height
             let thumbnailHeightPoints = min(maxHeight, image.size.height)
             let thumbnailWidthPoints = thumbnailHeightPoints * aspectRatio
             thumbnailSizePoints = CGSize(width: thumbnailWidthPoints, height: thumbnailHeightPoints)
         }
 
         // Convert to pixel dimensions for preparingThumbnail
-        // We render at screen scale to maintain quality
         let thumbnailSizePixels = CGSize(
             width: thumbnailSizePoints.width * scale,
             height: thumbnailSizePoints.height * scale
         )
 
         // Use preparingThumbnail for efficient thumbnail generation
-        // This method downsamples the image efficiently without loading full resolution
         if let thumbnailCGImage = image.preparingThumbnail(of: thumbnailSizePixels)?.cgImage {
-            // Create UIImage with correct scale factor so it displays at the right size
             return UIImage(cgImage: thumbnailCGImage, scale: scale, orientation: image.imageOrientation)
         }
 
-        // Fallback if preparingThumbnail fails - use UIGraphicsImageRenderer which handles scale
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = scale
-        let renderer = UIGraphicsImageRenderer(size: thumbnailSizePoints, format: format)
-        return renderer.image { context in
-            image.draw(in: CGRect(origin: .zero, size: thumbnailSizePoints))
-        }
+        // Return original image if thumbnail generation fails
+        return image
     }
 }
