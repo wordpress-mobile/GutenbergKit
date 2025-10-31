@@ -34,6 +34,10 @@ export default defineConfig( {
 } );
 
 function external( id ) {
+	// Exclude internal `@wordpress` module paths (e.g., /build-module/) from externalization
+	if ( id.match( /\/build-module\// ) ) {
+		return false;
+	}
 	const hasExternal = defaultRequestToExternal( id ) !== undefined;
 	const isInlineCss = id.match( /\.css\?inline$/ );
 
@@ -70,6 +74,12 @@ function wordPressExternals() {
 
 				if ( module.match( /\.css\?inline$/ ) ) {
 					continue; // Exclude inlined CSS files from externalization
+				}
+
+				// Exclude internal `@wordpress` module paths (e.g., /build-module/)
+				// from externalization.
+				if ( module.match( /\/build-module\// ) ) {
+					continue;
 				}
 
 				const externalDefinition = defaultRequestToExternal( module );
@@ -135,6 +145,12 @@ function wordPressExternals() {
 
 			while ( ( match = dynamicImportRegex.exec( code ) ) !== null ) {
 				const [ fullMatch, module ] = match;
+
+				// Exclude internal `@wordpress` module paths (e.g., /build-module/)
+				// from externalization.
+				if ( module.match( /\/build-module\// ) ) {
+					continue;
+				}
 
 				const externalDefinition = defaultRequestToExternal( module );
 
