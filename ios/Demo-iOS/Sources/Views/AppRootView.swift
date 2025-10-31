@@ -74,7 +74,7 @@ struct AppRootView: View {
 
                 let updatedConfiguration = EditorConfigurationBuilder()
                     .setShouldUseThemeStyles(canUseEditorStyles)
-                    .setShouldUsePlugins(false)
+                    .setShouldUsePlugins(canUsePlugins)
                     .setSiteUrl(config.siteUrl)
                     .setSiteApiRoot(config.siteApiRoot)
                     .setAuthHeader(config.authHeader)
