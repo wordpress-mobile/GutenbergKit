@@ -26,29 +26,26 @@ public actor HTMLPreviewRenderer {
 
     // All requests (both queued and executing)
     private var requests: [RenderRequest] = []
+    private var executingTaskCount: Int = 0
 
     private let urlCache: URLCache
     private var totalCachedBytes: Int64 = 0
     private var cachedImageCount: Int = 0
 
-    // Cached CSS for background HTML generation
     private let gutenbergCSS: String
     private let gutenbergCSSHash: String
-
-    // MARK: - Types
 
     private class RenderRequest {
         let diskCacheKey: String
         let html: String
         let viewportWidth: Int
-        var continuations: [CheckedContinuation<UIImage, Error>]
+        var continuations: [UUID: CheckedContinuation<UIImage, Error>] = [:]
         var task: Task<Void, Never>?
 
-        init(diskCacheKey: String, html: String, viewportWidth: Int, continuation: CheckedContinuation<UIImage, Error>) {
+        init(diskCacheKey: String, html: String, viewportWidth: Int) {
             self.diskCacheKey = diskCacheKey
             self.html = html
             self.viewportWidth = viewportWidth
-            self.continuations = [continuation]
         }
     }
 
@@ -60,13 +57,11 @@ public actor HTMLPreviewRenderer {
         assert(!css.isEmpty, "Failed to load Gutenberg CSS from bundle. Previews will not render correctly.")
 
         // Precompute CSS hash for cache key generation
-        let data = Data(css.utf8)
-        let hash = SHA256.hash(data: data)
-        self.gutenbergCSSHash = hash.compactMap { String(format: "%02x", $0) }.joined()
+        self.gutenbergCSSHash = css.sha256
 
-        let urlCacheDirectory = URL.cachesDirectory.appendingPathComponent("gbk-pattern-previews", isDirectory: true)
+        let cacheDirectory = URL.cachesDirectory.appendingPathComponent("gbk-pattern-previews", isDirectory: true)
         do {
-            try FileManager.default.createDirectory(at: urlCacheDirectory, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
         } catch {
             assertionFailure("failed to create cache directory: \(error)")
         }
@@ -76,43 +71,24 @@ public actor HTMLPreviewRenderer {
         self.urlCache = URLCache(
             memoryCapacity: 0, // Disable memory cache (we use NSCache for thumbnails)
             diskCapacity: 16 * 1024 * 1024, // 16 MB
-            directory: urlCacheDirectory
+            directory: cacheDirectory
         )
     }
 
     /// Loads the Gutenberg CSS from the bundled assets
     private static func loadGutenbergCSS() -> String? {
-        // Check if Gutenberg resource exists in bundle
         guard let assetsURL = Bundle.module.url(forResource: "Gutenberg", withExtension: nil) else {
             assertionFailure("Gutenberg resource not found in bundle")
             return nil
         }
 
-        // Check if assets directory exists
         let assetsDirectory = assetsURL.appendingPathComponent("assets")
-        guard let assetsPath = try? FileManager.default.contentsOfDirectory(
-            at: assetsDirectory,
-            includingPropertiesForKeys: nil
-        ) else {
-            assertionFailure("Failed to read assets directory at: \(assetsDirectory.path)")
+        guard let files = try? FileManager.default.contentsOfDirectory(at: assetsDirectory, includingPropertiesForKeys: nil),
+              let cssURL = files.first(where: { $0.lastPathComponent.hasPrefix("index-") && $0.lastPathComponent.hasSuffix(".css") }),
+              let css = try? String(contentsOf: cssURL, encoding: .utf8) else {
+            assertionFailure("Failed to load Gutenberg CSS from bundle")
             return nil
         }
-
-        // Find CSS file matching pattern: index-*.css
-        guard let cssURL = assetsPath.first(where: { url in
-            let filename = url.lastPathComponent
-            return filename.hasPrefix("index-") && filename.hasSuffix(".css")
-        }) else {
-            assertionFailure("No CSS file matching 'index-*.css' found in assets. Available files: \(assetsPath.map { $0.lastPathComponent })")
-            return nil
-        }
-
-        // Load CSS file contents
-        guard let css = try? String(contentsOf: cssURL, encoding: .utf8) else {
-            assertionFailure("Failed to load CSS from: \(cssURL.path)")
-            return nil
-        }
-
         return css
     }
 
@@ -125,13 +101,8 @@ public actor HTMLPreviewRenderer {
     ///   - viewportWidth: The viewport width for rendering
     /// - Returns: Full-size rendered image at the specified viewport width
     func render(html: String, viewportWidth: Int) async throws -> UIImage {
+        let diskCacheKey = makeDiskCacheKey(html: html, viewportWidth: viewportWidth, cssHash: gutenbergCSSHash)
 
-        print("request \(html.count)")
-
-        // Generate disk cache key (HTML + viewport width + CSS hash)
-        let diskCacheKey = generateDiskCacheKey(html: html, viewportWidth: viewportWidth, cssHash: gutenbergCSSHash)
-
-        // Check disk cache (stores full-size images at viewport width)
         if let diskImage = loadImageFromCache(forKey: diskCacheKey) {
             print("disk cache hit \(html.count)")
             return diskImage
@@ -139,36 +110,56 @@ public actor HTMLPreviewRenderer {
 
         print("miss \(html.count)")
 
-        return try await withCheckedThrowingContinuation { continuation in
-            // Check if this content is already queued or executing (deduplication)
-            if let existingRequest = requests.first(where: { $0.diskCacheKey == diskCacheKey }) {
-                existingRequest.continuations.append(continuation)
-                return
+        let uuid = UUID()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                // Check if this content is already queued or executing (deduplication)
+                if let existingRequest = requests.first(where: { $0.diskCacheKey == diskCacheKey }) {
+                    existingRequest.continuations[uuid] = continuation
+                    return
+                }
+                let request = RenderRequest(
+                    diskCacheKey: diskCacheKey,
+                    html: html,
+                    viewportWidth: viewportWidth,
+                )
+                request.continuations[uuid] = continuation
+                requests.append(request)
+                performPendingTasksIfNeeded()
             }
-
-            // Create new request
-            let request = RenderRequest(
-                diskCacheKey: diskCacheKey,
-                html: html,
-                viewportWidth: viewportWidth,
-                continuation: continuation
-            )
-            requests.append(request)
-
-            // Start rendering if under capacity
-            let executingCount = requests.filter { $0.task != nil }.count
-            if executingCount < maxConcurrentRenders {
-                startRender(request: request)
+        } onCancel: {
+            Task {
+                await cancelRender(forKey: diskCacheKey, uuid: uuid)
             }
         }
     }
+
+    /// Cancels a specific continuation for a render request
+    /// - Parameters:
+    ///   - key: The disk cache key identifying the request
+    ///   - uuid: The unique identifier for the continuation to cancel
+    private func cancelRender(forKey key: String, uuid: UUID) {
+        guard let request = requests.first(where: { $0.diskCacheKey == key }) else {
+            return
+        }
+        // Remove and resume the specific continuation with cancellation error
+        if let continuation = request.continuations.removeValue(forKey: uuid) {
+            continuation.resume(throwing: CancellationError())
+        }
+        // If no continuations left, cancel the task and remove the request
+        if request.continuations.isEmpty {
+            request.task?.cancel()
+            removeRequest(request)
+            performPendingTasksIfNeeded()
+        }
+    }
+
+    // MARK: - URLCache
 
     /// Clears the disk cache
     public func clearCache() async {
         urlCache.removeAllCachedResponses()
     }
-
-    // MARK: - URLCache Helpers
 
     /// Load image from URLCache
     private func loadImageFromCache(forKey key: String) -> UIImage? {
@@ -210,82 +201,59 @@ public actor HTMLPreviewRenderer {
 
     // MARK: - Private Methods
 
-    private func startRender(request: RenderRequest) {
+    private func perform(_ request: RenderRequest) {
+        executingTaskCount += 1
         request.task = Task {
             do {
-                // Generate full HTML (expensive operation on actor)
-                let fullHTML = generateFullHTML(
+                let fullHTML = makeHTML(
                     content: request.html,
                     viewportWidth: request.viewportWidth,
                     css: gutenbergCSS
                 )
 
-                // Perform actual rendering
                 let image = try await webViewRenderer.render(
-                    fullHTML: fullHTML,
+                    html: fullHTML,
                     viewportWidth: request.viewportWidth
                 )
 
-                // Save to disk cache
-                await saveImageToCache(image, forKey: request.diskCacheKey)
+                saveImageToCache(image, forKey: request.diskCacheKey)
 
-                // Resume all continuations with success
-                for continuation in request.continuations {
+                for continuation in request.continuations.values {
                     continuation.resume(returning: image)
                 }
             } catch {
-                // Resume all continuations with error
-                for continuation in request.continuations {
+                for continuation in request.continuations.values {
                     continuation.resume(throwing: error)
                 }
             }
-
-            // Remove this request from the list
-            await self.removeRequest(request)
-
-            // Process next queued request if any
-            await processNextRequest()
+            removeRequest(request)
+            performPendingTasksIfNeeded()
         }
     }
 
     private func removeRequest(_ request: RenderRequest) {
+        if request.task != nil {
+            executingTaskCount -= 1
+            request.task = nil
+        }
         requests.removeAll { $0 === request }
     }
 
-    private func processNextRequest() {
-        // Find first queued request (not executing yet)
-        guard let nextRequest = requests.first(where: { $0.task == nil }) else {
-            return
+    private func performPendingTasksIfNeeded() {
+        while executingTaskCount < maxConcurrentRenders,
+              let request = requests.first(where: { $0.task == nil }) {
+            perform(request)
         }
-
-        // Check if we have capacity
-        let executingCount = requests.filter { $0.task != nil }.count
-        guard executingCount < maxConcurrentRenders else {
-            return
-        }
-
-        startRender(request: nextRequest)
     }
-
 }
 
 // MARK: - Private Helper Functions
 
-/// Creates a SHA256 hash of a string
-private func hashString(_ string: String) -> String {
-    let data = Data(string.utf8)
-    let hash = SHA256.hash(data: data)
-    return hash.compactMap { String(format: "%02x", $0) }.joined()
+private func makeDiskCacheKey(html: String, viewportWidth: Int, cssHash: String) -> String {
+    "\(html)-\(viewportWidth)-\(cssHash)".sha256
 }
 
-/// Generates a disk cache key from HTML content, viewport width, and CSS hash
-private func generateDiskCacheKey(html: String, viewportWidth: Int, cssHash: String) -> String {
-    let combined = "\(html)-\(viewportWidth)-\(cssHash)"
-    return hashString(combined)
-}
-
-/// Generates full HTML with styling
-private func generateFullHTML(content: String, viewportWidth: Int, css: String) -> String {
+private func makeHTML(content: String, viewportWidth: Int, css: String) -> String {
     return """
     <!DOCTYPE html>
     <html style="margin: 0; padding: 0;">
@@ -304,7 +272,7 @@ private func generateFullHTML(content: String, viewportWidth: Int, css: String) 
             \(css)
         </style>
     </head>
-    <body class="block-editor-iframe__body editor-styles-wrapper wp-embed-responsive">
+    <body>
         \(content)
     </body>
     </html>
@@ -336,5 +304,14 @@ private func encode(_ image: UIImage) -> Data? {
     }
 
     return data as Data
+}
+
+private extension String {
+    /// Creates a SHA256 hash of the string
+    var sha256: String {
+        let data = Data(self.utf8)
+        let hash = SHA256.hash(data: data)
+        return hash.compactMap { String(format: "%02x", $0) }.joined()
+    }
 }
 

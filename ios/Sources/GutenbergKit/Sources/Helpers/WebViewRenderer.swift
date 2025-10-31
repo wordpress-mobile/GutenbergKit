@@ -13,7 +13,7 @@ final class WebViewRenderer {
     nonisolated init() {}
 
     /// Renders HTML content to an image.
-    func render(fullHTML: String, viewportWidth: Int) async throws -> UIImage {
+    func render(html: String, viewportWidth: Int) async throws -> UIImage {
         cancelCleanup()
 
         let pooledView = getAvailableWebView()
@@ -31,7 +31,7 @@ final class WebViewRenderer {
         // This ensures scrollHeight returns actual content height, not viewport height
         webView.frame = CGRect(x: 0, y: 0, width: width, height: 80)
 
-        let contentHeight = try await pooledView.render(fullHTML) ?? width
+        let contentHeight = try await pooledView.render(html: html) ?? width
 
         // Take screenshot of entire content with the maximum target size we'll ever need (roughly)
         // Calculate snapshot width such that neither dimension exceeds the maximum size
@@ -99,7 +99,7 @@ final class WebViewRenderer {
         }
 
         /// Loads HTML content and waits for rendering to complete with timeout.
-        func render(_ html: String) async throws -> CGFloat? {
+        func render(html: String) async throws -> CGFloat? {
             try await withCheckedThrowingContinuation { continuation in
                 let timeoutTask = Task { @MainActor in
                     try? await Task.sleep(for: .seconds(16))
