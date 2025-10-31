@@ -35,6 +35,8 @@ public final class HTMLPreviewRenderer {
     private var pendingRequests: [RenderRequest] = []
     private var activeRenders: Set<String> = []
     private let urlCache: URLCache
+    private var totalCachedBytes: Int64 = 0
+    private var cachedImageCount: Int = 0
 
     // Cached CSS for background HTML generation
     private let gutenbergCSS: String
@@ -63,12 +65,6 @@ public final class HTMLPreviewRenderer {
             // Create web view with small initial frame for off-screen rendering
             // Frame will be adjusted per render based on viewport width and content height
             webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1200, height: 100), configuration: config)
-            webView.backgroundColor = .clear
-            webView.isOpaque = false // gets rid of the white flash upon content load in dark mode.
-            webView.translatesAutoresizingMaskIntoConstraints = false
-            webView.scrollView.bounces = false
-            webView.scrollView.showsVerticalScrollIndicator = false
-            webView.scrollView.backgroundColor = .clear
 
             delegate = RenderDelegate()
             webView.navigationDelegate = delegate
@@ -110,7 +106,7 @@ public final class HTMLPreviewRenderer {
         // most efficient format for it on iOS is HEIF.
         self.urlCache = URLCache(
             memoryCapacity: 0, // Disable memory cache (we use NSCache for thumbnails)
-            diskCapacity: 16 * 1024 * 1024, // 16 MB disk limit
+            diskCapacity: 16 * 1024 * 1024, // 16 MB
             directory: urlCacheDirectory
         )
 
@@ -292,9 +288,13 @@ public final class HTMLPreviewRenderer {
 
     /// Save image to URLCache
     private func saveImageToCache(_ image: UIImage, forKey key: String) {
-        guard let data = imageToHEICData(image) else { return }
+        guard let data = encode(image) else { return }
 
-        print("store \(image.size) \(image.scale) \(ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file))")
+        totalCachedBytes += Int64(data.count)
+        cachedImageCount += 1
+        let averageSize = totalCachedBytes / Int64(cachedImageCount)
+
+        print("store \(image.size) \(image.scale) size=\(ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file)) avg=\(ByteCountFormatter.string(fromByteCount: averageSize, countStyle: .file))")
 
         let url = URL(string: "preview://\(key)")!
         let request = URLRequest(url: url)
@@ -342,7 +342,7 @@ public final class HTMLPreviewRenderer {
         )
 
         // Wait for rendering to complete using the delegate
-        let contentHeight = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<CGFloat, Error>) in
+        let contentHeight: CGFloat = try await withCheckedThrowingContinuation { continuation in
             delegate.onRenderComplete = { height in
                 delegate.onRenderComplete = nil
                 continuation.resume(returning: height ?? width) // Fallback to square
@@ -351,9 +351,16 @@ public final class HTMLPreviewRenderer {
         }
 
         // Take screenshot of entire content with the maximum target size we'll ever need (roughly)
+        // Calculate snapshot width such that neither dimension exceeds the maximum size
+        let maxDimension = min(UIScreen.main.bounds.width, UIScreen.main.bounds.height) - 48
+        let scaleForWidth = maxDimension / width
+        let scaleForHeight = maxDimension / contentHeight
+        let scale = min(scaleForWidth, scaleForHeight, 1.0) // Don't scale up, only down
+        let snapshotWidth = width * scale
+
         let config = WKSnapshotConfiguration()
         config.rect = CGRect(x: 0, y: 0, width: width, height: contentHeight)
-        config.snapshotWidth = NSNumber(value: min(UIScreen.main.bounds.width, UIScreen.main.bounds.height) - 48)
+        config.snapshotWidth = NSNumber(value: snapshotWidth)
 
         let image = try await webView.takeSnapshot(configuration: config)
 
@@ -516,8 +523,8 @@ private func generateFullHTML(content: String, viewportWidth: Int, css: String) 
     """
 }
 
-/// Converts UIImage to HEIC data format
-private func imageToHEICData(_ image: UIImage) -> Data? {
+/// Converts UIImage to HEIC data format.
+private func encode(_ image: UIImage) -> Data? {
     guard let cgImage = image.cgImage else { return nil }
 
     let data = NSMutableData()
@@ -525,8 +532,13 @@ private func imageToHEICData(_ image: UIImage) -> Data? {
         return nil
     }
 
+    // Important to ignore the alpha channel (we now screenshots are opaque)
+    // to avoid warnings from ImageIO about saving HEIF with alpha channel but
+    // opqaue pixels. Storing opqaue images reduces the image size and the
+    // memory needed for decoding by two times.
     let options: [CFString: Any] = [
-        kCGImageDestinationLossyCompressionQuality: 0.85
+        kCGImageDestinationLossyCompressionQuality: 0.85,
+        kCGImagePropertyHasAlpha: false,
     ]
 
     CGImageDestinationAddImage(destination, cgImage, options as CFDictionary)
