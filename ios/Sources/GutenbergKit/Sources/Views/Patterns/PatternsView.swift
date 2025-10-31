@@ -7,7 +7,6 @@ struct PatternsView: View {
 
     @StateObject private var viewModel: PatternsViewModel
     @StateObject private var memoryCache = HTMLPreviewMemoryCache()
-    @State private var contentOpacity: Double = 0
 
     @Environment(\.dismiss) private var dismiss
 
@@ -20,8 +19,6 @@ struct PatternsView: View {
     var body: some View {
         // TODO: CMM-874 l10n
         content
-            .opacity(contentOpacity)
-            .background(Material.ultraThin)
             .searchable(text: $viewModel.searchText)
             .navigationTitle("Patterns")
             .navigationBarTitleDisplayMode(.inline)
@@ -29,15 +26,6 @@ struct PatternsView: View {
                 toolbar
             }
             .environment(\.htmlPreviewMemoryCache, memoryCache)
-            .onAppear {
-                // Small delay to allow cache warmup before showing content
-                Task {
-                    try await Task.sleep(for: .milliseconds(400))
-                    withAnimation(.easeInOut) {
-                        contentOpacity = 1.0
-                    }
-                }
-            }
     }
 
     private var content: some View {

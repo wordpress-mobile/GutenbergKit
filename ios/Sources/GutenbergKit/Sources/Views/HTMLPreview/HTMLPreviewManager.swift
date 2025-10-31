@@ -241,24 +241,36 @@ private func makeDiskCacheKey(html: String, viewportWidth: Int, cssHash: String)
 private func makeHTML(content: String, viewportWidth: Int, css: String) -> String {
     return """
     <!DOCTYPE html>
-    <html style="margin: 0; padding: 0;">
+    <html class="block-editor-iframe__html" style="margin: 0; padding: 0;">
     <head>
         <meta name="viewport" content="width=\(viewportWidth), initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <style>
             * { box-sizing: border-box; }
+            html {
+                height: auto !important;
+                min-height: 100%;
+            }
             body {
                 margin: 0;
-                padding: 0;
+                padding: 24px;
                 width: \(viewportWidth)px;
                 background: white;
+                display: flex;
+                align-items: center;
+                min-height: 100%;
+            }
+            .is-root-container {
+                width: 100%;
             }
         </style>
         <style>
             \(css)
         </style>
     </head>
-    <body>
-        \(content)
+    <body class="block-editor-iframe__body editor-styles-wrapper">
+        <div class="block-editor-block-list__layout is-root-container">
+            \(content)
+        </div>
     </body>
     </html>
     """

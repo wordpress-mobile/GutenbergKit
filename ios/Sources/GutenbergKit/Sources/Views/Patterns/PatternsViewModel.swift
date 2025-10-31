@@ -60,12 +60,12 @@ final class PatternsViewModel: ObservableObject {
         // Create "All" section at the top (no previews)
         // TODO: CMM-874 - Localize "All"
         if !patterns.isEmpty {
-            sections += [PatternSection(
+            sections = [PatternSection(
                 category: "all",
                 name: "All",
                 patterns: patterns,
                 showPreviews: false
-            )]
+            )] + sections
         }
 
         self.allSections = sections
