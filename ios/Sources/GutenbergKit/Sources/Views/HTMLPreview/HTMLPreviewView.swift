@@ -5,12 +5,19 @@ import UIKit
 struct HTMLPreviewView: View {
     let pattern: Pattern
     let targetSize: CGSize?
+    let viewportWidth: Int?
 
     @State private var previewImage: UIImage?
     @State private var isLoadingFailed = false
     @State private var cachedAspectRatio: CGFloat?
     @Environment(\.htmlPreviewMemoryCache) private var memoryCache
     @Environment(\.displayScale) private var displayScale
+
+    init(pattern: Pattern, targetSize: CGSize?, viewportWidth: Int? = nil) {
+        self.pattern = pattern
+        self.targetSize = targetSize
+        self.viewportWidth = viewportWidth
+    }
 
     var body: some View {
         ZStack {
@@ -41,27 +48,29 @@ struct HTMLPreviewView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .task(id: pattern.id) {
+        .task(id: "\(pattern.id)-\(viewportWidth?.description ?? "default")") {
             await loadPreview()
         }
     }
 
     private func loadPreview() async {
+        let effectiveViewportWidth = viewportWidth ?? pattern.viewportWidth ?? 1200
+
         // Load cached aspect ratio to prevent layout jumps
         if cachedAspectRatio == nil {
-            cachedAspectRatio = AspectRatioCache.shared.aspectRatio(for: pattern.name)
+            cachedAspectRatio = AspectRatioCache.shared.aspectRatio(for: pattern.name, viewportWidth: effectiveViewportWidth)
         }
 
         do {
             let cacheSize = targetSize ?? .zero
-            if let cachedImage = memoryCache?.image(for: pattern.name, size: cacheSize) {
+            if let cachedImage = memoryCache?.image(for: pattern.name, size: cacheSize, viewportWidth: viewportWidth) {
                 previewImage = cachedImage
-                updateAspectRatio(from: cachedImage)
+                updateAspectRatio(from: cachedImage, viewportWidth: effectiveViewportWidth)
                 return
             }
             let fullSizeImage = try await HTMLPreviewManager.shared.render(
                 html: pattern.content,
-                viewportWidth: pattern.viewportWidth ?? 1200
+                viewportWidth: effectiveViewportWidth
             )
             try Task.checkCancellation()
 
@@ -75,10 +84,10 @@ struct HTMLPreviewView: View {
             } else {
                 processedImage = await fullSizeImage.byPreparingForDisplay() ?? fullSizeImage
             }
-            memoryCache?.setImage(processedImage, for: pattern.name, size: cacheSize)
+            memoryCache?.setImage(processedImage, for: pattern.name, size: cacheSize, viewportWidth: viewportWidth)
 
             try Task.checkCancellation()
-            updateAspectRatio(from: processedImage)
+            updateAspectRatio(from: processedImage, viewportWidth: effectiveViewportWidth)
 
             withAnimation {
                 previewImage = processedImage
@@ -91,10 +100,10 @@ struct HTMLPreviewView: View {
     }
 
     /// Updates the cached aspect ratio from an image
-    private func updateAspectRatio(from image: UIImage) {
+    private func updateAspectRatio(from image: UIImage, viewportWidth: Int) {
         let aspectRatio = image.size.width / image.size.height
         cachedAspectRatio = aspectRatio
-        AspectRatioCache.shared.setAspectRatio(aspectRatio, for: pattern.name)
+        AspectRatioCache.shared.setAspectRatio(aspectRatio, for: pattern.name, viewportWidth: viewportWidth)
     }
 
     /// Creates a thumbnail from an image using preparingThumbnail
@@ -142,14 +151,19 @@ private class AspectRatioCache: ObservableObject {
         }
     }
 
-    func aspectRatio(for patternName: String) -> CGFloat? {
-        return cache[patternName]
+    private func key(for patternName: String, viewportWidth: Int) -> String {
+        "\(patternName)-vw\(viewportWidth)"
     }
 
-    func setAspectRatio(_ aspectRatio: CGFloat, for patternName: String) {
+    func aspectRatio(for patternName: String, viewportWidth: Int) -> CGFloat? {
+        return cache[key(for: patternName, viewportWidth: viewportWidth)]
+    }
+
+    func setAspectRatio(_ aspectRatio: CGFloat, for patternName: String, viewportWidth: Int) {
+        let cacheKey = key(for: patternName, viewportWidth: viewportWidth)
         // Only persist if the value changed
-        if cache[patternName] != aspectRatio {
-            cache[patternName] = aspectRatio
+        if cache[cacheKey] != aspectRatio {
+            cache[cacheKey] = aspectRatio
             UserDefaults.standard.set(cache, forKey: Self.cacheKey)
         }
     }

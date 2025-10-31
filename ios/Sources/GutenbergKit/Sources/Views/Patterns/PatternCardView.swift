@@ -5,21 +5,29 @@ struct PatternCardView: View {
     let pattern: Pattern
     let onSelected: () -> Void
     let style: Style
+    let viewportWidth: Int?
 
     enum Style {
         case horizontal(height: CGFloat, maxWidth: CGFloat)
         case fullWidth(maxHeight: CGFloat)
     }
 
+    init(pattern: Pattern, onSelected: @escaping () -> Void, style: Style, viewportWidth: Int? = nil) {
+        self.pattern = pattern
+        self.onSelected = onSelected
+        self.style = style
+        self.viewportWidth = viewportWidth
+    }
+
     var body: some View {
         Button(action: onSelected) {
             switch style {
             case .horizontal(let height, let maxWidth):
-                HTMLPreviewView(pattern: pattern, targetSize: CGSize(width: maxWidth, height: height))
+                HTMLPreviewView(pattern: pattern, targetSize: CGSize(width: maxWidth, height: height), viewportWidth: viewportWidth)
                     .frame(minWidth: 120, maxWidth: maxWidth, minHeight: height, maxHeight: height)
                     .cardStyle(cornerRadius: 10)
             case .fullWidth(let maxHeight):
-                HTMLPreviewView(pattern: pattern, targetSize: nil)
+                HTMLPreviewView(pattern: pattern, targetSize: nil, viewportWidth: viewportWidth)
                     .frame(minWidth: 200, maxWidth: .infinity, minHeight: 150, maxHeight: maxHeight)
                     .cardStyle(cornerRadius: 14)
             }
@@ -33,7 +41,7 @@ struct PatternCardView: View {
                 Label("Insert Pattern", systemImage: "plus")
             }
         } preview: {
-            PatternDetailedView(pattern: pattern, onSelected: onSelected)
+            PatternDetailedView(pattern: pattern, onSelected: onSelected, viewportWidth: viewportWidth)
         }
     }
 }
@@ -41,11 +49,12 @@ struct PatternCardView: View {
 private struct PatternDetailedView: View {
     let pattern: Pattern
     let onSelected: () -> Void
+    let viewportWidth: Int?
 
     var body: some View {
         VStack(spacing: 0) {
             // Large preview
-            HTMLPreviewView(pattern: pattern, targetSize: CGSize(width: 400, height: 300))
+            HTMLPreviewView(pattern: pattern, targetSize: CGSize(width: 400, height: 300), viewportWidth: viewportWidth)
                 .frame(maxWidth: .infinity)
                 .frame(height: 300)
                 .background(Color(uiColor: .white))

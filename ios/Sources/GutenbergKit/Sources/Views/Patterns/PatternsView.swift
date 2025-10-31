@@ -7,6 +7,7 @@ struct PatternsView: View {
 
     @StateObject private var viewModel: PatternsViewModel
     @StateObject private var memoryCache = HTMLPreviewMemoryCache()
+    @AppStorage("GBKPatternsPreviewMode") private var previewMode: PreviewMode = .desktop
 
     @Environment(\.dismiss) private var dismiss
 
@@ -14,6 +15,15 @@ struct PatternsView: View {
         self.patterns = patterns
         self.onPatternSelected = onPatternSelected
         self._viewModel = StateObject(wrappedValue: PatternsViewModel(patterns: patterns))
+    }
+
+    private var viewportWidth: Int? {
+        switch previewMode {
+        case .mobile:
+            return 375
+        case .desktop:
+            return nil
+        }
     }
 
     var body: some View {
@@ -46,7 +56,8 @@ struct PatternsView: View {
                                 onPatternSelected: { pattern in
                                     dismiss()
                                     onPatternSelected(pattern)
-                                }
+                                },
+                                viewportWidth: viewportWidth
                             )
                         }
                     }
@@ -66,6 +77,24 @@ struct PatternsView: View {
             }
             .tint(Color.primary)
         }
+
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                previewMode.toggle()
+            } label: {
+                Image(systemName: previewMode == .mobile ? "iphone" : "desktopcomputer")
+            }
+            .tint(Color.primary)
+        }
+    }
+}
+
+enum PreviewMode: String {
+    case mobile
+    case desktop
+
+    mutating func toggle() {
+        self = self == .mobile ? .desktop : .mobile
     }
 }
 

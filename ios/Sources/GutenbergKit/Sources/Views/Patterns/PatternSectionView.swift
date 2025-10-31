@@ -4,14 +4,21 @@ import SwiftUI
 struct PatternGridSection: View {
     let section: PatternSection
     let onPatternSelected: (Pattern) -> Void
+    let viewportWidth: Int?
 
     @Environment(\.htmlPreviewMemoryCache) private var memoryCache
+
+    init(section: PatternSection, onPatternSelected: @escaping (Pattern) -> Void, viewportWidth: Int? = nil) {
+        self.section = section
+        self.onPatternSelected = onPatternSelected
+        self.viewportWidth = viewportWidth
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             // Category header with navigation
             NavigationLink {
-                PatternListView(section: section, onPatternSelected: onPatternSelected)
+                PatternListView(section: section, onPatternSelected: onPatternSelected, viewportWidth: viewportWidth)
                     .environment(\.htmlPreviewMemoryCache, memoryCache) // Important
             } label: {
                 HStack {
@@ -49,7 +56,8 @@ struct PatternGridSection: View {
                                 onSelected: {
                                     onPatternSelected(pattern)
                                 },
-                                style: .horizontal(height: 140, maxWidth: 240)
+                                style: .horizontal(height: 140, maxWidth: 240),
+                                viewportWidth: viewportWidth
                             )
                         }
                     }

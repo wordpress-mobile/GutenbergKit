@@ -14,20 +14,24 @@ final class HTMLPreviewMemoryCache: ObservableObject {
         cache.countLimit = countLimit
     }
 
-    /// Generates a cache key from pattern name and size
-    private func cacheKey(patternName: String, size: CGSize) -> String {
-        "\(patternName)-\(Int(size.width))x\(Int(size.height))"
+    /// Generates a cache key from pattern name, size, and viewport width
+    private func cacheKey(patternName: String, size: CGSize, viewportWidth: Int?) -> String {
+        var key = "\(patternName)-\(Int(size.width))x\(Int(size.height))"
+        if let viewportWidth {
+            key += "-vw\(viewportWidth)"
+        }
+        return key
     }
 
     /// Retrieves an image from the cache
-    func image(for patternName: String, size: CGSize) -> UIImage? {
-        let key = cacheKey(patternName: patternName, size: size)
+    func image(for patternName: String, size: CGSize, viewportWidth: Int? = nil) -> UIImage? {
+        let key = cacheKey(patternName: patternName, size: size, viewportWidth: viewportWidth)
         return cache.object(forKey: key as NSString)
     }
 
     /// Stores an image in the cache
-    func setImage(_ image: UIImage, for patternName: String, size: CGSize) {
-        let key = cacheKey(patternName: patternName, size: size)
+    func setImage(_ image: UIImage, for patternName: String, size: CGSize, viewportWidth: Int? = nil) {
+        let key = cacheKey(patternName: patternName, size: size, viewportWidth: viewportWidth)
         cache.setObject(image, forKey: key as NSString)
     }
 }

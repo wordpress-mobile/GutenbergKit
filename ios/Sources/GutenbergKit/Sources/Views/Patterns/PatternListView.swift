@@ -4,8 +4,15 @@ import SwiftUI
 struct PatternListView: View {
     let section: PatternSection
     let onPatternSelected: (Pattern) -> Void
+    let viewportWidth: Int?
 
     @Environment(\.dismiss) private var dismiss
+
+    init(section: PatternSection, onPatternSelected: @escaping (Pattern) -> Void, viewportWidth: Int? = nil) {
+        self.section = section
+        self.onPatternSelected = onPatternSelected
+        self.viewportWidth = viewportWidth
+    }
 
     var body: some View {
         ScrollView {
@@ -17,7 +24,8 @@ struct PatternListView: View {
                             dismiss()
                             onPatternSelected(pattern)
                         },
-                        style: .fullWidth(maxHeight: 400)
+                        style: .fullWidth(maxHeight: 400),
+                        viewportWidth: viewportWidth
                     )
                 }
             }
