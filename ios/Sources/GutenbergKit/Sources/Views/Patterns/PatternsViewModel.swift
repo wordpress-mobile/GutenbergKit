@@ -9,7 +9,7 @@ final class PatternsViewModel: ObservableObject {
     private let allSections: [PatternSection]
     private var cancellables = Set<AnyCancellable>()
 
-    init(patterns: [PatternType]) {
+    init(patterns: [Pattern]) {
         // Group patterns by category to create sections
         let grouped = Dictionary(grouping: patterns) { pattern in
             pattern.category ?? "other"
@@ -44,7 +44,7 @@ final class PatternsViewModel: ObservableObject {
             sections = allSections
         } else {
             sections = allSections.compactMap { section in
-                let filtered = SearchEngine<PatternType>()
+                let filtered = SearchEngine<Pattern>()
                     .search(query: searchText, in: section.patterns)
                 return filtered.isEmpty ? nil : PatternSection(
                     category: section.category,

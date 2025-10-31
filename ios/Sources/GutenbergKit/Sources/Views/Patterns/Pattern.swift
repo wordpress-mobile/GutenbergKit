@@ -1,6 +1,6 @@
 import Foundation
 
-struct PatternType: Decodable, Identifiable {
+struct Pattern: Decodable, Identifiable {
     let name: String
     let title: String
     let content: String
@@ -21,7 +21,7 @@ struct PatternType: Decodable, Identifiable {
     }
 }
 
-extension PatternType: Searchable {
+extension Pattern: Searchable {
     /// Sets the searchable fields in the order of priority
     func searchableFields() -> [SearchableField] {
         var fields: [SearchableField] = []
@@ -56,5 +56,5 @@ struct PatternSection: Identifiable, Decodable {
     var id: String { category }
     let category: String
     let name: String
-    let patterns: [PatternType]
+    let patterns: [Pattern]
 }

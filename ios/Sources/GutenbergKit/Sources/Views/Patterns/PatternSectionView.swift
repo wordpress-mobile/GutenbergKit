@@ -3,7 +3,7 @@ import SwiftUI
 /// Displays a category section with horizontal scrolling pattern previews
 struct PatternGridSection: View {
     let section: PatternSection
-    let onPatternSelected: (PatternType) -> Void
+    let onPatternSelected: (Pattern) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {

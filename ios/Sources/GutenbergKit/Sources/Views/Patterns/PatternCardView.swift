@@ -2,7 +2,7 @@ import SwiftUI
 
 /// A simple card view showing only the pattern preview image
 struct PatternCardView: View {
-    let pattern: PatternType
+    let pattern: Pattern
     let onSelected: () -> Void
     let style: Style
 
@@ -91,7 +91,7 @@ private extension PatternCardView.Style {
 }
 
 private struct PatternDetailedView: View {
-    let pattern: PatternType
+    let pattern: Pattern
     let onSelected: () -> Void
 
     var body: some View {

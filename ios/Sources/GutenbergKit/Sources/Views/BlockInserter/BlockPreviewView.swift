@@ -3,7 +3,7 @@ import UIKit
 
 /// A view that displays a block pattern preview using HTMLPreviewRenderer
 struct BlockPreviewView: View {
-    let pattern: PatternType
+    let pattern: Pattern
     let maximumDimension: HTMLPreviewRenderer.MaximumDimension
 
     @State private var previewImage: UIImage?

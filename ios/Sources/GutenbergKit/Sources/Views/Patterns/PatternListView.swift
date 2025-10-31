@@ -3,7 +3,7 @@ import SwiftUI
 /// A full-screen view showing all patterns in a category
 struct PatternListView: View {
     let section: PatternSection
-    let onPatternSelected: (PatternType) -> Void
+    let onPatternSelected: (Pattern) -> Void
 
     @Environment(\.dismiss) private var dismiss
 

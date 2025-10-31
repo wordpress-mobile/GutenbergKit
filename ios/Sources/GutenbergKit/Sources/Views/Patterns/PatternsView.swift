@@ -2,14 +2,14 @@ import SwiftUI
 import WebKit
 
 struct PatternsView: View {
-    let patterns: [PatternType]
+    let patterns: [Pattern]
     let onPatternSelected: (String) -> Void
 
     @StateObject private var viewModel: PatternsViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var contentOpacity: Double = 0
 
-    init(patterns: [PatternType], onPatternSelected: @escaping (String) -> Void) {
+    init(patterns: [Pattern], onPatternSelected: @escaping (String) -> Void) {
         self.patterns = patterns
         self.onPatternSelected = onPatternSelected
         self._viewModel = StateObject(wrappedValue: PatternsViewModel(patterns: patterns))

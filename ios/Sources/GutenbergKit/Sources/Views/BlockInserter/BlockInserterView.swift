@@ -5,7 +5,7 @@ import WebKit
 
 struct BlockInserterView: View {
     let sections: [BlockInserterSection]
-    let patterns: [PatternType]
+    let patterns: [Pattern]
     let mediaPicker: MediaPickerController?
     let presentationContext: MediaPickerPresentationContext
     let onBlockSelected: (BlockType) -> Void
@@ -24,7 +24,7 @@ struct BlockInserterView: View {
 
     init(
         sections: [BlockInserterSection],
-        patterns: [PatternType],
+        patterns: [Pattern],
         mediaPicker: MediaPickerController?,
         presentationContext: MediaPickerPresentationContext,
         onBlockSelected: @escaping (BlockType) -> Void,
