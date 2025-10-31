@@ -36,7 +36,7 @@ struct HTMLPreviewView: View {
                     }
             } else {
                 RoundedRectangle(cornerRadius: 8)
-                    .background(Color(uiColor: .secondarySystemBackground))
+                    .fill(Color(uiColor: .secondarySystemBackground))
                     .aspectRatio(cachedAspectRatio, contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }

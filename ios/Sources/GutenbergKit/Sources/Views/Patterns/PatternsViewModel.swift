@@ -38,10 +38,15 @@ final class PatternsViewModel: ObservableObject {
                 displayName = category.capitalized
             }
 
+            // Separate primary and secondary patterns, then concatenate
+            let primaryPatterns = patterns.filter { $0.categories?.first == category }
+            let secondaryPatterns = patterns.filter { $0.categories?.first != category }
+            let sortedPatterns = primaryPatterns + secondaryPatterns
+
             return PatternSection(
                 category: category,
                 name: displayName,
-                patterns: patterns // Keep patterns in input order
+                patterns: sortedPatterns
             )
         }
 
