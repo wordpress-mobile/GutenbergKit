@@ -71,6 +71,18 @@ struct EditorJSMessage {
     struct ShowBlockInserterBody: Decodable {
         let sections: [BlockInserterSection]
         let patterns: [Pattern]
+
+        private enum CodingKeys: String, CodingKey {
+            case sections
+            case patterns
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+
+            self.sections = try container.decode([BlockInserterSection].self, forKey: .sections)
+            self.patterns = try container.decodeSafely([Pattern].self, forKey: .patterns)
+        }
     }
 
     struct LogMessage: Decodable {

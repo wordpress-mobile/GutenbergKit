@@ -5,6 +5,26 @@ struct BlockInserterSection: Identifiable, Decodable {
     let category: String
     let name: String?
     let blocks: [BlockType]
+
+    private enum CodingKeys: String, CodingKey {
+        case category
+        case name
+        case blocks
+    }
+
+    init(category: String, name: String? = nil, blocks: [BlockType]) {
+        self.category = category
+        self.name = name
+        self.blocks = blocks
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        self.category = try container.decodeIfPresent(String.self, forKey: .category) ?? "gbk-missing-category"
+        self.name = try container.decodeIfPresent(String.self, forKey: .name)
+        self.blocks = try container.decodeSafely([BlockType].self, forKey: .blocks)
+    }
 }
 
 struct BlockInserterSectionView: View {
