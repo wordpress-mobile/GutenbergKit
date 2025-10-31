@@ -42,7 +42,12 @@ export default defineConfig( {
 function wordPressExternals() {
 	return {
 		name: 'wordpress-externals-plugin',
-		transform( code ) {
+		transform( code, id ) {
+			// Skip transforming node_modules files
+			if ( id.includes( 'node_modules' ) ) {
+				return null;
+			}
+
 			const magicString = new MagicString( code );
 			let hasReplacements = false;
 
