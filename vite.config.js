@@ -15,7 +15,6 @@ export default defineConfig( {
 	base: '',
 	build: {
 		outDir: '../dist',
-		rollupOptions: { external },
 		target: 'esnext',
 	},
 	plugins: [ nodePolyfills(), react(), wordPressExternals() ],
@@ -28,17 +27,6 @@ export default defineConfig( {
 		},
 	},
 } );
-
-function external( id ) {
-	// Exclude internal `@wordpress` module paths (e.g., /build-module/) from externalization
-	if ( id.match( /\/build-module\// ) ) {
-		return false;
-	}
-	const hasExternal = defaultRequestToExternal( id ) !== undefined;
-	const isInlineCss = id.match( /\.css\?inline$/ );
-
-	return hasExternal && ! isInlineCss;
-}
 
 /**
  * Transform code by replacing WordPress imports with global definitions.
