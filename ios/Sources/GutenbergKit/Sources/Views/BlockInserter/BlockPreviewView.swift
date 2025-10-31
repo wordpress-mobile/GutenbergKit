@@ -1,16 +1,10 @@
 import SwiftUI
 import UIKit
 
-/// Maximum dimension constraint for thumbnail generation
-enum MaximumDimension {
-    case width(CGFloat)
-    case height(CGFloat)
-}
-
 /// A view that displays a block pattern preview using HTMLPreviewRenderer
 struct BlockPreviewView: View {
     let pattern: Pattern
-    let maximumDimension: MaximumDimension
+    let maximumDimension: CGFloat
 
     @State private var previewImage: UIImage?
     @State private var isLoadingPreview = false
@@ -96,32 +90,26 @@ struct BlockPreviewView: View {
     }
 
     /// Calculates the target thumbnail size based on maximum dimension constraint
-    private func calculateTargetSize(maximumDimension: MaximumDimension) -> CGSize {
+    private func calculateTargetSize(maximumDimension: CGFloat) -> CGSize {
         // Use a standardized size for cache lookup
-        // The actual thumbnail will be created to fit this constraint
-        switch maximumDimension {
-        case .width(let maxWidth):
-            return CGSize(width: maxWidth, height: maxWidth)
-        case .height(let maxHeight):
-            return CGSize(width: maxHeight, height: maxHeight)
-        }
+        return CGSize(width: maximumDimension, height: maximumDimension)
     }
 
     /// Creates a thumbnail from an image using preparingThumbnail
-    private func createThumbnail(from image: UIImage, maximumDimension: MaximumDimension, scale: CGFloat) -> UIImage {
+    private func createThumbnail(from image: UIImage, maximumDimension: CGFloat, scale: CGFloat) -> UIImage {
         // Calculate the thumbnail size in points maintaining aspect ratio
+        // Scale so that the larger dimension fits within maximumDimension
         let aspectRatio = image.size.width / image.size.height
-
         let thumbnailSizePoints: CGSize
-        switch maximumDimension {
-        case .width(let maxWidth):
-            let thumbnailWidthPoints = min(maxWidth, image.size.width)
-            let thumbnailHeightPoints = thumbnailWidthPoints / aspectRatio
-            thumbnailSizePoints = CGSize(width: thumbnailWidthPoints, height: thumbnailHeightPoints)
-        case .height(let maxHeight):
-            let thumbnailHeightPoints = min(maxHeight, image.size.height)
-            let thumbnailWidthPoints = thumbnailHeightPoints * aspectRatio
-            thumbnailSizePoints = CGSize(width: thumbnailWidthPoints, height: thumbnailHeightPoints)
+
+        if image.size.width > image.size.height {
+            // Width is larger - constrain by width
+            let width = min(maximumDimension, image.size.width)
+            thumbnailSizePoints = CGSize(width: width, height: width / aspectRatio)
+        } else {
+            // Height is larger - constrain by height
+            let height = min(maximumDimension, image.size.height)
+            thumbnailSizePoints = CGSize(width: height * aspectRatio, height: height)
         }
 
         // Convert to pixel dimensions for preparingThumbnail

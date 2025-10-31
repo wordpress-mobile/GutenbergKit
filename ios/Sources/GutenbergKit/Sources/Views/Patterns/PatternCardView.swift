@@ -42,14 +42,14 @@ struct PatternCardView: View {
 }
 
 private extension PatternCardView.Style {
-    var maximumDimension: MaximumDimension {
+    var maximumDimension: CGFloat {
         switch self {
         case .horizontal(let height, _):
             // In horizontal scroll, constrain by height
-            return .height(height)
+            return height
         case .fullWidth:
             // In full-width list, constrain by width (use screen width)
-            return .width(UIScreen.main.bounds.width - 32) // Account for padding
+            return UIScreen.main.bounds.width - 32 // Account for padding
         }
     }
 
@@ -97,7 +97,7 @@ private struct PatternDetailedView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Large preview
-            BlockPreviewView(pattern: pattern, maximumDimension: .width(400))
+            BlockPreviewView(pattern: pattern, maximumDimension: 400)
                 .frame(maxWidth: .infinity)
                 .frame(height: 300)
                 .background(Color(uiColor: .white))
