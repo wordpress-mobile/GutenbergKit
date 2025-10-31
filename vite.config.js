@@ -7,7 +7,6 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 /**
  * External dependencies
  */
-import { resolve } from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import MagicString from 'magic-string';
@@ -16,10 +15,7 @@ export default defineConfig( {
 	base: '',
 	build: {
 		outDir: '../dist',
-		rollupOptions: {
-			input: resolve( __dirname, 'src/remote.html' ),
-			external,
-		},
+		rollupOptions: { external },
 		target: 'esnext',
 	},
 	plugins: [ nodePolyfills(), react(), wordPressExternals() ],
