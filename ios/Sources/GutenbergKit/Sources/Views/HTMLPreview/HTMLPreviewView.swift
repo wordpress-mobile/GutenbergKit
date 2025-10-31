@@ -8,6 +8,7 @@ struct HTMLPreviewView: View {
 
     @State private var previewImage: UIImage?
     @State private var isLoadingFailed = false
+    @State private var cachedAspectRatio: CGFloat?
     @Environment(\.htmlPreviewMemoryCache) private var memoryCache
     @Environment(\.displayScale) private var displayScale
 
@@ -36,6 +37,7 @@ struct HTMLPreviewView: View {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color(uiColor: .secondarySystemBackground))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .aspectRatio(cachedAspectRatio, contentMode: .fit)
             }
         }
         .task(id: pattern.id) {
@@ -44,10 +46,16 @@ struct HTMLPreviewView: View {
     }
 
     private func loadPreview() async {
+        // Load cached aspect ratio to prevent layout jumps
+        if cachedAspectRatio == nil {
+            cachedAspectRatio = AspectRatioCache.shared.aspectRatio(for: pattern.name)
+        }
+
         do {
             let cacheSize = targetSize ?? .zero
             if let cachedImage = memoryCache?.image(for: pattern.name, size: cacheSize) {
                 previewImage = cachedImage
+                updateAspectRatio(from: cachedImage)
                 return
             }
             let fullSizeImage = try await HTMLPreviewManager.shared.render(
@@ -69,6 +77,8 @@ struct HTMLPreviewView: View {
             memoryCache?.setImage(processedImage, for: pattern.name, size: cacheSize)
 
             try Task.checkCancellation()
+            updateAspectRatio(from: processedImage)
+
             withAnimation {
                 previewImage = processedImage
             }
@@ -77,6 +87,13 @@ struct HTMLPreviewView: View {
         } catch {
             isLoadingFailed = true
         }
+    }
+
+    /// Updates the cached aspect ratio from an image
+    private func updateAspectRatio(from image: UIImage) {
+        let aspectRatio = image.size.width / image.size.height
+        cachedAspectRatio = aspectRatio
+        AspectRatioCache.shared.setAspectRatio(aspectRatio, for: pattern.name)
     }
 
     /// Creates a thumbnail from an image using preparingThumbnail
@@ -104,5 +121,35 @@ struct HTMLPreviewView: View {
             height: thumbnailSize.height * scale,
         ))
         return thumbnail ?? image
+    }
+}
+
+// MARK: - Aspect Ratio Cache
+
+/// Manages aspect ratio caching for pattern previews.
+@MainActor
+private class AspectRatioCache: ObservableObject {
+    static let shared = AspectRatioCache()
+
+    private static let cacheKey = "com.gutenbergkit.preview.aspectRatios"
+    private var cache: [String: CGFloat] = [:]
+
+    private init() {
+        // Load from UserDefaults
+        if let stored = UserDefaults.standard.dictionary(forKey: Self.cacheKey) as? [String: CGFloat] {
+            cache = stored
+        }
+    }
+
+    func aspectRatio(for patternName: String) -> CGFloat? {
+        return cache[patternName]
+    }
+
+    func setAspectRatio(_ aspectRatio: CGFloat, for patternName: String) {
+        // Only persist if the value changed
+        if cache[patternName] != aspectRatio {
+            cache[patternName] = aspectRatio
+            UserDefaults.standard.set(cache, forKey: Self.cacheKey)
+        }
     }
 }
