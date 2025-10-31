@@ -42,7 +42,7 @@ struct PatternCardView: View {
 }
 
 private extension PatternCardView.Style {
-    var maximumDimension: HTMLPreviewRenderer.MaximumDimension {
+    var maximumDimension: MaximumDimension {
         switch self {
         case .horizontal(let height, _):
             // In horizontal scroll, constrain by height

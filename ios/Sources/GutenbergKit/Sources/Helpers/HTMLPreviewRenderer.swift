@@ -10,9 +10,7 @@ import UniformTypeIdentifiers
 /// render HTML content off-screen and capture screenshots. It includes:
 /// - WKWebView pooling to reduce memory overhead
 /// - Off-screen rendering for performance
-/// - Two-tier caching strategy:
-///   - Disk cache: Stores full-size rendered images at pattern viewport width
-///   - Memory cache: Stores size-specific thumbnails created via preparingThumbnail()
+/// - Disk cache: Stores full-size rendered images at pattern viewport width
 /// - Concurrent rendering with request queuing
 /// - Background execution of disk I/O operations
 @MainActor
@@ -22,16 +20,10 @@ public final class HTMLPreviewRenderer {
     // MARK: - Configuration
 
     private let poolSize = 2
-    private let memoryCacheLimit = 50
 
     // MARK: - State
 
     private var webViewPool: [PooledWebView] = []
-    private var memoryCache: NSCache<NSString, UIImage> = {
-        let cache = NSCache<NSString, UIImage>()
-        cache.countLimit = 50
-        return cache
-    }()
     private var pendingRequests: [RenderRequest] = []
     private var activeRenders: Set<String> = []
     private let urlCache: URLCache
@@ -48,7 +40,6 @@ public final class HTMLPreviewRenderer {
         let diskCacheKey: String
         let html: String
         let viewportWidth: Int
-        let maximumDimension: MaximumDimension
         let continuation: CheckedContinuation<UIImage, Error>
     }
 
@@ -155,48 +146,22 @@ public final class HTMLPreviewRenderer {
 
     // MARK: - Public API
 
-    /// Maximum dimension constraint for thumbnail generation
-    enum MaximumDimension {
-        case width(CGFloat)
-        case height(CGFloat)
-
-        var value: CGFloat {
-            switch self {
-            case .width(let value), .height(let value):
-                return value
-            }
-        }
-    }
-
     /// Renders HTML content to an image
     /// - Parameters:
     ///   - html: The HTML content to render
     ///   - viewportWidth: The viewport width for rendering
-    ///   - maximumDimension: Maximum dimension constraint (width or height) for the thumbnail
-    /// - Returns: Thumbnail image constrained by the specified dimension
-    func render(html: String, viewportWidth: Int, maximumDimension: MaximumDimension) async throws -> UIImage {
+    /// - Returns: Full-size rendered image at the specified viewport width
+    func render(html: String, viewportWidth: Int) async throws -> UIImage {
 
         print("request \(html.count)")
 
         // Generate disk cache key (HTML + viewport width + CSS hash)
         let diskCacheKey = await generateDiskCacheKey(html: html, viewportWidth: viewportWidth, cssHash: gutenbergCSSHash)
 
-        // Generate memory cache key (includes maximum dimension)
-        let memoryCacheKey = await generateMemoryCacheKey(diskKey: diskCacheKey, maximumDimension: maximumDimension)
-
-        // Check memory cache first (stores thumbnails at specific sizes)
-        if let cachedImage = memoryCache.object(forKey: memoryCacheKey as NSString) {
-            print("mem cache hit \(html.count)")
-            return cachedImage
-        }
-
         // Check disk cache (stores full-size images at viewport width)
         if let diskImage = loadImageFromCache(forKey: diskCacheKey) {
             print("disk cache hit \(html.count)")
-            // Create thumbnail from disk image using preparingThumbnail
-            let thumbnail = await createThumbnail(from: diskImage, maximumDimension: maximumDimension)
-            memoryCache.setObject(thumbnail, forKey: memoryCacheKey as NSString)
-            return thumbnail
+            return diskImage
         }
 
         print("miss \(html.count)")
@@ -209,7 +174,6 @@ public final class HTMLPreviewRenderer {
                     diskCacheKey: diskCacheKey,
                     html: html,
                     viewportWidth: viewportWidth,
-                    maximumDimension: maximumDimension,
                     continuation: continuation
                 )
                 pendingRequests.append(request)
@@ -227,7 +191,6 @@ public final class HTMLPreviewRenderer {
                     diskCacheKey: diskCacheKey,
                     html: html,
                     viewportWidth: viewportWidth,
-                    maximumDimension: maximumDimension,
                     continuation: continuation
                 )
                 pendingRequests.append(request)
@@ -246,26 +209,14 @@ public final class HTMLPreviewRenderer {
         // Save full-size image to disk cache
         saveImageToCache(fullSizeImage, forKey: diskCacheKey)
 
-        // Create thumbnail for the requested dimension
-        let thumbnail = await createThumbnail(from: fullSizeImage, maximumDimension: maximumDimension)
-
-        // Cache thumbnail in memory
-        memoryCache.setObject(thumbnail, forKey: memoryCacheKey as NSString)
-
-        return thumbnail
+        return fullSizeImage
     }
 
 
 
-    /// Clears the image cache (both memory and disk)
+    /// Clears the disk cache
     public func clearCache() async {
-        memoryCache.removeAllObjects()
         urlCache.removeAllCachedResponses()
-    }
-
-    /// Clears only the memory cache (keeps disk cache intact)
-    func clearMemoryCache() {
-        memoryCache.removeAllObjects()
     }
 
     // MARK: - URLCache Helpers
@@ -398,14 +349,7 @@ public final class HTMLPreviewRenderer {
                 // Save full-size image to disk
                 saveImageToCache(fullSizeImage, forKey: request.diskCacheKey)
 
-                // Create thumbnail for requested dimension
-                let thumbnail = await createThumbnail(from: fullSizeImage, maximumDimension: request.maximumDimension)
-
-                // Cache thumbnail in memory
-                let memoryCacheKey = await generateMemoryCacheKey(diskKey: request.diskCacheKey, maximumDimension: request.maximumDimension)
-                memoryCache.setObject(thumbnail, forKey: memoryCacheKey as NSString)
-
-                request.continuation.resume(returning: thumbnail)
+                request.continuation.resume(returning: fullSizeImage)
             } catch {
                 request.continuation.resume(throwing: error)
             }
@@ -416,17 +360,9 @@ public final class HTMLPreviewRenderer {
         let matchingRequests = pendingRequests.filter { $0.diskCacheKey == diskCacheKey }
         pendingRequests.removeAll { $0.diskCacheKey == diskCacheKey }
 
-        // Each pending request needs its own thumbnail at its target dimension
+        // Notify all pending requests with the full-size image
         for request in matchingRequests {
-            Task {
-                let thumbnail = await createThumbnail(from: fullSizeImage, maximumDimension: request.maximumDimension)
-
-                // Cache the thumbnail in memory
-                let memoryCacheKey = await generateMemoryCacheKey(diskKey: diskCacheKey, maximumDimension: request.maximumDimension)
-                memoryCache.setObject(thumbnail, forKey: memoryCacheKey as NSString)
-
-                request.continuation.resume(returning: thumbnail)
-            }
+            request.continuation.resume(returning: fullSizeImage)
         }
     }
 
@@ -445,64 +381,6 @@ private func hashString(_ string: String) async -> String {
 private func generateDiskCacheKey(html: String, viewportWidth: Int, cssHash: String) async -> String {
     let combined = "\(html)-\(viewportWidth)-\(cssHash)"
     return await hashString(combined)
-}
-
-/// Generates a memory cache key from disk key and maximum dimension
-private func generateMemoryCacheKey(diskKey: String, maximumDimension: HTMLPreviewRenderer.MaximumDimension) async -> String {
-    let suffix: String
-    switch maximumDimension {
-    case .width(let value):
-        suffix = "w\(Int(value))"
-    case .height(let value):
-        suffix = "h\(Int(value))"
-    }
-    let combined = "\(diskKey)-\(suffix)"
-    return await hashString(combined)
-}
-
-/// Creates a thumbnail from an image using preparingThumbnail (runs in background)
-private func createThumbnail(from image: UIImage, maximumDimension: HTMLPreviewRenderer.MaximumDimension) async -> UIImage {
-    let scale = await UIScreen.main.scale
-
-    // Calculate the thumbnail size in points maintaining aspect ratio
-    // Note: image.size is already in points (accounts for scale)
-    let aspectRatio = image.size.width / image.size.height
-
-    let thumbnailSizePoints: CGSize
-    switch maximumDimension {
-    case .width(let maxWidth):
-        // Constrain by width
-        let thumbnailWidthPoints = min(maxWidth, image.size.width)
-        let thumbnailHeightPoints = thumbnailWidthPoints / aspectRatio
-        thumbnailSizePoints = CGSize(width: thumbnailWidthPoints, height: thumbnailHeightPoints)
-    case .height(let maxHeight):
-        // Constrain by height
-        let thumbnailHeightPoints = min(maxHeight, image.size.height)
-        let thumbnailWidthPoints = thumbnailHeightPoints * aspectRatio
-        thumbnailSizePoints = CGSize(width: thumbnailWidthPoints, height: thumbnailHeightPoints)
-    }
-
-    // Convert to pixel dimensions for preparingThumbnail
-    // We render at screen scale to maintain quality
-    let thumbnailSizePixels = CGSize(
-        width: thumbnailSizePoints.width * scale,
-        height: thumbnailSizePoints.height * scale
-    )
-
-    // Use preparingThumbnail for efficient thumbnail generation
-    // This method downsamples the image efficiently without loading full resolution
-    if let thumbnailCGImage = image.preparingThumbnail(of: thumbnailSizePixels)?.cgImage {
-        // Create UIImage with correct scale factor so it displays at the right size
-        return UIImage(cgImage: thumbnailCGImage, scale: scale, orientation: image.imageOrientation)
-    }
-
-    // Fallback if preparingThumbnail fails - use UIGraphicsImageRenderer which handles scale
-    let format = UIGraphicsImageRendererFormat()
-    format.scale = scale
-    let renderer = UIGraphicsImageRenderer(size: thumbnailSizePoints, format: format)
-    return renderer.image { context in
-        image.draw(in: CGRect(origin: .zero, size: thumbnailSizePoints))
-    }
 }
 
 /// Generates full HTML with styling (runs in background)

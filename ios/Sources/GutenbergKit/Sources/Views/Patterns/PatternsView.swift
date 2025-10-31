@@ -6,6 +6,7 @@ struct PatternsView: View {
     let onPatternSelected: (Pattern) -> Void
 
     @StateObject private var viewModel: PatternsViewModel
+    @StateObject private var memoryCache = HTMLPreviewMemoryCache()
     @Environment(\.dismiss) private var dismiss
     @State private var contentOpacity: Double = 0
 
@@ -26,6 +27,7 @@ struct PatternsView: View {
             .toolbar {
                 toolbar
             }
+            .environment(\.htmlPreviewMemoryCache, memoryCache)
             .onAppear {
                 // Small delay to allow cache warmup before showing content
                 Task {
@@ -34,11 +36,6 @@ struct PatternsView: View {
                         contentOpacity = 1.0
                     }
                 }
-            }
-            .onDisappear {
-                // Clear memory cache when view is closed to free up memory
-                // Disk cache is preserved for faster subsequent loads
-                HTMLPreviewRenderer.shared.clearMemoryCache()
             }
     }
 

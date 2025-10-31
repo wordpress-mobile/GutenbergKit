@@ -1,14 +1,21 @@
 import SwiftUI
 import UIKit
 
+/// Maximum dimension constraint for thumbnail generation
+enum MaximumDimension {
+    case width(CGFloat)
+    case height(CGFloat)
+}
+
 /// A view that displays a block pattern preview using HTMLPreviewRenderer
 struct BlockPreviewView: View {
     let pattern: Pattern
-    let maximumDimension: HTMLPreviewRenderer.MaximumDimension
+    let maximumDimension: MaximumDimension
 
     @State private var previewImage: UIImage?
     @State private var isLoadingPreview = false
     @State private var previewError = false
+    @Environment(\.htmlPreviewMemoryCache) private var memoryCache
 
     var body: some View {
         Group {
@@ -59,15 +66,88 @@ struct BlockPreviewView: View {
         defer { isLoadingPreview = false }
 
         do {
-            let image = try await HTMLPreviewRenderer.shared.render(
+            // Calculate target thumbnail size for cache lookup
+            let targetSize = calculateTargetSize(maximumDimension: maximumDimension)
+
+            // Check memory cache first
+            if let cachedImage = memoryCache?.image(for: pattern.name, size: targetSize) {
+                previewImage = cachedImage
+                return
+            }
+
+            // Render full-size image
+            let fullSizeImage = try await HTMLPreviewRenderer.shared.render(
                 html: pattern.content,
-                viewportWidth: pattern.viewportWidth ?? 1200,
-                maximumDimension: maximumDimension
+                viewportWidth: pattern.viewportWidth ?? 1200
             )
-            previewImage = image
+
+            // Create thumbnail from full-size image
+            let thumbnail = await createThumbnail(from: fullSizeImage, maximumDimension: maximumDimension)
+
+            // Store thumbnail in memory cache
+            memoryCache?.setImage(thumbnail, for: pattern.name, size: targetSize)
+
+            previewImage = thumbnail
         } catch {
             print("Failed to render pattern preview: \(error)")
             previewError = true
+        }
+    }
+
+    /// Calculates the target thumbnail size based on maximum dimension constraint
+    private func calculateTargetSize(maximumDimension: MaximumDimension) -> CGSize {
+        // Use a standardized size for cache lookup
+        // The actual thumbnail will be created to fit this constraint
+        switch maximumDimension {
+        case .width(let maxWidth):
+            return CGSize(width: maxWidth, height: maxWidth)
+        case .height(let maxHeight):
+            return CGSize(width: maxHeight, height: maxHeight)
+        }
+    }
+
+    /// Creates a thumbnail from an image using preparingThumbnail
+    private func createThumbnail(from image: UIImage, maximumDimension: MaximumDimension) async -> UIImage {
+        let scale = await UIScreen.main.scale
+
+        // Calculate the thumbnail size in points maintaining aspect ratio
+        // Note: image.size is already in points (accounts for scale)
+        let aspectRatio = image.size.width / image.size.height
+
+        let thumbnailSizePoints: CGSize
+        switch maximumDimension {
+        case .width(let maxWidth):
+            // Constrain by width
+            let thumbnailWidthPoints = min(maxWidth, image.size.width)
+            let thumbnailHeightPoints = thumbnailWidthPoints / aspectRatio
+            thumbnailSizePoints = CGSize(width: thumbnailWidthPoints, height: thumbnailHeightPoints)
+        case .height(let maxHeight):
+            // Constrain by height
+            let thumbnailHeightPoints = min(maxHeight, image.size.height)
+            let thumbnailWidthPoints = thumbnailHeightPoints * aspectRatio
+            thumbnailSizePoints = CGSize(width: thumbnailWidthPoints, height: thumbnailHeightPoints)
+        }
+
+        // Convert to pixel dimensions for preparingThumbnail
+        // We render at screen scale to maintain quality
+        let thumbnailSizePixels = CGSize(
+            width: thumbnailSizePoints.width * scale,
+            height: thumbnailSizePoints.height * scale
+        )
+
+        // Use preparingThumbnail for efficient thumbnail generation
+        // This method downsamples the image efficiently without loading full resolution
+        if let thumbnailCGImage = image.preparingThumbnail(of: thumbnailSizePixels)?.cgImage {
+            // Create UIImage with correct scale factor so it displays at the right size
+            return UIImage(cgImage: thumbnailCGImage, scale: scale, orientation: image.imageOrientation)
+        }
+
+        // Fallback if preparingThumbnail fails - use UIGraphicsImageRenderer which handles scale
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = scale
+        let renderer = UIGraphicsImageRenderer(size: thumbnailSizePoints, format: format)
+        return renderer.image { context in
+            image.draw(in: CGRect(origin: .zero, size: thumbnailSizePoints))
         }
     }
 }
