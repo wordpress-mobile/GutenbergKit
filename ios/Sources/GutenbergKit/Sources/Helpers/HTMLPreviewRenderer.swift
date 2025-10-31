@@ -341,9 +341,18 @@ public final class HTMLPreviewRenderer {
             css: gutenbergCSS
         )
 
-        // Wait for rendering to complete using the delegate
+        // Wait for rendering to complete using the delegate with 16-second timeout
         let contentHeight: CGFloat = try await withCheckedThrowingContinuation { continuation in
+            let timeoutTask = Task {
+                try? await Task.sleep(for: .seconds(16))
+                if !Task.isCancelled {
+                    delegate.onRenderComplete = nil
+                    continuation.resume(throwing: URLError(.timedOut))
+                }
+            }
             delegate.onRenderComplete = { height in
+                guard !timeoutTask.isCancelled else { return }
+                timeoutTask.cancel()
                 delegate.onRenderComplete = nil
                 continuation.resume(returning: height ?? width) // Fallback to square
             }
