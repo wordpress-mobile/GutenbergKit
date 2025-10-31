@@ -4,7 +4,7 @@ import UIKit
 /// A view that displays a block pattern preview using HTMLPreviewRenderer
 struct BlockPreviewView: View {
     let pattern: Pattern
-    let maximumDimension: CGFloat
+    let targetSize: CGSize?
 
     @State private var previewImage: UIImage?
     @State private var isLoadingFailed = false
@@ -38,18 +38,15 @@ struct BlockPreviewView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .task {
+        .task(id: pattern.id) {
             await loadPreview()
         }
     }
 
     private func loadPreview() async {
-        guard previewImage == nil, !isLoadingFailed else {
-            return
-        }
         do {
-            let targetSize = CGSize(width: maximumDimension, height: maximumDimension)
-            if let cachedImage = memoryCache?.image(for: pattern.name, size: targetSize) {
+            let cacheSize = targetSize ?? .zero
+            if let cachedImage = memoryCache?.image(for: pattern.name, size: cacheSize) {
                 previewImage = cachedImage
                 return
             }
@@ -59,46 +56,48 @@ struct BlockPreviewView: View {
             )
             try Task.checkCancellation()
 
-            let thumbnail = await createThumbnail(
-                from: fullSizeImage,
-                maximumDimension: maximumDimension,
-                scale: displayScale
-            )
+            let processedImage: UIImage
+            if let targetSize {
+                processedImage = await createThumbnail(
+                    from: fullSizeImage,
+                    targetSize: targetSize,
+                    scale: displayScale
+                )
+            } else {
+                processedImage = await fullSizeImage.byPreparingForDisplay() ?? fullSizeImage
+            }
+            memoryCache?.setImage(processedImage, for: pattern.name, size: cacheSize)
 
-            memoryCache?.setImage(thumbnail, for: pattern.name, size: targetSize)
-            previewImage = thumbnail
+            try Task.checkCancellation()
+            previewImage = processedImage
         } catch is CancellationError {
             return // Task was cancelled, don't show error
         } catch {
-            print("Failed to render pattern preview: \(error)")
             isLoadingFailed = true
         }
     }
 
     /// Creates a thumbnail from an image using preparingThumbnail
-    private func createThumbnail(from image: UIImage, maximumDimension: CGFloat, scale: CGFloat) async -> UIImage {
+    /// The thumbnail will fit within targetSize while maintaining aspect ratio (aspect fit)
+    private func createThumbnail(from image: UIImage, targetSize: CGSize, scale: CGFloat) async -> UIImage {
         // Calculate the thumbnail size in points maintaining aspect ratio
-        // Scale so that the larger dimension fits within maximumDimension
+        // Scale so that the image fits within both width and height constraints
         let aspectRatio = image.size.width / image.size.height
-        let thumbnailSizePoints: CGSize
+        let targetAspectRatio = targetSize.width / targetSize.height
 
-        if image.size.width > image.size.height {
-            // Width is larger - constrain by width
-            let width = min(maximumDimension, image.size.width)
-            thumbnailSizePoints = CGSize(width: width, height: width / aspectRatio)
+        let thumbnailSize: CGSize
+
+        if aspectRatio > targetAspectRatio {
+            // Image is wider than target - constrain by width
+            let width = min(targetSize.width, image.size.width)
+            thumbnailSize = CGSize(width: width, height: width / aspectRatio)
         } else {
-            // Height is larger - constrain by height
-            let height = min(maximumDimension, image.size.height)
-            thumbnailSizePoints = CGSize(width: height * aspectRatio, height: height)
+            // Image is taller than target - constrain by height
+            let height = min(targetSize.height, image.size.height)
+            thumbnailSize = CGSize(width: height * aspectRatio, height: height)
         }
 
-        // Convert to pixel dimensions for preparingThumbnail
-        let thumbnailSizePixels = CGSize(
-            width: thumbnailSizePoints.width * scale,
-            height: thumbnailSizePoints.height * scale
-        )
-
-        let thumbnail = await image.byPreparingThumbnail(ofSize: thumbnailSizePixels)
+        let thumbnail = await image.byPreparingThumbnail(ofSize: thumbnailSize)
         return thumbnail ?? image
     }
 }
