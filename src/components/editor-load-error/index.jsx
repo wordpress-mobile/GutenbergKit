@@ -1,7 +1,6 @@
 /**
  * WordPress dependencies
  */
-import { Notice } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 
 /**
@@ -12,51 +11,46 @@ import './style.scss';
 /**
  * Displays an error notice when the editor fails to load.
  *
+ * Simple error message avoids `@wordpress` components to avoid
+ * complex dependency management during editor initialization.
+ *
  * @param {Object} props       Component props
  * @param {string} props.error Error message displayed in the notice
  *
  * @return {JSX.Element} Editor load error component
  */
 const EditorLoadError = ( { error } ) => {
-	return (
-		<div className="gutenberg-kit-editor-load-error">
-			<Notice
-				status="error"
-				isDismissible={ false }
-				className="gutenberg-kit-editor-load-error__notice"
-			>
-				<h1>{ __( 'Editor Load Error', 'gutenberg-kit' ) }</h1>
-				<p className="gutenberg-kit-editor-load-error__message">
-					{ __(
-						'Sorry, loading the experimental editor failed. Please try reopening the editor.',
-						'gutenberg-kit'
-					) }
-				</p>
-				<p className="gutenberg-kit-editor-load-error__message">
-					{ __(
-						'If the problem persists, please contact support or disable the experimental editor within the app settings.',
-						'gutenberg-kit'
-					) }
-				</p>
-				{ error && (
-					<details className="gutenberg-kit-editor-load-error__details">
-						<summary className="gutenberg-kit-editor-load-error__message">
-							<i>
-								{ __(
-									'Tap to view error details',
-									'gutenberg-kit'
-								) }
-							</i>
-						</summary>
+	const errorMessage = error.message || error;
+	let errorDetails = '';
+	if ( errorMessage ) {
+		errorDetails = `
+			<details>
+				<summary class="gutenberg-kit-editor-load-error__message">
+					<i>
+						${ __( 'Tap to view error details', 'gutenberg-kit' ) }
+					</i>
+				</summary>
+				<pre class="gutenberg-kit-editor-load-error__code">${ errorMessage }</pre>
+			</details>`;
+	}
 
-						<pre className="gutenberg-kit-editor-load-error__details">
-							{ error.message || error }
-						</pre>
-					</details>
-				) }
-			</Notice>
+	return `
+		<div class="gutenberg-kit-editor-load-error">
+			<div class="gutenberg-kit-editor-load-error__notice">
+				<h1 class="gutenberg-kit-editor-load-error__heading">${ __(
+					'Editor load error',
+					'gutenberg-kit'
+				) }</h1>
+				<p class="gutenberg-kit-editor-load-error__message">
+					${ __(
+						'Sorry, loading the editor failed. Please try again.',
+						'gutenberg-kit'
+					) }
+				</p>
+				${ errorDetails }
+			</div>
 		</div>
-	);
+	`;
 };
 
 export default EditorLoadError;

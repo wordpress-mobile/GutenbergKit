@@ -2,10 +2,15 @@
 	padding: 20px;
 }
 
-.gutenberg-kit-editor-load-error__message {
-	font-size: 14px;
+.gutenberg-kit-editor-load-error__heading {
+	font-size: 22px;
+	font-size: 600;
 }
 
-.gutenberg-kit-editor-load-error__details {
+.gutenberg-kit-editor-load-error__message {
+	font-size: 16px;
+}
+
+.gutenberg-kit-editor-load-error__code {
 	white-space: pre-wrap;
 }

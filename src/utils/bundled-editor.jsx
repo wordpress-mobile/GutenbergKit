@@ -1,18 +1,11 @@
 /**
- * WordPress dependencies
- */
-import { createRoot, StrictMode } from '@wordpress/element';
-
-/**
  * Internal dependencies
  */
-import { initializeApiFetch } from './api-fetch';
 import { awaitGBKitGlobal, editorLoaded, getGBKit } from './bridge';
 import { loadEditorAssets } from './editor-loader';
 import EditorLoadError from '../components/editor-load-error';
 import { error } from './logger';
 import './editor-styles.js';
-import { unregisterDisallowedBlocks } from './blocks';
 
 /**
  * Initialize the bundled editor by loading assets and configuring modules
@@ -34,7 +27,6 @@ export function initializeBundledEditor() {
 		.then( configureLocale )
 		.then( loadRemainingGlobals )
 		.then( initializeApiFetchWrapper )
-		.then( importEditor )
 		.then( initializeEditor )
 		.then( loadPluginsIfEnabled )
 		.catch( handleError );
@@ -48,22 +40,24 @@ function configureLocale() {
 
 function loadRemainingGlobals() {
 	// Load remaining WordPress globals after i18n is configured.
-	// wordpress-i18n.js is already loaded in index.html, so we just need
-	// to load the remaining modules.
 	return import( './wordpress-globals' );
 }
 
 function initializeApiFetchWrapper() {
-	initializeApiFetch();
+	// Load api-fetch now that WordPress globals are available.
+	return import( './api-fetch' ).then(
+		( { initializeApiFetch: _initializeApiFetch } ) => {
+			_initializeApiFetch();
+		}
+	);
 }
 
-function importEditor() {
-	return import( './editor' );
-}
-
-function initializeEditor( editorModule ) {
-	const { initializeEditor: _initializeEditor } = editorModule;
-	_initializeEditor();
+function initializeEditor() {
+	return import( './editor' ).then(
+		( { initializeEditor: _initializeEditor } ) => {
+			_initializeEditor();
+		}
+	);
 }
 
 function loadPluginsIfEnabled() {
@@ -71,20 +65,16 @@ function loadPluginsIfEnabled() {
 
 	if ( plugins ) {
 		return loadEditorAssets().then( ( { allowedBlockTypes } ) =>
-			unregisterDisallowedBlocks( allowedBlockTypes )
+			import( './blocks' ).then( ( { unregisterDisallowedBlocks } ) =>
+				unregisterDisallowedBlocks( allowedBlockTypes )
+			)
 		);
 	}
-
-	return Promise.resolve();
 }
 
 function handleError( err ) {
 	error( 'Error initializing editor', err );
-	const root = document.getElementById( 'root' );
-	createRoot( root ).render(
-		<StrictMode>
-			<EditorLoadError error={ err } />
-		</StrictMode>
-	);
+	const errorDetails = EditorLoadError( { error: err } );
+	document.body.innerHTML = errorDetails;
 	editorLoaded();
 }
