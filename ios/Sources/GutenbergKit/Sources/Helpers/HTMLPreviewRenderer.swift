@@ -19,13 +19,15 @@ public final class HTMLPreviewRenderer {
 
     // MARK: - Configuration
 
-    private let poolSize = 2
+    private let maxConcurrentRenders = 2
 
     // MARK: - State
 
     private var webViewPool: [PooledWebView] = []
-    private var pendingRequests: [RenderRequest] = []
-    private var activeRenders: Set<String> = []
+
+    // All requests (both queued and executing)
+    private var requests: [RenderRequest] = []
+
     private let urlCache: URLCache
     private var totalCachedBytes: Int64 = 0
     private var cachedImageCount: Int = 0
@@ -36,18 +38,26 @@ public final class HTMLPreviewRenderer {
 
     // MARK: - Types
 
-    private struct RenderRequest {
+    private class RenderRequest {
         let diskCacheKey: String
         let html: String
         let viewportWidth: Int
-        let continuation: CheckedContinuation<UIImage, Error>
+        var continuations: [CheckedContinuation<UIImage, Error>]
+        var task: Task<Void, Never>?
+
+        init(diskCacheKey: String, html: String, viewportWidth: Int, continuation: CheckedContinuation<UIImage, Error>) {
+            self.diskCacheKey = diskCacheKey
+            self.html = html
+            self.viewportWidth = viewportWidth
+            self.continuations = [continuation]
+        }
     }
 
     @MainActor
     private class PooledWebView {
         let webView: WKWebView
         let delegate: RenderDelegate
-        var isAvailable: Bool = true
+        var isAvailable = true
 
         init() {
             let config = WKWebViewConfiguration()
@@ -100,11 +110,6 @@ public final class HTMLPreviewRenderer {
             diskCapacity: 16 * 1024 * 1024, // 16 MB
             directory: urlCacheDirectory
         )
-
-        // Pre-populate the web view pool
-        for _ in 0..<poolSize {
-            webViewPool.append(PooledWebView())
-        }
     }
 
     /// Loads the Gutenberg CSS from the bundled assets
@@ -166,53 +171,29 @@ public final class HTMLPreviewRenderer {
 
         print("miss \(html.count)")
 
-        // Check if already rendering this content
-        if activeRenders.contains(diskCacheKey) {
-            // Wait for existing render to complete by creating a new request
-            return try await withCheckedThrowingContinuation { continuation in
-                let request = RenderRequest(
-                    diskCacheKey: diskCacheKey,
-                    html: html,
-                    viewportWidth: viewportWidth,
-                    continuation: continuation
-                )
-                pendingRequests.append(request)
+        return try await withCheckedThrowingContinuation { continuation in
+            // Check if this content is already queued or executing (deduplication)
+            if let existingRequest = requests.first(where: { $0.diskCacheKey == diskCacheKey }) {
+                existingRequest.continuations.append(continuation)
+                return
+            }
+
+            // Create new request
+            let request = RenderRequest(
+                diskCacheKey: diskCacheKey,
+                html: html,
+                viewportWidth: viewportWidth,
+                continuation: continuation
+            )
+            requests.append(request)
+
+            // Start rendering if under capacity
+            let executingCount = requests.filter { $0.task != nil }.count
+            if executingCount < maxConcurrentRenders {
+                startRender(request: request)
             }
         }
-
-        // Mark as actively rendering
-        activeRenders.insert(diskCacheKey)
-        defer { activeRenders.remove(diskCacheKey) }
-
-        // Get available web view or queue the request
-        guard let pooledView = getAvailableWebView() else {
-            return try await withCheckedThrowingContinuation { continuation in
-                let request = RenderRequest(
-                    diskCacheKey: diskCacheKey,
-                    html: html,
-                    viewportWidth: viewportWidth,
-                    continuation: continuation
-                )
-                pendingRequests.append(request)
-                processNextRequest()
-            }
-        }
-
-        // Perform actual rendering (returns full-size image)
-        let fullSizeImage = try await performRender(
-            html: html,
-            viewportWidth: viewportWidth,
-            diskCacheKey: diskCacheKey,
-            pooledView: pooledView
-        )
-
-        // Save full-size image to disk cache
-        saveImageToCache(fullSizeImage, forKey: diskCacheKey)
-
-        return fullSizeImage
     }
-
-
 
     /// Clears the disk cache
     public func clearCache() async {
@@ -261,8 +242,66 @@ public final class HTMLPreviewRenderer {
 
     // MARK: - Private Methods
 
-    private func getAvailableWebView() -> PooledWebView? {
-        return webViewPool.first { $0.isAvailable }
+    private func getAvailableWebView() -> PooledWebView {
+        // Try to find an available web view
+        if let pooledView = webViewPool.first(where: { $0.isAvailable }) {
+            return pooledView
+        }
+
+        // Create new web view if needed
+        let pooledView = PooledWebView()
+        webViewPool.append(pooledView)
+        return pooledView
+    }
+
+    private func startRender(request: RenderRequest) {
+        request.task = Task {
+            do {
+                let pooledView = getAvailableWebView()
+
+                // Perform actual rendering
+                let image = try await performRender(
+                    html: request.html,
+                    viewportWidth: request.viewportWidth,
+                    diskCacheKey: request.diskCacheKey,
+                    pooledView: pooledView
+                )
+
+                // Save to disk cache
+                saveImageToCache(image, forKey: request.diskCacheKey)
+
+                // Resume all continuations with success
+                for continuation in request.continuations {
+                    continuation.resume(returning: image)
+                }
+            } catch {
+                // Resume all continuations with error
+                for continuation in request.continuations {
+                    continuation.resume(throwing: error)
+                }
+            }
+
+            // Remove this request from the list
+            requests.removeAll { $0 === request }
+
+            // Process next queued request if any
+            processNextRequest()
+        }
+    }
+
+    private func processNextRequest() {
+        // Find first queued request (not executing yet)
+        guard let nextRequest = requests.first(where: { $0.task == nil }) else {
+            return
+        }
+
+        // Check if we have capacity
+        let executingCount = requests.filter { $0.task != nil }.count
+        guard executingCount < maxConcurrentRenders else {
+            return
+        }
+
+        startRender(request: nextRequest)
     }
 
     private func performRender(
@@ -274,7 +313,6 @@ public final class HTMLPreviewRenderer {
         pooledView.isAvailable = false
         defer {
             pooledView.isAvailable = true
-            processNextRequest()
         }
 
         let webView = pooledView.webView
@@ -324,46 +362,7 @@ public final class HTMLPreviewRenderer {
 
         let image = try await webView.takeSnapshot(configuration: config)
 
-        notifyPendingRequests(for: diskCacheKey, with: image)
-
         return image
-    }
-
-    private func processNextRequest() {
-        guard !pendingRequests.isEmpty,
-              let pooledView = getAvailableWebView() else {
-            return
-        }
-
-        let request = pendingRequests.removeFirst()
-
-        Task {
-            do {
-                let fullSizeImage = try await performRender(
-                    html: request.html,
-                    viewportWidth: request.viewportWidth,
-                    diskCacheKey: request.diskCacheKey,
-                    pooledView: pooledView
-                )
-
-                // Save full-size image to disk
-                saveImageToCache(fullSizeImage, forKey: request.diskCacheKey)
-
-                request.continuation.resume(returning: fullSizeImage)
-            } catch {
-                request.continuation.resume(throwing: error)
-            }
-        }
-    }
-
-    private func notifyPendingRequests(for diskCacheKey: String, with fullSizeImage: UIImage) {
-        let matchingRequests = pendingRequests.filter { $0.diskCacheKey == diskCacheKey }
-        pendingRequests.removeAll { $0.diskCacheKey == diskCacheKey }
-
-        // Notify all pending requests with the full-size image
-        for request in matchingRequests {
-            request.continuation.resume(returning: fullSizeImage)
-        }
     }
 
 }
