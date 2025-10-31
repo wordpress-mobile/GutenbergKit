@@ -333,19 +333,6 @@ export function awaitGBKitGlobal( timeoutMs = 3000 ) {
 export async function fetchEditorAssets() {
 	const { siteApiRoot, editorAssetsEndpoint, authHeader } = getGBKit();
 
-	// TODO: Determine best mechanism for conditionally fetching editor assets
-	// on both iOS and Android.
-	if ( ! editorAssetsEndpoint && ! siteApiRoot ) {
-		debug(
-			'Skipping editor assets fetch because site API root or editor assets endpoint is not found'
-		);
-		return Promise.resolve( {
-			scripts: '',
-			styles: '',
-			allowed_block_types: [],
-		} );
-	}
-
 	if ( window.webkit ) {
 		return await window.webkit.messageHandlers.loadFetchedEditorAssets.postMessage(
 			{ asset: 'manifest' }

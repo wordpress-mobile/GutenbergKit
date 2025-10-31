@@ -300,6 +300,7 @@ class GutenbergView : WebView {
                 "namespaceExcludedPaths": ${configuration.namespaceExcludedPaths.joinToString(",", "[", "]") { "\"$it\"" }},
                 "authHeader": "${configuration.authHeader}",
                 "themeStyles": ${configuration.themeStyles},
+                "plugins": ${configuration.plugins},
                 "hideTitle": ${configuration.hideTitle},
                 "editorSettings": $editorSettings,
                 "locale": "${configuration.locale}",

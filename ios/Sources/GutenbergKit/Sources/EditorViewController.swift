@@ -128,6 +128,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             namespaceExcludedPaths: \(Array(configuration.namespaceExcludedPaths)),
             authHeader: '\(configuration.authHeader)',
             themeStyles: \(configuration.shouldUseThemeStyles),
+            plugins: \(configuration.shouldUsePlugins),
             enableNativeBlockInserter: \(configuration.isNativeInserterEnabled),
             hideTitle: \(configuration.shouldHideTitle),
             editorSettings: \(configuration.editorSettings),

@@ -7,7 +7,7 @@ import { createRoot, StrictMode } from '@wordpress/element';
  * Internal dependencies
  */
 import { initializeApiFetch } from './api-fetch';
-import { awaitGBKitGlobal, editorLoaded } from './bridge';
+import { awaitGBKitGlobal, editorLoaded, getGBKit } from './bridge';
 import { configureLocale } from './localization';
 import { loadEditorAssets } from './editor-loader';
 import EditorLoadError from '../components/editor-load-error';
@@ -35,10 +35,7 @@ export function initializeBundledEditor() {
 		.then( initializeApiAndLocale )
 		.then( importEditor )
 		.then( initializeEditor )
-		.then( loadEditorAssets )
-		.then( ( { allowedBlockTypes } ) => {
-			unregisterDisallowedBlocks( allowedBlockTypes );
-		} )
+		.then( loadPluginsIfEnabled )
 		.catch( handleError );
 }
 
@@ -54,6 +51,18 @@ function importEditor() {
 function initializeEditor( editorModule ) {
 	const { initializeEditor: _initializeEditor } = editorModule;
 	_initializeEditor();
+}
+
+function loadPluginsIfEnabled() {
+	const { plugins } = getGBKit();
+
+	if ( plugins ) {
+		return loadEditorAssets().then( ( { allowedBlockTypes } ) =>
+			unregisterDisallowedBlocks( allowedBlockTypes )
+		);
+	}
+
+	return Promise.resolve();
 }
 
 function handleError( err ) {
