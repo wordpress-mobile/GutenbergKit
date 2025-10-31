@@ -7,8 +7,9 @@ struct PatternsView: View {
 
     @StateObject private var viewModel: PatternsViewModel
     @StateObject private var memoryCache = HTMLPreviewMemoryCache()
-    @Environment(\.dismiss) private var dismiss
     @State private var contentOpacity: Double = 0
+
+    @Environment(\.dismiss) private var dismiss
 
     init(patterns: [Pattern], onPatternSelected: @escaping (Pattern) -> Void) {
         self.patterns = patterns
@@ -31,8 +32,8 @@ struct PatternsView: View {
             .onAppear {
                 // Small delay to allow cache warmup before showing content
                 Task {
-                    try await Task.sleep(for: .milliseconds(330))
-                    withAnimation(.easeIn(duration: 0.2)) {
+                    try await Task.sleep(for: .milliseconds(400))
+                    withAnimation(.easeInOut) {
                         contentOpacity = 1.0
                     }
                 }

@@ -29,8 +29,6 @@ public actor HTMLPreviewManager {
     private var executingTaskCount: Int = 0
 
     private let urlCache: URLCache
-    private var totalCachedBytes: Int64 = 0
-    private var cachedImageCount: Int = 0
 
     private let gutenbergCSS: String
     private let gutenbergCSSHash: String
@@ -104,11 +102,8 @@ public actor HTMLPreviewManager {
         let diskCacheKey = makeDiskCacheKey(html: html, viewportWidth: viewportWidth, cssHash: gutenbergCSSHash)
 
         if let diskImage = loadImageFromCache(forKey: diskCacheKey) {
-            print("disk cache hit \(html.count)")
             return diskImage
         }
-
-        print("miss \(html.count)")
 
         let uuid = UUID()
         return try await withTaskCancellationHandler {
@@ -163,10 +158,6 @@ public actor HTMLPreviewManager {
 
     /// Load image from URLCache
     private func loadImageFromCache(forKey key: String) -> UIImage? {
-
-        #warning("TEMP")
-        return nil
-
         let url = URL(string: "preview://\(key)")!
         let request = URLRequest(url: url)
 
@@ -180,12 +171,6 @@ public actor HTMLPreviewManager {
     /// Save image to URLCache
     private func saveImageToCache(_ image: UIImage, forKey key: String) {
         guard let data = encode(image) else { return }
-
-        totalCachedBytes += Int64(data.count)
-        cachedImageCount += 1
-        let averageSize = totalCachedBytes / Int64(cachedImageCount)
-
-        print("store \(image.size) \(image.scale) size=\(ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file)) avg=\(ByteCountFormatter.string(fromByteCount: averageSize, countStyle: .file))")
 
         let url = URL(string: "preview://\(key)")!
         let request = URLRequest(url: url)

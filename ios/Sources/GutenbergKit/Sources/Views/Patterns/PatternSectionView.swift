@@ -8,7 +8,7 @@ struct PatternGridSection: View {
     @Environment(\.htmlPreviewMemoryCache) private var memoryCache
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 9) {
             // Category header with navigation
             NavigationLink {
                 PatternListView(section: section, onPatternSelected: onPatternSelected)

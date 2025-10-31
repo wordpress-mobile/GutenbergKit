@@ -38,18 +38,6 @@ struct PatternCardView: View {
     }
 }
 
-//private extension View {
-//    func cardStyle() -> some View {
-//        self
-//            .background(Color(uiColor: .white))
-//            .overlay(
-//                RoundedRectangle(cornerRadius: 12)
-//                    .stroke(Color(uiColor: .opaqueSeparator), lineWidth: 0.5)
-//            )
-//            .clipShape(RoundedRectangle(cornerRadius: 12))
-//    }
-//}
-
 private struct PatternDetailedView: View {
     let pattern: Pattern
     let onSelected: () -> Void

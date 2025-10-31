@@ -99,7 +99,10 @@ struct HTMLPreviewView: View {
             thumbnailSize = CGSize(width: height * aspectRatio, height: height)
         }
 
-        let thumbnail = await image.byPreparingThumbnail(ofSize: thumbnailSize)
+        let thumbnail = await image.byPreparingThumbnail(ofSize: CGSize(
+            width: thumbnailSize.width * scale,
+            height: thumbnailSize.height * scale,
+        ))
         return thumbnail ?? image
     }
 }
