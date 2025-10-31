@@ -1,5 +1,7 @@
 /**
  * WordPress dependencies - import all packages used by the project
+ * Note: i18n and hooks are loaded separately via wordpress-i18n.js to ensure
+ * they are configured before other modules that depend on localization.
  */
 import * as a11y from '@wordpress/a11y';
 import * as apiFetch from '@wordpress/api-fetch';
@@ -24,9 +26,7 @@ import * as editor from '@wordpress/editor';
 import * as element from '@wordpress/element';
 import * as escapeHtml from '@wordpress/escape-html';
 import * as formatLibrary from '@wordpress/format-library';
-import * as hooks from '@wordpress/hooks';
 import * as htmlEntities from '@wordpress/html-entities';
-import * as i18n from '@wordpress/i18n';
 import * as icons from '@wordpress/icons';
 import * as isShallowEqual from '@wordpress/is-shallow-equal';
 import * as keycodes from '@wordpress/keycodes';
@@ -96,9 +96,14 @@ export function initializeWordPressGlobals() {
 	window.wp.element = element;
 	window.wp.escapeHtml = escapeHtml;
 	window.wp.formatLibrary = formatLibrary;
-	window.wp.hooks = hooks;
+	// hooks and i18n are initialized via wordpress-i18n.js
+	// Ensure they exist (they should, but handle case where wordpress-i18n.js hasn't loaded)
+	if ( ! window.wp.hooks ) {
+		throw new Error(
+			'wordpress-i18n.js must be loaded before wordpress-globals.js'
+		);
+	}
 	window.wp.htmlEntities = htmlEntities;
-	window.wp.i18n = i18n;
 	window.wp.icons = icons;
 	window.wp.isShallowEqual = isShallowEqual.default || isShallowEqual;
 	window.wp.keycodes = keycodes;

@@ -8,7 +8,6 @@ import { createRoot, StrictMode } from '@wordpress/element';
  */
 import { initializeApiFetch } from './api-fetch';
 import { awaitGBKitGlobal, editorLoaded, getGBKit } from './bridge';
-import { configureLocale } from './localization';
 import { loadEditorAssets } from './editor-loader';
 import EditorLoadError from '../components/editor-load-error';
 import { error } from './logger';
@@ -32,16 +31,30 @@ export function initializeBundledEditor() {
 	// - https://github.com/vitejs/vite/issues/13952
 	// - https://github.com/vitejs/vite/issues/5189#issuecomment-2175410148
 	return awaitGBKitGlobal()
-		.then( initializeApiAndLocale )
+		.then( configureLocale )
+		.then( loadRemainingGlobals )
+		.then( initializeApiFetchWrapper )
 		.then( importEditor )
 		.then( initializeEditor )
 		.then( loadPluginsIfEnabled )
 		.catch( handleError );
 }
 
-function initializeApiAndLocale() {
+function configureLocale() {
+	return import( './localization' ).then(
+		( { configureLocale: _configureLocale } ) => _configureLocale()
+	);
+}
+
+function loadRemainingGlobals() {
+	// Load remaining WordPress globals after i18n is configured.
+	// wordpress-i18n.js is already loaded in index.html, so we just need
+	// to load the remaining modules.
+	return import( './wordpress-globals' );
+}
+
+function initializeApiFetchWrapper() {
 	initializeApiFetch();
-	return configureLocale();
 }
 
 function importEditor() {
