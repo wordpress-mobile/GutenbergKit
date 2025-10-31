@@ -5,14 +5,17 @@ struct PatternGridSection: View {
     let section: PatternSection
     let onPatternSelected: (Pattern) -> Void
 
+    @Environment(\.htmlPreviewMemoryCache) private var memoryCache
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Category header with navigation
             NavigationLink {
                 PatternListView(section: section, onPatternSelected: onPatternSelected)
+                    .environment(\.htmlPreviewMemoryCache, memoryCache) // Important
             } label: {
                 HStack {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(section.name)
                             .font(.title3)
                             .fontWeight(.semibold)

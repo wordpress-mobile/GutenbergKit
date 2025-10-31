@@ -7,26 +7,26 @@ import SwiftUI
 /// This cache is designed to be created at the view level and will
 /// automatically deallocate when the view is dismissed, conserving resources.
 @MainActor
-public final class HTMLPreviewMemoryCache: ObservableObject {
+final class HTMLPreviewMemoryCache: ObservableObject {
     private let cache = NSCache<NSString, UIImage>()
 
-    public init(countLimit: Int = 50) {
+    init(countLimit: Int = 200) {
         cache.countLimit = countLimit
     }
 
     /// Generates a cache key from pattern name and size
     private func cacheKey(patternName: String, size: CGSize) -> String {
-        return "\(patternName)-\(Int(size.width))x\(Int(size.height))"
+        "\(patternName)-\(Int(size.width))x\(Int(size.height))"
     }
 
     /// Retrieves an image from the cache
-    public func image(for patternName: String, size: CGSize) -> UIImage? {
+    func image(for patternName: String, size: CGSize) -> UIImage? {
         let key = cacheKey(patternName: patternName, size: size)
         return cache.object(forKey: key as NSString)
     }
 
     /// Stores an image in the cache
-    public func setImage(_ image: UIImage, for patternName: String, size: CGSize) {
+    func setImage(_ image: UIImage, for patternName: String, size: CGSize) {
         let key = cacheKey(patternName: patternName, size: size)
         cache.setObject(image, forKey: key as NSString)
     }

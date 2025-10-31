@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 /// A view that displays a block pattern preview using HTMLPreviewRenderer
-struct BlockPreviewView: View {
+struct HTMLPreviewView: View {
     let pattern: Pattern
     let targetSize: CGSize?
 
@@ -50,7 +50,7 @@ struct BlockPreviewView: View {
                 previewImage = cachedImage
                 return
             }
-            let fullSizeImage = try await HTMLPreviewRenderer.shared.render(
+            let fullSizeImage = try await HTMLPreviewManager.shared.render(
                 html: pattern.content,
                 viewportWidth: pattern.viewportWidth ?? 1200
             )
@@ -69,7 +69,9 @@ struct BlockPreviewView: View {
             memoryCache?.setImage(processedImage, for: pattern.name, size: cacheSize)
 
             try Task.checkCancellation()
-            previewImage = processedImage
+            withAnimation {
+                previewImage = processedImage
+            }
         } catch is CancellationError {
             return // Task was cancelled, don't show error
         } catch {

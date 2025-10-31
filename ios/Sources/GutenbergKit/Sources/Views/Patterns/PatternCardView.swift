@@ -13,19 +13,16 @@ struct PatternCardView: View {
 
     var body: some View {
         Button(action: onSelected) {
-            BlockPreviewView(pattern: pattern, targetSize: style.targetSize)
-                .frame(
-                    minWidth: style.minWidth,
-                    maxWidth: style.maxWidth,
-                    minHeight: style.minHeight,
-                    maxHeight: style.maxHeight
-                )
-                .background(Color(uiColor: .white))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(uiColor: .opaqueSeparator), lineWidth: 0.5)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+            switch style {
+            case .horizontal(let height, let maxWidth):
+                HTMLPreviewView(pattern: pattern, targetSize: CGSize(width: maxWidth, height: height))
+                    .frame(minWidth: 120, maxWidth: maxWidth, minHeight: height, maxHeight: height)
+                    .cardStyle(cornerRadius: 10)
+            case .fullWidth(let maxHeight):
+                HTMLPreviewView(pattern: pattern, targetSize: nil)
+                    .frame(minWidth: 200, maxWidth: .infinity, minHeight: 150, maxHeight: maxHeight)
+                    .cardStyle(cornerRadius: 14)
+            }
         }
         .buttonStyle(.plain)
         .contextMenu {
@@ -41,53 +38,17 @@ struct PatternCardView: View {
     }
 }
 
-private extension PatternCardView.Style {
-    var targetSize: CGSize? {
-        switch self {
-        case .horizontal(let height, let maxWidth):
-            // In horizontal scroll, constrain by both height and max width
-            return CGSize(width: maxWidth, height: height)
-        case .fullWidth:
-            return nil
-        }
-    }
-
-    var minWidth: CGFloat? {
-        switch self {
-        case .horizontal:
-            return 120
-        case .fullWidth:
-            return 200
-        }
-    }
-
-    var maxWidth: CGFloat? {
-        switch self {
-        case .horizontal(_, let maxWidth):
-            return maxWidth
-        case .fullWidth:
-            return .infinity
-        }
-    }
-
-    var minHeight: CGFloat? {
-        switch self {
-        case .horizontal(let height, _):
-            return height
-        case .fullWidth:
-            return 150
-        }
-    }
-
-    var maxHeight: CGFloat? {
-        switch self {
-        case .horizontal(let height, _):
-            return height
-        case .fullWidth(let maxHeight):
-            return maxHeight
-        }
-    }
-}
+//private extension View {
+//    func cardStyle() -> some View {
+//        self
+//            .background(Color(uiColor: .white))
+//            .overlay(
+//                RoundedRectangle(cornerRadius: 12)
+//                    .stroke(Color(uiColor: .opaqueSeparator), lineWidth: 0.5)
+//            )
+//            .clipShape(RoundedRectangle(cornerRadius: 12))
+//    }
+//}
 
 private struct PatternDetailedView: View {
     let pattern: Pattern
@@ -96,7 +57,7 @@ private struct PatternDetailedView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Large preview
-            BlockPreviewView(pattern: pattern, targetSize: CGSize(width: 400, height: 300))
+            HTMLPreviewView(pattern: pattern, targetSize: CGSize(width: 400, height: 300))
                 .frame(maxWidth: .infinity)
                 .frame(height: 300)
                 .background(Color(uiColor: .white))

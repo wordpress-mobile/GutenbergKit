@@ -6,7 +6,7 @@ import WebKit
 /// - Pooling and reusing WKWebView instances to reduce memory overhead
 /// - Automatic cleanup of idle webviews after 5 seconds of inactivity
 @MainActor
-final class WebViewRenderer {
+final class HTMLWebViewRenderer {
     private var webViewPool: [PooledWebView] = []
     private var idleCleanupTask: Task<Void, Never>?
 
@@ -35,7 +35,7 @@ final class WebViewRenderer {
 
         // Take screenshot of entire content with the maximum target size we'll ever need (roughly)
         // Calculate snapshot width such that neither dimension exceeds the maximum size
-        let maxDimension = min(UIScreen.main.bounds.width, UIScreen.main.bounds.height) - 48
+        let maxDimension = min(UIScreen.main.bounds.width, UIScreen.main.bounds.height, 640) - 48
         let scaleForWidth = maxDimension / width
         let scaleForHeight = maxDimension / contentHeight
         let scale = min(scaleForWidth, scaleForHeight, 1.0) // Don't scale up, only down

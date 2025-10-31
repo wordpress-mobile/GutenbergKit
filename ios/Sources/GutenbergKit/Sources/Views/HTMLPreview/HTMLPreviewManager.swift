@@ -13,8 +13,8 @@ import UniformTypeIdentifiers
 /// - Disk cache: Stores full-size rendered images at pattern viewport width
 /// - Concurrent rendering with request queuing
 /// - Background execution of disk I/O operations
-public actor HTMLPreviewRenderer {
-    public static let shared = HTMLPreviewRenderer()
+public actor HTMLPreviewManager {
+    public static let shared = HTMLPreviewManager()
 
     // MARK: - Configuration
 
@@ -22,7 +22,7 @@ public actor HTMLPreviewRenderer {
 
     // MARK: - State
 
-    private let webViewRenderer = WebViewRenderer()
+    private let htmlRenderer = HTMLWebViewRenderer()
 
     // All requests (both queued and executing)
     private var requests: [RenderRequest] = []
@@ -59,7 +59,7 @@ public actor HTMLPreviewRenderer {
         // Precompute CSS hash for cache key generation
         self.gutenbergCSSHash = css.sha256
 
-        let cacheDirectory = URL.cachesDirectory.appendingPathComponent("gbk-pattern-previews", isDirectory: true)
+        let cacheDirectory = URL.cachesDirectory.appendingPathComponent("gbk-html-preview-cache", isDirectory: true)
         do {
             try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
         } catch {
@@ -211,7 +211,7 @@ public actor HTMLPreviewRenderer {
                     css: gutenbergCSS
                 )
 
-                let image = try await webViewRenderer.render(
+                let image = try await htmlRenderer.render(
                     html: fullHTML,
                     viewportWidth: request.viewportWidth
                 )
