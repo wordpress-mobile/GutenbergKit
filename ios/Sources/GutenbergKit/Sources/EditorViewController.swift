@@ -109,14 +109,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             name: "loadFetchedEditorAssets"
         )
 
-        if configuration.shouldUsePlugins {
-            if let remoteURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
-                webView.load(URLRequest(url: remoteURL))
-            } else {
-                let remoteURL = Bundle.module.url(forResource: "remote", withExtension: "html", subdirectory: "Gutenberg")!
-                webView.loadFileURL(remoteURL, allowingReadAccessTo: Bundle.module.resourceURL!)
-            }
-        } else if let editorURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
+        if let editorURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
             webView.load(URLRequest(url: editorURL))
         } else {
             let indexURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
