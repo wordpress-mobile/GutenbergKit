@@ -10,21 +10,65 @@ final class PatternsViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     init(patterns: [Pattern]) {
-        // Group patterns by category to create sections
-        let grouped = Dictionary(grouping: patterns) { pattern in
-            pattern.category ?? "other"
+        // Build a mapping of category -> patterns in input order
+        var categoryPatterns: [String: [Pattern]] = [:]
+        let uncategorizedKey = "uncategorized"
+
+        for pattern in patterns {
+            let patternCategories = pattern.categories?.filter { !$0.isEmpty } ?? []
+
+            if patternCategories.isEmpty {
+                // Handle uncategorized patterns
+                categoryPatterns[uncategorizedKey, default: []].append(pattern)
+            } else {
+                // Add pattern to all its categories
+                for category in patternCategories {
+                    categoryPatterns[category, default: []].append(pattern)
+                }
+            }
         }
 
-        // Create sections sorted by category name
-        self.allSections = grouped.map { category, patterns in
-            PatternSection(
+        // Create category sections
+        var sections: [PatternSection] = categoryPatterns.map { category, patterns in
+            let displayName: String
+            if category == uncategorizedKey {
+                // TODO: CMM-874 - Localize "Uncategorized"
+                displayName = "Uncategorized"
+            } else {
+                displayName = category.capitalized
+            }
+
+            return PatternSection(
                 category: category,
-                name: category.capitalized,
-                patterns: patterns.sorted { $0.title < $1.title }
+                name: displayName,
+                patterns: patterns // Keep patterns in input order
             )
         }
-        .sorted { $0.name < $1.name }
 
+        // Sort sections alphabetically using localized comparison
+        // Uncategorized always goes last
+        sections.sort { section1, section2 in
+            if section1.category == uncategorizedKey {
+                return false
+            }
+            if section2.category == uncategorizedKey {
+                return true
+            }
+            return section1.name.localizedCompare(section2.name) == .orderedAscending
+        }
+
+        // Create "All" section at the top (no previews)
+        // TODO: CMM-874 - Localize "All"
+        if !patterns.isEmpty {
+            sections += [PatternSection(
+                category: "all",
+                name: "All",
+                patterns: patterns,
+                showPreviews: false
+            )]
+        }
+
+        self.allSections = sections
         self.sections = allSections
 
         setupSearchObserver()
@@ -49,7 +93,8 @@ final class PatternsViewModel: ObservableObject {
                 return filtered.isEmpty ? nil : PatternSection(
                     category: section.category,
                     name: section.name,
-                    patterns: filtered
+                    patterns: filtered,
+                    showPreviews: section.showPreviews
                 )
             }
         }

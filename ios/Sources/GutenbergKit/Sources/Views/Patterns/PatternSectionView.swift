@@ -40,19 +40,21 @@ struct PatternGridSection: View {
             .buttonStyle(.plain)
 
             // Horizontal scrolling previews - shows all patterns
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(section.patterns) { pattern in
-                        PatternCardView(
-                            pattern: pattern,
-                            onSelected: {
-                                onPatternSelected(pattern)
-                            },
-                            style: .horizontal(height: 140, maxWidth: 240)
-                        )
+            if section.showPreviews {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(section.patterns) { pattern in
+                            PatternCardView(
+                                pattern: pattern,
+                                onSelected: {
+                                    onPatternSelected(pattern)
+                                },
+                                style: .horizontal(height: 140, maxWidth: 240)
+                            )
+                        }
                     }
+                    .padding(.horizontal, 16)
                 }
-                .padding(.horizontal, 16)
             }
         }
     }

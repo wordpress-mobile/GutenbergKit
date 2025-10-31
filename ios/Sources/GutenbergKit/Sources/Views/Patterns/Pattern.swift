@@ -58,4 +58,12 @@ struct PatternSection: Identifiable, Decodable {
     let category: String
     let name: String
     let patterns: [Pattern]
+    let showPreviews: Bool
+
+    init(category: String, name: String, patterns: [Pattern], showPreviews: Bool = true) {
+        self.category = category
+        self.name = name
+        self.patterns = patterns
+        self.showPreviews = showPreviews
+    }
 }
