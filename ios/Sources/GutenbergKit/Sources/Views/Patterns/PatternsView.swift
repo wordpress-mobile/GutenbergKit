@@ -3,13 +3,13 @@ import WebKit
 
 struct PatternsView: View {
     let patterns: [Pattern]
-    let onPatternSelected: (String) -> Void
+    let onPatternSelected: (Pattern) -> Void
 
     @StateObject private var viewModel: PatternsViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var contentOpacity: Double = 0
 
-    init(patterns: [Pattern], onPatternSelected: @escaping (String) -> Void) {
+    init(patterns: [Pattern], onPatternSelected: @escaping (Pattern) -> Void) {
         self.patterns = patterns
         self.onPatternSelected = onPatternSelected
         self._viewModel = StateObject(wrappedValue: PatternsViewModel(patterns: patterns))
@@ -59,7 +59,7 @@ struct PatternsView: View {
                                 section: section,
                                 onPatternSelected: { pattern in
                                     dismiss()
-                                    onPatternSelected(pattern.name)
+                                    onPatternSelected(pattern)
                                 }
                             )
                         }
@@ -88,8 +88,8 @@ struct PatternsView: View {
     NavigationStack {
         PatternsView(
             patterns: [],
-            onPatternSelected: { patternName in
-                print("pattern selected: \(patternName)")
+            onPatternSelected: { pattern in
+                print("pattern selected: \(pattern.name)")
             }
         )
     }

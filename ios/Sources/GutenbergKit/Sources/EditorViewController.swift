@@ -262,14 +262,15 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 patterns: data.patterns,
                 mediaPicker: mediaPicker,
                 presentationContext: context,
-                onBlockSelected: { [weak self] block in
-                    self?.insertBlockFromInserter(block.id)
-                },
-                onPatternSelected: { [weak self] patternName in
-                    self?.insertPatternFromInserter(patternName)
-                },
-                onMediaSelected: { [weak self] selection in
-                    self?.insertMediaFromInserter(selection)
+                onSelection: { [weak self] selection in
+                    switch selection {
+                    case .block(let block):
+                        self?.insertBlockFromInserter(block.id)
+                    case .pattern(let pattern):
+                        self?.insertPatternFromInserter(pattern.name)
+                    case .media(let items):
+                        self?.insertMediaFromInserter(items)
+                    }
                 }
             )
         })

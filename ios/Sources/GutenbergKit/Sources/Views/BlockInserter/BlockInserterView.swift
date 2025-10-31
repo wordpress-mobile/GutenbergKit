@@ -3,14 +3,18 @@ import PhotosUI
 import UIKit
 import WebKit
 
+enum BlockInserterSelection {
+    case block(BlockType)
+    case pattern(Pattern)
+    case media([MediaInfo])
+}
+
 struct BlockInserterView: View {
     let sections: [BlockInserterSection]
     let patterns: [Pattern]
     let mediaPicker: MediaPickerController?
     let presentationContext: MediaPickerPresentationContext
-    let onBlockSelected: (BlockType) -> Void
-    let onPatternSelected: (String) -> Void
-    let onMediaSelected: ([MediaInfo]) -> Void
+    let onSelection: (BlockInserterSelection) -> Void
 
     @StateObject private var viewModel: BlockInserterViewModel
     @StateObject private var iconCache = BlockIconCache()
@@ -27,17 +31,13 @@ struct BlockInserterView: View {
         patterns: [Pattern],
         mediaPicker: MediaPickerController?,
         presentationContext: MediaPickerPresentationContext,
-        onBlockSelected: @escaping (BlockType) -> Void,
-        onPatternSelected: @escaping (String) -> Void,
-        onMediaSelected: @escaping ([MediaInfo]) -> Void
+        onSelection: @escaping (BlockInserterSelection) -> Void
     ) {
         self.sections = sections
         self.patterns = patterns
         self.mediaPicker = mediaPicker
         self.presentationContext = presentationContext
-        self.onBlockSelected = onBlockSelected
-        self.onPatternSelected = onPatternSelected
-        self.onMediaSelected = onMediaSelected
+        self.onSelection = onSelection
 
         let viewModel = BlockInserterViewModel(sections: sections)
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -63,9 +63,9 @@ struct BlockInserterView: View {
                 NavigationStack {
                     PatternsView(
                         patterns: patterns,
-                        onPatternSelected: { patternName in
+                        onPatternSelected: { pattern in
                             showingPatterns = false
-                            insertPattern(patternName)
+                            insertPattern(pattern)
                         }
                     )
                 }
@@ -118,7 +118,7 @@ struct BlockInserterView: View {
             if let mediaPicker {
                 MediaPickerMenu(picker: mediaPicker, context: presentationContext) {
                     dismiss()
-                    onMediaSelected($0)
+                    onSelection(.media($0))
                 }
             }
         }
@@ -128,7 +128,7 @@ struct BlockInserterView: View {
 
     private func insertBlock(_ block: BlockType) {
         dismiss()
-        onBlockSelected(block)
+        onSelection(.block(block))
     }
 
     private func insertMedia(_ items: [PhotosPickerItem]) {
@@ -136,14 +136,14 @@ struct BlockInserterView: View {
             let items = await viewModel.processSelectedPhotosPickerItems(items)
             if !items.isEmpty {
                 dismiss()
-                onMediaSelected(items)
+                onSelection(.media(items))
             }
         }
     }
 
-    private func insertPattern(_ patternName: String) {
+    private func insertPattern(_ pattern: Pattern) {
         dismiss()
-        onPatternSelected(patternName)
+        onSelection(.pattern(pattern))
     }
 }
 
@@ -159,14 +159,8 @@ struct BlockInserterView: View {
             patterns: [],
             mediaPicker: MockMediaPickerController(),
             presentationContext: MediaPickerPresentationContext(),
-            onBlockSelected: {
-                print("block selected: \($0.name)")
-            },
-            onPatternSelected: {
-                print("pattern selected: \($0)")
-            },
-            onMediaSelected: {
-                print("media selected: \($0)")
+            onSelection: { selection in
+                print("on selected: \(selection)")
             }
         )
     }
