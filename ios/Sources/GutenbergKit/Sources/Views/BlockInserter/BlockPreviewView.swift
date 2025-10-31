@@ -16,6 +16,7 @@ struct BlockPreviewView: View {
     @State private var isLoadingPreview = false
     @State private var previewError = false
     @Environment(\.htmlPreviewMemoryCache) private var memoryCache
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         Group {
@@ -82,7 +83,7 @@ struct BlockPreviewView: View {
             )
 
             // Create thumbnail from full-size image
-            let thumbnail = await createThumbnail(from: fullSizeImage, maximumDimension: maximumDimension)
+            let thumbnail = createThumbnail(from: fullSizeImage, maximumDimension: maximumDimension, scale: displayScale)
 
             // Store thumbnail in memory cache
             memoryCache?.setImage(thumbnail, for: pattern.name, size: targetSize)
@@ -107,9 +108,7 @@ struct BlockPreviewView: View {
     }
 
     /// Creates a thumbnail from an image using preparingThumbnail
-    private func createThumbnail(from image: UIImage, maximumDimension: MaximumDimension) async -> UIImage {
-        let scale = await UIScreen.main.scale
-
+    private func createThumbnail(from image: UIImage, maximumDimension: MaximumDimension, scale: CGFloat) -> UIImage {
         // Calculate the thumbnail size in points maintaining aspect ratio
         let aspectRatio = image.size.width / image.size.height
 
