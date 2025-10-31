@@ -1,6 +1,8 @@
 import UIKit
 import WebKit
 import CryptoKit
+import ImageIO
+import UniformTypeIdentifiers
 
 /// Renders HTML content to images using a pool of WKWebView instances.
 ///
@@ -20,7 +22,6 @@ public final class HTMLPreviewRenderer {
     // MARK: - Configuration
 
     private let poolSize = 2
-    private let maxContentHeight: CGFloat = 2000 // Maximum height to prevent excessive memory usage
     private let memoryCacheLimit = 50
 
     // MARK: - State
@@ -33,10 +34,11 @@ public final class HTMLPreviewRenderer {
     }()
     private var pendingRequests: [RenderRequest] = []
     private var activeRenders: Set<String> = []
-    private let diskCache: DiskCache
+    private let urlCache: URLCache
 
     // Cached CSS for background HTML generation
     private let gutenbergCSS: String
+    private let gutenbergCSSHash: String
 
     // MARK: - Types
 
@@ -74,75 +76,47 @@ public final class HTMLPreviewRenderer {
     }
 
     private class RenderDelegate: NSObject, WKNavigationDelegate {
-        var onRenderComplete: ((CGFloat) -> Void)?
+        var onRenderComplete: ((CGFloat?) -> Void)?
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            // Wait until the HTML document finished loading
-            // This also waits for all resources within the HTML (images, videos) to be fully loaded
-            webView.evaluateJavaScript("document.readyState") { [weak self] complete, _ in
-                guard complete != nil else {
-                    return
-                }
-
-                // Get content height using document.documentElement.scrollHeight
-                // This captures margins on <html> tag, unlike document.body.scrollHeight
-                webView.evaluateJavaScript("document.documentElement.scrollHeight") { height, _ in
-                    guard let height = height as? CGFloat else {
-                        self?.onRenderComplete?(480) // Fallback height
-                        return
-                    }
-
-                    self?.onRenderComplete?(height)
-                }
+            // Get content height using document.documentElement.scrollHeight
+            // This captures margins on <html> tag, unlike document.body.scrollHeight
+            webView.evaluateJavaScript("document.documentElement.scrollHeight") { [weak self] height, _ in
+                self?.onRenderComplete?(height as? CGFloat)
             }
         }
     }
-
-    enum PreviewError: Error, LocalizedError {
-        case renderingFailed
-        case screenshotFailed
-        case cancelled
-
-        var errorDescription: String? {
-            switch self {
-            case .renderingFailed:
-                return "Failed to render HTML content"
-            case .screenshotFailed:
-                return "Failed to capture screenshot"
-            case .cancelled:
-                return "Rendering was cancelled"
-            }
-        }
-    }
-
 
     // MARK: - Initialization
 
     private init() {
-        // Initialize disk cache
-        self.diskCache = DiskCache()
+        let css = Self.loadGutenbergCSS() ?? ""
+        self.gutenbergCSS = css
+        assert(!css.isEmpty, "Failed to load Gutenberg CSS from bundle. Previews will not render correctly.")
 
-        // Load Gutenberg CSS from bundled assets
-        self.gutenbergCSS = Self.loadGutenbergCSS() ?? ""
+        // Precompute CSS hash for cache key generation
+        let data = Data(css.utf8)
+        let hash = SHA256.hash(data: data)
+        self.gutenbergCSSHash = hash.compactMap { String(format: "%02x", $0) }.joined()
 
-        // Assert that CSS loaded successfully
-        assert(
-            !gutenbergCSS.isEmpty,
-            "Failed to load Gutenberg CSS from bundle. Previews will not render correctly."
+        let urlCacheDirectory = URL.cachesDirectory.appendingPathComponent("gbk-pattern-previews", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: urlCacheDirectory, withIntermediateDirectories: true)
+        } catch {
+            assertionFailure("failed to create cache directory: \(error)")
+        }
+
+        // The previews often have graphics included and are non opaque. The
+        // most efficient format for it on iOS is HEIF.
+        self.urlCache = URLCache(
+            memoryCapacity: 0, // Disable memory cache (we use NSCache for thumbnails)
+            diskCapacity: 16 * 1024 * 1024, // 16 MB disk limit
+            directory: urlCacheDirectory
         )
 
         // Pre-populate the web view pool
         for _ in 0..<poolSize {
             webViewPool.append(PooledWebView())
-        }
-
-        // Check CSS hash and clear cache if changed (in background)
-        Task.detached { [diskCache, gutenbergCSS] in
-            let currentCSSHash = await hashString(gutenbergCSS)
-            if await diskCache.cssHashChanged(currentHash: currentCSSHash) {
-                await diskCache.clearCache()
-                await diskCache.saveCSSHash(currentCSSHash)
-            }
         }
     }
 
@@ -205,24 +179,31 @@ public final class HTMLPreviewRenderer {
     ///   - maximumDimension: Maximum dimension constraint (width or height) for the thumbnail
     /// - Returns: Thumbnail image constrained by the specified dimension
     func render(html: String, viewportWidth: Int, maximumDimension: MaximumDimension) async throws -> UIImage {
-        // Generate disk cache key (HTML + viewport width only)
-        let diskCacheKey = await generateDiskCacheKey(html: html, viewportWidth: viewportWidth)
+
+        print("request \(html.count)")
+
+        // Generate disk cache key (HTML + viewport width + CSS hash)
+        let diskCacheKey = await generateDiskCacheKey(html: html, viewportWidth: viewportWidth, cssHash: gutenbergCSSHash)
 
         // Generate memory cache key (includes maximum dimension)
         let memoryCacheKey = await generateMemoryCacheKey(diskKey: diskCacheKey, maximumDimension: maximumDimension)
 
         // Check memory cache first (stores thumbnails at specific sizes)
         if let cachedImage = memoryCache.object(forKey: memoryCacheKey as NSString) {
+            print("mem cache hit \(html.count)")
             return cachedImage
         }
 
         // Check disk cache (stores full-size images at viewport width)
-        if let diskImage = await diskCache.loadImage(forKey: diskCacheKey) {
+        if let diskImage = loadImageFromCache(forKey: diskCacheKey) {
+            print("disk cache hit \(html.count)")
             // Create thumbnail from disk image using preparingThumbnail
             let thumbnail = await createThumbnail(from: diskImage, maximumDimension: maximumDimension)
             memoryCache.setObject(thumbnail, forKey: memoryCacheKey as NSString)
             return thumbnail
         }
+
+        print("miss \(html.count)")
 
         // Check if already rendering this content
         if activeRenders.contains(diskCacheKey) {
@@ -266,8 +247,8 @@ public final class HTMLPreviewRenderer {
             pooledView: pooledView
         )
 
-        // Save full-size image to disk cache (background operation)
-        await diskCache.saveImage(fullSizeImage, forKey: diskCacheKey)
+        // Save full-size image to disk cache
+        saveImageToCache(fullSizeImage, forKey: diskCacheKey)
 
         // Create thumbnail for the requested dimension
         let thumbnail = await createThumbnail(from: fullSizeImage, maximumDimension: maximumDimension)
@@ -283,12 +264,48 @@ public final class HTMLPreviewRenderer {
     /// Clears the image cache (both memory and disk)
     public func clearCache() async {
         memoryCache.removeAllObjects()
-        await diskCache.clearCache()
+        urlCache.removeAllCachedResponses()
     }
 
     /// Clears only the memory cache (keeps disk cache intact)
     func clearMemoryCache() {
         memoryCache.removeAllObjects()
+    }
+
+    // MARK: - URLCache Helpers
+
+    /// Load image from URLCache
+    private func loadImageFromCache(forKey key: String) -> UIImage? {
+
+        #warning("TEMP")
+        return nil
+
+        let url = URL(string: "preview://\(key)")!
+        let request = URLRequest(url: url)
+
+        guard let cachedResponse = urlCache.cachedResponse(for: request),
+              let image = UIImage(data: cachedResponse.data) else {
+            return nil
+        }
+        return image
+    }
+
+    /// Save image to URLCache
+    private func saveImageToCache(_ image: UIImage, forKey key: String) {
+        guard let data = imageToHEICData(image) else { return }
+
+        print("store \(image.size) \(image.scale) \(ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file))")
+
+        let url = URL(string: "preview://\(key)")!
+        let request = URLRequest(url: url)
+        let response = URLResponse(
+            url: url,
+            mimeType: "image/heic",
+            expectedContentLength: data.count,
+            textEncodingName: nil
+        )
+        let cachedResponse = CachedURLResponse(response: response, data: data)
+        urlCache.storeCachedResponse(cachedResponse, for: request)
     }
 
     // MARK: - Private Methods
@@ -312,45 +329,34 @@ public final class HTMLPreviewRenderer {
         let webView = pooledView.webView
         let delegate = pooledView.delegate
 
+        let width = CGFloat(viewportWidth)
+
         // Set initial frame with small height so content can expand naturally
         // This ensures scrollHeight returns actual content height, not viewport height
-        let width = CGFloat(viewportWidth)
-        let minHeight: CGFloat = 100
-        webView.frame = CGRect(x: 0, y: 0, width: width, height: minHeight)
+        webView.frame = CGRect(x: 0, y: 0, width: width, height: 80)
 
-        // Generate full HTML with styling (in background)
-        let fullHTML = await generateFullHTML(content: html, viewportWidth: viewportWidth, css: gutenbergCSS)
+        let fullHTML = await generateFullHTML(
+            content: html,
+            viewportWidth: viewportWidth,
+            css: gutenbergCSS
+        )
 
         // Wait for rendering to complete using the delegate
         let contentHeight = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<CGFloat, Error>) in
             delegate.onRenderComplete = { height in
-                continuation.resume(returning: height)
+                delegate.onRenderComplete = nil
+                continuation.resume(returning: height ?? width) // Fallback to square
             }
-
-            // Load HTML - the delegate will notify when ready
             webView.loadHTMLString(fullHTML, baseURL: nil)
         }
 
-        let finalHeight = min(contentHeight, maxContentHeight)
-
-        // Update frame to actual content size
-        webView.frame = CGRect(x: 0, y: 0, width: width, height: finalHeight)
-
-        // Force layout update
-        webView.layoutIfNeeded()
-
-        // Take screenshot of entire content
+        // Take screenshot of entire content with the maximum target size we'll ever need (roughly)
         let config = WKSnapshotConfiguration()
-        config.rect = CGRect(x: 0, y: 0, width: width, height: finalHeight)
+        config.rect = CGRect(x: 0, y: 0, width: width, height: contentHeight)
+        config.snapshotWidth = NSNumber(value: min(UIScreen.main.bounds.width, UIScreen.main.bounds.height) - 48)
 
-        guard let image = try? await webView.takeSnapshot(configuration: config) else {
-            throw PreviewError.screenshotFailed
-        }
+        let image = try await webView.takeSnapshot(configuration: config)
 
-        // Clear the delegate callback
-        delegate.onRenderComplete = nil
-
-        // Notify any waiting requests
         notifyPendingRequests(for: diskCacheKey, with: image)
 
         return image
@@ -374,7 +380,7 @@ public final class HTMLPreviewRenderer {
                 )
 
                 // Save full-size image to disk
-                await diskCache.saveImage(fullSizeImage, forKey: request.diskCacheKey)
+                saveImageToCache(fullSizeImage, forKey: request.diskCacheKey)
 
                 // Create thumbnail for requested dimension
                 let thumbnail = await createThumbnail(from: fullSizeImage, maximumDimension: request.maximumDimension)
@@ -419,9 +425,9 @@ private func hashString(_ string: String) async -> String {
     return hash.compactMap { String(format: "%02x", $0) }.joined()
 }
 
-/// Generates a disk cache key from HTML content and viewport width
-private func generateDiskCacheKey(html: String, viewportWidth: Int) async -> String {
-    let combined = "\(html)-\(viewportWidth)"
+/// Generates a disk cache key from HTML content, viewport width, and CSS hash
+private func generateDiskCacheKey(html: String, viewportWidth: Int, cssHash: String) async -> String {
+    let combined = "\(html)-\(viewportWidth)-\(cssHash)"
     return await hashString(combined)
 }
 
@@ -510,76 +516,25 @@ private func generateFullHTML(content: String, viewportWidth: Int, css: String) 
     """
 }
 
-// MARK: - Disk Cache
+/// Converts UIImage to HEIC data format
+private func imageToHEICData(_ image: UIImage) -> Data? {
+    guard let cgImage = image.cgImage else { return nil }
 
-extension HTMLPreviewRenderer {
-    /// Manages disk caching of rendered preview images
-    /// All operations run on actor's isolated context for thread safety
-    private actor DiskCache {
-        private let cacheDirectory: URL
-        private let manifestURL: URL
-
-        init() {
-            // Create cache directory in Caches folder
-            let fileManager = FileManager.default
-            let cachesDirectory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
-            self.cacheDirectory = cachesDirectory.appendingPathComponent("pattern-previews", isDirectory: true)
-            self.manifestURL = cacheDirectory.appendingPathComponent("manifest.json")
-
-            // Create directory if needed
-            try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-        }
-
-        /// Check if CSS hash has changed
-        func cssHashChanged(currentHash: String) -> Bool {
-            guard let data = try? Data(contentsOf: manifestURL),
-                  let manifest = try? JSONDecoder().decode(CacheManifest.self, from: data) else {
-                return true // No manifest means first run or cache cleared
-            }
-            return manifest.cssHash != currentHash
-        }
-
-        /// Save CSS hash to manifest
-        func saveCSSHash(_ hash: String) {
-            let manifest = CacheManifest(cssHash: hash)
-            guard let data = try? JSONEncoder().encode(manifest) else { return }
-            try? data.write(to: manifestURL)
-        }
-
-        /// Load image from disk cache
-        func loadImage(forKey key: String) -> UIImage? {
-            let fileURL = cacheDirectory.appendingPathComponent("\(key).png")
-            guard let data = try? Data(contentsOf: fileURL),
-                  let image = UIImage(data: data) else {
-                return nil
-            }
-            return image
-        }
-
-        /// Save image to disk cache
-        func saveImage(_ image: UIImage, forKey key: String) {
-            let fileURL = cacheDirectory.appendingPathComponent("\(key).png")
-            guard let data = image.pngData() else { return }
-            try? data.write(to: fileURL)
-        }
-
-        /// Clear all cached images
-        func clearCache() {
-            let fileManager = FileManager.default
-            guard let contents = try? fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: nil) else {
-                return
-            }
-
-            for fileURL in contents {
-                // Keep manifest, delete everything else
-                if fileURL != manifestURL {
-                    try? fileManager.removeItem(at: fileURL)
-                }
-            }
-        }
-
-        private struct CacheManifest: Codable {
-            let cssHash: String
-        }
+    let data = NSMutableData()
+    guard let destination = CGImageDestinationCreateWithData(data, UTType.heic.identifier as CFString, 1, nil) else {
+        return nil
     }
+
+    let options: [CFString: Any] = [
+        kCGImageDestinationLossyCompressionQuality: 0.85
+    ]
+
+    CGImageDestinationAddImage(destination, cgImage, options as CFDictionary)
+
+    guard CGImageDestinationFinalize(destination) else {
+        return nil
+    }
+
+    return data as Data
 }
+
