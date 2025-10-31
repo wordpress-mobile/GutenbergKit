@@ -352,10 +352,13 @@ export async function fetchEditorAssets() {
 		);
 	}
 
-	const url =
-		editorAssetsEndpoint || `${ siteApiRoot }wpcom/v2/editor-assets`;
+	const url = new URL(
+		editorAssetsEndpoint || `${ siteApiRoot }wpcom/v2/editor-assets`
+	);
+	// The GutenbergKit bundle includes the required `@wordpress` modules
+	url.searchParams.set( 'exclude', 'core,gutenberg' );
 	// Use our fetch utility, as we have not yet loaded the `wp.apiFetch` utility
-	return await basicFetch( url, {
+	return await basicFetch( url.toString(), {
 		headers: { Authorization: authHeader },
 	} );
 }
