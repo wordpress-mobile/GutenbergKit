@@ -28,6 +28,9 @@ public final class HTMLPreviewRenderer {
     // All requests (both queued and executing)
     private var requests: [RenderRequest] = []
 
+    // Timer to clear pool when idle
+    private var idleCleanupTask: Task<Void, Never>?
+
     private let urlCache: URLCache
     private var totalCachedBytes: Int64 = 0
     private var cachedImageCount: Int = 0
@@ -172,6 +175,10 @@ public final class HTMLPreviewRenderer {
         print("miss \(html.count)")
 
         return try await withCheckedThrowingContinuation { continuation in
+            // Cancel idle cleanup since we have work to do
+            idleCleanupTask?.cancel()
+            idleCleanupTask = nil
+
             // Check if this content is already queued or executing (deduplication)
             if let existingRequest = requests.first(where: { $0.diskCacheKey == diskCacheKey }) {
                 existingRequest.continuations.append(continuation)
@@ -292,6 +299,8 @@ public final class HTMLPreviewRenderer {
     private func processNextRequest() {
         // Find first queued request (not executing yet)
         guard let nextRequest = requests.first(where: { $0.task == nil }) else {
+            // No more requests - schedule cleanup
+            scheduleIdleCleanup()
             return
         }
 
@@ -302,6 +311,22 @@ public final class HTMLPreviewRenderer {
         }
 
         startRender(request: nextRequest)
+    }
+
+    private func scheduleIdleCleanup() {
+        // Cancel any existing cleanup task
+        idleCleanupTask?.cancel()
+
+        // Schedule cleanup after 5 seconds of inactivity
+        idleCleanupTask = Task {
+            do {
+                try await Task.sleep(for: .seconds(5))
+                // Clear the webview pool to free resources
+                webViewPool.removeAll()
+            } catch {
+                // Task was cancelled, which is fine
+            }
+        }
     }
 
     private func performRender(
