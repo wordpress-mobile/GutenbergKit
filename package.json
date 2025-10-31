@@ -39,7 +39,6 @@
 		"@wordpress/private-apis": "^1.10",
 		"@wordpress/rich-text": "^7.16.0",
 		"clsx": "^2.1.1",
-		"html2canvas": "^1.4.1",
 		"vite-plugin-node-polyfills": "^0.23.0"
 	},
 	"devDependencies": {
