@@ -21,6 +21,7 @@ struct HTMLPreviewView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .cornerRadius(10)
                     .padding(8)
+                    .background(Color.white)
                     .clipped()
             } else if isLoadingFailed {
                 RoundedRectangle(cornerRadius: 8)
@@ -35,9 +36,9 @@ struct HTMLPreviewView: View {
                     }
             } else {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(uiColor: .secondarySystemBackground))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(uiColor: .secondarySystemBackground))
                     .aspectRatio(cachedAspectRatio, contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .task(id: pattern.id) {

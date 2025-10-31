@@ -3,6 +3,7 @@ import WebKit
 import CryptoKit
 import ImageIO
 import UniformTypeIdentifiers
+import SwiftUI
 
 /// Renders HTML content to images using a pool of WKWebView instances.
 ///
@@ -311,4 +312,3 @@ private extension String {
         return hash.compactMap { String(format: "%02x", $0) }.joined()
     }
 }
-
