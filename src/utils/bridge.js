@@ -331,14 +331,13 @@ export function awaitGBKitGlobal( timeoutMs = 3000 ) {
  * @return {Promise<{scripts: string, styles: string, allowed_block_types: string[]}>} Promise that resolves with the assets object.
  */
 export async function fetchEditorAssets() {
-	const { siteApiRoot, editorAssetsEndpoint, authHeader } = getGBKit();
-
 	if ( window.webkit ) {
 		return await window.webkit.messageHandlers.loadFetchedEditorAssets.postMessage(
 			{ asset: 'manifest' }
 		);
 	}
 
+	const { siteApiRoot, editorAssetsEndpoint, authHeader } = getGBKit();
 	const url = new URL(
 		editorAssetsEndpoint || `${ siteApiRoot }wpcom/v2/editor-assets`
 	);
