@@ -2,11 +2,11 @@
  * WordPress dependencies
  */
 import { defaultRequestToExternal } from '@wordpress/dependency-extraction-webpack-plugin/lib/util';
-import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
 /**
  * External dependencies
  */
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import MagicString from 'magic-string';
