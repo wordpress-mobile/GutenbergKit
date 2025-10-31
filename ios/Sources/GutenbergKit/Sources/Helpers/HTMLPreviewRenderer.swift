@@ -6,15 +6,14 @@ import UniformTypeIdentifiers
 
 /// Renders HTML content to images using a pool of WKWebView instances.
 ///
-/// This class manages a pool of reusable WKWebView instances to efficiently
+/// This actor manages a pool of reusable WKWebView instances to efficiently
 /// render HTML content off-screen and capture screenshots. It includes:
 /// - WKWebView pooling to reduce memory overhead
 /// - Off-screen rendering for performance
 /// - Disk cache: Stores full-size rendered images at pattern viewport width
 /// - Concurrent rendering with request queuing
 /// - Background execution of disk I/O operations
-@MainActor
-public final class HTMLPreviewRenderer {
+public actor HTMLPreviewRenderer {
     public static let shared = HTMLPreviewRenderer()
 
     // MARK: - Configuration
@@ -23,13 +22,10 @@ public final class HTMLPreviewRenderer {
 
     // MARK: - State
 
-    private var webViewPool: [PooledWebView] = []
+    private let webViewRenderer = WebViewRenderer()
 
     // All requests (both queued and executing)
     private var requests: [RenderRequest] = []
-
-    // Timer to clear pool when idle
-    private var idleCleanupTask: Task<Void, Never>?
 
     private let urlCache: URLCache
     private var totalCachedBytes: Int64 = 0
@@ -53,37 +49,6 @@ public final class HTMLPreviewRenderer {
             self.html = html
             self.viewportWidth = viewportWidth
             self.continuations = [continuation]
-        }
-    }
-
-    @MainActor
-    private class PooledWebView {
-        let webView: WKWebView
-        let delegate: RenderDelegate
-        var isAvailable = true
-
-        init() {
-            let config = WKWebViewConfiguration()
-            config.suppressesIncrementalRendering = true
-
-            // Create web view with small initial frame for off-screen rendering
-            // Frame will be adjusted per render based on viewport width and content height
-            webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1200, height: 100), configuration: config)
-
-            delegate = RenderDelegate()
-            webView.navigationDelegate = delegate
-        }
-    }
-
-    private class RenderDelegate: NSObject, WKNavigationDelegate {
-        var onRenderComplete: ((CGFloat?) -> Void)?
-
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            // Get content height using document.documentElement.scrollHeight
-            // This captures margins on <html> tag, unlike document.body.scrollHeight
-            webView.evaluateJavaScript("document.documentElement.scrollHeight") { [weak self] height, _ in
-                self?.onRenderComplete?(height as? CGFloat)
-            }
         }
     }
 
@@ -164,7 +129,7 @@ public final class HTMLPreviewRenderer {
         print("request \(html.count)")
 
         // Generate disk cache key (HTML + viewport width + CSS hash)
-        let diskCacheKey = await generateDiskCacheKey(html: html, viewportWidth: viewportWidth, cssHash: gutenbergCSSHash)
+        let diskCacheKey = generateDiskCacheKey(html: html, viewportWidth: viewportWidth, cssHash: gutenbergCSSHash)
 
         // Check disk cache (stores full-size images at viewport width)
         if let diskImage = loadImageFromCache(forKey: diskCacheKey) {
@@ -175,10 +140,6 @@ public final class HTMLPreviewRenderer {
         print("miss \(html.count)")
 
         return try await withCheckedThrowingContinuation { continuation in
-            // Cancel idle cleanup since we have work to do
-            idleCleanupTask?.cancel()
-            idleCleanupTask = nil
-
             // Check if this content is already queued or executing (deduplication)
             if let existingRequest = requests.first(where: { $0.diskCacheKey == diskCacheKey }) {
                 existingRequest.continuations.append(continuation)
@@ -249,33 +210,24 @@ public final class HTMLPreviewRenderer {
 
     // MARK: - Private Methods
 
-    private func getAvailableWebView() -> PooledWebView {
-        // Try to find an available web view
-        if let pooledView = webViewPool.first(where: { $0.isAvailable }) {
-            return pooledView
-        }
-
-        // Create new web view if needed
-        let pooledView = PooledWebView()
-        webViewPool.append(pooledView)
-        return pooledView
-    }
-
     private func startRender(request: RenderRequest) {
         request.task = Task {
             do {
-                let pooledView = getAvailableWebView()
+                // Generate full HTML (expensive operation on actor)
+                let fullHTML = generateFullHTML(
+                    content: request.html,
+                    viewportWidth: request.viewportWidth,
+                    css: gutenbergCSS
+                )
 
                 // Perform actual rendering
-                let image = try await performRender(
-                    html: request.html,
-                    viewportWidth: request.viewportWidth,
-                    diskCacheKey: request.diskCacheKey,
-                    pooledView: pooledView
+                let image = try await webViewRenderer.render(
+                    fullHTML: fullHTML,
+                    viewportWidth: request.viewportWidth
                 )
 
                 // Save to disk cache
-                saveImageToCache(image, forKey: request.diskCacheKey)
+                await saveImageToCache(image, forKey: request.diskCacheKey)
 
                 // Resume all continuations with success
                 for continuation in request.continuations {
@@ -289,18 +241,20 @@ public final class HTMLPreviewRenderer {
             }
 
             // Remove this request from the list
-            requests.removeAll { $0 === request }
+            await self.removeRequest(request)
 
             // Process next queued request if any
-            processNextRequest()
+            await processNextRequest()
         }
+    }
+
+    private func removeRequest(_ request: RenderRequest) {
+        requests.removeAll { $0 === request }
     }
 
     private func processNextRequest() {
         // Find first queued request (not executing yet)
         guard let nextRequest = requests.first(where: { $0.task == nil }) else {
-            // No more requests - schedule cleanup
-            scheduleIdleCleanup()
             return
         }
 
@@ -313,102 +267,25 @@ public final class HTMLPreviewRenderer {
         startRender(request: nextRequest)
     }
 
-    private func scheduleIdleCleanup() {
-        // Cancel any existing cleanup task
-        idleCleanupTask?.cancel()
-
-        // Schedule cleanup after 5 seconds of inactivity
-        idleCleanupTask = Task {
-            do {
-                try await Task.sleep(for: .seconds(5))
-                // Clear the webview pool to free resources
-                webViewPool.removeAll()
-            } catch {
-                // Task was cancelled, which is fine
-            }
-        }
-    }
-
-    private func performRender(
-        html: String,
-        viewportWidth: Int,
-        diskCacheKey: String,
-        pooledView: PooledWebView
-    ) async throws -> UIImage {
-        pooledView.isAvailable = false
-        defer {
-            pooledView.isAvailable = true
-        }
-
-        let webView = pooledView.webView
-        let delegate = pooledView.delegate
-
-        let width = CGFloat(viewportWidth)
-
-        // Set initial frame with small height so content can expand naturally
-        // This ensures scrollHeight returns actual content height, not viewport height
-        webView.frame = CGRect(x: 0, y: 0, width: width, height: 80)
-
-        let fullHTML = await generateFullHTML(
-            content: html,
-            viewportWidth: viewportWidth,
-            css: gutenbergCSS
-        )
-
-        // Wait for rendering to complete using the delegate with 16-second timeout
-        let contentHeight: CGFloat = try await withCheckedThrowingContinuation { continuation in
-            let timeoutTask = Task {
-                try? await Task.sleep(for: .seconds(16))
-                if !Task.isCancelled {
-                    delegate.onRenderComplete = nil
-                    continuation.resume(throwing: URLError(.timedOut))
-                }
-            }
-            delegate.onRenderComplete = { height in
-                guard !timeoutTask.isCancelled else { return }
-                timeoutTask.cancel()
-                delegate.onRenderComplete = nil
-                continuation.resume(returning: height ?? width) // Fallback to square
-            }
-            webView.loadHTMLString(fullHTML, baseURL: nil)
-        }
-
-        // Take screenshot of entire content with the maximum target size we'll ever need (roughly)
-        // Calculate snapshot width such that neither dimension exceeds the maximum size
-        let maxDimension = min(UIScreen.main.bounds.width, UIScreen.main.bounds.height) - 48
-        let scaleForWidth = maxDimension / width
-        let scaleForHeight = maxDimension / contentHeight
-        let scale = min(scaleForWidth, scaleForHeight, 1.0) // Don't scale up, only down
-        let snapshotWidth = width * scale
-
-        let config = WKSnapshotConfiguration()
-        config.rect = CGRect(x: 0, y: 0, width: width, height: contentHeight)
-        config.snapshotWidth = NSNumber(value: snapshotWidth)
-
-        let image = try await webView.takeSnapshot(configuration: config)
-
-        return image
-    }
-
 }
 
 // MARK: - Private Helper Functions
 
-/// Creates a SHA256 hash of a string (runs in background)
-private func hashString(_ string: String) async -> String {
+/// Creates a SHA256 hash of a string
+private func hashString(_ string: String) -> String {
     let data = Data(string.utf8)
     let hash = SHA256.hash(data: data)
     return hash.compactMap { String(format: "%02x", $0) }.joined()
 }
 
 /// Generates a disk cache key from HTML content, viewport width, and CSS hash
-private func generateDiskCacheKey(html: String, viewportWidth: Int, cssHash: String) async -> String {
+private func generateDiskCacheKey(html: String, viewportWidth: Int, cssHash: String) -> String {
     let combined = "\(html)-\(viewportWidth)-\(cssHash)"
-    return await hashString(combined)
+    return hashString(combined)
 }
 
-/// Generates full HTML with styling (runs in background)
-private func generateFullHTML(content: String, viewportWidth: Int, css: String) async -> String {
+/// Generates full HTML with styling
+private func generateFullHTML(content: String, viewportWidth: Int, css: String) -> String {
     return """
     <!DOCTYPE html>
     <html style="margin: 0; padding: 0;">
