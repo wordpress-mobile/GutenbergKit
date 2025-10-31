@@ -1,10 +1,11 @@
 import Foundation
 
 struct Pattern: Decodable, Identifiable {
+    /// Example: `"core/query-standard-posts"`
     let name: String
     let title: String
+    /// Containts HTML with Gutenberg blocks.
     let content: String
-    let previewHTML: String
     let blockTypes: [String]?
     let categories: [String]?
     let description: String?

@@ -238,7 +238,6 @@ export default function NativeBlockInserterButton() {
 						name: pattern.name,
 						title: pattern.title,
 						content: pattern.content,
-						previewHTML: pattern.content,
 						blockTypes: pattern.blockTypes ?? null,
 						categories: pattern.categories ?? null,
 						description: pattern.description ?? null,

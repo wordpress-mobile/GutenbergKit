@@ -60,7 +60,7 @@ struct BlockPreviewView: View {
 
         do {
             let image = try await HTMLPreviewRenderer.shared.render(
-                html: pattern.previewHTML,
+                html: pattern.content,
                 viewportWidth: pattern.viewportWidth ?? 1200,
                 maximumDimension: maximumDimension
             )
