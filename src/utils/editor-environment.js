@@ -6,7 +6,7 @@ import { loadEditorAssets } from './editor-loader';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge';
 import EditorLoadError from '../components/editor-load-error';
 import { error } from './logger';
-import './editor-styles.js';
+import './editor-styles';
 
 /**
  * Initialize the bundled editor by loading assets and configuring modules
@@ -14,7 +14,7 @@ import './editor-styles.js';
  *
  * @return {Promise} Promise that resolves when initialization is complete
  */
-export function initializeBundledEditor() {
+export function setUpEditorEnvironment() {
 	// Rely upon promises rather than async/await to avoid timeouts caused by
 	// circular dependencies. Addressing the circular dependencies is quite
 	// challenging due to Vite's preload helpers and bugs in `manualChunks`
