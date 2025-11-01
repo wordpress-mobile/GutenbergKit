@@ -29,7 +29,6 @@ import org.json.JSONObject
 import java.util.Locale
 
 const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
-const val ASSET_URL_REMOTE = "https://appassets.androidplatform.net/assets/remote.html"
 
 class GutenbergView : WebView {
     private var isEditorLoaded = false
@@ -170,7 +169,7 @@ class GutenbergView : WebView {
                 }
 
                 // Allow asset URLs
-                if (url.host == Uri.parse(ASSET_URL).host || url.host == Uri.parse(ASSET_URL_REMOTE).host) {
+                if (url.host == Uri.parse(ASSET_URL).host) {
                     return false
                 }
 
@@ -190,14 +189,6 @@ class GutenbergView : WebView {
                 if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
                     val editorUrl = Uri.parse(BuildConfig.GUTENBERG_EDITOR_URL)
                     if (url.host == editorUrl.host) {
-                        return false
-                    }
-                }
-
-                // Allow remote editor server if configured
-                if (BuildConfig.GUTENBERG_EDITOR_REMOTE_URL.isNotEmpty()) {
-                    val remoteEditorUrl = Uri.parse(BuildConfig.GUTENBERG_EDITOR_REMOTE_URL)
-                    if (url.host == remoteEditorUrl.host) {
                         return false
                     }
                 }

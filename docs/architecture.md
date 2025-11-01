@@ -19,8 +19,7 @@ GutenbergKit/
 │   │   └── text-editor/    # HTML text editing interface
 │   ├── utils/              # Utility functions
 │   │   └── bridge.js       # Native-to-web communication
-│   ├── index.js            # Bundled editor entry point
-│   └── remote.js           # Remote editor entry point
+│   └── index.js            # Main editor entry point
 ├── ios/                    # iOS Swift package
 │   └── Sources/
 │       └── GutenbergKit/
@@ -64,11 +63,10 @@ Development mode (`?dev_mode` query parameter) enables debugging features and by
 -   **Mock GBKit global is provided** - If the native bridge (`window.GBKit`) is not available, a mock object is automatically provided to allow the editor to load without native integration
 -   **Development notice is displayed** - A warning notice appears to inform developers that they're running without a native bridge
 
-Add the `?dev_mode` query parameter to any editor URL:
+Add the `?dev_mode` query parameter to the editor URL:
 
 ```
 http://localhost:3000/?dev_mode
-http://localhost:3000/remote.html?dev_mode
 ```
 
 ## Logging Configuration
@@ -80,38 +78,30 @@ The logger utility (`src/utils/logger.js`) supports different log levels that ca
 -   `?log_level=warn` - Show only warnings and errors
 -   `?log_level=error` - Show only errors
 
-## Editor Variants
+## Plugin Support
 
-By default, GutenbergKit utilizes local `@wordpress` modules. This approach is similar to most modern web applications, where the `@wordpress` modules are bundled with the application.
-To enable support for non-core blocks, GutenbergKit can be configured to use remote `@wordpress` modules, where the `@wordpress` modules and plugin-provided editor assets are fetched from a site's remote server. At this time, this functionality is partially implemented and may not work as expected.
+GutenbergKit bundles `@wordpress` modules locally for offline capability and fast load times. The editor can optionally load plugin-provided blocks and custom editor assets from a remote server when configured.
 
-The `make build` command builds both the local and remote editors by default. To load the remote editor, you must enable the `plugins` configuration option within the Demo app.
+### How Plugin Loading Works
 
-Additionally, a `make dev-server-remote` command is available for serving the latest remote editor changes through a development server. To load the development server in the Demo app, add an environment variable named `GUTENBERG_EDITOR_REMOTE_URL` with the URL of the development server plus `/remote.html`—i.e., `http://<YOUR_LOCAL_IP>:5173/remote.html`.
+When the `plugins` configuration option is enabled:
 
-> [!TIP]
-> The remote editor redirects to the bundled editor when loading fails. If you need to debug the failure, disable redirects via the `?dev_mode` query parameter..
+1. Core `@wordpress` packages are loaded from bundled code
+2. Plugin scripts and styles are fetched from the site's editor assets endpoint
+3. Custom blocks and editor extensions are registered dynamically
+4. The editor integrates both core and custom functionality
 
-### Bundled Editor (`index.html`)
+This approach provides:
 
-The bundled editor relies upon local `@wordpress` packages. This variant:
-
--   Provides offline capability
--   Has faster initial load times
--   Limited to core blocks only
--   No plugin support
+-   **Offline-first**: Core editor works without network connectivity
+-   **Extensibility**: Supports custom blocks and plugins when connected
+-   **Performance**: Core packages load instantly from local bundle
 
 **Entry point:** `src/index.js`
 
-### Remote Editor (`remote.html`)
+### Configuration
 
-The remote editor loads `@wordpress` packages and plugins from a remote server. This variant:
-
--   Supports custom blocks and plugins
--   Requires network connectivity
--   Used in production environments with custom implementations
-
-**Entry point:** `src/remote.js`
+Enable plugins by setting the `plugins` configuration option. The editor will fetch assets from the configured `editorAssetsEndpoint` or fall back to the default Jetpack endpoint. The demo app UI allows adding site-specific editor configurations, which enables the `plugins` configuration option.
 
 ## Testing
 

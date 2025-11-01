@@ -71,15 +71,6 @@ make local-android-library
 make test-android
 ```
 
-### Remote Editor Development
-
-```bash
-# Start development server for remote editor
-make dev-server-remote
-# or
-npm run dev:remote
-```
-
 ## Architecture
 
 ### Web Editor Structure
@@ -87,8 +78,7 @@ npm run dev:remote
 The web editor is built with React and WordPress packages:
 
 -   **Entry Points**:
-    -   `src/index.js` - Bundled editor entry
-    -   `src/remote.js` - Remote editor entry (supports plugins)
+    -   `src/index.js` - Main editor entry point (supports plugins via bundled code)
 -   **Core Components**:
     -   `src/components/editor/` - Main editor component with host bridge integration
     -   `src/components/visual-editor/` - Visual editing interface
@@ -123,7 +113,7 @@ The editor uses a bidirectional bridge pattern:
 
 ### Build System
 
--   **Vite**: Handles web bundling with separate configs for local and remote editors
+-   **Vite**: Handles web bundling and development server
 -   **Translations**: Automated translation preparation from WordPress packages
 -   **Asset Distribution**: Built assets are copied to platform-specific directories
 
