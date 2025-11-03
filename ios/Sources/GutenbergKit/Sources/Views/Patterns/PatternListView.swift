@@ -15,9 +15,9 @@ struct PatternListView: View {
     }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 16) {
-                ForEach(section.patterns) { pattern in
+        List {
+            ForEach(section.patterns) { pattern in
+                VStack(alignment: .leading, spacing: 8) {
                     PatternCardView(
                         pattern: pattern,
                         onSelected: {
@@ -27,12 +27,19 @@ struct PatternListView: View {
                         style: .fullWidth(maxHeight: 400),
                         viewportWidth: viewportWidth
                     )
+                    Text(pattern.title)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
                 }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
         }
-        .background(Material.ultraThin)
+        .listStyle(.plain)
+        .background(Color(.secondarySystemBackground))
         .navigationTitle(section.name)
         .navigationBarTitleDisplayMode(.inline)
     }
