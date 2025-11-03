@@ -3,6 +3,7 @@
  */
 import { awaitGBKitGlobal, editorLoaded, getGBKit } from './bridge';
 import { loadEditorAssets } from './editor-loader';
+import { initializeVideoPressAjaxBridge } from './videopress-bridge';
 import EditorLoadError from '../components/editor-load-error';
 import { error } from './logger';
 import './editor-styles.js';
@@ -27,6 +28,7 @@ export function initializeBundledEditor() {
 		.then( configureLocale )
 		.then( loadRemainingGlobals )
 		.then( initializeApiFetchWrapper )
+		.then( initializeVideoPressAjaxBridge )
 		.then( initializeEditor )
 		.then( loadPluginsIfEnabled )
 		.catch( handleError );
