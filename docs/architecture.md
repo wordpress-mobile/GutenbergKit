@@ -97,8 +97,6 @@ This approach provides:
 -   **Extensibility**: Supports custom blocks and plugins when connected
 -   **Performance**: Core packages load instantly from local bundle
 
-**Entry point:** `src/index.js`
-
 ### Configuration
 
 Enable plugins by setting the `plugins` configuration option. The editor will fetch assets from the configured `editorAssetsEndpoint` or fall back to the default Jetpack endpoint. The demo app UI allows adding site-specific editor configurations, which enables the `plugins` configuration option.
