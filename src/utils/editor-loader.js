@@ -19,23 +19,13 @@ let editorAssetsCache = null;
 /**
  * Fetch editor assets and return select WordPress dependencies.
  *
- * @param {Object} [options]                    Options for the fetch.
- * @param {Array}  [options.allowedPackages]    Array of allowed package names to load.
- * @param {Array}  [options.disallowedPackages] Array of disallowed package names to load.
- *
  * @return {EditorAssetConfig} Editor configuration provided by the API.
  */
-export async function loadEditorAssets( {
-	allowedPackages = [],
-	disallowedPackages = [],
-} = {} ) {
+export async function loadEditorAssets() {
 	try {
 		// Return cached response if available
 		if ( editorAssetsCache ) {
-			return processEditorAssets( editorAssetsCache, {
-				allowedPackages,
-				disallowedPackages,
-			} );
+			return processEditorAssets( editorAssetsCache );
 		}
 
 		const response = await fetchEditorAssets();
@@ -43,10 +33,7 @@ export async function loadEditorAssets( {
 		// Cache the response
 		editorAssetsCache = response;
 
-		return processEditorAssets( response, {
-			allowedPackages,
-			disallowedPackages,
-		} );
+		return processEditorAssets( response );
 	} catch ( err ) {
 		error( 'Error loading editor assets', err );
 		throw err;
@@ -56,33 +43,17 @@ export async function loadEditorAssets( {
 /**
  * Process editor assets and return the configuration
  *
- * @param {Object}   assets                     The assets to process
- * @param {string[]} assets.styles              Array of style assets
- * @param {string[]} assets.scripts             Array of script assets
- * @param {string[]} assets.allowedBlockTypes   Array of allowed block types
- * @param {Object}   options                    Processing options
- * @param {string[]} options.allowedPackages    Array of allowed package names
- * @param {string[]} options.disallowedPackages Array of disallowed package names
+ * @param {Object}   assets                   The assets to process
+ * @param {string[]} assets.styles            Array of style assets
+ * @param {string[]} assets.scripts           Array of script assets
+ * @param {string[]} assets.allowedBlockTypes Array of allowed block types
  *
  * @return {EditorAssetConfig} Processed editor configuration
  */
-async function processEditorAssets(
-	assets,
-	{ allowedPackages = [], disallowedPackages = [] } = {}
-) {
+async function processEditorAssets( assets ) {
 	const { styles, scripts, allowed_block_types: allowedBlockTypes } = assets;
 
-	if ( allowedPackages.length > 0 ) {
-		await loadAssets( [ ...styles, ...scripts ].join( '' ), {
-			allowedPackages,
-		} );
-
-		return { allowedBlockTypes };
-	}
-
-	await loadAssets( [ ...styles, ...scripts ].join( '' ), {
-		disallowedPackages,
-	} );
+	await loadAssets( [ ...styles, ...scripts ].join( '' ) );
 
 	return { allowedBlockTypes };
 }
@@ -90,46 +61,14 @@ async function processEditorAssets(
 /**
  * Load the asset files for a block
  *
- * @param {string}   html                         The HTML content to parse for assets.
- * @param {Object}   [options]                    Options for the load.
- * @param {string[]} [options.allowedPackages]    Array of allowed package names to load.
- * @param {string[]} [options.disallowedPackages] Array of disallowed package names to load.
+ * @param {string} html The HTML content to parse for assets.
  */
-async function loadAssets(
-	html,
-	{ allowedPackages = [], disallowedPackages = [] } = {}
-) {
-	const excludedScriptIDs = disallowedPackages.length
-		? new RegExp(
-				disallowedPackages
-					.map( ( script ) => `wp-${ script }-js` )
-					.join( '|' )
-		  )
-		: null;
-
-	const allowedScriptIDs = allowedPackages.length
-		? new RegExp(
-				allowedPackages.map( ( pkg ) => `wp-${ pkg }-js` ).join( '|' )
-		  )
-		: null;
-
+async function loadAssets( html ) {
 	const doc = new window.DOMParser().parseFromString( html, 'text/html' );
 
 	const newAssets = Array.from(
 		doc.querySelectorAll( 'link[rel="stylesheet"],script' )
 	).filter( ( asset ) => {
-		if ( ! asset.id ) {
-			return false;
-		}
-
-		if ( allowedScriptIDs ) {
-			return allowedScriptIDs.test( asset.id );
-		}
-
-		if ( excludedScriptIDs ) {
-			return ! excludedScriptIDs.test( asset.id );
-		}
-
 		/**
 		 * TODO: Remove this once the relevant Jetpack plugin release is available.
 		 *
@@ -149,7 +88,7 @@ async function loadAssets(
 			return false;
 		}
 
-		return true;
+		return !! asset.id;
 	} );
 
 	/*
