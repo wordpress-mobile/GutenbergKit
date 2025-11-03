@@ -13,6 +13,9 @@ struct BlockInserterView: View {
     @StateObject private var iconCache = BlockIconCache()
 
     @State private var selectedMediaItems: [PhotosPickerItem] = []
+    @State private var inlineSelectedMediaItems: [PhotosPickerItem] = []
+
+    @ScaledMetric(relativeTo: .largeTitle) private var inlinePickerHeight = 86
 
     private let maxSelectionCount = 10
 
@@ -56,6 +59,9 @@ struct BlockInserterView: View {
     private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                if viewModel.searchText.isEmpty {
+                    inlinePhotosPickerSection
+                }
                 ForEach(viewModel.sections) { section in
                     BlockInserterSectionView(section: section, onBlockSelected: insertBlock)
                         .padding(.horizontal)
@@ -96,6 +102,51 @@ struct BlockInserterView: View {
                     onMediaSelected($0)
                 }
             }
+        }
+    }
+
+    // MARK: - Inline PhotosPicker (.compact)
+
+    @available(iOS 17, *)
+    @ViewBuilder
+    private var inlinePhotosPickerSection: some View {
+        PhotosPicker(
+            "",
+            selection: $inlineSelectedMediaItems,
+            maxSelectionCount: maxSelectionCount,
+            selectionBehavior: .continuousAndOrdered
+        )
+        .photosPickerStyle(.compact)
+        .photosPickerDisabledCapabilities([.collectionNavigation, .search, .sensitivityAnalysisIntervention, .stagingArea])
+        .photosPickerAccessoryVisibility(.hidden)
+        .frame(height: inlinePickerHeight)
+        .clipShape(UnevenRoundedRectangle(topLeadingRadius: 22, bottomLeadingRadius: 22, bottomTrailingRadius: 0, topTrailingRadius: 0))
+        .padding(.leading)
+        .opacity(viewModel.isProcessingMedia ? 0.5 : 1.0)
+        .transition(.asymmetric(
+            insertion: .scale(scale: 0.95, anchor: .leading).combined(with: .opacity),
+            removal: .scale(scale: 0.95, anchor: .leading).combined(with: .opacity)
+        ))
+        .animation(.spring(response: 0.5, dampingFraction: 0.7), value: viewModel.searchText.isEmpty)
+
+        if !inlineSelectedMediaItems.isEmpty {
+            Button {
+                insertMedia(inlineSelectedMediaItems)
+                inlineSelectedMediaItems = []
+            } label: {
+                // Making the best of it without using any localizable strings
+                Image(systemName: "plus")
+                // Setting max 1 to to prevent it from animating to 0 on disappear
+                Text("\(max(1, inlineSelectedMediaItems.count))")
+                    .contentTransition(.numericText())
+            }
+            .font(.system(.headline, design: .rounded))
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .tint(.primary)
+            // It animates as if it was hidden behind the next section
+            .transition(.offset(y: 28).combined(with: .scale(scale: 0.85)))
+            .frame(maxWidth: .infinity, alignment: .center)
         }
     }
 
