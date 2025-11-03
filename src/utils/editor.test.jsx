@@ -59,6 +59,7 @@ describe( 'initializeEditor', () => {
 			themeStyles: true,
 			hideTitle: false,
 			editorSettings: null,
+			logLevel: 'INFO',
 		} );
 		getPost.mockReturnValue( {
 			id: 1,
@@ -98,6 +99,7 @@ describe( 'initializeEditor', () => {
 			themeStyles: false,
 			hideTitle: false,
 			editorSettings: null,
+			logLevel: 'INFO',
 		} );
 
 		initializeEditor();
@@ -127,6 +129,7 @@ describe( 'initializeEditor', () => {
 			themeStyles: true,
 			hideTitle: false,
 			editorSettings: customSettings,
+			logLevel: 'INFO',
 		} );
 
 		initializeEditor();
