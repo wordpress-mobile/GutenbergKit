@@ -43,8 +43,6 @@ struct BlockInserterSectionView: View {
             }
         }
         .padding(.top, section.name != nil ? 20 : 24)
-        .padding(.bottom, 10)
-        .cardStyle()
     }
 
     private var grid: some View {

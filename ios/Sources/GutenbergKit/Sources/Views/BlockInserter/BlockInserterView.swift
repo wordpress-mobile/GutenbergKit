@@ -15,7 +15,7 @@ struct BlockInserterView: View {
     @State private var selectedMediaItems: [PhotosPickerItem] = []
     @State private var inlineSelectedMediaItems: [PhotosPickerItem] = []
 
-    @ScaledMetric(relativeTo: .largeTitle) private var inlinePickerHeight = 86
+    @ScaledMetric(relativeTo: .largeTitle) private var inlinePickerHeight = 116
 
     private let maxSelectionCount = 10
 
@@ -60,16 +60,14 @@ struct BlockInserterView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 ForEach(viewModel.sections) { section in
-
-
-                    BlockInserterSectionView(section: section, onBlockSelected: insertBlock)
-                        .padding(.horizontal)
-
-
-                    // Show inline photos picker after the "most common" section
-                    if viewModel.searchText.isEmpty && section.category == "gbk-most-used" {
-                        inlinePhotosPickerSection
+                    VStack(spacing: 16) {
+                        BlockInserterSectionView(section: section, onBlockSelected: insertBlock)
+                        if viewModel.searchText.isEmpty && section.category == "gbk-most-used" {
+                            inlinePhotosPickerSection
+                        }
                     }
+                    .cardStyle()
+                    .padding(.horizontal)
                 }
             }
             .padding(.vertical, 8)
@@ -125,26 +123,16 @@ struct BlockInserterView: View {
         .photosPickerStyle(.compact)
         .photosPickerDisabledCapabilities([.collectionNavigation, .search, .sensitivityAnalysisIntervention, .stagingArea])
         .photosPickerAccessoryVisibility(.hidden)
-        .padding(.top, -16)
-        .frame(height: inlinePickerHeight ) // * 4) // Show a few rows
+        .frame(height: inlinePickerHeight)
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .padding(.horizontal)
-
         .opacity(viewModel.isProcessingMedia ? 0.5 : 1.0)
-        .transition(.asymmetric(
-            insertion: .scale(scale: 0.95).combined(with: .opacity),
-            removal: .scale(scale: 0.95).combined(with: .opacity)
-        ))
-        .animation(.spring(response: 0.5, dampingFraction: 0.7), value: viewModel.searchText.isEmpty)
 
         if !inlineSelectedMediaItems.isEmpty {
             Button {
                 insertMedia(inlineSelectedMediaItems)
                 inlineSelectedMediaItems = []
             } label: {
-                // Making the best of it without using any localizable strings
                 Image(systemName: "plus")
-                // Setting max 1 to to prevent it from animating to 0 on disappear
                 Text("\(max(1, inlineSelectedMediaItems.count))")
                     .contentTransition(.numericText())
             }
@@ -152,7 +140,6 @@ struct BlockInserterView: View {
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(.capsule)
             .tint(.primary)
-            // It animates as if it was hidden behind the next section
             .transition(.offset(y: 28).combined(with: .scale(scale: 0.85)))
             .frame(maxWidth: .infinity, alignment: .center)
         }
