@@ -3,8 +3,9 @@
 $border-color: #c8c7cc;
 $border-radius: 2px;
 $min-touch-target-size: 46px;
+$scroll-indicator-elevation: 32;
 
-.gutenberg-kit-editor-toolbar.is-unstyled {
+.gutenberg-kit-editor-toolbar {
 	background-color: wordpress.$white;
 	border-bottom: none;
 	border-left: none;
@@ -19,9 +20,72 @@ $min-touch-target-size: 46px;
 	width: auto;
 }
 
-// Hide the scrollbar in the toolbar
-.gutenberg-kit-editor-toolbar::-webkit-scrollbar {
-	display: none;
+.gutenberg-kit-editor-toolbar__scroll-view {
+	display: flex;
+	align-items: center;
+	overflow-x: auto;
+	width: 100%;
+
+	// Prevent toolbar from shrinking
+	> .components-accessible-toolbar {
+		flex-shrink: 0;
+	}
+
+	// Hide scrollbar
+	&::-webkit-scrollbar {
+		display: none;
+	}
+
+	// Scroll indicator gradients
+	// Left gradient - shows when there's content to scroll left
+	&::before {
+		content: "";
+		position: absolute;
+		top: 0;
+		left: 0;
+		bottom: 0;
+		width: 32px;
+		background: linear-gradient(
+			to right,
+			rgba(255, 255, 255, 1) 0%,
+			rgba(255, 255, 255, 0.95) 20%,
+			rgba(255, 255, 255, 0) 100%
+		);
+		pointer-events: none;
+		z-index: $scroll-indicator-elevation;
+		opacity: 0;
+		transition: opacity 0.2s ease-in-out;
+	}
+
+	// Right gradient - shows when there's content to scroll right
+	&::after {
+		content: "";
+		position: absolute;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		width: 32px;
+		background: linear-gradient(
+			to left,
+			rgba(255, 255, 255, 1) 0%,
+			rgba(255, 255, 255, 0.95) 20%,
+			rgba(255, 255, 255, 0) 100%
+		);
+		pointer-events: none;
+		z-index: $scroll-indicator-elevation;
+		opacity: 0;
+		transition: opacity 0.2s ease-in-out;
+	}
+
+	// Show left gradient when can scroll left
+	&.has-scroll-left::before {
+		opacity: 1;
+	}
+
+	// Show right gradient when can scroll right
+	&.has-scroll-right::after {
+		opacity: 1;
+	}
 }
 
 .gutenberg-kit-editor-toolbar .components-toolbar-group {
