@@ -18,8 +18,6 @@ struct BlockInserterView: View {
 
     @ScaledMetric(relativeTo: .largeTitle) private var inlinePickerHeight = 116
 
-    private let maxSelectionCount = 10
-
     @Environment(\.dismiss) private var dismiss
 
     init(
@@ -98,7 +96,10 @@ struct BlockInserterView: View {
         }
 
         ToolbarItemGroup(placement: .topBarTrailing) {
-            PhotosPicker(selection: $selectedMediaItems, preferredItemEncoding: .compatible) {
+            PhotosPicker(
+                selection: $selectedMediaItems,
+                preferredItemEncoding: .compatible
+            ) {
                 Image(systemName: "photo.on.rectangle.angled")
             }
             .onChange(of: selectedMediaItems) { _, selection in
@@ -114,7 +115,6 @@ struct BlockInserterView: View {
                     onMediaSelected($0)
                 }
             }
-
         }
 
         ToolbarItemGroup(placement: .confirmationAction) {
@@ -131,18 +131,10 @@ struct BlockInserterView: View {
         PhotosPicker(
             "",
             selection: $inlineSelectedMediaItems,
-            maxSelectionCount: maxSelectionCount,
             selectionBehavior: .continuousAndOrdered,
             preferredItemEncoding: .compatible
         )
         .photosPickerStyle(.compact)
-        .photosPickerDisabledCapabilities([
-                .collectionNavigation,
-                .search,
-                .sensitivityAnalysisIntervention,
-                .stagingArea,
-                .selectionActions
-        ])
         .photosPickerAccessoryVisibility(.hidden)
         .frame(height: inlinePickerHeight)
         .opacity(showInlinePhotoPicker ? 1.0 : 0.0)
