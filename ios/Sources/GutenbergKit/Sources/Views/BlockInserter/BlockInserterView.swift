@@ -39,6 +39,7 @@ struct BlockInserterView: View {
 
     var body: some View {
         content
+            .background(Material.ultraThin)
             .searchable(text: $viewModel.searchText)
             .navigationBarTitleDisplayMode(.inline)
             .disabled(viewModel.isProcessingMedia)
@@ -57,7 +58,7 @@ struct BlockInserterView: View {
 
     private var content: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 24) {
                 ForEach(viewModel.sections, content: makeSection)
             }
             .padding(.vertical, 6)
@@ -81,7 +82,7 @@ struct BlockInserterView: View {
     }
 
     private var inlinePickerSpacing: CGFloat {
-        if #available(iOS 26, *) { 0.0 } else { 16.0 }
+        if #available(iOS 26, *) { -6.0 } else { 16.0 }
     }
 
     @ToolbarContentBuilder
@@ -139,8 +140,8 @@ struct BlockInserterView: View {
         .frame(height: inlinePickerHeight)
         .opacity(showInlinePhotoPicker ? 1.0 : 0.0)
         .task {
-            try? await Task.sleep(for: .milliseconds(330))
-            withAnimation(.easeIn(duration: 0.2)) {
+            try? await Task.sleep(for: .milliseconds(400))
+            withAnimation(.easeIn) {
                 showInlinePhotoPicker = true
             }
         }
@@ -165,6 +166,7 @@ struct BlockInserterView: View {
                 label
             }
             .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
         }
     }
 
@@ -194,66 +196,21 @@ struct BlockInserterView: View {
 
 #if DEBUG
 #Preview {
-    PreviewWrapper()
-}
-
-struct PreviewWrapper: View {
-    @State private var isPresented = true
-
-    var body: some View {
-        Color.clear
-            .sheet(isPresented: $isPresented) {
-                NavigationStack {
-                    BlockInserterView(
-                        sections: [
-                            BlockInserterSection(category: "gbk-most-used", name: nil, blocks: Array(BlockType.mocks.prefix(12)))
-                        ],
-                        mediaPicker: MockMediaPickerController(),
-                        presentationContext: MediaPickerPresentationContext(),
-                        onBlockSelected: {
-                            print("block selected: \($0.name)")
-                        },
-                        onMediaSelected: {
-                            print("media selected: \($0)")
-                        }
-                    )
-                }
-                .background(SheetDetentModifier())
+    NavigationStack {
+        BlockInserterView(
+            sections: [
+                BlockInserterSection(category: "gbk-most-used", name: nil, blocks: Array(BlockType.mocks.prefix(12))),
+                BlockInserterSection(category: "text", name: "Text", blocks: Array(BlockType.mocks.prefix(12)))
+            ],
+            mediaPicker: MockMediaPickerController(),
+            presentationContext: MediaPickerPresentationContext(),
+            onBlockSelected: {
+                print("block selected: \($0.name)")
+            },
+            onMediaSelected: {
+                print("media selected: \($0)")
             }
-    }
-}
-
-struct SheetDetentModifier: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> SheetDetentViewController {
-        SheetDetentViewController()
-    }
-
-    func updateUIViewController(_ uiViewController: SheetDetentViewController, context: Context) {}
-}
-
-class SheetDetentViewController: UIViewController {
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        configureSheetPresentation()
-    }
-
-    private func configureSheetPresentation() {
-        guard let presentationController = presentingViewController?.presentedViewController?.presentationController as? UISheetPresentationController else {
-            return
-        }
-
-        let compactHeight: CGFloat
-        if #available(iOS 26, *) {
-            compactHeight = 556
-        } else {
-            compactHeight = 528
-        }
-
-        presentationController.detents = [.custom(identifier: .medium, resolver: { context in
-            context.containerTraitCollection.horizontalSizeClass == .compact ? compactHeight : 900
-        }), .large()]
-        presentationController.prefersGrabberVisible = true
-        presentationController.preferredCornerRadius = 26
+        )
     }
 }
 
