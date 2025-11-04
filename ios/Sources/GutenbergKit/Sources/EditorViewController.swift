@@ -240,6 +240,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
+    private func makeJavaScriptCompatibleDictionary<T: Encodable>(with object: T) throws -> Any {
+        let data = try JSONEncoder().encode(object)
+        return try JSONSerialization.jsonObject(with: data, options: .allowFragments)
+    }
+
     private func handleError(_ error: Error, isCritical: Bool) {
         // These are non-critical errors but they might prevent certain features from working
         let alert = UIAlertController(title: error.localizedDescription, message: "\(error)", preferredStyle: .alert)
@@ -265,7 +270,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                     self?.insertBlockFromInserter(block.id)
                 },
                 onMediaSelected: { [weak self] selection in
-                    self?.insertMediaFromInserter(selection)
+                    Task {
+                        await self?.insertMediaFromInserter(selection)
+                    }
                 }
             )
         })
@@ -295,15 +302,18 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         evaluate("window.blockInserter.insertBlock('\(blockID)')")
     }
 
-    private func insertMediaFromInserter(_ selection: [MediaInfo]) {
+    private func insertMediaFromInserter(_ selection: [MediaInfo]) async {
         guard !selection.isEmpty else { return }
-
         do {
-            let data = try JSONEncoder().encode(selection)
-            let base64String = data.base64EncodedString()
-            evaluate("window.blockInserter.insertMedia(JSON.parse(atob('\(base64String)')))")
+            let object = try makeJavaScriptCompatibleDictionary(with: selection)
+            _ = try await webView.callAsyncJavaScript(
+                "window.blockInserter.insertMedia(selection)",
+                arguments: ["selection": object],
+                in: nil,
+                contentWorld: .page
+            )
         } catch {
-            assertionFailure("Failed to serialize media: \(error)")
+            assertionFailure("Failed to serialize or insert media: \(error)")
         }
     }
 
@@ -465,3 +475,4 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
 
 
 #endif
+
