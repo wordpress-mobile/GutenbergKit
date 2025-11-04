@@ -298,12 +298,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private func insertMediaFromInserter(_ selection: [MediaInfo]) {
         guard !selection.isEmpty else { return }
 
-        guard let data = try? JSONEncoder().encode(selection),
-              let string = String(data: data, encoding: .utf8) else {
-            debugPrint("Failed to serialize media array to JSON")
-            return
+        do {
+            let data = try JSONEncoder().encode(selection)
+            let base64String = data.base64EncodedString()
+            evaluate("window.blockInserter.insertMedia(JSON.parse(atob('\(base64String)')))")
+        } catch {
+            assertionFailure("Failed to serialize media: \(error)")
         }
-        evaluate("window.blockInserter.insertMedia(\(string))")
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
