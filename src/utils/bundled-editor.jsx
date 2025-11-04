@@ -29,8 +29,8 @@ export function initializeBundledEditor() {
 		.then( loadRemainingGlobals )
 		.then( initializeApiFetchWrapper )
 		.then( initializeVideoPressAjaxBridge )
-		.then( initializeEditor )
 		.then( loadPluginsIfEnabled )
+		.then( initializeEditor )
 		.catch( handleError );
 }
 
@@ -54,14 +54,6 @@ function initializeApiFetchWrapper() {
 	);
 }
 
-function initializeEditor() {
-	return import( './editor' ).then(
-		( { initializeEditor: _initializeEditor } ) => {
-			_initializeEditor();
-		}
-	);
-}
-
 function loadPluginsIfEnabled() {
 	const { plugins } = getGBKit();
 
@@ -72,6 +64,14 @@ function loadPluginsIfEnabled() {
 			)
 		);
 	}
+}
+
+function initializeEditor() {
+	return import( './editor' ).then(
+		( { initializeEditor: _initializeEditor } ) => {
+			_initializeEditor();
+		}
+	);
 }
 
 function handleError( err ) {
