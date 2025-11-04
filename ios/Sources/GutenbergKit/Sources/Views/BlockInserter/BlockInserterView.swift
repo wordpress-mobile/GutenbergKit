@@ -14,6 +14,7 @@ struct BlockInserterView: View {
 
     @State private var selectedMediaItems: [PhotosPickerItem] = []
     @State private var inlineSelectedMediaItems: [PhotosPickerItem] = []
+    @State private var showInlinePhotoPicker = false
 
     @ScaledMetric(relativeTo: .largeTitle) private var inlinePickerHeight = 116
 
@@ -74,7 +75,7 @@ struct BlockInserterView: View {
                 .padding(.bottom, 6)
 
             if viewModel.searchText.isEmpty && section.category == "gbk-most-used" {
-                inlinePhotosPickerSection
+                inlinePhotosPicker
             }
         }
         .cardStyle()
@@ -125,9 +126,8 @@ struct BlockInserterView: View {
 
     // MARK: - Inline PhotosPicker (.inline)
 
-    @available(iOS 17, *)
     @ViewBuilder
-    private var inlinePhotosPickerSection: some View {
+    private var inlinePhotosPicker: some View {
         PhotosPicker(
             "",
             selection: $inlineSelectedMediaItems,
@@ -145,7 +145,13 @@ struct BlockInserterView: View {
         ])
         .photosPickerAccessoryVisibility(.hidden)
         .frame(height: inlinePickerHeight)
-        .opacity(viewModel.isProcessingMedia ? 0.5 : 1.0)
+        .opacity(showInlinePhotoPicker ? 1.0 : 0.0)
+        .task {
+            try? await Task.sleep(for: .milliseconds(330))
+            withAnimation(.easeIn(duration: 0.2)) {
+                showInlinePhotoPicker = true
+            }
+        }
     }
 
     @ViewBuilder
