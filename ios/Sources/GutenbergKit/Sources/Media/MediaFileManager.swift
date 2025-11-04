@@ -46,7 +46,7 @@ actor MediaFileManager {
         try fileManager.createDirectory(at: uploadsDirectory, withIntermediateDirectories: true)
         try data.write(to: destinationURL)
 
-        return URL(string: "\(MediaFileSchemeHandler.scheme):///Uploads/\(fileName)")!
+        return URL(string: "\(MediaFileSchemeHandler.scheme)://Uploads/\(fileName)")!
     }
 
     /// Gets URLResponse and data for a `gbk-media-file` URL
