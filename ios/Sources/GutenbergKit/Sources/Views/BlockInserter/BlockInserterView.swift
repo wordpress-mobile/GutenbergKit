@@ -59,12 +59,17 @@ struct BlockInserterView: View {
     private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                if viewModel.searchText.isEmpty {
-                    inlinePhotosPickerSection
-                }
                 ForEach(viewModel.sections) { section in
+
+
                     BlockInserterSectionView(section: section, onBlockSelected: insertBlock)
                         .padding(.horizontal)
+
+
+                    // Show inline photos picker after the "most common" section
+                    if viewModel.searchText.isEmpty && section.category == "gbk-most-used" {
+                        inlinePhotosPickerSection
+                    }
                 }
             }
             .padding(.vertical, 8)
@@ -105,7 +110,7 @@ struct BlockInserterView: View {
         }
     }
 
-    // MARK: - Inline PhotosPicker (.compact)
+    // MARK: - Inline PhotosPicker (.inline)
 
     @available(iOS 17, *)
     @ViewBuilder
@@ -114,18 +119,21 @@ struct BlockInserterView: View {
             "",
             selection: $inlineSelectedMediaItems,
             maxSelectionCount: maxSelectionCount,
-            selectionBehavior: .continuousAndOrdered
+            selectionBehavior: .continuousAndOrdered,
+            preferredItemEncoding: .compatible
         )
         .photosPickerStyle(.compact)
         .photosPickerDisabledCapabilities([.collectionNavigation, .search, .sensitivityAnalysisIntervention, .stagingArea])
         .photosPickerAccessoryVisibility(.hidden)
-        .frame(height: inlinePickerHeight)
-        .clipShape(UnevenRoundedRectangle(topLeadingRadius: 22, bottomLeadingRadius: 22, bottomTrailingRadius: 0, topTrailingRadius: 0))
-        .padding(.leading)
+        .padding(.top, -16)
+        .frame(height: inlinePickerHeight ) // * 4) // Show a few rows
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal)
+
         .opacity(viewModel.isProcessingMedia ? 0.5 : 1.0)
         .transition(.asymmetric(
-            insertion: .scale(scale: 0.95, anchor: .leading).combined(with: .opacity),
-            removal: .scale(scale: 0.95, anchor: .leading).combined(with: .opacity)
+            insertion: .scale(scale: 0.95).combined(with: .opacity),
+            removal: .scale(scale: 0.95).combined(with: .opacity)
         ))
         .animation(.spring(response: 0.5, dampingFraction: 0.7), value: viewModel.searchText.isEmpty)
 
@@ -175,7 +183,7 @@ struct BlockInserterView: View {
     NavigationStack {
         BlockInserterView(
             sections: [
-                BlockInserterSection(category: "text", name: "Text", blocks: BlockType.mocks)
+                BlockInserterSection(category: "gbk-most-used", name: nil, blocks: Array(BlockType.mocks.prefix(12)))
             ],
             mediaPicker: MockMediaPickerController(),
             presentationContext: MediaPickerPresentationContext(),

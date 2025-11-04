@@ -272,6 +272,22 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         context.viewController = host
 
+        // Configure sheet presentation with medium detent
+        if let sheet = host.sheetPresentationController {
+            let compactHeight: CGFloat
+            if #available(iOS 26, *) {
+                compactHeight = 556
+            } else {
+                compactHeight = 528
+            }
+
+            sheet.detents = [.custom(identifier: .medium, resolver: { context in
+                context.containerTraitCollection.horizontalSizeClass == .compact ? compactHeight : 900
+            }), .large()]
+            sheet.prefersGrabberVisible = true
+            sheet.preferredCornerRadius = 26
+        }
+
         present(host, animated: true)
     }
 
