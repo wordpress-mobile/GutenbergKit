@@ -1,0 +1,13 @@
+diff --git a/node_modules/@wordpress/block-library/build-module/image/image.js b/node_modules/@wordpress/block-library/build-module/image/image.js
+index 473b653..8a52e9e 100644
+--- a/node_modules/@wordpress/block-library/build-module/image/image.js
++++ b/node_modules/@wordpress/block-library/build-module/image/image.js
+@@ -282,7 +282,7 @@ export default function Image({
+   const [hasImageErrored, setHasImageErrored] = useState(false);
+   const hasNonContentControls = blockEditingMode === 'default';
+   const isContentOnlyMode = blockEditingMode === 'contentOnly';
+-  const isResizable = allowResize && hasNonContentControls && !isWideAligned && isLargeViewport;
++  const isResizable = allowResize && hasNonContentControls && !isWideAligned;
+   const imageSizeOptions = imageSizes.filter(({
+     slug
+   }) => image?.media_details?.sizes?.[slug]?.source_url).map(({
