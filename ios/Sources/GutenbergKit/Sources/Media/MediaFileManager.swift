@@ -51,7 +51,7 @@ actor MediaFileManager {
 
     /// Gets URLResponse and data for a `gbk-media-file` URL
     func getData(for url: URL) async throws -> Data {
-        // Convert `gbk-media-file://Uploads/filename.jpg` to actual file path
+        // Convert `gbk-media-file:///Uploads/filename.jpg` to actual file path
         let fileURL = rootURL.appendingPathComponent(url.path)
         return try Data(contentsOf: fileURL)
     }
