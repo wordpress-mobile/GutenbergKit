@@ -40,15 +40,15 @@ struct BlockInserterView: View {
 
     var body: some View {
         content
-            .background(Material.ultraThin)
             .searchable(text: $viewModel.searchText)
             .navigationBarTitleDisplayMode(.inline)
             .disabled(viewModel.isProcessingMedia)
-            .animation(.smooth(duration: 2), value: viewModel.isProcessingMedia)
             .environmentObject(iconCache)
             .toolbar {
                 toolbar
             }
+            .animation(.smooth(duration: 2), value: viewModel.isProcessingMedia)
+            .animation(.snappy, value: inlineSelectedMediaItems.count)
             .onDisappear {
                 if viewModel.isProcessingMedia {
                     viewModel.cancelProcessing()
@@ -59,22 +59,30 @@ struct BlockInserterView: View {
     private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                ForEach(viewModel.sections) { section in
-                    VStack(spacing: 16) {
-                        BlockInserterSectionView(section: section, onBlockSelected: insertBlock)
-                        if viewModel.searchText.isEmpty && section.category == "gbk-most-used" {
-                            inlinePhotosPickerSection
-                        }
-                    }
-                    .cardStyle()
-                    .padding(.horizontal)
-                }
+                ForEach(viewModel.sections, content: makeSection)
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, 6)
             .dynamicTypeSize(...(.accessibility3))
         }
         .scrollContentBackground(.hidden)
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+    }
+
+    private func makeSection(with section: BlockInserterSection) -> some View {
+        VStack(spacing: inlinePickerSpacing) {
+            BlockInserterSectionView(section: section, onBlockSelected: insertBlock)
+                .padding(.bottom, 6)
+
+            if viewModel.searchText.isEmpty && section.category == "gbk-most-used" {
+                inlinePhotosPickerSection
+            }
+        }
+        .cardStyle()
+        .padding(.horizontal)
+    }
+
+    private var inlinePickerSpacing: CGFloat {
+        if #available(iOS 26, *) { 0.0 } else { 16.0 }
     }
 
     @ToolbarContentBuilder
@@ -105,6 +113,13 @@ struct BlockInserterView: View {
                     onMediaSelected($0)
                 }
             }
+
+        }
+
+        ToolbarItemGroup(placement: .confirmationAction) {
+            if !inlineSelectedMediaItems.isEmpty {
+                buttonInsertInlineMedia
+            }
         }
     }
 
@@ -121,27 +136,37 @@ struct BlockInserterView: View {
             preferredItemEncoding: .compatible
         )
         .photosPickerStyle(.compact)
-        .photosPickerDisabledCapabilities([.collectionNavigation, .search, .sensitivityAnalysisIntervention, .stagingArea])
+        .photosPickerDisabledCapabilities([
+                .collectionNavigation,
+                .search,
+                .sensitivityAnalysisIntervention,
+                .stagingArea,
+                .selectionActions
+        ])
         .photosPickerAccessoryVisibility(.hidden)
         .frame(height: inlinePickerHeight)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
         .opacity(viewModel.isProcessingMedia ? 0.5 : 1.0)
+    }
 
-        if !inlineSelectedMediaItems.isEmpty {
-            Button {
-                insertMedia(inlineSelectedMediaItems)
-                inlineSelectedMediaItems = []
+    @ViewBuilder
+    private var buttonInsertInlineMedia: some View {
+        let label = Text("+\(max(1, inlineSelectedMediaItems.count))")
+            .font(.headline.monospacedDigit())
+            .contentTransition(.numericText())
+
+        if #available(iOS 26, *) {
+            Button(role: .confirm) {
+                insertInlineMedia()
             } label: {
-                Image(systemName: "plus")
-                Text("\(max(1, inlineSelectedMediaItems.count))")
-                    .contentTransition(.numericText())
+                label
             }
-            .font(.system(.headline, design: .rounded))
+        } else {
+            Button {
+                insertInlineMedia()
+            } label: {
+                label
+            }
             .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.capsule)
-            .tint(.primary)
-            .transition(.offset(y: 28).combined(with: .scale(scale: 0.85)))
-            .frame(maxWidth: .infinity, alignment: .center)
         }
     }
 
@@ -150,6 +175,10 @@ struct BlockInserterView: View {
     private func insertBlock(_ block: BlockType) {
         dismiss()
         onBlockSelected(block)
+    }
+
+    private func insertInlineMedia() {
+        insertMedia(inlineSelectedMediaItems)
     }
 
     private func insertMedia(_ items: [PhotosPickerItem]) {
@@ -167,20 +196,66 @@ struct BlockInserterView: View {
 
 #if DEBUG
 #Preview {
-    NavigationStack {
-        BlockInserterView(
-            sections: [
-                BlockInserterSection(category: "gbk-most-used", name: nil, blocks: Array(BlockType.mocks.prefix(12)))
-            ],
-            mediaPicker: MockMediaPickerController(),
-            presentationContext: MediaPickerPresentationContext(),
-            onBlockSelected: {
-                print("block selected: \($0.name)")
-            },
-            onMediaSelected: {
-                print("media selected: \($0)")
+    PreviewWrapper()
+}
+
+struct PreviewWrapper: View {
+    @State private var isPresented = true
+
+    var body: some View {
+        Color.clear
+            .sheet(isPresented: $isPresented) {
+                NavigationStack {
+                    BlockInserterView(
+                        sections: [
+                            BlockInserterSection(category: "gbk-most-used", name: nil, blocks: Array(BlockType.mocks.prefix(12)))
+                        ],
+                        mediaPicker: MockMediaPickerController(),
+                        presentationContext: MediaPickerPresentationContext(),
+                        onBlockSelected: {
+                            print("block selected: \($0.name)")
+                        },
+                        onMediaSelected: {
+                            print("media selected: \($0)")
+                        }
+                    )
+                }
+                .background(SheetDetentModifier())
             }
-        )
+    }
+}
+
+struct SheetDetentModifier: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> SheetDetentViewController {
+        SheetDetentViewController()
+    }
+
+    func updateUIViewController(_ uiViewController: SheetDetentViewController, context: Context) {}
+}
+
+class SheetDetentViewController: UIViewController {
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        configureSheetPresentation()
+    }
+
+    private func configureSheetPresentation() {
+        guard let presentationController = presentingViewController?.presentedViewController?.presentationController as? UISheetPresentationController else {
+            return
+        }
+
+        let compactHeight: CGFloat
+        if #available(iOS 26, *) {
+            compactHeight = 556
+        } else {
+            compactHeight = 528
+        }
+
+        presentationController.detents = [.custom(identifier: .medium, resolver: { context in
+            context.containerTraitCollection.horizontalSizeClass == .compact ? compactHeight : 900
+        }), .large()]
+        presentationController.prefersGrabberVisible = true
+        presentationController.preferredCornerRadius = 26
     }
 }
 
