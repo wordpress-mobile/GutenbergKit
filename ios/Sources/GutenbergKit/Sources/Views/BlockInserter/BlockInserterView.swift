@@ -14,7 +14,6 @@ struct BlockInserterView: View {
 
     @State private var selectedMediaItems: [PhotosPickerItem] = []
     @State private var inlineSelectedMediaItems: [PhotosPickerItem] = []
-    @State private var showInlinePhotoPicker = false
 
     @ScaledMetric(relativeTo: .largeTitle) private var inlinePickerHeight = 116
 
@@ -68,6 +67,7 @@ struct BlockInserterView: View {
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
     }
 
+    @ViewBuilder
     private func makeSection(with section: BlockInserterSection) -> some View {
         VStack(spacing: inlinePickerSpacing) {
             BlockInserterSectionView(section: section, onBlockSelected: insertBlock)
@@ -138,13 +138,6 @@ struct BlockInserterView: View {
         .photosPickerStyle(.compact)
         .photosPickerAccessoryVisibility(.hidden)
         .frame(height: inlinePickerHeight)
-        .opacity(showInlinePhotoPicker ? 1.0 : 0.0)
-        .task {
-            try? await Task.sleep(for: .milliseconds(400))
-            withAnimation(.easeIn) {
-                showInlinePhotoPicker = true
-            }
-        }
     }
 
     @ViewBuilder

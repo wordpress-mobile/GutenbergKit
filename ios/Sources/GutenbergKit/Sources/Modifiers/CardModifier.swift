@@ -1,13 +1,11 @@
 import SwiftUI
 
 struct CardModifier: ViewModifier {
+    // - warning: It was previously using .overlay, but it turned out to be
+    // incompatible with inline PhotosPicker – breaks gestures on a device.
     func body(content: Content) -> some View {
         content
             .background(Color(.systemBackground))
-            .overlay(
-                RoundedRectangle(cornerRadius: 26)
-                    .stroke(Color(.opaqueSeparator), lineWidth: 0.5)
-            )
             .clipShape(RoundedRectangle(cornerRadius: 26))
     }
 }
