@@ -15,10 +15,15 @@ struct BlockInserterView: View {
     @State private var selectedMediaItems: [PhotosPickerItem] = []
     @State private var inlineSelectedMediaItems: [PhotosPickerItem] = []
     @State private var isShowingCamera = false
+    @State private var availableWidth: CGFloat = 0
 
     @ScaledMetric(relativeTo: .largeTitle) private var inlinePickerHeight = 116
 
     @Environment(\.dismiss) private var dismiss
+
+    private var isLargeWidth: Bool {
+        availableWidth >= 500
+    }
 
     init(
         sections: [BlockInserterSection],
@@ -40,7 +45,7 @@ struct BlockInserterView: View {
     var body: some View {
         content
             .background(Material.ultraThin)
-            .searchable(text: $viewModel.searchText)
+            .conditionallySearchable(text: $viewModel.searchText, isEnabled: !isLargeWidth)
             .navigationBarTitleDisplayMode(.inline)
             .disabled(viewModel.isProcessingMedia)
             .environmentObject(iconCache)
@@ -60,15 +65,32 @@ struct BlockInserterView: View {
                     viewModel.cancelProcessing()
                 }
             }
+            .background(
+                GeometryReader { geometry in
+                    Color.clear
+                        .onAppear {
+                            availableWidth = geometry.size.width
+                        }
+                        .onChange(of: geometry.size.width) { _, newWidth in
+                            if availableWidth != newWidth, newWidth > 0.0 {
+                                availableWidth = newWidth
+                            }
+                        }
+                }
+            )
     }
 
     private var content: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                ForEach(viewModel.sections, content: makeSection)
+            if viewModel.sections.isEmpty {
+                ContentUnavailableView.search(text: viewModel.searchText)
+            } else {
+                VStack(alignment: .leading, spacing: 24) {
+                    ForEach(viewModel.sections, content: makeSection)
+                }
+                .padding(.vertical, 6)
+                .dynamicTypeSize(...(.accessibility3))
             }
-            .padding(.vertical, 6)
-            .dynamicTypeSize(...(.accessibility3))
         }
         .scrollContentBackground(.hidden)
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
@@ -103,7 +125,12 @@ struct BlockInserterView: View {
             .tint(Color.primary)
         }
 
+
         ToolbarItemGroup(placement: .topBarTrailing) {
+            if isLargeWidth {
+                customSearchField
+            }
+
             PhotosPicker(
                 selection: $selectedMediaItems,
                 preferredItemEncoding: .compatible
@@ -138,6 +165,32 @@ struct BlockInserterView: View {
         }
     }
 
+    /// We use a custom search field on iPad to reduce the amount of vertical space used.
+    /// The standard `.searchable` behavaior with ` .toolbar` placement doesn't
+    /// achieve that. It defaults to a showing a full-screen search bar in a list
+    /// regardless of the popover size.
+    @ViewBuilder
+    private var customSearchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            /// TODO: CMM-874
+            TextField("Search", text: $viewModel.searchText)
+                .textFieldStyle(.plain)
+                .autocorrectionDisabled()
+            if !viewModel.searchText.isEmpty {
+                Button {
+                    viewModel.searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(maxWidth: 320)
+    }
+
     // MARK: - Inline PhotosPicker (.inline)
 
     @ViewBuilder
@@ -150,7 +203,7 @@ struct BlockInserterView: View {
         )
         .photosPickerStyle(.compact)
         .photosPickerAccessoryVisibility(.hidden)
-        .frame(height: inlinePickerHeight)
+        .frame(height: inlinePickerHeight - (isLargeWidth ? 20 : 0))
     }
 
     @ViewBuilder
@@ -204,6 +257,19 @@ struct BlockInserterView: View {
                 dismiss()
                 onMediaSelected(items)
             }
+        }
+    }
+}
+
+// MARK: - Helpers
+
+private extension View {
+    @ViewBuilder
+    func conditionallySearchable(text: Binding<String>, isEnabled: Bool) -> some View {
+        if isEnabled {
+            self.searchable(text: text)
+        } else {
+            self
         }
     }
 }

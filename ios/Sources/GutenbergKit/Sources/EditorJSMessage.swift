@@ -70,6 +70,14 @@ struct EditorJSMessage {
 
     struct ShowBlockInserterBody: Decodable {
         let sections: [BlockInserterSection]
+        let sourceRect: SourceRect?
+
+        struct SourceRect: Decodable {
+            let x: CGFloat
+            let y: CGFloat
+            let width: CGFloat
+            let height: CGFloat
+        }
     }
 
     struct LogMessage: Decodable {
