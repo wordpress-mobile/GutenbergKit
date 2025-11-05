@@ -286,7 +286,7 @@ private func encode(_ image: UIImage) -> Data? {
         return nil
     }
 
-    // Important to ignore the alpha channel (we now screenshots are opaque)
+    // Important to ignore the alpha channel (we know screenshots are opaque)
     // to avoid warnings from ImageIO about saving HEIF with alpha channel but
     // opqaue pixels. Storing opqaue images reduces the image size and the
     // memory needed for decoding by two times.
