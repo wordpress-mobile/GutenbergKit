@@ -1,3 +1,27 @@
+diff --git a/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.js b/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.js
+index 89a3bbc..8564798 100644
+--- a/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.js
++++ b/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.js
+@@ -28,6 +28,10 @@ function InserterListItem({
+   ...props
+ }) {
+   const isDraggingRef = useRef(false);
++  const isTouchDeviceRef = useRef(
++    window.matchMedia( '(hover: none)' ).matches ||
++    window.matchMedia( '(pointer: coarse)' ).matches
++  );
+   const itemIconStyle = item.icon ? {
+     backgroundColor: item.icon.background,
+     color: item.icon.foreground
+@@ -80,7 +84,7 @@ function InserterListItem({
+           }
+         },
+         onMouseEnter: () => {
+-          if (isDraggingRef.current) {
++          if (isDraggingRef.current || isTouchDeviceRef.current) {
+             return;
+           }
+           onHover(item);
 diff --git a/node_modules/@wordpress/block-editor/build-module/components/inserter/index.js b/node_modules/@wordpress/block-editor/build-module/components/inserter/index.js
 index 78b9b8f..9a8efb8 100644
 --- a/node_modules/@wordpress/block-editor/build-module/components/inserter/index.js

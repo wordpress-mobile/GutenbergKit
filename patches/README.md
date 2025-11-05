@@ -11,6 +11,7 @@ Existing patches should be described and justified here.
 -   Expose an `open` prop on the `Inserter` component, allowing toggling the inserter visibility via the quick inserter's "Browse all" button.
 -   Disable `stripExperimentalSettings` in the `BlockEditorProvider` component so that the Patterns and Media inserter tabs function.
 -   Allow setting popover props for the `Inserter` component, so we can improve the mobile screen reader experience by marking it as a modal dialog.
+-   Prevent the insertion point popover from appearing on touch devices in `InserterListItem`. The popover (triggered by `onMouseEnter`) disrupts tap/click events, requiring users to tap inserter items twice before they are inserted.
 
 ### `@wordpress/block-library`
 
