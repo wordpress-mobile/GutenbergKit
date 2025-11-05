@@ -96,6 +96,8 @@ export function onBlocksChanged( isEmpty = false ) {
  * The sections array is preprocessed by preprocessBlockTypesForNativeInserter()
  * which handles ordering, contextual filtering, and localized section names.
  *
+ * @param {Object} sourceRect The rectangle coordinates of the source element that triggered the inserter.
+ *
  * @return {void}
  */
 export function showBlockInserter( sourceRect ) {
