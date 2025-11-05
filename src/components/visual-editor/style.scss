@@ -77,10 +77,8 @@
 }
 
 .gutenberg-kit-visual-editor__toolbar {
-	align-items: center;
 	bottom: 0;
 	left: 0;
-	overflow-x: auto;
 	position: fixed;
 	right: 0;
 	z-index: 40; // Ensure the toolbar is above the block canvas and its controls

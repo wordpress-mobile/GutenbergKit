@@ -96,11 +96,9 @@ export function onBlocksChanged( isEmpty = false ) {
  * The sections array is preprocessed by preprocessBlockTypesForNativeInserter()
  * which handles ordering, contextual filtering, and localized section names.
  *
- * Patterns are included in the payload for immediate display.
- *
  * @return {void}
  */
-export function showBlockInserter() {
+export function showBlockInserter( sourceRect ) {
 	if ( ! window.blockInserter ) {
 		debug(
 			'BlockInserterBridge not available. Ensure editor is initialized.'
@@ -112,6 +110,7 @@ export function showBlockInserter() {
 	dispatchToBridge( 'showBlockInserter', {
 		sections: window.blockInserter.sections,
 		patterns: window.blockInserter.patterns,
+		sourceRect,
 	} );
 }
 

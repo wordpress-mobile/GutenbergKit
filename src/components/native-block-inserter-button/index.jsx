@@ -6,6 +6,7 @@ import { __ } from '@wordpress/i18n';
 import { plus } from '@wordpress/icons';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { findTransform, getBlockTransforms, parse } from '@wordpress/blocks';
+import { useRef } from '@wordpress/element';
 
 // NOTE: These hooks are internal WordPress APIs not available via public exports
 // or privateApis. We import from build-module as the only way to access the
@@ -46,6 +47,8 @@ import { unlock } from '../../lock-unlock';
  * state and exposes the current inserter state globally for the native side.
  */
 export default function NativeBlockInserterButton() {
+	const buttonRef = useRef( null );
+
 	// Get current selection for insertion context and destination block info
 	const { selectedBlockClientId, destinationBlockName } = useSelect(
 		( select ) => {
@@ -223,6 +226,7 @@ export default function NativeBlockInserterButton() {
 
 	return (
 		<Button
+			ref={ buttonRef }
 			title={ __( 'Add block' ) }
 			icon={ plus }
 			onClick={ () => {
@@ -253,7 +257,20 @@ export default function NativeBlockInserterButton() {
 					insertPattern,
 					insertMedia,
 				};
-				showBlockInserter();
+
+				// Get button position for popover presentation on iPad
+				let sourceRect;
+				if ( buttonRef.current ) {
+					const rect = buttonRef.current.getBoundingClientRect();
+					sourceRect = {
+						x: rect.left,
+						y: rect.top,
+						width: rect.width,
+						height: rect.height,
+					};
+				}
+
+				showBlockInserter( sourceRect );
 			} }
 			onMouseDown={ ( e ) => {
 				e.preventDefault();

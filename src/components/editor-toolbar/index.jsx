@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { useState } from '@wordpress/element';
+import { useState, useRef } from '@wordpress/element';
 import {
 	BlockInspector,
 	BlockToolbar,
@@ -29,6 +29,7 @@ import { useModalize } from './use-modalize';
 import { useModalDialogState } from '../editor/use-modal-dialog-state';
 import { getGBKit } from '../../utils/bridge';
 import NativeBlockInserterButton from '../native-block-inserter-button';
+import { useScrollIndicators } from './use-scroll-indicators';
 
 /**
  * Renders the editor toolbar containing block-related actions.
@@ -39,6 +40,10 @@ import NativeBlockInserterButton from '../native-block-inserter-button';
  */
 const EditorToolbar = ( { className } ) => {
 	const { enableNativeBlockInserter } = getGBKit();
+
+	const scrollViewRef = useRef();
+	const { canScrollLeft, canScrollRight } =
+		useScrollIndicators( scrollViewRef );
 
 	const [ isBlockInspectorShown, setBlockInspectorShown ] = useState( false );
 	const { isSelected } = useSelect( ( select ) => {
@@ -81,6 +86,14 @@ const EditorToolbar = ( { className } ) => {
 
 	const classes = clsx( 'gutenberg-kit-editor-toolbar', className );
 
+	const scrollViewClasses = clsx(
+		'gutenberg-kit-editor-toolbar__scroll-view',
+		{
+			'has-scroll-left': canScrollLeft,
+			'has-scroll-right': canScrollRight,
+		}
+	);
+
 	const addBlockButton = enableNativeBlockInserter ? (
 		<NativeBlockInserterButton />
 	) : (
@@ -96,25 +109,28 @@ const EditorToolbar = ( { className } ) => {
 
 	return (
 		<>
-			<Toolbar
-				className={ classes }
-				label="Editor toolbar"
-				variant="unstyled"
-			>
-				<ToolbarGroup>{ addBlockButton }</ToolbarGroup>
+			<div className={ classes }>
+				<Toolbar
+					label="Editor toolbar"
+					variant="unstyled"
+					ref={ scrollViewRef }
+					className={ scrollViewClasses }
+				>
+					<ToolbarGroup>{ addBlockButton }</ToolbarGroup>
 
-				{ isSelected && (
-					<ToolbarGroup>
-						<ToolbarButton
-							title={ __( 'Block Settings' ) }
-							icon={ cog }
-							onClick={ openSettings }
-						/>
-					</ToolbarGroup>
-				) }
+					{ isSelected && (
+						<ToolbarGroup>
+							<ToolbarButton
+								title={ __( 'Block Settings' ) }
+								icon={ cog }
+								onClick={ openSettings }
+							/>
+						</ToolbarGroup>
+					) }
 
-				<BlockToolbar hideDragHandle />
-			</Toolbar>
+					<BlockToolbar hideDragHandle />
+				</Toolbar>
+			</div>
 
 			{ isBlockInspectorShown && (
 				<Popover

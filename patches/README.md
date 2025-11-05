@@ -12,6 +12,10 @@ Existing patches should be described and justified here.
 -   Disable `stripExperimentalSettings` in the `BlockEditorProvider` component so that the Patterns and Media inserter tabs function.
 -   Allow setting popover props for the `Inserter` component, so we can improve the mobile screen reader experience by marking it as a modal dialog.
 
+### `@wordpress/block-library`
+
+-   Enable image resizing on mobile devices by removing the `isLargeViewport` check from the `isResizable` condition in the `Image` component. The resizing feature appears to work well enough now, in contrast to the description in https://github.com/WordPress/gutenberg/issues/2675.
+
 ### `@wordpress/components`
 
 -   Apply workaround to `FormFileUpload` to address iOS Safari's lack of support for a wildcard `audio/*` MIME type. Can be removed once [the issue](https://github.com/WordPress/gutenberg/issues/70119) is resolved in a future release.

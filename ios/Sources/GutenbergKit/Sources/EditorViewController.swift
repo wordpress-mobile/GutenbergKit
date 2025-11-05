@@ -240,6 +240,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
+    private func makeJavaScriptCompatibleDictionary<T: Encodable>(with object: T) throws -> Any {
+        let data = try JSONEncoder().encode(object)
+        return try JSONSerialization.jsonObject(with: data, options: .allowFragments)
+    }
+
     private func handleError(_ error: Error, isCritical: Bool) {
         // These are non-critical errors but they might prevent certain features from working
         let alert = UIAlertController(title: error.localizedDescription, message: "\(error)", preferredStyle: .alert)
@@ -262,37 +267,69 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 patterns: data.patterns,
                 mediaPicker: mediaPicker,
                 presentationContext: context,
-                onSelection: { [weak self] selection in
-                    switch selection {
-                    case .block(let block):
-                        self?.insertBlockFromInserter(block.id)
-                    case .pattern(let pattern):
-                        self?.insertPatternFromInserter(pattern.name)
-                    case .media(let items):
-                        self?.insertMediaFromInserter(items)
-                    }
-                }
+                onSelection: { [weak self] in self?.didSelectBlockInserterItem($0) }
             )
         })
 
         context.viewController = host
 
+        if let sourceRect = data.sourceRect {
+            host.modalPresentationStyle = .popover
+
+            if let popover = host.popoverPresentationController {
+                popover.sourceView = webView
+                popover.sourceRect = CGRect(
+                    x: sourceRect.x,
+                    y: sourceRect.y,
+                    width: sourceRect.width,
+                    height: sourceRect.height
+                )
+                popover.permittedArrowDirections = [.up, .down]
+                host.preferredContentSize = CGSize(width: 600, height: 580)
+            }
+        }
+
+        if let sheet = host.popoverPresentationController?.adaptiveSheetPresentationController ?? host.sheetPresentationController {
+            sheet.detents = [.custom(identifier: .medium, resolver: { context in
+                context.containerTraitCollection.horizontalSizeClass == .compact ? 536 : 900
+            }), .large()]
+            sheet.prefersGrabberVisible = true
+            sheet.preferredCornerRadius = 26
+        }
+
         present(host, animated: true)
+    }
+
+    private func didSelectBlockInserterItem(_ selection: BlockInserterSelection) {
+        switch selection {
+        case .block(let block):
+            insertBlockFromInserter(block.id)
+        case .pattern(let pattern):
+            insertPatternFromInserter(pattern.name)
+        case .media(let items):
+            Task {
+                await insertMediaFromInserter(items)
+            }
+        }
     }
 
     private func insertBlockFromInserter(_ blockID: String) {
         evaluate("window.blockInserter.insertBlock('\(blockID)')")
     }
 
-    private func insertMediaFromInserter(_ selection: [MediaInfo]) {
+    private func insertMediaFromInserter(_ selection: [MediaInfo]) async {
         guard !selection.isEmpty else { return }
-
-        guard let data = try? JSONEncoder().encode(selection),
-              let string = String(data: data, encoding: .utf8) else {
-            debugPrint("Failed to serialize media array to JSON")
-            return
+        do {
+            let object = try makeJavaScriptCompatibleDictionary(with: selection)
+            _ = try await webView.callAsyncJavaScript(
+                "window.blockInserter.insertMedia(selection)",
+                arguments: ["selection": object],
+                in: nil,
+                contentWorld: .page
+            )
+        } catch {
+            assertionFailure("Failed to serialize or insert media: \(error)")
         }
-        evaluate("window.blockInserter.insertMedia(\(string))")
     }
 
     private func insertPatternFromInserter(_ patternName: String) {
@@ -458,3 +495,4 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
 
 
 #endif
+
