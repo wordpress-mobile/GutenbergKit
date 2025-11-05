@@ -13,8 +13,10 @@ struct BlockInserterView: View {
     @StateObject private var iconCache = BlockIconCache()
 
     @State private var selectedMediaItems: [PhotosPickerItem] = []
+    @State private var inlineSelectedMediaItems: [PhotosPickerItem] = []
+    @State private var isShowingCamera = false
 
-    private let maxSelectionCount = 10
+    @ScaledMetric(relativeTo: .largeTitle) private var inlinePickerHeight = 116
 
     @Environment(\.dismiss) private var dismiss
 
@@ -41,11 +43,18 @@ struct BlockInserterView: View {
             .searchable(text: $viewModel.searchText)
             .navigationBarTitleDisplayMode(.inline)
             .disabled(viewModel.isProcessingMedia)
-            .animation(.smooth(duration: 2), value: viewModel.isProcessingMedia)
             .environmentObject(iconCache)
             .toolbar {
                 toolbar
             }
+            .sheet(isPresented: $isShowingCamera) {
+                CameraView { media in
+                    insertCameraMedia(media)
+                }
+                .ignoresSafeArea()
+            }
+            .animation(.smooth(duration: 2), value: viewModel.isProcessingMedia)
+            .animation(.snappy, value: inlineSelectedMediaItems.count)
             .onDisappear {
                 if viewModel.isProcessingMedia {
                     viewModel.cancelProcessing()
@@ -55,17 +64,32 @@ struct BlockInserterView: View {
 
     private var content: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                ForEach(viewModel.sections) { section in
-                    BlockInserterSectionView(section: section, onBlockSelected: insertBlock)
-                        .padding(.horizontal)
-                }
+            VStack(alignment: .leading, spacing: 24) {
+                ForEach(viewModel.sections, content: makeSection)
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, 6)
             .dynamicTypeSize(...(.accessibility3))
         }
         .scrollContentBackground(.hidden)
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+    }
+
+    @ViewBuilder
+    private func makeSection(with section: BlockInserterSection) -> some View {
+        VStack(spacing: inlinePickerSpacing) {
+            BlockInserterSectionView(section: section, onBlockSelected: insertBlock)
+                .padding(.bottom, 6)
+
+            if viewModel.searchText.isEmpty && section.category == "gbk-most-used" {
+                inlinePhotosPicker
+            }
+        }
+        .cardStyle()
+        .padding(.horizontal)
+    }
+
+    private var inlinePickerSpacing: CGFloat {
+        if #available(iOS 26, *) { -6.0 } else { 16.0 }
     }
 
     @ToolbarContentBuilder
@@ -80,7 +104,10 @@ struct BlockInserterView: View {
         }
 
         ToolbarItemGroup(placement: .topBarTrailing) {
-            PhotosPicker(selection: $selectedMediaItems, preferredItemEncoding: .compatible) {
+            PhotosPicker(
+                selection: $selectedMediaItems,
+                preferredItemEncoding: .compatible
+            ) {
                 Image(systemName: "photo.on.rectangle.angled")
             }
             .onChange(of: selectedMediaItems) { _, selection in
@@ -90,12 +117,62 @@ struct BlockInserterView: View {
                 selectedMediaItems = []
             }
 
+            Button {
+                isShowingCamera = true
+            } label: {
+                Image(systemName: "camera")
+            }
+
             if let mediaPicker {
                 MediaPickerMenu(picker: mediaPicker, context: presentationContext) {
                     dismiss()
                     onMediaSelected($0)
                 }
             }
+        }
+
+        ToolbarItemGroup(placement: .confirmationAction) {
+            if !inlineSelectedMediaItems.isEmpty {
+                buttonInsertInlineMedia
+            }
+        }
+    }
+
+    // MARK: - Inline PhotosPicker (.inline)
+
+    @ViewBuilder
+    private var inlinePhotosPicker: some View {
+        PhotosPicker(
+            "",
+            selection: $inlineSelectedMediaItems,
+            selectionBehavior: .continuousAndOrdered,
+            preferredItemEncoding: .compatible
+        )
+        .photosPickerStyle(.compact)
+        .photosPickerAccessoryVisibility(.hidden)
+        .frame(height: inlinePickerHeight)
+    }
+
+    @ViewBuilder
+    private var buttonInsertInlineMedia: some View {
+        let label = Text("+\(max(1, inlineSelectedMediaItems.count))")
+            .font(.headline.monospacedDigit())
+            .contentTransition(.numericText())
+
+        if #available(iOS 26, *) {
+            Button(role: .confirm) {
+                insertInlineMedia()
+            } label: {
+                label
+            }
+        } else {
+            Button {
+                insertInlineMedia()
+            } label: {
+                label
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
         }
     }
 
@@ -106,9 +183,23 @@ struct BlockInserterView: View {
         onBlockSelected(block)
     }
 
+    private func insertInlineMedia() {
+        insertMedia(inlineSelectedMediaItems)
+    }
+
     private func insertMedia(_ items: [PhotosPickerItem]) {
         Task {
             let items = await viewModel.processSelectedPhotosPickerItems(items)
+            if !items.isEmpty {
+                dismiss()
+                onMediaSelected(items)
+            }
+        }
+    }
+
+    private func insertCameraMedia(_ media: CameraMedia) {
+        Task {
+            let items = await viewModel.processCameraMedia(media)
             if !items.isEmpty {
                 dismiss()
                 onMediaSelected(items)
@@ -124,7 +215,8 @@ struct BlockInserterView: View {
     NavigationStack {
         BlockInserterView(
             sections: [
-                BlockInserterSection(category: "text", name: "Text", blocks: BlockType.mocks)
+                BlockInserterSection(category: "gbk-most-used", name: nil, blocks: Array(BlockType.mocks.prefix(12))),
+                BlockInserterSection(category: "text", name: "Text", blocks: Array(BlockType.mocks.prefix(12)))
             ],
             mediaPicker: MockMediaPickerController(),
             presentationContext: MediaPickerPresentationContext(),

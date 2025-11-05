@@ -240,6 +240,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
+    private func makeJavaScriptCompatibleDictionary<T: Encodable>(with object: T) throws -> Any {
+        let data = try JSONEncoder().encode(object)
+        return try JSONSerialization.jsonObject(with: data, options: .allowFragments)
+    }
+
     private func handleError(_ error: Error, isCritical: Bool) {
         // These are non-critical errors but they might prevent certain features from working
         let alert = UIAlertController(title: error.localizedDescription, message: "\(error)", preferredStyle: .alert)
@@ -265,12 +270,22 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                     self?.insertBlockFromInserter(block.id)
                 },
                 onMediaSelected: { [weak self] selection in
-                    self?.insertMediaFromInserter(selection)
+                    Task {
+                        await self?.insertMediaFromInserter(selection)
+                    }
                 }
             )
         })
 
         context.viewController = host
+
+        if let sheet = host.sheetPresentationController {
+            sheet.detents = [.custom(identifier: .medium, resolver: { context in
+                context.containerTraitCollection.horizontalSizeClass == .compact ? 536 : 900
+            }), .large()]
+            sheet.prefersGrabberVisible = true
+            sheet.preferredCornerRadius = 26
+        }
 
         present(host, animated: true)
     }
@@ -279,15 +294,19 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         evaluate("window.blockInserter.insertBlock('\(blockID)')")
     }
 
-    private func insertMediaFromInserter(_ selection: [MediaInfo]) {
+    private func insertMediaFromInserter(_ selection: [MediaInfo]) async {
         guard !selection.isEmpty else { return }
-
-        guard let data = try? JSONEncoder().encode(selection),
-              let string = String(data: data, encoding: .utf8) else {
-            debugPrint("Failed to serialize media array to JSON")
-            return
+        do {
+            let object = try makeJavaScriptCompatibleDictionary(with: selection)
+            _ = try await webView.callAsyncJavaScript(
+                "window.blockInserter.insertMedia(selection)",
+                arguments: ["selection": object],
+                in: nil,
+                contentWorld: .page
+            )
+        } catch {
+            assertionFailure("Failed to serialize or insert media: \(error)")
         }
-        evaluate("window.blockInserter.insertMedia(\(string))")
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
@@ -448,3 +467,4 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
 
 
 #endif
+
