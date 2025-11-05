@@ -279,7 +279,23 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         context.viewController = host
 
-        if let sheet = host.sheetPresentationController {
+        if let sourceRect = data.sourceRect {
+            host.modalPresentationStyle = .popover
+
+            if let popover = host.popoverPresentationController {
+                popover.sourceView = webView
+                popover.sourceRect = CGRect(
+                    x: sourceRect.x,
+                    y: sourceRect.y,
+                    width: sourceRect.width,
+                    height: sourceRect.height
+                )
+                popover.permittedArrowDirections = [.up, .down]
+                host.preferredContentSize = CGSize(width: 600, height: 580)
+            }
+        }
+
+        if let sheet = host.popoverPresentationController?.adaptiveSheetPresentationController ?? host.sheetPresentationController {
             sheet.detents = [.custom(identifier: .medium, resolver: { context in
                 context.containerTraitCollection.horizontalSizeClass == .compact ? 536 : 900
             }), .large()]

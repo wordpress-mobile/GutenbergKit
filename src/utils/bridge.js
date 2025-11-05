@@ -96,9 +96,15 @@ export function onBlocksChanged( isEmpty = false ) {
  * The sections array is preprocessed by preprocessBlockTypesForNativeInserter()
  * which handles ordering, contextual filtering, and localized section names.
  *
+ * @param {Object} [sourceRect]      The button's position for popover presentation.
+ * @param {number} sourceRect.x      The x coordinate relative to the webview.
+ * @param {number} sourceRect.y      The y coordinate relative to the webview.
+ * @param {number} sourceRect.width  The width of the button.
+ * @param {number} sourceRect.height The height of the button.
+ *
  * @return {void}
  */
-export function showBlockInserter() {
+export function showBlockInserter( sourceRect ) {
 	if ( ! window.blockInserter ) {
 		debug(
 			'BlockInserterBridge not available. Ensure editor is initialized.'
@@ -109,6 +115,7 @@ export function showBlockInserter() {
 	// Send preprocessed sections to native
 	dispatchToBridge( 'showBlockInserter', {
 		sections: window.blockInserter.sections,
+		sourceRect,
 	} );
 }
 
