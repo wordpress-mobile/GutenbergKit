@@ -1,28 +1,33 @@
 import Foundation
 
-struct BlockType: Decodable, Identifiable {
-    /// Unique identifier for this block variant. Note that this is NOT the same as `name`.
-    /// Multiple blocks can share the same `name` but have different `id` values to represent
-    /// different variants with different initial attributes (e.g., core/embed variants for
-    /// YouTube, Vimeo, etc.).
-    let id: String
+struct Pattern: Decodable, Identifiable {
+    /// Example: `"core/query-standard-posts"`
     let name: String
-    let title: String?
+    let title: String
+    /// Containts HTML with Gutenberg blocks.
+    let content: String
+    let blockTypes: [String]?
+    let categories: [String]?
     let description: String?
-    let category: String?
     let keywords: [String]?
-    var icon: String?
-    var frecency: Double = 0.0
-    var isDisabled = false
-    var parents: [String] = []
+    let source: String?
+    let viewportWidth: Int?
+
+    // Computed property for Identifiable
+    var id: String { name }
+
+    // Get primary category for display
+    var category: String? {
+        categories?.first
+    }
 }
 
-extension BlockType: Searchable {
+extension Pattern: Searchable {
     /// Sets the searchable fields in the order of priority
     func searchableFields() -> [SearchableField] {
         var fields: [SearchableField] = []
 
-        if let title, !title.isEmpty {
+        if !title.isEmpty {
             fields.append(SearchableField(content: title, weight: 10.0, allowFuzzyMatch: true))
         }
 
@@ -45,5 +50,20 @@ extension BlockType: Searchable {
         }
 
         return fields
+    }
+}
+
+struct PatternSection: Identifiable, Decodable {
+    var id: String { category }
+    let category: String
+    let name: String
+    let patterns: [Pattern]
+    let showPreviews: Bool
+
+    init(category: String, name: String, patterns: [Pattern], showPreviews: Bool = true) {
+        self.category = category
+        self.name = name
+        self.patterns = patterns
+        self.showPreviews = showPreviews
     }
 }

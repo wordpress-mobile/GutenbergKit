@@ -1,13 +1,20 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import WebKit
+
+enum BlockInserterSelection {
+    case block(BlockType)
+    case pattern(Pattern)
+    case media([MediaInfo])
+}
 
 struct BlockInserterView: View {
     let sections: [BlockInserterSection]
+    let patterns: [Pattern]
     let mediaPicker: MediaPickerController?
     let presentationContext: MediaPickerPresentationContext
-    let onBlockSelected: (BlockType) -> Void
-    let onMediaSelected: ([MediaInfo]) -> Void
+    let onSelection: (BlockInserterSelection) -> Void
 
     @StateObject private var viewModel: BlockInserterViewModel
     @StateObject private var iconCache = BlockIconCache()
@@ -20,6 +27,7 @@ struct BlockInserterView: View {
     @ScaledMetric(relativeTo: .largeTitle) private var inlinePickerHeight = 116
 
     @Environment(\.dismiss) private var dismiss
+    @State private var showingPatterns = false
 
     private var isLargeWidth: Bool {
         availableWidth >= 500
@@ -27,16 +35,16 @@ struct BlockInserterView: View {
 
     init(
         sections: [BlockInserterSection],
+        patterns: [Pattern],
         mediaPicker: MediaPickerController?,
         presentationContext: MediaPickerPresentationContext,
-        onBlockSelected: @escaping (BlockType) -> Void,
-        onMediaSelected: @escaping ([MediaInfo]) -> Void
+        onSelection: @escaping (BlockInserterSelection) -> Void
     ) {
         self.sections = sections
+        self.patterns = patterns
         self.mediaPicker = mediaPicker
         self.presentationContext = presentationContext
-        self.onBlockSelected = onBlockSelected
-        self.onMediaSelected = onMediaSelected
+        self.onSelection = onSelection
 
         let viewModel = BlockInserterViewModel(sections: sections)
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -63,6 +71,17 @@ struct BlockInserterView: View {
             .onDisappear {
                 if viewModel.isProcessingMedia {
                     viewModel.cancelProcessing()
+                }
+            }
+            .sheet(isPresented: $showingPatterns) {
+                NavigationStack {
+                    PatternsView(
+                        patterns: patterns,
+                        onPatternSelected: { pattern in
+                            showingPatterns = false
+                            insertPattern(pattern)
+                        }
+                    )
                 }
             }
             .background(
@@ -150,10 +169,17 @@ struct BlockInserterView: View {
                 Image(systemName: "camera")
             }
 
+            Button {
+                showingPatterns = true
+            } label: {
+                Image(systemName: "square.grid.2x2")
+            }
+            .tint(Color.primary)
+
             if let mediaPicker {
                 MediaPickerMenu(picker: mediaPicker, context: presentationContext) {
                     dismiss()
-                    onMediaSelected($0)
+                    onSelection(.media($0))
                 }
             }
         }
@@ -174,6 +200,7 @@ struct BlockInserterView: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
+                .padding(.leading, 6)
             /// TODO: CMM-874
             TextField("Search", text: $viewModel.searchText)
                 .textFieldStyle(.plain)
@@ -188,7 +215,7 @@ struct BlockInserterView: View {
                 .buttonStyle(.plain)
             }
         }
-        .frame(maxWidth: 320)
+        .frame(maxWidth: 260)
     }
 
     // MARK: - Inline PhotosPicker (.inline)
@@ -233,7 +260,12 @@ struct BlockInserterView: View {
 
     private func insertBlock(_ block: BlockType) {
         dismiss()
-        onBlockSelected(block)
+        onSelection(.block(block))
+    }
+
+    private func insertPattern(_ pattern: Pattern) {
+        dismiss()
+        onSelection(.pattern(pattern))
     }
 
     private func insertInlineMedia() {
@@ -245,7 +277,7 @@ struct BlockInserterView: View {
             let items = await viewModel.processSelectedPhotosPickerItems(items)
             if !items.isEmpty {
                 dismiss()
-                onMediaSelected(items)
+                onSelection(.media(items))
             }
         }
     }
@@ -255,7 +287,7 @@ struct BlockInserterView: View {
             let items = await viewModel.processCameraMedia(media)
             if !items.isEmpty {
                 dismiss()
-                onMediaSelected(items)
+                onSelection(.media(items))
             }
         }
     }
@@ -284,13 +316,11 @@ private extension View {
                 BlockInserterSection(category: "gbk-most-used", name: nil, blocks: Array(BlockType.mocks.prefix(12))),
                 BlockInserterSection(category: "text", name: "Text", blocks: Array(BlockType.mocks.prefix(12)))
             ],
+            patterns: [],
             mediaPicker: MockMediaPickerController(),
             presentationContext: MediaPickerPresentationContext(),
-            onBlockSelected: {
-                print("block selected: \($0.name)")
-            },
-            onMediaSelected: {
-                print("media selected: \($0)")
+            onSelection: { selection in
+                print("on selected: \(selection)")
             }
         )
     }

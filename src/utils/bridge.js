@@ -96,11 +96,7 @@ export function onBlocksChanged( isEmpty = false ) {
  * The sections array is preprocessed by preprocessBlockTypesForNativeInserter()
  * which handles ordering, contextual filtering, and localized section names.
  *
- * @param {Object} [sourceRect]      The button's position for popover presentation.
- * @param {number} sourceRect.x      The x coordinate relative to the webview.
- * @param {number} sourceRect.y      The y coordinate relative to the webview.
- * @param {number} sourceRect.width  The width of the button.
- * @param {number} sourceRect.height The height of the button.
+ * @param {Object} sourceRect The rectangle coordinates of the source element that triggered the inserter.
  *
  * @return {void}
  */
@@ -112,9 +108,10 @@ export function showBlockInserter( sourceRect ) {
 		return;
 	}
 
-	// Send preprocessed sections to native
+	// Send preprocessed sections and patterns to native
 	dispatchToBridge( 'showBlockInserter', {
 		sections: window.blockInserter.sections,
+		patterns: window.blockInserter.patterns,
 		sourceRect,
 	} );
 }

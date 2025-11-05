@@ -5,7 +5,7 @@ import { Button } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { plus } from '@wordpress/icons';
 import { useSelect, useDispatch } from '@wordpress/data';
-import { findTransform, getBlockTransforms } from '@wordpress/blocks';
+import { findTransform, getBlockTransforms, parse } from '@wordpress/blocks';
 import { useRef } from '@wordpress/element';
 
 // NOTE: These hooks are internal WordPress APIs not available via public exports
@@ -36,6 +36,7 @@ import { store as blockEditorStore } from '@wordpress/block-editor';
 import { debug } from '../../utils/logger';
 import { preprocessBlockTypesForNativeInserter } from '../../utils/blocks';
 import { showBlockInserter } from '../../utils/bridge';
+import { unlock } from '../../lock-unlock';
 
 /**
  * Native Block Inserter Button Component
@@ -86,6 +87,17 @@ export default function NativeBlockInserterButton() {
 		destinationRootClientId,
 		onInsertBlocks,
 		false // isQuick
+	);
+
+	// Get patterns for the inserter
+	const patterns = useSelect(
+		( select ) => {
+			const { __experimentalGetAllowedPatterns } = unlock(
+				select( blockEditorStore )
+			);
+			return __experimentalGetAllowedPatterns( destinationRootClientId );
+		},
+		[ destinationRootClientId ]
 	);
 
 	const insertBlock = ( blockId ) => {
@@ -194,6 +206,24 @@ export default function NativeBlockInserterButton() {
 		}
 	};
 
+	const insertPattern = ( patternName ) => {
+		const pattern = patterns?.find( ( p ) => p.name === patternName );
+		if ( ! pattern ) {
+			debug( `Pattern "${ patternName }" not found` );
+			return false;
+		}
+
+		try {
+			// Parse and insert pattern blocks
+			const blocks = parse( pattern.content );
+			onInsertBlocks( blocks );
+			return true;
+		} catch ( error ) {
+			debug( 'Failed to insert pattern:', error );
+			return false;
+		}
+	};
+
 	return (
 		<Button
 			ref={ buttonRef }
@@ -205,9 +235,26 @@ export default function NativeBlockInserterButton() {
 					destinationBlockName,
 					categories
 				);
+
+				// Format patterns for native consumption
+				const formattedPatterns =
+					patterns?.map( ( pattern ) => ( {
+						name: pattern.name,
+						title: pattern.title,
+						content: pattern.content,
+						blockTypes: pattern.blockTypes ?? null,
+						categories: pattern.categories ?? null,
+						description: pattern.description ?? null,
+						keywords: pattern.keywords ?? null,
+						source: pattern.source ?? null,
+						viewportWidth: pattern.viewportWidth ?? null,
+					} ) ) ?? [];
+
 				window.blockInserter = {
 					sections,
+					patterns: formattedPatterns,
 					insertBlock,
+					insertPattern,
 					insertMedia,
 				};
 

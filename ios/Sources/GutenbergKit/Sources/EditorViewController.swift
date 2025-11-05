@@ -264,16 +264,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let host = UIHostingController(rootView: NavigationStack {
             BlockInserterView(
                 sections: data.sections,
+                patterns: data.patterns,
                 mediaPicker: mediaPicker,
                 presentationContext: context,
-                onBlockSelected: { [weak self] block in
-                    self?.insertBlockFromInserter(block.id)
-                },
-                onMediaSelected: { [weak self] selection in
-                    Task {
-                        await self?.insertMediaFromInserter(selection)
-                    }
-                }
+                onSelection: { [weak self] in self?.didSelectBlockInserterItem($0) }
             )
         })
 
@@ -306,6 +300,19 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         present(host, animated: true)
     }
 
+    private func didSelectBlockInserterItem(_ selection: BlockInserterSelection) {
+        switch selection {
+        case .block(let block):
+            insertBlockFromInserter(block.id)
+        case .pattern(let pattern):
+            insertPatternFromInserter(pattern.name)
+        case .media(let items):
+            Task {
+                await insertMediaFromInserter(items)
+            }
+        }
+    }
+
     private func insertBlockFromInserter(_ blockID: String) {
         evaluate("window.blockInserter.insertBlock('\(blockID)')")
     }
@@ -323,6 +330,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         } catch {
             assertionFailure("Failed to serialize or insert media: \(error)")
         }
+    }
+
+    private func insertPatternFromInserter(_ patternName: String) {
+        let escapedName = patternName.replacingOccurrences(of: "'", with: "\\'")
+        evaluate("window.blockInserter.insertPattern('\(escapedName)')")
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
