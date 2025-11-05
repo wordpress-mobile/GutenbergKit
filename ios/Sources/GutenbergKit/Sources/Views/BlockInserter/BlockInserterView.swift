@@ -14,6 +14,7 @@ struct BlockInserterView: View {
 
     @State private var selectedMediaItems: [PhotosPickerItem] = []
     @State private var inlineSelectedMediaItems: [PhotosPickerItem] = []
+    @State private var isShowingCamera = false
 
     @ScaledMetric(relativeTo: .largeTitle) private var inlinePickerHeight = 116
 
@@ -45,6 +46,12 @@ struct BlockInserterView: View {
             .environmentObject(iconCache)
             .toolbar {
                 toolbar
+            }
+            .sheet(isPresented: $isShowingCamera) {
+                CameraView { media in
+                    insertCameraMedia(media)
+                }
+                .ignoresSafeArea()
             }
             .animation(.smooth(duration: 2), value: viewModel.isProcessingMedia)
             .animation(.snappy, value: inlineSelectedMediaItems.count)
@@ -108,6 +115,12 @@ struct BlockInserterView: View {
                     insertMedia(selection)
                 }
                 selectedMediaItems = []
+            }
+
+            Button {
+                isShowingCamera = true
+            } label: {
+                Image(systemName: "camera")
             }
 
             if let mediaPicker {
@@ -177,6 +190,16 @@ struct BlockInserterView: View {
     private func insertMedia(_ items: [PhotosPickerItem]) {
         Task {
             let items = await viewModel.processSelectedPhotosPickerItems(items)
+            if !items.isEmpty {
+                dismiss()
+                onMediaSelected(items)
+            }
+        }
+    }
+
+    private func insertCameraMedia(_ media: CameraMedia) {
+        Task {
+            let items = await viewModel.processCameraMedia(media)
             if !items.isEmpty {
                 dismiss()
                 onMediaSelected(items)

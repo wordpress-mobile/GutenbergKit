@@ -14,7 +14,7 @@ class BlockInserterViewModel: ObservableObject {
     private var processingTask: Task<[MediaInfo], Never>?
     private var cancellables = Set<AnyCancellable>()
 
-    struct MediaError: Identifiable {
+    struct MediaError: Identifiable, Error {
         let id = UUID()
         let message: String
     }
@@ -83,6 +83,46 @@ class BlockInserterViewModel: ObservableObject {
             }
 
             return results
+        }
+        processingTask = task
+        return await task.value
+    }
+
+
+    func processCameraMedia(_ media: CameraMedia) async -> [MediaInfo] {
+        isProcessingMedia = true
+        defer { isProcessingMedia = false }
+
+        let task = Task<[MediaInfo], Never> { @MainActor in
+            do {
+                let mediaInfo: MediaInfo
+
+                switch media {
+                case .photo(let image):
+                    guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+                        throw MediaError(message: "Failed to convert image to JPEG")
+                    }
+
+                    let fileURL = try await fileManager.writeData(imageData, withExtension: "jpg")
+                    mediaInfo = MediaInfo(url: fileURL.absoluteString, type: "image/jpeg")
+
+                case .video(let videoURL):
+                    let videoData = try Data(contentsOf: videoURL)
+                    let fileExtension = videoURL.pathExtension.isEmpty ? "mp4" : videoURL.pathExtension
+                    let fileURL = try await fileManager.writeData(videoData, withExtension: fileExtension)
+                    mediaInfo = MediaInfo(url: fileURL.absoluteString, type: "video/\(fileExtension)")
+                }
+
+                guard !Task.isCancelled else {
+                    return []
+                }
+
+                return [mediaInfo]
+
+            } catch {
+                self.error = MediaError(message: error.localizedDescription)
+                return []
+            }
         }
         processingTask = task
         return await task.value
