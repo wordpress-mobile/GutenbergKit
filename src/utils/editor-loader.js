@@ -107,9 +107,13 @@ async function loadAssets(
 	html,
 	{ allowedPackages = [], disallowedPackages = [] } = {}
 ) {
-	const excludedScriptIDs = new RegExp(
-		disallowedPackages.map( ( script ) => `wp-${ script }-js` ).join( '|' )
-	);
+	const excludedScriptIDs = disallowedPackages.length
+		? new RegExp(
+				disallowedPackages
+					.map( ( script ) => `wp-${ script }-js` )
+					.join( '|' )
+		  )
+		: null;
 
 	const allowedScriptIDs = allowedPackages.length
 		? new RegExp(
@@ -125,10 +129,16 @@ async function loadAssets(
 		if ( ! asset.id ) {
 			return false;
 		}
+
 		if ( allowedScriptIDs ) {
 			return allowedScriptIDs.test( asset.id );
 		}
-		return ! excludedScriptIDs.test( asset.id );
+
+		if ( excludedScriptIDs ) {
+			return ! excludedScriptIDs.test( asset.id );
+		}
+
+		return true;
 	} );
 
 	/*

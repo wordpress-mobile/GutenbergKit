@@ -1,14 +1,9 @@
 /**
- * WordPress dependencies
- */
-import { createRoot, StrictMode } from '@wordpress/element';
-
-/**
  * Internal dependencies
  */
-import { initializeApiFetch } from './api-fetch';
-import { awaitGBKitGlobal, editorLoaded } from './bridge';
-import { configureLocale } from './localization';
+import { awaitGBKitGlobal, editorLoaded, getGBKit } from './bridge';
+import { loadEditorAssets } from './editor-loader';
+import { initializeVideoPressAjaxBridge } from './videopress-bridge';
 import EditorLoadError from '../components/editor-load-error';
 import { error } from './logger';
 import './editor-styles.js';
@@ -30,33 +25,58 @@ export function initializeBundledEditor() {
 	// - https://github.com/vitejs/vite/issues/13952
 	// - https://github.com/vitejs/vite/issues/5189#issuecomment-2175410148
 	return awaitGBKitGlobal()
-		.then( initializeApiAndLocale )
-		.then( importEditor )
+		.then( configureLocale )
+		.then( loadRemainingGlobals )
+		.then( initializeApiFetchWrapper )
+		.then( initializeVideoPressAjaxBridge )
+		.then( loadPluginsIfEnabled )
 		.then( initializeEditor )
 		.catch( handleError );
 }
 
-function initializeApiAndLocale() {
-	initializeApiFetch();
-	return configureLocale();
+function configureLocale() {
+	return import( './localization' ).then(
+		( { configureLocale: _configureLocale } ) => _configureLocale()
+	);
 }
 
-function importEditor() {
-	return import( './editor' );
+function loadRemainingGlobals() {
+	// Load remaining WordPress globals after i18n is configured.
+	return import( './wordpress-globals' );
 }
 
-function initializeEditor( editorModule ) {
-	const { initializeEditor: _initializeEditor } = editorModule;
-	_initializeEditor();
+function initializeApiFetchWrapper() {
+	// Load api-fetch now that WordPress globals are available.
+	return import( './api-fetch' ).then(
+		( { initializeApiFetch: _initializeApiFetch } ) => {
+			_initializeApiFetch();
+		}
+	);
+}
+
+function loadPluginsIfEnabled() {
+	const { plugins } = getGBKit();
+
+	if ( plugins ) {
+		return loadEditorAssets().then( ( { allowedBlockTypes } ) =>
+			import( './blocks' ).then( ( { unregisterDisallowedBlocks } ) =>
+				unregisterDisallowedBlocks( allowedBlockTypes )
+			)
+		);
+	}
+}
+
+function initializeEditor() {
+	return import( './editor' ).then(
+		( { initializeEditor: _initializeEditor } ) => {
+			_initializeEditor();
+		}
+	);
 }
 
 function handleError( err ) {
 	error( 'Error initializing editor', err );
-	const root = document.getElementById( 'root' );
-	createRoot( root ).render(
-		<StrictMode>
-			<EditorLoadError error={ err } />
-		</StrictMode>
-	);
+	const errorDetails = EditorLoadError( { error: err } );
+	document.body.innerHTML = errorDetails;
 	editorLoaded();
 }

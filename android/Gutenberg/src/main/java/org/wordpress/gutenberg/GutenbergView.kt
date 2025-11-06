@@ -263,12 +263,8 @@ class GutenbergView : WebView {
 
         initializeWebView()
 
-        val editorUrl = if (configuration.plugins && BuildConfig.GUTENBERG_EDITOR_REMOTE_URL.isNotEmpty()) {
-            BuildConfig.GUTENBERG_EDITOR_REMOTE_URL
-        } else if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
+        val editorUrl = if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
             BuildConfig.GUTENBERG_EDITOR_URL
-        } else if (configuration.plugins) {
-            ASSET_URL_REMOTE
         } else {
             ASSET_URL
         }
@@ -304,6 +300,7 @@ class GutenbergView : WebView {
                 "namespaceExcludedPaths": ${configuration.namespaceExcludedPaths.joinToString(",", "[", "]") { "\"$it\"" }},
                 "authHeader": "${configuration.authHeader}",
                 "themeStyles": ${configuration.themeStyles},
+                "plugins": ${configuration.plugins},
                 "hideTitle": ${configuration.hideTitle},
                 "editorSettings": $editorSettings,
                 "locale": "${configuration.locale}",
