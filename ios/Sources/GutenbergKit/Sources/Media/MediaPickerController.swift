@@ -43,6 +43,7 @@ public struct MediaPickerParameters {
     }
 }
 
+@MainActor
 public protocol MediaPickerController {
     /// Returns a grouped list of media picker actions for the given parameters.
     func getActions(for parameters: MediaPickerParameters) -> [MediaPickerActionGroup]
