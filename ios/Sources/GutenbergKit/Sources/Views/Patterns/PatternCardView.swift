@@ -28,7 +28,7 @@ struct PatternCardView: View {
                         .frame(minWidth: 120, maxWidth: maxWidth, minHeight: height, maxHeight: height)
                 case .fullWidth(let maxHeight):
                     HTMLPreviewView(pattern: pattern, targetSize: nil, viewportWidth: viewportWidth)
-                        .frame(minHeight: 150, maxHeight: maxHeight)
+                        .frame(minHeight: 140, maxHeight: maxHeight)
                 }
             }
             .background(Color(.systemBackground))
