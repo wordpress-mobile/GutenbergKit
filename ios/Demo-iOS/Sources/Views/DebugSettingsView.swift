@@ -48,7 +48,7 @@ struct DebugSettingsView: View {
 
     private func clearCache() {
         Task {
-            await HTMLPreviewManager.shared.clearCache()
+            await HTMLPreviewManager.clearCache()
             cacheCleared = true
 
             // Reset the checkmark after 2 seconds

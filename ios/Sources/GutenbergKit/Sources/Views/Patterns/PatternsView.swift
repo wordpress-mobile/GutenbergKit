@@ -107,6 +107,7 @@ enum PreviewMode: String {
                 print("pattern selected: \(pattern.name)")
             }
         )
+        .environmentObject(HTMLPreviewManager())
     }
 }
 #endif

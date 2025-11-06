@@ -2,7 +2,7 @@
 import SwiftUI
 
 /// SwiftUI view for previewing HTML content
-private struct HTMLPreviewDebugView: View {
+public struct HTMLPreviewDebugView: View {
     let html: String
     let initialViewportWidth: Int
 
@@ -12,15 +12,16 @@ private struct HTMLPreviewDebugView: View {
     @State private var isLoading = true
     @State private var error: Error?
     @State private var debounceTask: Task<Void, Never>?
+    @State private var htmlPreviewManager = HTMLPreviewManager()
 
-    init(html: String, viewportWidth: Int) {
+    public init(html: String, viewportWidth: Int) {
         self.html = html
         self.initialViewportWidth = viewportWidth
         _viewportWidth = State(initialValue: Double(viewportWidth))
         _debouncedViewportWidth = State(initialValue: viewportWidth)
     }
 
-    var body: some View {
+    public var body: some View {
         ScrollView {
             VStack(spacing: 16) {
                 // Header with refresh button
@@ -115,7 +116,7 @@ private struct HTMLPreviewDebugView: View {
         error = nil
 
         do {
-            let renderedImage = try await HTMLPreviewManager.shared.render(
+            let renderedImage = try await htmlPreviewManager.render(
                 html: html,
                 viewportWidth: debouncedViewportWidth
             )
@@ -128,7 +129,7 @@ private struct HTMLPreviewDebugView: View {
     }
 
     private func clearCacheAndRefresh() async {
-        await HTMLPreviewManager.shared.clearCache()
+        await htmlPreviewManager.clearCache()
         debouncedViewportWidth = Int(viewportWidth)
     }
 

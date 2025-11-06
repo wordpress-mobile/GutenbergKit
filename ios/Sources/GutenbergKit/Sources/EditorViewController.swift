@@ -28,6 +28,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     private let isWarmupMode: Bool
 
+    /// HTML Preview Manager instance for rendering pattern previews
+    private(set) lazy var htmlPreviewManager = HTMLPreviewManager(themeStyles: configuration.extractThemeStyles())
+
     /// Initalizes the editor with the initial content (Gutenberg).
     public init(
         configuration: EditorConfiguration = .default,
@@ -269,6 +272,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 presentationContext: context,
                 onSelection: { [weak self] in self?.didSelectBlockInserterItem($0) }
             )
+            .environmentObject(htmlPreviewManager)
         })
 
         context.viewController = host
