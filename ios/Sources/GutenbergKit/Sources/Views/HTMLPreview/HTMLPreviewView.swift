@@ -26,13 +26,11 @@ struct HTMLPreviewView: View {
                 Image(uiImage: previewImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color.white)
                     .clipped()
             } else if isLoadingFailed {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color(uiColor: .tertiarySystemBackground))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .overlay {
                         VStack(spacing: 4) {
                             Image(systemName: "square.grid.2x2")

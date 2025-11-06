@@ -25,7 +25,7 @@ struct PatternListView: View {
     var body: some View {
         List {
             ForEach(section.patterns) { pattern in
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .center, spacing: 8) {
                     PatternCardView(
                         pattern: pattern,
                         onSelected: {
@@ -42,6 +42,7 @@ struct PatternListView: View {
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                 }
+                .frame(maxWidth: .infinity)
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
             }
