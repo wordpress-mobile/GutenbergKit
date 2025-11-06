@@ -1,5 +1,7 @@
 package com.example.gutenbergkit
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.webkit.WebView
 import android.content.pm.ApplicationInfo
@@ -7,6 +9,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
@@ -38,9 +42,38 @@ import org.wordpress.gutenberg.EditorConfiguration
 import org.wordpress.gutenberg.GutenbergView
 
 class EditorActivity : ComponentActivity() {
+    private var gutenbergView: GutenbergView? = null
+    private lateinit var filePickerLauncher: ActivityResultLauncher<Intent>
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Register file picker launcher before setContent
+        filePickerLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            val data = result.data
+            val uris = if (data != null) {
+                if (data.clipData != null) {
+                    // Multiple files selected
+                    val clipData = data.clipData!!
+                    Array(clipData.itemCount) { i ->
+                        clipData.getItemAt(i).uri
+                    }
+                } else if (data.data != null) {
+                    // Single file selected
+                    arrayOf(data.data)
+                } else {
+                    null
+                }
+            } else {
+                null
+            }
+
+            // Pass the result back to the WebView
+            gutenbergView?.filePathCallback?.onReceiveValue(uris)
+            gutenbergView?.resetFilePathCallback()
+        }
 
         if (0 != (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE)) {
             WebView.setWebContentsDebuggingEnabled(true)
@@ -62,9 +95,19 @@ class EditorActivity : ComponentActivity() {
             AppTheme {
                 EditorScreen(
                     configuration = configuration,
-                    onClose = { finish() }
+                    onClose = { finish() },
+                    onGutenbergViewCreated = { view ->
+                        gutenbergView = view
+                        setupFileChooserListener(view)
+                    }
                 )
             }
+        }
+    }
+
+    private fun setupFileChooserListener(view: GutenbergView) {
+        view.setOnFileChooserRequestedListener { intent, _ ->
+            filePickerLauncher.launch(intent)
         }
     }
 }
@@ -73,7 +116,8 @@ class EditorActivity : ComponentActivity() {
 @Composable
 fun EditorScreen(
     configuration: EditorConfiguration,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onGutenbergViewCreated: (GutenbergView) -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var isModalDialogOpen by remember { mutableStateOf(false) }
@@ -196,6 +240,7 @@ fun EditorScreen(
                         }
                     })
                     start(configuration)
+                    onGutenbergViewCreated(this)
                 }
             },
             modifier = Modifier
