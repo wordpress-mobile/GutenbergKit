@@ -255,7 +255,10 @@ export default function NativeBlockInserterButton() {
 						title: pattern.title,
 						content: pattern.content,
 						blockTypes: pattern.blockTypes ?? null,
-						categories: pattern.categories ?? null,
+						categories:
+							pattern.categories?.filter(
+								( cat ) => ! cat.startsWith( '_' )
+							) ?? null,
 						description: pattern.description ?? null,
 						keywords: pattern.keywords ?? null,
 						source: pattern.source ?? null,
