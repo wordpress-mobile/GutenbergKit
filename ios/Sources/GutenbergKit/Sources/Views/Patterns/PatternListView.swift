@@ -4,14 +4,22 @@ import SwiftUI
 struct PatternListView: View {
     let section: PatternSection
     let onPatternSelected: (Pattern) -> Void
-    let viewportWidth: Int?
 
+    @AppStorage("GBKPatternsPreviewMode") private var previewMode: PreviewMode = .desktop
     @Environment(\.dismiss) private var dismiss
 
-    init(section: PatternSection, onPatternSelected: @escaping (Pattern) -> Void, viewportWidth: Int? = nil) {
+    init(section: PatternSection, onPatternSelected: @escaping (Pattern) -> Void) {
         self.section = section
         self.onPatternSelected = onPatternSelected
-        self.viewportWidth = viewportWidth
+    }
+
+    private var viewportWidth: Int? {
+        switch previewMode {
+        case .mobile:
+            return 375
+        case .desktop:
+            return nil
+        }
     }
 
     var body: some View {
@@ -42,5 +50,15 @@ struct PatternListView: View {
         .background(Color(.secondarySystemBackground))
         .navigationTitle(section.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            toolbar
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            PatternsTogglePreviewModeButton()
+        }
     }
 }

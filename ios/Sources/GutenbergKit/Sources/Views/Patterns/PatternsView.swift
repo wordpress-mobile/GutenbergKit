@@ -79,12 +79,7 @@ struct PatternsView: View {
         }
 
         ToolbarItem(placement: .primaryAction) {
-            Button {
-                previewMode.toggle()
-            } label: {
-                Image(systemName: previewMode == .mobile ? "iphone" : "desktopcomputer")
-            }
-            .tint(Color.primary)
+            PatternsTogglePreviewModeButton()
         }
     }
 }
