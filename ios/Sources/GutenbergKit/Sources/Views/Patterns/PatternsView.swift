@@ -3,6 +3,7 @@ import WebKit
 
 struct PatternsView: View {
     let patterns: [Pattern]
+    let patternCategories: [PatternCategory]
     let onPatternSelected: (Pattern) -> Void
 
     @StateObject private var viewModel: PatternsViewModel
@@ -11,10 +12,11 @@ struct PatternsView: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    init(patterns: [Pattern], onPatternSelected: @escaping (Pattern) -> Void) {
+    init(patterns: [Pattern], patternCategories: [PatternCategory] = [], onPatternSelected: @escaping (Pattern) -> Void) {
         self.patterns = patterns
+        self.patternCategories = patternCategories
         self.onPatternSelected = onPatternSelected
-        self._viewModel = StateObject(wrappedValue: PatternsViewModel(patterns: patterns))
+        self._viewModel = StateObject(wrappedValue: PatternsViewModel(patterns: patterns, patternCategories: patternCategories))
     }
 
     private var viewportWidth: Int? {

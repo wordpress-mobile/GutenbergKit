@@ -265,6 +265,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             BlockInserterView(
                 sections: data.sections,
                 patterns: data.patterns,
+                patternCategories: data.patternCategories,
                 mediaPicker: mediaPicker,
                 presentationContext: context,
                 onSelection: { [weak self] in self?.didSelectBlockInserterItem($0) }

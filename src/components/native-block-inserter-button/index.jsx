@@ -33,6 +33,7 @@ import useBlockTypesState from '@wordpress/block-editor/build-module/components/
  * Internal dependencies
  */
 import { store as blockEditorStore } from '@wordpress/block-editor';
+import { store as coreDataStore } from '@wordpress/core-data';
 import { debug } from '../../utils/logger';
 import { preprocessBlockTypesForNativeInserter } from '../../utils/blocks';
 import { showBlockInserter } from '../../utils/bridge';
@@ -99,6 +100,17 @@ export default function NativeBlockInserterButton() {
 		},
 		[ destinationRootClientId ]
 	);
+
+	// Get pattern categories with localized labels
+	const patternCategories = useSelect( ( select ) => {
+		const { getBlockPatternCategories, getUserPatternCategories } =
+			select( coreDataStore );
+
+		return [
+			...( getBlockPatternCategories() || [] ),
+			...( getUserPatternCategories() || [] ),
+		];
+	}, [] );
 
 	const insertBlock = ( blockId ) => {
 		const item = inserterItems.find( ( i ) => i.id === blockId );
@@ -250,9 +262,16 @@ export default function NativeBlockInserterButton() {
 						viewportWidth: pattern.viewportWidth ?? null,
 					} ) ) ?? [];
 
+				const formattedPatternCategories =
+					patternCategories?.map( ( cat ) => ( {
+						name: cat.name,
+						label: cat.label,
+					} ) ) ?? [];
+
 				window.blockInserter = {
 					sections,
 					patterns: formattedPatterns,
+					patternCategories: formattedPatternCategories,
 					insertBlock,
 					insertPattern,
 					insertMedia,

@@ -1,5 +1,12 @@
 import Foundation
 
+struct PatternCategory: Decodable {
+    /// Category slug/identifier (e.g., "gallery")
+    let name: String
+    /// Localized display name (e.g., "Galerie" in French)
+    let label: String
+}
+
 struct Pattern: Decodable, Identifiable {
     /// Example: `"core/query-standard-posts"`
     let name: String

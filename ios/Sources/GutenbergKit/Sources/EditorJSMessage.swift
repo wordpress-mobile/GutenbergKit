@@ -71,6 +71,7 @@ struct EditorJSMessage {
     struct ShowBlockInserterBody: Decodable {
         let sections: [BlockInserterSection]
         let patterns: [Pattern]
+        let patternCategories: [PatternCategory]
         let sourceRect: SourceRect?
 
         struct SourceRect: Decodable {
@@ -83,6 +84,7 @@ struct EditorJSMessage {
         private enum CodingKeys: String, CodingKey {
             case sections
             case patterns
+            case patternCategories
             case sourceRect
         }
 
@@ -91,6 +93,7 @@ struct EditorJSMessage {
 
             self.sections = try container.decode([BlockInserterSection].self, forKey: .sections)
             self.patterns = try container.decodeSafely([Pattern].self, forKey: .patterns)
+            self.patternCategories = try container.decodeSafely([PatternCategory].self, forKey: .patternCategories)
             self.sourceRect = try container.decodeIfPresent(SourceRect.self, forKey: .sourceRect)
         }
     }

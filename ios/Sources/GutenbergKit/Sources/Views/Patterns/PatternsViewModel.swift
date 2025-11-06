@@ -9,7 +9,10 @@ final class PatternsViewModel: ObservableObject {
     private let allSections: [PatternSection]
     private var cancellables = Set<AnyCancellable>()
 
-    init(patterns: [Pattern]) {
+    init(patterns: [Pattern], patternCategories: [PatternCategory] = []) {
+        let categoryLabels = Dictionary(
+            uniqueKeysWithValues: patternCategories.map { ($0.name, $0.label) }
+        )
         // Build a mapping of category -> patterns in input order
         var categoryPatterns: [String: [Pattern]] = [:]
         let uncategorizedKey = "uncategorized"
@@ -35,7 +38,7 @@ final class PatternsViewModel: ObservableObject {
                 // TODO: CMM-874 - Localize "Uncategorized"
                 displayName = "Uncategorized"
             } else {
-                displayName = category.capitalized
+                displayName = categoryLabels[category] ?? category.capitalized
             }
 
             // Separate primary and secondary patterns, then concatenate
