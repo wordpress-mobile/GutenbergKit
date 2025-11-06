@@ -63,20 +63,7 @@ public final class HTMLPreviewManager: ObservableObject {
         let template = makePatternHTML(content: "", viewportWidth: 0, editorStyles: gutenbergCSS, themeStyles: themeStyles)
         self.templateHash = template.sha256
 
-        let cacheDirectory = URL.cachesDirectory.appendingPathComponent("gbk-html-preview-cache", isDirectory: true)
-        do {
-            try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-        } catch {
-            assertionFailure("failed to create cache directory: \(error)")
-        }
-
-        // The previews often have graphics included and are non opaque. The
-        // most efficient format for it on iOS is HEIF.
-        self.urlCache = URLCache(
-            memoryCapacity: 0, // Disable memory cache (we use NSCache for thumbnails)
-            diskCapacity: 16 * 1024 * 1024, // 16 MB
-            directory: cacheDirectory
-        )
+        self.urlCache = HTMLPreviewManager.makeCache()
     }
 
     /// Loads the Gutenberg CSS from the bundled assets
@@ -158,13 +145,21 @@ public final class HTMLPreviewManager: ObservableObject {
 
     /// Clears the disk cache for all HTMLPreviewManager instances
     public static func clearCache() async {
+        makeCache().removeAllCachedResponses()
+    }
+
+    private static func makeCache() -> URLCache {
         let cacheDirectory = URL.cachesDirectory.appendingPathComponent("gbk-html-preview-cache", isDirectory: true)
-        let urlCache = URLCache(
+        do {
+            try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        } catch {
+            assertionFailure("failed to create cache directory: \(error)")
+        }
+        return URLCache(
             memoryCapacity: 0,
             diskCapacity: 16 * 1024 * 1024,
             directory: cacheDirectory
         )
-        urlCache.removeAllCachedResponses()
     }
 
     /// Clears the disk cache for this instance
