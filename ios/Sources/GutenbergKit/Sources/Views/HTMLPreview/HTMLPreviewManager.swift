@@ -277,6 +277,14 @@ private func makePatternHTML(content: String, viewportWidth: Int, editorStyles: 
             .is-root-container {
                 width: 100%;
             }
+            /* Fix for WordPress image blocks with rounded corners in WebKit */
+            .wp-block-image {
+                overflow: hidden;
+            }
+            .wp-block-image img {
+                display: block;
+                border-radius: 22px;
+            }
         </style>
         <style>
             \(editorStyles)
