@@ -201,8 +201,7 @@ struct BlockInserterView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
                 .padding(.leading, 6)
-            /// TODO: CMM-874
-            TextField("Search", text: $viewModel.searchText)
+            TextField(EditorLocalization[.search], text: $viewModel.searchText)
                 .textFieldStyle(.plain)
                 .autocorrectionDisabled()
             if !viewModel.searchText.isEmpty {
