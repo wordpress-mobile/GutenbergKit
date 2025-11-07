@@ -11,7 +11,8 @@ final class PatternsViewModel: ObservableObject {
 
     init(patterns: [Pattern], patternCategories: [PatternCategory] = []) {
         let categoryLabels = Dictionary(
-            uniqueKeysWithValues: patternCategories.map { ($0.name, $0.label) }
+            patternCategories.map { ($0.name, $0.label) },
+            uniquingKeysWith: { first, _ in first }
         )
         // Build a mapping of category -> patterns in input order
         var categoryPatterns: [String: [Pattern]] = [:]
