@@ -5,7 +5,13 @@ import { Button } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { plus } from '@wordpress/icons';
 import { useSelect, useDispatch } from '@wordpress/data';
-import { findTransform, getBlockTransforms, parse } from '@wordpress/blocks';
+import {
+	findTransform,
+	getBlockTransforms,
+	parse,
+	createBlock,
+} from '@wordpress/blocks';
+import { getBlockAndPreviewFromMedia } from '@wordpress/block-editor/build-module/components/inserter/media-tab/utils';
 import { useRef } from '@wordpress/element';
 
 // NOTE: These hooks are internal WordPress APIs not available via public exports
@@ -128,92 +134,181 @@ export default function NativeBlockInserterButton() {
 	};
 
 	/**
-	 * Insert media blocks from native media picker using block transforms.
+	 * Get media type from MIME type.
 	 *
-	 * This method uses the same file transform system as drag-and-drop,
-	 * ensuring consistent behavior and leveraging WordPress's extensibility:
-	 * - Finds matching transform based on file types (image/video/audio)
-	 * - Respects transform priorities (gallery > single image)
-	 * - Supports third-party block transforms
-	 * - Handles block insertion validation
+	 * @param {string} mimeType The MIME type of the media
+	 * @return {string|null} Media type ('image', 'video', 'audio') or null
+	 */
+	const getMediaType = ( mimeType ) => {
+		if ( ! mimeType ) {
+			return null;
+		}
+		if ( mimeType.startsWith( 'image/' ) ) {
+			return 'image';
+		}
+		if ( mimeType.startsWith( 'video/' ) ) {
+			return 'video';
+		}
+		if ( mimeType.startsWith( 'audio/' ) ) {
+			return 'audio';
+		}
+		return null;
+	};
+
+	/**
+	 * Insert media from WordPress media library (with existing IDs).
+	 * Creates blocks directly with media attributes, avoiding re-upload.
+	 *
+	 * @param {Array} mediaArray Array of media objects with IDs
+	 * @return {boolean} True if insertion succeeded
+	 */
+	const insertMediaWithIds = ( mediaArray ) => {
+		const blocks = [];
+		const allImages = mediaArray.every(
+			( media ) => getMediaType( media.type ) === 'image'
+		);
+
+		// Create gallery for multiple images
+		if ( allImages && mediaArray.length > 1 ) {
+			if (
+				! canInsertBlockType( 'core/gallery', destinationRootClientId )
+			) {
+				debug( 'Cannot insert gallery block at this location' );
+				return false;
+			}
+
+			const galleryBlock = createBlock( 'core/gallery', {
+				images: mediaArray.map( ( media ) => ( {
+					id: String( media.id ),
+					url: media.url,
+					alt: media.alt ?? '',
+					caption: media.caption ?? '',
+				} ) ),
+			} );
+			blocks.push( galleryBlock );
+		} else {
+			// Create individual blocks using WordPress utility
+			for ( const media of mediaArray ) {
+				const mediaType = getMediaType( media.type );
+				if ( ! mediaType ) {
+					debug( `Unsupported media type: ${ media.type }` );
+					continue;
+				}
+
+				if (
+					! canInsertBlockType(
+						`core/${ mediaType }`,
+						destinationRootClientId
+					)
+				) {
+					debug(
+						`Cannot insert core/${ mediaType } block at this location`
+					);
+					continue;
+				}
+
+				const [ block ] = getBlockAndPreviewFromMedia(
+					media,
+					mediaType
+				);
+				blocks.push( block );
+			}
+		}
+
+		if ( blocks.length === 0 ) {
+			return false;
+		}
+
+		onInsertBlocks( blocks );
+		return true;
+	};
+
+	/**
+	 * Insert new media files (without IDs) using WordPress file transforms.
+	 * Downloads files and uses transform system for block creation and upload.
+	 *
+	 * @param {Array} mediaArray Array of media objects without IDs
+	 * @return {Promise<boolean>} True if insertion succeeded
+	 */
+	const insertMediaWithoutIds = async ( mediaArray ) => {
+		// Convert media objects to File objects
+		const files = await Promise.all(
+			mediaArray.map( async ( media ) => {
+				try {
+					const response = await fetch( media.url );
+					const blob = await response.blob();
+					const filename = media.url.split( '/' ).pop() || 'media';
+					return new File( [ blob ], filename, {
+						type: media.type ?? 'application/octet-stream',
+					} );
+				} catch ( error ) {
+					debug( `Failed to fetch media: ${ media.url }`, error );
+					return null;
+				}
+			} )
+		);
+
+		const validFiles = files.filter( ( f ) => f !== null );
+		if ( validFiles.length === 0 ) {
+			debug( 'No valid files to insert' );
+			return false;
+		}
+
+		// Find and apply file transform
+		const transformation = findTransform(
+			getBlockTransforms( 'from' ),
+			( transform ) =>
+				transform.type === 'files' &&
+				canInsertBlockType(
+					transform.blockName,
+					destinationRootClientId
+				) &&
+				transform.isMatch( validFiles )
+		);
+
+		if ( ! transformation ) {
+			debug( 'No matching transform found', {
+				fileCount: validFiles.length,
+				fileTypes: validFiles.map( ( f ) => f.type ),
+			} );
+			return false;
+		}
+
+		const blocks = transformation.transform(
+			validFiles,
+			updateBlockAttributes
+		);
+
+		if ( ! blocks || ( Array.isArray( blocks ) && blocks.length === 0 ) ) {
+			debug( 'Transform produced no blocks' );
+			return false;
+		}
+
+		onInsertBlocks( Array.isArray( blocks ) ? blocks : [ blocks ] );
+		return true;
+	};
+
+	/**
+	 * Insert media blocks from native media picker.
 	 *
 	 * @param {Array} mediaArray Array of media objects with shape:
 	 *                           { id?, url, type, caption?, alt?, title?, metadata? }
-	 * @return {Promise<boolean>} True if insertion succeeded, false otherwise
+	 * @return {Promise<boolean>} True if insertion succeeded
 	 */
 	const insertMedia = async ( mediaArray ) => {
 		if ( ! Array.isArray( mediaArray ) || mediaArray.length === 0 ) {
 			return false;
 		}
+
 		try {
-			// Convert media objects to File objects
-			// This allows us to use the existing file transform system
-			const files = await Promise.all(
-				mediaArray.map( async ( media ) => {
-					try {
-						const response = await fetch( media.url );
-						const blob = await response.blob();
-						const filename =
-							media.url.split( '/' ).pop() || 'media';
-						return new File( [ blob ], filename, {
-							type: media.type ?? 'application/octet-stream',
-						} );
-					} catch ( error ) {
-						debug(
-							`insertMedia: Failed to fetch media: ${ media.url }`,
-							error
-						);
-						return null;
-					}
-				} )
-			);
+			// Assume all media have IDs or all don't (not mixed)
+			const hasIds = mediaArray[ 0 ]?.id;
 
-			// Filter out any failed fetches
-			const validFiles = files.filter( ( f ) => f !== null );
-
-			if ( validFiles.length === 0 ) {
-				debug( 'insertMedia: No valid files to insert' );
-				return false;
-			}
-
-			// Find matching transform using WordPress's transform system
-			// This is the same logic as onFilesDrop in use-on-block-drop
-			const transformation = findTransform(
-				getBlockTransforms( 'from' ),
-				( transform ) =>
-					transform.type === 'files' &&
-					canInsertBlockType(
-						transform.blockName,
-						destinationRootClientId
-					) &&
-					transform.isMatch( validFiles )
-			);
-
-			if ( ! transformation ) {
-				debug( 'insertMedia: No matching transform found', {
-					fileCount: validFiles.length,
-					fileTypes: validFiles.map( ( f ) => f.type ),
-				} );
-				return false;
-			}
-
-			const blocks = transformation.transform(
-				validFiles,
-				updateBlockAttributes
-			);
-
-			if (
-				! blocks ||
-				( Array.isArray( blocks ) && blocks.length === 0 )
-			) {
-				debug( 'insertMedia: Transform produced no blocks' );
-				return false;
-			}
-
-			onInsertBlocks( blocks );
-			return true;
+			return hasIds
+				? insertMediaWithIds( mediaArray )
+				: await insertMediaWithoutIds( mediaArray );
 		} catch ( error ) {
-			debug( 'insertMedia: Failed to insert media blocks', error );
+			debug( 'Failed to insert media blocks', error );
 			return false;
 		}
 	};
