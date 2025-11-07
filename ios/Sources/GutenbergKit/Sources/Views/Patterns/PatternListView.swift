@@ -4,20 +4,28 @@ import SwiftUI
 struct PatternListView: View {
     let section: PatternSection
     let onPatternSelected: (Pattern) -> Void
-    let viewportWidth: Int?
 
+    @AppStorage("GBKPatternsPreviewMode") private var previewMode: PreviewMode = .desktop
     @Environment(\.dismiss) private var dismiss
 
-    init(section: PatternSection, onPatternSelected: @escaping (Pattern) -> Void, viewportWidth: Int? = nil) {
+    init(section: PatternSection, onPatternSelected: @escaping (Pattern) -> Void) {
         self.section = section
         self.onPatternSelected = onPatternSelected
-        self.viewportWidth = viewportWidth
+    }
+
+    private var viewportWidth: Int? {
+        switch previewMode {
+        case .mobile:
+            return 375
+        case .desktop:
+            return nil
+        }
     }
 
     var body: some View {
         List {
             ForEach(section.patterns) { pattern in
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .center, spacing: 8) {
                     PatternCardView(
                         pattern: pattern,
                         onSelected: {
@@ -34,6 +42,7 @@ struct PatternListView: View {
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                 }
+                .frame(maxWidth: .infinity)
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
             }
@@ -42,5 +51,15 @@ struct PatternListView: View {
         .background(Color(.secondarySystemBackground))
         .navigationTitle(section.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            toolbar
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            PatternsTogglePreviewModeButton()
+        }
     }
 }

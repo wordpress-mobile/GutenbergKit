@@ -18,7 +18,7 @@ struct PatternGridSection: View {
         VStack(alignment: .leading, spacing: 9) {
             // Category header with navigation
             NavigationLink {
-                PatternListView(section: section, onPatternSelected: onPatternSelected, viewportWidth: viewportWidth)
+                PatternListView(section: section, onPatternSelected: onPatternSelected)
                     .environment(\.htmlPreviewMemoryCache, memoryCache) // Important
             } label: {
                 HStack {

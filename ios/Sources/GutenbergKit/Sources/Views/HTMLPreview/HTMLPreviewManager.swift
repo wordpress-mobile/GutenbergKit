@@ -14,9 +14,8 @@ import SwiftUI
 /// - Disk cache: Stores full-size rendered images at pattern viewport width
 /// - Concurrent rendering with request queuing
 /// - Background execution of disk I/O operations
-public actor HTMLPreviewManager {
-    public static let shared = HTMLPreviewManager()
-
+@MainActor
+public final class HTMLPreviewManager: ObservableObject {
     // MARK: - Configuration
 
     private let maxConcurrentRenders = 2
@@ -31,8 +30,9 @@ public actor HTMLPreviewManager {
 
     private let urlCache: URLCache
 
-    private let gutenbergCSS: String
-    private let gutenbergCSSHash: String
+    private let editorStyles: String
+    private let themeStyles: String?
+    private let templateHash: String
 
     private class RenderRequest {
         let diskCacheKey: String
@@ -50,28 +50,20 @@ public actor HTMLPreviewManager {
 
     // MARK: - Initialization
 
-    private init() {
-        let css = Self.loadGutenbergCSS() ?? ""
-        self.gutenbergCSS = css
-        assert(!css.isEmpty, "Failed to load Gutenberg CSS from bundle. Previews will not render correctly.")
+    public init(themeStyles: String? = nil) {
+        let gutenbergCSS = Self.loadGutenbergCSS() ?? ""
+        assert(!gutenbergCSS.isEmpty, "Failed to load Gutenberg CSS from bundle. Previews will not render correctly.")
 
-        // Precompute CSS hash for cache key generation
-        self.gutenbergCSSHash = css.sha256
+        self.editorStyles = gutenbergCSS
+        self.themeStyles = themeStyles
 
-        let cacheDirectory = URL.cachesDirectory.appendingPathComponent("gbk-html-preview-cache", isDirectory: true)
-        do {
-            try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-        } catch {
-            assertionFailure("failed to create cache directory: \(error)")
-        }
+        // Compute hash from template with placeholder values to be used as a key
+        // for caching purposes. This way, if you make any changes to the template,
+        // it will automatically invaliate the previous caches.
+        let template = makePatternHTML(content: "", viewportWidth: 0, editorStyles: gutenbergCSS, themeStyles: themeStyles)
+        self.templateHash = template.sha256
 
-        // The previews often have graphics included and are non opaque. The
-        // most efficient format for it on iOS is HEIF.
-        self.urlCache = URLCache(
-            memoryCapacity: 0, // Disable memory cache (we use NSCache for thumbnails)
-            diskCapacity: 16 * 1024 * 1024, // 16 MB
-            directory: cacheDirectory
-        )
+        self.urlCache = HTMLPreviewManager.makeCache()
     }
 
     /// Loads the Gutenberg CSS from the bundled assets
@@ -91,7 +83,6 @@ public actor HTMLPreviewManager {
         return css
     }
 
-
     // MARK: - Public API
 
     /// Renders HTML content to an image
@@ -99,8 +90,8 @@ public actor HTMLPreviewManager {
     ///   - html: The HTML content to render
     ///   - viewportWidth: The viewport width for rendering
     /// - Returns: Full-size rendered image at the specified viewport width
-    func render(html: String, viewportWidth: Int) async throws -> UIImage {
-        let diskCacheKey = makeDiskCacheKey(html: html, viewportWidth: viewportWidth, cssHash: gutenbergCSSHash)
+    public func render(html: String, viewportWidth: Int) async throws -> UIImage {
+        let diskCacheKey = makeDiskCacheKey(content: html, viewportWidth: viewportWidth, templateHash: templateHash)
 
         if let diskImage = loadImageFromCache(forKey: diskCacheKey) {
             return diskImage
@@ -124,8 +115,8 @@ public actor HTMLPreviewManager {
                 performPendingTasksIfNeeded()
             }
         } onCancel: {
-            Task {
-                await cancelRender(forKey: diskCacheKey, uuid: uuid)
+            Task { @MainActor in
+                cancelRender(forKey: diskCacheKey, uuid: uuid)
             }
         }
     }
@@ -152,7 +143,26 @@ public actor HTMLPreviewManager {
 
     // MARK: - URLCache
 
-    /// Clears the disk cache
+    /// Clears the disk cache for all HTMLPreviewManager instances
+    public static func clearCache() async {
+        makeCache().removeAllCachedResponses()
+    }
+
+    private static func makeCache() -> URLCache {
+        let cacheDirectory = URL.cachesDirectory.appendingPathComponent("gbk-html-preview-cache", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        } catch {
+            assertionFailure("failed to create cache directory: \(error)")
+        }
+        return URLCache(
+            memoryCapacity: 0,
+            diskCapacity: 16 * 1024 * 1024,
+            directory: cacheDirectory
+        )
+    }
+
+    /// Clears the disk cache for this instance
     public func clearCache() async {
         urlCache.removeAllCachedResponses()
     }
@@ -191,10 +201,11 @@ public actor HTMLPreviewManager {
         executingTaskCount += 1
         request.task = Task {
             do {
-                let fullHTML = makeHTML(
+                let fullHTML = makePatternHTML(
                     content: request.html,
                     viewportWidth: request.viewportWidth,
-                    css: gutenbergCSS
+                    editorStyles: editorStyles,
+                    themeStyles: themeStyles
                 )
 
                 let image = try await htmlRenderer.render(
@@ -235,12 +246,13 @@ public actor HTMLPreviewManager {
 
 // MARK: - Private Helper Functions
 
-private func makeDiskCacheKey(html: String, viewportWidth: Int, cssHash: String) -> String {
-    "\(html)-\(viewportWidth)-\(cssHash)".sha256
+private func makeDiskCacheKey(content: String, viewportWidth: Int, templateHash: String) -> String {
+    "\(content)-\(viewportWidth)-\(templateHash)".sha256
 }
 
-private func makeHTML(content: String, viewportWidth: Int, css: String) -> String {
-    return """
+/// Creates the HTML for rendering the pattern preview.
+private func makePatternHTML(content: String, viewportWidth: Int, editorStyles: String, themeStyles: String?) -> String {
+    """
     <!DOCTYPE html>
     <html class="block-editor-iframe__html" style="margin: 0; padding: 0;">
     <head>
@@ -253,19 +265,27 @@ private func makeHTML(content: String, viewportWidth: Int, css: String) -> Strin
             }
             body {
                 margin: 0;
-                padding: 24px;
-                width: \(viewportWidth)px;
+                padding: 0;
                 background: white;
-                display: flex;
-                align-items: center;
                 min-height: 100%;
             }
             .is-root-container {
                 width: 100%;
             }
+            /* Fix for WordPress image blocks with rounded corners in WebKit */
+            .wp-block-image {
+                overflow: hidden;
+            }
+            .wp-block-image img {
+                display: block;
+                border-radius: 22px;
+            }
         </style>
         <style>
-            \(css)
+            \(editorStyles)
+        </style>
+        <style>
+            \(themeStyles ?? "")
         </style>
     </head>
     <body class="block-editor-iframe__body editor-styles-wrapper">

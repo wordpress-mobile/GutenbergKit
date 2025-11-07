@@ -21,16 +21,22 @@ struct PatternCardView: View {
 
     var body: some View {
         Button(action: onSelected) {
-            switch style {
-            case .horizontal(let height, let maxWidth):
-                HTMLPreviewView(pattern: pattern, targetSize: CGSize(width: maxWidth, height: height), viewportWidth: viewportWidth)
-                    .frame(minWidth: 120, maxWidth: maxWidth, minHeight: height, maxHeight: height)
-                    .cardStyle(cornerRadius: 10)
-            case .fullWidth(let maxHeight):
-                HTMLPreviewView(pattern: pattern, targetSize: nil, viewportWidth: viewportWidth)
-                    .frame(minWidth: 200, maxWidth: .infinity, minHeight: 150, maxHeight: maxHeight)
-                    .cardStyle(cornerRadius: 14)
+            Group {
+                switch style {
+                case .horizontal(let height, let maxWidth):
+                    HTMLPreviewView(pattern: pattern, targetSize: CGSize(width: maxWidth, height: height), viewportWidth: viewportWidth)
+                        .frame(minWidth: 120, maxWidth: maxWidth, minHeight: height, maxHeight: height)
+                case .fullWidth(let maxHeight):
+                    HTMLPreviewView(pattern: pattern, targetSize: nil, viewportWidth: viewportWidth)
+                        .frame(minHeight: 140, maxHeight: maxHeight)
+                }
             }
+            .background(Color(.systemBackground))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color(.opaqueSeparator), lineWidth: 0.5)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
         .contextMenu {

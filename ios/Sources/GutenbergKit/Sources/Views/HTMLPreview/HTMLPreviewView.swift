@@ -11,6 +11,7 @@ struct HTMLPreviewView: View {
     @State private var isLoadingFailed = false
     @State private var cachedAspectRatio: CGFloat?
     @Environment(\.htmlPreviewMemoryCache) private var memoryCache
+    @EnvironmentObject private var htmlPreviewManager: HTMLPreviewManager
     @Environment(\.displayScale) private var displayScale
 
     init(pattern: Pattern, targetSize: CGSize?, viewportWidth: Int? = nil) {
@@ -25,15 +26,11 @@ struct HTMLPreviewView: View {
                 Image(uiImage: previewImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .cornerRadius(10)
-                    .padding(8)
                     .background(Color.white)
                     .clipped()
             } else if isLoadingFailed {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color(uiColor: .tertiarySystemBackground))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .overlay {
                         VStack(spacing: 4) {
                             Image(systemName: "square.grid.2x2")
@@ -68,7 +65,7 @@ struct HTMLPreviewView: View {
                 updateAspectRatio(from: cachedImage, viewportWidth: effectiveViewportWidth)
                 return
             }
-            let fullSizeImage = try await HTMLPreviewManager.shared.render(
+            let fullSizeImage = try await htmlPreviewManager.render(
                 html: pattern.content,
                 viewportWidth: effectiveViewportWidth
             )

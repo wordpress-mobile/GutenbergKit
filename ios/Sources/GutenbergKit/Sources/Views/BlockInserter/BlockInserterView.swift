@@ -172,7 +172,7 @@ struct BlockInserterView: View {
             Button {
                 showingPatterns = true
             } label: {
-                Image(systemName: "square.grid.2x2")
+                Image(systemName: "square.3.layers.3d.down.left")
             }
             .tint(Color.primary)
 
