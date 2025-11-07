@@ -35,8 +35,7 @@ final class PatternsViewModel: ObservableObject {
         var sections: [PatternSection] = categoryPatterns.map { category, patterns in
             let displayName: String
             if category == uncategorizedKey {
-                // TODO: CMM-874 - Localize "Uncategorized"
-                displayName = "Uncategorized"
+                displayName = EditorLocalization[.patternsCategoryUncategorized]
             } else {
                 displayName = categoryLabels[category] ?? category.capitalized
             }
@@ -66,11 +65,10 @@ final class PatternsViewModel: ObservableObject {
         }
 
         // Create "All" section at the top (no previews)
-        // TODO: CMM-874 - Localize "All"
         if !patterns.isEmpty {
             sections = [PatternSection(
                 category: "all",
-                name: "All",
+                name: EditorLocalization[.patternsCategoryAll],
                 patterns: patterns,
                 showPreviews: false
             )] + sections

@@ -29,10 +29,9 @@ struct PatternsView: View {
     }
 
     var body: some View {
-        // TODO: CMM-874 l10n
         content
             .searchable(text: $viewModel.searchText)
-            .navigationTitle("Patterns")
+            .navigationTitle(EditorLocalization[.patterns])
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 toolbar
@@ -43,12 +42,11 @@ struct PatternsView: View {
     private var content: some View {
         Group {
             if viewModel.sections.isEmpty {
-                // TODO: CMM-874 l10n
-                ContentUnavailableView(
-                    "No Patterns Found",
-                    systemImage: "square.grid.2x2",
-                    description: Text(viewModel.searchText.isEmpty ? "There are no patterns available" : "Try a different search")
-                )
+                if !viewModel.searchText.isEmpty {
+                    ContentUnavailableView.search(text: viewModel.searchText)
+                } else {
+                    ContentUnavailableView(EditorLocalization[.noPatternsFound], systemImage: "square.grid.2x2")
+                }
             } else {
                 ScrollView {
                     LazyVStack(spacing: 24) {

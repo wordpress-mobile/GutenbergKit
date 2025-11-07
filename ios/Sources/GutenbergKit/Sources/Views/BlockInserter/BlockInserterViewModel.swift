@@ -78,8 +78,7 @@ class BlockInserterViewModel: ObservableObject {
             }
 
             if results.isEmpty {
-                // TODO: CMM-874 add localization
-                self.error = MediaError(message: anyError?.localizedDescription ?? "Failed to insert media")
+                self.error = MediaError(message: anyError?.localizedDescription ?? EditorLocalization[.failedToInsertMedia])
             }
 
             return results

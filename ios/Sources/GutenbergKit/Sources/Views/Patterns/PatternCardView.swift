@@ -43,8 +43,7 @@ struct PatternCardView: View {
             Button {
                 onSelected()
             } label: {
-                // TODO: CMM-874 l10n
-                Label("Insert Pattern", systemImage: "plus")
+                Label(EditorLocalization[.insertPattern], systemImage: "plus")
             }
         } preview: {
             PatternDetailedView(pattern: pattern, onSelected: onSelected, viewportWidth: viewportWidth)

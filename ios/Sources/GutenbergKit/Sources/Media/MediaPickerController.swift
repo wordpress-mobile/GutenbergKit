@@ -5,7 +5,7 @@ public struct MediaPickerAction: Identifiable {
     public let title: String
     public let image: UIImage
 
-    init(id: String, title: String, image: UIImage) {
+    public init(id: String, title: String, image: UIImage) {
         self.id = id
         self.title = title
         self.image = image
@@ -15,6 +15,11 @@ public struct MediaPickerAction: Identifiable {
 public struct MediaPickerActionGroup: Identifiable {
     public let id: String
     public let actions: [MediaPickerAction]
+
+    public init(id: String, actions: [MediaPickerAction]) {
+        self.id = id
+        self.actions = actions
+    }
 }
 
 /// Configuration parameters for media picker behavior.
@@ -38,6 +43,7 @@ public struct MediaPickerParameters {
     }
 }
 
+@MainActor
 public protocol MediaPickerController {
     /// Returns a grouped list of media picker actions for the given parameters.
     func getActions(for parameters: MediaPickerParameters) -> [MediaPickerActionGroup]

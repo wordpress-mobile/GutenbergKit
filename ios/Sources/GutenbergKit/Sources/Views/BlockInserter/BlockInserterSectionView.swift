@@ -83,8 +83,7 @@ struct BlockInserterSectionView: View {
             }
         } label: {
             HStack {
-                // TODO: CMM-874 add localization
-                Text(isExpanded ? "Show Less" : "Show More")
+                Text(isExpanded ? EditorLocalization[.showLess] : EditorLocalization[.showMore])
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .foregroundStyle(Color.secondary)

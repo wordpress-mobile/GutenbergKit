@@ -34,8 +34,7 @@ struct BlockInserterBlockView: View {
             Button {
                 onSelected()
             } label: {
-                // TODO: CMM-874 l10n
-                Label("Insert Block", systemImage: "plus")
+                Label(EditorLocalization[.insertBlock], systemImage: "plus")
             }
         } preview: {
             BlockDetailedView(block: block)
