@@ -1,14 +1,10 @@
-export const Notice = ( { children, actions } ) => (
+export const Notice = ( { children, onRemove } ) => (
 	<div data-testid="mock-notice">
 		<span>{ children }</span>
-		{ actions?.map( ( action, index ) => (
-			<button
-				key={ index }
-				onClick={ action.onClick }
-				data-variant={ action.variant }
-			>
-				{ action.label }
+		{ onRemove && (
+			<button onClick={ onRemove } data-testid="notice-dismiss">
+				Dismiss
 			</button>
-		) ) }
+		) }
 	</div>
 );

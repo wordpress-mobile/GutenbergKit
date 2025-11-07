@@ -2,8 +2,7 @@
  * Internal dependencies
  */
 import { fetchEditorAssets } from './bridge';
-import { error, warn } from './logger';
-import { isDevMode } from './dev-mode';
+import { error } from './logger';
 
 /**
  * Cache for editor assets to avoid unnecessary network requests
@@ -50,14 +49,7 @@ export async function loadEditorAssets( {
 		} );
 	} catch ( err ) {
 		error( 'Error loading editor assets', err );
-		if ( isDevMode() ) {
-			warn( 'Dev mode disabled automatic redirect to the local editor.' );
-		} else {
-			// Fallback to the local editor and display a notice. Because the remote
-			// editor loading failed, it is more practical to rely upon the local
-			// editor's scripts and styles for displaying the notice.
-			window.location.href = 'index.html?error=remote_editor_load_error';
-		}
+		throw err;
 	}
 }
 

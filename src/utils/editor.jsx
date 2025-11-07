@@ -19,10 +19,14 @@ import { setLogLevel } from './logger';
  * that this utility can be used in both the local and remote editor, which
  * rely upon ES modules and global variables, respectively.
  *
- * @param {Object} [options]
- * @param {Array}  [options.allowedBlockTypes]
+ * @param {Object}  [options]
+ * @param {Array}   [options.allowedBlockTypes] Array of allowed block types
+ * @param {boolean} [options.pluginLoadFailed]  Whether plugin loading failed
  */
-export function initializeEditor( { allowedBlockTypes } = {} ) {
+export function initializeEditor( {
+	allowedBlockTypes,
+	pluginLoadFailed,
+} = {} ) {
 	const { themeStyles, hideTitle, editorSettings, logLevel } = getGBKit();
 
 	const settings = editorSettings || getDefaultEditorSettings();
@@ -49,7 +53,11 @@ export function initializeEditor( { allowedBlockTypes } = {} ) {
 
 	createRoot( document.getElementById( 'root' ) ).render(
 		<StrictMode>
-			<Layout post={ post } hideTitle={ hideTitle } />
+			<Layout
+				post={ post }
+				hideTitle={ hideTitle }
+				pluginLoadFailed={ pluginLoadFailed }
+			/>
 		</StrictMode>
 	);
 }
