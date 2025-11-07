@@ -15,14 +15,10 @@ vi.mock( '@wordpress/components' );
 describe( 'EditorLoadNotice', () => {
 	beforeEach( () => {
 		vi.useFakeTimers();
-		vi.stubGlobal( 'location', {
-			href: 'https://example.com',
-		} );
 	} );
 
 	afterEach( () => {
 		vi.useRealTimers();
-		vi.unstubAllGlobals();
 	} );
 
 	it( 'renders nothing when no error is present', () => {
@@ -30,68 +26,29 @@ describe( 'EditorLoadNotice', () => {
 		expect( screen.queryByTestId( 'mock-notice' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'renders remote editor load error notice', () => {
-		vi.stubGlobal( 'location', {
-			href: 'https://example.com?error=remote_editor_load_error',
-		} );
-
-		render( <EditorLoadNotice /> );
+	it( 'renders plugin load failed notice', () => {
+		render( <EditorLoadNotice pluginLoadFailed={ true } /> );
 
 		expect( screen.getByTestId( 'mock-notice' ) ).toBeInTheDocument();
 		expect(
 			screen.getByText(
-				"Oops! We couldn't load your site's editor and plugins. Don't worry, you can use the default editor for now."
-			)
-		).toBeInTheDocument();
-	} );
-
-	it( 'renders global unavailable error notice', () => {
-		vi.stubGlobal( 'location', {
-			href: 'https://example.com?error=gbkit_global_unavailable',
-		} );
-
-		render( <EditorLoadNotice /> );
-
-		expect( screen.getByTestId( 'mock-notice' ) ).toBeInTheDocument();
-		expect(
-			screen.getByText(
-				"Oops! Configuration for your site editor was unavailable. Don't worry, you can use the default editor for now."
+				'Loading plugins failed, using default editor configuration.'
 			)
 		).toBeInTheDocument();
 	} );
 
 	it( 'clears notice when clicking Dismiss button', () => {
-		vi.stubGlobal( 'location', {
-			href: 'https://example.com?error=remote_editor_load_error',
-		} );
-
-		render( <EditorLoadNotice /> );
+		render( <EditorLoadNotice pluginLoadFailed={ true } /> );
 
 		expect( screen.getByTestId( 'mock-notice' ) ).toBeInTheDocument();
 
-		fireEvent.click( screen.getByText( 'Dismiss' ) );
+		fireEvent.click( screen.getByTestId( 'notice-dismiss' ) );
 
 		expect( screen.queryByTestId( 'mock-notice' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'redirects when clicking Retry button', () => {
-		vi.stubGlobal( 'location', {
-			href: 'https://example.com?error=remote_editor_load_error',
-		} );
-
-		render( <EditorLoadNotice /> );
-
-		fireEvent.click( screen.getByText( 'Retry' ) );
-
-		expect( window.location.href ).toBe( 'remote.html' );
-	} );
-
 	it( 'auto-dismisses notice after 20 seconds', () => {
-		vi.stubGlobal( 'location', {
-			href: 'https://example.com?error=remote_editor_load_error',
-		} );
-
-		render( <EditorLoadNotice /> );
+		render( <EditorLoadNotice pluginLoadFailed={ true } /> );
 
 		expect( screen.getByTestId( 'mock-notice' ) ).toBeInTheDocument();
 
@@ -103,12 +60,11 @@ describe( 'EditorLoadNotice', () => {
 	} );
 
 	it( 'applies custom className to container', () => {
-		vi.stubGlobal( 'location', {
-			href: 'https://example.com?error=remote_editor_load_error',
-		} );
-
 		const { container } = render(
-			<EditorLoadNotice className="custom-class" />
+			<EditorLoadNotice
+				pluginLoadFailed={ true }
+				className="custom-class"
+			/>
 		);
 
 		expect( container.firstChild ).toHaveClass( 'custom-class' );

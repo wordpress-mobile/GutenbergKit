@@ -58,18 +58,25 @@ function loadPluginsIfEnabled() {
 	const { plugins } = getGBKit();
 
 	if ( plugins ) {
-		return loadEditorAssets().then( ( { allowedBlockTypes } ) =>
-			import( './blocks' ).then( ( { unregisterDisallowedBlocks } ) =>
-				unregisterDisallowedBlocks( allowedBlockTypes )
-			)
-		);
+		return loadEditorAssets()
+			.then( ( { allowedBlockTypes } ) => {
+				return { allowedBlockTypes };
+			} )
+			.catch( () => {
+				return Promise.resolve( { pluginLoadFailed: true } );
+			} );
 	}
+
+	return Promise.resolve( {} );
 }
 
-function initializeEditor() {
+function initializeEditor( pluginLoadResult = {} ) {
 	return import( './editor' ).then(
 		( { initializeEditor: _initializeEditor } ) => {
-			_initializeEditor();
+			_initializeEditor( {
+				allowedBlockTypes: pluginLoadResult?.allowedBlockTypes,
+				pluginLoadFailed: pluginLoadResult?.pluginLoadFailed,
+			} );
 		}
 	);
 }

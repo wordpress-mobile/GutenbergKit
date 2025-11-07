@@ -5,29 +5,24 @@ import { Notice } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 
+const pluginLoadFailedNotice = __(
+	'Loading plugins failed, using default editor configuration.',
+	'gutenberg-kit'
+);
+
 /**
  * Displays a notice with actions to retry or dismiss.
  *
- * @param {Object} props           Component props.
- * @param {string} props.className Additional class names to apply.
+ * @param {Object}  props                  Component props.
+ * @param {string}  props.className        Additional class names to apply.
+ * @param {boolean} props.pluginLoadFailed Whether plugin loading failed.
  *
  * @return {?JSX.Element} The rendered component or null if no notice is present.
  */
-export default function EditorLoadNotice( { className } ) {
-	const { notice, clearNotice } = useEditorLoadNotice();
-
-	const actions = [
-		{
-			label: __( 'Retry', 'gutenberg-kit' ),
-			onClick: () => ( window.location.href = 'remote.html' ),
-			variant: 'primary',
-		},
-		{
-			label: __( 'Dismiss', 'gutenberg-kit' ),
-			onClick: clearNotice,
-			variant: 'secondary',
-		},
-	];
+export default function EditorLoadNotice( { className, pluginLoadFailed } ) {
+	const { notice, clearNotice } = useEditorLoadNotice(
+		pluginLoadFailed ? pluginLoadFailedNotice : null
+	);
 
 	if ( ! notice ) {
 		return null;
@@ -35,11 +30,7 @@ export default function EditorLoadNotice( { className } ) {
 
 	return (
 		<div className={ className }>
-			<Notice
-				actions={ actions }
-				status="warning"
-				isDismissible={ false }
-			>
+			<Notice status="warning" onRemove={ clearNotice }>
 				{ notice }
 			</Notice>
 		</div>
@@ -47,37 +38,14 @@ export default function EditorLoadNotice( { className } ) {
 }
 
 /**
- * Conditionally and temporarily sets a notice message based on the URL.
+ * Conditionally and temporarily sets a notice message.
  *
- * @return {{notice:string, clearNotice:()=>void}} The notice message and a function to clear it.
+ * @param {string|null} initialNotice The initial notice message.
+ *
+ * @return {{notice:string|null, clearNotice:()=>void}} The notice message and a function to clear it.
  */
-function useEditorLoadNotice() {
-	const [ notice, setNotice ] = useState( null );
-
-	useEffect( () => {
-		const url = new URL( window.location.href );
-		const error = url.searchParams.get( 'error' );
-
-		let message = null;
-		switch ( error ) {
-			case REMOTE_EDITOR_LOAD_ERROR:
-				message = __(
-					"Oops! We couldn't load your site's editor and plugins. Don't worry, you can use the default editor for now.",
-					'gutenberg-kit'
-				);
-				break;
-			case GBKIT_GLOBAL_UNAVAILABLE:
-				message = __(
-					"Oops! Configuration for your site editor was unavailable. Don't worry, you can use the default editor for now.",
-					'gutenberg-kit'
-				);
-				break;
-			default:
-				message = null;
-		}
-
-		setNotice( message );
-	}, [] );
+function useEditorLoadNotice( initialNotice ) {
+	const [ notice, setNotice ] = useState( initialNotice );
 
 	useEffect( () => {
 		if ( notice ) {
@@ -90,6 +58,3 @@ function useEditorLoadNotice() {
 
 	return { notice, clearNotice: () => setNotice( null ) };
 }
-
-const REMOTE_EDITOR_LOAD_ERROR = 'remote_editor_load_error';
-const GBKIT_GLOBAL_UNAVAILABLE = 'gbkit_global_unavailable';
