@@ -112,6 +112,7 @@ export function showBlockInserter( sourceRect ) {
 	dispatchToBridge( 'showBlockInserter', {
 		sections: window.blockInserter.sections,
 		patterns: window.blockInserter.patterns,
+		patternCategories: window.blockInserter.patternCategories,
 		sourceRect,
 	} );
 }

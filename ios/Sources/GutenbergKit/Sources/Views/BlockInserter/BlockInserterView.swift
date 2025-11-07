@@ -12,6 +12,7 @@ enum BlockInserterSelection {
 struct BlockInserterView: View {
     let sections: [BlockInserterSection]
     let patterns: [Pattern]
+    let patternCategories: [PatternCategory]
     let mediaPicker: MediaPickerController?
     let presentationContext: MediaPickerPresentationContext
     let onSelection: (BlockInserterSelection) -> Void
@@ -36,12 +37,14 @@ struct BlockInserterView: View {
     init(
         sections: [BlockInserterSection],
         patterns: [Pattern],
+        patternCategories: [PatternCategory],
         mediaPicker: MediaPickerController?,
         presentationContext: MediaPickerPresentationContext,
         onSelection: @escaping (BlockInserterSelection) -> Void
     ) {
         self.sections = sections
         self.patterns = patterns
+        self.patternCategories = patternCategories
         self.mediaPicker = mediaPicker
         self.presentationContext = presentationContext
         self.onSelection = onSelection
@@ -77,6 +80,7 @@ struct BlockInserterView: View {
                 NavigationStack {
                     PatternsView(
                         patterns: patterns,
+                        patternCategories: patternCategories,
                         onPatternSelected: { pattern in
                             showingPatterns = false
                             insertPattern(pattern)
@@ -317,6 +321,7 @@ private extension View {
                 BlockInserterSection(category: "text", name: "Text", blocks: Array(BlockType.mocks.prefix(12)))
             ],
             patterns: [],
+            patternCategories: [],
             mediaPicker: MockMediaPickerController(),
             presentationContext: MediaPickerPresentationContext(),
             onSelection: { selection in
