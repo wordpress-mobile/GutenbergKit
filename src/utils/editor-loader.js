@@ -138,6 +138,25 @@ async function loadAssets(
 			return ! excludedScriptIDs.test( asset.id );
 		}
 
+		/**
+		 * TODO: Remove this once the relevant Jetpack plugin release is available.
+		 *
+		 * Exclude WordPress core and Gutenberg assets to avoid loading duplicate
+		 * assets, which causes editor loading failures.
+		 *
+		 * This is a temporary measure until users update to the latest Jetpack REST
+		 * API endpoint that excludes these assets. This can be removed a few weeks
+		 * after the relevant Jetpack plugin release.
+		 *
+		 * See: https://github.com/Automattic/jetpack/pull/45715
+		 */
+		const coreOrGutenbergRegex = new RegExp(
+			'wp-(includes|admin)/(js|css)|plugins/gutenberg(-core)?/'
+		);
+		if ( coreOrGutenbergRegex.test( asset.src || asset.href ) ) {
+			return false;
+		}
+
 		return true;
 	} );
 
