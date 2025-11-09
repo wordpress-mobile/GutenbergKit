@@ -11,6 +11,7 @@ import { registerCoreBlocks } from '@wordpress/block-library';
 import { initializeEditor } from './editor';
 import { getGBKit, getPost } from './bridge';
 import { getDefaultEditorSettings } from './editor-settings';
+import { unregisterDisallowedBlocks } from './blocks';
 
 vi.mock( '@wordpress/editor', () => ( {
 	store: { name: 'core/editor' },
@@ -18,6 +19,7 @@ vi.mock( '@wordpress/editor', () => ( {
 vi.mock( '@wordpress/data' );
 vi.mock( '@wordpress/preferences' );
 vi.mock( '@wordpress/block-library' );
+vi.mock( './blocks' );
 vi.mock( './bridge' );
 vi.mock( './editor-settings' );
 vi.mock( '../components/layout', () => ( {
@@ -134,6 +136,16 @@ describe( 'initializeEditor', () => {
 
 		expect( mockEditorDispatch.updateEditorSettings ).toHaveBeenCalledWith(
 			customSettings
+		);
+	} );
+
+	it( 'should pass allowedBlockTypes to unregisterDisallowedBlocks', () => {
+		const allowedBlockTypes = [ 'core/paragraph', 'core/heading' ];
+
+		initializeEditor( { allowedBlockTypes } );
+
+		expect( unregisterDisallowedBlocks ).toHaveBeenCalledWith(
+			allowedBlockTypes
 		);
 	} );
 

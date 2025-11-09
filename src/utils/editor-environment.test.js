@@ -15,7 +15,6 @@ import { initializeVideoPressAjaxBridge } from './videopress-bridge.js';
 import { configureLocale } from './localization.js';
 import { initializeApiFetch } from './api-fetch.js';
 import { initializeEditor } from './editor.jsx';
-import { unregisterDisallowedBlocks } from './blocks.js';
 
 vi.mock( './bridge.js' );
 vi.mock( './logger.js' );
@@ -41,10 +40,6 @@ vi.mock( './api-fetch.js', () => ( {
 
 vi.mock( './editor.jsx', () => ( {
 	initializeEditor: vi.fn(),
-} ) );
-
-vi.mock( './blocks.js', () => ( {
-	unregisterDisallowedBlocks: vi.fn(),
 } ) );
 
 describe( 'setUpEditorEnvironment', () => {
@@ -105,7 +100,7 @@ describe( 'setUpEditorEnvironment', () => {
 		] );
 	} );
 
-	it( 'loads plugins and unregisters disallowed blocks when plugins enabled', async () => {
+	it( 'loads plugins when plugins enabled', async () => {
 		getGBKit.mockReturnValue( { plugins: true } );
 
 		const allowedTypes = [ 'core/paragraph', 'core/heading', 'core/image' ];
@@ -116,9 +111,6 @@ describe( 'setUpEditorEnvironment', () => {
 		await setUpEditorEnvironment();
 
 		expect( loadEditorAssets ).toHaveBeenCalledTimes( 1 );
-		expect( unregisterDisallowedBlocks ).toHaveBeenCalledWith(
-			allowedTypes
-		);
 	} );
 
 	it( 'skips plugin loading when plugins configuration is disabled', async () => {
@@ -127,7 +119,6 @@ describe( 'setUpEditorEnvironment', () => {
 		await setUpEditorEnvironment();
 
 		expect( loadEditorAssets ).not.toHaveBeenCalled();
-		expect( unregisterDisallowedBlocks ).not.toHaveBeenCalled();
 	} );
 
 	it( 'skips plugin loading when plugins configuration is undefined', async () => {
@@ -136,7 +127,6 @@ describe( 'setUpEditorEnvironment', () => {
 		await setUpEditorEnvironment();
 
 		expect( loadEditorAssets ).not.toHaveBeenCalled();
-		expect( unregisterDisallowedBlocks ).not.toHaveBeenCalled();
 	} );
 
 	it( 'handles errors during initialization', async () => {
@@ -188,7 +178,9 @@ describe( 'setUpEditorEnvironment', () => {
 		getGBKit.mockReturnValue( { plugins: true } );
 
 		const testError = new Error( 'Plugin loading failed' );
-		loadEditorAssets.mockRejectedValue( testError );
+		initializeEditor.mockImplementation( () => {
+			throw testError;
+		} );
 
 		await setUpEditorEnvironment();
 
