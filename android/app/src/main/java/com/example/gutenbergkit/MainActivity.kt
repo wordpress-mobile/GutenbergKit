@@ -106,7 +106,7 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
 
     private fun createRemoteConfiguration(config: ConfigurationItem.RemoteEditor): EditorConfiguration =
         createCommonConfigurationBuilder()
-            .setPlugins(true) // Enable plugins for remote editor
+            .setPlugins(true)
             .setSiteURL(config.siteUrl)
             .setSiteApiRoot(config.siteApiRoot)
             .setNamespaceExcludedPaths(arrayOf())

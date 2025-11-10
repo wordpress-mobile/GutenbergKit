@@ -23,7 +23,7 @@ struct EditorList: View {
                 if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"] != nil ||
                    ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"] != nil
                     {
-                    Text("Note: The editor is backed by the dev server created by `make dev-server` and `make dev-server-remote`.")
+                    Text("Note: The editor is backed by the dev server created by `make dev-server`.")
                         .textCase(nil)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
