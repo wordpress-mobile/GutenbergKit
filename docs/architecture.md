@@ -120,3 +120,11 @@ Enable plugins by setting the `plugins` configuration option. The editor will fe
 
 -   JUnit framework
 -   Run: `make test-android`
+
+## Frequently Asked Questions
+
+### Why do I encounter a `GBKit global not available after timeout` error when opening the GutenbergKit editor in a browser?
+
+This error occurs when the editor is unable to communicate with the native bridge. This is expected when opening the editor in a browser, as the native bridge is not available. GutenbergKit is designed to be used in a native host app that provides the native bridge. The GutenbergKit project includes a demo app that can be used to test the editor.
+
+It is possible to circumvent this this error by adding the `?dev_mode` query parameter to the editor URL in your browser. This will bypass the native bridge requirement and allow the editor to load without the native bridge. However, some features may not work as expected when using this mode.
