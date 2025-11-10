@@ -213,15 +213,6 @@ fun MainScreen(
                 )
             }
 
-            item {
-                Text(
-                    text = stringResource(R.string.bundled_editor_subtitle),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-            }
-
             // Remote editors section
             val remoteEditors = configurations.filterIsInstance<ConfigurationItem.RemoteEditor>()
             if (remoteEditors.isNotEmpty()) {
@@ -341,11 +332,13 @@ fun ConfigurationCard(
                     }
                 )
             },
-            supportingContent = when (configuration) {
-                is ConfigurationItem.BundledEditor -> null
-                is ConfigurationItem.RemoteEditor -> {
-                    { Text(configuration.siteUrl) }
-                }
+            supportingContent = {
+                Text(
+                    when (configuration) {
+                        is ConfigurationItem.BundledEditor -> stringResource(R.string.bundled_editor_subtitle)
+                        is ConfigurationItem.RemoteEditor -> configuration.siteUrl
+                    }
+                )
             },
             leadingContent = {
                 Icon(
