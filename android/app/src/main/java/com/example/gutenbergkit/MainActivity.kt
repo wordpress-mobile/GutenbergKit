@@ -7,9 +7,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -152,6 +155,11 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
     }
 }
 
+private fun isDevServerRunning(): Boolean {
+    return System.getenv("GUTENBERG_EDITOR_URL") != null ||
+           System.getenv("GUTENBERG_EDITOR_REMOTE_URL") != null
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
@@ -192,16 +200,70 @@ fun MainScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(configurations) { config ->
+            // Editor source note
+            item {
+                val editorSourceNote = if (isDevServerRunning()) {
+                    stringResource(R.string.editor_source_dev_server)
+                } else {
+                    stringResource(R.string.editor_source_built)
+                }
+                Text(
+                    text = editorSourceNote,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+
+            // Bundled editor
+            item {
                 ConfigurationCard(
-                    configuration = config,
-                    onClick = { onConfigurationClick(config) },
-                    onLongClick = {
-                        if (config is ConfigurationItem.RemoteEditor) {
+                    configuration = ConfigurationItem.BundledEditor,
+                    onClick = { onConfigurationClick(ConfigurationItem.BundledEditor) },
+                    onLongClick = { }
+                )
+            }
+
+            item {
+                Text(
+                    text = stringResource(R.string.bundled_editor_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+
+            // Remote editors section
+            val remoteEditors = configurations.filterIsInstance<ConfigurationItem.RemoteEditor>()
+            if (remoteEditors.isNotEmpty()) {
+                item {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.remote_editors_section).uppercase(),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+
+                items(remoteEditors) { config ->
+                    ConfigurationCard(
+                        configuration = config,
+                        onClick = { onConfigurationClick(config) },
+                        onLongClick = {
                             showDeleteDialog.value = config
                         }
-                    }
-                )
+                    )
+                }
+
+                item {
+                    Text(
+                        text = stringResource(R.string.remote_editor_subtitle),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
             }
         }
     }
@@ -262,13 +324,11 @@ fun ConfigurationCard(
                     }
                 )
             },
-            supportingContent = {
-                Text(
-                    when (configuration) {
-                        is ConfigurationItem.BundledEditor -> stringResource(R.string.bundled_editor_subtitle)
-                        is ConfigurationItem.RemoteEditor -> configuration.siteUrl
-                    }
-                )
+            supportingContent = when (configuration) {
+                is ConfigurationItem.BundledEditor -> null
+                is ConfigurationItem.RemoteEditor -> {
+                    { Text(configuration.siteUrl) }
+                }
             },
             leadingContent = {
                 Icon(
