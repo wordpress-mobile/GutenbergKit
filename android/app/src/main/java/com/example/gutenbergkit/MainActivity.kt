@@ -44,6 +44,7 @@ import com.example.gutenbergkit.ui.dialogs.AddConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DeleteConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DiscoveringSiteDialog
 import com.example.gutenbergkit.ui.theme.AppTheme
+import org.wordpress.gutenberg.BuildConfig
 import org.wordpress.gutenberg.EditorConfiguration
 
 class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCallback {
@@ -160,8 +161,7 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
 }
 
 private fun isDevServerRunning(): Boolean {
-    return System.getenv("GUTENBERG_EDITOR_URL") != null ||
-           System.getenv("GUTENBERG_EDITOR_REMOTE_URL") != null
+    return BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
