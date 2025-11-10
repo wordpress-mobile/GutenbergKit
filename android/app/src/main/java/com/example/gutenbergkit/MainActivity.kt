@@ -7,15 +7,22 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,6 +44,7 @@ import com.example.gutenbergkit.ui.dialogs.AddConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DeleteConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DiscoveringSiteDialog
 import com.example.gutenbergkit.ui.theme.AppTheme
+import org.wordpress.gutenberg.BuildConfig
 import org.wordpress.gutenberg.EditorConfiguration
 
 class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCallback {
@@ -106,7 +114,7 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
 
     private fun createRemoteConfiguration(config: ConfigurationItem.RemoteEditor): EditorConfiguration =
         createCommonConfigurationBuilder()
-            .setPlugins(true) // Enable plugins for remote editor
+            .setPlugins(true)
             .setSiteURL(config.siteUrl)
             .setSiteApiRoot(config.siteApiRoot)
             .setNamespaceExcludedPaths(arrayOf())
@@ -152,6 +160,10 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
     }
 }
 
+private fun isDevServerRunning(): Boolean {
+    return BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
@@ -192,16 +204,65 @@ fun MainScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(configurations) { config ->
+            // Bundled editor
+            item {
                 ConfigurationCard(
-                    configuration = config,
-                    onClick = { onConfigurationClick(config) },
-                    onLongClick = {
-                        if (config is ConfigurationItem.RemoteEditor) {
+                    configuration = ConfigurationItem.BundledEditor,
+                    onClick = { onConfigurationClick(ConfigurationItem.BundledEditor) },
+                    onLongClick = { }
+                )
+            }
+
+            // Remote editors section
+            val remoteEditors = configurations.filterIsInstance<ConfigurationItem.RemoteEditor>()
+            if (remoteEditors.isNotEmpty()) {
+                item {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.remote_editors_section).uppercase(),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+
+                items(remoteEditors) { config ->
+                    ConfigurationCard(
+                        configuration = config,
+                        onClick = { onConfigurationClick(config) },
+                        onLongClick = {
                             showDeleteDialog.value = config
                         }
-                    }
-                )
+                    )
+                }
+            }
+
+            // Editor source note at bottom with info icon
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                val editorSourceNote = if (isDevServerRunning()) {
+                    stringResource(R.string.editor_source_dev_server)
+                } else {
+                    stringResource(R.string.editor_source_built)
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = editorSourceNote,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
@@ -266,7 +327,7 @@ fun ConfigurationCard(
                 Text(
                     when (configuration) {
                         is ConfigurationItem.BundledEditor -> stringResource(R.string.bundled_editor_subtitle)
-                        is ConfigurationItem.RemoteEditor -> configuration.siteUrl
+                        is ConfigurationItem.RemoteEditor -> stringResource(R.string.remote_editor_subtitle)
                     }
                 )
             },

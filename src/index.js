@@ -6,8 +6,8 @@ import jquery from 'jquery';
 /**
  * Internal dependencies
  */
-import { initializeBundledEditor } from './utils/bundled-editor';
+import { setUpEditorEnvironment } from './utils/editor-environment';
 import './index.scss';
 
 window.jQuery = jquery; // Expose jQuery for plugins
-initializeBundledEditor();
+setUpEditorEnvironment();

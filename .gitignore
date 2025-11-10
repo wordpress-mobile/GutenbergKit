@@ -188,12 +188,10 @@ local.properties
 ## Production Build Products
 /android/Gutenberg/src/main/assets/assets
 /android/Gutenberg/src/main/assets/index.html
-/android/Gutenberg/src/main/assets/remote.html
 
 # Disabled removing these files until this is published like Android in CI.
 # /ios/Sources/GutenbergKit/Gutenberg/assets
 # /ios/Sources/GutenbergKit/Gutenberg/index.html
-# /ios/Sources/GutenbergKit/Gutenberg/remote.html
 
 # Translation files
 src/translations/

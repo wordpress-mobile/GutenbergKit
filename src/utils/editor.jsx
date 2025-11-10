@@ -15,10 +15,6 @@ import { setLogLevel } from './logger';
 /**
  * Configure editor settings and styles, and render the editor.
  *
- * Dependency injection is used for various `@wordpress` package functions so
- * that this utility can be used in both the local and remote editor, which
- * rely upon ES modules and global variables, respectively.
- *
  * @param {Object}  [options]
  * @param {Array}   [options.allowedBlockTypes] Array of allowed block types
  * @param {boolean} [options.pluginLoadFailed]  Whether plugin loading failed

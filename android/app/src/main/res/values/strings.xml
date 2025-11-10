@@ -3,8 +3,12 @@
 
     <!-- Configuration Activity -->
     <string name="demo_title">GutenbergKit Demo</string>
+    <string name="editor_source_dev_server">Note: Editors are using the dev server started with `make dev-server`.</string>
+    <string name="editor_source_built">Note: Editors are using the compiled web app built with `make build`.</string>
     <string name="bundled_editor">Bundled editor</string>
     <string name="bundled_editor_subtitle">Local editor without plugin support</string>
+    <string name="remote_editors_section">Remote editors</string>
+    <string name="remote_editor_subtitle">Site-specific editor with plugins</string>
     <string name="add_remote_editor_description">Add remote editor</string>
 
     <!-- Dialog strings -->
