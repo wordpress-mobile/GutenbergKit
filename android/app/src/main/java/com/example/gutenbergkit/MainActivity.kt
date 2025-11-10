@@ -44,14 +44,19 @@ import com.example.gutenbergkit.ui.dialogs.AddConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DeleteConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DiscoveringSiteDialog
 import com.example.gutenbergkit.ui.theme.AppTheme
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.wordpress.gutenberg.BuildConfig
 import org.wordpress.gutenberg.EditorConfiguration
 
 class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCallback {
     private val configurations = mutableStateListOf<ConfigurationItem>()
     private val isDiscoveringSite = mutableStateOf(false)
+    private val isLoadingCapabilities = mutableStateOf(false)
     private lateinit var configurationStorage: ConfigurationStorage
     private lateinit var authenticationManager: AuthenticationManager
+    private val siteCapabilitiesDiscovery = SiteCapabilitiesDiscovery()
 
     companion object {
         const val EXTRA_CONFIGURATION = "configuration"
@@ -77,7 +82,7 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
                     onConfigurationClick = { config ->
                         when (config) {
                             is ConfigurationItem.BundledEditor -> launchEditor(createBundledConfiguration())
-                            is ConfigurationItem.RemoteEditor -> launchEditor(createRemoteConfiguration(config))
+                            is ConfigurationItem.RemoteEditor -> loadRemoteEditor(config)
                         }
                     },
                     onConfigurationLongClick = { config ->
@@ -95,7 +100,8 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
                         configurationStorage.saveConfigurations(configurations)
                     },
                     isDiscoveringSite = isDiscoveringSite.value,
-                    onDismissDiscovering = { isDiscoveringSite.value = false }
+                    onDismissDiscovering = { isDiscoveringSite.value = false },
+                    isLoadingCapabilities = isLoadingCapabilities.value
                 )
             }
         }
@@ -112,14 +118,43 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
             .setCookies(emptyMap())
             .build()
 
-    private fun createRemoteConfiguration(config: ConfigurationItem.RemoteEditor): EditorConfiguration =
-        createCommonConfigurationBuilder()
-            .setPlugins(true)
-            .setSiteURL(config.siteUrl)
-            .setSiteApiRoot(config.siteApiRoot)
-            .setNamespaceExcludedPaths(arrayOf())
-            .setAuthHeader(config.authHeader)
-            .build()
+    private fun loadRemoteEditor(config: ConfigurationItem.RemoteEditor) {
+        isLoadingCapabilities.value = true
+
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val capabilities = siteCapabilitiesDiscovery.discoverCapabilities(
+                    siteApiRoot = config.siteApiRoot,
+                    authHeader = config.authHeader
+                )
+
+                val editorConfiguration = createCommonConfigurationBuilder()
+                    .setPlugins(capabilities.supportsPlugins)
+                    .setThemeStyles(capabilities.supportsThemeStyles)
+                    .setSiteURL(config.siteUrl)
+                    .setSiteApiRoot(config.siteApiRoot)
+                    .setNamespaceExcludedPaths(arrayOf())
+                    .setAuthHeader(config.authHeader)
+                    .build()
+
+                isLoadingCapabilities.value = false
+                launchEditor(editorConfiguration)
+            } catch (e: Exception) {
+                isLoadingCapabilities.value = false
+                // If capability discovery fails, use default configuration
+                val defaultConfiguration = createCommonConfigurationBuilder()
+                    .setPlugins(false)
+                    .setThemeStyles(false)
+                    .setSiteURL(config.siteUrl)
+                    .setSiteApiRoot(config.siteApiRoot)
+                    .setNamespaceExcludedPaths(arrayOf())
+                    .setAuthHeader(config.authHeader)
+                    .build()
+
+                launchEditor(defaultConfiguration)
+            }
+        }
+    }
 
     private fun createCommonConfigurationBuilder(): EditorConfiguration.Builder =
         EditorConfiguration.builder()
@@ -173,7 +208,8 @@ fun MainScreen(
     onAddConfiguration: (String) -> Unit,
     onDeleteConfiguration: (ConfigurationItem) -> Unit,
     isDiscoveringSite: Boolean = false,
-    onDismissDiscovering: () -> Unit = {}
+    onDismissDiscovering: () -> Unit = {},
+    isLoadingCapabilities: Boolean = false
 ) {
     var showAddDialog = remember { mutableStateOf(false) }
     var showDeleteDialog = remember { mutableStateOf<ConfigurationItem.RemoteEditor?>(null) }
@@ -295,6 +331,12 @@ fun MainScreen(
     if (isDiscoveringSite) {
         DiscoveringSiteDialog(
             onDismiss = onDismissDiscovering
+        )
+    }
+
+    if (isLoadingCapabilities) {
+        DiscoveringSiteDialog(
+            onDismiss = { /* Cannot dismiss while loading */ }
         )
     }
 }
