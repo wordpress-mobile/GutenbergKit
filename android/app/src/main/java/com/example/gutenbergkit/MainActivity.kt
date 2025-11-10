@@ -235,15 +235,6 @@ fun MainScreen(
                         }
                     )
                 }
-
-                item {
-                    Text(
-                        text = stringResource(R.string.remote_editor_subtitle),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                }
             }
 
             // Editor source note at bottom with info icon
@@ -336,7 +327,7 @@ fun ConfigurationCard(
                 Text(
                     when (configuration) {
                         is ConfigurationItem.BundledEditor -> stringResource(R.string.bundled_editor_subtitle)
-                        is ConfigurationItem.RemoteEditor -> configuration.siteUrl
+                        is ConfigurationItem.RemoteEditor -> stringResource(R.string.remote_editor_subtitle)
                     }
                 )
             },
