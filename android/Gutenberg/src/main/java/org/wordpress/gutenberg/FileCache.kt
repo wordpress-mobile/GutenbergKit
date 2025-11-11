@@ -3,6 +3,7 @@ package org.wordpress.gutenberg
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Log
 import android.webkit.MimeTypeMap
 import java.io.File
 import java.io.FileOutputStream
@@ -13,6 +14,7 @@ import java.io.IOException
  * in WebView when uploading files from cloud storage providers.
  */
 object FileCache {
+    private const val TAG = "FileCache"
     private const val CACHE_DIR_NAME = "gutenberg_file_uploads"
     private const val BUFFER_SIZE = 8192
 
@@ -35,6 +37,7 @@ object FileCache {
 
         val fileName = getFileName(context, uri) ?: "upload_${System.currentTimeMillis()}"
         val extension = getFileExtension(context, uri)
+        val mimeType = context.contentResolver.getType(uri)
         val fileNameWithExtension = if (extension != null && !fileName.endsWith(".$extension")) {
             "$fileName.$extension"
         } else {
@@ -45,18 +48,24 @@ object FileCache {
         val uniqueFileName = "${System.currentTimeMillis()}_$fileNameWithExtension"
         val cachedFile = File(cacheDir, uniqueFileName)
 
+        Log.d(TAG, "Attempting to cache file: uri=$uri, fileName=$fileName, mimeType=$mimeType, destination=$cachedFile")
+
         return try {
+            var totalBytesRead = 0L
             context.contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(cachedFile).use { output ->
                     val buffer = ByteArray(BUFFER_SIZE)
                     var bytesRead: Int
                     while (input.read(buffer).also { bytesRead = it } != -1) {
                         output.write(buffer, 0, bytesRead)
+                        totalBytesRead += bytesRead
                     }
                 }
             }
+            Log.d(TAG, "Successfully cached file: uri=$uri, cachedFile=$cachedFile, size=$totalBytesRead bytes")
             Uri.fromFile(cachedFile)
         } catch (e: IOException) {
+            Log.e(TAG, "Failed to copy file to cache: uri=$uri, error=${e.message}", e)
             // Clean up partial file if copy failed
             if (cachedFile.exists()) {
                 cachedFile.delete()
