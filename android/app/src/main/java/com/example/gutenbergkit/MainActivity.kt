@@ -124,8 +124,7 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
         CoroutineScope(Dispatchers.Main).launch {
             try {
                 val capabilities = siteCapabilitiesDiscovery.discoverCapabilities(
-                    siteApiRoot = config.siteApiRoot,
-                    authHeader = config.authHeader
+                    siteApiRoot = config.siteApiRoot
                 )
 
                 val editorConfiguration = createCommonConfigurationBuilder()

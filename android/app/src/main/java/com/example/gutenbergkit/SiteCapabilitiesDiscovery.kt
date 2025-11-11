@@ -3,9 +3,8 @@ package com.example.gutenbergkit
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.json.JSONObject
+import rs.wordpress.api.kotlin.ApiDiscoveryResult
+import rs.wordpress.api.kotlin.WpLoginClient
 
 /**
  * Data class representing the capabilities discovered from a WordPress site.
@@ -30,64 +29,45 @@ class SiteCapabilitiesDiscovery {
     }
 
     /**
-     * Discovers site capabilities by fetching the API root metadata.
+     * Discovers site capabilities via API discovery.
      *
-     * @param siteApiRoot The WordPress REST API root URL
-     * @param authHeader The authentication header (e.g., "Basic xyz123")
+     * @param siteApiRoot The WordPress REST API root URL (e.g., "https://example.com/wp-json")
      * @return SiteCapabilities indicating which features are supported
      */
     suspend fun discoverCapabilities(
         siteApiRoot: String,
-        authHeader: String
     ): SiteCapabilities = withContext(Dispatchers.IO) {
         try {
-            val client = OkHttpClient()
-            val request = Request.Builder()
-                .url(siteApiRoot)
-                .addHeader("Authorization", authHeader)
-                .build()
+            // Extract the site URL from the API root URL
+            // e.g., "https://example.com/wp-json" -> "https://example.com"
+            val siteUrl = siteApiRoot.removeSuffix("/").substringBeforeLast("/wp-json")
 
-            val response = client.newCall(request).execute()
+            // Use WpLoginClient to perform API discovery, which includes API details
+            when (val apiDiscoveryResult = WpLoginClient().apiDiscovery(siteUrl)) {
+                is ApiDiscoveryResult.Success -> {
+                    val success = apiDiscoveryResult.success
+                    val apiDetails = success.apiDetails
 
-            if (!response.isSuccessful) {
-                Log.w(TAG, "Failed to fetch API root: ${response.code}")
-                return@withContext getDefaultCapabilities()
+                    // Check if the site has the required routes using hasRoute() method
+                    val supportsPlugins = apiDetails.hasRoute(ROUTE_EDITOR_ASSETS)
+                    val supportsThemeStyles = apiDetails.hasRoute(ROUTE_EDITOR_SETTINGS)
+
+                    Log.d(TAG, "Discovered capabilities - Plugins: $supportsPlugins, Theme Styles: $supportsThemeStyles")
+
+                    SiteCapabilities(
+                        supportsPlugins = supportsPlugins,
+                        supportsThemeStyles = supportsThemeStyles
+                    )
+                }
+                else -> {
+                    Log.w(TAG, "API discovery failed: $apiDiscoveryResult")
+                    getDefaultCapabilities()
+                }
             }
-
-            val responseBody = response.body?.string()
-            if (responseBody == null) {
-                Log.w(TAG, "Empty response body from API root")
-                return@withContext getDefaultCapabilities()
-            }
-
-            val apiRoot = JSONObject(responseBody)
-            val routes = apiRoot.optJSONObject("routes")
-
-            if (routes == null) {
-                Log.w(TAG, "No routes found in API root response")
-                return@withContext getDefaultCapabilities()
-            }
-
-            val supportsPlugins = hasRoute(routes, ROUTE_EDITOR_ASSETS)
-            val supportsThemeStyles = hasRoute(routes, ROUTE_EDITOR_SETTINGS)
-
-            Log.d(TAG, "Discovered capabilities - Plugins: $supportsPlugins, Theme Styles: $supportsThemeStyles")
-
-            SiteCapabilities(
-                supportsPlugins = supportsPlugins,
-                supportsThemeStyles = supportsThemeStyles
-            )
         } catch (e: Exception) {
             Log.e(TAG, "Error discovering site capabilities", e)
             getDefaultCapabilities()
         }
-    }
-
-    /**
-     * Checks if a specific route exists in the routes object.
-     */
-    private fun hasRoute(routes: JSONObject, route: String): Boolean {
-        return routes.has(route)
     }
 
     /**

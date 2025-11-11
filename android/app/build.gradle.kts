@@ -50,7 +50,6 @@ dependencies {
     implementation(libs.androidx.recyclerview)
     implementation(libs.wordpress.rs.android)
     implementation(project(":Gutenberg"))
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // Compose
     implementation(platform(libs.androidx.compose.bom))
