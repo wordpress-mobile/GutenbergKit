@@ -115,6 +115,9 @@ class GutenbergView : WebView {
         this.addJavascriptInterface(this, "editorDelegate")
         this.visibility = View.GONE
 
+        // Clear file upload cache from previous sessions
+        FileCache.clearCache(context)
+
         this.webViewClient = object : WebViewClient() {
             override fun onReceivedError(
                 view: WebView?,

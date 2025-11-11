@@ -3,6 +3,7 @@ package com.example.gutenbergkit
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.webkit.WebView
 import android.content.pm.ApplicationInfo
 import androidx.activity.ComponentActivity
@@ -37,8 +38,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.lifecycleScope
 import com.example.gutenbergkit.ui.theme.AppTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.wordpress.gutenberg.EditorConfiguration
+import org.wordpress.gutenberg.FileCache
 import org.wordpress.gutenberg.GutenbergView
 
 class EditorActivity : ComponentActivity() {
@@ -70,9 +76,13 @@ class EditorActivity : ComponentActivity() {
                 null
             }
 
-            // Pass the result back to the WebView
-            gutenbergView?.filePathCallback?.onReceiveValue(uris)
-            gutenbergView?.resetFilePathCallback()
+            // Process URIs asynchronously to avoid blocking the main thread
+            lifecycleScope.launch {
+                val processedUris = processSelectedFiles(uris)
+                // Pass the result back to the WebView on the main thread
+                gutenbergView?.filePathCallback?.onReceiveValue(processedUris)
+                gutenbergView?.resetFilePathCallback()
+            }
         }
 
         if (0 != (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE)) {
@@ -108,6 +118,42 @@ class EditorActivity : ComponentActivity() {
     private fun setupFileChooserListener(view: GutenbergView) {
         view.setOnFileChooserRequestedListener { intent, _ ->
             filePickerLauncher.launch(intent)
+        }
+    }
+
+    /**
+     * Processes selected files by copying content:// URIs to cache to avoid
+     * ERR_UPLOAD_FILE_CHANGED errors when uploading from cloud storage providers.
+     *
+     * @param uris Array of selected file URIs
+     * @return Array of processed URIs (cached for content:// URIs, original for others)
+     */
+    private suspend fun processSelectedFiles(uris: Array<Uri?>?): Array<Uri?>? {
+        if (uris == null) {
+            return null
+        }
+
+        return withContext(Dispatchers.IO) {
+            uris.map { uri ->
+                if (uri == null) {
+                    return@map null
+                }
+
+                // Only process content:// URIs that are media files
+                if (uri.scheme == "content" && FileCache.isMediaFile(this@EditorActivity, uri)) {
+                    val cachedUri = FileCache.copyToCache(this@EditorActivity, uri)
+                    if (cachedUri != null) {
+                        Log.i("EditorActivity", "Copied content URI to cache: $uri -> $cachedUri")
+                        cachedUri
+                    } else {
+                        Log.w("EditorActivity", "Failed to copy content URI to cache, using original: $uri")
+                        uri
+                    }
+                } else {
+                    // Pass through file:// URIs and non-media content:// URIs unchanged
+                    uri
+                }
+            }.toTypedArray()
         }
     }
 }
