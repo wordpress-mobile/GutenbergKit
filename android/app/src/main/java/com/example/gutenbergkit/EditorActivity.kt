@@ -143,8 +143,8 @@ class EditorActivity : ComponentActivity() {
                     return@map null
                 }
 
-                // Only process content:// URIs that are media files
-                if (uri.scheme == "content" && FileCache.isMediaFile(this@EditorActivity, uri)) {
+                // Only process content:// URIs
+                if (uri.scheme == "content") {
                     // Skip copying from known-safe local providers (MediaStore, Downloads)
                     if (FileCache.isKnownSafeLocalProvider(uri)) {
                         Log.i("EditorActivity", "Using local provider URI directly: $uri")
@@ -161,7 +161,7 @@ class EditorActivity : ComponentActivity() {
                         }
                     }
                 } else {
-                    // Pass through file:// URIs and non-media content:// URIs unchanged
+                    // Pass through file:// URIs unchanged
                     uri
                 }
             }.toTypedArray()

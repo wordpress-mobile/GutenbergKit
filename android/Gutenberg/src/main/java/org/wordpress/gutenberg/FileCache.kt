@@ -112,18 +112,6 @@ object FileCache {
     }
 
     /**
-     * Checks if a MIME type represents a media file (image or video).
-     *
-     * @param context Android context
-     * @param uri The content URI
-     * @return true if the MIME type starts with "image/" or "video/"
-     */
-    fun isMediaFile(context: Context, uri: Uri): Boolean {
-        val mimeType = context.contentResolver.getType(uri) ?: return false
-        return mimeType.startsWith("image/") || mimeType.startsWith("video/")
-    }
-
-    /**
      * Checks if a URI comes from a known-safe local content provider.
      *
      * These providers serve local files that won't change during upload, so copying
