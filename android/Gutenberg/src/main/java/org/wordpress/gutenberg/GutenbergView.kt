@@ -24,6 +24,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
 import java.util.Locale
@@ -591,6 +593,62 @@ class GutenbergView : WebView {
 
     fun resetFilePathCallback() {
         filePathCallback = null
+    }
+
+    /**
+     * Handles file picker result by processing URIs and completing the file selection.
+     * Implements workaround for Chrome ERR_UPLOAD_FILE_CHANGED bug by caching files
+     * from cloud providers.
+     *
+     * @param context Android context for file operations
+     * @param data Intent data from file picker result
+     */
+    suspend fun handleFilePickerResult(context: Context, data: Intent?) {
+        val uris = extractUrisFromIntent(data)
+        val processedUris = processFileSelection(context, uris)
+        withContext(Dispatchers.Main) {
+            filePathCallback?.onReceiveValue(processedUris)
+            resetFilePathCallback()
+        }
+    }
+
+    private fun extractUrisFromIntent(data: Intent?): Array<Uri?>? {
+        return if (data != null) {
+            if (data.clipData != null) {
+                val clipData = data.clipData!!
+                Array(clipData.itemCount) { i -> clipData.getItemAt(i).uri }
+            } else if (data.data != null) {
+                arrayOf(data.data)
+            } else null
+        } else null
+    }
+
+    private suspend fun processFileSelection(context: Context, uris: Array<Uri?>?): Array<Uri?>? {
+        if (uris == null) return null
+
+        return withContext(Dispatchers.IO) {
+            uris.map { uri ->
+                if (uri == null) return@map null
+
+                if (uri.scheme == "content") {
+                    if (FileCache.isKnownSafeLocalProvider(uri)) {
+                        Log.i("GutenbergView", "Using local provider URI directly: $uri")
+                        uri
+                    } else {
+                        val cachedUri = FileCache.copyToCache(context, uri)
+                        if (cachedUri != null) {
+                            Log.i("GutenbergView", "Copied content URI to cache: $uri -> $cachedUri")
+                            cachedUri
+                        } else {
+                            Log.w("GutenbergView", "Failed to copy content URI to cache, using original: $uri")
+                            uri
+                        }
+                    }
+                } else {
+                    uri
+                }
+            }.toTypedArray()
+        }
     }
 
     override fun onDetachedFromWindow() {

@@ -1,9 +1,7 @@
 package com.example.gutenbergkit
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
-import android.util.Log
 import android.webkit.WebView
 import android.content.pm.ApplicationInfo
 import androidx.activity.ComponentActivity
@@ -40,11 +38,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
 import com.example.gutenbergkit.ui.theme.AppTheme
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.wordpress.gutenberg.EditorConfiguration
-import org.wordpress.gutenberg.FileCache
 import org.wordpress.gutenberg.GutenbergView
 
 class EditorActivity : ComponentActivity() {
@@ -58,30 +53,8 @@ class EditorActivity : ComponentActivity() {
         filePickerLauncher = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()
         ) { result ->
-            val data = result.data
-            val uris = if (data != null) {
-                if (data.clipData != null) {
-                    // Multiple files selected
-                    val clipData = data.clipData!!
-                    Array(clipData.itemCount) { i ->
-                        clipData.getItemAt(i).uri
-                    }
-                } else if (data.data != null) {
-                    // Single file selected
-                    arrayOf(data.data)
-                } else {
-                    null
-                }
-            } else {
-                null
-            }
-
-            // Process URIs asynchronously to avoid blocking the main thread
             lifecycleScope.launch {
-                val processedUris = processSelectedFiles(uris)
-                // Pass the result back to the WebView on the main thread
-                gutenbergView?.filePathCallback?.onReceiveValue(processedUris)
-                gutenbergView?.resetFilePathCallback()
+                gutenbergView?.handleFilePickerResult(this@EditorActivity, result.data)
             }
         }
 
@@ -118,53 +91,6 @@ class EditorActivity : ComponentActivity() {
     private fun setupFileChooserListener(view: GutenbergView) {
         view.setOnFileChooserRequestedListener { intent, _ ->
             filePickerLauncher.launch(intent)
-        }
-    }
-
-    /**
-     * Processes selected files by copying content:// URIs to cache to avoid
-     * ERR_UPLOAD_FILE_CHANGED errors when uploading from cloud storage providers.
-     *
-     * Files from known-safe local providers (MediaStore, Downloads) are not copied
-     * to avoid unnecessary overhead. All other content providers (cloud or unknown)
-     * are copied to ensure reliable uploads.
-     *
-     * @param uris Array of selected file URIs
-     * @return Array of processed URIs (cached for cloud URIs, original for local/file URIs)
-     */
-    private suspend fun processSelectedFiles(uris: Array<Uri?>?): Array<Uri?>? {
-        if (uris == null) {
-            return null
-        }
-
-        return withContext(Dispatchers.IO) {
-            uris.map { uri ->
-                if (uri == null) {
-                    return@map null
-                }
-
-                // Only process content:// URIs
-                if (uri.scheme == "content") {
-                    // Skip copying from known-safe local providers (MediaStore, Downloads)
-                    if (FileCache.isKnownSafeLocalProvider(uri)) {
-                        Log.i("EditorActivity", "Using local provider URI directly: $uri")
-                        uri
-                    } else {
-                        // Copy from cloud providers or unknown providers to avoid upload errors
-                        val cachedUri = FileCache.copyToCache(this@EditorActivity, uri)
-                        if (cachedUri != null) {
-                            Log.i("EditorActivity", "Copied content URI to cache: $uri -> $cachedUri")
-                            cachedUri
-                        } else {
-                            Log.w("EditorActivity", "Failed to copy content URI to cache, using original: $uri")
-                            uri
-                        }
-                    }
-                } else {
-                    // Pass through file:// URIs unchanged
-                    uri
-                }
-            }.toTypedArray()
         }
     }
 }

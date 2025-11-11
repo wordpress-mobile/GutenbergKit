@@ -10,10 +10,13 @@ import java.io.FileOutputStream
 import java.io.IOException
 
 /**
- * Utility class for caching files from content providers to avoid ERR_UPLOAD_FILE_CHANGED errors
- * in WebView when uploading files from cloud storage providers.
+ * Internal utility class for caching files from content providers to avoid ERR_UPLOAD_FILE_CHANGED
+ * errors in WebView when uploading files from cloud storage providers.
+ *
+ * This is an internal implementation detail of GutenbergView and should not be used directly by apps.
+ * Apps should use GutenbergView.handleFilePickerResult() instead.
  */
-object FileCache {
+internal object FileCache {
     private const val TAG = "FileCache"
     private const val CACHE_DIR_NAME = "gutenberg_file_uploads"
     private const val BUFFER_SIZE = 8192
