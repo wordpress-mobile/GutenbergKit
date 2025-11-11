@@ -122,4 +122,31 @@ object FileCache {
         val mimeType = context.contentResolver.getType(uri) ?: return false
         return mimeType.startsWith("image/") || mimeType.startsWith("video/")
     }
+
+    /**
+     * Checks if a URI comes from a known-safe local content provider.
+     *
+     * These providers serve local files that won't change during upload, so copying
+     * them to cache is unnecessary. This allow list includes only Android's built-in
+     * local content providers.
+     *
+     * @param uri The content URI to check
+     * @return true if the URI is from a known-safe local provider
+     */
+    fun isKnownSafeLocalProvider(uri: Uri): Boolean {
+        val authority = uri.authority ?: return false
+
+        // Android's MediaStore (photos, videos, audio from device)
+        if (authority.startsWith("com.android.providers.media")) {
+            return true
+        }
+
+        // Android's Downloads provider
+        if (authority.startsWith("com.android.providers.downloads")) {
+            return true
+        }
+
+        // All other providers (including cloud providers) are not on the allow list
+        return false
+    }
 }

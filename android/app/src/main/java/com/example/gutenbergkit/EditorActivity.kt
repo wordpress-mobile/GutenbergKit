@@ -125,8 +125,12 @@ class EditorActivity : ComponentActivity() {
      * Processes selected files by copying content:// URIs to cache to avoid
      * ERR_UPLOAD_FILE_CHANGED errors when uploading from cloud storage providers.
      *
+     * Files from known-safe local providers (MediaStore, Downloads) are not copied
+     * to avoid unnecessary overhead. All other content providers (cloud or unknown)
+     * are copied to ensure reliable uploads.
+     *
      * @param uris Array of selected file URIs
-     * @return Array of processed URIs (cached for content:// URIs, original for others)
+     * @return Array of processed URIs (cached for cloud URIs, original for local/file URIs)
      */
     private suspend fun processSelectedFiles(uris: Array<Uri?>?): Array<Uri?>? {
         if (uris == null) {
@@ -141,13 +145,20 @@ class EditorActivity : ComponentActivity() {
 
                 // Only process content:// URIs that are media files
                 if (uri.scheme == "content" && FileCache.isMediaFile(this@EditorActivity, uri)) {
-                    val cachedUri = FileCache.copyToCache(this@EditorActivity, uri)
-                    if (cachedUri != null) {
-                        Log.i("EditorActivity", "Copied content URI to cache: $uri -> $cachedUri")
-                        cachedUri
-                    } else {
-                        Log.w("EditorActivity", "Failed to copy content URI to cache, using original: $uri")
+                    // Skip copying from known-safe local providers (MediaStore, Downloads)
+                    if (FileCache.isKnownSafeLocalProvider(uri)) {
+                        Log.i("EditorActivity", "Using local provider URI directly: $uri")
                         uri
+                    } else {
+                        // Copy from cloud providers or unknown providers to avoid upload errors
+                        val cachedUri = FileCache.copyToCache(this@EditorActivity, uri)
+                        if (cachedUri != null) {
+                            Log.i("EditorActivity", "Copied content URI to cache: $uri -> $cachedUri")
+                            cachedUri
+                        } else {
+                            Log.w("EditorActivity", "Failed to copy content URI to cache, using original: $uri")
+                            uri
+                        }
                     }
                 } else {
                     // Pass through file:// URIs and non-media content:// URIs unchanged

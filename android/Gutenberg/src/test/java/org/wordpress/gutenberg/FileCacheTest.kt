@@ -73,8 +73,113 @@ class FileCacheTest {
         assertTrue("Test should complete without exception", true)
     }
 
-    // Note: Tests for copyToCache() and isMediaFile() require ContentResolver access
-    // which is not easily testable in unit tests. These methods should be tested
-    // in instrumented tests (androidTest) with real content providers.
-    // The core cache management functionality (clearCache) is tested above.
+    // Tests for isKnownSafeLocalProvider() - Allow List
+
+    @Test
+    fun `isKnownSafeLocalProvider returns true for MediaStore images`() {
+        // Given
+        val mediaStoreUri = Uri.parse("content://com.android.providers.media.documents/document/image:12345")
+
+        // When
+        val result = FileCache.isKnownSafeLocalProvider(mediaStoreUri)
+
+        // Then
+        assertTrue("MediaStore images should be recognized as safe local provider", result)
+    }
+
+    @Test
+    fun `isKnownSafeLocalProvider returns true for MediaStore videos`() {
+        // Given
+        val mediaStoreUri = Uri.parse("content://com.android.providers.media/external/video/media/456")
+
+        // When
+        val result = FileCache.isKnownSafeLocalProvider(mediaStoreUri)
+
+        // Then
+        assertTrue("MediaStore videos should be recognized as safe local provider", result)
+    }
+
+    @Test
+    fun `isKnownSafeLocalProvider returns true for Downloads provider`() {
+        // Given
+        val downloadsUri = Uri.parse("content://com.android.providers.downloads.documents/document/123")
+
+        // When
+        val result = FileCache.isKnownSafeLocalProvider(downloadsUri)
+
+        // Then
+        assertTrue("Downloads provider should be recognized as safe local provider", result)
+    }
+
+    @Test
+    fun `isKnownSafeLocalProvider returns false for Google Drive`() {
+        // Given
+        val driveUri = Uri.parse("content://com.google.android.apps.docs.storage/document/acc=1;doc=12345")
+
+        // When
+        val result = FileCache.isKnownSafeLocalProvider(driveUri)
+
+        // Then
+        assertFalse("Google Drive should NOT be on the allow list", result)
+    }
+
+    @Test
+    fun `isKnownSafeLocalProvider returns false for OneDrive`() {
+        // Given
+        val oneDriveUri = Uri.parse("content://com.microsoft.skydrive.documents/document/primary:path/to/file")
+
+        // When
+        val result = FileCache.isKnownSafeLocalProvider(oneDriveUri)
+
+        // Then
+        assertFalse("OneDrive should NOT be on the allow list", result)
+    }
+
+    @Test
+    fun `isKnownSafeLocalProvider returns false for unknown cloud provider`() {
+        // Given
+        val unknownCloudUri = Uri.parse("content://com.example.cloudstorage/document/file123")
+
+        // When
+        val result = FileCache.isKnownSafeLocalProvider(unknownCloudUri)
+
+        // Then
+        assertFalse("Unknown cloud providers should NOT be on the allow list", result)
+    }
+
+    @Test
+    fun `isKnownSafeLocalProvider returns false for file URIs`() {
+        // Given
+        val fileUri = Uri.parse("file:///storage/emulated/0/Pictures/photo.jpg")
+
+        // When
+        val result = FileCache.isKnownSafeLocalProvider(fileUri)
+
+        // Then
+        assertFalse("File URIs should return false (not a content provider)", result)
+    }
+
+    @Test
+    fun `isKnownSafeLocalProvider returns false for null authority`() {
+        // Given
+        val malformedUri = Uri.parse("content://")
+
+        // When
+        val result = FileCache.isKnownSafeLocalProvider(malformedUri)
+
+        // Then
+        assertFalse("URIs with null authority should return false", result)
+    }
+
+    @Test
+    fun `isKnownSafeLocalProvider returns false for other Android providers`() {
+        // Given - Android's contacts provider is a local provider but NOT on our allow list
+        val contactsUri = Uri.parse("content://com.android.contacts/data/123")
+
+        // When
+        val result = FileCache.isKnownSafeLocalProvider(contactsUri)
+
+        // Then
+        assertFalse("Other Android providers not on allow list should return false", result)
+    }
 }
