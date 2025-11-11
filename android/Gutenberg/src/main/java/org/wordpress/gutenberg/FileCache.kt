@@ -17,6 +17,7 @@ object FileCache {
     private const val TAG = "FileCache"
     private const val CACHE_DIR_NAME = "gutenberg_file_uploads"
     private const val BUFFER_SIZE = 8192
+    const val DEFAULT_MAX_FILE_SIZE = 100 * 1024 * 1024L // 100MB in bytes
 
     /**
      * Copies a file from a content URI to the app's cache directory.
@@ -27,9 +28,25 @@ object FileCache {
      *
      * @param context Android context
      * @param uri The content:// URI to copy
-     * @return URI of the cached file, or null if the copy failed
+     * @param maxSizeBytes Maximum file size in bytes (default: 100MB)
+     * @return URI of the cached file, or null if the copy failed or file exceeds size limit
      */
-    fun copyToCache(context: Context, uri: Uri): Uri? {
+    fun copyToCache(context: Context, uri: Uri, maxSizeBytes: Long = DEFAULT_MAX_FILE_SIZE): Uri? {
+        // Check file size before attempting to copy
+        val fileSize = getFileSize(context, uri)
+        if (fileSize != null && fileSize > maxSizeBytes) {
+            val fileSizeMB = fileSize / (1024 * 1024)
+            val maxSizeMB = maxSizeBytes / (1024 * 1024)
+            Log.w(TAG, "File exceeds maximum size limit: uri=$uri, size=${fileSizeMB}MB, limit=${maxSizeMB}MB")
+            return null
+        }
+
+        if (fileSize != null) {
+            Log.d(TAG, "File size check passed: uri=$uri, size=${fileSize / (1024 * 1024)}MB")
+        } else {
+            Log.w(TAG, "Unable to determine file size, proceeding with copy attempt: uri=$uri")
+        }
+
         val cacheDir = File(context.cacheDir, CACHE_DIR_NAME)
         if (!cacheDir.exists()) {
             cacheDir.mkdirs()
@@ -85,6 +102,39 @@ object FileCache {
             cacheDir.listFiles()?.forEach { file ->
                 file.delete()
             }
+        }
+    }
+
+    /**
+     * Gets the file size from a content URI.
+     *
+     * Queries the content provider for the file size using OpenableColumns.SIZE.
+     * Some content providers may not provide size information, in which case this
+     * returns null.
+     *
+     * @param context Android context
+     * @param uri The content URI
+     * @return File size in bytes, or null if size cannot be determined
+     */
+    private fun getFileSize(context: Context, uri: Uri): Long? {
+        return try {
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if (sizeIndex != -1) {
+                        val size = cursor.getLong(sizeIndex)
+                        // Some providers return -1 or 0 when size is unknown
+                        if (size > 0) size else null
+                    } else {
+                        null
+                    }
+                } else {
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to query file size for uri: $uri, error=${e.message}", e)
+            null
         }
     }
 
