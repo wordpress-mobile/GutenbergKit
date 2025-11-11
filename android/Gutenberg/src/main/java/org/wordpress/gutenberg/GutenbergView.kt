@@ -218,6 +218,9 @@ class GutenbergView : WebView {
                 newFilePathCallback: ValueCallback<Array<Uri?>?>?,
                 fileChooserParams: FileChooserParams?
             ): Boolean {
+                // Cancel any existing callback to prevent WebView state corruption
+                filePathCallback?.onReceiveValue(null)
+
                 filePathCallback = newFilePathCallback
                 val allowMultiple = fileChooserParams?.mode == FileChooserParams.MODE_OPEN_MULTIPLE
                 // Only use `acceptTypes` if it is not merely an empty string
