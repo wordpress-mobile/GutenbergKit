@@ -54,7 +54,10 @@ class EditorActivity : ComponentActivity() {
             ActivityResultContracts.StartActivityForResult()
         ) { result ->
             lifecycleScope.launch {
-                gutenbergView?.handleFilePickerResult(this@EditorActivity, result.data)
+                val uris = gutenbergView?.extractUrisFromIntent(result.data)
+                val processedUris = gutenbergView?.processFileUris(this@EditorActivity, uris)
+                gutenbergView?.filePathCallback?.onReceiveValue(processedUris)
+                gutenbergView?.resetFilePathCallback()
             }
         }
 
