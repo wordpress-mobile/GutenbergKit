@@ -236,6 +236,22 @@ fun MainScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            item {
+                val editorSourceNote = if (isDevServerRunning()) {
+                    stringResource(R.string.editor_source_dev_server)
+                } else {
+                    stringResource(R.string.editor_source_built)
+                }
+                Text(
+                    text = editorSourceNote,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+
             // Bundled editor
             item {
                 ConfigurationCard(
@@ -249,13 +265,25 @@ fun MainScreen(
             val configuredEditors = configurations.filterIsInstance<ConfigurationItem.ConfiguredEditor>()
 
             item {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.editor_configurations_section).uppercase(),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                ) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.editor_configurations_section).uppercase(),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.editor_configurations_section_description),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
             }
 
             items(configuredEditors) { config ->
@@ -272,34 +300,6 @@ fun MainScreen(
                 AddNewConfigurationCard(
                     onClick = { showAddDialog.value = true }
                 )
-            }
-
-            // Editor source note at bottom with info icon
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                val editorSourceNote = if (isDevServerRunning()) {
-                    stringResource(R.string.editor_source_dev_server)
-                } else {
-                    stringResource(R.string.editor_source_built)
-                }
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Info,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = editorSourceNote,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
         }
     }
@@ -366,13 +366,11 @@ fun ConfigurationCard(
                     }
                 )
             },
-            supportingContent = {
-                Text(
-                    when (configuration) {
-                        is ConfigurationItem.BundledEditor -> stringResource(R.string.bundled_editor_subtitle)
-                        is ConfigurationItem.ConfiguredEditor -> stringResource(R.string.editor_configuration_subtitle)
-                    }
-                )
+            supportingContent = when (configuration) {
+                is ConfigurationItem.BundledEditor -> {
+                    { Text(stringResource(R.string.bundled_editor_subtitle)) }
+                }
+                is ConfigurationItem.ConfiguredEditor -> null
             },
             leadingContent = {
                 Icon(

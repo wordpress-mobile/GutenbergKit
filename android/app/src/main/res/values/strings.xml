@@ -8,7 +8,7 @@
     <string name="bundled_editor">Default editor</string>
     <string name="bundled_editor_subtitle">Default editor without site configuration</string>
     <string name="editor_configurations_section">Editor configurations</string>
-    <string name="editor_configuration_subtitle">Editor with site configuration; enabling media uploads, plugin support, etc.</string>
+    <string name="editor_configurations_section_description">Editors with site configuration; enabling media uploads, plugin support, etc.</string>
     <string name="add_editor_configuration_description">Add editor configuration</string>
 
     <!-- Dialog strings -->
