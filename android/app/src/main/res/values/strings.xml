@@ -6,7 +6,7 @@
     <string name="editor_source_dev_server">Note: Editors are using the dev server started with `make dev-server`.</string>
     <string name="editor_source_built">Note: Editors are using the compiled web app built with `make build`.</string>
     <string name="bundled_editor">Default editor</string>
-    <string name="bundled_editor_subtitle">Default editor without site configuration or plugin support</string>
+    <string name="bundled_editor_subtitle">Default editor without site configuration</string>
     <string name="editor_configurations_section">Editor configurations</string>
     <string name="editor_configuration_subtitle">Editor with site configuration; enabling media uploads, plugin support, etc.</string>
     <string name="add_editor_configuration_description">Add editor configuration</string>
