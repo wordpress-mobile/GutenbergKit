@@ -15,7 +15,7 @@ mockito = "4.1.0"
 robolectric = "4.14.1"
 kotlinx-coroutines = '1.10.2'
 androidx-recyclerview = '1.3.2'
-wordpress-rs = 'trunk-503f1da9e067677d1517d09f926b1d038dfa58a1'
+wordpress-rs = 'trunk-d02efa6d4d56bc5b44dd2191e837163f9fa27095'
 composeBom = "2024.12.01"
 activityCompose = "1.9.3"
 
