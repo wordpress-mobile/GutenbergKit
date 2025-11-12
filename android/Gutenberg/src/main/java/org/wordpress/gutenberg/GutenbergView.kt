@@ -24,6 +24,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
 import java.util.Locale
@@ -215,6 +217,9 @@ class GutenbergView : WebView {
                 newFilePathCallback: ValueCallback<Array<Uri?>?>?,
                 fileChooserParams: FileChooserParams?
             ): Boolean {
+                // Cancel any existing callback to prevent WebView state corruption
+                filePathCallback?.onReceiveValue(null)
+
                 filePathCallback = newFilePathCallback
                 val allowMultiple = fileChooserParams?.mode == FileChooserParams.MODE_OPEN_MULTIPLE
                 // Only use `acceptTypes` if it is not merely an empty string
@@ -590,11 +595,75 @@ class GutenbergView : WebView {
         filePathCallback = null
     }
 
+    /**
+     * Extracts file URIs from a file picker Intent result.
+     *
+     * Handles both single file selection (Intent.data) and multiple file selection
+     * (Intent.clipData). This is a utility method for processing ActivityResult data
+     * from file picker requests.
+     *
+     * @param data Intent data from file picker result
+     * @return Array of selected URIs, or null if no files were selected
+     */
+    fun extractUrisFromIntent(data: Intent?): Array<Uri?>? {
+        return if (data != null) {
+            if (data.clipData != null) {
+                val clipData = data.clipData!!
+                Array(clipData.itemCount) { i -> clipData.getItemAt(i).uri }
+            } else if (data.data != null) {
+                arrayOf(data.data)
+            } else null
+        } else null
+    }
+
+    /**
+     * Processes file URIs to work around Chrome ERR_UPLOAD_FILE_CHANGED bug.
+     *
+     * This method caches files from cloud storage providers (Google Drive, OneDrive, etc.)
+     * to local storage to prevent upload failures. Files from known-safe local providers
+     * (MediaStore, Downloads) are passed through unchanged for optimal performance.
+     *
+     * Apps should call this method with URIs from the file picker, then pass the result
+     * to filePathCallback.onReceiveValue() to complete the file selection.
+     *
+     * @param context Android context for file operations
+     * @param uris Array of URIs from file picker
+     * @return Array of processed URIs (cached for cloud URIs, original for local URIs)
+     */
+    suspend fun processFileUris(context: Context, uris: Array<Uri?>?): Array<Uri?>? {
+        if (uris == null) return null
+
+        return withContext(Dispatchers.IO) {
+            uris.map { uri ->
+                if (uri == null) return@map null
+
+                if (uri.scheme == "content") {
+                    if (FileCache.isKnownSafeLocalProvider(uri)) {
+                        Log.i("GutenbergView", "Using local provider URI directly: $uri")
+                        uri
+                    } else {
+                        val cachedUri = FileCache.copyToCache(context, uri)
+                        if (cachedUri != null) {
+                            Log.i("GutenbergView", "Copied content URI to cache: $uri -> $cachedUri")
+                            cachedUri
+                        } else {
+                            Log.w("GutenbergView", "Failed to copy content URI to cache, using original: $uri")
+                            uri
+                        }
+                    }
+                } else {
+                    uri
+                }
+            }.toTypedArray()
+        }
+    }
+
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         clearConfig()
         this.stopLoading()
         (requestInterceptor as? CachedAssetRequestInterceptor)?.shutdown()
+        FileCache.clearCache(context)
         contentChangeListener = null
         historyChangeListener = null
         featuredImageChangeListener = null

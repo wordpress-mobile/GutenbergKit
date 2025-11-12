@@ -1,5 +1,6 @@
 package com.example.gutenbergkit
 
+import android.content.Intent
 import android.os.Bundle
 import android.webkit.WebView
 import android.content.pm.ApplicationInfo
@@ -7,6 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
@@ -33,14 +36,30 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.lifecycleScope
 import com.example.gutenbergkit.ui.theme.AppTheme
+import kotlinx.coroutines.launch
 import org.wordpress.gutenberg.EditorConfiguration
 import org.wordpress.gutenberg.GutenbergView
 
 class EditorActivity : ComponentActivity() {
+    private var gutenbergView: GutenbergView? = null
+    private lateinit var filePickerLauncher: ActivityResultLauncher<Intent>
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Register file picker launcher before setContent
+        filePickerLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            lifecycleScope.launch {
+                val uris = gutenbergView?.extractUrisFromIntent(result.data)
+                val processedUris = gutenbergView?.processFileUris(this@EditorActivity, uris)
+                gutenbergView?.filePathCallback?.onReceiveValue(processedUris)
+                gutenbergView?.resetFilePathCallback()
+            }
+        }
 
         if (0 != (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE)) {
             WebView.setWebContentsDebuggingEnabled(true)
@@ -62,9 +81,19 @@ class EditorActivity : ComponentActivity() {
             AppTheme {
                 EditorScreen(
                     configuration = configuration,
-                    onClose = { finish() }
+                    onClose = { finish() },
+                    onGutenbergViewCreated = { view ->
+                        gutenbergView = view
+                        setupFileChooserListener(view)
+                    }
                 )
             }
+        }
+    }
+
+    private fun setupFileChooserListener(view: GutenbergView) {
+        view.setOnFileChooserRequestedListener { intent, _ ->
+            filePickerLauncher.launch(intent)
         }
     }
 }
@@ -73,7 +102,8 @@ class EditorActivity : ComponentActivity() {
 @Composable
 fun EditorScreen(
     configuration: EditorConfiguration,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onGutenbergViewCreated: (GutenbergView) -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var isModalDialogOpen by remember { mutableStateOf(false) }
@@ -196,6 +226,7 @@ fun EditorScreen(
                         }
                     })
                     start(configuration)
+                    onGutenbergViewCreated(this)
                 }
             },
             modifier = Modifier
