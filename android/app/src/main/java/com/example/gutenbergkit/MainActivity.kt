@@ -44,8 +44,7 @@ import com.example.gutenbergkit.ui.dialogs.AddConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DeleteConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DiscoveringSiteDialog
 import com.example.gutenbergkit.ui.theme.AppTheme
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import org.wordpress.gutenberg.BuildConfig
 import org.wordpress.gutenberg.EditorConfiguration
@@ -121,7 +120,7 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
     private fun loadRemoteEditor(config: ConfigurationItem.RemoteEditor) {
         isLoadingCapabilities.value = true
 
-        CoroutineScope(Dispatchers.Main).launch {
+        lifecycleScope.launch {
             try {
                 val capabilities = siteCapabilitiesDiscovery.discoverCapabilities(
                     siteApiRoot = config.siteApiRoot
