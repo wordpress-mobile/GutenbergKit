@@ -40,7 +40,7 @@ struct EditorList: View {
             Section {
                 configuredEditors
 
-                Button("Add New Editor Configuration") {
+                Button("Add Editor Configuration") {
                     showAddDialog = true
                 }
             } header: {
