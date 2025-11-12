@@ -16,7 +16,7 @@ struct EditorList: View {
     var body: some View {
         List {
             Section {
-                Button("Bundled Editor") {
+                Button("Default Editor") {
                     selectedConfiguration = .bundledEditor
                 }
             } header: {
@@ -34,27 +34,27 @@ struct EditorList: View {
                         .foregroundStyle(.secondary)
                 }
             } footer: {
-                Text("Local editor without plugin support")
+            Text("Default editor without site configuration.")
             }
 
             Section {
                 remoteEditors
 
-                Button("Add New Remote Editor") {
+                Button("Add New Editor Configuration") {
                     showAddDialog = true
                 }
             } header: {
-                Text("Remote Editors")
+                Text("Editor Configurations")
             } footer: {
-                Text("Site-specific editor with plugins")
+                Text("Editors with site configuration; enabling media uploads, plugin support, etc.")
             }
 
-            Section("Configuration") {
+            Section("Feature Configuration") {
                 Toggle("Native Inserter", isOn: $isNativeInserterEnabled)
             }
         }
         .alert(
-            "Delete Remote Editor?",
+            "Delete Editor Configuration?",
             isPresented: Binding(
                 get: { configurationToDelete != nil },
                 set: { if !$0 { configurationToDelete = nil } }
