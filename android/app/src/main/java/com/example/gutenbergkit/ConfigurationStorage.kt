@@ -12,13 +12,13 @@ class ConfigurationStorage(context: Context) {
 
     companion object {
         private const val PREFS_NAME = "gutenberg_configs"
-        private const val KEY_REMOTE_CONFIGS = "remote_configurations"
+        private const val KEY_EDITOR_CONFIGS = "remote_configurations"
     }
 
     fun saveConfigurations(configurations: List<ConfigurationItem>) {
         val jsonArray = JSONArray()
         configurations.forEach { config ->
-            if (config is ConfigurationItem.RemoteEditor) {
+            if (config is ConfigurationItem.ConfiguredEditor) {
                 val jsonObject = JSONObject().apply {
                     put("name", config.name)
                     put("siteUrl", config.siteUrl)
@@ -29,19 +29,19 @@ class ConfigurationStorage(context: Context) {
             }
         }
         sharedPrefs.edit {
-            putString(KEY_REMOTE_CONFIGS, jsonArray.toString())
+            putString(KEY_EDITOR_CONFIGS, jsonArray.toString())
         }
     }
 
-    fun loadConfigurations(): List<ConfigurationItem.RemoteEditor> {
-        val savedData = sharedPrefs.getString(KEY_REMOTE_CONFIGS, null) ?: return emptyList()
-        val configurations = mutableListOf<ConfigurationItem.RemoteEditor>()
+    fun loadConfigurations(): List<ConfigurationItem.ConfiguredEditor> {
+        val savedData = sharedPrefs.getString(KEY_EDITOR_CONFIGS, null) ?: return emptyList()
+        val configurations = mutableListOf<ConfigurationItem.ConfiguredEditor>()
 
         try {
             val jsonArray = JSONArray(savedData)
             for (i in 0 until jsonArray.length()) {
                 val jsonObject = jsonArray.getJSONObject(i)
-                val config = ConfigurationItem.RemoteEditor(
+                val config = ConfigurationItem.ConfiguredEditor(
                     name = jsonObject.getString("name"),
                     siteUrl = jsonObject.getString("siteUrl"),
                     siteApiRoot = jsonObject.optString(

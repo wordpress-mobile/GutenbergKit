@@ -7,12 +7,12 @@
     <string name="editor_source_built">Note: Editors are using the compiled web app built with `make build`.</string>
     <string name="bundled_editor">Default editor</string>
     <string name="bundled_editor_subtitle">Default editor without site configuration or plugin support</string>
-    <string name="remote_editors_section">Editor configurations</string>
-    <string name="remote_editor_subtitle">Editor with site configuration; enabling media uploads, plugin support, etc.</string>
-    <string name="add_remote_editor_description">Add editor configuration</string>
+    <string name="editor_configurations_section">Editor configurations</string>
+    <string name="editor_configuration_subtitle">Editor with site configuration; enabling media uploads, plugin support, etc.</string>
+    <string name="add_editor_configuration_description">Add editor configuration</string>
 
     <!-- Dialog strings -->
-    <string name="add_remote_editor">Add editor configuration</string>
+    <string name="add_editor_configuration">Add editor configuration</string>
     <string name="site_url_hint">Site URL</string>
     <string name="site_url">Site URL</string>
     <string name="add">Add</string>

@@ -38,7 +38,7 @@ struct EditorList: View {
             }
 
             Section {
-                remoteEditors
+                configuredEditors
 
                 Button("Add New Editor Configuration") {
                     showAddDialog = true
@@ -101,9 +101,9 @@ struct EditorList: View {
         }
     }
 
-    var remoteEditors: some View {
-        ForEach(configurationStorage.remoteEditors.filter {
-            if case .remoteEditor = $0 { return true }
+    var configuredEditors: some View {
+        ForEach(configurationStorage.editorConfigurations.filter {
+            if case .editorConfiguration = $0 { return true }
             return false
         }) { config in
             Button(config.displayName) {

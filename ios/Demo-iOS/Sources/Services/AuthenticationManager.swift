@@ -11,7 +11,7 @@ class AuthenticationManager: NSObject, ObservableObject {
     private var currentApiRootUrl: String?
     private var authSession: ASWebAuthenticationSession?
     private var currentClient: WordPressLoginClient?
-    private var onAuthenticationComplete: ((RemoteEditorConfiguration) -> Void)?
+    private var onAuthenticationComplete: ((ConfiguredEditor) -> Void)?
 
     private static let appName = "GutenbergKit iOS Demo App"
     private static let callbackURLScheme = "gutenbergkit"
@@ -20,7 +20,7 @@ class AuthenticationManager: NSObject, ObservableObject {
     func startAuthentication(
         siteUrl: String,
         presentationContext: ASWebAuthenticationPresentationContextProviding,
-        onComplete: @escaping (RemoteEditorConfiguration) -> Void
+        onComplete: @escaping (ConfiguredEditor) -> Void
     ) {
         isAuthenticating = true
         errorMessage = nil
@@ -113,7 +113,7 @@ class AuthenticationManager: NSObject, ObservableObject {
             // Extract site name from URL
             let siteName = URL(string: credentials.siteUrl)?.host ?? credentials.siteUrl
 
-            let configuration = RemoteEditorConfiguration(
+            let configuration = ConfiguredEditor(
                 name: siteName,
                 siteUrl: credentials.siteUrl,
                 siteApiRoot: apiRootUrl,

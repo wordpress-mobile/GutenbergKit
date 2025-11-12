@@ -29,7 +29,7 @@ fun AddConfigurationDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.add_remote_editor)) },
+        title = { Text(stringResource(R.string.add_editor_configuration)) },
         text = {
             OutlinedTextField(
                 value = siteUrlInput,

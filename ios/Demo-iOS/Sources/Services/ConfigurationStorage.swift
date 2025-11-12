@@ -1,12 +1,12 @@
 import Foundation
 
-/// Manages persistence of remote editor configurations
+/// Manages persistence of editor configurations
 class ConfigurationStorage: ObservableObject {
     private let userDefaults: UserDefaults
     private let configurationsKey = "saved_configurations"
 
     @Published
-    var remoteEditors: [ConfigurationItem] = []
+    var editorConfigurations: [ConfigurationItem] = []
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
@@ -22,9 +22,9 @@ class ConfigurationStorage: ObservableObject {
         }
 
         do {
-            let remoteConfigs = try JSONDecoder().decode([RemoteEditorConfiguration].self, from: data)
-            self.remoteEditors = remoteConfigs.map { .remoteEditor($0) }
-            return self.remoteEditors
+            let configs = try JSONDecoder().decode([ConfiguredEditor].self, from: data)
+            self.editorConfigurations = configs.map { .editorConfiguration($0) }
+            return self.editorConfigurations
         } catch {
             NSLog("Failed to decode configurations: \(error)")
             return []
@@ -33,15 +33,15 @@ class ConfigurationStorage: ObservableObject {
 
     /// Save configurations to storage
     func saveConfigurations(_ configurations: [ConfigurationItem]) {
-        let remoteConfigs = configurations.compactMap { item -> RemoteEditorConfiguration? in
-            if case .remoteEditor(let config) = item {
+        let configs = configurations.compactMap { item -> ConfiguredEditor? in
+            if case .editorConfiguration(let config) = item {
                 return config
             }
             return nil
         }
 
         do {
-            let data = try JSONEncoder().encode(remoteConfigs)
+            let data = try JSONEncoder().encode(configs)
             userDefaults.set(data, forKey: configurationsKey)
         } catch {
             NSLog("Failed to encode configurations: \(error)")
@@ -50,19 +50,19 @@ class ConfigurationStorage: ObservableObject {
 
     /// Add a configuration to storage
     func addConfiguration(_ configuration: ConfigurationItem) {
-        self.remoteEditors.append(configuration)
-        self.saveConfigurations(self.remoteEditors)
+        self.editorConfigurations.append(configuration)
+        self.saveConfigurations(self.editorConfigurations)
         self.loadConfigurations()
     }
 
     /// Delete configuration from storage
     func deleteConfiguration(_ configuration: ConfigurationItem) {
-        guard let ix = self.remoteEditors.firstIndex(where: { $0.id == configuration.id }) else {
+        guard let ix = self.editorConfigurations.firstIndex(where: { $0.id == configuration.id }) else {
             return
         }
-        self.remoteEditors.remove(at: ix)
+        self.editorConfigurations.remove(at: ix)
 
-        self.saveConfigurations(self.remoteEditors)
+        self.saveConfigurations(self.editorConfigurations)
         self.loadConfigurations()
     }
 }

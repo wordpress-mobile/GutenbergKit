@@ -2,7 +2,7 @@ import SwiftUI
 import AuthenticationServices
 import GutenbergKit
 
-/// View for adding a new remote editor site
+/// View for adding a new editor configuration with site integration
 struct AddSiteView: View {
 
     @EnvironmentObject
@@ -78,8 +78,8 @@ struct AddSiteView: View {
         }
     }
 
-    private func onAdd(_ configuration: RemoteEditorConfiguration) {
-        configurationStorage.addConfiguration(.remoteEditor(configuration))
+    private func onAdd(_ configuration: ConfiguredEditor) {
+        configurationStorage.addConfiguration(.editorConfiguration(configuration))
         self.siteUrl = ""
         self.dismiss()
     }
