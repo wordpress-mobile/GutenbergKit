@@ -20,8 +20,7 @@ struct EditorList: View {
                     selectedConfiguration = .bundledEditor
                 }
             } header: {
-                if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"] != nil ||
-                   ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"] != nil
+                if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"] != nil
                     {
                     Text("Note: Editors are using the dev server started with `make dev-server`.")
                         .textCase(nil)
