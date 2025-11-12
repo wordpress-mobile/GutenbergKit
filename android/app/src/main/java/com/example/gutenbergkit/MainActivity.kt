@@ -247,26 +247,31 @@ fun MainScreen(
 
             // Editor configurations section
             val configuredEditors = configurations.filterIsInstance<ConfigurationItem.ConfiguredEditor>()
-            if (configuredEditors.isNotEmpty()) {
-                item {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(R.string.editor_configurations_section).uppercase(),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                }
 
-                items(configuredEditors) { config ->
-                    ConfigurationCard(
-                        configuration = config,
-                        onClick = { onConfigurationClick(config) },
-                        onLongClick = {
-                            showDeleteDialog.value = config
-                        }
-                    )
-                }
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.editor_configurations_section).uppercase(),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+
+            items(configuredEditors) { config ->
+                ConfigurationCard(
+                    configuration = config,
+                    onClick = { onConfigurationClick(config) },
+                    onLongClick = {
+                        showDeleteDialog.value = config
+                    }
+                )
+            }
+
+            item {
+                AddNewConfigurationCard(
+                    onClick = { showAddDialog.value = true }
+                )
             }
 
             // Editor source note at bottom with info icon
@@ -375,6 +380,30 @@ fun ConfigurationCard(
                         is ConfigurationItem.BundledEditor -> Icons.Outlined.Inventory2
                         is ConfigurationItem.ConfiguredEditor -> Icons.Default.Language
                     },
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        )
+    }
+}
+
+@Composable
+fun AddNewConfigurationCard(
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth(),
+        onClick = onClick
+    ) {
+        ListItem(
+            headlineContent = {
+                Text(stringResource(R.string.add_editor_configuration))
+            },
+            leadingContent = {
+                Icon(
+                    imageVector = Icons.Default.Add,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary
                 )
