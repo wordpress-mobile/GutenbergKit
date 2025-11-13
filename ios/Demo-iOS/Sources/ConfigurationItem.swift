@@ -3,13 +3,13 @@ import Foundation
 /// Represents a configuration item for the editor
 enum ConfigurationItem: Codable, Identifiable, Equatable {
     case bundledEditor
-    case remoteEditor(RemoteEditorConfiguration)
+    case editorConfiguration(ConfiguredEditor)
 
     var id: String {
         switch self {
         case .bundledEditor:
             return "bundled"
-        case .remoteEditor(let config):
+        case .editorConfiguration(let config):
             return config.id
         }
     }
@@ -18,14 +18,14 @@ enum ConfigurationItem: Codable, Identifiable, Equatable {
         switch self {
         case .bundledEditor:
             return "Bundled Editor"
-        case .remoteEditor(let config):
+        case .editorConfiguration(let config):
             return config.name
         }
     }
 }
 
-/// Configuration for a remote editor
-struct RemoteEditorConfiguration: Codable, Identifiable, Equatable {
+/// Configuration for an editor with site integration
+struct ConfiguredEditor: Codable, Identifiable, Equatable {
     let id: String
     let name: String
     let siteUrl: String

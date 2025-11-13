@@ -2,7 +2,7 @@ import SwiftUI
 import AuthenticationServices
 import GutenbergKit
 
-/// View for adding a new remote editor site
+/// View for adding a new editor configuration with site integration
 struct AddSiteView: View {
 
     @EnvironmentObject
@@ -32,7 +32,7 @@ struct AddSiteView: View {
                 } header: {
                     Text("WordPress Site")
                 } footer: {
-                    Text("Enter the URL of your WordPress site (e.g., https://example.com)")
+                    Text("Enter the URL of your WordPress site (e.g., https://example.com).")
                 }
 
                 if let errorMessage = authenticationManager.errorMessage {
@@ -42,7 +42,7 @@ struct AddSiteView: View {
                     }
                 }
             }
-            .navigationTitle("Add Remote Editor")
+            .navigationTitle("Add Editor Configuration")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -78,8 +78,8 @@ struct AddSiteView: View {
         }
     }
 
-    private func onAdd(_ configuration: RemoteEditorConfiguration) {
-        configurationStorage.addConfiguration(.remoteEditor(configuration))
+    private func onAdd(_ configuration: ConfiguredEditor) {
+        configurationStorage.addConfiguration(.editorConfiguration(configuration))
         self.siteUrl = ""
         self.dismiss()
     }

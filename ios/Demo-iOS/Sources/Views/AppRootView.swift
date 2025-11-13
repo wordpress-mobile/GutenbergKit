@@ -15,7 +15,7 @@ struct AppRootView: View {
     @State private var configurations: [ConfigurationItem] = [.bundledEditor]
     @State private var siteUrlInput = ""
 
-    @State private var editorRemoteConfiguration: EditorConfiguration? = nil
+    @State private var activeEditorConfiguration: EditorConfiguration? = nil
 
     @State private var hasError: Bool = false
     @State private var error: AppError? = nil
@@ -40,9 +40,9 @@ struct AppRootView: View {
         }
         .onChange(of: self.selectedConfiguration) { oldValue, newValue in
             switch newValue {
-            case .bundledEditor: editorRemoteConfiguration = createBundledConfiguration()
-            case .remoteEditor(let config): self.loadRemoteEditor(for: config)
-            case .none: self.editorRemoteConfiguration = nil
+            case .bundledEditor: activeEditorConfiguration = createBundledConfiguration()
+            case .editorConfiguration(let config): self.loadEditorConfiguration(for: config)
+            case .none: self.activeEditorConfiguration = nil
             }
         }
     }
@@ -50,15 +50,15 @@ struct AppRootView: View {
     @ViewBuilder
     var editor: some View {
         NavigationView {
-            if let editorRemoteConfiguration {
-                EditorView(configuration: editorRemoteConfiguration)
+            if let activeEditorConfiguration {
+                EditorView(configuration: activeEditorConfiguration)
             } else {
                 ProgressView("Preparing Editor")
             }
         }
     }
 
-    private func loadRemoteEditor(for config: RemoteEditorConfiguration) {
+    private func loadEditorConfiguration(for config: ConfiguredEditor) {
         Task {
             do {
                 let client = WordPressAPI(
@@ -82,7 +82,7 @@ struct AppRootView: View {
                     .setLogLevel(.debug)
                     .build()
 
-                self.editorRemoteConfiguration = updatedConfiguration
+                self.activeEditorConfiguration = updatedConfiguration
             } catch {
                 self.hasError = true
                 self.error = AppError(errorDescription: error.localizedDescription)

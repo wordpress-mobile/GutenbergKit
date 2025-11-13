@@ -17,7 +17,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_margin="16dp"
-        android:contentDescription="@string/add_remote_editor_description"
+        android:contentDescription="@string/add_editor_configuration_description"
         android:src="@android:drawable/ic_input_add"
         app:backgroundTint="@color/design_default_color_primary"
         app:tint="@android:color/white" />

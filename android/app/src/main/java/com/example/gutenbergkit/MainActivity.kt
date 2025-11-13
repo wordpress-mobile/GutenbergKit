@@ -79,13 +79,13 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
                     onConfigurationClick = { config ->
                         when (config) {
                             is ConfigurationItem.BundledEditor -> launchEditor(createBundledConfiguration())
-                            is ConfigurationItem.RemoteEditor -> loadRemoteEditor(config)
+                            is ConfigurationItem.ConfiguredEditor -> loadConfiguredEditor(config)
                         }
                     },
                     onConfigurationLongClick = { config ->
                         when (config) {
                             is ConfigurationItem.BundledEditor -> false
-                            is ConfigurationItem.RemoteEditor -> true
+                            is ConfigurationItem.ConfiguredEditor -> true
                         }
                     },
                     onAddConfiguration = { siteUrl ->
@@ -115,7 +115,7 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
             .setCookies(emptyMap())
             .build()
 
-    private fun loadRemoteEditor(config: ConfigurationItem.RemoteEditor) {
+    private fun loadConfiguredEditor(config: ConfigurationItem.ConfiguredEditor) {
         isLoadingCapabilities.value = true
 
         lifecycleScope.launch {
@@ -175,7 +175,7 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
     override fun onAuthenticationSuccess(siteUrl: String, siteApiRoot: String, authToken: String) {
         isDiscoveringSite.value = false
         val siteName = siteUrl.removePrefix("https://").removePrefix("http://").substringBefore("/")
-        val newConfig = ConfigurationItem.RemoteEditor(
+        val newConfig = ConfigurationItem.ConfiguredEditor(
             name = siteName,
             siteUrl = siteUrl,
             siteApiRoot = siteApiRoot,
@@ -208,7 +208,7 @@ fun MainScreen(
     isLoadingCapabilities: Boolean = false
 ) {
     var showAddDialog = remember { mutableStateOf(false) }
-    var showDeleteDialog = remember { mutableStateOf<ConfigurationItem.RemoteEditor?>(null) }
+    var showDeleteDialog = remember { mutableStateOf<ConfigurationItem.ConfiguredEditor?>(null) }
     var siteUrlInput = remember { mutableStateOf("") }
 
     Scaffold(
@@ -224,7 +224,7 @@ fun MainScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
-                    contentDescription = stringResource(R.string.add_remote_editor_description)
+                    contentDescription = stringResource(R.string.add_editor_configuration_description)
                 )
             }
         }
@@ -236,6 +236,22 @@ fun MainScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            item {
+                val editorSourceNote = if (isDevServerRunning()) {
+                    stringResource(R.string.editor_source_dev_server)
+                } else {
+                    stringResource(R.string.editor_source_built)
+                }
+                Text(
+                    text = editorSourceNote,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+
             // Bundled editor
             item {
                 ConfigurationCard(
@@ -245,56 +261,45 @@ fun MainScreen(
                 )
             }
 
-            // Remote editors section
-            val remoteEditors = configurations.filterIsInstance<ConfigurationItem.RemoteEditor>()
-            if (remoteEditors.isNotEmpty()) {
-                item {
+            // Editor configurations section
+            val configuredEditors = configurations.filterIsInstance<ConfigurationItem.ConfiguredEditor>()
+
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                ) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = stringResource(R.string.remote_editors_section).uppercase(),
+                        text = stringResource(R.string.editor_configurations_section).uppercase(),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        modifier = Modifier.padding(vertical = 8.dp)
                     )
-                }
-
-                items(remoteEditors) { config ->
-                    ConfigurationCard(
-                        configuration = config,
-                        onClick = { onConfigurationClick(config) },
-                        onLongClick = {
-                            showDeleteDialog.value = config
-                        }
+                    Text(
+                        text = stringResource(R.string.editor_configurations_section_description),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
             }
 
-            // Editor source note at bottom with info icon
+            items(configuredEditors) { config ->
+                ConfigurationCard(
+                    configuration = config,
+                    onClick = { onConfigurationClick(config) },
+                    onLongClick = {
+                        showDeleteDialog.value = config
+                    }
+                )
+            }
+
             item {
-                Spacer(modifier = Modifier.height(16.dp))
-                val editorSourceNote = if (isDevServerRunning()) {
-                    stringResource(R.string.editor_source_dev_server)
-                } else {
-                    stringResource(R.string.editor_source_built)
-                }
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Info,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = editorSourceNote,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                AddNewConfigurationCard(
+                    onClick = { showAddDialog.value = true }
+                )
             }
         }
     }
@@ -357,24 +362,46 @@ fun ConfigurationCard(
                 Text(
                     when (configuration) {
                         is ConfigurationItem.BundledEditor -> stringResource(R.string.bundled_editor)
-                        is ConfigurationItem.RemoteEditor -> configuration.name
+                        is ConfigurationItem.ConfiguredEditor -> configuration.name
                     }
                 )
             },
-            supportingContent = {
-                Text(
-                    when (configuration) {
-                        is ConfigurationItem.BundledEditor -> stringResource(R.string.bundled_editor_subtitle)
-                        is ConfigurationItem.RemoteEditor -> stringResource(R.string.remote_editor_subtitle)
-                    }
-                )
+            supportingContent = when (configuration) {
+                is ConfigurationItem.BundledEditor -> {
+                    { Text(stringResource(R.string.bundled_editor_subtitle)) }
+                }
+                is ConfigurationItem.ConfiguredEditor -> null
             },
             leadingContent = {
                 Icon(
                     imageVector = when (configuration) {
                         is ConfigurationItem.BundledEditor -> Icons.Outlined.Inventory2
-                        is ConfigurationItem.RemoteEditor -> Icons.Default.Language
+                        is ConfigurationItem.ConfiguredEditor -> Icons.Default.Language
                     },
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        )
+    }
+}
+
+@Composable
+fun AddNewConfigurationCard(
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth(),
+        onClick = onClick
+    ) {
+        ListItem(
+            headlineContent = {
+                Text(stringResource(R.string.add_editor_configuration))
+            },
+            leadingContent = {
+                Icon(
+                    imageVector = Icons.Default.Add,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary
                 )

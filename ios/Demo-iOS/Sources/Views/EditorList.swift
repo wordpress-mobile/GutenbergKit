@@ -16,12 +16,11 @@ struct EditorList: View {
     var body: some View {
         List {
             Section {
-                Button("Bundled Editor") {
+                Button("Default Editor") {
                     selectedConfiguration = .bundledEditor
                 }
             } header: {
-                if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"] != nil ||
-                   ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_REMOTE_URL"] != nil
+                if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"] != nil
                     {
                     Text("Note: Editors are using the dev server started with `make dev-server`.")
                         .textCase(nil)
@@ -34,27 +33,27 @@ struct EditorList: View {
                         .foregroundStyle(.secondary)
                 }
             } footer: {
-                Text("Local editor without plugin support")
+            Text("Default editor without site configuration.")
             }
 
             Section {
-                remoteEditors
+                configuredEditors
 
-                Button("Add New Remote Editor") {
+                Button("Add Editor Configuration") {
                     showAddDialog = true
                 }
             } header: {
-                Text("Remote Editors")
+                Text("Editor Configurations")
             } footer: {
-                Text("Site-specific editor with plugins")
+                Text("Editors with site configuration; enabling media uploads, plugin support, etc.")
             }
 
-            Section("Configuration") {
+            Section("Feature Configuration") {
                 Toggle("Native Inserter", isOn: $isNativeInserterEnabled)
             }
         }
         .alert(
-            "Delete Remote Editor?",
+            "Delete Editor Configuration?",
             isPresented: Binding(
                 get: { configurationToDelete != nil },
                 set: { if !$0 { configurationToDelete = nil } }
@@ -101,9 +100,9 @@ struct EditorList: View {
         }
     }
 
-    var remoteEditors: some View {
-        ForEach(configurationStorage.remoteEditors.filter {
-            if case .remoteEditor = $0 { return true }
+    var configuredEditors: some View {
+        ForEach(configurationStorage.editorConfigurations.filter {
+            if case .editorConfiguration = $0 { return true }
             return false
         }) { config in
             Button(config.displayName) {

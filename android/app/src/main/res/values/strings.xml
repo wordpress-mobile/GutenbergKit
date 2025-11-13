@@ -2,25 +2,25 @@
     <string name="app_name">GutenbergKit</string>
 
     <!-- Configuration Activity -->
-    <string name="demo_title">GutenbergKit Demo</string>
+    <string name="demo_title">GutenbergKit</string>
     <string name="editor_source_dev_server">Note: Editors are using the dev server started with `make dev-server`.</string>
     <string name="editor_source_built">Note: Editors are using the compiled web app built with `make build`.</string>
-    <string name="bundled_editor">Bundled editor</string>
-    <string name="bundled_editor_subtitle">Local editor without plugin support</string>
-    <string name="remote_editors_section">Remote editors</string>
-    <string name="remote_editor_subtitle">Site-specific editor with plugins</string>
-    <string name="add_remote_editor_description">Add remote editor</string>
+    <string name="bundled_editor">Default editor</string>
+    <string name="bundled_editor_subtitle">Default editor without site configuration</string>
+    <string name="editor_configurations_section">Editor configurations</string>
+    <string name="editor_configurations_section_description">Editors with site configuration; enabling media uploads, plugin support, etc.</string>
+    <string name="add_editor_configuration_description">Add editor configuration</string>
 
     <!-- Dialog strings -->
-    <string name="add_remote_editor">Add remote editor</string>
+    <string name="add_editor_configuration">Add editor configuration</string>
     <string name="site_url_hint">Site URL</string>
     <string name="site_url">Site URL</string>
     <string name="add">Add</string>
     <string name="cancel">Cancel</string>
     <string name="delete">Delete</string>
-    <string name="delete_site_title">Delete site configuration?</string>
-    <string name="delete_site_message">This will remove the site from the editor configuration list.</string>
-    
+    <string name="delete_site_title">Delete editor configuration?</string>
+    <string name="delete_site_message">This will remove the site from the configuration list.</string>
+
     <!-- Authentication -->
     <string name="authentication_failed">Authentication failed</string>
     <string name="ok">OK</string>

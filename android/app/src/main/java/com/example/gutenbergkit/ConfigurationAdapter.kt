@@ -27,7 +27,7 @@ class ConfigurationAdapter(
                 holder.subtitleText.visibility = View.VISIBLE
             }
 
-            is ConfigurationItem.RemoteEditor -> {
+            is ConfigurationItem.ConfiguredEditor -> {
                 holder.titleText.text = item.name
                 holder.subtitleText.text = item.siteUrl
                 holder.subtitleText.visibility = View.VISIBLE
