@@ -24,6 +24,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     private var cancellables: [AnyCancellable] = []
 
+    /// Stores the contextId from the most recent openMediaLibrary call
+    /// to pass back to JavaScript when media is selected
+    private var currentMediaContextId: String?
+
     /// Warmup mode preloads resources into memory to make the UI transition seamless when displaying the editor for the first time
     ///
     private let isWarmupMode: Bool
@@ -337,11 +341,22 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
+        // Store the contextId to pass back when media is selected
+        currentMediaContextId = config.contextId
         delegate?.editor(self, didRequestMediaFromSiteMediaLibrary: config)
     }
 
     public func setMediaUploadAttachment(_ media: String) {
-        evaluate("editor.setMediaUploadAttachment(\(media));")
+        // Pass the contextId back to JavaScript so it can route to the correct callback
+        if let contextId = currentMediaContextId {
+            let escapedContextId = contextId.replacingOccurrences(of: "'", with: "\\'")
+            evaluate("editor.setMediaUploadAttachment(\(media), '\(escapedContextId)');")
+            // Clear the contextId after use
+            currentMediaContextId = nil
+        } else {
+            // Fallback for backward compatibility (no contextId)
+            evaluate("editor.setMediaUploadAttachment(\(media));")
+        }
     }
 
     /// Appends text at the current cursor position in the editor.

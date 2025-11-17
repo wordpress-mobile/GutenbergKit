@@ -56,6 +56,12 @@ class GutenbergView : WebView {
     private var autocompleterTriggeredListener: AutocompleterTriggeredListener? = null
     private var modalDialogStateListener: ModalDialogStateListener? = null
 
+    /**
+     * Stores the contextId from the most recent openMediaLibrary call
+     * to pass back to JavaScript when media is selected
+     */
+    private var currentMediaContextId: String? = null
+
     var textEditorEnabled: Boolean = false
         set(value) {
             field = value
@@ -374,7 +380,8 @@ class GutenbergView : WebView {
     data class OpenMediaLibraryConfig(
         val allowedTypes: Array<MediaType>,
         val multiple: Boolean,
-        val value: Value?
+        val value: Value?,
+        val contextId: String?
     )
 
     interface OpenMediaLibraryListener {
@@ -543,7 +550,17 @@ class GutenbergView : WebView {
                 null
             }
 
-            val config = OpenMediaLibraryConfig(allowedTypes = allowedTypes, multiple = multiple, value = value)
+            // Parse contextId
+            val contextId = if (jsonObj.has("contextId")) {
+                jsonObj.getString("contextId")
+            } else {
+                null
+            }
+
+            // Store contextId to pass back when media is selected
+            currentMediaContextId = contextId
+
+            val config = OpenMediaLibraryConfig(allowedTypes = allowedTypes, multiple = multiple, value = value, contextId = contextId)
 
             openMediaLibraryListener?.onOpenMediaLibrary(config)
         } catch (e: JSONException) {
@@ -556,7 +573,16 @@ class GutenbergView : WebView {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
             return
         }
-        this.evaluateJavascript("editor.setMediaUploadAttachment($media);", null)
+        // Pass the contextId back to JavaScript so it can route to the correct callback
+        if (currentMediaContextId != null) {
+            val escapedContextId = currentMediaContextId!!.replace("'", "\\'")
+            this.evaluateJavascript("editor.setMediaUploadAttachment($media, '$escapedContextId');", null)
+            // Clear the contextId after use
+            currentMediaContextId = null
+        } else {
+            // Fallback for backward compatibility (no contextId)
+            this.evaluateJavascript("editor.setMediaUploadAttachment($media);", null)
+        }
     }
 
     @JavascriptInterface

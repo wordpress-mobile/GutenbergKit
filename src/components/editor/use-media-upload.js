@@ -2,12 +2,25 @@
  * WordPress dependencies
  */
 import { addFilter, removeFilter } from '@wordpress/hooks';
-import { useCallback, useEffect } from '@wordpress/element';
+import { useCallback, useEffect, useRef } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
 import { openMediaLibrary } from '../../utils/bridge';
+import { warn } from '../../utils/logger';
+
+/**
+ * Global registry for media upload callbacks indexed by context ID.
+ * This allows multiple MediaPlaceholder instances to coexist without
+ * overwriting each other's callbacks.
+ */
+const callbackRegistry = {};
+
+/**
+ * Counter for generating unique context IDs.
+ */
+let contextIdCounter = 0;
 
 /**
  * @typedef {Object} MediaUploadConfig
@@ -54,14 +67,53 @@ function MediaUpload( { render, ...config } ) {
  */
 function useNativeMediaLibrary( { onSelect, ...config } ) {
 	const { allowedTypes, multiple = false, value } = config;
+	const contextIdRef = useRef( null );
 
 	useEffect( () => {
-		window.editor.setMediaUploadAttachment = ( attachment ) => {
+		// Generate a unique context ID for this MediaPlaceholder instance
+		const contextId = `media-upload-${ ++contextIdCounter }`;
+		contextIdRef.current = contextId;
+
+		// Register this instance's callback in the global registry
+		callbackRegistry[ contextId ] = ( attachment ) => {
 			onSelect( config.multiple ? attachment : attachment[ 0 ] );
 		};
 
+		// Set up the global bridge function that routes to the correct callback
+		// based on the contextId returned from the native layer
+		if (
+			! window.editor.setMediaUploadAttachment ||
+			! window.editor.setMediaUploadAttachment.__isRegistry
+		) {
+			window.editor.setMediaUploadAttachment = (
+				attachment,
+				receivedContextId
+			) => {
+				// If contextId is provided, use the registry (new behavior)
+				if (
+					receivedContextId &&
+					callbackRegistry[ receivedContextId ]
+				) {
+					callbackRegistry[ receivedContextId ]( attachment );
+				} else if ( receivedContextId ) {
+					warn(
+						`No callback found for contextId: ${ receivedContextId }`
+					);
+				} else {
+					// Fallback: If no contextId, use the last registered callback (backward compatibility)
+					const callbacks = Object.values( callbackRegistry );
+					if ( callbacks.length > 0 ) {
+						callbacks[ callbacks.length - 1 ]( attachment );
+					}
+				}
+			};
+			// Mark this function as the registry-based implementation
+			window.editor.setMediaUploadAttachment.__isRegistry = true;
+		}
+
 		return () => {
-			window.editor.setMediaUploadAttachment = () => {};
+			// Clean up this instance's callback when unmounted
+			delete callbackRegistry[ contextIdRef.current ];
 		};
 	}, [ onSelect, config.multiple ] );
 
@@ -71,6 +123,7 @@ function useNativeMediaLibrary( { onSelect, ...config } ) {
 				allowedTypes,
 				multiple,
 				value,
+				contextId: contextIdRef.current,
 			} ),
 		[ allowedTypes, multiple, value ]
 	);
