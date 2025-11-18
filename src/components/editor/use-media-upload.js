@@ -87,9 +87,7 @@ function useNativeMediaLibrary( { onSelect, ...config } ) {
 		contextIdRef.current = contextId;
 
 		callbackRegistry[ contextId ] = ( attachment ) => {
-			onSelectRef.current(
-				config.multiple ? attachment : attachment[ 0 ]
-			);
+			onSelectRef.current( multiple ? attachment : attachment[ 0 ] );
 		};
 
 		window.editor = window.editor || {};
@@ -116,7 +114,7 @@ function useNativeMediaLibrary( { onSelect, ...config } ) {
 		return () => {
 			delete callbackRegistry[ contextIdRef.current ];
 		};
-	}, [ config.multiple ] );
+	}, [ multiple ] );
 
 	const open = useCallback(
 		() =>
