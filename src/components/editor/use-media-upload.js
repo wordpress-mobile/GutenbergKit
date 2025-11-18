@@ -81,30 +81,23 @@ function useNativeMediaLibrary( { onSelect, ...config } ) {
 
 		// Set up the global bridge function that routes to the correct callback
 		// based on the contextId returned from the native layer
-		if (
-			! window.editor.setMediaUploadAttachment ||
-			! window.editor.setMediaUploadAttachment.__isRegistry
-		) {
-			window.editor.setMediaUploadAttachment = (
-				attachment,
-				receivedContextId
-			) => {
-				if ( ! receivedContextId ) {
-					warn( 'setMediaUploadAttachment called without contextId' );
-					return;
-				}
+		window.editor.setMediaUploadAttachment = (
+			attachment,
+			receivedContextId
+		) => {
+			if ( ! receivedContextId ) {
+				warn( 'setMediaUploadAttachment called without contextId' );
+				return;
+			}
 
-				if ( callbackRegistry[ receivedContextId ] ) {
-					callbackRegistry[ receivedContextId ]( attachment );
-				} else {
-					warn(
-						`No callback found for contextId: ${ receivedContextId }`
-					);
-				}
-			};
-			// Mark this function as the registry-based implementation
-			window.editor.setMediaUploadAttachment.__isRegistry = true;
-		}
+			if ( callbackRegistry[ receivedContextId ] ) {
+				callbackRegistry[ receivedContextId ]( attachment );
+			} else {
+				warn(
+					`No callback found for contextId: ${ receivedContextId }`
+				);
+			}
+		};
 
 		return () => {
 			// Clean up this instance's callback when unmounted

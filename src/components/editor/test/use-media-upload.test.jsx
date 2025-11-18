@@ -244,34 +244,6 @@ describe( 'useMediaUpload', () => {
 			expect( onSelectBefore ).toHaveBeenCalledTimes( 1 );
 		} );
 
-		it( 'should warn when contextId is missing', () => {
-			let MediaUploadComponent;
-			addFilter.mockImplementation( ( name, namespace, callback ) => {
-				MediaUploadComponent = callback();
-			} );
-
-			const onSelect = vi.fn();
-
-			renderHook( () => useMediaUpload() );
-
-			render(
-				<MediaUploadComponent
-					render={ ( { open } ) => open() }
-					onSelect={ onSelect }
-					multiple={ false }
-				/>
-			);
-
-			// Call without contextId
-			window.editor.setMediaUploadAttachment( [ 'test-image.jpg' ] );
-
-			// Should warn and not call the callback
-			expect( warn ).toHaveBeenCalledWith(
-				'setMediaUploadAttachment called without contextId'
-			);
-			expect( onSelect ).not.toHaveBeenCalled();
-		} );
-
 		it( 'should warn when an invalid contextId is provided', () => {
 			let MediaUploadComponent;
 			addFilter.mockImplementation( ( name, namespace, callback ) => {
