@@ -28,6 +28,16 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     private let isWarmupMode: Bool
 
+    /// Overlay view shown over the navigation bar when modal dialogs are open
+    private lazy var navigationOverlayView: UIView = {
+        let view = UIView()
+        view.backgroundColor = UIColor.black.withAlphaComponent(0.3)
+        view.isUserInteractionEnabled = true
+        view.isHidden =  true
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
+
     /// HTML Preview Manager instance for rendering pattern previews
     private(set) lazy var htmlPreviewManager = HTMLPreviewManager(themeStyles: configuration.extractThemeStyles())
 
@@ -96,6 +106,16 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             setUpEditor()
             loadEditor()
         }
+    }
+
+    public override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        setupNavigationOverlay()
+    }
+
+    public override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        removeNavigationOverlay()
     }
 
     private func setUpEditor() {
@@ -352,6 +372,32 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         evaluate("editor.appendTextAtCursor(decodeURIComponent('\(escapedText)'));")
     }
 
+    // MARK: - Navigation Overlay
+
+    private func setupNavigationOverlay() {
+        guard let navigationController = navigationController,
+                navigationOverlayView.superview == nil else { return }
+        navigationController.view.addSubview(navigationOverlayView)
+        NSLayoutConstraint.activate([
+            navigationOverlayView.leadingAnchor.constraint(equalTo: navigationController.view.leadingAnchor),
+            navigationOverlayView.trailingAnchor.constraint(equalTo: navigationController.view.trailingAnchor),
+            navigationOverlayView.topAnchor.constraint(equalTo: navigationController.view.topAnchor),
+            navigationOverlayView.bottomAnchor.constraint(equalTo: navigationController.navigationBar.bottomAnchor)
+        ])
+    }
+
+    private func removeNavigationOverlay() {
+        navigationOverlayView.removeFromSuperview()
+    }
+
+    private func showNavigationOverlay() {
+        navigationOverlayView.isHidden = false
+    }
+
+    private func hideNavigationOverlay() {
+        navigationOverlayView.isHidden = true
+    }
+
     // MARK: - GutenbergEditorControllerDelegate
 
     fileprivate func controller(_ controller: GutenbergEditorController, didReceiveMessage message: EditorJSMessage) {
@@ -387,9 +433,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 delegate?.editor(self, didTriggerAutocompleter: body.type)
             case .onModalDialogOpened:
                 let body = try message.decode(EditorJSMessage.ModalDialogBody.self)
+                showNavigationOverlay()
                 delegate?.editor(self, didOpenModalDialog: body.dialogType)
             case .onModalDialogClosed:
                 let body = try message.decode(EditorJSMessage.ModalDialogBody.self)
+                hideNavigationOverlay()
                 delegate?.editor(self, didCloseModalDialog: body.dialogType)
             case .log:
                 let log = try message.decode(EditorJSMessage.LogMessage.self)

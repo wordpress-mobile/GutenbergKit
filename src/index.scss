@@ -237,3 +237,16 @@ $baseline-interactive-font-size: 17px;
 		min-width: 274px !important;
 	}
 }
+
+// iOS-specific styling for block settings menu
+body.is-ios.gutenberg-kit {
+	.block-settings-menu {
+		background-color: rgba(0, 0, 0, 0.3) !important;
+	}
+
+	.block-settings-menu .components-popover__content {
+		border-top-left-radius: 26px !important;
+		border-top-right-radius: 26px !important;
+		background-color: #ffffff !important;
+	}
+}
