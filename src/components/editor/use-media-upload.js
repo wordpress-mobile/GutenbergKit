@@ -68,6 +68,18 @@ function MediaUpload( { render, ...config } ) {
 function useNativeMediaLibrary( { onSelect, ...config } ) {
 	const { allowedTypes, multiple = false, value } = config;
 	const contextIdRef = useRef( null );
+	// Stored as ref to avoid recreating a new context ID on every render, which
+	// can lead to stale callbacks.
+	const onSelectRef = useRef( onSelect );
+
+	// Keep the onSelect ref up to date with the latest callback
+	useEffect( () => {
+		onSelectRef.current = onSelect;
+
+		return () => {
+			onSelectRef.current = () => {};
+		};
+	}, [ onSelect ] );
 
 	useEffect( () => {
 		// Generate a unique context ID for this MediaPlaceholder instance
@@ -75,7 +87,9 @@ function useNativeMediaLibrary( { onSelect, ...config } ) {
 		contextIdRef.current = contextId;
 
 		callbackRegistry[ contextId ] = ( attachment ) => {
-			onSelect( config.multiple ? attachment : attachment[ 0 ] );
+			onSelectRef.current(
+				config.multiple ? attachment : attachment[ 0 ]
+			);
 		};
 
 		window.editor = window.editor || {};
@@ -102,7 +116,7 @@ function useNativeMediaLibrary( { onSelect, ...config } ) {
 		return () => {
 			delete callbackRegistry[ contextIdRef.current ];
 		};
-	}, [ onSelect, config.multiple ] );
+	}, [ config.multiple ] );
 
 	const open = useCallback(
 		() =>

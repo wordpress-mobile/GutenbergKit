@@ -342,5 +342,116 @@ describe( 'useMediaUpload', () => {
 				} )
 			);
 		} );
+
+		it( 'should maintain stable contextId when onSelect changes', async () => {
+			let MediaUploadComponent;
+			addFilter.mockImplementation( ( name, namespace, callback ) => {
+				MediaUploadComponent = callback();
+			} );
+
+			const onSelectFirst = vi.fn();
+			const onSelectSecond = vi.fn();
+			let openPicker;
+
+			renderHook( () => useMediaUpload() );
+			const { rerender } = render(
+				<MediaUploadComponent
+					render={ ( { open } ) => {
+						openPicker = open;
+						return null;
+					} }
+					onSelect={ onSelectFirst }
+					multiple={ false }
+				/>
+			);
+
+			// Wait for effects to run and get the contextId
+			await waitFor( () => {
+				openPicker();
+			} );
+
+			const firstContextId =
+				openMediaLibrary.mock.calls[ 0 ][ 0 ].contextId;
+
+			// Re-render with a new onSelect callback (simulating parent re-render)
+			rerender(
+				<MediaUploadComponent
+					render={ ( { open } ) => {
+						openPicker = open;
+						return null;
+					} }
+					onSelect={ onSelectSecond }
+					multiple={ false }
+				/>
+			);
+
+			// Open the media library again with the new callback
+			await waitFor( () => {
+				openPicker();
+			} );
+
+			const secondContextId =
+				openMediaLibrary.mock.calls[ 1 ][ 0 ].contextId;
+
+			// The contextId should remain the same across re-renders when only onSelect changes
+			expect( firstContextId ).toBe( secondContextId );
+		} );
+
+		it( 'should handle media insertion after re-render simulating block reordering', async () => {
+			let MediaUploadComponent;
+			addFilter.mockImplementation( ( name, namespace, callback ) => {
+				MediaUploadComponent = callback();
+			} );
+
+			const onSelectOriginal = vi.fn();
+			const onSelectAfterReorder = vi.fn();
+			let openPicker;
+
+			renderHook( () => useMediaUpload() );
+			const { rerender } = render(
+				<MediaUploadComponent
+					render={ ( { open } ) => {
+						openPicker = open;
+						return null;
+					} }
+					onSelect={ onSelectOriginal }
+					multiple={ false }
+				/>
+			);
+
+			// Wait for effects to run and open the media library
+			await waitFor( () => {
+				openPicker();
+			} );
+
+			const contextId = openMediaLibrary.mock.calls[ 0 ][ 0 ].contextId;
+
+			// Simulate a block reordering event that causes re-render with new onSelect
+			// (This would have caused the bug before the fix)
+			rerender(
+				<MediaUploadComponent
+					render={ ( { open } ) => {
+						openPicker = open;
+						return null;
+					} }
+					onSelect={ onSelectAfterReorder }
+					multiple={ false }
+				/>
+			);
+
+			// Native returns media with the original contextId
+			// This should still work despite the re-render
+			window.editor.setMediaUploadAttachment(
+				[ 'inserted-media.jpg' ],
+				contextId
+			);
+
+			// Should call the NEW callback (not warn about missing contextId)
+			expect( onSelectAfterReorder ).toHaveBeenCalledWith(
+				'inserted-media.jpg'
+			);
+			expect( onSelectOriginal ).not.toHaveBeenCalled();
+			expect( warn ).not.toHaveBeenCalled();
+		} );
 	} );
 } );
