@@ -74,13 +74,11 @@ function useNativeMediaLibrary( { onSelect, ...config } ) {
 		const contextId = `media-upload-${ ++contextIdCounter }`;
 		contextIdRef.current = contextId;
 
-		// Register this instance's callback in the global registry
 		callbackRegistry[ contextId ] = ( attachment ) => {
 			onSelect( config.multiple ? attachment : attachment[ 0 ] );
 		};
 
-		// Set up the global bridge function that routes to the correct callback
-		// based on the contextId returned from the native layer
+		window.editor = window.editor || {};
 		window.editor.setMediaUploadAttachment = (
 			attachment,
 			receivedContextId
@@ -90,17 +88,18 @@ function useNativeMediaLibrary( { onSelect, ...config } ) {
 				return;
 			}
 
-			if ( callbackRegistry[ receivedContextId ] ) {
-				callbackRegistry[ receivedContextId ]( attachment );
-			} else {
+			const callback = callbackRegistry[ receivedContextId ];
+			if ( ! callback ) {
 				warn(
 					`No callback found for contextId: ${ receivedContextId }`
 				);
+				return;
 			}
+
+			callback( attachment );
 		};
 
 		return () => {
-			// Clean up this instance's callback when unmounted
 			delete callbackRegistry[ contextIdRef.current ];
 		};
 	}, [ onSelect, config.multiple ] );

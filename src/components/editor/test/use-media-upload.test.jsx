@@ -8,15 +8,7 @@ import { render, renderHook, waitFor } from '@testing-library/react';
  * Internal dependencies
  */
 import { useMediaUpload } from '../use-media-upload';
-import {
-	describe,
-	it,
-	expect,
-	vi,
-	beforeAll,
-	afterAll,
-	afterEach,
-} from 'vitest';
+import { describe, it, expect, vi, afterAll, afterEach } from 'vitest';
 import { openMediaLibrary } from '../../../utils/bridge';
 import { warn } from '../../../utils/logger';
 
@@ -30,12 +22,6 @@ vi.mock( '../../../utils/logger', () => ( {
 } ) );
 
 describe( 'useMediaUpload', () => {
-	beforeAll( () => {
-		vi.stubGlobal( 'editor', {
-			setMediaUploadAttachment: vi.fn(),
-		} );
-	} );
-
 	afterEach( () => {
 		vi.clearAllMocks();
 	} );
