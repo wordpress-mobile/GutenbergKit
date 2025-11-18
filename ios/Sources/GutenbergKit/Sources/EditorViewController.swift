@@ -29,7 +29,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private var currentMediaContextId: String?
 
     /// Warmup mode preloads resources into memory to make the UI transition seamless when displaying the editor for the first time
-    ///
     private let isWarmupMode: Bool
 
     /// HTML Preview Manager instance for rendering pattern previews
@@ -352,11 +351,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             return
         }
 
-        // Pass the contextId back to JavaScript so it can route to the correct callback
         let escapedContextId = contextId.replacingOccurrences(of: "'", with: "\\'")
         evaluate("editor.setMediaUploadAttachment(\(media), '\(escapedContextId)');")
 
-        // Clear the contextId after use
         currentMediaContextId = nil
     }
 
@@ -510,4 +507,3 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
 
 
 #endif
-

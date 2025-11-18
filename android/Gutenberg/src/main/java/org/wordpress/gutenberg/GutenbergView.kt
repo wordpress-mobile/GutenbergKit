@@ -550,14 +550,11 @@ class GutenbergView : WebView {
                 null
             }
 
-            // Parse contextId (required)
-            val contextId = jsonObj.getString("contextId")
-
             // Store contextId to pass back when media is selected
+            val contextId = jsonObj.getString("contextId")
             currentMediaContextId = contextId
 
             val config = OpenMediaLibraryConfig(allowedTypes = allowedTypes, multiple = multiple, value = value, contextId = contextId)
-
             openMediaLibraryListener?.onOpenMediaLibrary(config)
         } catch (e: JSONException) {
             e.printStackTrace()
@@ -576,11 +573,9 @@ class GutenbergView : WebView {
             return
         }
 
-        // Pass the contextId back to JavaScript so it can route to the correct callback
         val escapedContextId = contextId.replace("'", "\\'")
         this.evaluateJavascript("editor.setMediaUploadAttachment($media, '$escapedContextId');", null)
 
-        // Clear the contextId after use
         currentMediaContextId = null
     }
 
