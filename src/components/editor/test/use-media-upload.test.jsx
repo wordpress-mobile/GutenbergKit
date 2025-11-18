@@ -65,49 +65,71 @@ describe( 'useMediaUpload', () => {
 		);
 	} );
 
-	it( 'should define the setMediaUploadAttachment function', () => {
+	it( 'should define the setMediaUploadAttachment function', async () => {
 		let MediaUploadComponent;
 		addFilter.mockImplementation( ( name, namespace, callback ) => {
 			MediaUploadComponent = callback();
 		} );
 		const onSelect = vi.fn();
+		let openPicker;
 
 		renderHook( () => useMediaUpload() );
 		render(
 			<MediaUploadComponent
-				render={ ( { open } ) => open() }
+				render={ ( { open } ) => {
+					openPicker = open;
+					return null;
+				} }
 				onSelect={ onSelect }
 				multiple={ false }
 			/>
 		);
-		window.editor.setMediaUploadAttachment( [ 'test' ] );
+
+		// Wait for effects to run and get the contextId
+		await waitFor( () => {
+			openPicker();
+		} );
+
+		const contextId = openMediaLibrary.mock.calls[ 0 ][ 0 ].contextId;
+		window.editor.setMediaUploadAttachment( [ 'test' ], contextId );
 
 		expect( onSelect ).toHaveBeenCalledWith( 'test' );
 	} );
 
-	it( 'should clear the setMediaUploadAttachment function when the component is unmounted', () => {
+	it( 'should clear the setMediaUploadAttachment function when the component is unmounted', async () => {
 		let MediaUploadComponent;
 		addFilter.mockImplementation( ( name, namespace, callback ) => {
 			MediaUploadComponent = callback();
 		} );
 		const onSelect = vi.fn();
+		let openPicker;
 
 		renderHook( () => useMediaUpload() );
 		const { unmount } = render(
 			<MediaUploadComponent
-				render={ ( { open } ) => open() }
+				render={ ( { open } ) => {
+					openPicker = open;
+					return null;
+				} }
 				onSelect={ onSelect }
 				multiple={ false }
 			/>
 		);
 
-		window.editor.setMediaUploadAttachment( [ 'test' ] );
+		// Wait for effects to run and get the contextId
+		await waitFor( () => {
+			openPicker();
+		} );
+
+		const contextId = openMediaLibrary.mock.calls[ 0 ][ 0 ].contextId;
+		window.editor.setMediaUploadAttachment( [ 'test' ], contextId );
 
 		expect( onSelect ).toHaveBeenCalledWith( 'test' );
 
 		unmount();
 
-		window.editor.setMediaUploadAttachment( [ 'test' ] );
+		// After unmount, calling with the same contextId should not trigger callback
+		window.editor.setMediaUploadAttachment( [ 'test' ], contextId );
 
 		expect( onSelect ).toHaveBeenCalledTimes( 1 );
 	} );
@@ -222,38 +244,32 @@ describe( 'useMediaUpload', () => {
 			expect( onSelectBefore ).toHaveBeenCalledTimes( 1 );
 		} );
 
-		it( 'should use the last callback as fallback when no contextId is provided (backward compatibility)', () => {
+		it( 'should warn when contextId is missing', () => {
 			let MediaUploadComponent;
 			addFilter.mockImplementation( ( name, namespace, callback ) => {
 				MediaUploadComponent = callback();
 			} );
 
-			const onSelectFirst = vi.fn();
-			const onSelectSecond = vi.fn();
+			const onSelect = vi.fn();
 
 			renderHook( () => useMediaUpload() );
 
 			render(
-				<>
-					<MediaUploadComponent
-						render={ ( { open } ) => open() }
-						onSelect={ onSelectFirst }
-						multiple={ false }
-					/>
-					<MediaUploadComponent
-						render={ ( { open } ) => open() }
-						onSelect={ onSelectSecond }
-						multiple={ false }
-					/>
-				</>
+				<MediaUploadComponent
+					render={ ( { open } ) => open() }
+					onSelect={ onSelect }
+					multiple={ false }
+				/>
 			);
 
-			// Call without contextId (backward compatibility)
+			// Call without contextId
 			window.editor.setMediaUploadAttachment( [ 'test-image.jpg' ] );
 
-			// Should call the last registered callback
-			expect( onSelectSecond ).toHaveBeenCalledWith( 'test-image.jpg' );
-			expect( onSelectFirst ).not.toHaveBeenCalled();
+			// Should warn and not call the callback
+			expect( warn ).toHaveBeenCalledWith(
+				'setMediaUploadAttachment called without contextId'
+			);
+			expect( onSelect ).not.toHaveBeenCalled();
 		} );
 
 		it( 'should warn when an invalid contextId is provided', () => {

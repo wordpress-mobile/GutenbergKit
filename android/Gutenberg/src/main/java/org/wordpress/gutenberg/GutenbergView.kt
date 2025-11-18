@@ -381,7 +381,7 @@ class GutenbergView : WebView {
         val allowedTypes: Array<MediaType>,
         val multiple: Boolean,
         val value: Value?,
-        val contextId: String?
+        val contextId: String
     )
 
     interface OpenMediaLibraryListener {
@@ -550,12 +550,8 @@ class GutenbergView : WebView {
                 null
             }
 
-            // Parse contextId
-            val contextId = if (jsonObj.has("contextId")) {
-                jsonObj.getString("contextId")
-            } else {
-                null
-            }
+            // Parse contextId (required)
+            val contextId = jsonObj.getString("contextId")
 
             // Store contextId to pass back when media is selected
             currentMediaContextId = contextId
@@ -573,16 +569,19 @@ class GutenbergView : WebView {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
             return
         }
-        // Pass the contextId back to JavaScript so it can route to the correct callback
-        if (currentMediaContextId != null) {
-            val escapedContextId = currentMediaContextId!!.replace("'", "\\'")
-            this.evaluateJavascript("editor.setMediaUploadAttachment($media, '$escapedContextId');", null)
-            // Clear the contextId after use
-            currentMediaContextId = null
-        } else {
-            // Fallback for backward compatibility (no contextId)
-            this.evaluateJavascript("editor.setMediaUploadAttachment($media);", null)
+
+        val contextId = currentMediaContextId
+        if (contextId == null) {
+            Log.e("GutenbergView", "setMediaUploadAttachment called without contextId")
+            return
         }
+
+        // Pass the contextId back to JavaScript so it can route to the correct callback
+        val escapedContextId = contextId.replace("'", "\\'")
+        this.evaluateJavascript("editor.setMediaUploadAttachment($media, '$escapedContextId');", null)
+
+        // Clear the contextId after use
+        currentMediaContextId = null
     }
 
     @JavascriptInterface

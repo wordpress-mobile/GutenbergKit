@@ -121,7 +121,7 @@ public struct OpenMediaLibraryAction: Codable {
     public let allowedTypes: [MediaType]?
     public let multiple: Bool
     public let value: Value?
-    public let contextId: String?
+    public let contextId: String
 
     private enum CodingKeys: String, CodingKey {
         case allowedTypes, multiple, value, contextId
@@ -131,7 +131,7 @@ public struct OpenMediaLibraryAction: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.allowedTypes = try container.decodeIfPresent([OpenMediaLibraryAction.MediaType].self, forKey: .allowedTypes)
         self.multiple = try container.decode(Bool.self, forKey: .multiple)
-        self.contextId = try container.decodeIfPresent(String.self, forKey: .contextId)
+        self.contextId = try container.decode(String.self, forKey: .contextId)
 
         // Decode value as either Int? or [Int]?
         if let singleValue = try? container.decodeIfPresent(Int.self, forKey: .value) {

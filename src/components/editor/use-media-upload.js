@@ -89,22 +89,17 @@ function useNativeMediaLibrary( { onSelect, ...config } ) {
 				attachment,
 				receivedContextId
 			) => {
-				// If contextId is provided, use the registry (new behavior)
-				if (
-					receivedContextId &&
-					callbackRegistry[ receivedContextId ]
-				) {
+				if ( ! receivedContextId ) {
+					warn( 'setMediaUploadAttachment called without contextId' );
+					return;
+				}
+
+				if ( callbackRegistry[ receivedContextId ] ) {
 					callbackRegistry[ receivedContextId ]( attachment );
-				} else if ( receivedContextId ) {
+				} else {
 					warn(
 						`No callback found for contextId: ${ receivedContextId }`
 					);
-				} else {
-					// Fallback: If no contextId, use the last registered callback (backward compatibility)
-					const callbacks = Object.values( callbackRegistry );
-					if ( callbacks.length > 0 ) {
-						callbacks[ callbacks.length - 1 ]( attachment );
-					}
 				}
 			};
 			// Mark this function as the registry-based implementation

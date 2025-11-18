@@ -347,16 +347,17 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     public func setMediaUploadAttachment(_ media: String) {
-        // Pass the contextId back to JavaScript so it can route to the correct callback
-        if let contextId = currentMediaContextId {
-            let escapedContextId = contextId.replacingOccurrences(of: "'", with: "\\'")
-            evaluate("editor.setMediaUploadAttachment(\(media), '\(escapedContextId)');")
-            // Clear the contextId after use
-            currentMediaContextId = nil
-        } else {
-            // Fallback for backward compatibility (no contextId)
-            evaluate("editor.setMediaUploadAttachment(\(media));")
+        guard let contextId = currentMediaContextId else {
+            NSLog("setMediaUploadAttachment called without contextId")
+            return
         }
+
+        // Pass the contextId back to JavaScript so it can route to the correct callback
+        let escapedContextId = contextId.replacingOccurrences(of: "'", with: "\\'")
+        evaluate("editor.setMediaUploadAttachment(\(media), '\(escapedContextId)');")
+
+        // Clear the contextId after use
+        currentMediaContextId = nil
     }
 
     /// Appends text at the current cursor position in the editor.
