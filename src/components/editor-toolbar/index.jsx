@@ -98,7 +98,10 @@ const EditorToolbar = ( { className } ) => {
 	);
 
 	const addBlockButton = enableNativeBlockInserter ? (
-		<NativeBlockInserterButton />
+		<NativeBlockInserterButton
+			open={ isInserterOpened }
+			onToggle={ setIsInserterOpened }
+		/>
 	) : (
 		<Inserter
 			popoverProps={ {

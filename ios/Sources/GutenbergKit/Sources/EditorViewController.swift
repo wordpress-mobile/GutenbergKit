@@ -7,7 +7,7 @@ import CryptoKit
 import UIKit
 
 @MainActor
-public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
+public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate, UIAdaptivePresentationControllerDelegate, UIPopoverPresentationControllerDelegate, UISheetPresentationControllerDelegate {
     public let webView: WKWebView
     let assetsLibrary: EditorAssetsLibrary
 
@@ -288,17 +288,22 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 patternCategories: data.patternCategories,
                 mediaPicker: mediaPicker,
                 presentationContext: context,
-                onSelection: { [weak self] in self?.didSelectBlockInserterItem($0) }
+                onSelection: { [weak self] in self?.didSelectBlockInserterItem($0) },
+                onClose: { [weak self] in self?.notifyInserterClosed() }
             )
             .environmentObject(htmlPreviewManager)
         })
 
         context.viewController = host
 
+        // Set presentation delegate to track dismissal
+        host.presentationController?.delegate = self
+
         if let sourceRect = data.sourceRect {
             host.modalPresentationStyle = .popover
 
             if let popover = host.popoverPresentationController {
+                popover.delegate = self
                 popover.sourceView = webView
                 popover.sourceRect = CGRect(
                     x: sourceRect.x,
@@ -312,6 +317,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
 
         if let sheet = host.popoverPresentationController?.adaptiveSheetPresentationController ?? host.sheetPresentationController {
+            sheet.delegate = self
             sheet.detents = [.custom(identifier: .medium, resolver: { context in
                 context.containerTraitCollection.horizontalSizeClass == .compact ? 536 : 900
             }), .large()]
@@ -323,6 +329,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func didSelectBlockInserterItem(_ selection: BlockInserterSelection) {
+        notifyInserterClosed()
+
         switch selection {
         case .block(let block):
             insertBlockFromInserter(block.id)
@@ -333,6 +341,16 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 await insertMediaFromInserter(items)
             }
         }
+    }
+
+    // MARK: - UIAdaptivePresentationControllerDelegate
+
+    public func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        notifyInserterClosed()
+    }
+
+    private func notifyInserterClosed() {
+        evaluate("window.blockInserter?.onClose?.()")
     }
 
     private func insertBlockFromInserter(_ blockID: String) {
