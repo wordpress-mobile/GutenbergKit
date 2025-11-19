@@ -118,23 +118,41 @@ async function downloadTranslations( locale, force = false ) {
 	debug( `Downloading translations for ${ locale }...` );
 
 	const url = `https://translate.wordpress.org/projects/wp-plugins/gutenberg/dev/${ locale }/default/export-translations/?format=json`;
-	const response = await fetch( url );
 
-	if ( ! response.ok ) {
-		throw new Error( `Failed to download translations for ${ locale }` );
+	try {
+		const response = await fetch( url );
+
+		if ( ! response.ok ) {
+			throw new Error(
+				`HTTP ${ response.status } ${ response.statusText } - ${ url }`
+			);
+		}
+
+		let translations;
+		try {
+			translations = await response.json();
+		} catch ( jsonError ) {
+			throw new Error(
+				`Invalid JSON response from ${ url }: ${ jsonError.message }`
+			);
+		}
+
+		const outputPath = path.join( TRANSLATIONS_DIR, `${ locale }.json` );
+
+		// Ensure the translations directory exists
+		if ( ! fs.existsSync( TRANSLATIONS_DIR ) ) {
+			fs.mkdirSync( TRANSLATIONS_DIR, { recursive: true } );
+		}
+
+		// Write translations to file
+		fs.writeFileSync( outputPath, JSON.stringify( translations, null, 2 ) );
+		debug( `✓ Downloaded translations for ${ locale }` );
+	} catch ( err ) {
+		// Re-throw with more context
+		throw new Error(
+			`Failed to download translations for ${ locale }: ${ err.message }`
+		);
 	}
-
-	const translations = await response.json();
-	const outputPath = path.join( TRANSLATIONS_DIR, `${ locale }.json` );
-
-	// Ensure the translations directory exists
-	if ( ! fs.existsSync( TRANSLATIONS_DIR ) ) {
-		fs.mkdirSync( TRANSLATIONS_DIR, { recursive: true } );
-	}
-
-	// Write translations to file
-	fs.writeFileSync( outputPath, JSON.stringify( translations, null, 2 ) );
-	debug( `✓ Downloaded translations for ${ locale }` );
 }
 
 /**
