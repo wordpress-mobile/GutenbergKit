@@ -11,8 +11,8 @@ An experimental Gutenberg block editor for native iOS and Android apps relying u
 In order to build GutenbergKit, the following tools must be installed on your development machine:
 
 -   [Node.js](https://nodejs.org/en/download/) - Required for building the web app; recommend using [Node Version Manager](https://github.com/nvm-sh/nvm).
--   [Xcode](https://developer.apple.com/xcode/) - Required if building iOS demo app.
--   [Android Studio](https://developer.android.com/studio) - Required if building Android demo app.
+-   [Xcode](https://developer.apple.com/xcode/) - Required if building the iOS demo app.
+-   [Android Studio](https://developer.android.com/studio) - Required if building the Android demo app.
 
 ### Web App
 
