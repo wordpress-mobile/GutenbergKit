@@ -77,8 +77,15 @@ async function prepareTranslations( force = false ) {
 		info( 'Verifying translations...' );
 	}
 
-	for ( const locale of SUPPORTED_LOCALES ) {
-		await downloadWithRetry( locale, force );
+	// Download translations in batches to balance speed with server load
+	const CONCURRENCY_LIMIT = 10;
+
+	// Process locales in batches, fail early on first error
+	for ( let i = 0; i < SUPPORTED_LOCALES.length; i += CONCURRENCY_LIMIT ) {
+		const batch = SUPPORTED_LOCALES.slice( i, i + CONCURRENCY_LIMIT );
+		await Promise.all(
+			batch.map( ( locale ) => downloadWithRetry( locale, force ) )
+		);
 	}
 
 	info( '✓ Translations ready!' );
