@@ -2,12 +2,25 @@
  * WordPress dependencies
  */
 import { addFilter, removeFilter } from '@wordpress/hooks';
-import { useCallback, useEffect } from '@wordpress/element';
+import { useCallback, useEffect, useRef } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
 import { openMediaLibrary } from '../../utils/bridge';
+import { warn } from '../../utils/logger';
+
+/**
+ * Global registry for media upload callbacks indexed by context ID.
+ * This allows multiple MediaPlaceholder instances to coexist without
+ * overwriting each other's callbacks.
+ */
+const callbackRegistry = {};
+
+/**
+ * Counter for generating unique context IDs.
+ */
+let contextIdCounter = 0;
 
 /**
  * @typedef {Object} MediaUploadConfig
@@ -54,16 +67,54 @@ function MediaUpload( { render, ...config } ) {
  */
 function useNativeMediaLibrary( { onSelect, ...config } ) {
 	const { allowedTypes, multiple = false, value } = config;
+	const contextIdRef = useRef( null );
+	// Stored as ref to avoid recreating a new context ID on every render, which
+	// can lead to stale callbacks.
+	const onSelectRef = useRef( onSelect );
+
+	// Keep the onSelect ref up to date with the latest callback
+	useEffect( () => {
+		onSelectRef.current = onSelect;
+
+		return () => {
+			onSelectRef.current = () => {};
+		};
+	}, [ onSelect ] );
 
 	useEffect( () => {
-		window.editor.setMediaUploadAttachment = ( attachment ) => {
-			onSelect( config.multiple ? attachment : attachment[ 0 ] );
+		// Generate a unique context ID for this MediaPlaceholder instance
+		const contextId = `media-upload-${ ++contextIdCounter }`;
+		contextIdRef.current = contextId;
+
+		callbackRegistry[ contextId ] = ( attachment ) => {
+			onSelectRef.current( multiple ? attachment : attachment[ 0 ] );
+		};
+
+		window.editor = window.editor || {};
+		window.editor.setMediaUploadAttachment = (
+			attachment,
+			receivedContextId
+		) => {
+			if ( ! receivedContextId ) {
+				warn( 'setMediaUploadAttachment called without contextId' );
+				return;
+			}
+
+			const callback = callbackRegistry[ receivedContextId ];
+			if ( ! callback ) {
+				warn(
+					`No callback found for contextId: ${ receivedContextId }`
+				);
+				return;
+			}
+
+			callback( attachment );
 		};
 
 		return () => {
-			window.editor.setMediaUploadAttachment = () => {};
+			delete callbackRegistry[ contextIdRef.current ];
 		};
-	}, [ onSelect, config.multiple ] );
+	}, [ multiple ] );
 
 	const open = useCallback(
 		() =>
@@ -71,6 +122,7 @@ function useNativeMediaLibrary( { onSelect, ...config } ) {
 				allowedTypes,
 				multiple,
 				value,
+				contextId: contextIdRef.current,
 			} ),
 		[ allowedTypes, multiple, value ]
 	);

@@ -15,8 +15,7 @@ import { isDevMode } from '../../utils/dev-mode';
 let noticeShown = false;
 
 export function useDevModeNotice() {
-	const { createWarningNotice, removeAllNotices } =
-		useDispatch( noticesStore );
+	const { createWarningNotice } = useDispatch( noticesStore );
 
 	useEffect( () => {
 		const hasDevMode = isDevMode();
@@ -34,5 +33,5 @@ export function useDevModeNotice() {
 				}
 			);
 		}
-	}, [ createWarningNotice, removeAllNotices ] );
+	}, [ createWarningNotice ] );
 }

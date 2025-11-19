@@ -56,6 +56,12 @@ class GutenbergView : WebView {
     private var autocompleterTriggeredListener: AutocompleterTriggeredListener? = null
     private var modalDialogStateListener: ModalDialogStateListener? = null
 
+    /**
+     * Stores the contextId from the most recent openMediaLibrary call
+     * to pass back to JavaScript when media is selected
+     */
+    private var currentMediaContextId: String? = null
+
     var textEditorEnabled: Boolean = false
         set(value) {
             field = value
@@ -374,7 +380,8 @@ class GutenbergView : WebView {
     data class OpenMediaLibraryConfig(
         val allowedTypes: Array<MediaType>,
         val multiple: Boolean,
-        val value: Value?
+        val value: Value?,
+        val contextId: String
     )
 
     interface OpenMediaLibraryListener {
@@ -543,8 +550,11 @@ class GutenbergView : WebView {
                 null
             }
 
-            val config = OpenMediaLibraryConfig(allowedTypes = allowedTypes, multiple = multiple, value = value)
+            // Store contextId to pass back when media is selected
+            val contextId = jsonObj.getString("contextId")
+            currentMediaContextId = contextId
 
+            val config = OpenMediaLibraryConfig(allowedTypes = allowedTypes, multiple = multiple, value = value, contextId = contextId)
             openMediaLibraryListener?.onOpenMediaLibrary(config)
         } catch (e: JSONException) {
             e.printStackTrace()
@@ -556,7 +566,17 @@ class GutenbergView : WebView {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
             return
         }
-        this.evaluateJavascript("editor.setMediaUploadAttachment($media);", null)
+
+        val contextId = currentMediaContextId
+        if (contextId == null) {
+            Log.e("GutenbergView", "setMediaUploadAttachment called without contextId")
+            return
+        }
+
+        val escapedContextId = contextId.replace("'", "\\'")
+        this.evaluateJavascript("editor.setMediaUploadAttachment($media, '$escapedContextId');", null)
+
+        currentMediaContextId = null
     }
 
     @JavascriptInterface
