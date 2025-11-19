@@ -60,10 +60,13 @@ const EditorToolbar = ( { className } ) => {
 	}, [] );
 	const { setIsInserterOpened } = useDispatch( editorStore );
 
-	useModalize( isInserterOpened );
+	useModalize( isInserterOpened && ! enableNativeBlockInserter );
 	useModalize( isBlockInspectorShown );
 
-	useModalDialogState( isInserterOpened, 'block-inserter' );
+	useModalDialogState(
+		isInserterOpened && ! enableNativeBlockInserter,
+		'block-inserter'
+	);
 	useModalDialogState( isBlockInspectorShown, 'block-inspector' );
 
 	function openSettings() {
