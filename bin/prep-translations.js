@@ -77,12 +77,26 @@ async function prepareTranslations( force = false ) {
 		info( 'Verifying translations...' );
 	}
 
+	const failures = [];
+
 	for ( const locale of SUPPORTED_LOCALES ) {
 		try {
 			await downloadTranslations( locale, force );
 		} catch ( err ) {
 			error( `✗ Failed to download translations for ${ locale }:`, err );
+			failures.push( locale );
 		}
+	}
+
+	if ( failures.length > 0 ) {
+		error(
+			`Failed to download translations for ${
+				failures.length
+			} locale(s): ${ failures.join( ', ' ) }`
+		);
+		throw new Error(
+			`Translation download failed for ${ failures.length } locale(s)`
+		);
 	}
 
 	info( '✓ Translations ready!' );

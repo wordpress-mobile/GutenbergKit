@@ -20,7 +20,14 @@ npm-dependencies:
 prep-translations:
 	@if [ ! -d "src/translations" ] || [ "$(REFRESH_L10N)" = "true" ] || [ "$(REFRESH_L10N)" = "1" ]; then \
 		echo "--- :npm: Preparing Translations"; \
-		npm run prep-translations -- --force; \
+		if ! npm run prep-translations -- --force; then \
+			if [ "$(STRICT_L10N)" = "true" ] || [ "$(STRICT_L10N)" = "1" ]; then \
+				echo "--- :x: ERROR: Translation fetching failed and STRICT_L10N is enabled"; \
+				exit 1; \
+			else \
+				echo "--- :warning: WARNING: Translation fetching failed, but continuing anyway. Use STRICT_L10N=1 to make this fatal."; \
+			fi; \
+		fi; \
 	else \
 		echo "--- :white_check_mark: Skipping translations fetch (src/translations already exists). Use REFRESH_L10N=1 to force refresh."; \
 	fi
