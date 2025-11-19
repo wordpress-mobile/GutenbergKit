@@ -77,29 +77,50 @@ async function prepareTranslations( force = false ) {
 		info( 'Verifying translations...' );
 	}
 
-	const failures = [];
-
 	for ( const locale of SUPPORTED_LOCALES ) {
-		try {
-			await downloadTranslations( locale, force );
-		} catch ( err ) {
-			error( `✗ Failed to download translations for ${ locale }:`, err );
-			failures.push( locale );
-		}
-	}
-
-	if ( failures.length > 0 ) {
-		error(
-			`Failed to download translations for ${
-				failures.length
-			} locale(s): ${ failures.join( ', ' ) }`
-		);
-		throw new Error(
-			`Translation download failed for ${ failures.length } locale(s)`
-		);
+		await downloadWithRetry( locale, force );
 	}
 
 	info( '✓ Translations ready!' );
+}
+
+/**
+ * Downloads translations with retry logic.
+ *
+ * @param {string}  locale      The locale to download translations for.
+ * @param {boolean} force       Whether to force download even if cache exists.
+ * @param {number}  maxAttempts Maximum number of attempts (default: 3).
+ *
+ * @return {Promise<void>} A promise that resolves when translations are downloaded.
+ */
+async function downloadWithRetry( locale, force = false, maxAttempts = 3 ) {
+	let lastError;
+
+	for ( let attempt = 1; attempt <= maxAttempts; attempt++ ) {
+		try {
+			await downloadTranslations( locale, force );
+			return; // Success - exit retry loop
+		} catch ( err ) {
+			lastError = err;
+
+			if ( attempt < maxAttempts ) {
+				// Calculate backoff: 1s for first retry, 2s for second retry
+				const backoffMs = attempt * 1000;
+				info(
+					`Retrying download for '${ locale }' (attempt ${
+						attempt + 1
+					}/${ maxAttempts }) in ${ backoffMs }ms...`
+				);
+				await new Promise( ( resolve ) =>
+					setTimeout( resolve, backoffMs )
+				);
+			}
+		}
+	}
+
+	// All attempts failed
+	error( `Failed to download '${ locale }' after ${ maxAttempts } attempts` );
+	throw lastError;
 }
 
 /**
