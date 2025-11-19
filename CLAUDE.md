@@ -31,6 +31,9 @@ make dev-tools
 # or
 npm run devtools
 
+# Preview production build locally
+npm run preview
+
 # Run JavaScript tests
 make test-js
 # or
@@ -40,6 +43,9 @@ npm run test -- run
 make lint-js
 # or
 npm run lint
+
+# Lint and auto-fix JavaScript code
+npm run lintfix
 
 # Format JavaScript code
 make fmt-js
@@ -60,6 +66,11 @@ make build
 # By default, dependencies and translations are only installed if their directories don't exist
 # Force refresh of dependencies and translations
 make build REFRESH_DEPS=1 REFRESH_L10N=1
+
+# Clean build artifacts
+npm run clean         # Clean both dist and translations
+npm run clean:dist    # Clean only dist directory
+npm run clean:l10n    # Clean only translations directory
 ```
 
 ### iOS Development
