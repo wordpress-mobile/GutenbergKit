@@ -56,6 +56,10 @@ make build
 # This builds the web app and copies assets to:
 # - ios/Sources/GutenbergKit/Gutenberg/
 # - android/Gutenberg/src/main/assets/
+
+# By default, dependencies and translations are only installed if their directories don't exist
+# Force refresh of dependencies and translations
+make build REFRESH_DEPS=1 REFRESH_L10N=1
 ```
 
 ### iOS Development
@@ -63,6 +67,9 @@ make build
 ```bash
 # Build Swift package
 make build-swift-package
+
+# Build Swift package (force refresh of npm deps/translations if needed)
+make build-swift-package REFRESH_DEPS=1 REFRESH_L10N=1
 
 # Run Swift tests
 make test-swift-package
@@ -73,6 +80,9 @@ make test-swift-package
 ```bash
 # Build Android library to local Maven
 make local-android-library
+
+# Build Android library (force refresh of npm deps/translations if needed)
+make local-android-library REFRESH_DEPS=1 REFRESH_L10N=1
 
 # Run Android tests
 make test-android

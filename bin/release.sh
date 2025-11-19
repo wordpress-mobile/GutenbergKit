@@ -243,7 +243,7 @@ build_project() {
         return
     fi
 
-    make build
+    make build REFRESH_DEPS=1 REFRESH_L10N=1
     print_success "Build completed successfully"
 }
 
