@@ -300,23 +300,24 @@ export function awaitGBKitGlobal( timeoutMs = 3000 ) {
 				return;
 			}
 
-			// In development mode, bypass the GBKit requirement and seed a default post,
-			// allowing the editor to load without the native bridge to simplify testing.
-			if ( isDevMode() ) {
-				resolve( {
-					post: {
-						id: -1,
-						type: 'post',
-						title: '',
-						content: '',
-						status: 'auto-draft',
-					},
-					themeStyles: false,
-					hideTitle: false,
-				} );
-			}
-
 			if ( Date.now() - startTime >= timeoutMs ) {
+				// In development mode, bypass the GBKit requirement and seed a default post,
+				// allowing the editor to load without the native bridge to simplify testing.
+				if ( isDevMode() ) {
+					resolve( {
+						post: {
+							id: -1,
+							type: 'post',
+							title: '',
+							content: '',
+							status: 'auto-draft',
+						},
+						themeStyles: false,
+						hideTitle: false,
+					} );
+					return;
+				}
+
 				reject(
 					new Error( 'GBKit global not available after timeout' )
 				);
