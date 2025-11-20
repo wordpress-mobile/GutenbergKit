@@ -26,16 +26,12 @@ public struct EditorConfiguration: Sendable {
     public let namespaceExcludedPaths: [String]
     /// Authorization header
     public let authHeader: String
-    /// Raw block editor settings from the WordPress REST API
-    public let editorSettings: String
     /// Locale used for translations
     public let locale: String
     /// Enables the native inserter UI in the editor
     public let isNativeInserterEnabled: Bool
     /// Logs emitted at or above this level will be printed to the debug console
     public let logLevel: LogLevel
-    /// Editor assets manifest containing scripts and styles for plugins, and allowed block types
-    public let manifest: String?
 
     /// Deliberately non-public – consumers should use `EditorConfigurationBuilder` to construct a configuration
     init(
@@ -51,11 +47,9 @@ public struct EditorConfiguration: Sendable {
         siteApiNamespace: [String],
         namespaceExcludedPaths: [String],
         authHeader: String,
-        editorSettings: String,
         locale: String,
         isNativeInserterEnabled: Bool,
-        logLevel: LogLevel,
-        manifest: String?
+        logLevel: LogLevel
     ) {
         self.title = title
         self.content = content
@@ -69,11 +63,9 @@ public struct EditorConfiguration: Sendable {
         self.siteApiNamespace = siteApiNamespace
         self.namespaceExcludedPaths = namespaceExcludedPaths
         self.authHeader = authHeader
-        self.editorSettings = editorSettings
         self.locale = locale
         self.isNativeInserterEnabled = isNativeInserterEnabled
         self.logLevel = logLevel
-        self.manifest = manifest
     }
 
     public func toBuilder() -> EditorConfigurationBuilder {
@@ -90,10 +82,8 @@ public struct EditorConfiguration: Sendable {
             siteApiNamespace: siteApiNamespace,
             namespaceExcludedPaths: namespaceExcludedPaths,
             authHeader: authHeader,
-            editorSettings: editorSettings,
             locale: locale,
-            isNativeInserterEnabled: isNativeInserterEnabled,
-            manifest: manifest
+            isNativeInserterEnabled: isNativeInserterEnabled
         )
     }
 
@@ -121,11 +111,9 @@ public struct EditorConfigurationBuilder {
     private var siteApiNamespace: [String]
     private var namespaceExcludedPaths: [String]
     private var authHeader: String
-    private var editorSettings: String
     private var locale: String
     private var isNativeInserterEnabled: Bool
     private var logLevel: LogLevel
-    private var manifest: String?
 
     public init(
         title: String = "",
@@ -140,11 +128,9 @@ public struct EditorConfigurationBuilder {
         siteApiNamespace: [String] = [],
         namespaceExcludedPaths: [String] = [],
         authHeader: String = "",
-        editorSettings: String = "undefined",
         locale: String = "en",
         isNativeInserterEnabled: Bool = false,
-        logLevel: LogLevel = .error,
-        manifest: String? = nil
+        logLevel: LogLevel = .error
     ){
         self.title = title
         self.content = content
@@ -158,11 +144,9 @@ public struct EditorConfigurationBuilder {
         self.siteApiNamespace = siteApiNamespace
         self.namespaceExcludedPaths = namespaceExcludedPaths
         self.authHeader = authHeader
-        self.editorSettings = editorSettings
         self.locale = locale
         self.isNativeInserterEnabled = isNativeInserterEnabled
         self.logLevel = logLevel
-        self.manifest = manifest
     }
 
     public func setTitle(_ title: String) -> EditorConfigurationBuilder {
@@ -237,12 +221,6 @@ public struct EditorConfigurationBuilder {
         return copy
     }
 
-    public func setEditorSettings(_ editorSettings: String) -> EditorConfigurationBuilder {
-        var copy = self
-        copy.editorSettings = editorSettings
-        return copy
-    }
-
     public func setLocale(_ locale: String) -> EditorConfigurationBuilder {
         var copy = self
         copy.locale = locale
@@ -258,12 +236,6 @@ public struct EditorConfigurationBuilder {
     public func setLogLevel(_ logLevel: LogLevel) -> EditorConfigurationBuilder {
         var copy = self
         copy.logLevel = logLevel
-        return copy
-    }
-
-    public func setManifest(_ manifest: String?) -> EditorConfigurationBuilder {
-        var copy = self
-        copy.manifest = manifest
         return copy
     }
 
@@ -303,32 +275,10 @@ public struct EditorConfigurationBuilder {
             siteApiNamespace: siteApiNamespace,
             namespaceExcludedPaths: namespaceExcludedPaths,
             authHeader: authHeader,
-            editorSettings: editorSettings,
             locale: locale,
             isNativeInserterEnabled: isNativeInserterEnabled,
-            logLevel: logLevel,
-            manifest: manifest
+            logLevel: logLevel
         )
-    }
-}
-
-public typealias EditorSettings = [String: Encodable]
-
-// MARK: - EditorConfiguration Extensions
-
-extension EditorConfiguration {
-    /// Extracts CSS styles from the editor settings JSON string
-    func extractThemeStyles() -> String? {
-        guard editorSettings != "undefined",
-              let data = editorSettings.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let styles = json["styles"] as? [[String: Any]] else {
-            return nil
-        }
-
-        // Concatenate all CSS from the styles array
-        let cssArray = styles.compactMap { $0["css"] as? String }
-        return cssArray.isEmpty ? nil : cssArray.joined(separator: "\n")
     }
 }
 

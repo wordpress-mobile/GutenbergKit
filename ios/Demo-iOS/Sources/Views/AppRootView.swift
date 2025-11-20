@@ -76,7 +76,7 @@ struct AppRootView: View {
                 let canUsePlugins = apiRoot.hasRoute(route: "/wpcom/v2/editor-assets")
                 let canUseEditorStyles = apiRoot.hasRoute(route: "/wp-block-editor/v1/settings")
 
-                var updatedConfiguration = EditorConfigurationBuilder()
+                let updatedConfiguration = EditorConfigurationBuilder()
                     .setShouldUseThemeStyles(canUseEditorStyles)
                     .setShouldUsePlugins(canUsePlugins)
                     .setSiteUrl(config.siteUrl)
@@ -85,13 +85,6 @@ struct AppRootView: View {
                     .setNativeInserterEnabled(isNativeInserterEnabled)
                     .setLogLevel(.debug)
                     .build()
-
-                let service = EditorService.shared(for: config.siteUrl, logLevel: .debug)
-                do {
-                    try await service.setup(&updatedConfiguration)
-                } catch {
-                    print("Failed to setup editor environment, confinuing with the default or cached configuration:", error)
-                }
 
                 self.activeEditorConfiguration = updatedConfiguration
             } catch {

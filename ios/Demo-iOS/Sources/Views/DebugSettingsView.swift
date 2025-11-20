@@ -88,7 +88,7 @@ struct DebugSettingsView: View {
 
     private func clearEditorData() {
         Task {
-            try? EditorService.deleteAllData()
+            try? EditorViewController.deleteAllData()
             editorDataCleared = true
 
             // Reset the checkmark after 2 seconds

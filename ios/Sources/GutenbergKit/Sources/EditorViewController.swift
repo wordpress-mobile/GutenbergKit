@@ -12,6 +12,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     let service: EditorService
 
     public var configuration: EditorConfiguration
+    private var editorSettings: EditorDependencies?
     private var _isEditorRendered = false
     private var _isEditorSetup = false
     private let mediaPicker: MediaPickerController?
@@ -42,7 +43,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }()
 
     /// HTML Preview Manager instance for rendering pattern previews
-    private(set) lazy var htmlPreviewManager = HTMLPreviewManager(themeStyles: configuration.extractThemeStyles())
+    private(set) lazy var htmlPreviewManager = HTMLPreviewManager(themeStyles: editorSettings?.extractThemeStyles())
 
     /// Initalizes the editor with the initial content (Gutenberg).
     public init(
@@ -138,15 +139,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func getEditorConfiguration() -> WKUserScript {
-        let manifestJSON: String
-        if let manifest = configuration.manifest {
-            manifestJSON = manifest
-        } else {
-            manifestJSON = "undefined"
-        }
-
         let jsCode = """
-
         window.GBKit = {
             siteURL: '\(configuration.siteURL)',
             siteApiRoot: '\(configuration.siteApiRoot)',
@@ -157,7 +150,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             plugins: \(configuration.shouldUsePlugins),
             enableNativeBlockInserter: \(configuration.isNativeInserterEnabled),
             hideTitle: \(configuration.shouldHideTitle),
-            editorSettings: \(configuration.editorSettings),
+            editorSettings: \(editorSettings?.manifest ?? "undefined"),
             locale: '\(configuration.locale)',
             post: {
                 id: \(configuration.postID ?? -1),
@@ -165,7 +158,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 content: '\(configuration.escapedContent)'
             },
             logLevel: '\(configuration.logLevel)',
-            manifest: \(manifestJSON)
+            manifest: \(editorSettings?.editorSettings ?? "undefined")
         };
 
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
@@ -175,6 +168,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         let editorScript = WKUserScript(source: jsCode, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         return editorScript
+    }
+
+    /// Deletes all cached editor data for all sites
+    public static func deleteAllData() throws {
+        try EditorService.deleteAllData()
     }
 
     // MARK: - Public API
@@ -248,8 +246,16 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         guard !_isEditorSetup else { return }
         _isEditorSetup = true
 
-        setUpEditor()
-        loadEditor()
+        Task { @MainActor in
+            do {
+                self.editorSettings = try await service.setup(configuration: configuration)
+            } catch {
+                print("Failed to setup editor environment, continuing with the default or cached configuration:", error)
+            }
+
+            setUpEditor()
+            loadEditor()
+        }
     }
 
     // MARK: - Internal (JavaScript)

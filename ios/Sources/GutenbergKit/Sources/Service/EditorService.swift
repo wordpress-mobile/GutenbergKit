@@ -6,12 +6,6 @@ import OSLog
 /// Service for fetching the editor settings and other parts of the enrvironment
 /// required to launch the editor.
 actor EditorService {
-    enum EditorServiceError: Error {
-        case invalidResponseData
-        case manifestUnavailable
-        case invalidServerResponse
-    }
-
     struct State: Codable {
         let refreshDate: Date
     }
@@ -62,23 +56,17 @@ actor EditorService {
     ///
     /// - warning: The request make take a significant amount of time the first
     /// time you open the editor.
-    func setup(_ configuration: inout EditorConfiguration) async throws {
-        var builder = configuration.toBuilder()
-
+    func setup(configuration: EditorConfiguration) async throws -> EditorDependencies {
         if !isEditorLoaded {
             await refresh(configuration: configuration)
         }
-
+        var dependencies = EditorDependencies()
         if let data = try? Data(contentsOf: editorSettingsFileURL),
            let settings = String(data: data, encoding: .utf8) {
-            builder = builder.setEditorSettings(settings)
+            dependencies.editorSettings = settings
         }
-
-        if let manifestString = try? getManifestForEditor(siteURL: configuration.siteURL) {
-            builder = builder.setManifest(manifestString)
-        }
-
-        return configuration = builder.build()
+        dependencies.manifest = try? getManifestForEditor(siteURL: configuration.siteURL)
+        return dependencies
     }
 
     /// Returns `true` if the resources required for the editor already exist.
@@ -232,7 +220,7 @@ actor EditorService {
             if missingAssets.count > 5 {
                 log(.error, "  ... and \(missingAssets.count - 5) more")
             }
-            throw EditorServiceError.manifestUnavailable
+            throw URLError(.resourceUnavailable)
         }
 
         log(.info, "All \(assetLinks.count) manifest assets verified in cache")
@@ -240,7 +228,7 @@ actor EditorService {
         // Process manifest for editor
         let processedData = try manifest.renderForEditor(defaultScheme: siteURLScheme)
         guard let jsonString = String(data: processedData, encoding: .utf8) else {
-            throw EditorServiceError.invalidResponseData
+            throw URLError(.cannotDecodeContentData)
         }
         return jsonString
     }
@@ -348,18 +336,16 @@ actor EditorService {
         return (response, content)
     }
 
-    // MARK: - Data Management
+    // MARK: - Helpers
 
     /// Deletes all cached editor data for all sites
-    public static func deleteAllData() throws {
+    static func deleteAllData() throws {
         let rootURL = URL.documentsDirectory.appendingPathComponent("GutenbergKit", isDirectory: true)
         guard FileManager.default.fileExists(atPath: rootURL.path) else {
             return
         }
         try FileManager.default.removeItem(at: rootURL)
     }
-
-    // MARK: - Helpers
 
     /// Generates a cached filename from an asset URL using SHA256 hash
     private func cachedFilename(for urlString: String) -> String {
