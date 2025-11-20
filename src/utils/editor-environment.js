@@ -15,6 +15,13 @@ import './editor-styles';
  * @return {Promise} Promise that resolves when initialization is complete
  */
 export function setUpEditorEnvironment() {
+	// Detect platform and add class to body for platform-specific styling
+	if ( typeof window !== 'undefined' && window.webkit ) {
+		document.body.classList.add( 'is-ios' );
+	} else if ( typeof window !== 'undefined' && window.editorDelegate ) {
+		document.body.classList.add( 'is-android' );
+	}
+
 	// Rely upon promises rather than async/await to avoid timeouts caused by
 	// circular dependencies. Addressing the circular dependencies is quite
 	// challenging due to Vite's preload helpers and bugs in `manualChunks`
