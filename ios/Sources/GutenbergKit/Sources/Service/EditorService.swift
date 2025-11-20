@@ -97,18 +97,18 @@ public actor EditorService {
         log(.info, "Starting editor resources refresh")
 
         // Fetch settings and manifest in parallel
-        async let settings = Result { try await fetchEditorSettings() }
-        async let manifest = Result { try await fetchManifestData() }
+        async let settingsFuture = Result { try await fetchEditorSettings() }
+        async let manifestFuture = Result { try await fetchManifestData() }
 
-        let (settingsResult, manifestResult) = await (settings, manifest)
+        let (settingsResult, manifestResult) = await (settingsFuture, manifestFuture)
 
         // Log errors but continue
-        if case .failure(let error) = settings {
+        if case .failure(let error) = settingsResult {
             log(.error, "Failed to fetch editor settings: \(error)")
         }
 
-        guard case .success(let manifestData) = manifest else {
-            if case .failure(let error) = manifest {
+        guard case .success(let manifestData) = manifestResult else {
+            if case .failure(let error) = manifestResult {
                 log(.error, "Failed to fetch manifest: \(error)")
             }
             log(.error, "Editor refresh aborted: manifest fetch failed")
