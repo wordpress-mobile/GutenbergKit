@@ -24,7 +24,7 @@ public actor EditorService {
     private var manifestFileURL: URL { storeURL.appendingPathComponent("manifest.json") }
     private var assetsDirectoryURL: URL { storeURL.appendingPathComponent("assets", isDirectory: true) }
 
-    private var refreshTask: Task<Void, Error>?
+    private var refreshTask: Task<Void, Never>?
 
     /// Creates a new EditorService instance
     /// - Parameters:
@@ -54,7 +54,7 @@ public actor EditorService {
         var builder = configuration.toBuilder()
 
         if !isEditorLoaded {
-            try await refresh()
+            await refresh()
         }
 
         if let data = try? Data(contentsOf: editorSettingsFileURL),
@@ -76,34 +76,64 @@ public actor EditorService {
     }
 
     /// Refresh the editor resources.
-    public func refresh() async throws {
+    public func refresh() async {
         if let task = refreshTask {
-            return try await task.value
+            return await task.value
         }
         let task = Task {
             defer { refreshTask = nil }
-            try await actuallyRefresh()
+            await actuallyRefresh()
         }
         refreshTask = task
-        return try await task.value
+        return await task.value
     }
 
-    private func actuallyRefresh() async throws {
+    private func actuallyRefresh() async {
         let startTime = CFAbsoluteTimeGetCurrent()
         log(.info, "Starting editor resources refresh")
 
         // Fetch settings and manifest in parallel
-        async let settingsData = fetchEditorSettings()
-        async let manifestData = fetchManifest()
+        async let settingsResult = Result { try await fetchEditorSettings() }
+        async let manifestResult = Result { try await fetchManifestData() }
 
-        let (_, manifest) = try await (settingsData, manifestData)
+        let (settings, manifest) = await (settingsResult, manifestResult)
+
+        // Log errors but continue
+        if case .failure(let error) = settings {
+            log(.error, "Failed to fetch editor settings: \(error)")
+        }
+
+        guard case .success(let manifestData) = manifest else {
+            if case .failure(let error) = manifest {
+                log(.error, "Failed to fetch manifest: \(error)")
+            }
+            log(.error, "Editor refresh aborted: manifest fetch failed")
+            return
+        }
+
         let fetchTime = CFAbsoluteTimeGetCurrent() - startTime
         log(.info, "Fetched settings and manifest in \(String(format: "%.2f", fetchTime))s")
 
-        // After manifest is fetched, fetch all assets in parallel
+        // Fetch all assets for the new manifest
         let assetsStartTime = CFAbsoluteTimeGetCurrent()
-        try await fetchAssets(manifestData: manifest)
+        do {
+            try await fetchAssets(manifestData: manifestData)
+        } catch {
+            log(.error, "Failed to fetch assets: \(error)")
+            log(.error, "Editor refresh aborted: asset fetching failed")
+            return
+        }
         let assetsTime = CFAbsoluteTimeGetCurrent() - assetsStartTime
+
+        // Only write manifest to disk after all assets are successfully fetched
+        do {
+            createStoreDirectoryIfNeeded()
+            try manifestData.write(to: manifestFileURL)
+            log(.info, "Manifest saved to disk")
+        } catch {
+            log(.error, "Failed to save manifest: \(error)")
+            return
+        }
 
         let totalTime = CFAbsoluteTimeGetCurrent() - startTime
         log(.info, "Editor refresh completed in \(String(format: "%.2f", totalTime))s (assets: \(String(format: "%.2f", assetsTime))s)")
@@ -129,20 +159,14 @@ public actor EditorService {
     // MARK: - Manifest
 
     /// Fetches the editor assets manifest from the WordPress REST API
-    @discardableResult
-    private func fetchManifest() async throws -> Data {
+    /// Does not write to disk - use this to get manifest data without persisting it
+    private func fetchManifestData() async throws -> Data {
         let excludeParam = URLQueryItem(name: "exclude", value: "core,gutenberg")
         let endpoint = baseURL
             .appendingPathComponent("/wpcom/v2/editor-assets")
             .appending(queryItems: [excludeParam])
 
         let data = try await fetchData(for: endpoint)
-        do {
-            createStoreDirectoryIfNeeded()
-            try data.write(to: manifestFileURL)
-        } catch {
-            assertionFailure("Failed to save manifest: \(error)")
-        }
         return data
     }
 
