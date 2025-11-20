@@ -27,9 +27,6 @@ export function setupGlobalErrorHandlers() {
 			isHandled: false,
 			handledBy: 'window.error',
 		} );
-
-		// Don't prevent default - let errors also appear in browser console
-		// for debugging purposes
 	} );
 
 	// Catch unhandled promise rejections
@@ -51,9 +48,6 @@ export function setupGlobalErrorHandlers() {
 			isHandled: false,
 			handledBy: 'unhandledrejection',
 		} );
-
-		// Don't prevent default - let rejections also appear in browser console
-		// for debugging purposes
 	} );
 }
 
