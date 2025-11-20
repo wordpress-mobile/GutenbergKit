@@ -13,7 +13,8 @@ import {
 } from '@wordpress/blocks';
 import { getBlockAndPreviewFromMedia } from '@wordpress/block-editor/build-module/components/inserter/media-tab/utils';
 import { useRef, useEffect, useCallback } from '@wordpress/element';
-
+import { store as blockEditorStore } from '@wordpress/block-editor';
+import { store as coreDataStore } from '@wordpress/core-data';
 // NOTE: These hooks are internal WordPress APIs not available via public exports
 // or privateApis. We import from build-module as the only way to access the
 // block insertion logic without reimplementing it ourselves.
@@ -38,8 +39,6 @@ import useBlockTypesState from '@wordpress/block-editor/build-module/components/
 /**
  * Internal dependencies
  */
-import { store as blockEditorStore } from '@wordpress/block-editor';
-import { store as coreDataStore } from '@wordpress/core-data';
 import { debug } from '../../utils/logger';
 import { preprocessBlockTypesForNativeInserter } from '../../utils/blocks';
 import { showBlockInserter } from '../../utils/bridge';
