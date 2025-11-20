@@ -5,7 +5,7 @@ import OSLog
 
 /// Service for fetching the editor settings and other parts of the enrvironment
 /// required to launch the editor.
-public actor EditorService {
+actor EditorService {
     enum EditorServiceError: Error {
         case invalidResponseData
         case manifestUnavailable
@@ -16,9 +16,9 @@ public actor EditorService {
         let refreshDate: Date
     }
 
-    private let siteID: String
-    private let baseURL: URL
-    private let authHeader: String
+    @MainActor private static var instances: [String: EditorService] = [:]
+
+    private let siteURL: String
     private let urlSession: URLSession
     private let logLevel: LogLevel
     private let logger: Logger
@@ -31,35 +31,42 @@ public actor EditorService {
 
     private var refreshTask: Task<Void, Never>?
 
+    /// Returns the shared EditorService instance for the given siteURL
+    @MainActor
+    static func shared(for siteURL: String, logLevel: LogLevel = .error, urlSession: URLSession = .shared) -> EditorService {
+        if let existing = instances[siteURL] {
+            return existing
+        }
+        let service = EditorService(siteURL: siteURL, logLevel: logLevel, urlSession: urlSession)
+        instances[siteURL] = service
+        return service
+    }
+
     /// Creates a new EditorService instance
     /// - Parameters:
-    ///   - siteID: Unique identifier for the site (used for caching)
-    ///   - baseURL: Root URL for the site API
-    ///   - authHeader: Authorization header value
+    ///   - siteURL: Unique identifier for the site (used for caching)
     ///   - logLevel: Minimum log level for messages (defaults to .error)
     ///   - urlSession: URLSession to use for network requests (defaults to .shared)
-    public init(siteID: String, baseURL: URL, authHeader: String, logLevel: LogLevel = .error, urlSession: URLSession = .shared) {
-        self.siteID = siteID
-        self.baseURL = baseURL
-        self.authHeader = authHeader
+    private init(siteURL: String, logLevel: LogLevel = .error, urlSession: URLSession = .shared) {
+        self.siteURL = siteURL
         self.logLevel = logLevel
         self.urlSession = urlSession
         self.logger = Logger(subsystem: "com.gutenbergkit.editor", category: "EditorService")
 
         self.storeURL = URL.documentsDirectory
             .appendingPathComponent("GutenbergKit", isDirectory: true)
-            .appendingPathComponent(siteID.safeFilename, isDirectory: true)
+            .appendingPathComponent(siteURL.safeFilename, isDirectory: true)
     }
 
     /// Set up the editor for the given site.
     ///
     /// - warning: The request make take a significant amount of time the first
     /// time you open the editor.
-    public func setup(_ configuration: inout EditorConfiguration) async throws {
+    func setup(_ configuration: inout EditorConfiguration) async throws {
         var builder = configuration.toBuilder()
 
         if !isEditorLoaded {
-            await refresh()
+            await refresh(configuration: configuration)
         }
 
         if let data = try? Data(contentsOf: editorSettingsFileURL),
@@ -80,25 +87,30 @@ public actor EditorService {
     }
 
     /// Refresh the editor resources.
-    public func refresh() async {
+    func refresh(configuration: EditorConfiguration) async {
         if let task = refreshTask {
             return await task.value
         }
         let task = Task {
             defer { refreshTask = nil }
-            await actuallyRefresh()
+            await actuallyRefresh(configuration: configuration)
         }
         refreshTask = task
         return await task.value
     }
 
-    private func actuallyRefresh() async {
+    private func actuallyRefresh(configuration: EditorConfiguration) async {
         let startTime = CFAbsoluteTimeGetCurrent()
         log(.info, "Starting editor resources refresh")
 
+        guard let baseURL = URL(string: configuration.siteApiRoot) else {
+            log(.error, "Invalid siteApiRoot URL: \(configuration.siteApiRoot)")
+            return
+        }
+
         // Fetch settings and manifest in parallel
-        async let settingsFuture = Result { try await fetchEditorSettings() }
-        async let manifestFuture = Result { try await fetchManifestData() }
+        async let settingsFuture = Result { try await fetchEditorSettings(baseURL: baseURL, authHeader: configuration.authHeader) }
+        async let manifestFuture = Result { try await fetchManifestData(baseURL: baseURL, authHeader: configuration.authHeader) }
 
         let (settingsResult, manifestResult) = await (settingsFuture, manifestFuture)
 
@@ -159,8 +171,8 @@ public actor EditorService {
     ///
     /// - Returns: Raw settings data from the API
     @discardableResult
-    private func fetchEditorSettings() async throws -> Data {
-        let data = try await fetchData(for: baseURL.appendingPathComponent("/wp-block-editor/v1/settings"))
+    private func fetchEditorSettings(baseURL: URL, authHeader: String) async throws -> Data {
+        let data = try await fetchData(for: baseURL.appendingPathComponent("/wp-block-editor/v1/settings"), authHeader: authHeader)
         do {
             createStoreDirectoryIfNeeded()
             try data.write(to: editorSettingsFileURL)
@@ -174,19 +186,14 @@ public actor EditorService {
 
     /// Fetches the editor assets manifest from the WordPress REST API
     /// Does not write to disk - use this to get manifest data without persisting it
-    private func fetchManifestData() async throws -> Data {
+    private func fetchManifestData(baseURL: URL, authHeader: String) async throws -> Data {
         let excludeParam = URLQueryItem(name: "exclude", value: "core,gutenberg")
         let endpoint = baseURL
             .appendingPathComponent("/wpcom/v2/editor-assets")
             .appending(queryItems: [excludeParam])
 
-        let data = try await fetchData(for: endpoint)
+        let data = try await fetchData(for: endpoint, authHeader: authHeader)
         return data
-    }
-
-    /// Returns the stored manifest data
-    func getManifestData() throws -> Data {
-        try Data(contentsOf: manifestFileURL)
     }
 
     /// Returns the editor assets manifest as a JSON string, with JavaScript and stylesheet links
@@ -200,7 +207,7 @@ public actor EditorService {
     private func getManifestForEditor(siteURL: String) throws -> String {
         // For scheme-less links (i.e. '//stats.wp.com/w.js'), use the scheme in `siteURL`.
         let siteURLScheme = URL(string: siteURL)?.scheme
-        let data = try getManifestData()
+        let data = try Data(contentsOf: manifestFileURL)
         let manifest = try JSONDecoder().decode(EditorAssetsManifest.self, from: data)
         let assetLinks = try manifest.parseAssetLinks()
 
@@ -374,7 +381,7 @@ public actor EditorService {
         }
     }
 
-    private func fetchData(for requestURL: URL) async throws -> Data {
+    private func fetchData(for requestURL: URL, authHeader: String) async throws -> Data {
         var request = URLRequest(url: requestURL)
         request.setValue(authHeader, forHTTPHeaderField: "Authorization")
 

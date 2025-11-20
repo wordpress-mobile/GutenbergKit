@@ -46,12 +46,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Initalizes the editor with the initial content (Gutenberg).
     public init(
-        service: EditorService,
         configuration: EditorConfiguration = .default,
         mediaPicker: MediaPickerController? = nil,
         isWarmupMode: Bool = false
     ) {
-        self.service = service
+        self.service = EditorService.shared(for: configuration.siteURL)
         self.configuration = configuration
         self.mediaPicker = mediaPicker
         self.controller = GutenbergEditorController(configuration: configuration)
@@ -485,13 +484,18 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Calls this at any moment before showing the actual editor. The warmup
     /// shaves a couple of hundred milliseconds off the first load.
-    public static func warmup(service: EditorService, configuration: EditorConfiguration = .default) {
-        let editorViewController = EditorViewController(service: service, configuration: configuration, isWarmupMode: true)
+    public static func warmup(configuration: EditorConfiguration) {
+        let editorViewController = EditorViewController(configuration: configuration, isWarmupMode: true)
         _ = editorViewController.view // Trigger viewDidLoad
 
         // Retain for 5 seconds and let it prefetch stuff
         DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(5)) {
             _ = editorViewController
+        }
+
+        Task {
+            await EditorService.shared(for: configuration.siteURL)
+                .refresh(configuration: configuration)
         }
     }
 }
