@@ -10,7 +10,6 @@ import UIKit
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
     public let webView: WKWebView
     let service: EditorService
-    let assetsLibrary: EditorAssetsLibrary
 
     public var configuration: EditorConfiguration
     private var _isEditorRendered = false
@@ -55,7 +54,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         self.service = service
         self.configuration = configuration
         self.mediaPicker = mediaPicker
-        self.assetsLibrary = EditorAssetsLibrary(service: service, configuration: configuration)
         self.controller = GutenbergEditorController(configuration: configuration)
 
         // The `allowFileAccessFromFileURLs` allows the web view to access the

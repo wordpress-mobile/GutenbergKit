@@ -2,37 +2,6 @@ import Foundation
 import CryptoKit
 import SwiftSoup
 
-public actor EditorAssetsLibrary {
-    let service: EditorService
-    let configuration: EditorConfiguration
-
-    public init(service: EditorService, configuration: EditorConfiguration) {
-        self.service = service
-        self.configuration = configuration
-    }
-
-    /// Returns the editor assets manifest content from EditorService.
-    func loadManifestContent() async throws -> Data {
-        try await service.getManifestData()
-    }
-
-    /// Returns the editor assets manifest content, with JavaScript and stylesheet links
-    /// modified so that their content can be cached and reused by the editor.
-    ///
-    /// - SeeAlso: `CachedAssetSchemeHandler`
-    /// - SeeAlso: `EditorAssetsLibrary.addAsset`
-    func manifestContentForEditor() async throws -> Data {
-        // For scheme-less links (i.e. '//stats.wp.com/w.js'), use the scheme in `siteURL`.
-        let siteURLScheme = URL(string: configuration.siteURL)?.scheme
-        let data = try await loadManifestContent()
-        let manifest = try JSONDecoder().decode(EditorAssetsManifest.self, from: data)
-        return try manifest.renderForEditor(defaultScheme: siteURLScheme)
-    }
-
-}
-
-// MARK: - Manifest Model
-
 struct EditorAssetsManifest: Codable {
     var scripts: String
     var styles: String
