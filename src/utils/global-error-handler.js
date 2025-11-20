@@ -62,12 +62,8 @@ export function setupGlobalErrorHandlers() {
 function isGutenbergKitError( filename, errorObj ) {
 	// Check the filename first
 	if ( filename ) {
-		// GutenbergKit errors should have /gutenberg/ in the path or be from
-		// the same origin
-		if (
-			filename.includes( '/gutenberg/' ) ||
-			filename.includes( window.location.origin )
-		) {
+		// GutenbergKit errors should be from the same origin
+		if ( filename.includes( window.location.origin ) ) {
 			return true;
 		}
 		// If filename is from a different origin, it's likely third-party
@@ -79,11 +75,8 @@ function isGutenbergKitError( filename, errorObj ) {
 	// If no filename, check the error stack trace
 	if ( errorObj?.stack ) {
 		const stack = errorObj.stack;
-		// Look for GutenbergKit-related paths in the stack
-		if (
-			stack.includes( '/gutenberg/' ) ||
-			stack.includes( window.location.origin )
-		) {
+		// Look for same-origin paths in the stack trace
+		if ( stack.includes( window.location.origin ) ) {
 			return true;
 		}
 	}
