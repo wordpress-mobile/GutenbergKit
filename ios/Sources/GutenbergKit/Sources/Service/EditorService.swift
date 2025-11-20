@@ -12,6 +12,10 @@ public actor EditorService {
         case invalidServerResponse
     }
 
+    struct State: Codable {
+        let refreshDate: Date
+    }
+
     private let siteID: String
     private let baseURL: URL
     private let authHeader: String
@@ -22,6 +26,7 @@ public actor EditorService {
     private let storeURL: URL
     private var editorSettingsFileURL: URL { storeURL.appendingPathComponent("settings.json") }
     private var manifestFileURL: URL { storeURL.appendingPathComponent("manifest.json") }
+    private var stateFileURL: URL { storeURL.appendingPathComponent("state.json") }
     private var assetsDirectoryURL: URL { storeURL.appendingPathComponent("assets", isDirectory: true) }
 
     private var refreshTask: Task<Void, Never>?
@@ -71,8 +76,7 @@ public actor EditorService {
 
     /// Returns `true` if the resources required for the editor already exist.
     private var isEditorLoaded: Bool {
-        FileManager.default.fileExists(atPath: editorSettingsFileURL.path()) &&
-        FileManager.default.fileExists(atPath: manifestFileURL.path())
+        FileManager.default.fileExists(atPath: stateFileURL.path)
     }
 
     /// Refresh the editor resources.
@@ -133,6 +137,16 @@ public actor EditorService {
         } catch {
             log(.error, "Failed to save manifest: \(error)")
             return
+        }
+
+        // Save state to indicate successful refresh
+        do {
+            let state = State(refreshDate: Date())
+            let stateData = try JSONEncoder().encode(state)
+            try stateData.write(to: stateFileURL)
+            log(.info, "State saved to disk")
+        } catch {
+            log(.error, "Failed to save state: \(error)")
         }
 
         let totalTime = CFAbsoluteTimeGetCurrent() - startTime
