@@ -2,18 +2,20 @@ import SwiftUI
 import GutenbergKit
 
 struct EditorView: View {
+    private let service: EditorService
     private let configuration: EditorConfiguration
 
     @State private var viewModel = EditorViewModel()
 
     @Environment(\.dismiss) private var dismiss
 
-    init(configuration: EditorConfiguration) {
+    init(service: EditorService, configuration: EditorConfiguration) {
+        self.service = service
         self.configuration = configuration
     }
 
     var body: some View {
-        _EditorView(configuration: configuration, viewModel: viewModel)
+        _EditorView(service: service, configuration: configuration, viewModel: viewModel)
             .toolbar { toolbar }
     }
 
@@ -89,13 +91,16 @@ struct EditorView: View {
 }
 
 private struct _EditorView: UIViewControllerRepresentable {
+    private let service: EditorService
     private let configuration: EditorConfiguration
     private let viewModel: EditorViewModel
 
     init(
+        service: EditorService,
         configuration: EditorConfiguration,
-        viewModel: EditorViewModel,
+        viewModel: EditorViewModel
     ) {
+        self.service = service
         self.configuration = configuration
         self.viewModel = viewModel
     }
@@ -105,7 +110,7 @@ private struct _EditorView: UIViewControllerRepresentable {
     }
 
     func makeUIViewController(context: Context) -> EditorViewController {
-        let viewController = EditorViewController(configuration: configuration)
+        let viewController = EditorViewController(service: service, configuration: configuration)
         viewController.delegate = context.coordinator
         viewController.webView.isInspectable = true
         viewController.startEditorSetup()
@@ -202,6 +207,11 @@ private final class EditorViewModel {
 
 #Preview {
     NavigationStack {
-        EditorView(configuration: .default)
+        let service = EditorService(
+            siteID: "preview",
+            baseURL: URL(string: "https://example.com")!,
+            authHeader: ""
+        )
+        EditorView(service: service, configuration: .default)
     }
 }

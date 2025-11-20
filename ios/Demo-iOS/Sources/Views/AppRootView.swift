@@ -16,6 +16,7 @@ struct AppRootView: View {
     @State private var siteUrlInput = ""
 
     @State private var activeEditorConfiguration: EditorConfiguration? = nil
+    @State private var activeEditorService: EditorService? = nil
 
     @State private var hasError: Bool = false
     @State private var error: AppError? = nil
@@ -40,9 +41,15 @@ struct AppRootView: View {
         }
         .onChange(of: self.selectedConfiguration) { oldValue, newValue in
             switch newValue {
-            case .bundledEditor: activeEditorConfiguration = createBundledConfiguration()
-            case .editorConfiguration(let config): self.loadEditorConfiguration(for: config)
-            case .none: self.activeEditorConfiguration = nil
+            case .bundledEditor:
+                let (config, service) = createBundledConfiguration()
+                activeEditorConfiguration = config
+                activeEditorService = service
+            case .editorConfiguration(let config):
+                self.loadEditorConfiguration(for: config)
+            case .none:
+                self.activeEditorConfiguration = nil
+                self.activeEditorService = nil
             }
         }
     }
@@ -50,8 +57,8 @@ struct AppRootView: View {
     @ViewBuilder
     var editor: some View {
         NavigationView {
-            if let activeEditorConfiguration {
-                EditorView(configuration: activeEditorConfiguration)
+            if let activeEditorConfiguration, let activeEditorService {
+                EditorView(service: activeEditorService, configuration: activeEditorConfiguration)
             } else {
                 ProgressView("Preparing Editor")
             }
@@ -93,6 +100,7 @@ struct AppRootView: View {
                     } catch {
                         print("Failed to setup editor environment, confinuing with the default or cached configuration:", error)
                     }
+                    self.activeEditorService = service
                 }
 
                 self.activeEditorConfiguration = updatedConfiguration
@@ -108,14 +116,23 @@ struct AppRootView: View {
         configurationStorage.saveConfigurations(configurations)
     }
 
-    private func createBundledConfiguration() -> EditorConfiguration {
-        EditorConfigurationBuilder()
+    private func createBundledConfiguration() -> (EditorConfiguration, EditorService) {
+        let config = EditorConfigurationBuilder()
             .setShouldUsePlugins(false)
             .setSiteUrl("")
             .setSiteApiRoot("")
             .setAuthHeader("")
             .setNativeInserterEnabled(isNativeInserterEnabled)
             .build()
+
+        // Create a dummy EditorService for bundled editor (no network requests needed)
+        let service = EditorService(
+            siteID: "bundled",
+            baseURL: URL(string: "https://example.com")!,
+            authHeader: ""
+        )
+
+        return (config, service)
     }
 }
 

@@ -9,6 +9,7 @@ import UIKit
 @MainActor
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
     public let webView: WKWebView
+    let service: EditorService
     let assetsLibrary: EditorAssetsLibrary
 
     public var configuration: EditorConfiguration
@@ -46,13 +47,15 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Initalizes the editor with the initial content (Gutenberg).
     public init(
+        service: EditorService,
         configuration: EditorConfiguration = .default,
         mediaPicker: MediaPickerController? = nil,
         isWarmupMode: Bool = false
     ) {
+        self.service = service
         self.configuration = configuration
         self.mediaPicker = mediaPicker
-        self.assetsLibrary = EditorAssetsLibrary(configuration: configuration)
+        self.assetsLibrary = EditorAssetsLibrary(service: service, configuration: configuration)
         self.controller = GutenbergEditorController(configuration: configuration)
 
         // The `allowFileAccessFromFileURLs` allows the web view to access the
@@ -67,7 +70,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // This is important so they user can't select anything but text across blocks.
         config.selectionGranularity = .character
 
-        let schemeHandler = CachedAssetSchemeHandler(library: assetsLibrary)
+        let schemeHandler = CachedAssetSchemeHandler(service: service)
         for scheme in CachedAssetSchemeHandler.supportedURLSchemes {
             config.setURLSchemeHandler(schemeHandler, forURLScheme: scheme)
         }

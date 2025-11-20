@@ -25,8 +25,8 @@ class CachedAssetSchemeHandler: NSObject, WKURLSchemeHandler {
 
     let worker: Worker
 
-    init(library: EditorAssetsLibrary) {
-        self.worker = .init(library: library)
+    init(service: EditorService) {
+        self.worker = .init(service: service)
     }
 
     func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {
@@ -51,11 +51,11 @@ class CachedAssetSchemeHandler: NSObject, WKURLSchemeHandler {
              }
         }
 
-        let library: EditorAssetsLibrary
+        let service: EditorService
         var tasks: [ObjectIdentifier: TaskInfo] = [:]
 
-        init(library: EditorAssetsLibrary) {
-            self.library = library
+        init(service: EditorService) {
+            self.service = service
         }
 
         deinit {
@@ -72,9 +72,9 @@ class CachedAssetSchemeHandler: NSObject, WKURLSchemeHandler {
 
             let taskKey = ObjectIdentifier(task)
 
-            let fetchAssetTask = Task { [library, weak self] in
+            let fetchAssetTask = Task { [service, weak self] in
                 do {
-                    let (response, content) = try await library.cacheAsset(from: httpURL, webViewURL: url)
+                    let (response, content) = try await service.loadCachedAsset(from: httpURL, webViewURL: url)
 
                     await self?.tasks[taskKey]?.webViewTask.didReceive(response)
                     await self?.tasks[taskKey]?.webViewTask.didReceive(content)
