@@ -10,6 +10,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import { isDevMode } from '../../utils/dev-mode';
+import { getGBKit } from '../../utils/bridge';
 
 // Only display the notice on initial load
 let noticeShown = false;
@@ -19,19 +20,20 @@ export function useDevModeNotice() {
 
 	useEffect( () => {
 		const hasDevMode = isDevMode();
+		const hasNativeBridge = !! getGBKit().post;
 
 		if ( hasDevMode && ! noticeShown ) {
 			noticeShown = true;
-			createWarningNotice(
-				__(
-					'Editor loaded in development mode without a native bridge.',
-					'gutenberg-kit'
-				),
-				{
-					type: 'snackbar',
-					isDismissible: true,
-				}
-			);
+			const message = hasNativeBridge
+				? __( 'Editor loaded in development mode.', 'gutenberg-kit' )
+				: __(
+						'Editor loaded in development mode without a native bridge.',
+						'gutenberg-kit'
+				  );
+			createWarningNotice( message, {
+				type: 'snackbar',
+				isDismissible: true,
+			} );
 		}
 	}, [ createWarningNotice ] );
 }
