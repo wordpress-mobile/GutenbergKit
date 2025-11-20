@@ -18,21 +18,19 @@ public actor EditorAssetsLibrary {
         self.urlSession = URLSession(configuration: .default)
     }
 
-    /// Returns the `EditorConfiguration.editorAssetsEndpoint` manifest content. The manifest content is cached and
-    /// reused on future calls.
+    /// Returns the editor assets manifest content from the WordPress REST API.
+    /// The manifest content is cached and reused on future calls.
     func loadManifestContent() async throws -> Data {
-        let endpoint: URL
         // The GutenbergKit bundle includes the required `@wordpress` modules
         let excludeParam = URLQueryItem(name: "exclude", value: "core,gutenberg")
-        if let url = configuration.editorAssetsEndpoint {
-            endpoint = url.appending(queryItems: [excludeParam])
-        } else if !configuration.siteApiRoot.isEmpty, let apiRoot = URL(string: configuration.siteApiRoot) {
-            endpoint = apiRoot
-                .appendingPathComponent("wpcom/v2/editor-assets")
-                .appending(queryItems: [excludeParam])
-        } else {
+
+        guard !configuration.siteApiRoot.isEmpty, let apiRoot = URL(string: configuration.siteApiRoot) else {
             throw ManifestError.unavailable
         }
+
+        let endpoint = apiRoot
+            .appendingPathComponent("wpcom/v2/editor-assets")
+            .appending(queryItems: [excludeParam])
 
         var request = URLRequest(url: endpoint)
         request.setValue(configuration.authHeader, forHTTPHeaderField: "Authorization")
@@ -44,7 +42,7 @@ public actor EditorAssetsLibrary {
         }
     }
 
-    /// Returns the `EditorConfiguration.editorAssetsEndpoint` manifest content, with JavaScript and stylesheet links
+    /// Returns the editor assets manifest content, with JavaScript and stylesheet links
     /// modified so that their content can be cached and reused by the editor.
     ///
     /// - SeeAlso: `CachedAssetSchemeHandler`
@@ -57,7 +55,7 @@ public actor EditorAssetsLibrary {
         return try manifest.renderForEditor(defaultScheme: siteURLScheme)
     }
 
-    /// Fetches all assets in the `EditorConfiguration.editorAssetsEndpoint` manifest and stores them on the device.
+    /// Fetches all assets in the editor assets manifest and stores them on the device.
     ///
     /// - SeeAlso: CachedAssetSchemeHandler
     public func fetchAssets() async throws {

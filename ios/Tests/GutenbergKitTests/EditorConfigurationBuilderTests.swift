@@ -22,7 +22,6 @@ struct EditorConfigurationBuilderTests {
         #expect(builder.authHeader == "")
         #expect(builder.editorSettings == "undefined")
         #expect(builder.locale == "en")
-        #expect(builder.editorAssetsEndpoint == nil)
     }
 
     @Test("Editor Configuration to Builder")
@@ -42,7 +41,6 @@ struct EditorConfigurationBuilderTests {
             .setAuthHeader("Bearer Token")
             .setEditorSettings(#"{"foo":"bar"}"#)
             .setLocale("fr")
-            .setEditorAssetsEndpoint(URL(string: "https://example.com/wp-content/plugins/gutenberg/build/"))
             .build()        // Convert to a configuration
             .toBuilder()    // Then back to a builder (to test the configuration->builder logic)
             .build()        // Then back to a configuration to examine the results
@@ -61,7 +59,6 @@ struct EditorConfigurationBuilderTests {
         #expect(configuration.authHeader == "Bearer Token")
         #expect(configuration.editorSettings == #"{"foo":"bar"}"#)
         #expect(configuration.locale == "fr")
-        #expect(configuration.editorAssetsEndpoint == URL(string: "https://example.com/wp-content/plugins/gutenberg/build/"))
     }
 
     @Test("Sets Title Correctly")
@@ -150,11 +147,6 @@ struct EditorConfigurationBuilderTests {
     @Test("Sets locale Correctly")
     func editorConfigurationBuilderSetsLocaleCorrectly() throws {
         #expect(EditorConfigurationBuilder().setLocale("en").build().locale == "en")
-    }
-
-    @Test("Sets editorAssetsEndpoint Correctly")
-    func editorConfigurationBuilderSetsEditorAssetsEndpointCorrectly() throws {
-        #expect(EditorConfigurationBuilder().setEditorAssetsEndpoint(URL(string: "https://example.com/wp-content/plugins/gutenberg/build/")).build().editorAssetsEndpoint == URL(string: "https://example.com/wp-content/plugins/gutenberg/build/"))
     }
 
     @Test("Applies values correctly")
