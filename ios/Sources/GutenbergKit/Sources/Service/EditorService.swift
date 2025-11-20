@@ -117,32 +117,12 @@ public actor EditorService {
     /// - Returns: Raw settings data from the API
     @discardableResult
     private func fetchEditorSettings() async throws -> Data {
-        let data = try await getData(for: baseURL.appendingPathComponent("/wp-block-editor/v1/settings"))
+        let data = try await fetchData(for: baseURL.appendingPathComponent("/wp-block-editor/v1/settings"))
         do {
             createStoreDirectoryIfNeeded()
             try data.write(to: editorSettingsFileURL)
         } catch {
             assertionFailure("Failed to save settings: \(error)")
-        }
-        return data
-    }
-
-    // MARK: - Private Helpers
-
-    private func createStoreDirectoryIfNeeded() {
-        if !FileManager.default.fileExists(atPath: storeURL.path) {
-            try? FileManager.default.createDirectory(at: storeURL, withIntermediateDirectories: true)
-        }
-    }
-
-    private func getData(for requestURL: URL) async throws -> Data {
-        var request = URLRequest(url: requestURL)
-        request.setValue(authHeader, forHTTPHeaderField: "Authorization")
-
-        let (data, response) = try await urlSession.data(for: request)
-        guard let status = (response as? HTTPURLResponse)?.statusCode,
-              (200..<300).contains(status) else {
-            throw URLError(.badServerResponse)
         }
         return data
     }
@@ -157,7 +137,7 @@ public actor EditorService {
             .appendingPathComponent("/wpcom/v2/editor-assets")
             .appending(queryItems: [excludeParam])
 
-        let data = try await getData(for: endpoint)
+        let data = try await fetchData(for: endpoint)
         do {
             createStoreDirectoryIfNeeded()
             try data.write(to: manifestFileURL)
@@ -303,19 +283,6 @@ public actor EditorService {
         try FileManager.default.removeItem(at: rootURL)
     }
 
-    // MARK: - Logging
-
-    /// Logs a message at the specified level
-    private func log(_ level: LogLevel, _ message: String) {
-        guard level.rawValue >= logLevel.rawValue else { return }
-        switch level {
-        case .debug: logger.debug("\(message)")
-        case .info: logger.info("\(message)")
-        case .warn: logger.warning("\(message)")
-        case .error: logger.error("\(message)")
-        }
-    }
-
     // MARK: - Helpers
 
     /// Generates a cached filename from an asset URL using SHA256 hash
@@ -330,6 +297,37 @@ public actor EditorService {
             return ext.isEmpty ? hash : "\(hash).\(ext)"
         }
         return hash
+    }
+
+    private func createStoreDirectoryIfNeeded() {
+        if !FileManager.default.fileExists(atPath: storeURL.path) {
+            try? FileManager.default.createDirectory(at: storeURL, withIntermediateDirectories: true)
+        }
+    }
+
+    private func fetchData(for requestURL: URL) async throws -> Data {
+        var request = URLRequest(url: requestURL)
+        request.setValue(authHeader, forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await urlSession.data(for: request)
+        guard let status = (response as? HTTPURLResponse)?.statusCode,
+              (200..<300).contains(status) else {
+            throw URLError(.badServerResponse)
+        }
+        return data
+    }
+
+    // MARK: - Logging
+
+    /// Logs a message at the specified level
+    private func log(_ level: LogLevel, _ message: String) {
+        guard level.rawValue >= logLevel.rawValue else { return }
+        switch level {
+        case .debug: logger.debug("\(message)")
+        case .info: logger.info("\(message)")
+        case .warn: logger.warning("\(message)")
+        case .error: logger.error("\(message)")
+        }
     }
 }
 
