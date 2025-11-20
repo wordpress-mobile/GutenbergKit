@@ -93,7 +93,8 @@ struct AppRootView: View {
                     let service = EditorService(
                         siteID: config.siteUrl,
                         baseURL: baseURL,
-                        authHeader: config.authHeader
+                        authHeader: config.authHeader,
+                        logLevel: .debug
                     )
                     do {
                         try await service.setup(&updatedConfiguration)
@@ -129,7 +130,8 @@ struct AppRootView: View {
         let service = EditorService(
             siteID: "bundled",
             baseURL: URL(string: "https://example.com")!,
-            authHeader: ""
+            authHeader: "",
+            logLevel: .debug
         )
 
         return (config, service)

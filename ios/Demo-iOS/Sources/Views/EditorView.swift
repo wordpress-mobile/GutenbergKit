@@ -210,7 +210,8 @@ private final class EditorViewModel {
         let service = EditorService(
             siteID: "preview",
             baseURL: URL(string: "https://example.com")!,
-            authHeader: ""
+            authHeader: "",
+            logLevel: .debug
         )
         EditorView(service: service, configuration: .default)
     }

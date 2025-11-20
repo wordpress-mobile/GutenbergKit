@@ -1,6 +1,7 @@
 import Foundation
 import CryptoKit
 import SwiftSoup
+import OSLog
 
 /// Service for fetching the editor settings and other parts of the enrvironment
 /// required to launch the editor.
@@ -15,6 +16,8 @@ public actor EditorService {
     private let baseURL: URL
     private let authHeader: String
     private let urlSession: URLSession
+    private let logLevel: LogLevel
+    private let logger: Logger
 
     private let storeURL: URL
     private var editorSettingsFileURL: URL { storeURL.appendingPathComponent("settings.json") }
@@ -28,12 +31,15 @@ public actor EditorService {
     ///   - siteID: Unique identifier for the site (used for caching)
     ///   - baseURL: Root URL for the site API
     ///   - authHeader: Authorization header value
+    ///   - logLevel: Minimum log level for messages (defaults to .error)
     ///   - urlSession: URLSession to use for network requests (defaults to .shared)
-    public init(siteID: String, baseURL: URL, authHeader: String, urlSession: URLSession = .shared) {
+    public init(siteID: String, baseURL: URL, authHeader: String, logLevel: LogLevel = .error, urlSession: URLSession = .shared) {
         self.siteID = siteID
         self.baseURL = baseURL
         self.authHeader = authHeader
+        self.logLevel = logLevel
         self.urlSession = urlSession
+        self.logger = Logger(subsystem: "com.gutenbergkit.editor", category: "EditorService")
 
         self.storeURL = URL.documentsDirectory
             .appendingPathComponent("GutenbergKit", isDirectory: true)
@@ -79,14 +85,24 @@ public actor EditorService {
     }
 
     private func actuallyRefresh() async throws {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        log(.info, "Starting editor resources refresh")
+
         // Fetch settings and manifest in parallel
         async let settingsData = fetchEditorSettings()
         async let manifestData = fetchManifest()
 
-        _ = try await (settingsData, manifestData)
+        let (_, manifest) = try await (settingsData, manifestData)
+        let fetchTime = CFAbsoluteTimeGetCurrent() - startTime
+        log(.info, "Fetched settings and manifest in \(String(format: "%.2f", fetchTime))s")
 
         // After manifest is fetched, fetch all assets in parallel
-        try await fetchAssets()
+        let assetsStartTime = CFAbsoluteTimeGetCurrent()
+        try await fetchAssets(manifestData: manifest)
+        let assetsTime = CFAbsoluteTimeGetCurrent() - assetsStartTime
+
+        let totalTime = CFAbsoluteTimeGetCurrent() - startTime
+        log(.info, "Editor refresh completed in \(String(format: "%.2f", totalTime))s (assets: \(String(format: "%.2f", assetsTime))s)")
     }
 
     // MARK: – Editor Settings
@@ -154,10 +170,11 @@ public actor EditorService {
     // MARK: - Assets
 
     /// Fetches all assets from the manifest and stores them on the device
-    private func fetchAssets() async throws {
-        let manifestData = try Data(contentsOf: manifestFileURL)
+    private func fetchAssets(manifestData: Data) async throws {
         let manifest = try JSONDecoder().decode(EditorAssetsManifest.self, from: manifestData)
         let assetLinks = try manifest.parseAssetLinks()
+
+        log(.info, "Found \(assetLinks.count) assets to fetch")
 
         // Create assets directory if needed
         let fileManager = FileManager.default
@@ -165,50 +182,69 @@ public actor EditorService {
             try fileManager.createDirectory(at: assetsDirectoryURL, withIntermediateDirectories: true)
         }
 
+        // Track statistics
+        var fetchedCount = 0
+        var cachedCount = 0
+        var totalSize: Int64 = 0
+
         // Fetch all assets in parallel
-        try await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: (Bool, Int64).self) { group in
             for link in assetLinks {
                 group.addTask {
                     try await self.fetchAsset(from: link)
                 }
             }
 
-            try await group.waitForAll()
+            for try await (wasCached, size) in group {
+                if wasCached {
+                    cachedCount += 1
+                } else {
+                    fetchedCount += 1
+                }
+                totalSize += size
+            }
         }
 
-        NSLog("\(assetLinks.count) assets fetched and cached.")
+        let totalSizeMB = Double(totalSize) / (1024 * 1024)
+        log(.info, "Assets loaded: \(fetchedCount) fetched, \(cachedCount) cached, total size: \(String(format: "%.2f", totalSizeMB)) MB")
     }
 
     /// Fetches a single asset and stores it on disk
-    private func fetchAsset(from urlString: String) async throws {
+    /// - Returns: A tuple indicating (wasCached, fileSize)
+    private func fetchAsset(from urlString: String) async throws -> (Bool, Int64) {
         guard let url = URL(string: urlString) else {
-            NSLog("Malformed asset link: \(urlString)")
-            return
+            log(.warn, "Malformed asset link: \(urlString)")
+            return (false, 0)
         }
 
         guard url.scheme == "http" || url.scheme == "https" else {
-            NSLog("Unexpected asset link: \(urlString)")
-            return
+            log(.warn, "Unexpected asset link: \(urlString)")
+            return (false, 0)
         }
 
         let supportedResourceSuffixes = [".js", ".css", ".js.map"]
         guard supportedResourceSuffixes.contains(where: { url.lastPathComponent.hasSuffix($0) }) else {
-            NSLog("Unsupported asset URL: \(url)")
-            return
+            log(.warn, "Unsupported asset URL: \(url)")
+            return (false, 0)
         }
 
         let localURL = assetsDirectoryURL.appendingPathComponent(url.uniqueFilename)
 
-        // Skip if already cached
+        // Check if already cached
         if FileManager.default.fileExists(atPath: localURL.path) {
-            return
+            let size = try? FileManager.default.attributesOfItem(atPath: localURL.path)[.size] as? Int64 ?? 0
+            return (true, size ?? 0)
         }
 
         let (downloadedURL, response) = try await urlSession.download(from: url)
         if let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status) {
+            let size = try? FileManager.default.attributesOfItem(atPath: downloadedURL.path)[.size] as? Int64 ?? 0
             try FileManager.default.moveItem(at: downloadedURL, to: localURL)
+            log(.debug, "Downloaded asset: \(url.lastPathComponent) (\(size ?? 0) bytes)")
+            return (false, size ?? 0)
         } else {
-            NSLog("Received unexpected HTTP response for URL: \(url)")
+            log(.error, "Received unexpected HTTP response for URL: \(url)")
+            return (false, 0)
         }
     }
 
@@ -237,6 +273,19 @@ public actor EditorService {
         }
         let response = URLResponse(url: webViewURL, mimeType: mimeType, expectedContentLength: content.count, textEncodingName: nil)
         return (response, content)
+    }
+
+    // MARK: - Logging
+
+    /// Logs a message at the specified level
+    private func log(_ level: LogLevel, _ message: String) {
+        guard level.rawValue >= logLevel.rawValue else { return }
+        switch level {
+        case .debug: logger.debug("\(message)")
+        case .info: logger.info("\(message)")
+        case .warn: logger.warning("\(message)")
+        case .error: logger.error("\(message)")
+        }
     }
 }
 
