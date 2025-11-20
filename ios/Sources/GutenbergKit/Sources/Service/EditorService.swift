@@ -97,10 +97,10 @@ public actor EditorService {
         log(.info, "Starting editor resources refresh")
 
         // Fetch settings and manifest in parallel
-        async let settingsResult = Result { try await fetchEditorSettings() }
-        async let manifestResult = Result { try await fetchManifestData() }
+        async let settings = Result { try await fetchEditorSettings() }
+        async let manifest = Result { try await fetchManifestData() }
 
-        let (settings, manifest) = await (settingsResult, manifestResult)
+        let (settingsResult, manifestResult) = await (settings, manifest)
 
         // Log errors but continue
         if case .failure(let error) = settings {
@@ -396,6 +396,18 @@ public actor EditorService {
         case .info: logger.info("\(message)")
         case .warn: logger.warning("\(message)")
         case .error: logger.error("\(message)")
+        }
+    }
+}
+
+// MARK: - Result Extension
+
+private extension Result {
+    init(catching body: () async throws -> Success) async where Failure == Error {
+        do {
+            self = .success(try await body())
+        } catch {
+            self = .failure(error)
         }
     }
 }
