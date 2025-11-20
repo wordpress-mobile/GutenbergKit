@@ -7,7 +7,7 @@ import { logException } from './bridge';
  * Sets up global error handlers to catch and report unhandled errors
  * and promise rejections.
  */
-export function setupGlobalErrorHandlers() {
+export function setUpGlobalErrorHandlers() {
 	// Catch unhandled errors
 	window.addEventListener( 'error', ( event ) => {
 		if ( isExternalError( event.filename, event.error ) ) {

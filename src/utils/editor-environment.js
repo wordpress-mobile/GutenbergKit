@@ -6,7 +6,7 @@ import { loadEditorAssets } from './editor-loader';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge';
 import EditorLoadError from '../components/editor-load-error';
 import { error } from './logger';
-import { setupGlobalErrorHandlers } from './global-error-handler';
+import { setUpGlobalErrorHandlers } from './global-error-handler';
 import './editor-styles';
 
 /**
@@ -39,7 +39,7 @@ export function setUpEditorEnvironment() {
 		.then( initializeVideoPressAjaxBridge )
 		.then( loadPluginsIfEnabled )
 		.then( initializeEditor )
-		.then( setupGlobalErrorHandlers )
+		.then( setUpGlobalErrorHandlers )
 		.catch( handleError );
 }
 
