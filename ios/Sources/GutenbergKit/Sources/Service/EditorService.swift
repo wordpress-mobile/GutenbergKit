@@ -63,7 +63,7 @@ public actor EditorService {
         }
 
         // Load and process manifest for the editor
-        if let manifestString = try? await getManifestForEditor(siteURL: configuration.siteURL) {
+        if let manifestString = try? getManifestForEditor(siteURL: configuration.siteURL) {
             builder = builder.setManifest(manifestString)
         }
 
@@ -177,7 +177,7 @@ public actor EditorService {
     ///
     /// - Parameter siteURL: The site URL to extract the scheme for scheme-less links
     /// - Returns: JSON string of the processed manifest
-    private func getManifestForEditor(siteURL: String) async throws -> String {
+    private func getManifestForEditor(siteURL: String) throws -> String {
         // For scheme-less links (i.e. '//stats.wp.com/w.js'), use the scheme in `siteURL`.
         let siteURLScheme = URL(string: siteURL)?.scheme
         let data = try getManifestData()
@@ -250,7 +250,7 @@ public actor EditorService {
             return (false, 0)
         }
 
-        let localURL = assetsDirectoryURL.appendingPathComponent(url.uniqueFilename)
+        let localURL = assetsDirectoryURL.appendingPathComponent(cachedFilename(for: urlString))
 
         // Check if already cached
         if FileManager.default.fileExists(atPath: localURL.path) {
@@ -261,7 +261,11 @@ public actor EditorService {
         let (downloadedURL, response) = try await urlSession.download(from: url)
         if let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status) {
             let size = try? FileManager.default.attributesOfItem(atPath: downloadedURL.path)[.size] as? Int64 ?? 0
-            try FileManager.default.moveItem(at: downloadedURL, to: localURL)
+            do {
+                try FileManager.default.moveItem(at: downloadedURL, to: localURL)
+            } catch {
+                log(.error, "Failed to move downloaded assets \(downloadedURL) \(localURL)")
+            }
             log(.debug, "Downloaded asset: \(url.lastPathComponent) (\(size ?? 0) bytes)")
             return (false, size ?? 0)
         } else {
@@ -270,18 +274,9 @@ public actor EditorService {
         }
     }
 
-    /// Returns the local file URL for a cached asset
-    func getCachedAssetURL(for httpURL: URL) -> URL? {
-        let localURL = assetsDirectoryURL.appendingPathComponent(httpURL.uniqueFilename)
-        guard FileManager.default.fileExists(atPath: localURL.path) else {
-            return nil
-        }
-        return localURL
-    }
-
     /// Loads a cached asset from disk
-    func loadCachedAsset(from httpURL: URL, webViewURL: URL) async throws -> (URLResponse, Data) {
-        let localURL = assetsDirectoryURL.appendingPathComponent(httpURL.uniqueFilename)
+    func loadCachedAsset(from httpURL: URL, webViewURL: URL) throws -> (URLResponse, Data) {
+        let localURL = assetsDirectoryURL.appendingPathComponent(cachedFilename(for: httpURL.absoluteString))
 
         guard FileManager.default.fileExists(atPath: localURL.path) else {
             throw URLError(.fileDoesNotExist)
@@ -320,31 +315,21 @@ public actor EditorService {
         case .error: logger.error("\(message)")
         }
     }
-}
 
-// MARK: - URL Extension
+    // MARK: - Helpers
 
-private extension URL {
-    var uniqueFilename: String {
-        var filename = path
-
-        if filename.hasPrefix("/") {
-            filename.removeFirst()
-        }
-
-        filename.removeLast(pathExtension.count)
-
-        let hash = SHA256.hash(data: Data(absoluteString.utf8))
+    /// Generates a cached filename from an asset URL using SHA256 hash
+    private func cachedFilename(for urlString: String) -> String {
+        let hash = SHA256.hash(data: Data(urlString.utf8))
             .compactMap { String(format: "%02x", $0) }
             .joined()
 
-        filename += hash
-
-        if pathExtension.isEmpty {
-            return filename
-        } else {
-            return filename + "." + pathExtension
+        // Preserve file extension if present
+        if let url = URL(string: urlString) {
+            let ext = url.pathExtension
+            return ext.isEmpty ? hash : "\(hash).\(ext)"
         }
+        return hash
     }
 }
 

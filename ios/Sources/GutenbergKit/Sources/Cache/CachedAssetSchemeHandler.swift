@@ -23,86 +23,33 @@ class CachedAssetSchemeHandler: NSObject, WKURLSchemeHandler {
         return nil
     }
 
-    let worker: Worker
+    let service: EditorService
 
     init(service: EditorService) {
-        self.worker = .init(service: service)
+        self.service = service
     }
 
     func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {
+        guard let url = urlSchemeTask.request.url,
+              let httpURL = CachedAssetSchemeHandler.originalHTTPURL(from: url) else {
+            urlSchemeTask.didFailWithError(URLError(.badURL))
+            return
+        }
+
         Task {
-            await worker.start(urlSchemeTask)
+            do {
+                let (response, content) = try await service.loadCachedAsset(from: httpURL, webViewURL: url)
+                urlSchemeTask.didReceive(response)
+                urlSchemeTask.didReceive(content)
+                urlSchemeTask.didFinish()
+            } catch {
+                urlSchemeTask.didFailWithError(error)
+            }
         }
     }
 
     func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {
-        Task {
-            await worker.stop(urlSchemeTask)
-        }
-    }
-
-    actor Worker {
-         struct TaskInfo {
-             var webViewTask: WKURLSchemeTask
-             var fetchAssetTask: Task<Void, Never>
-
-             func cancel() {
-                 fetchAssetTask.cancel()
-             }
-        }
-
-        let service: EditorService
-        var tasks: [ObjectIdentifier: TaskInfo] = [:]
-
-        init(service: EditorService) {
-            self.service = service
-        }
-
-        deinit {
-            for (_, task) in tasks {
-                task.cancel()
-            }
-        }
-
-        func start(_ task: WKURLSchemeTask) {
-            guard let url = task.request.url, let httpURL = CachedAssetSchemeHandler.originalHTTPURL(from: url) else {
-                task.didFailWithError(URLError(.badURL))
-                return
-            }
-
-            let taskKey = ObjectIdentifier(task)
-
-            let fetchAssetTask = Task { [service, weak self] in
-                do {
-                    let (response, content) = try await service.loadCachedAsset(from: httpURL, webViewURL: url)
-
-                    await self?.tasks[taskKey]?.webViewTask.didReceive(response)
-                    await self?.tasks[taskKey]?.webViewTask.didReceive(content)
-
-                    await self?.finish(with: nil, taskKey: taskKey)
-                } catch {
-                    await self?.finish(with: error, taskKey: taskKey)
-                }
-            }
-            tasks[taskKey] = .init(webViewTask: task, fetchAssetTask: fetchAssetTask)
-        }
-
-        func stop(_ task: WKURLSchemeTask) {
-            let taskKey = ObjectIdentifier(task)
-            tasks[taskKey]?.cancel()
-            tasks[taskKey] = nil
-        }
-
-        private func finish(with error: Error?, taskKey: ObjectIdentifier) {
-            guard let task = tasks[taskKey] else { return }
-
-            if let error {
-                task.webViewTask.didFailWithError(error)
-            } else {
-                task.webViewTask.didFinish()
-            }
-            tasks[taskKey] = nil
-        }
+        // No-op: since we're reading from disk synchronously, there's nothing to cancel
     }
 }
 
