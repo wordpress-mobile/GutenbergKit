@@ -307,13 +307,11 @@ class GutenbergView : WebView {
                 "editorSettings": $editorSettings,
                 "locale": "${configuration.locale}",
                 ${if (configuration.editorAssetsEndpoint != null) "\"editorAssetsEndpoint\": \"${configuration.editorAssetsEndpoint}\"," else ""}
-                ${if (configuration.postId != null) """
                 "post": {
-                    "id": ${configuration.postId},
+                    "id": ${configuration.postId ?: -1},
                     "title": "$escapedTitle",
                     "content": "$escapedContent"
                 }
-                """ else ""}
             };
             localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
         """.trimIndent()
