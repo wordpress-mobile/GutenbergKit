@@ -9,6 +9,7 @@
 		"clean:dist": "rm -rf dist",
 		"clean:l10n": "rm -rf src/translations",
 		"dev": "vite --host",
+		"devtools": "react-devtools",
 		"build": "vite --emptyOutDir build",
 		"lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
 		"lintfix": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0 --fix",
@@ -66,6 +67,8 @@
 		"node-fetch": "^3.3.2",
 		"patch-package": "^8.0.0",
 		"prettier": "npm:wp-prettier@^3.0.3",
+		"react-devtools": "^7.0.1",
+		"react-devtools-core": "^7.0.1",
 		"sass-embedded": "^1.86.3",
 		"vite": "^6.3.5",
 		"vitest": "^3.1.3"
