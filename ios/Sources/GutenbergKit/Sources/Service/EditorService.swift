@@ -275,6 +275,17 @@ public actor EditorService {
         return (response, content)
     }
 
+    // MARK: - Data Management
+
+    /// Deletes all cached editor data for all sites
+    public static func deleteAllData() throws {
+        let rootURL = URL.documentsDirectory.appendingPathComponent("GutenbergKit", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: rootURL.path) else {
+            return
+        }
+        try FileManager.default.removeItem(at: rootURL)
+    }
+
     // MARK: - Logging
 
     /// Logs a message at the specified level
