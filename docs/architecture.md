@@ -59,15 +59,41 @@ Native code executes JavaScript in the WebView to:
 
 Development mode (`?dev_mode` query parameter) enables debugging features and bypasses certain production behaviors to simplify development and testing:
 
--   **Automatic redirects are disabled** - When errors occur, the editor stays on the current page instead of redirecting to fallback pages, allowing developers to debug errors in place
--   **Mock GBKit global is provided** - If the native bridge (`window.GBKit`) is not available, a mock object is automatically provided to allow the editor to load without native integration
--   **Development notice is displayed** - A warning notice appears to inform developers that they're running without a native bridge
+-   **Development notice is displayed** - A warning notice appears to inform developers that they're running in development mode.
+-   **Mock GBKit global is provided** - If the native bridge (`window.GBKit`) is not available, a mock object is automatically provided to allow the editor to load without native integration.
+-   **React Dev Tools integration** - The editor connects to the React Dev Tools standalone server for component inspection and debugging. See the React Dev Tools section below for setup instructions.
 
 Add the `?dev_mode` query parameter to the editor URL:
 
 ```
 http://localhost:3000/?dev_mode
 ```
+
+### React Dev Tools
+
+The [React Developer Tools](https://react.dev/learn/react-developer-tools) allow inspecting React components, view props and state, and debug the component tree during development. GutenbergKit supports the standalone DevTools server for both browser and native WebView debugging.
+
+1. Start the standalone DevTools server:
+
+    ```bash
+    make dev-tools
+    ```
+
+    This opens a standalone window that will display your React component tree.
+
+2. Start the development server:
+
+    ```bash
+    make dev-server
+    ```
+
+3. Load the editor with development mode enabled:
+
+    ```
+    http://localhost:5173/?dev_mode=1
+    ```
+
+    The editor will automatically connect to the DevTools server, and your component tree will appear in the standalone window.
 
 ## Logging Configuration
 
