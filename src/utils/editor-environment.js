@@ -16,6 +16,8 @@ import './editor-styles';
  * @return {Promise} Promise that resolves when initialization is complete
  */
 export function setUpEditorEnvironment() {
+	setUpGlobalErrorHandlers();
+
 	// Detect platform and add class to body for platform-specific styling
 	if ( typeof window !== 'undefined' && window.webkit ) {
 		document.body.classList.add( 'is-ios' );
@@ -39,7 +41,6 @@ export function setUpEditorEnvironment() {
 		.then( initializeVideoPressAjaxBridge )
 		.then( loadPluginsIfEnabled )
 		.then( initializeEditor )
-		.then( setUpGlobalErrorHandlers )
 		.catch( handleError );
 }
 
