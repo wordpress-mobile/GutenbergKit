@@ -87,7 +87,13 @@ The [React Developer Tools](https://react.dev/learn/react-developer-tools) allow
     make dev-server
     ```
 
-3. Load the editor with development mode enabled:
+3. For Android emulators only, set up port forwarding (see below).
+
+    ```bash
+    adb reverse tcp:8097 tcp:8097
+    ```
+
+4. Load the editor with development mode enabled:
 
     ```
     http://localhost:5173/?dev_mode=1
