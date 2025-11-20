@@ -132,12 +132,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func loadEditor() {
-        webView.configuration.userContentController.addScriptMessageHandler(
-            EditorAssetsProvider(library: assetsLibrary),
-            contentWorld: .page,
-            name: "loadFetchedEditorAssets"
-        )
-
         if let editorURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
             webView.load(URLRequest(url: editorURL))
         } else {
@@ -147,6 +141,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func getEditorConfiguration() -> WKUserScript {
+        let manifestJSON: String
+        if let manifest = configuration.manifest {
+            manifestJSON = manifest
+        } else {
+            manifestJSON = "undefined"
+        }
 
         let jsCode = """
 
@@ -167,7 +167,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 title: '\(configuration.escapedTitle)',
                 content: '\(configuration.escapedContent)'
             },
-            logLevel: '\(configuration.logLevel)'
+            logLevel: '\(configuration.logLevel)',
+            manifest: \(manifestJSON)
         };
 
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));

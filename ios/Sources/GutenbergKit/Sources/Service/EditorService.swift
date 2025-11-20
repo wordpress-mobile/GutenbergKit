@@ -62,6 +62,11 @@ public actor EditorService {
             builder = builder.setEditorSettings(settings)
         }
 
+        // Load and process manifest for the editor
+        if let manifestString = try? await getManifestForEditor(siteURL: configuration.siteURL) {
+            builder = builder.setManifest(manifestString)
+        }
+
         return configuration = builder.build()
     }
 
@@ -165,6 +170,23 @@ public actor EditorService {
     /// Returns the stored manifest data
     func getManifestData() throws -> Data {
         try Data(contentsOf: manifestFileURL)
+    }
+
+    /// Returns the editor assets manifest as a JSON string, with JavaScript and stylesheet links
+    /// modified so that their content can be cached and reused by the editor.
+    ///
+    /// - Parameter siteURL: The site URL to extract the scheme for scheme-less links
+    /// - Returns: JSON string of the processed manifest
+    private func getManifestForEditor(siteURL: String) async throws -> String {
+        // For scheme-less links (i.e. '//stats.wp.com/w.js'), use the scheme in `siteURL`.
+        let siteURLScheme = URL(string: siteURL)?.scheme
+        let data = try getManifestData()
+        let manifest = try JSONDecoder().decode(EditorAssetsManifest.self, from: data)
+        let processedData = try manifest.renderForEditor(defaultScheme: siteURLScheme)
+        guard let jsonString = String(data: processedData, encoding: .utf8) else {
+            throw EditorServiceError.invalidResponseData
+        }
+        return jsonString
     }
 
     // MARK: - Assets

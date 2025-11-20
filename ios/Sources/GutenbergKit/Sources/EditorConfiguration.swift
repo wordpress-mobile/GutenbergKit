@@ -34,6 +34,8 @@ public struct EditorConfiguration: Sendable {
     public let isNativeInserterEnabled: Bool
     /// Logs emitted at or above this level will be printed to the debug console
     public let logLevel: LogLevel
+    /// Editor assets manifest containing scripts and styles for plugins, and allowed block types
+    public let manifest: String?
 
     /// Deliberately non-public – consumers should use `EditorConfigurationBuilder` to construct a configuration
     init(
@@ -52,7 +54,8 @@ public struct EditorConfiguration: Sendable {
         editorSettings: String,
         locale: String,
         isNativeInserterEnabled: Bool,
-        logLevel: LogLevel
+        logLevel: LogLevel,
+        manifest: String?
     ) {
         self.title = title
         self.content = content
@@ -70,6 +73,7 @@ public struct EditorConfiguration: Sendable {
         self.locale = locale
         self.isNativeInserterEnabled = isNativeInserterEnabled
         self.logLevel = logLevel
+        self.manifest = manifest
     }
 
     public func toBuilder() -> EditorConfigurationBuilder {
@@ -88,7 +92,8 @@ public struct EditorConfiguration: Sendable {
             authHeader: authHeader,
             editorSettings: editorSettings,
             locale: locale,
-            isNativeInserterEnabled: isNativeInserterEnabled
+            isNativeInserterEnabled: isNativeInserterEnabled,
+            manifest: manifest
         )
     }
 
@@ -120,6 +125,7 @@ public struct EditorConfigurationBuilder {
     private var locale: String
     private var isNativeInserterEnabled: Bool
     private var logLevel: LogLevel
+    private var manifest: String?
 
     public init(
         title: String = "",
@@ -137,7 +143,8 @@ public struct EditorConfigurationBuilder {
         editorSettings: String = "undefined",
         locale: String = "en",
         isNativeInserterEnabled: Bool = false,
-        logLevel: LogLevel = .error
+        logLevel: LogLevel = .error,
+        manifest: String? = nil
     ){
         self.title = title
         self.content = content
@@ -155,6 +162,7 @@ public struct EditorConfigurationBuilder {
         self.locale = locale
         self.isNativeInserterEnabled = isNativeInserterEnabled
         self.logLevel = logLevel
+        self.manifest = manifest
     }
 
     public func setTitle(_ title: String) -> EditorConfigurationBuilder {
@@ -253,6 +261,12 @@ public struct EditorConfigurationBuilder {
         return copy
     }
 
+    public func setManifest(_ manifest: String?) -> EditorConfigurationBuilder {
+        var copy = self
+        copy.manifest = manifest
+        return copy
+    }
+
     /// Simplify conditionally applying a configuration change
     ///
     /// Sample Code:
@@ -292,7 +306,8 @@ public struct EditorConfigurationBuilder {
             editorSettings: editorSettings,
             locale: locale,
             isNativeInserterEnabled: isNativeInserterEnabled,
-            logLevel: logLevel
+            logLevel: logLevel,
+            manifest: manifest
         )
     }
 }
