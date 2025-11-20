@@ -75,10 +75,22 @@ actor EditorService {
     }
 
     /// Refresh the editor resources.
+    /// Will not refresh more often than once every 30 seconds.
     func refresh(configuration: EditorConfiguration) async {
         if let task = refreshTask {
             return await task.value
         }
+
+        // Check if we refreshed recently (within the last 30 seconds)
+        if let data = try? Data(contentsOf: stateFileURL),
+           let state = try? JSONDecoder().decode(State.self, from: data) {
+            let timeSinceLastRefresh = Date().timeIntervalSince(state.refreshDate)
+            if timeSinceLastRefresh < 30 {
+                log(.info, "Skipping refresh - last refresh was \(String(format: "%.1f", timeSinceLastRefresh))s ago")
+                return
+            }
+        }
+
         let task = Task {
             defer { refreshTask = nil }
             await actuallyRefresh(configuration: configuration)

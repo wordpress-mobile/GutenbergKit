@@ -12,7 +12,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     let service: EditorService
 
     public var configuration: EditorConfiguration
-    private var editorSettings: EditorDependencies?
+    private var dependencies: EditorDependencies?
     private var _isEditorRendered = false
     private var _isEditorSetup = false
     private let mediaPicker: MediaPickerController?
@@ -43,7 +43,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }()
 
     /// HTML Preview Manager instance for rendering pattern previews
-    private(set) lazy var htmlPreviewManager = HTMLPreviewManager(themeStyles: editorSettings?.extractThemeStyles())
+    private(set) lazy var htmlPreviewManager = HTMLPreviewManager(themeStyles: dependencies?.extractThemeStyles())
 
     /// Initalizes the editor with the initial content (Gutenberg).
     public init(
@@ -150,7 +150,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             plugins: \(configuration.shouldUsePlugins),
             enableNativeBlockInserter: \(configuration.isNativeInserterEnabled),
             hideTitle: \(configuration.shouldHideTitle),
-            editorSettings: \(editorSettings?.manifest ?? "undefined"),
+            editorSettings: \(dependencies?.editorSettings ?? "undefined"),
             locale: '\(configuration.locale)',
             post: {
                 id: \(configuration.postID ?? -1),
@@ -158,7 +158,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 content: '\(configuration.escapedContent)'
             },
             logLevel: '\(configuration.logLevel)',
-            manifest: \(editorSettings?.editorSettings ?? "undefined")
+            manifest: \(dependencies?.manifest ?? "undefined")
         };
 
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
@@ -248,7 +248,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         Task { @MainActor in
             do {
-                self.editorSettings = try await service.setup(configuration: configuration)
+                self.dependencies = try await service.setup(configuration: configuration)
             } catch {
                 print("Failed to setup editor environment, continuing with the default or cached configuration:", error)
             }
