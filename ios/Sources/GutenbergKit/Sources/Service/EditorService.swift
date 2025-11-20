@@ -62,7 +62,6 @@ public actor EditorService {
             builder = builder.setEditorSettings(settings)
         }
 
-        // Load and process manifest for the editor
         if let manifestString = try? getManifestForEditor(siteURL: configuration.siteURL) {
             builder = builder.setManifest(manifestString)
         }
@@ -155,13 +154,45 @@ public actor EditorService {
     /// Returns the editor assets manifest as a JSON string, with JavaScript and stylesheet links
     /// modified so that their content can be cached and reused by the editor.
     ///
+    /// Verifies that all required assets are cached before returning the manifest.
+    ///
     /// - Parameter siteURL: The site URL to extract the scheme for scheme-less links
     /// - Returns: JSON string of the processed manifest
+    /// - Throws: `EditorServiceError` if assets are missing or manifest processing fails
     private func getManifestForEditor(siteURL: String) throws -> String {
         // For scheme-less links (i.e. '//stats.wp.com/w.js'), use the scheme in `siteURL`.
         let siteURLScheme = URL(string: siteURL)?.scheme
         let data = try getManifestData()
         let manifest = try JSONDecoder().decode(EditorAssetsManifest.self, from: data)
+        let assetLinks = try manifest.parseAssetLinks()
+
+        // Verify all assets are cached
+        let fileManager = FileManager.default
+        var missingAssets: [String] = []
+
+        for urlString in assetLinks {
+            let filename = cachedFilename(for: urlString)
+            let localURL = assetsDirectoryURL.appendingPathComponent(filename)
+
+            if !fileManager.fileExists(atPath: localURL.path) {
+                missingAssets.append(urlString)
+            }
+        }
+
+        if !missingAssets.isEmpty {
+            log(.error, "Missing \(missingAssets.count) asset(s) from cache")
+            for (index, asset) in missingAssets.prefix(5).enumerated() {
+                log(.error, "  [\(index + 1)] \(asset)")
+            }
+            if missingAssets.count > 5 {
+                log(.error, "  ... and \(missingAssets.count - 5) more")
+            }
+            throw EditorServiceError.manifestUnavailable
+        }
+
+        log(.info, "All \(assetLinks.count) manifest assets verified in cache")
+
+        // Process manifest for editor
         let processedData = try manifest.renderForEditor(defaultScheme: siteURLScheme)
         guard let jsonString = String(data: processedData, encoding: .utf8) else {
             throw EditorServiceError.invalidResponseData
