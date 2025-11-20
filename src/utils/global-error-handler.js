@@ -10,8 +10,7 @@ import { logException } from './bridge';
 export function setupGlobalErrorHandlers() {
 	// Catch unhandled errors
 	window.addEventListener( 'error', ( event ) => {
-		// Filter out errors from third-party scripts
-		if ( ! isGutenbergKitError( event.filename, event.error ) ) {
+		if ( isExternalError( event.filename, event.error ) ) {
 			return;
 		}
 
@@ -37,8 +36,7 @@ export function setupGlobalErrorHandlers() {
 				? event.reason
 				: new Error( String( event.reason ) );
 
-		// Filter out errors from third-party scripts
-		if ( ! isGutenbergKitError( undefined, errorObj ) ) {
+		if ( isExternalError( undefined, errorObj ) ) {
 			return;
 		}
 
@@ -52,36 +50,37 @@ export function setupGlobalErrorHandlers() {
 }
 
 /**
- * Determines if an error originated from GutenbergKit code rather than
- * third-party scripts.
+ * Determines if an error originated from an external third-party script.
+ *
+ * Detects external HTTP(S) URLs from different origins (third-party scripts).
+ * GutenbergKit errors (same-origin, file://, or unknown sources) return false.
  *
  * @param {string|undefined} filename - The filename from the error event
  * @param {Error|undefined}  errorObj - The error object with stack trace
- * @return {boolean} True if the error appears to be from GutenbergKit code
+ * @return {boolean} True if the error is from an external source (should be filtered)
  */
-function isGutenbergKitError( filename, errorObj ) {
-	// Check the filename first
-	if ( filename ) {
-		// GutenbergKit errors should be from the same origin
-		if ( filename.includes( window.location.origin ) ) {
-			return true;
-		}
-		// If filename is from a different origin, it's likely third-party
-		if ( filename.startsWith( 'http' ) ) {
-			return false;
-		}
+function isExternalError( filename, errorObj ) {
+	// Detect external HTTP(S) URLs from different origins (third-party scripts)
+	if (
+		filename?.startsWith( 'http' ) &&
+		! filename.includes( window.location.origin )
+	) {
+		return true;
 	}
 
-	// If no filename, check the error stack trace
+	// Check stack trace for external URLs
 	if ( errorObj?.stack ) {
-		const stack = errorObj.stack;
-		// Look for same-origin paths in the stack trace
-		if ( stack.includes( window.location.origin ) ) {
-			return true;
+		const stackLines = errorObj.stack.split( '\n' );
+		for ( const line of stackLines ) {
+			// Check if any line in stack contains external HTTP URL
+			if (
+				line.includes( 'http' ) &&
+				! line.includes( window.location.origin )
+			) {
+				return true;
+			}
 		}
 	}
 
-	// If we can't determine the origin, report it to be safe
-	// Better to have some noise than miss legitimate errors
-	return true;
+	return false;
 }
