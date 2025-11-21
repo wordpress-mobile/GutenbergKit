@@ -61,6 +61,15 @@ build-swift-package: build
 test-swift-package: build
 	$(call XCODEBUILD_CMD, test)
 
+archive-swift-package: build
+	xcodebuild archive \
+	    -scheme GutenbergKit \
+	    -destination "generic/platform=iOS" \
+	    -archivePath ./build/GutenbergKit-iOS \
+	    -derivedDataPath ./DerivedData \
+	    SKIP_INSTALL=NO \
+	    BUILD_LIBRARY_FOR_DISTRIBUTION=YES | xcbeautify
+
 release:
 	@echo "--- :rocket: Starting GutenbergKit Release Process"
 	@echo "Usage: make release VERSION_TYPE=[<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease | from-git] [DRY_RUN=true]"

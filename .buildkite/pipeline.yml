@@ -37,3 +37,7 @@ steps:
     - label: ':swift: Test Swift Package'
       command: make test-swift-package
       plugins: *plugins
+
+    - label: ':xcode: EXPERIMENT Archive Package for XCFramework'
+      command: make archive-swift-package
+      plugins: *plugins
