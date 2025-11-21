@@ -1,5 +1,15 @@
 {
+  "originHash" : "ffe9be20a1a75c117535fd2cd889acd56318d76f2924f727d7d0c5b53360b2b3",
   "pins" : [
+    {
+      "identity" : "lrucache",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/nicklockwood/LRUCache.git",
+      "state" : {
+        "revision" : "0d91406ecd4d6c1c56275866f00508d9aeacc92a",
+        "version" : "1.2.0"
+      }
+    },
     {
       "identity" : "svgview",
       "kind" : "remoteSourceControl",
@@ -10,12 +20,21 @@
       }
     },
     {
+      "identity" : "swift-atomics",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-atomics.git",
+      "state" : {
+        "revision" : "b601256eab081c0f92f059e12818ac1d4f178ff7",
+        "version" : "1.3.0"
+      }
+    },
+    {
       "identity" : "swiftsoup",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/scinfu/SwiftSoup.git",
       "state" : {
-        "revision" : "aa85ee96017a730031bafe411cde24a08a17a9c9",
-        "version" : "2.8.8"
+        "revision" : "4206bc7b8bd9a4ff8e9511211e1b4bff979ef9c4",
+        "version" : "2.11.1"
       }
     },
     {
@@ -28,5 +47,5 @@
       }
     }
   ],
-  "version" : 2
+  "version" : 3
 }

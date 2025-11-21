@@ -15,7 +15,21 @@
 		246852562EAABB7800ED1F09 /* WordPressAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 0C4F59A12BEFF4980028BD96 /* WordPressAPI */; };
 		2468526B2EAACCA100ED1F09 /* AuthenticationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246852682EAACCA100ED1F09 /* AuthenticationManager.swift */; };
 		2468526C2EAACCA100ED1F09 /* ConfigurationStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246852692EAACCA100ED1F09 /* ConfigurationStorage.swift */; };
+		3F418C5E2ED02BA0007AF156 /* GutenbergKit in Frameworks */ = {isa = PBXBuildFile; productRef = 3F418C5D2ED02BA0007AF156 /* GutenbergKit */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		3F418C492ED02A3D007AF156 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		0C4F598B2BEFF4970028BD96 /* Gutenberg.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Gutenberg.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -26,10 +40,12 @@
 		0CE8E7922C339B1B00B9DC67 /* GutenbergKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = GutenbergKit; path = ../..; sourceTree = "<group>"; };
 		246852682EAACCA100ED1F09 /* AuthenticationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationManager.swift; sourceTree = "<group>"; };
 		246852692EAACCA100ED1F09 /* ConfigurationStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationStorage.swift; sourceTree = "<group>"; };
+		3F418C522ED02B2F007AF156 /* GutenbergKitXCFramework.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = GutenbergKitXCFramework.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		2468525B2EAAC62B00ED1F09 /* Views */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Views; sourceTree = "<group>"; };
+		3F418C532ED02B2F007AF156 /* GutenbergKitXCFramework */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = GutenbergKitXCFramework; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -39,6 +55,14 @@
 			files = (
 				246852562EAABB7800ED1F09 /* WordPressAPI in Frameworks */,
 				0CF6E04C2BEFF60E00EDEE8A /* GutenbergKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3F418C4F2ED02B2F007AF156 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3F418C5E2ED02BA0007AF156 /* GutenbergKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -52,6 +76,7 @@
 				0CE8E7882C339B0600B9DC67 /* Sources */,
 				0C83424D2C339B7F00CAA762 /* Resources */,
 				0CE8E78A2C339B0600B9DC67 /* PreviewContent */,
+				3F418C532ED02B2F007AF156 /* GutenbergKitXCFramework */,
 				0C4F598C2BEFF4970028BD96 /* Products */,
 				0CF6E04A2BEFF60E00EDEE8A /* Frameworks */,
 			);
@@ -61,6 +86,7 @@
 			isa = PBXGroup;
 			children = (
 				0C4F598B2BEFF4970028BD96 /* Gutenberg.app */,
+				3F418C522ED02B2F007AF156 /* GutenbergKitXCFramework.framework */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -110,6 +136,16 @@
 		};
 /* End PBXGroup section */
 
+/* Begin PBXHeadersBuildPhase section */
+		3F418C4D2ED02B2F007AF156 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
 /* Begin PBXNativeTarget section */
 		0C4F598A2BEFF4970028BD96 /* Gutenberg */ = {
 			isa = PBXNativeTarget;
@@ -118,6 +154,7 @@
 				0C4F59872BEFF4970028BD96 /* Sources */,
 				0C4F59882BEFF4970028BD96 /* Frameworks */,
 				0C4F59892BEFF4970028BD96 /* Resources */,
+				3F418C492ED02A3D007AF156 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -135,6 +172,30 @@
 			productReference = 0C4F598B2BEFF4970028BD96 /* Gutenberg.app */;
 			productType = "com.apple.product-type.application";
 		};
+		3F418C512ED02B2F007AF156 /* GutenbergKitXCFramework */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3F418C5A2ED02B2F007AF156 /* Build configuration list for PBXNativeTarget "GutenbergKitXCFramework" */;
+			buildPhases = (
+				3F418C4D2ED02B2F007AF156 /* Headers */,
+				3F418C4E2ED02B2F007AF156 /* Sources */,
+				3F418C4F2ED02B2F007AF156 /* Frameworks */,
+				3F418C502ED02B2F007AF156 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				3F418C532ED02B2F007AF156 /* GutenbergKitXCFramework */,
+			);
+			name = GutenbergKitXCFramework;
+			packageProductDependencies = (
+				3F418C5D2ED02BA0007AF156 /* GutenbergKit */,
+			);
+			productName = GutenbergKitXCFramework;
+			productReference = 3F418C522ED02B2F007AF156 /* GutenbergKitXCFramework.framework */;
+			productType = "com.apple.product-type.framework";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -142,11 +203,14 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1510;
+				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					0C4F598A2BEFF4970028BD96 = {
 						CreatedOnToolsVersion = 15.1;
+					};
+					3F418C512ED02B2F007AF156 = {
+						CreatedOnToolsVersion = 26.0;
 					};
 				};
 			};
@@ -161,12 +225,14 @@
 			mainGroup = 0C4F59822BEFF4970028BD96;
 			packageReferences = (
 				0C4F59A02BEFF4980028BD96 /* XCRemoteSwiftPackageReference "wordpress-rs" */,
+				3F418C4A2ED02A75007AF156 /* XCLocalSwiftPackageReference "../../../GutenbergKit" */,
 			);
 			productRefGroup = 0C4F598C2BEFF4970028BD96 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				0C4F598A2BEFF4970028BD96 /* Gutenberg */,
+				3F418C512ED02B2F007AF156 /* GutenbergKitXCFramework */,
 			);
 		};
 /* End PBXProject section */
@@ -181,6 +247,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		3F418C502ED02B2F007AF156 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -192,6 +265,13 @@
 				0CE8E78E2C339B0600B9DC67 /* GutenbergApp.swift in Sources */,
 				2468526B2EAACCA100ED1F09 /* AuthenticationManager.swift in Sources */,
 				2468526C2EAACCA100ED1F09 /* ConfigurationStorage.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3F418C4E2ED02B2F007AF156 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -387,6 +467,84 @@
 			};
 			name = Release;
 		};
+		3F418C5B2ED02B2F007AF156 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUILD_LIBRARY_FOR_DISTRIBUTION = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				ENABLE_MODULE_VERIFIER = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				MODULE_VERIFIER_SUPPORTED_LANGUAGES = "objective-c objective-c++";
+				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu17 gnu++20";
+				PRODUCT_BUNDLE_IDENTIFIER = org.wordpress.GutenbergKitXCFramework;
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INSTALL_MODULE = YES;
+				SWIFT_INSTALL_OBJC_HEADER = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = Debug;
+		};
+		3F418C5C2ED02B2F007AF156 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUILD_LIBRARY_FOR_DISTRIBUTION = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				ENABLE_MODULE_VERIFIER = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				MODULE_VERIFIER_SUPPORTED_LANGUAGES = "objective-c objective-c++";
+				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu17 gnu++20";
+				PRODUCT_BUNDLE_IDENTIFIER = org.wordpress.GutenbergKitXCFramework;
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INSTALL_MODULE = YES;
+				SWIFT_INSTALL_OBJC_HEADER = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -408,7 +566,23 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		3F418C5A2ED02B2F007AF156 /* Build configuration list for PBXNativeTarget "GutenbergKitXCFramework" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3F418C5B2ED02B2F007AF156 /* Debug */,
+				3F418C5C2ED02B2F007AF156 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		3F418C4A2ED02A75007AF156 /* XCLocalSwiftPackageReference "../../../GutenbergKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../../GutenbergKit;
+		};
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
 		0C4F59A02BEFF4980028BD96 /* XCRemoteSwiftPackageReference "wordpress-rs" */ = {
@@ -428,6 +602,10 @@
 			productName = WordPressAPI;
 		};
 		0CF6E04B2BEFF60E00EDEE8A /* GutenbergKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = GutenbergKit;
+		};
+		3F418C5D2ED02BA0007AF156 /* GutenbergKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = GutenbergKit;
 		};
