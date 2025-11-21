@@ -6,6 +6,8 @@ An experimental Gutenberg block editor for native iOS and Android apps relying u
 
 ## Development
 
+To see all available development commands, run `make help` (or simply `make`) in your terminal. This will display a list of all available build, test, and development commands.
+
 ### Preqrequisites
 
 In order to build GutenbergKit, the following tools must be installed on your development machine:

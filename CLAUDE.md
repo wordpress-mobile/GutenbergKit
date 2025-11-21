@@ -15,6 +15,16 @@ GutenbergKit is an experimental Gutenberg block editor for native iOS and Androi
 
 **IMPORTANT**: Prefer `make` commands over `npm` commands when they exist. The Makefile provides convenient wrappers that handle dependencies and configuration automatically.
 
+To see all available make commands, run:
+
+```bash
+make help
+# or simply
+make
+```
+
+This will display a list of all available targets with descriptions.
+
 ### Web Development
 
 ```bash
