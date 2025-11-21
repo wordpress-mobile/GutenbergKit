@@ -44,7 +44,7 @@ actor EditorService {
 
         self.storeURL = URL.applicationDirectory
             .appendingPathComponent("GutenbergKit", isDirectory: true)
-            .appendingPathComponent(siteURL.safeFilename, isDirectory: true)
+            .appendingPathComponent(siteURL.sha1, isDirectory: true)
     }
 
     /// Set up the editor for the given site.
@@ -356,10 +356,7 @@ actor EditorService {
 
     /// Generates a cached filename from an asset URL using SHA256 hash
     private func cachedFilename(for urlString: String) -> String {
-        let hash = SHA256.hash(data: Data(urlString.utf8))
-            .compactMap { String(format: "%02x", $0) }
-            .joined()
-
+        let hash = urlString.sha1
         // Preserve file extension if present
         if let url = URL(string: urlString) {
             let ext = url.pathExtension
