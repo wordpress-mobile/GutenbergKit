@@ -164,7 +164,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 title: '\(configuration.escapedTitle)',
                 content: '\(configuration.escapedContent)'
             },
-            logLevel: '\(configuration.logLevel)'
+            logLevel: '\(configuration.logLevel)',
+            enableNetworkLogging: \(configuration.enableNetworkLogging)
         };
 
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));

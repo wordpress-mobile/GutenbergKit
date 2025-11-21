@@ -307,6 +307,7 @@ class GutenbergView : WebView {
                 "editorSettings": $editorSettings,
                 "locale": "${configuration.locale}",
                 ${if (configuration.editorAssetsEndpoint != null) "\"editorAssetsEndpoint\": \"${configuration.editorAssetsEndpoint}\"," else ""}
+                "enableNetworkLogging": ${configuration.enableNetworkLogging},
                 "post": {
                     "id": ${configuration.postId ?: -1},
                     "title": "$escapedTitle",
