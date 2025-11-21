@@ -107,6 +107,10 @@ fmt-js: npm-dependencies ## Format JavaScript code
 lint-js: npm-dependencies ## Lint JavaScript code
 	npm run lint
 
+.PHONY: lintfix-js
+lintfix-js: npm-dependencies ## Lint and auto-fix JavaScript code
+	npm run lintfix
+
 .PHONY: lint-swift
 lint-swift: ## Lint Swift code
 	swift package plugin swiftlint
