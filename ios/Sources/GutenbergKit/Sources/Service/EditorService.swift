@@ -13,7 +13,7 @@ actor EditorService {
     @MainActor private static var instances: [String: EditorService] = [:]
 
     private let siteURL: String
-    private let urlSession: URLSession
+    private let networkSession: URLSessionProtocol
 
     private let storeURL: URL
     private var editorSettingsFileURL: URL { storeURL.appendingPathComponent("settings.json") }
@@ -29,7 +29,7 @@ actor EditorService {
         if let existing = instances[siteURL] {
             return existing
         }
-        let service = EditorService(siteURL: siteURL, urlSession: .shared)
+        let service = EditorService(siteURL: siteURL, networkSession: URLSession.shared)
         instances[siteURL] = service
         return service
     }
@@ -37,13 +37,24 @@ actor EditorService {
     /// Creates a new EditorService instance
     /// - Parameters:
     ///   - siteURL: Unique identifier for the site (used for caching)
-    ///   - urlSession: URLSession to use for network requests (defaults to .shared)
-    private init(siteURL: String, urlSession: URLSession = .shared) {
+    ///   - networkSession: Network session to use for network requests (defaults to URLSession.shared)
+    private init(siteURL: String, networkSession: URLSessionProtocol) {
         self.siteURL = siteURL
-        self.urlSession = urlSession
+        self.networkSession = networkSession
 
         self.storeURL = EditorService.rootURL
             .appendingPathComponent(siteURL.sha1, isDirectory: true)
+    }
+
+    /// Creates a new EditorService instance for testing
+    /// - Parameters:
+    ///   - siteURL: Unique identifier for the site (used for caching)
+    ///   - storeURL: Custom store URL for testing
+    ///   - networkSession: Network session to use for network requests
+    internal init(siteURL: String, storeURL: URL, networkSession: URLSessionProtocol) {
+        self.siteURL = siteURL
+        self.networkSession = networkSession
+        self.storeURL = storeURL
     }
 
     private static var rootURL: URL {
@@ -306,7 +317,8 @@ actor EditorService {
         }
 
         let startTime = CFAbsoluteTimeGetCurrent()
-        let (downloadedURL, response) = try await urlSession.download(from: url)
+        let request = URLRequest(url: url)
+        let (downloadedURL, response) = try await networkSession.download(for: request, delegate: nil)
         let downloadTime = CFAbsoluteTimeGetCurrent() - startTime
 
         guard let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status) else {
@@ -361,7 +373,7 @@ actor EditorService {
         var request = URLRequest(url: requestURL)
         request.setValue(authHeader, forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response) = try await networkSession.data(for: request)
         guard let status = (response as? HTTPURLResponse)?.statusCode,
               (200..<300).contains(status) else {
             throw URLError(.badServerResponse)

@@ -1,0 +1,5 @@
+{
+  "styles": "<link rel='stylesheet' id='jp-forms-blocks-css' href='https://example.com/wp-content/plugins/jetpack/jetpack_vendor/automattic/jetpack-forms/dist/blocks/editor.css?ver=13.9' type='text/css' media='all' />\n<link rel='stylesheet' id='jetpack-blocks-editor-css' href='https://example.com/wp-content/plugins/jetpack/_inc/blocks/editor.css?ver=13.9' type='text/css' media='all' />",
+  "scripts": "<script type=\"text/javascript\" src=\"https://example.com/wp-content/plugins/jetpack/modules/videopress/js/videopress-token-bridge.js?ver=13.9\" id=\"videopress-token-bridge-js\"></script>\n<script type=\"text/javascript\" src=\"https://example.com/wp-content/plugins/jetpack/_inc/blocks/contact-form/editor.js?ver=13.9\" id=\"jetpack-contact-form-js\"></script>\n<script type=\"text/javascript\" src=\"https://example.com/wp-content/plugins/jetpack/_inc/blocks/slideshow/editor.js?ver=13.9\" id=\"jetpack-slideshow-js\"></script>",
+  "allowed_block_types": ["jetpack/contact-form", "jetpack/slideshow", "jetpack/videopress", "jetpack/markdown"]
+}
