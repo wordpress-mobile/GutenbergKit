@@ -324,7 +324,11 @@ actor EditorService {
     }
 
     /// Loads a cached asset from disk
-    func loadCachedAsset(from httpURL: URL, webViewURL: URL) throws -> (URLResponse, Data) {
+    func getCachedAsset(from assetsURL: URL) throws -> (URLResponse, Data) {
+        guard let httpURL = CachedAssetSchemeHandler.originalHTTPURL(from: assetsURL) else {
+            throw URLError(.badURL)
+        }
+
         let localURL = assetsDirectoryURL.appendingPathComponent(cachedFilename(for: httpURL.absoluteString))
 
         guard FileManager.default.fileExists(atPath: localURL.path) else {
@@ -337,7 +341,7 @@ actor EditorService {
         case "css": "text/css"
         default: "application/octet-stream"
         }
-        let response = URLResponse(url: webViewURL, mimeType: mimeType, expectedContentLength: content.count, textEncodingName: nil)
+        let response = URLResponse(url: assetsURL, mimeType: mimeType, expectedContentLength: content.count, textEncodingName: nil)
         return (response, content)
     }
 

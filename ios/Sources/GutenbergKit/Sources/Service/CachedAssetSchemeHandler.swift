@@ -30,15 +30,14 @@ class CachedAssetSchemeHandler: NSObject, WKURLSchemeHandler {
     }
 
     func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {
-        guard let url = urlSchemeTask.request.url,
-              let httpURL = CachedAssetSchemeHandler.originalHTTPURL(from: url) else {
+        guard let url = urlSchemeTask.request.url else {
             urlSchemeTask.didFailWithError(URLError(.badURL))
             return
         }
 
         Task {
             do {
-                let (response, content) = try await service.loadCachedAsset(from: httpURL, webViewURL: url)
+                let (response, content) = try await service.getCachedAsset(from: url)
                 urlSchemeTask.didReceive(response)
                 urlSchemeTask.didReceive(content)
                 urlSchemeTask.didFinish()
