@@ -50,13 +50,20 @@ actor EditorService {
         URL.applicationDirectory.appendingPathComponent("GutenbergKit", isDirectory: true)
     }
 
-    /// Set up the editor for the given site.
+    /// Returns the editor dependencies for the given configuration.
     ///
     /// - warning: The request make take a significant amount of time the first
     /// time you open the editor.
-    func setup(configuration: EditorConfiguration) async throws -> EditorDependencies {
+    func dependencies(for configuration: EditorConfiguration) async throws -> EditorDependencies {
         if !isEditorLoaded {
             await refresh(configuration: configuration)
+        } else {
+            // Trigger a background refresh after a delay to avoid interfering with editor loading
+            Task {
+                log(.info, "Registering background refresh to be performed later")
+                try? await Task.sleep(for: .seconds(7))
+                await refresh(configuration: configuration)
+            }
         }
         var dependencies = EditorDependencies()
         if let data = try? Data(contentsOf: editorSettingsFileURL),
@@ -117,7 +124,7 @@ actor EditorService {
             log(.error, "Failed to fetch editor settings: \(error)")
         }
 
-        guard case .success(let manifestData) = manifestResult else {
+        guard case .success(let manifest) = manifestResult else {
             if case .failure(let error) = manifestResult {
                 log(.error, "Failed to fetch manifest: \(error)")
             }
@@ -131,7 +138,7 @@ actor EditorService {
         // Fetch all assets for the new manifest
         let assetsStartTime = CFAbsoluteTimeGetCurrent()
         do {
-            try await fetchAssets(manifestData: manifestData)
+            try await fetchAssets(manifestData: manifest)
         } catch {
             log(.error, "Failed to fetch assets: \(error)")
             log(.error, "Editor refresh aborted: asset fetching failed")
@@ -142,7 +149,7 @@ actor EditorService {
         // Only write manifest to disk after all assets are successfully fetched
         do {
             FileManager.default.createDirectoryIfNeeded(at: storeURL)
-            try manifestData.write(to: manifestFileURL)
+            try manifest.write(to: manifestFileURL)
             log(.info, "Manifest saved to disk")
         } catch {
             log(.error, "Failed to save manifest: \(error)")
@@ -152,9 +159,7 @@ actor EditorService {
         // Save state to indicate successful refresh
         do {
             let state = State(refreshDate: Date())
-            let stateData = try JSONEncoder().encode(state)
-            try stateData.write(to: stateFileURL)
-            log(.info, "State saved to disk")
+            try JSONEncoder().encode(state).write(to: stateFileURL)
         } catch {
             log(.error, "Failed to save state: \(error)")
         }

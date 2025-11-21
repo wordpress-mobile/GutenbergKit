@@ -248,7 +248,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         Task { @MainActor in
             do {
-                self.dependencies = try await service.setup(configuration: configuration)
+                self.dependencies = try await service.dependencies(for: configuration)
             } catch {
                 print("Failed to setup editor environment, continuing with the default or cached configuration:", error)
             }
