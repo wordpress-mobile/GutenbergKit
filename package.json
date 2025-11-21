@@ -9,15 +9,16 @@
 		"clean:dist": "rm -rf dist",
 		"clean:l10n": "rm -rf src/translations",
 		"dev": "vite --host",
-		"devtools": "react-devtools",
+		"dev:tools": "react-devtools",
 		"build": "vite --emptyOutDir build",
-		"lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
-		"lintfix": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0 --fix",
 		"format": "prettier --write .",
+		"lint:js": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+		"lint:js:fix": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0 --fix",
 		"postinstall": "patch-package && npm run prep-translations",
 		"prep-translations": "node bin/prep-translations.js",
 		"preview": "vite preview --host",
-		"test": "vitest"
+		"test:unit": "vitest run",
+		"test:unit:watch": "vitest"
 	},
 	"dependencies": {
 		"@wordpress/api-fetch": "^7.10",

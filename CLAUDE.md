@@ -39,27 +39,32 @@ npm run dev
 # Start standalone React DevTools server
 make dev-tools
 # or
-npm run devtools
+npm run dev:tools
 
 # Preview production build locally
 make preview
 # or
 npm run preview
 
-# Run JavaScript tests
+# Run JavaScript tests (one-time run)
 make test-js
 # or
-npm run test -- run
+npm run test:unit
+
+# Run JavaScript tests in watch mode (for active development)
+make test-js-watch
+# or
+npm run test:unit:watch
 
 # Lint JavaScript code
 make lint-js
 # or
-npm run lint
+npm run lint:js
 
 # Lint and auto-fix JavaScript code
 make lintfix-js
 # or
-npm run lintfix
+npm run lint:js:fix
 
 # Format JavaScript code
 make fmt-js

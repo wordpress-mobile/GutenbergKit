@@ -97,7 +97,7 @@ dev-server: npm-dependencies ## Start the development server
 
 .PHONY: dev-tools
 dev-tools: npm-dependencies ## Start the React Developer Tools
-	npm run devtools
+	npm run dev:tools
 
 .PHONY: preview
 preview: npm-dependencies ## Preview the production build locally
@@ -113,11 +113,11 @@ fmt-js: npm-dependencies ## Format JavaScript code
 
 .PHONY: lint-js
 lint-js: npm-dependencies ## Lint JavaScript code
-	npm run lint
+	npm run lint:js
 
-.PHONY: lintfix-js
-lintfix-js: npm-dependencies ## Lint and auto-fix JavaScript code
-	npm run lintfix
+.PHONY: lint-fix-js
+lint-js-fix: npm-dependencies ## Lint and auto-fix JavaScript code
+	npm run lint:js:fix
 
 .PHONY: lint-swift
 lint-swift: ## Lint Swift code
@@ -129,7 +129,11 @@ lint-swift: ## Lint Swift code
 
 .PHONY: test-js
 test-js: npm-dependencies ## Run JavaScript tests
-	npm run test -- run
+	npm run test:unit
+
+.PHONY: test-js-watch
+test-js-watch: npm-dependencies ## Run JavaScript tests in watch mode
+	npm run test:unit:watch
 
 .PHONY: test-swift-package
 test-swift-package: build ## Run Swift package tests
