@@ -6,7 +6,7 @@ import OSLog
 /// Service for fetching the editor settings and other parts of the environment
 /// required to launch the editor.
 actor EditorService {
-    struct State: Codable {
+    internal struct State: Codable {
         let refreshDate: Date
     }
 
@@ -45,6 +45,8 @@ actor EditorService {
 
         self.storeURL = EditorService.rootURL
             .appendingPathComponent(siteURL.sha1, isDirectory: true)
+
+        scheduleAutomaticCleanup()
     }
 
     /// Creates a new EditorService instance for testing
@@ -56,6 +58,27 @@ actor EditorService {
         self.siteURL = siteURL
         self.networkSession = networkSession
         self.storeURL = storeURL
+
+        scheduleAutomaticCleanup()
+    }
+
+    /// Schedules automatic cleanup of orphaned assets after a brief delay.
+    ///
+    /// This is safe to call during initialization because:
+    /// - No previous editor instance can be accessing orphaned files at this point
+    /// - The delay ensures initialization completes before cleanup starts
+    /// - Any errors are caught and logged, preventing initialization failures
+    private func scheduleAutomaticCleanup() {
+        Task {
+            // Brief delay to allow service initialization to complete
+            try? await Task.sleep(for: .seconds(5))
+
+            do {
+                try await cleanupOrphanedAssets()
+            } catch {
+                log(.error, "Automatic cleanup failed: \(error)")
+            }
+        }
     }
 
     private static var rootURL: URL {
@@ -235,6 +258,63 @@ actor EditorService {
 
     // MARK: - Assets
 
+    /// Removes assets that are no longer referenced in the current manifest.
+    ///
+    /// This method is safe to call at any time, but is typically called automatically
+    /// shortly after service initialization. At that point, no previous editor instance
+    /// can be referencing orphaned files, making it safe to delete them immediately.
+    func cleanupOrphanedAssets() async throws {
+        // Load current manifest to determine which assets should be retained
+        guard FileManager.default.fileExists(atPath: manifestOriginalFileURL.path) else {
+            log(.warn, "No manifest found, skipping cleanup")
+            return
+        }
+
+        let manifestData = try Data(contentsOf: manifestOriginalFileURL)
+        let manifest = try JSONDecoder().decode(EditorAssetsManifest.self, from: manifestData)
+        let currentAssetLinks = try manifest.parseAssetLinks()
+            .filter { isSupportedAsset($0) }
+
+        // Build set of expected filenames
+        let expectedFilenames = Set(currentAssetLinks.map { cachedFilename(for: $0) })
+
+        // Get all files in assets directory
+        guard FileManager.default.fileExists(atPath: assetsDirectoryURL.path) else {
+            log(.debug, "Assets directory doesn't exist, nothing to clean up")
+            return
+        }
+
+        let filesOnDisk = try FileManager.default.contentsOfDirectory(
+            at: assetsDirectoryURL,
+            includingPropertiesForKeys: [.fileSizeKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        // Identify and delete orphaned files
+        var deletedCount = 0
+        var deletedSize: Int64 = 0
+
+        for fileURL in filesOnDisk {
+            let filename = fileURL.lastPathComponent
+
+            // Skip if file is referenced in current manifest
+            if expectedFilenames.contains(filename) {
+                continue
+            }
+
+            // Delete orphaned asset
+            try? FileManager.default.removeItem(at: fileURL)
+            deletedCount += 1
+            deletedSize += fileURL.fileSize
+        }
+
+        if deletedCount > 0 {
+            log(.info, "Cleaned up \(deletedCount) orphaned assets (\(deletedSize.formatted))")
+        } else {
+            log(.debug, "No orphaned assets to clean up")
+        }
+    }
+
     /// Fetches all assets from the manifest and stores them on the device
     private func fetchAssets(manifestData: Data) async throws {
         let startTime = CFAbsoluteTimeGetCurrent()
@@ -359,7 +439,7 @@ actor EditorService {
     }
 
     /// Generates a cached filename from an asset URL using SHA256 hash
-    private func cachedFilename(for urlString: String) -> String {
+    nonisolated func cachedFilename(for urlString: String) -> String {
         let hash = urlString.sha1
         // Preserve file extension if present
         if let url = URL(string: urlString) {
