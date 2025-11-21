@@ -13,6 +13,8 @@ GutenbergKit is an experimental Gutenberg block editor for native iOS and Androi
 
 ## Common Development Commands
 
+**IMPORTANT**: Prefer `make` commands over `npm` commands when they exist. The Makefile provides convenient wrappers that handle dependencies and configuration automatically.
+
 ### Web Development
 
 ```bash
@@ -23,6 +25,11 @@ npm ci
 make dev-server
 # or
 npm run dev
+
+# Start standalone React DevTools server
+make dev-tools
+# or
+npm run devtools
 
 # Run JavaScript tests
 make test-js
@@ -141,8 +148,8 @@ Always run these commands before committing:
 
 ```bash
 # Lint JavaScript code
-npm run lint
+make lint-js
 
 # Format JavaScript code
-npm run format
+make fmt-js
 ```

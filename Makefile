@@ -35,6 +35,9 @@ build: npm-dependencies prep-translations
 dev-server: npm-dependencies
 	npm run dev
 
+dev-tools: npm-dependencies
+	npm run devtools
+
 fmt-js: npm-dependencies
 	npm run format
 
