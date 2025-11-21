@@ -3,7 +3,7 @@ import CryptoKit
 import SwiftSoup
 import OSLog
 
-/// Service for fetching the editor settings and other parts of the enrvironment
+/// Service for fetching the editor settings and other parts of the environment
 /// required to launch the editor.
 actor EditorService {
     struct State: Codable {
@@ -52,7 +52,7 @@ actor EditorService {
 
     /// Returns the editor dependencies for the given configuration.
     ///
-    /// - warning: The request make take a significant amount of time the first
+    /// - warning: The request may take a significant amount of time the first
     /// time you open the editor.
     func dependencies(for configuration: EditorConfiguration) async throws -> EditorDependencies {
         if !isEditorLoaded {
