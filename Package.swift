@@ -7,7 +7,8 @@ let package = Package(
     name: "GutenbergKit",
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
-        .library(name: "GutenbergKit", targets: ["GutenbergKit"])
+        .library(name: "GutenbergKit", targets: ["GutenbergKit"]),
+        .plugin(name: "BuildToolPlugin", targets: ["BuildToolPlugin"])
     ],
     dependencies: [
         .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.5"),
@@ -19,7 +20,10 @@ let package = Package(
             dependencies: ["SwiftSoup", "SVGView"],
             path: "ios/Sources/GutenbergKit",
             exclude: [],
-            resources: [.copy("Gutenberg")]
+            resources: [.copy("Gutenberg")],
+            plugins: [
+                .plugin(name: "BuildToolPlugin")
+            ]
         ),
         .testTarget(
             name: "GutenbergKitTests",
@@ -30,5 +34,10 @@ let package = Package(
                 .copy("GutenbergKitTests/Resources/manifest-test-case-1.json")
             ]
         ),
+        .plugin(
+            name: "BuildToolPlugin",
+            capability: .buildTool(),
+            path: "ios/Sources/BuildToolPlugin"
+        )
     ]
 )
