@@ -17,7 +17,8 @@ actor EditorService {
 
     private let storeURL: URL
     private var editorSettingsFileURL: URL { storeURL.appendingPathComponent("settings.json") }
-    private var manifestFileURL: URL { storeURL.appendingPathComponent("manifest.json") }
+    private var manifestOriginalFileURL: URL { storeURL.appendingPathComponent("manifest-original.json") }
+    private var manifestProcessedFileURL: URL { storeURL.appendingPathComponent("manifest-processed.json") }
     private var stateFileURL: URL { storeURL.appendingPathComponent("state.json") }
     private var assetsDirectoryURL: URL { storeURL.appendingPathComponent("assets", isDirectory: true) }
 
@@ -85,12 +86,13 @@ actor EditorService {
             }
         }
 
+        log(.info, "Prepping local dependencies")
         var dependencies = EditorDependencies()
         if let data = try? Data(contentsOf: editorSettingsFileURL),
            let settings = String(data: data, encoding: .utf8) {
             dependencies.editorSettings = settings
         }
-        dependencies.manifest = try? getManifestForEditor(siteURL: configuration.siteURL)
+        dependencies.manifest = try? loadProcessedManifest()
         let loadTime = CFAbsoluteTimeGetCurrent() - startTime
         log(.info, "Loaded dependencies in \(String(format: "%.3f", loadTime))s")
 
@@ -156,9 +158,9 @@ actor EditorService {
             do {
                 try await fetchAssets(manifestData: manifest)
 
-                // Only write manifest to disk after all assets are successfully fetched
+                // Only write both manifest versions to disk after all assets are successfully fetched
                 FileManager.default.createDirectoryIfNeeded(at: storeURL)
-                try manifest.write(to: manifestFileURL)
+                try saveManifest(originalData: manifest)
                 log(.info, "Saved manifest")
             } catch {
                 log(.error, "Failed to fetch assets: \(error) – skipping the manifest")
@@ -210,20 +212,22 @@ actor EditorService {
         return data
     }
 
-    /// Returns the editor assets manifest as a JSON string, with JavaScript and stylesheet links
-    /// modified so that their content can be cached and reused by the editor.
-    ///
-    /// - Parameter siteURL: The site URL to extract the scheme for scheme-less links
-    /// - Returns: JSON string of the processed manifest
-    private func getManifestForEditor(siteURL: String) throws -> String {
-        // For scheme-less links (i.e. '//stats.wp.com/w.js'), use the scheme in `siteURL`.
-        let siteURLScheme = URL(string: siteURL)?.scheme
-        let data = try Data(contentsOf: manifestFileURL)
-        let manifest = try JSONDecoder().decode(EditorAssetsManifest.self, from: data)
+    /// Saves both original and processed manifest to disk
+    private func saveManifest(originalData: Data) throws {
+        // Save original manifest
+        try originalData.write(to: manifestOriginalFileURL)
 
-        // Process manifest for editor
+        // Process and save processed manifest
+        let manifest = try JSONDecoder().decode(EditorAssetsManifest.self, from: originalData)
+        let siteURLScheme = URL(string: siteURL)?.scheme
         let processedData = try manifest.renderForEditor(defaultScheme: siteURLScheme)
-        guard let jsonString = String(data: processedData, encoding: .utf8) else {
+        try processedData.write(to: manifestProcessedFileURL)
+    }
+
+    /// Loads the processed manifest from disk
+    private func loadProcessedManifest() throws -> String {
+        let data = try Data(contentsOf: manifestProcessedFileURL)
+        guard let jsonString = String(data: data, encoding: .utf8) else {
             throw URLError(.cannotDecodeContentData)
         }
         return jsonString
