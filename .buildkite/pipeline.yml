@@ -41,3 +41,7 @@ steps:
     - label: ':xcode: EXPERIMENT Archive Package for XCFramework'
       command: make archive-swift-package
       plugins: *plugins
+
+    - label: ':xcode: EXPERIMENT Archive Package for XCFramework via wrapper'
+      command: make archive-swift-package-via-target
+      plugins: *plugins

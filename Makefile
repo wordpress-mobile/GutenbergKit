@@ -70,6 +70,16 @@ archive-swift-package: build
 	    SKIP_INSTALL=NO \
 	    BUILD_LIBRARY_FOR_DISTRIBUTION=YES | xcbeautify
 
+archive-swift-package-via-target: build
+	xcodebuild archive \
+	    -project ./ios/Demo-iOS/Gutenberg.xcodeproj \
+	    -scheme GutenbergKitXCFramework \
+	    -destination "generic/platform=iOS" \
+	    -archivePath ./build/GutenbergKitXCFramework-iOS \
+	    -derivedDataPath ./DerivedData \
+	    SKIP_INSTALL=NO \
+	    BUILD_LIBRARY_FOR_DISTRIBUTION=YES | xcbeautify
+
 release:
 	@echo "--- :rocket: Starting GutenbergKit Release Process"
 	@echo "Usage: make release VERSION_TYPE=[<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease | from-git] [DRY_RUN=true]"
