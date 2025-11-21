@@ -15,6 +15,16 @@ GutenbergKit is an experimental Gutenberg block editor for native iOS and Androi
 
 **IMPORTANT**: Prefer `make` commands over `npm` commands when they exist. The Makefile provides convenient wrappers that handle dependencies and configuration automatically.
 
+To see all available make commands, run:
+
+```bash
+make help
+# or simply
+make
+```
+
+This will display a list of all available targets with descriptions.
+
 ### Web Development
 
 ```bash
@@ -29,23 +39,32 @@ npm run dev
 # Start standalone React DevTools server
 make dev-tools
 # or
-npm run devtools
+npm run dev:tools
 
 # Preview production build locally
+make preview
+# or
 npm run preview
 
-# Run JavaScript tests
+# Run JavaScript tests (one-time run)
 make test-js
 # or
-npm run test -- run
+npm run test:unit
+
+# Run JavaScript tests in watch mode (for active development)
+make test-js-watch
+# or
+npm run test:unit:watch
 
 # Lint JavaScript code
 make lint-js
 # or
-npm run lint
+npm run lint:js
 
 # Lint and auto-fix JavaScript code
-npm run lintfix
+make lint-fix-js
+# or
+npm run lint:js:fix
 
 # Format JavaScript code
 make fmt-js
@@ -68,6 +87,8 @@ make build
 make build REFRESH_DEPS=1 REFRESH_L10N=1
 
 # Clean build artifacts
+make clean            # Clean both dist and translations
+# or
 npm run clean         # Clean both dist and translations
 npm run clean:dist    # Clean only dist directory
 npm run clean:l10n    # Clean only translations directory
