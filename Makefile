@@ -1,4 +1,16 @@
+.DEFAULT_GOAL := help
+
 SIMULATOR_DESTINATION := OS=26.0,name=iPhone 17
+
+.PHONY: help
+help: ## Display this help menu
+	@echo "Usage: make [target]"
+	@echo ""
+	@echo "Available targets:"
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
+	awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-25s\033[0m %s\n", $$1, $$2}' | \
+	sort
+	@echo ""
 
 define XCODEBUILD_CMD
 	@set -o pipefail && \
@@ -9,7 +21,9 @@ define XCODEBUILD_CMD
 		| xcbeautify
 endef
 
-npm-dependencies:
+# Utility targets for dependency management
+.PHONY: npm-dependencies
+npm-dependencies: ## Install npm dependencies (with smart caching)
 # Skip unless...
 # - node_modules doesn't exist
 # - REFRESH_DEPS is set to true or 1
@@ -21,7 +35,8 @@ npm-dependencies:
 		echo "--- :white_check_mark: Skipping NPM dependencies installation (node_modules already exists). Use REFRESH_DEPS=1 to force refresh."; \
 	fi
 
-prep-translations:
+.PHONY: prep-translations
+prep-translations: ## Prepare translation files (with smart caching)
 # Skip unless...
 # - src/translations doesn't exist
 # - REFRESH_L10N is set to true or 1
@@ -40,7 +55,9 @@ prep-translations:
 		echo "--- :white_check_mark: Skipping translations fetch (src/translations already exists). Use REFRESH_L10N=1 to force refresh."; \
 	fi
 
-build: npm-dependencies prep-translations
+# Build targets
+.PHONY: build
+build: npm-dependencies prep-translations ## Build the project for all platforms (iOS, Android, web)
 	@echo "--- :node: Building Gutenberg"
 
 	npm run build
@@ -51,39 +68,54 @@ build: npm-dependencies prep-translations
 	cp -r ./dist/. ./ios/Sources/GutenbergKit/Gutenberg/
 	cp -r ./dist/. ./android/Gutenberg/src/main/assets
 
-dev-server: npm-dependencies
-	npm run dev
+.PHONY: build-swift-package
+build-swift-package: build ## Build Swift package for iOS
+	$(call XCODEBUILD_CMD, build)
 
-dev-tools: npm-dependencies
-	npm run devtools
-
-fmt-js: npm-dependencies
-	npm run format
-
-lint-js: npm-dependencies
-	npm run lint
-
-test-js: npm-dependencies
-	npm run test -- run
-
-lint-swift:
-	swift package plugin swiftlint
-
-local-android-library: build
+.PHONY: local-android-library
+local-android-library: build ## Build Android library to local Maven
 	@echo "--- :android: Building Library"
 	./android/gradlew -p ./android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3
 
-test-android:
+# Development targets
+.PHONY: dev-server
+dev-server: npm-dependencies ## Start development server
+	npm run dev
+
+.PHONY: dev-tools
+dev-tools: npm-dependencies ## Start development tools
+	npm run devtools
+
+# Code quality targets
+.PHONY: fmt-js
+fmt-js: npm-dependencies ## Format JavaScript code
+	npm run format
+
+.PHONY: lint-js
+lint-js: npm-dependencies ## Lint JavaScript code
+	npm run lint
+
+.PHONY: lint-swift
+lint-swift: ## Lint Swift code
+	swift package plugin swiftlint
+
+# Testing targets
+.PHONY: test-js
+test-js: npm-dependencies ## Run JavaScript tests
+	npm run test -- run
+
+.PHONY: test-swift-package
+test-swift-package: build ## Run Swift package tests
+	$(call XCODEBUILD_CMD, test)
+
+.PHONY: test-android
+test-android: ## Run Android tests
 	@echo "--- :android: Running Android Tests"
 	./android/gradlew -p ./android :gutenberg:test
 
-build-swift-package: build
-	$(call XCODEBUILD_CMD, build)
-
-test-swift-package: build
-	$(call XCODEBUILD_CMD, test)
-
-release:
+# Release target
+.PHONY: release
+release: ## Create a new release (requires VERSION_TYPE parameter)
 	@echo "--- :rocket: Starting GutenbergKit Release Process"
 	@echo "Usage: make release VERSION_TYPE=[<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease | from-git] [DRY_RUN=true]"
 	@echo ""
