@@ -173,6 +173,16 @@ The project follows WordPress coding standards for JavaScript:
 -   **ESLint**: Uses `@wordpress/eslint-plugin/recommended` configuration
 -   **Prettier**: Uses `@wordpress/prettier-config` for code formatting
 
+### Function Ordering Convention
+
+Functions in this project are ordered by usage/call order rather than alphabetically:
+
+-   **Main/exported functions first**: The primary exported function appears at the top of the file
+-   **Helper functions follow in call order**: Helper functions are ordered based on when they are first called in the main function
+-   **Example**: If `mainFunction()` calls `helperA()` then `helperB()`, the file order should be: `mainFunction`, `helperA`, `helperB`
+
+This ordering makes code easier to read top-to-bottom, as you encounter function definitions before needing to understand their implementation details.
+
 ### Logging Guidelines
 
 The project uses a custom logger utility (`src/utils/logger.js`) instead of direct `console` methods:
