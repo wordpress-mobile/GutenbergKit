@@ -246,12 +246,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         _isEditorSetup = true
 
         Task { @MainActor in
-            do {
-                self.dependencies = try await service.dependencies(for: configuration, isWarmup: isWarmupMode)
-            } catch {
-                print("Failed to setup editor environment, continuing with the default or cached configuration:", error)
-            }
-
+            dependencies = await service.dependencies(for: configuration, isWarmup: isWarmupMode)
             setUpEditor()
             loadEditor()
         }

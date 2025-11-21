@@ -54,7 +54,7 @@ actor EditorService {
     ///
     /// - warning: The request may take a significant amount of time the first
     /// time you open the editor.
-    func dependencies(for configuration: EditorConfiguration, isWarmup: Bool = false) async throws -> EditorDependencies {
+    func dependencies(for configuration: EditorConfiguration, isWarmup: Bool = false) async -> EditorDependencies {
         let startTime = CFAbsoluteTimeGetCurrent()
 
         if !isEditorLoaded {
@@ -89,7 +89,7 @@ actor EditorService {
 
     /// Refresh the editor resources.
     /// Will not refresh more often than once every 30 seconds.
-    func refresh(configuration: EditorConfiguration) async {
+    private func refresh(configuration: EditorConfiguration) async {
         if let task = refreshTask {
             return await task.value
         }
