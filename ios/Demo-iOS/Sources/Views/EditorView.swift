@@ -182,6 +182,17 @@ private struct _EditorView: UIViewControllerRepresentable {
         func editor(_ viewController: EditorViewController, didCloseModalDialog dialogType: String) {
             viewModel.isModalDialogOpen = false
         }
+
+        func editor(_ viewController: EditorViewController, didLogNetworkRequest request: NetworkRequest) {
+            print("🌐 Network Request: \(request.method) \(request.url)")
+            print("   Status: \(request.status), Duration: \(request.duration)ms")
+            if let requestBody = request.requestBody {
+                print("   Request Body: \(requestBody.prefix(200))...")
+            }
+            if let responseBody = request.responseBody {
+                print("   Response Body: \(responseBody.prefix(200))...")
+            }
+        }
     }
 }
 
