@@ -186,12 +186,19 @@ The project uses a custom logger utility (`src/utils/logger.js`) instead of dire
 
 Note: Console logs should be used sparingly. For verbose or development-specific logging, prefer the `debug()` function which can be controlled via log levels.
 
-Always run these commands before committing:
+### Pre-Commit Checklist
+
+**IMPORTANT**: Always run these commands after making code changes and before presenting work for review/commit:
 
 ```bash
-# Lint JavaScript code
-make lint-js
-
 # Format JavaScript code
 make format
+
+# Auto-fix linting errors
+make lint-js-fix
+
+# Verify linting passes
+make lint-js
 ```
+
+These commands ensure code quality and prevent lint errors from blocking commits.
