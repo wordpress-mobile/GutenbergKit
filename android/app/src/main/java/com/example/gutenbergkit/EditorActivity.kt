@@ -225,6 +225,18 @@ fun EditorScreen(
                             hasRedoState = hasRedo
                         }
                     })
+                    setNetworkRequestListener(object : GutenbergView.NetworkRequestListener {
+                        override fun onNetworkRequest(request: org.wordpress.gutenberg.NetworkRequest) {
+                            android.util.Log.d("EditorActivity", "🌐 Network Request: ${request.method} ${request.url}")
+                            android.util.Log.d("EditorActivity", "   Status: ${request.status}, Duration: ${request.duration}ms")
+                            request.requestBody?.let {
+                                android.util.Log.d("EditorActivity", "   Request Body: ${it.take(200)}...")
+                            }
+                            request.responseBody?.let {
+                                android.util.Log.d("EditorActivity", "   Response Body: ${it.take(200)}...")
+                            }
+                        }
+                    })
                     start(configuration)
                     onGutenbergViewCreated(this)
                 }
