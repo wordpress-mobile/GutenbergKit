@@ -47,7 +47,7 @@ actor EditorService {
         self.urlSession = urlSession
         self.logger = Logger(subsystem: "com.gutenbergkit.editor", category: "EditorService")
 
-        self.storeURL = URL.documentsDirectory
+        self.storeURL = URL.applicationDirectory
             .appendingPathComponent("GutenbergKit", isDirectory: true)
             .appendingPathComponent(siteURL.safeFilename, isDirectory: true)
     }
