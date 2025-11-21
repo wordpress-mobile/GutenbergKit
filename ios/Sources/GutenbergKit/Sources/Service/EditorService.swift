@@ -35,31 +35,20 @@ actor EditorService {
         return service
     }
 
-    /// Creates a new EditorService instance
-    /// - Parameters:
-    ///   - siteURL: Unique identifier for the site (used for caching)
-    ///   - networkSession: Network session to use for network requests (defaults to URLSession.shared)
-    private init(siteURL: String, networkSession: URLSessionProtocol) {
-        self.siteURL = siteURL
-        self.networkSession = networkSession
-
-        self.storeURL = EditorService.rootURL
-            .appendingPathComponent(siteURL.sha1, isDirectory: true)
-
-        scheduleAutomaticCleanup()
-    }
-
     /// Creates a new EditorService instance for testing
     /// - Parameters:
     ///   - siteURL: Unique identifier for the site (used for caching)
     ///   - storeURL: Custom store URL for testing
     ///   - networkSession: Network session to use for network requests
-    internal init(siteURL: String, storeURL: URL, networkSession: URLSessionProtocol) {
+    init(siteURL: String, storeURL: URL? = nil, networkSession: URLSessionProtocol) {
         self.siteURL = siteURL
         self.networkSession = networkSession
-        self.storeURL = storeURL
+        self.storeURL = storeURL ?? EditorService.rootURL
+            .appendingPathComponent(siteURL.sha1, isDirectory: true)
 
-        scheduleAutomaticCleanup()
+        Task {
+            await scheduleAutomaticCleanup()
+        }
     }
 
     /// Schedules automatic cleanup of orphaned assets after a brief delay.
