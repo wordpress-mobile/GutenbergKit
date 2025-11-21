@@ -474,6 +474,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             case .log:
                 let log = try message.decode(EditorJSMessage.LogMessage.self)
                 delegate?.editor(self, didLogMessage: log.message, level: log.level)
+            case .onNetworkRequest:
+                guard let requestDict = message.body as? [String: Any],
+                      let networkRequest = NetworkRequest(from: requestDict) else {
+                    return
+                }
+                delegate?.editor(self, didLogNetworkRequest: networkRequest)
             }
         } catch {
             // Capture detailed diagnostic information for crash reporting
