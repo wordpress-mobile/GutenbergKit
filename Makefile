@@ -21,7 +21,10 @@ define XCODEBUILD_CMD
 		| xcbeautify
 endef
 
-# Utility targets for dependency management
+################################################################################
+# Utility Targets
+################################################################################
+
 .PHONY: npm-dependencies
 npm-dependencies: ## Install npm dependencies (with smart caching)
 # Skip unless...
@@ -55,7 +58,10 @@ prep-translations: ## Prepare translation files (with smart caching)
 		echo "--- :white_check_mark: Skipping translations fetch (src/translations already exists). Use REFRESH_L10N=1 to force refresh."; \
 	fi
 
-# Build targets
+################################################################################
+# Build Targets
+################################################################################
+
 .PHONY: build
 build: npm-dependencies prep-translations ## Build the project for all platforms (iOS, Android, web)
 	@echo "--- :node: Building Gutenberg"
@@ -77,7 +83,10 @@ local-android-library: build ## Build Android library to local Maven
 	@echo "--- :android: Building Library"
 	./android/gradlew -p ./android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3
 
-# Development targets
+################################################################################
+# Development Targets
+################################################################################
+
 .PHONY: dev-server
 dev-server: npm-dependencies ## Start development server
 	npm run dev
@@ -86,7 +95,10 @@ dev-server: npm-dependencies ## Start development server
 dev-tools: npm-dependencies ## Start development tools
 	npm run devtools
 
-# Code quality targets
+################################################################################
+# Code Quality Targets
+################################################################################
+
 .PHONY: fmt-js
 fmt-js: npm-dependencies ## Format JavaScript code
 	npm run format
@@ -99,7 +111,10 @@ lint-js: npm-dependencies ## Lint JavaScript code
 lint-swift: ## Lint Swift code
 	swift package plugin swiftlint
 
-# Testing targets
+################################################################################
+# Testing Targets
+################################################################################
+
 .PHONY: test-js
 test-js: npm-dependencies ## Run JavaScript tests
 	npm run test -- run
@@ -113,7 +128,10 @@ test-android: ## Run Android tests
 	@echo "--- :android: Running Android Tests"
 	./android/gradlew -p ./android :gutenberg:test
 
-# Release target
+################################################################################
+# Release Target
+################################################################################
+
 .PHONY: release
 release: ## Create a new release (requires VERSION_TYPE parameter)
 	@echo "--- :rocket: Starting GutenbergKit Release Process"
