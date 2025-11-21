@@ -58,6 +58,10 @@ prep-translations: ## Fetch and cache locale string files
 		echo "--- :white_check_mark: Skipping translations fetch (src/translations already exists). Use REFRESH_L10N=1 to force refresh."; \
 	fi
 
+.PHONY: clean
+clean: ## Remove build artifacts and translation string files
+	npm run clean
+
 ################################################################################
 # Build Targets
 ################################################################################
@@ -94,6 +98,10 @@ dev-server: npm-dependencies ## Start the development server
 .PHONY: dev-tools
 dev-tools: npm-dependencies ## Start the React Developer Tools
 	npm run devtools
+
+.PHONY: preview
+preview: npm-dependencies ## Preview the production build locally
+	npm run preview
 
 ################################################################################
 # Code Quality Targets

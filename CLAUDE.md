@@ -42,6 +42,8 @@ make dev-tools
 npm run devtools
 
 # Preview production build locally
+make preview
+# or
 npm run preview
 
 # Run JavaScript tests
@@ -55,6 +57,8 @@ make lint-js
 npm run lint
 
 # Lint and auto-fix JavaScript code
+make lintfix-js
+# or
 npm run lintfix
 
 # Format JavaScript code
@@ -78,6 +82,8 @@ make build
 make build REFRESH_DEPS=1 REFRESH_L10N=1
 
 # Clean build artifacts
+make clean            # Clean both dist and translations
+# or
 npm run clean         # Clean both dist and translations
 npm run clean:dist    # Clean only dist directory
 npm run clean:l10n    # Clean only translations directory
