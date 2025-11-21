@@ -42,9 +42,12 @@ actor EditorService {
         self.siteURL = siteURL
         self.urlSession = urlSession
 
-        self.storeURL = URL.applicationDirectory
-            .appendingPathComponent("GutenbergKit", isDirectory: true)
+        self.storeURL = EditorService.rootURL
             .appendingPathComponent(siteURL.sha1, isDirectory: true)
+    }
+
+    private static var rootURL: URL {
+        URL.applicationDirectory.appendingPathComponent("GutenbergKit", isDirectory: true)
     }
 
     /// Set up the editor for the given site.
@@ -138,7 +141,7 @@ actor EditorService {
 
         // Only write manifest to disk after all assets are successfully fetched
         do {
-            createStoreDirectoryIfNeeded()
+            FileManager.default.createDirectoryIfNeeded(at: storeURL)
             try manifestData.write(to: manifestFileURL)
             log(.info, "Manifest saved to disk")
         } catch {
@@ -169,7 +172,7 @@ actor EditorService {
     private func fetchEditorSettings(baseURL: URL, authHeader: String) async throws -> Data {
         let data = try await fetchData(for: baseURL.appendingPathComponent("/wp-block-editor/v1/settings"), authHeader: authHeader)
         do {
-            createStoreDirectoryIfNeeded()
+            FileManager.default.createDirectoryIfNeeded(at: storeURL)
             try data.write(to: editorSettingsFileURL)
         } catch {
             assertionFailure("Failed to save settings: \(error)")
@@ -177,7 +180,7 @@ actor EditorService {
         return data
     }
 
-    // MARK: - Manifest
+    // MARK: - Assets Manifest
 
     /// Fetches the editor assets manifest from the WordPress REST API
     /// Does not write to disk - use this to get manifest data without persisting it
@@ -194,43 +197,13 @@ actor EditorService {
     /// Returns the editor assets manifest as a JSON string, with JavaScript and stylesheet links
     /// modified so that their content can be cached and reused by the editor.
     ///
-    /// Verifies that all required assets are cached before returning the manifest.
-    ///
     /// - Parameter siteURL: The site URL to extract the scheme for scheme-less links
     /// - Returns: JSON string of the processed manifest
-    /// - Throws: `EditorServiceError` if assets are missing or manifest processing fails
     private func getManifestForEditor(siteURL: String) throws -> String {
         // For scheme-less links (i.e. '//stats.wp.com/w.js'), use the scheme in `siteURL`.
         let siteURLScheme = URL(string: siteURL)?.scheme
         let data = try Data(contentsOf: manifestFileURL)
         let manifest = try JSONDecoder().decode(EditorAssetsManifest.self, from: data)
-        let assetLinks = try manifest.parseAssetLinks()
-
-        // Verify all assets are cached
-        let fileManager = FileManager.default
-        var missingAssets: [String] = []
-
-        for urlString in assetLinks {
-            let filename = cachedFilename(for: urlString)
-            let localURL = assetsDirectoryURL.appendingPathComponent(filename)
-
-            if !fileManager.fileExists(atPath: localURL.path) {
-                missingAssets.append(urlString)
-            }
-        }
-
-        if !missingAssets.isEmpty {
-            log(.error, "Missing \(missingAssets.count) asset(s) from cache")
-            for (index, asset) in missingAssets.prefix(5).enumerated() {
-                log(.error, "  [\(index + 1)] \(asset)")
-            }
-            if missingAssets.count > 5 {
-                log(.error, "  ... and \(missingAssets.count - 5) more")
-            }
-            throw URLError(.resourceUnavailable)
-        }
-
-        log(.info, "All \(assetLinks.count) manifest assets verified in cache")
 
         // Process manifest for editor
         let processedData = try manifest.renderForEditor(defaultScheme: siteURLScheme)
@@ -244,85 +217,93 @@ actor EditorService {
 
     /// Fetches all assets from the manifest and stores them on the device
     private func fetchAssets(manifestData: Data) async throws {
+        let startTime = CFAbsoluteTimeGetCurrent()
         let manifest = try JSONDecoder().decode(EditorAssetsManifest.self, from: manifestData)
         let assetLinks = try manifest.parseAssetLinks()
+            .filter { isSupportedAsset($0) }
 
         log(.info, "Found \(assetLinks.count) assets to fetch")
 
-        // Create assets directory if needed
-        let fileManager = FileManager.default
-        if !fileManager.fileExists(atPath: assetsDirectoryURL.path) {
-            try fileManager.createDirectory(at: assetsDirectoryURL, withIntermediateDirectories: true)
-        }
+        FileManager.default.createDirectoryIfNeeded(at: assetsDirectoryURL)
 
         // Track statistics
         var fetchedCount = 0
         var cachedCount = 0
-        var totalSize: Int64 = 0
+        var assetURLs: [URL] = []
 
         // Fetch all assets in parallel
-        try await withThrowingTaskGroup(of: (Bool, Int64).self) { group in
+        await withTaskGroup(of: Result<(Bool, URL), Error>.self) { group in
             for link in assetLinks {
                 group.addTask {
-                    try await self.fetchAsset(from: link)
+                    await Result { try await self.fetchAsset(from: link) }
                 }
             }
 
-            for try await (wasCached, size) in group {
-                if wasCached {
-                    cachedCount += 1
-                } else {
-                    fetchedCount += 1
+            for await result in group {
+                switch result {
+                case .success(let (wasCached, url)):
+                    if wasCached {
+                        cachedCount += 1
+                    } else {
+                        fetchedCount += 1
+                    }
+                    assetURLs.append(url)
+                case .failure(let error):
+                    log(.error, "Failed to fetch asset: \(error)")
                 }
-                totalSize += size
             }
         }
 
-        let totalSizeMB = Double(totalSize) / (1024 * 1024)
-        log(.info, "Assets loaded: \(fetchedCount) fetched, \(cachedCount) cached, total size: \(String(format: "%.2f", totalSizeMB)) MB")
+        let totalTime = CFAbsoluteTimeGetCurrent() - startTime
+        log(.info, "Assets loaded: \(fetchedCount) fetched, \(cachedCount) cached, total size: \(assetURLs.reduce(0) { $0 + $1.fileSize }.formatted) in \(String(format: "%.2f", totalTime))s")
     }
 
-    /// Fetches a single asset and stores it on disk
-    /// - Returns: A tuple indicating (wasCached, fileSize)
-    private func fetchAsset(from urlString: String) async throws -> (Bool, Int64) {
+    /// Checks if an asset URL is supported
+    private func isSupportedAsset(_ urlString: String) -> Bool {
         guard let url = URL(string: urlString) else {
             log(.warn, "Malformed asset link: \(urlString)")
-            return (false, 0)
+            return false
         }
 
         guard url.scheme == "http" || url.scheme == "https" else {
             log(.warn, "Unexpected asset link: \(urlString)")
-            return (false, 0)
+            return false
         }
 
         let supportedResourceSuffixes = [".js", ".css", ".js.map"]
         guard supportedResourceSuffixes.contains(where: { url.lastPathComponent.hasSuffix($0) }) else {
             log(.warn, "Unsupported asset URL: \(url)")
-            return (false, 0)
+            return false
+        }
+
+        return true
+    }
+
+    /// Fetches a single asset and stores it on disk
+    /// - Returns: A tuple indicating (wasCached, fileURL)
+    private func fetchAsset(from urlString: String) async throws -> (Bool, URL) {
+        guard let url = URL(string: urlString) else {
+            throw URLError(.badURL)
         }
 
         let localURL = assetsDirectoryURL.appendingPathComponent(cachedFilename(for: urlString))
 
-        // Check if already cached
         if FileManager.default.fileExists(atPath: localURL.path) {
-            let size = try? FileManager.default.attributesOfItem(atPath: localURL.path)[.size] as? Int64 ?? 0
-            return (true, size ?? 0)
+            return (true, localURL)
         }
 
+        let startTime = CFAbsoluteTimeGetCurrent()
         let (downloadedURL, response) = try await urlSession.download(from: url)
-        if let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status) {
-            let size = try? FileManager.default.attributesOfItem(atPath: downloadedURL.path)[.size] as? Int64 ?? 0
-            do {
-                try FileManager.default.moveItem(at: downloadedURL, to: localURL)
-            } catch {
-                log(.error, "Failed to move downloaded assets \(downloadedURL) \(localURL)")
-            }
-            log(.debug, "Downloaded asset: \(url.lastPathComponent) (\(size ?? 0) bytes)")
-            return (false, size ?? 0)
-        } else {
-            log(.error, "Received unexpected HTTP response for URL: \(url)")
-            return (false, 0)
+        let downloadTime = CFAbsoluteTimeGetCurrent() - startTime
+
+        guard let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status) else {
+            throw URLError(.badServerResponse)
         }
+
+        try FileManager.default.moveItem(at: downloadedURL, to: localURL)
+
+        log(.debug, "Downloaded asset: \(url.lastPathComponent) (\(localURL.fileSize.formatted)) in \(String(format: "%.2f", downloadTime))s")
+        return (false, localURL)
     }
 
     /// Loads a cached asset from disk
@@ -347,11 +328,9 @@ actor EditorService {
 
     /// Deletes all cached editor data for all sites
     static func deleteAllData() throws {
-        let rootURL = URL.documentsDirectory.appendingPathComponent("GutenbergKit", isDirectory: true)
-        guard FileManager.default.fileExists(atPath: rootURL.path) else {
-            return
+        if FileManager.default.fileExists(atPath: EditorService.rootURL.path()) {
+            try FileManager.default.removeItem(at: EditorService.rootURL)
         }
-        try FileManager.default.removeItem(at: rootURL)
     }
 
     /// Generates a cached filename from an asset URL using SHA256 hash
@@ -363,12 +342,6 @@ actor EditorService {
             return ext.isEmpty ? hash : "\(hash).\(ext)"
         }
         return hash
-    }
-
-    private func createStoreDirectoryIfNeeded() {
-        if !FileManager.default.fileExists(atPath: storeURL.path) {
-            try? FileManager.default.createDirectory(at: storeURL, withIntermediateDirectories: true)
-        }
     }
 
     private func fetchData(for requestURL: URL, authHeader: String) async throws -> Data {
@@ -390,6 +363,26 @@ private extension Result {
             self = .success(try await body())
         } catch {
             self = .failure(error)
+        }
+    }
+}
+
+private extension URL {
+    var fileSize: Int64 {
+        (try? FileManager.default.attributesOfItem(atPath: path())[.size] as? Int64) ?? 0
+    }
+}
+
+private extension Int64 {
+    var formatted: String {
+        ByteCountFormatter.string(fromByteCount: self, countStyle: .file)
+    }
+}
+
+private extension FileManager {
+    func createDirectoryIfNeeded(at url: URL) {
+        if !fileExists(atPath: url.path) {
+            try? createDirectory(at: url, withIntermediateDirectories: true)
         }
     }
 }
