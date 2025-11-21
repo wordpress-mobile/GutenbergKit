@@ -26,7 +26,7 @@ endef
 ################################################################################
 
 .PHONY: npm-dependencies
-npm-dependencies: ## Install npm dependencies (with smart caching)
+npm-dependencies: ## Install npm dependencies
 # Skip unless...
 # - node_modules doesn't exist
 # - REFRESH_DEPS is set to true or 1
@@ -39,7 +39,7 @@ npm-dependencies: ## Install npm dependencies (with smart caching)
 	fi
 
 .PHONY: prep-translations
-prep-translations: ## Prepare translation files (with smart caching)
+prep-translations: ## Prepare translation files
 # Skip unless...
 # - src/translations doesn't exist
 # - REFRESH_L10N is set to true or 1
@@ -75,7 +75,7 @@ build: npm-dependencies prep-translations ## Build the project for all platforms
 	cp -r ./dist/. ./android/Gutenberg/src/main/assets
 
 .PHONY: build-swift-package
-build-swift-package: build ## Build Swift package for iOS
+build-swift-package: build ## Build the Swift package for iOS
 	$(call XCODEBUILD_CMD, build)
 
 .PHONY: local-android-library
@@ -88,11 +88,11 @@ local-android-library: build ## Build Android library to local Maven
 ################################################################################
 
 .PHONY: dev-server
-dev-server: npm-dependencies ## Start development server
+dev-server: npm-dependencies ## Start the development server
 	npm run dev
 
 .PHONY: dev-tools
-dev-tools: npm-dependencies ## Start development tools
+dev-tools: npm-dependencies ## Start the React Developer Tools
 	npm run devtools
 
 ################################################################################
@@ -133,7 +133,7 @@ test-android: ## Run Android tests
 ################################################################################
 
 .PHONY: release
-release: ## Create a new release (requires VERSION_TYPE parameter)
+release: ## Create a new release
 	@echo "--- :rocket: Starting GutenbergKit Release Process"
 	@echo "Usage: make release VERSION_TYPE=[<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease | from-git] [DRY_RUN=true]"
 	@echo ""
