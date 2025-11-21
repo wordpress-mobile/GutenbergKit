@@ -173,6 +173,25 @@ export function onModalDialogClosed( dialogType ) {
 }
 
 /**
+ * Notifies the native host about a network request and its response.
+ *
+ * @param {Object}      requestData                 The network request data.
+ * @param {string}      requestData.url             The request URL.
+ * @param {string}      requestData.method          The HTTP method (GET, POST, etc.).
+ * @param {Object|null} requestData.requestHeaders  The request headers object.
+ * @param {string|null} requestData.requestBody     The request body.
+ * @param {number}      requestData.status          The HTTP response status code.
+ * @param {Object|null} requestData.responseHeaders The response headers object.
+ * @param {string|null} requestData.responseBody    The response body.
+ * @param {number}      requestData.duration        The request duration in milliseconds.
+ *
+ * @return {void}
+ */
+export function onNetworkRequest( requestData ) {
+	dispatchToBridge( 'onNetworkRequest', requestData );
+}
+
+/**
  * @typedef GBKitConfig
  *
  * @property {boolean}  [themeStyles]            Controls if theme styles are applied to the editor.
