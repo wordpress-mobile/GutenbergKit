@@ -14,8 +14,6 @@ actor EditorService {
 
     private let siteURL: String
     private let urlSession: URLSession
-    private let logLevel: LogLevel
-    private let logger: Logger
 
     private let storeURL: URL
     private var editorSettingsFileURL: URL { storeURL.appendingPathComponent("settings.json") }
@@ -27,11 +25,11 @@ actor EditorService {
 
     /// Returns the shared EditorService instance for the given siteURL
     @MainActor
-    static func shared(for siteURL: String, logLevel: LogLevel = .error, urlSession: URLSession = .shared) -> EditorService {
+    static func shared(for siteURL: String) -> EditorService {
         if let existing = instances[siteURL] {
             return existing
         }
-        let service = EditorService(siteURL: siteURL, logLevel: logLevel, urlSession: urlSession)
+        let service = EditorService(siteURL: siteURL, urlSession: .shared)
         instances[siteURL] = service
         return service
     }
@@ -39,13 +37,10 @@ actor EditorService {
     /// Creates a new EditorService instance
     /// - Parameters:
     ///   - siteURL: Unique identifier for the site (used for caching)
-    ///   - logLevel: Minimum log level for messages (defaults to .error)
     ///   - urlSession: URLSession to use for network requests (defaults to .shared)
-    private init(siteURL: String, logLevel: LogLevel = .error, urlSession: URLSession = .shared) {
+    private init(siteURL: String, urlSession: URLSession = .shared) {
         self.siteURL = siteURL
-        self.logLevel = logLevel
         self.urlSession = urlSession
-        self.logger = Logger(subsystem: "com.gutenbergkit.editor", category: "EditorService")
 
         self.storeURL = URL.applicationDirectory
             .appendingPathComponent("GutenbergKit", isDirectory: true)
@@ -391,18 +386,6 @@ actor EditorService {
         return data
     }
 
-    // MARK: - Logging
-
-    /// Logs a message at the specified level
-    private func log(_ level: LogLevel, _ message: String) {
-        guard level.rawValue >= logLevel.rawValue else { return }
-        switch level {
-        case .debug: logger.debug("\(message)")
-        case .info: logger.info("\(message)")
-        case .warn: logger.warning("\(message)")
-        case .error: logger.error("\(message)")
-        }
-    }
 }
 
 // MARK: - Result Extension

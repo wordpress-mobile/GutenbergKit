@@ -100,6 +100,6 @@ struct EditorJSMessage {
 
     struct LogMessage: Decodable {
         let message: String
-        let level: LogLevel
+        let level: EditorLogLevel
     }
 }

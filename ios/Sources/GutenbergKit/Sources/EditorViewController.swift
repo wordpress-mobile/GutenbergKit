@@ -157,7 +157,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 title: '\(configuration.escapedTitle)',
                 content: '\(configuration.escapedContent)'
             },
-            logLevel: '\(configuration.logLevel)',
+            logLevel: '\(EditorLogger.logLevel.rawValue)',
             manifest: \(dependencies?.manifest ?? "undefined")
         };
 
@@ -460,8 +460,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 hideNavigationOverlay()
                 delegate?.editor(self, didCloseModalDialog: body.dialogType)
             case .log:
-                let log = try message.decode(EditorJSMessage.LogMessage.self)
-                delegate?.editor(self, didLogMessage: log.message, level: log.level)
+                let logMessage = try message.decode(EditorJSMessage.LogMessage.self)
+                log(logMessage.level, logMessage.message)
             }
         } catch {
             fatalError("failed to decode message: \(error)")

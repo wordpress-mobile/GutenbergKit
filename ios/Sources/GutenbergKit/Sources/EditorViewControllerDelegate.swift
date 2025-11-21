@@ -35,9 +35,6 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// Notifies the client about an exception that occurred during the editor
     func editor(_ viewController: EditorViewController, didLogException error: GutenbergJSException)
 
-    /// Notifies the client about a log message emitted by the editor
-    func editor(_ viewController: EditorViewController, didLogMessage message: String, level: LogLevel)
-
     func editor(_ viewController: EditorViewController, didRequestMediaFromSiteMediaLibrary config: OpenMediaLibraryAction)
 
     /// Notifies the client that an autocompleter was triggered.

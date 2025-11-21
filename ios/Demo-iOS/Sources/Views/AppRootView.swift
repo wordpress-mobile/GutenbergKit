@@ -83,7 +83,6 @@ struct AppRootView: View {
                     .setSiteApiRoot(config.siteApiRoot)
                     .setAuthHeader(config.authHeader)
                     .setNativeInserterEnabled(isNativeInserterEnabled)
-                    .setLogLevel(.debug)
                     .build()
 
                 self.activeEditorConfiguration = updatedConfiguration

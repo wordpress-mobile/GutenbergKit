@@ -159,10 +159,6 @@ private struct _EditorView: UIViewControllerRepresentable {
             // No-op for demo
         }
 
-        func editor(_ viewController: EditorViewController, didLogMessage message: String, level: LogLevel) {
-            print("[\(level)]: \(message)")
-        }
-
         func editor(_ viewController: EditorViewController, didLogException error: GutenbergJSException) {
             // No-op for demo
         }
