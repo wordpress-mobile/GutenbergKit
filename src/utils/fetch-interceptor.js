@@ -100,6 +100,7 @@ function extractRequestDetails( input, init = {} ) {
 /**
  * Initializes the global fetch interceptor.
  * Wraps window.fetch to log all network requests and responses.
+ * Only overrides window.fetch if network logging is enabled in config.
  *
  * @return {void}
  */
@@ -109,16 +110,17 @@ export function initializeFetchInterceptor() {
 		return;
 	}
 
+	const config = getGBKit();
+
+	// Only override window.fetch if network logging is enabled
+	if ( ! config.enableNetworkLogging ) {
+		debug( 'Network logging disabled, fetch interceptor not initialized' );
+		return;
+	}
+
 	const originalFetch = window.fetch;
 
 	window.fetch = async function ( input, init ) {
-		const config = getGBKit();
-
-		// Check if network logging is enabled
-		if ( ! config.enableNetworkLogging ) {
-			return originalFetch( input, init );
-		}
-
 		const startTime = performance.now();
 		const requestDetails = extractRequestDetails( input, init );
 
