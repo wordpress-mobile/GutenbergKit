@@ -107,8 +107,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         webView.alpha = 0
 
         if isWarmupMode {
-            setUpEditor()
-            loadEditor()
+            startEditorSetup()
         }
     }
 
@@ -248,7 +247,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         Task { @MainActor in
             do {
-                self.dependencies = try await service.dependencies(for: configuration)
+                self.dependencies = try await service.dependencies(for: configuration, isWarmup: isWarmupMode)
             } catch {
                 print("Failed to setup editor environment, continuing with the default or cached configuration:", error)
             }
@@ -497,11 +496,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // Retain for 5 seconds and let it prefetch stuff
         DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(5)) {
             _ = editorViewController
-        }
-
-        Task {
-            await EditorService.shared(for: configuration.siteURL)
-                .refresh(configuration: configuration)
         }
     }
 }

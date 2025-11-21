@@ -54,7 +54,7 @@ actor EditorService {
     ///
     /// - warning: The request may take a significant amount of time the first
     /// time you open the editor.
-    func dependencies(for configuration: EditorConfiguration) async throws -> EditorDependencies {
+    func dependencies(for configuration: EditorConfiguration, isWarmup: Bool = false) async throws -> EditorDependencies {
         let startTime = CFAbsoluteTimeGetCurrent()
 
         if !isEditorLoaded {
@@ -63,7 +63,9 @@ actor EditorService {
             // Trigger a background refresh after a delay to avoid interfering with editor loading
             Task {
                 log(.info, "Registering background refresh to be performed later")
-                try? await Task.sleep(for: .seconds(7))
+                if !isWarmup {
+                    try? await Task.sleep(for: .seconds(7))
+                }
                 await refresh(configuration: configuration)
             }
         }
