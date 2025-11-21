@@ -10,7 +10,11 @@ define XCODEBUILD_CMD
 endef
 
 npm-dependencies:
-	@if [ ! -d "node_modules" ] || [ "$(REFRESH_DEPS)" = "true" ] || [ "$(REFRESH_DEPS)" = "1" ]; then \
+# Skip unless...
+# - node_modules doesn't exist
+# - REFRESH_DEPS is set to true or 1
+# - npm-dependencies was invoked directly
+	@if [ ! -d "node_modules" ] || [ "$(REFRESH_DEPS)" = "true" ] || [ "$(REFRESH_DEPS)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^npm-dependencies$$"; then \
 		echo "--- :npm: Installing NPM Dependencies"; \
 		npm ci; \
 	else \
@@ -18,7 +22,11 @@ npm-dependencies:
 	fi
 
 prep-translations:
-	@if [ ! -d "src/translations" ] || [ "$(REFRESH_L10N)" = "true" ] || [ "$(REFRESH_L10N)" = "1" ]; then \
+# Skip unless...
+# - src/translations doesn't exist
+# - REFRESH_L10N is set to true or 1
+# - prep-translations was invoked directly
+	@if [ ! -d "src/translations" ] || [ "$(REFRESH_L10N)" = "true" ] || [ "$(REFRESH_L10N)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^prep-translations$$"; then \
 		echo "--- :npm: Preparing Translations"; \
 		if ! npm run prep-translations -- --force; then \
 			if [ "$(STRICT_L10N)" = "true" ] || [ "$(STRICT_L10N)" = "1" ]; then \
@@ -37,7 +45,7 @@ build: npm-dependencies prep-translations
 
 	npm run build
 
-	@# Copy build products into place
+# Copy build products into place
 	@echo "--- :open_file_folder: Copying Build Products into place"
 	rm -rf ./ios/Sources/GutenbergKit/Gutenberg/ ./android/Gutenberg/src/main/assets/
 	cp -r ./dist/. ./ios/Sources/GutenbergKit/Gutenberg/
