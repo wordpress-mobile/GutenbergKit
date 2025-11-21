@@ -188,7 +188,18 @@ export function onModalDialogClosed( dialogType ) {
  * @return {void}
  */
 export function onNetworkRequest( requestData ) {
-	dispatchToBridge( 'onNetworkRequest', requestData );
+	debug( `Bridge event: onNetworkRequest`, requestData );
+
+	if ( window.editorDelegate ) {
+		window.editorDelegate.onNetworkRequest( JSON.stringify( requestData ) );
+	}
+
+	if ( window.webkit ) {
+		window.webkit.messageHandlers.editorDelegate.postMessage( {
+			message: 'onNetworkRequest',
+			body: requestData,
+		} );
+	}
 }
 
 /**
