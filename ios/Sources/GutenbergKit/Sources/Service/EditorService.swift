@@ -241,14 +241,11 @@ actor EditorService {
 
         FileManager.default.createDirectoryIfNeeded(at: assetsDirectoryURL)
 
-        // Track statistics
-        var fetchedCount = 0
-        var cachedCount = 0
         var assetURLs: [URL] = []
         var lastError: Error?
 
         // Fetch all assets in parallel
-        await withTaskGroup(of: Result<(Bool, URL), Error>.self) { group in
+        await withTaskGroup(of: Result<URL, Error>.self) { group in
             for link in assetLinks {
                 group.addTask {
                     await Result { try await self.fetchAsset(from: link) }
@@ -257,12 +254,7 @@ actor EditorService {
 
             for await result in group {
                 switch result {
-                case .success(let (wasCached, url)):
-                    if wasCached {
-                        cachedCount += 1
-                    } else {
-                        fetchedCount += 1
-                    }
+                case .success(let url):
                     assetURLs.append(url)
                 case .failure(let error):
                     log(.error, "Failed to fetch asset: \(error)")
@@ -272,7 +264,8 @@ actor EditorService {
         }
 
         let totalTime = CFAbsoluteTimeGetCurrent() - startTime
-        log(.info, "Assets loaded: \(fetchedCount) fetched, \(cachedCount) cached, total size: \(assetURLs.reduce(0) { $0 + $1.fileSize }.formatted) in \(String(format: "%.2f", totalTime))s")
+        let totalSize = assetURLs.reduce(0) { $0 + $1.fileSize }
+        log(.info, "Assets loaded: \(assetURLs.count) assets, \(totalSize.formatted) in \(String(format: "%.2f", totalTime))s")
 
         if let lastError {
             throw lastError
@@ -301,8 +294,8 @@ actor EditorService {
     }
 
     /// Fetches a single asset and stores it on disk
-    /// - Returns: A tuple indicating (wasCached, fileURL)
-    private func fetchAsset(from urlString: String) async throws -> (Bool, URL) {
+    /// - Returns: The local file URL where the asset is stored
+    private func fetchAsset(from urlString: String) async throws -> URL {
         guard let url = URL(string: urlString) else {
             throw URLError(.badURL)
         }
@@ -310,7 +303,8 @@ actor EditorService {
         let localURL = assetsDirectoryURL.appendingPathComponent(cachedFilename(for: urlString))
 
         if FileManager.default.fileExists(atPath: localURL.path) {
-            return (true, localURL)
+            log(.debug, "Found cached asset for: \(url.lastPathComponent) (\(localURL.fileSize.formatted))")
+            return localURL
         }
 
         let startTime = CFAbsoluteTimeGetCurrent()
@@ -325,7 +319,7 @@ actor EditorService {
         try FileManager.default.moveItem(at: downloadedURL, to: localURL)
 
         log(.debug, "Downloaded asset: \(url.lastPathComponent) (\(localURL.fileSize.formatted)) in \(String(format: "%.2f", downloadTime))s")
-        return (false, localURL)
+        return localURL
     }
 
     /// Loads a cached asset from disk
