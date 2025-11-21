@@ -2,7 +2,7 @@ import Foundation
 @testable import GutenbergKit
 
 /// Mock implementation of URLSessionProtocol for testing
-final class MockNetworkSession: URLSessionProtocol, @unchecked Sendable {
+final class MockURLSession: URLSessionProtocol, @unchecked Sendable {
     private var mockedResponses: [String: (Data, HTTPURLResponse)] = [:]
     private let lock = NSLock()
 

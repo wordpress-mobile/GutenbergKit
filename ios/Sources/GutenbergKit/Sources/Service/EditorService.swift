@@ -133,49 +133,40 @@ actor EditorService {
         }
 
         // Fetch settings and manifest in parallel
-        async let settingsFuture = Result { try await fetchEditorSettings(baseURL: baseURL, authHeader: configuration.authHeader) }
-        async let manifestFuture = Result { try await fetchManifestData(baseURL: baseURL, authHeader: configuration.authHeader) }
+        async let settingsFuture = Result {
+            try await fetchEditorSettings(baseURL: baseURL, authHeader: configuration.authHeader)
+        }
+        async let manifestFuture = Result {
+            try await fetchManifestData(baseURL: baseURL, authHeader: configuration.authHeader)
+        }
 
         let (settingsResult, manifestResult) = await (settingsFuture, manifestFuture)
-
-        // Log errors but continue
-        if case .failure(let error) = settingsResult {
-            log(.error, "Failed to fetch editor settings: \(error)")
-        }
-
-        guard case .success(let manifest) = manifestResult else {
-            if case .failure(let error) = manifestResult {
-                log(.error, "Failed to fetch manifest: \(error)")
-            }
-            log(.error, "Editor refresh aborted: manifest fetch failed")
-            return
-        }
 
         let fetchTime = CFAbsoluteTimeGetCurrent() - startTime
         log(.info, "Fetched settings and manifest in \(String(format: "%.2f", fetchTime))s")
 
-        // Fetch all assets for the new manifest
-        let assetsStartTime = CFAbsoluteTimeGetCurrent()
-        do {
-            try await fetchAssets(manifestData: manifest)
-        } catch {
-            log(.error, "Failed to fetch assets: \(error)")
-            log(.error, "Editor refresh aborted: asset fetching failed")
-            return
-        }
-        let assetsTime = CFAbsoluteTimeGetCurrent() - assetsStartTime
-
-        // Only write manifest to disk after all assets are successfully fetched
-        do {
-            FileManager.default.createDirectoryIfNeeded(at: storeURL)
-            try manifest.write(to: manifestFileURL)
-            log(.info, "Manifest saved to disk")
-        } catch {
-            log(.error, "Failed to save manifest: \(error)")
-            return
+        if case .failure(let error) = settingsResult {
+            log(.error, "Failed to fetch editor settings: \(error)")
         }
 
-        // Save state to indicate successful refresh
+        switch manifestResult {
+        case .success(let manifest):
+            // Fetch all assets for the new manifest
+            do {
+                try await fetchAssets(manifestData: manifest)
+
+                // Only write manifest to disk after all assets are successfully fetched
+                FileManager.default.createDirectoryIfNeeded(at: storeURL)
+                try manifest.write(to: manifestFileURL)
+                log(.info, "Saved manifest")
+            } catch {
+                log(.error, "Failed to fetch assets: \(error) – skipping the manifest")
+            }
+        case .failure(let error):
+            log(.error, "Failed to fetch manifest: \(error)")
+        }
+
+        // Save state to indicate completed refresh (even if it fails)
         do {
             let state = State(refreshDate: Date())
             try JSONEncoder().encode(state).write(to: stateFileURL)
@@ -184,7 +175,7 @@ actor EditorService {
         }
 
         let totalTime = CFAbsoluteTimeGetCurrent() - startTime
-        log(.info, "Editor refresh completed in \(String(format: "%.2f", totalTime))s (assets: \(String(format: "%.2f", assetsTime))s)")
+        log(.info, "Editor refresh completed in \(String(format: "%.2f", totalTime))s")
     }
 
     // MARK: – Editor Settings
@@ -254,6 +245,7 @@ actor EditorService {
         var fetchedCount = 0
         var cachedCount = 0
         var assetURLs: [URL] = []
+        var lastError: Error?
 
         // Fetch all assets in parallel
         await withTaskGroup(of: Result<(Bool, URL), Error>.self) { group in
@@ -274,12 +266,17 @@ actor EditorService {
                     assetURLs.append(url)
                 case .failure(let error):
                     log(.error, "Failed to fetch asset: \(error)")
+                    lastError = error
                 }
             }
         }
 
         let totalTime = CFAbsoluteTimeGetCurrent() - startTime
         log(.info, "Assets loaded: \(fetchedCount) fetched, \(cachedCount) cached, total size: \(assetURLs.reduce(0) { $0 + $1.fileSize }.formatted) in \(String(format: "%.2f", totalTime))s")
+
+        if let lastError {
+            throw lastError
+        }
     }
 
     /// Checks if an asset URL is supported
