@@ -10,24 +10,43 @@ define XCODEBUILD_CMD
 endef
 
 npm-dependencies:
-	@if [ "$(SKIP_DEPS)" != "true" ] && [ "$(SKIP_DEPS)" != "1" ]; then \
+# Skip unless...
+# - node_modules doesn't exist
+# - REFRESH_DEPS is set to true or 1
+# - npm-dependencies was invoked directly
+	@if [ ! -d "node_modules" ] || [ "$(REFRESH_DEPS)" = "true" ] || [ "$(REFRESH_DEPS)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^npm-dependencies$$"; then \
 		echo "--- :npm: Installing NPM Dependencies"; \
 		npm ci; \
+	else \
+		echo "--- :white_check_mark: Skipping NPM dependencies installation (node_modules already exists). Use REFRESH_DEPS=1 to force refresh."; \
 	fi
 
 prep-translations:
-	@if [ "$(SKIP_L10N)" != "true" ] && [ "$(SKIP_L10N)" != "1" ]; then \
+# Skip unless...
+# - src/translations doesn't exist
+# - REFRESH_L10N is set to true or 1
+# - prep-translations was invoked directly
+	@if [ ! -d "src/translations" ] || [ "$(REFRESH_L10N)" = "true" ] || [ "$(REFRESH_L10N)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^prep-translations$$"; then \
 		echo "--- :npm: Preparing Translations"; \
-		npm run prep-translations -- --force; \
+		if ! npm run prep-translations -- --force; then \
+			if [ "$(STRICT_L10N)" = "true" ] || [ "$(STRICT_L10N)" = "1" ]; then \
+				echo "--- :x: ERROR: Translation fetching failed and STRICT_L10N is enabled"; \
+				exit 1; \
+			else \
+				echo "--- :warning: WARNING: Translation fetching failed, but continuing anyway. Use STRICT_L10N=1 to make this fatal."; \
+			fi; \
+		fi; \
+	else \
+		echo "--- :white_check_mark: Skipping translations fetch (src/translations already exists). Use REFRESH_L10N=1 to force refresh."; \
 	fi
 
 build: npm-dependencies prep-translations
-	echo "--- :node: Building Gutenberg"
+	@echo "--- :node: Building Gutenberg"
 
 	npm run build
 
-	# Copy build products into place
-	echo "--- :open_file_folder: Copying Build Products into place"
+# Copy build products into place
+	@echo "--- :open_file_folder: Copying Build Products into place"
 	rm -rf ./ios/Sources/GutenbergKit/Gutenberg/ ./android/Gutenberg/src/main/assets/
 	cp -r ./dist/. ./ios/Sources/GutenbergKit/Gutenberg/
 	cp -r ./dist/. ./android/Gutenberg/src/main/assets
@@ -51,11 +70,11 @@ lint-swift:
 	swift package plugin swiftlint
 
 local-android-library: build
-	echo "--- :android: Building Library"
+	@echo "--- :android: Building Library"
 	./android/gradlew -p ./android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3
 
 test-android:
-	echo "--- :android: Running Android Tests"
+	@echo "--- :android: Running Android Tests"
 	./android/gradlew -p ./android :gutenberg:test
 
 build-swift-package: build

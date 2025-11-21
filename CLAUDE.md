@@ -31,6 +31,9 @@ make dev-tools
 # or
 npm run devtools
 
+# Preview production build locally
+npm run preview
+
 # Run JavaScript tests
 make test-js
 # or
@@ -40,6 +43,9 @@ npm run test -- run
 make lint-js
 # or
 npm run lint
+
+# Lint and auto-fix JavaScript code
+npm run lintfix
 
 # Format JavaScript code
 make fmt-js
@@ -56,6 +62,15 @@ make build
 # This builds the web app and copies assets to:
 # - ios/Sources/GutenbergKit/Gutenberg/
 # - android/Gutenberg/src/main/assets/
+
+# By default, dependencies and translations are only installed if their directories don't exist
+# Force refresh of dependencies and translations
+make build REFRESH_DEPS=1 REFRESH_L10N=1
+
+# Clean build artifacts
+npm run clean         # Clean both dist and translations
+npm run clean:dist    # Clean only dist directory
+npm run clean:l10n    # Clean only translations directory
 ```
 
 ### iOS Development
@@ -63,6 +78,9 @@ make build
 ```bash
 # Build Swift package
 make build-swift-package
+
+# Build Swift package (force refresh of npm deps/translations if needed)
+make build-swift-package REFRESH_DEPS=1 REFRESH_L10N=1
 
 # Run Swift tests
 make test-swift-package
@@ -73,6 +91,9 @@ make test-swift-package
 ```bash
 # Build Android library to local Maven
 make local-android-library
+
+# Build Android library (force refresh of npm deps/translations if needed)
+make local-android-library REFRESH_DEPS=1 REFRESH_L10N=1
 
 # Run Android tests
 make test-android
