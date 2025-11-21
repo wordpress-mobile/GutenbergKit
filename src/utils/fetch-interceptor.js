@@ -56,34 +56,51 @@ export function initializeFetchInterceptor() {
 		let response;
 		let responseStatus;
 		let responseHeaders = {};
-		let responseBody = null;
 
 		try {
 			// Call original fetch
 			response = await originalFetch( input, init );
 
-			// Clone response to read body without consuming it
+			// Capture response metadata immediately
 			const responseClone = response.clone();
 			responseStatus = response.status;
 			responseHeaders = serializeHeaders( response.headers );
-
-			// Read response body from clone
-			responseBody = await serializeBody( responseClone );
-
-			// Calculate duration and log
 			const duration = Math.round( performance.now() - startTime );
 
-			onNetworkRequest( {
-				url: requestDetails.url,
-				method: requestDetails.method,
-				requestHeaders: serializeHeaders( requestDetails.headers ),
-				requestBody,
-				status: responseStatus,
-				responseHeaders,
-				responseBody,
-				duration,
-			} );
+			// Log asynchronously without blocking the response return
+			// This prevents Android WebView Response locking issues
+			serializeBody( responseClone )
+				.then( ( body ) => {
+					onNetworkRequest( {
+						url: requestDetails.url,
+						method: requestDetails.method,
+						requestHeaders: serializeHeaders(
+							requestDetails.headers
+						),
+						requestBody,
+						status: responseStatus,
+						responseHeaders,
+						responseBody: body,
+						duration,
+					} );
+				} )
+				.catch( ( error ) => {
+					// Log without body if reading fails
+					onNetworkRequest( {
+						url: requestDetails.url,
+						method: requestDetails.method,
+						requestHeaders: serializeHeaders(
+							requestDetails.headers
+						),
+						requestBody,
+						status: responseStatus,
+						responseHeaders,
+						responseBody: `[Error reading body: ${ error.message }]`,
+						duration,
+					} );
+				} );
 
+			// Return response immediately - don't wait for body serialization
 			return response;
 		} catch ( error ) {
 			// Log failed request
