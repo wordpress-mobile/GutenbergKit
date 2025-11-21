@@ -1,6 +1,6 @@
 import Foundation
 
-/// Service for fetching the editor settings and other parts of the enrvironment
+/// Service for fetching the editor settings and other parts of the environment
 /// required to launch the editor.
 public actor EditorService {
     enum EditorServiceError: Error {
