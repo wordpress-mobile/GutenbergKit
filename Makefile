@@ -39,7 +39,7 @@ npm-dependencies: ## Install npm dependencies
 	fi
 
 .PHONY: prep-translations
-prep-translations: ## Prepare translation files
+prep-translations: ## Fetch and cache locale string files
 # Skip unless...
 # - src/translations doesn't exist
 # - REFRESH_L10N is set to true or 1
@@ -79,7 +79,7 @@ build-swift-package: build ## Build the Swift package for iOS
 	$(call XCODEBUILD_CMD, build)
 
 .PHONY: local-android-library
-local-android-library: build ## Build Android library to local Maven
+local-android-library: build ## Build the Android library to local Maven
 	@echo "--- :android: Building Library"
 	./android/gradlew -p ./android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3
 
@@ -133,7 +133,7 @@ test-android: ## Run Android tests
 ################################################################################
 
 .PHONY: release
-release: ## Create a new release
+release: ## Create and publish a new release
 	@echo "--- :rocket: Starting GutenbergKit Release Process"
 	@echo "Usage: make release VERSION_TYPE=[<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease | from-git] [DRY_RUN=true]"
 	@echo ""
