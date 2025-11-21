@@ -55,6 +55,7 @@ class GutenbergView : WebView {
     private var logJsExceptionListener: LogJsExceptionListener? = null
     private var autocompleterTriggeredListener: AutocompleterTriggeredListener? = null
     private var modalDialogStateListener: ModalDialogStateListener? = null
+    private var networkRequestListener: NetworkRequestListener? = null
 
     /**
      * Stores the contextId from the most recent openMediaLibrary call
@@ -97,6 +98,10 @@ class GutenbergView : WebView {
 
     fun setModalDialogStateListener(listener: ModalDialogStateListener) {
         modalDialogStateListener = listener
+    }
+
+    fun setNetworkRequestListener(listener: NetworkRequestListener) {
+        networkRequestListener = listener
     }
 
     fun setOnFileChooserRequestedListener(listener: (Intent, Int) -> Unit) {
@@ -404,6 +409,10 @@ class GutenbergView : WebView {
         fun onModalDialogClosed(dialogType: String)
     }
 
+    interface NetworkRequestListener {
+        fun onNetworkRequest(request: NetworkRequest)
+    }
+
     fun getTitleAndContent(originalContent: CharSequence, callback: TitleAndContentCallback, completeComposition: Boolean = false) {
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
@@ -610,6 +619,19 @@ class GutenbergView : WebView {
         }
     }
 
+    @JavascriptInterface
+    fun onNetworkRequest(requestData: String) {
+        handler.post {
+            try {
+                val json = JSONObject(requestData)
+                val request = NetworkRequest.fromJson(json)
+                networkRequestListener?.onNetworkRequest(request)
+            } catch (e: Exception) {
+                Log.e("GutenbergView", "Error parsing network request: ${e.message}")
+            }
+        }
+    }
+
     fun resetFilePathCallback() {
         filePathCallback = null
     }
@@ -691,6 +713,7 @@ class GutenbergView : WebView {
         onFileChooserRequested = null
         autocompleterTriggeredListener = null
         modalDialogStateListener = null
+        networkRequestListener = null
         handler.removeCallbacksAndMessages(null)
         this.destroy()
     }
