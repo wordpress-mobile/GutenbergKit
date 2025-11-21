@@ -55,6 +55,8 @@ actor EditorService {
     /// - warning: The request may take a significant amount of time the first
     /// time you open the editor.
     func dependencies(for configuration: EditorConfiguration) async throws -> EditorDependencies {
+        let startTime = CFAbsoluteTimeGetCurrent()
+
         if !isEditorLoaded {
             await refresh(configuration: configuration)
         } else {
@@ -65,12 +67,16 @@ actor EditorService {
                 await refresh(configuration: configuration)
             }
         }
+
         var dependencies = EditorDependencies()
         if let data = try? Data(contentsOf: editorSettingsFileURL),
            let settings = String(data: data, encoding: .utf8) {
             dependencies.editorSettings = settings
         }
         dependencies.manifest = try? getManifestForEditor(siteURL: configuration.siteURL)
+        let loadTime = CFAbsoluteTimeGetCurrent() - startTime
+        log(.info, "Loaded dependencies in \(String(format: "%.3f", loadTime))s")
+
         return dependencies
     }
 
