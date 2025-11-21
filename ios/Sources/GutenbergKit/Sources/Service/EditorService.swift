@@ -73,11 +73,15 @@ actor EditorService {
         } else {
             // Trigger a background refresh after a delay to avoid interfering with editor loading
             Task {
-                log(.info, "Registering background refresh to be performed later")
                 if !isWarmup {
                     try? await Task.sleep(for: .seconds(7))
                 }
-                await refresh(configuration: configuration)
+                if isRefreshNeeded() {
+                    log(.info, "Refresh scheduled for later")
+                    await refresh(configuration: configuration)
+                } else {
+                    log(.info, "Skipping refresh – data is fresh")
+                }
             }
         }
 
@@ -99,28 +103,25 @@ actor EditorService {
     }
 
     /// Refresh the editor resources.
-    /// Will not refresh more often than once every 30 seconds.
-    private func refresh(configuration: EditorConfiguration) async {
+    func refresh(configuration: EditorConfiguration) async {
         if let task = refreshTask {
             return await task.value
         }
-
-        // Check if we refreshed recently (within the last 30 seconds)
-        if let data = try? Data(contentsOf: stateFileURL),
-           let state = try? JSONDecoder().decode(State.self, from: data) {
-            let timeSinceLastRefresh = Date().timeIntervalSince(state.refreshDate)
-            if timeSinceLastRefresh < 30 {
-                log(.info, "Skipping refresh - last refresh was \(String(format: "%.1f", timeSinceLastRefresh))s ago")
-                return
-            }
-        }
-
         let task = Task {
             defer { refreshTask = nil }
             await actuallyRefresh(configuration: configuration)
         }
         refreshTask = task
         return await task.value
+    }
+
+    private func isRefreshNeeded() -> Bool {
+        guard let data = try? Data(contentsOf: stateFileURL),
+              let state = try? JSONDecoder().decode(State.self, from: data) else {
+            return true
+        }
+        let timeSinceLastRefresh = Date().timeIntervalSince(state.refreshDate)
+        return timeSinceLastRefresh > 30
     }
 
     private func actuallyRefresh(configuration: EditorConfiguration) async {
