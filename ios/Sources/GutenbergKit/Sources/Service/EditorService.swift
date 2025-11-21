@@ -47,7 +47,7 @@ actor EditorService {
     }
 
     private static var rootURL: URL {
-        URL.applicationDirectory.appendingPathComponent("GutenbergKit", isDirectory: true)
+        URL.applicationSupportDirectory.appendingPathComponent("GutenbergKit", isDirectory: true)
     }
 
     /// Returns the editor dependencies for the given configuration.
