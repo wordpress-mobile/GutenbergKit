@@ -62,7 +62,7 @@ make lint-js
 npm run lint:js
 
 # Lint and auto-fix JavaScript code
-make lintfix-js
+make lint-fix-js
 # or
 npm run lint:js:fix
 
