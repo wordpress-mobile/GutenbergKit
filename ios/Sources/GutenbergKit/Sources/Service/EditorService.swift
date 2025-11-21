@@ -385,10 +385,7 @@ actor EditorService {
         }
         return data
     }
-
 }
-
-// MARK: - Result Extension
 
 private extension Result {
     init(catching body: () async throws -> Success) async where Failure == Error {
@@ -399,4 +396,3 @@ private extension Result {
         }
     }
 }
-
