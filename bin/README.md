@@ -86,9 +86,5 @@ Prepares translations for the GutenbergKit project. This script is typically run
 #### Usage
 
 ```bash
-# Direct usage
-node bin/prep-translations.js
-
-# Via npm script
-npm run prep-translations
+make prep-translations
 ```

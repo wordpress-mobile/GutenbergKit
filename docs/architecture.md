@@ -147,7 +147,7 @@ Enable plugins by setting the `plugins` configuration option. The editor will fe
 
 -   Framework: Vitest
 -   Test files: `*.test.{js,jsx}`
--   Run tests: `npm run test`
+-   Run tests: `make test-js`
 
 ### Native Testing
 
