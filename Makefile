@@ -62,7 +62,7 @@ test-swift-package: build
 	$(call XCODEBUILD_CMD, test)
 
 archive-swift-package: build
-	xcodebuild archive \
+	@set -o pipefail && xcodebuild archive \
 	    -scheme GutenbergKit \
 	    -destination "generic/platform=iOS" \
 	    -archivePath ./build/GutenbergKit-iOS \
@@ -71,7 +71,7 @@ archive-swift-package: build
 	    BUILD_LIBRARY_FOR_DISTRIBUTION=YES | xcbeautify
 
 archive-swift-package-via-target: build
-	xcodebuild archive \
+	@set -o pipefail && xcodebuild archive \
 	    -project ./ios/Demo-iOS/Gutenberg.xcodeproj \
 	    -scheme GutenbergKitXCFramework \
 	    -destination "generic/platform=iOS" \
