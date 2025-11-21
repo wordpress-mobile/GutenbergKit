@@ -24,6 +24,15 @@ struct EditorServiceTests {
         // THEN processed manifest contains links pointing to files on disk (`gbk-cache-https://`)
         let manifest = try #require(dependencies.manifest)
         #expect(manifest.contains(#"link rel=\"stylesheet\" id=\"jp-forms-blocks-css\" href=\"gbk-cache-https:\/\/example.com\/wp-content\/plugins\/jetpack\/jetpack_vendor\/automattic\/jetpack-forms\/dist\/blocks\/editor.css?ver=13.9\"#))
+
+        // THEN assets are available on disk and can be loaded
+        for assetURL in context.assetURLs {
+            let cachedURL = try #require(CachedAssetSchemeHandler.cachedURL(forWebLink: assetURL))
+            let gbkURL = try #require(URL(string: cachedURL))
+            let (response, data) = try await service.getCachedAsset(from: gbkURL)
+            #expect(response.url == gbkURL)
+            #expect(!data.isEmpty)
+        }
     }
 
     @Test("Loads settings but not manifest when asset download fails")
@@ -81,6 +90,15 @@ struct EditorServiceTests {
 
         // THEN upgraded asset has new version (contact-form)
         #expect(upgradedManifest.contains(#"jetpack\/_inc\/blocks\/contact-form\/editor.js?ver=14.0"#))
+
+        // THEN upgraded assets are available on disk
+        for assetURL in upgradedContext.assetURLs {
+            let cachedURL = try #require(CachedAssetSchemeHandler.cachedURL(forWebLink: assetURL))
+            let gbkURL = try #require(URL(string: cachedURL))
+            let (response, data) = try await service.getCachedAsset(from: gbkURL)
+            #expect(response.url == gbkURL)
+            #expect(!data.isEmpty)
+        }
     }
 }
 
