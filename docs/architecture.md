@@ -87,7 +87,7 @@ The [React Developer Tools](https://react.dev/learn/react-developer-tools) allow
     make dev-server
     ```
 
-3. For Android emulators only, set up port forwarding (see below).
+3. For Android emulators only, set up port forwarding:
 
     ```bash
     adb reverse tcp:8097 tcp:8097
@@ -95,8 +95,16 @@ The [React Developer Tools](https://react.dev/learn/react-developer-tools) allow
 
 4. Load the editor with development mode enabled:
 
+    Browser or iOS simulator:
+
     ```
-    http://localhost:5173/?dev_mode=1
+    http://localhost:5173/?dev_mode
+    ```
+
+    Android emulator:
+
+    ```
+    http://10.0.2.2:5173/?dev_mode
     ```
 
     The editor will automatically connect to the DevTools server, and your component tree will appear in the standalone window.
