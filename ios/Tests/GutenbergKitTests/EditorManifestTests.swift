@@ -8,7 +8,7 @@ struct EditorManifestTests {
     @Test
     func parseAssetLinks() throws {
         let json = try json(named: "manifest-test-case-1")
-        let manifest = try JSONDecoder().decode(EditorAssetsMainifest.self, from: json)
+        let manifest = try JSONDecoder().decode(EditorAssetsManifest.self, from: json)
 
         let links = try manifest.parseAssetLinks(defaultScheme: nil)
         let scripts = links.filter { $0.contains(".js") }
@@ -21,8 +21,8 @@ struct EditorManifestTests {
     @Test
     func editorWebViewGetsCachedLinks() throws {
         let json = try json(named: "manifest-test-case-1")
-        let original = try JSONDecoder().decode(EditorAssetsMainifest.self, from: json)
-        let forEditor = try JSONDecoder().decode(EditorAssetsMainifest.self, from: original.renderForEditor(defaultScheme: nil))
+        let original = try JSONDecoder().decode(EditorAssetsManifest.self, from: json)
+        let forEditor = try JSONDecoder().decode(EditorAssetsManifest.self, from: original.renderForEditor(defaultScheme: nil))
 
         #expect(try original.parseAssetLinks(defaultScheme: nil).count == forEditor.parseAssetLinks(defaultScheme: nil).count)
 
@@ -44,7 +44,7 @@ struct EditorManifestTests {
     @Test
     func useDefaultScheme() throws {
         let scriptHTML = #"<script src="//w.org/lib.js"></script>"#
-        let manifest = EditorAssetsMainifest(scripts: scriptHTML, styles: "", allowedBlockTypes: [])
+        let manifest = EditorAssetsManifest(scripts: scriptHTML, styles: "", allowedBlockTypes: [])
         #expect(try manifest.parseAssetLinks(defaultScheme: "http") == ["http://w.org/lib.js"])
         #expect(try manifest.parseAssetLinks(defaultScheme: "https") == ["https://w.org/lib.js"])
     }
