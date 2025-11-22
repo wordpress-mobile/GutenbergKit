@@ -1,9 +1,17 @@
 // Log levels in order of verbosity
 const LOG_LEVELS = {
-	ERROR: 0,
-	WARN: 1,
-	INFO: 2,
-	DEBUG: 3,
+	ERROR: 'error',
+	WARN: 'warn',
+	INFO: 'info',
+	DEBUG: 'debug',
+};
+
+// Numeric values for log level comparison
+const LOG_LEVEL_VALUES = {
+	error: 0,
+	warn: 1,
+	info: 2,
+	debug: 3,
 };
 
 // Default log level
@@ -11,35 +19,44 @@ let currentLogLevel = LOG_LEVELS.INFO;
 
 // Check for log level from environment variable (Node.js)
 if ( typeof process !== 'undefined' && process?.env?.LOG_LEVEL ) {
-	const envLogLevel = process.env.LOG_LEVEL.toUpperCase();
-	if ( LOG_LEVELS[ envLogLevel ] !== undefined ) {
-		currentLogLevel = LOG_LEVELS[ envLogLevel ];
+	const envLogLevel = process.env.LOG_LEVEL.toLowerCase();
+	if ( LOG_LEVEL_VALUES[ envLogLevel ] !== undefined ) {
+		currentLogLevel = envLogLevel;
 	}
 }
 
 /**
  * Set the current log level
- * @param {string} level - The log level to set (ERROR, WARN, INFO, DEBUG)
+ * @param {string} level - The log level to set (error, warn, info, debug)
  */
 const setLogLevel = ( level ) => {
-	if ( LOG_LEVELS[ level ] !== undefined ) {
-		currentLogLevel = LOG_LEVELS[ level ];
+	if ( typeof level !== 'string' || ! level ) {
+		// eslint-disable-next-line no-console
+		console.warn(
+			`Invalid log level: ${ level }. Using default level info.`
+		);
+		return;
+	}
+
+	const normalizedLevel = level.toLowerCase();
+	if ( LOG_LEVEL_VALUES[ normalizedLevel ] !== undefined ) {
+		currentLogLevel = normalizedLevel;
 	} else {
 		// eslint-disable-next-line no-console
 		console.warn(
-			`Invalid log level: ${ level }. Using default level INFO.`
+			`Invalid log level: ${ level }. Using default level info.`
 		);
 	}
 };
 
 /**
  * Check if a message should be logged based on the current log level
- * @param {number} level - The level of the message to check
+ * @param {string} level - The level of the message to check
  *
  * @return {boolean} - Whether the message should be logged
  */
 const shouldLog = ( level ) => {
-	return level <= currentLogLevel;
+	return LOG_LEVEL_VALUES[ level ] <= LOG_LEVEL_VALUES[ currentLogLevel ];
 };
 
 /**
@@ -56,7 +73,7 @@ const error = ( message, data ) => {
 			window.webkit.messageHandlers.editorDelegate.postMessage( {
 				message: 'log',
 				body: {
-					level: 'error',
+					level: LOG_LEVELS.ERROR,
 					message,
 					data,
 				},
@@ -79,7 +96,7 @@ const warn = ( message, data ) => {
 			window.webkit.messageHandlers.editorDelegate.postMessage( {
 				message: 'log',
 				body: {
-					level: 'warn',
+					level: LOG_LEVELS.WARN,
 					message,
 					data,
 				},
@@ -102,7 +119,7 @@ const info = ( message, data ) => {
 			window.webkit.messageHandlers.editorDelegate.postMessage( {
 				message: 'log',
 				body: {
-					level: 'warn',
+					level: LOG_LEVELS.INFO,
 					message,
 					data,
 				},
@@ -125,7 +142,7 @@ const debug = ( message, data ) => {
 			window.webkit.messageHandlers.editorDelegate.postMessage( {
 				message: 'log',
 				body: {
-					level: 'debug',
+					level: LOG_LEVELS.DEBUG,
 					message,
 					data,
 				},
