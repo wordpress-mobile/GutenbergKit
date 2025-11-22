@@ -95,6 +95,10 @@ local-android-library: build ## Build the Android library to local Maven
 dev-server: npm-dependencies ## Start the development server
 	npm run dev
 
+.PHONY: dev-server-force
+dev-server-force: npm-dependencies ## Start the development server, ignore the cache and re-bundle
+	npm run dev:force
+
 .PHONY: dev-tools
 dev-tools: npm-dependencies ## Start the React Developer Tools
 	npm run dev:tools
