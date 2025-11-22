@@ -111,12 +111,17 @@ The [React Developer Tools](https://react.dev/learn/react-developer-tools) allow
 
 ## Logging Configuration
 
-The logger utility (`src/utils/logger.js`) supports different log levels that can be controlled via URL parameters independently of dev mode:
+The logger utility (`src/utils/logger.js`) supports different log levels that can be controlled via:
 
--   `?log_level=debug` - Show all logs including verbose debug messages
--   `?log_level=info` - Show info, warnings, and errors (default)
--   `?log_level=warn` - Show only warnings and errors
--   `?log_level=error` - Show only errors
+-   The `logLevel` editor configuration option, for controlling the client console;
+-   And Node.js environment variables (`LOG_LEVEL=<level>`), for project scripts.
+
+The default log level is `info`. The project's demo app defaults to `debug`. Available log levels are:
+
+-   `error`: Logs only error messages
+-   `warn`: Logs warnings and errors
+-   `info`: Logs informational messages, warnings, and errors
+-   `debug`: Logs detailed debugging information, informational messages, warnings, and errors
 
 ## Plugin Support
 
