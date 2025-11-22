@@ -10,7 +10,7 @@ import { registerCoreBlocks } from '@wordpress/block-library';
 import { unregisterDisallowedBlocks } from './blocks';
 import { getGBKit, getPost } from './bridge';
 import { getDefaultEditorSettings } from './editor-settings';
-import { setLogLevel } from './logger';
+import { setLogLevel, LOG_LEVELS } from './logger';
 
 /**
  * Configure editor settings and styles, and render the editor.
@@ -23,7 +23,12 @@ export function initializeEditor( {
 	allowedBlockTypes,
 	pluginLoadFailed,
 } = {} ) {
-	const { themeStyles, hideTitle, editorSettings, logLevel } = getGBKit();
+	const {
+		themeStyles,
+		hideTitle,
+		editorSettings,
+		logLevel = LOG_LEVELS.INFO,
+	} = getGBKit();
 
 	const settings = editorSettings || getDefaultEditorSettings();
 	dispatch( editorStore ).updateEditorSettings( settings );

@@ -31,9 +31,8 @@ if ( typeof process !== 'undefined' && process?.env?.LOG_LEVEL ) {
  */
 const setLogLevel = ( level ) => {
 	if ( typeof level !== 'string' || ! level ) {
-		// eslint-disable-next-line no-console
-		console.warn(
-			`Invalid log level: ${ level }. Using default level info.`
+		warn(
+			`Invalid log level configuration: ${ level }. Using default level info.`
 		);
 		return;
 	}
@@ -42,9 +41,8 @@ const setLogLevel = ( level ) => {
 	if ( LOG_LEVEL_VALUES[ normalizedLevel ] !== undefined ) {
 		currentLogLevel = normalizedLevel;
 	} else {
-		// eslint-disable-next-line no-console
-		console.warn(
-			`Invalid log level: ${ level }. Using default level info.`
+		warn(
+			`Invalid log level configuration: ${ level }. Using default level info.`
 		);
 	}
 };
