@@ -34,51 +34,6 @@ export default defineConfig( {
 } );
 
 /**
- * Inject React Developer Tools connection script during development.
- * Only active when running the dev server, not in production builds.
- *
- * When the editor loads with ?dev_mode=1, it will connect to the standalone
- * React DevTools server at http://localhost:8097.
- *
- * @return {Object} Vite plugin configuration
- */
-function injectReactDevTools() {
-	return {
-		name: 'inject-react-devtools',
-		transformIndexHtml: {
-			order: 'pre',
-			handler( html, ctx ) {
-				// Only inject during dev server
-				if ( ctx.server ) {
-					return {
-						html,
-						tags: [
-							{
-								tag: 'script',
-								attrs: { id: 'react-devtools-loader' },
-								children: `
-									// Connect to React DevTools standalone server if in dev mode
-									if (new URLSearchParams(window.location.search).has('dev_mode')) {
-										const script = document.createElement('script');
-										script.src = 'http://localhost:8097';
-										script.onerror = () => {
-											console.warn('[GBK] Failed loading http://localhost:8097, ensure the React DevTools server is running.');
-										};
-										document.head.appendChild(script);
-									}
-								`,
-								injectTo: 'head-prepend',
-							},
-						],
-					};
-				}
-				return html;
-			},
-		},
-	};
-}
-
-/**
  * Transform code by replacing WordPress imports with global definitions.
  * E.g., `import { __ } from '@wordpress/i18n';` becomes `const { __ } = window.wp.i18n;`
  * Also transforms dynamic imports: `await import('@wordpress/blocks')` becomes `Promise.resolve(window.wp.blocks)`
@@ -223,6 +178,51 @@ function wordPressExternals() {
 				code: magicString.toString(),
 				map: magicString.generateMap( { hires: true } ),
 			};
+		},
+	};
+}
+
+/**
+ * Inject React Developer Tools connection script during development.
+ * Only active when running the dev server, not in production builds.
+ *
+ * When the editor loads with ?dev_mode=1, it will connect to the standalone
+ * React DevTools server at http://localhost:8097.
+ *
+ * @return {Object} Vite plugin configuration
+ */
+function injectReactDevTools() {
+	return {
+		name: 'inject-react-devtools',
+		transformIndexHtml: {
+			order: 'pre',
+			handler( html, ctx ) {
+				// Only inject during dev server
+				if ( ctx.server ) {
+					return {
+						html,
+						tags: [
+							{
+								tag: 'script',
+								attrs: { id: 'react-devtools-loader' },
+								children: `
+									// Connect to React DevTools standalone server if in dev mode
+									if (new URLSearchParams(window.location.search).has('dev_mode')) {
+										const script = document.createElement('script');
+										script.src = 'http://localhost:8097';
+										script.onerror = () => {
+											console.warn('[GBK] Failed loading http://localhost:8097, ensure the React DevTools server is running.');
+										};
+										document.head.appendChild(script);
+									}
+								`,
+								injectTo: 'head-prepend',
+							},
+						],
+					};
+				}
+				return html;
+			},
 		},
 	};
 }
