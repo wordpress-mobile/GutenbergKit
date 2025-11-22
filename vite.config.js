@@ -21,7 +21,7 @@ export default defineConfig( {
 		nodePolyfills(),
 		react(),
 		wordPressExternals(),
-		injectReactDevTools(),
+		reactDevTools(),
 	],
 	root: 'src',
 	css: {
@@ -191,7 +191,7 @@ function wordPressExternals() {
  *
  * @return {Object} Vite plugin configuration
  */
-function injectReactDevTools() {
+function reactDevTools() {
 	return {
 		name: 'inject-react-devtools',
 		transformIndexHtml: {
