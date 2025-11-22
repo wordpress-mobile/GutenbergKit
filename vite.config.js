@@ -1,15 +1,15 @@
 /**
- * WordPress dependencies
- */
-import { defaultRequestToExternal } from '@wordpress/dependency-extraction-webpack-plugin/lib/util';
-
-/**
  * External dependencies
  */
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import MagicString from 'magic-string';
+
+/**
+ * WordPress dependencies
+ */
+import { defaultRequestToExternal } from '@wordpress/dependency-extraction-webpack-plugin/lib/util';
 
 export default defineConfig( {
 	base: '',
