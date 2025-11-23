@@ -67,7 +67,7 @@ make lint-fix-js
 npm run lint:js:fix
 
 # Format JavaScript code
-make fmt-js
+make format-js
 # or
 npm run format
 ```
@@ -193,5 +193,5 @@ Always run these commands before committing:
 make lint-js
 
 # Format JavaScript code
-make fmt-js
+make format-js
 ```

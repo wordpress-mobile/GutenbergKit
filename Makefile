@@ -111,8 +111,8 @@ preview: npm-dependencies ## Preview the production build locally
 # Code Quality Targets
 ################################################################################
 
-.PHONY: fmt-js
-fmt-js: npm-dependencies ## Format JavaScript code
+.PHONY: format
+format: npm-dependencies ## Format code
 	npm run format
 
 .PHONY: lint-js
