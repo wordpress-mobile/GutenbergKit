@@ -146,7 +146,22 @@ function extractRequestDetails( input, init = {} ) {
 	} else if ( input instanceof Request ) {
 		url = input.url;
 		method = input.method;
-		headers = input.headers;
+		// Merge Request headers with init.headers (init takes precedence, like native fetch)
+		if ( init.headers ) {
+			const requestHeaders = serializeHeaders( input.headers );
+			const initHeaders = serializeHeaders( init.headers );
+			// Merge with case-insensitive key matching (lowercase all keys)
+			const merged = {};
+			Object.entries( requestHeaders ).forEach( ( [ key, value ] ) => {
+				merged[ key.toLowerCase() ] = value;
+			} );
+			Object.entries( initHeaders ).forEach( ( [ key, value ] ) => {
+				merged[ key.toLowerCase() ] = value;
+			} );
+			headers = merged;
+		} else {
+			headers = input.headers;
+		}
 	}
 
 	return {
@@ -272,18 +287,27 @@ async function serializeBody( source ) {
 }
 
 /**
- * Serializes Headers object to a plain object.
+ * Serializes Headers object or plain object to a plain object.
  *
- * @param {Headers} headers The Headers object to serialize.
+ * @param {Headers|Object} headers The Headers object or plain object to serialize.
  *
  * @return {Object} Plain object representation of headers.
  */
 function serializeHeaders( headers ) {
 	const result = {};
+
+	// Handle Headers object (has forEach method)
 	if ( headers && typeof headers.forEach === 'function' ) {
 		headers.forEach( ( value, key ) => {
 			result[ key ] = value;
 		} );
 	}
+	// Handle plain object (from init.headers)
+	else if ( headers && typeof headers === 'object' ) {
+		Object.entries( headers ).forEach( ( [ key, value ] ) => {
+			result[ key ] = value;
+		} );
+	}
+
 	return result;
 }

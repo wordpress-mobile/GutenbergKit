@@ -76,6 +76,126 @@ describe( 'initializeFetchInterceptor', () => {
 		expect( window.fetch ).toBe( currentFetch );
 	} );
 
+	describe( 'request header capture', () => {
+		it( 'should capture headers from plain object with string URL', async () => {
+			initializeFetchInterceptor();
+
+			await window.fetch( 'https://example.com/api', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: 'Bearer test-token',
+					'X-Custom-Header': 'custom-value',
+				},
+			} );
+
+			await waitForAsyncLogging();
+
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestHeaders: expect.objectContaining( {
+						'Content-Type': 'application/json',
+						Authorization: 'Bearer test-token',
+						'X-Custom-Header': 'custom-value',
+					} ),
+				} )
+			);
+		} );
+
+		it( 'should capture headers from Request object', async () => {
+			initializeFetchInterceptor();
+
+			const request = new Request( 'https://example.com/api', {
+				method: 'GET',
+				headers: {
+					Accept: 'application/json',
+					'X-Request-ID': '12345',
+				},
+			} );
+
+			await window.fetch( request );
+
+			await waitForAsyncLogging();
+
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestHeaders: expect.objectContaining( {
+						accept: 'application/json',
+						'x-request-id': '12345',
+					} ),
+				} )
+			);
+		} );
+
+		it( 'should merge Request headers with init override', async () => {
+			initializeFetchInterceptor();
+
+			const request = new Request( 'https://example.com/api', {
+				headers: {
+					'Content-Type': 'application/json',
+					'X-Original': 'original-value',
+				},
+			} );
+
+			await window.fetch( request, {
+				headers: {
+					'Content-Type': 'application/xml', // Override
+					'X-Additional': 'additional-value', // Additional
+				},
+			} );
+
+			await waitForAsyncLogging();
+
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestHeaders: expect.objectContaining( {
+						'content-type': 'application/xml', // Overridden (lowercase)
+						'x-original': 'original-value', // Preserved (lowercase)
+						'x-additional': 'additional-value', // Added (lowercase)
+					} ),
+				} )
+			);
+		} );
+
+		it( 'should handle empty headers', async () => {
+			initializeFetchInterceptor();
+
+			await window.fetch( 'https://example.com/api' );
+
+			await waitForAsyncLogging();
+
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestHeaders: {},
+				} )
+			);
+		} );
+
+		it( 'should handle Headers instance', async () => {
+			initializeFetchInterceptor();
+
+			const headers = new Headers();
+			headers.append( 'Authorization', 'Bearer token123' );
+			headers.append( 'Content-Type', 'application/json' );
+
+			await window.fetch( 'https://example.com/api', {
+				method: 'POST',
+				headers,
+			} );
+
+			await waitForAsyncLogging();
+
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestHeaders: expect.objectContaining( {
+						authorization: 'Bearer token123',
+						'content-type': 'application/json',
+					} ),
+				} )
+			);
+		} );
+	} );
+
 	describe( 'request body serialization', () => {
 		it( 'should serialize FormData with files correctly', async () => {
 			initializeFetchInterceptor();
