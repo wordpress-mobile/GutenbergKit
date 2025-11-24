@@ -11,6 +11,11 @@ import * as bridge from './bridge';
 
 vi.mock( './bridge' );
 
+// Helper to await the nested, non-blocking async logging that occurs within the
+// fetch interceptor.
+const waitForAsyncLogging = () =>
+	new Promise( ( resolve ) => setTimeout( resolve, 10 ) );
+
 describe( 'initializeFetchInterceptor', () => {
 	let originalFetch;
 
@@ -88,8 +93,7 @@ describe( 'initializeFetchInterceptor', () => {
 				body: formData,
 			} );
 
-			// Wait for async logging to complete
-			await new Promise( ( resolve ) => setTimeout( resolve, 10 ) );
+			await waitForAsyncLogging();
 
 			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
 			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
@@ -113,8 +117,7 @@ describe( 'initializeFetchInterceptor', () => {
 				body: blob,
 			} );
 
-			// Wait for async logging to complete
-			await new Promise( ( resolve ) => setTimeout( resolve, 10 ) );
+			await waitForAsyncLogging();
 
 			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
 			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
@@ -136,8 +139,7 @@ describe( 'initializeFetchInterceptor', () => {
 				body: file,
 			} );
 
-			// Wait for async logging to complete
-			await new Promise( ( resolve ) => setTimeout( resolve, 10 ) );
+			await waitForAsyncLogging();
 
 			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
 			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
@@ -157,8 +159,7 @@ describe( 'initializeFetchInterceptor', () => {
 				body: buffer,
 			} );
 
-			// Wait for async logging to complete
-			await new Promise( ( resolve ) => setTimeout( resolve, 10 ) );
+			await waitForAsyncLogging();
 
 			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
 			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
@@ -180,8 +181,7 @@ describe( 'initializeFetchInterceptor', () => {
 				body: params,
 			} );
 
-			// Wait for async logging to complete
-			await new Promise( ( resolve ) => setTimeout( resolve, 10 ) );
+			await waitForAsyncLogging();
 
 			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
 			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
@@ -201,8 +201,7 @@ describe( 'initializeFetchInterceptor', () => {
 				body: jsonString,
 			} );
 
-			// Wait for async logging to complete
-			await new Promise( ( resolve ) => setTimeout( resolve, 10 ) );
+			await waitForAsyncLogging();
 
 			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
 			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
@@ -237,8 +236,7 @@ describe( 'initializeFetchInterceptor', () => {
 				body: formData,
 			} );
 
-			// Wait for async logging to complete
-			await new Promise( ( resolve ) => setTimeout( resolve, 10 ) );
+			await waitForAsyncLogging();
 
 			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
 			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
@@ -271,8 +269,7 @@ describe( 'initializeFetchInterceptor', () => {
 				body: formData,
 			} );
 
-			// Wait for async logging to complete
-			await new Promise( ( resolve ) => setTimeout( resolve, 10 ) );
+			await waitForAsyncLogging();
 
 			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
 			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
@@ -299,8 +296,7 @@ describe( 'initializeFetchInterceptor', () => {
 				body: stream,
 			} );
 
-			// Wait for async logging to complete
-			await new Promise( ( resolve ) => setTimeout( resolve, 10 ) );
+			await waitForAsyncLogging();
 
 			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
 			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
@@ -315,8 +311,7 @@ describe( 'initializeFetchInterceptor', () => {
 
 			await window.fetch( 'https://example.com/api' );
 
-			// Wait for async logging to complete
-			await new Promise( ( resolve ) => setTimeout( resolve, 10 ) );
+			await waitForAsyncLogging();
 
 			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
 			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
