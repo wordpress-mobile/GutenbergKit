@@ -186,9 +186,27 @@ private struct _EditorView: UIViewControllerRepresentable {
         func editor(_ viewController: EditorViewController, didLogNetworkRequest request: NetworkRequest) {
             print("🌐 Network Request: \(request.method) \(request.url)")
             print("   Status: \(request.status), Duration: \(request.duration)ms")
+
+            // Log request headers
+            if !request.requestHeaders.isEmpty {
+                print("   Request Headers:")
+                for (key, value) in request.requestHeaders.sorted(by: { $0.key < $1.key }) {
+                    print("      \(key): \(value)")
+                }
+            }
+
             if let requestBody = request.requestBody {
                 print("   Request Body: \(requestBody.prefix(200))...")
             }
+
+            // Log response headers
+            if !request.responseHeaders.isEmpty {
+                print("   Response Headers:")
+                for (key, value) in request.responseHeaders.sorted(by: { $0.key < $1.key }) {
+                    print("      \(key): \(value)")
+                }
+            }
+
             if let responseBody = request.responseBody {
                 print("   Response Body: \(responseBody.prefix(200))...")
             }

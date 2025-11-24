@@ -229,9 +229,27 @@ fun EditorScreen(
                         override fun onNetworkRequest(request: org.wordpress.gutenberg.NetworkRequest) {
                             android.util.Log.d("EditorActivity", "🌐 Network Request: ${request.method} ${request.url}")
                             android.util.Log.d("EditorActivity", "   Status: ${request.status}, Duration: ${request.duration}ms")
+
+                            // Log request headers
+                            if (request.requestHeaders.isNotEmpty()) {
+                                android.util.Log.d("EditorActivity", "   Request Headers:")
+                                request.requestHeaders.toSortedMap().forEach { (key, value) ->
+                                    android.util.Log.d("EditorActivity", "      $key: $value")
+                                }
+                            }
+
                             request.requestBody?.let {
                                 android.util.Log.d("EditorActivity", "   Request Body: ${it.take(200)}...")
                             }
+
+                            // Log response headers
+                            if (request.responseHeaders.isNotEmpty()) {
+                                android.util.Log.d("EditorActivity", "   Response Headers:")
+                                request.responseHeaders.toSortedMap().forEach { (key, value) ->
+                                    android.util.Log.d("EditorActivity", "      $key: $value")
+                                }
+                            }
+
                             request.responseBody?.let {
                                 android.util.Log.d("EditorActivity", "   Response Body: ${it.take(200)}...")
                             }
