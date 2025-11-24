@@ -9,6 +9,7 @@
 		"clean:dist": "rm -rf dist",
 		"clean:l10n": "rm -rf src/translations",
 		"dev": "vite --host",
+		"dev:force": "vite --host --force",
 		"dev:tools": "react-devtools",
 		"build": "vite --emptyOutDir build",
 		"format": "prettier --write .",
