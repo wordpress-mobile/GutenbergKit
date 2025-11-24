@@ -97,7 +97,9 @@ public struct EditorConfiguration: Sendable {
             editorSettings: editorSettings,
             locale: locale,
             isNativeInserterEnabled: isNativeInserterEnabled,
-            editorAssetsEndpoint: editorAssetsEndpoint
+            editorAssetsEndpoint: editorAssetsEndpoint,
+            logLevel: logLevel,
+            enableNetworkLogging: enableNetworkLogging
         )
     }
 
