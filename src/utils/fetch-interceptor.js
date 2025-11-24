@@ -41,7 +41,7 @@ export function initializeFetchInterceptor() {
 				if ( typeof init.body === 'string' ) {
 					requestBody = init.body;
 				} else {
-					requestBody = String( init.body );
+					requestBody = serializeRequestBody( init.body );
 				}
 			} else if ( input instanceof Request ) {
 				// Body might be in Request object - clone to read it
@@ -154,6 +154,75 @@ function extractRequestDetails( input, init = {} ) {
 		method: method.toUpperCase(),
 		headers,
 	};
+}
+
+/**
+ * Serializes non-string request body objects into readable strings.
+ * Handles FormData, Blob, File, ArrayBuffer, and URLSearchParams.
+ *
+ * @param {*} body The request body to serialize.
+ *
+ * @return {string} The serialized body representation.
+ */
+function serializeRequestBody( body ) {
+	// FormData - serialize all entries
+	if ( body instanceof FormData ) {
+		const entries = Array.from( body.entries() );
+		const fields = entries
+			.map( ( [ key, value ] ) => {
+				if ( value instanceof File ) {
+					return `${ key }=<File: ${ value.name }, ${
+						value.size
+					} bytes, type: ${ value.type || 'unknown' }>`;
+				}
+				if ( value instanceof Blob ) {
+					return `${ key }=<Blob: ${ value.size } bytes, type: ${
+						value.type || 'unknown'
+					}>`;
+				}
+				// Truncate long string values for readability
+				const stringValue = String( value );
+				return `${ key }=${
+					stringValue.length > 50
+						? stringValue.substring( 0, 50 ) + '...'
+						: stringValue
+				}`;
+			} )
+			.join( ', ' );
+		return `[FormData with ${ entries.length } field(s): ${ fields }]`;
+	}
+
+	// File - show file details
+	if ( body instanceof File ) {
+		return `[File: ${ body.name }, ${ body.size } bytes, type: ${
+			body.type || 'unknown'
+		}]`;
+	}
+
+	// Blob - show size and type
+	if ( body instanceof Blob ) {
+		return `[Blob: ${ body.size } bytes, type: ${
+			body.type || 'unknown'
+		}]`;
+	}
+
+	// ArrayBuffer - show byte length
+	if ( body instanceof ArrayBuffer ) {
+		return `[ArrayBuffer: ${ body.byteLength } bytes]`;
+	}
+
+	// URLSearchParams - convert to string
+	if ( body instanceof URLSearchParams ) {
+		return body.toString();
+	}
+
+	// ReadableStream - can't read without consuming
+	if ( body instanceof ReadableStream ) {
+		return '[ReadableStream - cannot serialize without consuming]';
+	}
+
+	// Fallback to String conversion
+	return String( body );
 }
 
 /**
