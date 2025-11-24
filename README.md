@@ -50,7 +50,7 @@ Alternatively, you can load a production build of the web app bundled with the G
 
 #### Android
 
-The Android demo app loads the production build of the web app bundled with the GutenbergKit package by default—i.e., the output of the project's `make build` command). It can be configured to load the development server by setting a `GUTENBERG_EDITOR_URL` environment variable in the `android/local.properties` file.
+The Android demo app loads the production build of the web app bundled with the GutenbergKit package by default—i.e., the output of the project's `make build` command. It can be configured to load the development server by setting a `GUTENBERG_EDITOR_URL` environment variable in the `android/local.properties` file.
 
 1. Start the development server by running `make dev-server`.
 1. Launch Android Studio and open the `android` project.
