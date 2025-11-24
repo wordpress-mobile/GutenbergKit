@@ -2,14 +2,12 @@ package org.wordpress.gutenberg
 
 import org.junit.Test
 import org.junit.Assert.*
-import org.junit.Before
 
 class EditorConfigurationTest {
-    private lateinit var editorConfig: EditorConfiguration
 
-    @Before
-    fun setup() {
-        editorConfig = EditorConfiguration.builder()
+    @Test
+    fun `test EditorConfiguration builder sets all properties correctly`() {
+        val config = EditorConfiguration.builder()
             .setTitle("Test Title")
             .setContent("Test Content")
             .setPostId(123)
@@ -22,23 +20,34 @@ class EditorConfigurationTest {
             .setSiteApiNamespace(arrayOf("wp/v2"))
             .setNamespaceExcludedPaths(arrayOf("users"))
             .setAuthHeader("Bearer token")
+            .setEditorSettings("{\"foo\":\"bar\"}")
+            .setLocale("fr")
+            .setCookies(mapOf("session" to "abc123"))
+            .setEnableAssetCaching(true)
+            .setCachedAssetHosts(setOf("example.com", "cdn.example.com"))
+            .setEditorAssetsEndpoint("https://example.com/assets")
+            .setEnableNetworkLogging(true)
             .build()
-    }
 
-    @Test
-    fun `test EditorConfiguration builder creates correct configuration`() {
-        assertEquals("Test Title", editorConfig.title)
-        assertEquals("Test Content", editorConfig.content)
-        assertEquals(123, editorConfig.postId)
-        assertEquals("post", editorConfig.postType)
-        assertTrue(editorConfig.themeStyles)
-        assertTrue(editorConfig.plugins)
-        assertFalse(editorConfig.hideTitle)
-        assertEquals("https://example.com", editorConfig.siteURL)
-        assertEquals("https://example.com/wp-json", editorConfig.siteApiRoot)
-        assertArrayEquals(arrayOf("wp/v2"), editorConfig.siteApiNamespace)
-        assertArrayEquals(arrayOf("users"), editorConfig.namespaceExcludedPaths)
-        assertEquals("Bearer token", editorConfig.authHeader)
+        assertEquals("Test Title", config.title)
+        assertEquals("Test Content", config.content)
+        assertEquals(123, config.postId)
+        assertEquals("post", config.postType)
+        assertTrue(config.themeStyles)
+        assertTrue(config.plugins)
+        assertFalse(config.hideTitle)
+        assertEquals("https://example.com", config.siteURL)
+        assertEquals("https://example.com/wp-json", config.siteApiRoot)
+        assertArrayEquals(arrayOf("wp/v2"), config.siteApiNamespace)
+        assertArrayEquals(arrayOf("users"), config.namespaceExcludedPaths)
+        assertEquals("Bearer token", config.authHeader)
+        assertEquals("{\"foo\":\"bar\"}", config.editorSettings)
+        assertEquals("fr", config.locale)
+        assertEquals(mapOf("session" to "abc123"), config.cookies)
+        assertTrue(config.enableAssetCaching)
+        assertEquals(setOf("example.com", "cdn.example.com"), config.cachedAssetHosts)
+        assertEquals("https://example.com/assets", config.editorAssetsEndpoint)
+        assertTrue(config.enableNetworkLogging)
     }
 
     @Test

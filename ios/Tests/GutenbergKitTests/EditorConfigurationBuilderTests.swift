@@ -23,6 +23,9 @@ struct EditorConfigurationBuilderTests {
         #expect(builder.editorSettings == "undefined")
         #expect(builder.locale == "en")
         #expect(builder.editorAssetsEndpoint == nil)
+        #expect(builder.isNativeInserterEnabled == false)
+        #expect(builder.logLevel == .error)
+        #expect(builder.enableNetworkLogging == false)
     }
 
     @Test("Editor Configuration to Builder")
@@ -43,6 +46,9 @@ struct EditorConfigurationBuilderTests {
             .setEditorSettings(#"{"foo":"bar"}"#)
             .setLocale("fr")
             .setEditorAssetsEndpoint(URL(string: "https://example.com/wp-content/plugins/gutenberg/build/"))
+            .setNativeInserterEnabled(true)
+            .setLogLevel(.debug)
+            .setEnableNetworkLogging(true)
             .build()        // Convert to a configuration
             .toBuilder()    // Then back to a builder (to test the configuration->builder logic)
             .build()        // Then back to a configuration to examine the results
@@ -62,6 +68,9 @@ struct EditorConfigurationBuilderTests {
         #expect(configuration.editorSettings == #"{"foo":"bar"}"#)
         #expect(configuration.locale == "fr")
         #expect(configuration.editorAssetsEndpoint == URL(string: "https://example.com/wp-content/plugins/gutenberg/build/"))
+        #expect(configuration.isNativeInserterEnabled == true)
+        #expect(configuration.logLevel == .debug)
+        #expect(configuration.enableNetworkLogging == true)
     }
 
     @Test("Sets Title Correctly")
@@ -155,6 +164,26 @@ struct EditorConfigurationBuilderTests {
     @Test("Sets editorAssetsEndpoint Correctly")
     func editorConfigurationBuilderSetsEditorAssetsEndpointCorrectly() throws {
         #expect(EditorConfigurationBuilder().setEditorAssetsEndpoint(URL(string: "https://example.com/wp-content/plugins/gutenberg/build/")).build().editorAssetsEndpoint == URL(string: "https://example.com/wp-content/plugins/gutenberg/build/"))
+    }
+
+    @Test("Sets isNativeInserterEnabled Correctly")
+    func editorConfigurationBuilderSetsNativeInserterEnabledCorrectly() throws {
+        #expect(EditorConfigurationBuilder().setNativeInserterEnabled(true).build().isNativeInserterEnabled)
+        #expect(!EditorConfigurationBuilder().setNativeInserterEnabled(false).build().isNativeInserterEnabled)
+    }
+
+    @Test("Sets logLevel Correctly")
+    func editorConfigurationBuilderSetsLogLevelCorrectly() throws {
+        #expect(EditorConfigurationBuilder().setLogLevel(.debug).build().logLevel == .debug)
+        #expect(EditorConfigurationBuilder().setLogLevel(.info).build().logLevel == .info)
+        #expect(EditorConfigurationBuilder().setLogLevel(.warn).build().logLevel == .warn)
+        #expect(EditorConfigurationBuilder().setLogLevel(.error).build().logLevel == .error)
+    }
+
+    @Test("Sets enableNetworkLogging Correctly")
+    func editorConfigurationBuilderSetsEnableNetworkLoggingCorrectly() throws {
+        #expect(EditorConfigurationBuilder().setEnableNetworkLogging(true).build().enableNetworkLogging)
+        #expect(!EditorConfigurationBuilder().setEnableNetworkLogging(false).build().enableNetworkLogging)
     }
 
     @Test("Applies values correctly")
