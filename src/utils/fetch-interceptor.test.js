@@ -95,14 +95,23 @@ describe( 'initializeFetchInterceptor', () => {
 
 			await waitForAsyncLogging();
 
-			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
-			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
-
-			expect( loggedRequest.requestBody ).toContain( '[FormData with' );
-			expect( loggedRequest.requestBody ).toContain(
-				'file=<File: test.jpg'
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestBody: expect.stringContaining( '[FormData with' ),
+				} )
 			);
-			expect( loggedRequest.requestBody ).toContain( 'post=123' );
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestBody: expect.stringContaining(
+						'file=<File: test.jpg'
+					),
+				} )
+			);
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestBody: expect.stringContaining( 'post=123' ),
+				} )
+			);
 		} );
 
 		it( 'should serialize Blob bodies correctly', async () => {
@@ -119,11 +128,12 @@ describe( 'initializeFetchInterceptor', () => {
 
 			await waitForAsyncLogging();
 
-			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
-			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
-
-			expect( loggedRequest.requestBody ).toMatch(
-				/\[Blob: \d+ bytes, type: image\/png\]/
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestBody: expect.stringMatching(
+						/\[Blob: \d+ bytes, type: image\/png\]/
+					),
+				} )
 			);
 		} );
 
@@ -141,11 +151,12 @@ describe( 'initializeFetchInterceptor', () => {
 
 			await waitForAsyncLogging();
 
-			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
-			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
-
-			expect( loggedRequest.requestBody ).toMatch(
-				/\[File: document\.pdf, \d+ bytes, type: application\/pdf\]/
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestBody: expect.stringMatching(
+						/\[File: document\.pdf, \d+ bytes, type: application\/pdf\]/
+					),
+				} )
 			);
 		} );
 
@@ -161,11 +172,10 @@ describe( 'initializeFetchInterceptor', () => {
 
 			await waitForAsyncLogging();
 
-			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
-			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
-
-			expect( loggedRequest.requestBody ).toBe(
-				'[ArrayBuffer: 1024 bytes]'
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestBody: '[ArrayBuffer: 1024 bytes]',
+				} )
 			);
 		} );
 
@@ -183,11 +193,10 @@ describe( 'initializeFetchInterceptor', () => {
 
 			await waitForAsyncLogging();
 
-			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
-			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
-
-			expect( loggedRequest.requestBody ).toBe(
-				'key1=value1&key2=value2'
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestBody: 'key1=value1&key2=value2',
+				} )
 			);
 		} );
 
@@ -203,10 +212,11 @@ describe( 'initializeFetchInterceptor', () => {
 
 			await waitForAsyncLogging();
 
-			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
-			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
-
-			expect( loggedRequest.requestBody ).toBe( jsonString );
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestBody: jsonString,
+				} )
+			);
 		} );
 
 		it( 'should handle FormData with mixed content types', async () => {
@@ -238,23 +248,40 @@ describe( 'initializeFetchInterceptor', () => {
 
 			await waitForAsyncLogging();
 
-			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
-			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
-
-			expect( loggedRequest.requestBody ).toContain(
-				'[FormData with 4 field(s):'
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestBody: expect.stringContaining(
+						'[FormData with 4 field(s):'
+					),
+				} )
 			);
-			expect( loggedRequest.requestBody ).toContain(
-				'text=simple text value'
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestBody: expect.stringContaining(
+						'text=simple text value'
+					),
+				} )
 			);
-			expect( loggedRequest.requestBody ).toContain(
-				'file1=<File: image.png'
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestBody: expect.stringContaining(
+						'file1=<File: image.png'
+					),
+				} )
 			);
-			expect( loggedRequest.requestBody ).toContain(
-				'file2=<File: doc.pdf'
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestBody: expect.stringContaining(
+						'file2=<File: doc.pdf'
+					),
+				} )
 			);
 			// Note: Blob is converted to File by FormData with name "blob"
-			expect( loggedRequest.requestBody ).toContain( 'blob=<File: blob' );
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestBody: expect.stringContaining( 'blob=<File: blob' ),
+				} )
+			);
 		} );
 
 		it( 'should truncate long string values in FormData', async () => {
@@ -271,13 +298,22 @@ describe( 'initializeFetchInterceptor', () => {
 
 			await waitForAsyncLogging();
 
-			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
-			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
-
-			expect( loggedRequest.requestBody ).toContain( 'longField=' );
-			expect( loggedRequest.requestBody ).toContain( '...' );
-			expect( loggedRequest.requestBody.length ).toBeLessThan(
-				longString.length + 50
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestBody: expect.stringContaining( 'longField=' ),
+				} )
+			);
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestBody: expect.stringContaining( '...' ),
+				} )
+			);
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestBody: expect.stringMatching(
+						new RegExp( `.{1,${ longString.length + 50 }}` )
+					),
+				} )
 			);
 		} );
 
@@ -298,11 +334,11 @@ describe( 'initializeFetchInterceptor', () => {
 
 			await waitForAsyncLogging();
 
-			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
-			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
-
-			expect( loggedRequest.requestBody ).toBe(
-				'[ReadableStream - cannot serialize without consuming]'
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestBody:
+						'[ReadableStream - cannot serialize without consuming]',
+				} )
 			);
 		} );
 
@@ -313,10 +349,11 @@ describe( 'initializeFetchInterceptor', () => {
 
 			await waitForAsyncLogging();
 
-			expect( bridge.onNetworkRequest ).toHaveBeenCalled();
-			const loggedRequest = bridge.onNetworkRequest.mock.calls[ 0 ][ 0 ];
-
-			expect( loggedRequest.requestBody ).toBeNull();
+			expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					requestBody: null,
+				} )
+			);
 		} );
 	} );
 } );
