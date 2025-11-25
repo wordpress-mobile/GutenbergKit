@@ -6,6 +6,7 @@ import { loadEditorAssets } from './editor-loader';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge';
 import EditorLoadError from '../components/editor-load-error';
 import { error } from './logger';
+import { setUpGlobalErrorHandlers } from './global-error-handler';
 import './editor-styles';
 
 /**
@@ -15,6 +16,8 @@ import './editor-styles';
  * @return {Promise} Promise that resolves when initialization is complete
  */
 export function setUpEditorEnvironment() {
+	setUpGlobalErrorHandlers();
+
 	// Detect platform and add class to body for platform-specific styling
 	if ( typeof window !== 'undefined' && window.webkit ) {
 		document.body.classList.add( 'is-ios' );
