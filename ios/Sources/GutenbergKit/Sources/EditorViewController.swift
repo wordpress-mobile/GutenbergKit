@@ -475,7 +475,22 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 delegate?.editor(self, didLogMessage: log.message, level: log.level)
             }
         } catch {
-            fatalError("failed to decode message: \(error)")
+            // Capture detailed diagnostic information for crash reporting
+            let messageType = message.type
+            let messageBodyDescription = String(describing: message.body)
+
+            let errorMessage = """
+                Failed to decode editor message:
+                - Message type: \(messageType)
+                - Decode error: \(error)
+                - Message body: \(messageBodyDescription)
+                """
+
+            NSLog("❌ GutenbergKit Message Decode Error: %@", errorMessage)
+
+            assertionFailure(errorMessage)
+
+            fatalError(errorMessage)
         }
     }
 
