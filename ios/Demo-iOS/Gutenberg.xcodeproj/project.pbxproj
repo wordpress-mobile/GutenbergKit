@@ -26,10 +26,12 @@
 		0CE8E7922C339B1B00B9DC67 /* GutenbergKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = GutenbergKit; path = ../..; sourceTree = "<group>"; };
 		246852682EAACCA100ED1F09 /* AuthenticationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationManager.swift; sourceTree = "<group>"; };
 		246852692EAACCA100ED1F09 /* ConfigurationStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationStorage.swift; sourceTree = "<group>"; };
+		3F8A1FEB2ED851AF00117262 /* XCFrameworkIntegrationTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = XCFrameworkIntegrationTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		2468525B2EAAC62B00ED1F09 /* Views */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Views; sourceTree = "<group>"; };
+		3F8A1FEC2ED851AF00117262 /* XCFrameworkIntegrationTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = XCFrameworkIntegrationTests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -39,6 +41,13 @@
 			files = (
 				246852562EAABB7800ED1F09 /* WordPressAPI in Frameworks */,
 				0CF6E04C2BEFF60E00EDEE8A /* GutenbergKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3F8A1FE82ED851AF00117262 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -52,6 +61,7 @@
 				0CE8E7882C339B0600B9DC67 /* Sources */,
 				0C83424D2C339B7F00CAA762 /* Resources */,
 				0CE8E78A2C339B0600B9DC67 /* PreviewContent */,
+				3F8A1FEC2ED851AF00117262 /* XCFrameworkIntegrationTests */,
 				0C4F598C2BEFF4970028BD96 /* Products */,
 				0CF6E04A2BEFF60E00EDEE8A /* Frameworks */,
 			);
@@ -61,6 +71,7 @@
 			isa = PBXGroup;
 			children = (
 				0C4F598B2BEFF4970028BD96 /* Gutenberg.app */,
+				3F8A1FEB2ED851AF00117262 /* XCFrameworkIntegrationTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -135,6 +146,28 @@
 			productReference = 0C4F598B2BEFF4970028BD96 /* Gutenberg.app */;
 			productType = "com.apple.product-type.application";
 		};
+		3F8A1FEA2ED851AF00117262 /* XCFrameworkIntegrationTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3F8A1FF12ED851AF00117262 /* Build configuration list for PBXNativeTarget "XCFrameworkIntegrationTests" */;
+			buildPhases = (
+				3F8A1FE72ED851AF00117262 /* Sources */,
+				3F8A1FE82ED851AF00117262 /* Frameworks */,
+				3F8A1FE92ED851AF00117262 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				3F8A1FEC2ED851AF00117262 /* XCFrameworkIntegrationTests */,
+			);
+			name = XCFrameworkIntegrationTests;
+			packageProductDependencies = (
+			);
+			productName = XCFrameworkIntegrationTests;
+			productReference = 3F8A1FEB2ED851AF00117262 /* XCFrameworkIntegrationTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -142,11 +175,14 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1510;
+				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					0C4F598A2BEFF4970028BD96 = {
 						CreatedOnToolsVersion = 15.1;
+					};
+					3F8A1FEA2ED851AF00117262 = {
+						CreatedOnToolsVersion = 26.0;
 					};
 				};
 			};
@@ -167,6 +203,7 @@
 			projectRoot = "";
 			targets = (
 				0C4F598A2BEFF4970028BD96 /* Gutenberg */,
+				3F8A1FEA2ED851AF00117262 /* XCFrameworkIntegrationTests */,
 			);
 		};
 /* End PBXProject section */
@@ -181,6 +218,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		3F8A1FE92ED851AF00117262 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -192,6 +236,13 @@
 				0CE8E78E2C339B0600B9DC67 /* GutenbergApp.swift in Sources */,
 				2468526B2EAACCA100ED1F09 /* AuthenticationManager.swift in Sources */,
 				2468526C2EAACCA100ED1F09 /* ConfigurationStorage.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3F8A1FE72ED851AF00117262 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -387,6 +438,44 @@
 			};
 			name = Release;
 		};
+		3F8A1FEF2ED851AF00117262 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.wordpress.XCFrameworkIntegrationTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		3F8A1FF02ED851AF00117262 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.wordpress.XCFrameworkIntegrationTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -404,6 +493,15 @@
 			buildConfigurations = (
 				0C4F599A2BEFF4980028BD96 /* Debug */,
 				0C4F599B2BEFF4980028BD96 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		3F8A1FF12ED851AF00117262 /* Build configuration list for PBXNativeTarget "XCFrameworkIntegrationTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3F8A1FEF2ED851AF00117262 /* Debug */,
+				3F8A1FF02ED851AF00117262 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

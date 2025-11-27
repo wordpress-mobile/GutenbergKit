@@ -1,0 +1,25 @@
+{
+  "configurations" : [
+    {
+      "id" : "51606B53-6F98-44E9-AB63-ED180087748D",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "performanceAntipatternCheckerEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:Gutenberg.xcodeproj",
+        "identifier" : "3F8A1FEA2ED851AF00117262",
+        "name" : "XCFrameworkIntegrationTests"
+      }
+    }
+  ],
+  "version" : 1
+}
