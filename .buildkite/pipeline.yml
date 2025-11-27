@@ -38,6 +38,6 @@ steps:
       command: make test-swift-package
       plugins: *plugins
 
-    - label: ':xcode: Test Swift Package XCFramework distribution'
+    - label: ':xcode: Test XCFramework'
       command: make test-xcframework-integration
       plugins: *plugins
