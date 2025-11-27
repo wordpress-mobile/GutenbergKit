@@ -1,8 +1,16 @@
 import Testing
+import GutenbergKit
 
 struct `XCFramework integration test` {
 
-    @Test func example() async throws {
-      #expect(1 == 1 - 1)
+    @Test func `EditorConfigurationBuilder can be used`() {
+      #expect(
+        EditorConfigurationBuilder()
+          .setShouldHideTitle(true)
+          .build()
+          .shouldHideTitle
+        ==
+        true
+      )
     }
 }

@@ -15,7 +15,23 @@
 		246852562EAABB7800ED1F09 /* WordPressAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 0C4F59A12BEFF4980028BD96 /* WordPressAPI */; };
 		2468526B2EAACCA100ED1F09 /* AuthenticationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246852682EAACCA100ED1F09 /* AuthenticationManager.swift */; };
 		2468526C2EAACCA100ED1F09 /* ConfigurationStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246852692EAACCA100ED1F09 /* ConfigurationStorage.swift */; };
+		3F8A1FF62ED854BE00117262 /* GutenbergKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3F8A1FF52ED854BE00117262 /* GutenbergKit.xcframework */; };
+		3F8A1FF72ED854BE00117262 /* GutenbergKit.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 3F8A1FF52ED854BE00117262 /* GutenbergKit.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		3F8A1FF82ED854BE00117262 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				3F8A1FF72ED854BE00117262 /* GutenbergKit.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		0C4F598B2BEFF4970028BD96 /* Gutenberg.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Gutenberg.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -27,6 +43,7 @@
 		246852682EAACCA100ED1F09 /* AuthenticationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationManager.swift; sourceTree = "<group>"; };
 		246852692EAACCA100ED1F09 /* ConfigurationStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationStorage.swift; sourceTree = "<group>"; };
 		3F8A1FEB2ED851AF00117262 /* XCFrameworkIntegrationTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = XCFrameworkIntegrationTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3F8A1FF52ED854BE00117262 /* GutenbergKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = GutenbergKit.xcframework; path = ../../build/GutenbergKit.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -48,6 +65,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3F8A1FF62ED854BE00117262 /* GutenbergKit.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -106,6 +124,7 @@
 		0CF6E04A2BEFF60E00EDEE8A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				3F8A1FF52ED854BE00117262 /* GutenbergKit.xcframework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -153,6 +172,7 @@
 				3F8A1FE72ED851AF00117262 /* Sources */,
 				3F8A1FE82ED851AF00117262 /* Frameworks */,
 				3F8A1FE92ED851AF00117262 /* Resources */,
+				3F8A1FF82ED854BE00117262 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
