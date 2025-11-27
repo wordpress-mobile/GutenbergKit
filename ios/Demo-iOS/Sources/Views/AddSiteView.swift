@@ -1,6 +1,5 @@
 import SwiftUI
 import AuthenticationServices
-import GutenbergKit
 
 /// View for adding a new editor configuration with site integration
 struct AddSiteView: View {
