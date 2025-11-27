@@ -41,3 +41,7 @@ steps:
     - label: ':xcode: Test XCFramework'
       command: make test-xcframework-integration
       plugins: *plugins
+
+    - label: ':xcode: Verify XCFramework Integration Test Fails With Missing Resources'
+      command: .buildkite/commands/verify-xcframework-test-fails-with-missing-resources.sh
+      plugins: *plugins

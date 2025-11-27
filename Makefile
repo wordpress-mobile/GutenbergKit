@@ -151,10 +151,15 @@ test-android: ## Run Android tests
 .PHONY: build-xcframework
 build-xcframework: build ## Build XCFramework for iOS
 	@echo "--- :package: Building XCFramework"
-	@./build_xcframework.sh GutenbergKit
+	@SWIFT_OPTIMIZATION_LEVEL="${SWIFT_OPTIMIZATION_LEVEL:--O}" ./build_xcframework.sh GutenbergKit
+
+.PHONY: build-xcframework-debug
+build-xcframework-debug: build ## Build XCFramework for iOS with no optimizations (for testing)
+	@echo "--- :package: Building XCFramework (Debug - No Optimizations)"
+	@SWIFT_OPTIMIZATION_LEVEL=-Onone ./build_xcframework.sh GutenbergKit
 
 .PHONY: test-xcframework-integration
-test-xcframework-integration: build-xcframework ## Run XCFramework integration tests
+test-xcframework-integration: build-xcframework-debug ## Run XCFramework integration tests
 	@echo "--- :apple: Running XCFramework Integration Tests"
 	@set -o pipefail && \
 		xcodebuild test \

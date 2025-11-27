@@ -20,6 +20,11 @@ if [ -z "$PACKAGE_NAME" ]; then
     echo "Using: $PACKAGE_NAME"
 fi
 
+# Swift optimization level: -Onone (no optimization), -O (optimize for speed), -Osize (optimize for size)
+# Default to -O for release builds, can be overridden with SWIFT_OPTIMIZATION_LEVEL environment variable
+SWIFT_OPTIMIZATION_LEVEL="${SWIFT_OPTIMIZATION_LEVEL:--O}"
+echo "Swift optimization level: $SWIFT_OPTIMIZATION_LEVEL"
+
 # FIXME: Original script was in subfolder, this is in repo root for the time being.
 #
 # SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd -P)"
@@ -55,6 +60,7 @@ build_framework() {
         -destination "$destination" \
         BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
         INSTALL_PATH='Library/Frameworks' \
+        SWIFT_OPTIMIZATION_LEVEL="$SWIFT_OPTIMIZATION_LEVEL" \
         OTHER_SWIFT_FLAGS=-no-verify-emitted-module-interface \
         | xcbeautify
 
