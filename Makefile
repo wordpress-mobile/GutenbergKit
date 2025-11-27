@@ -148,6 +148,17 @@ test-android: ## Run Android tests
 	@echo "--- :android: Running Android Tests"
 	./android/gradlew -p ./android :gutenberg:test
 
+.PHONY: test-xcframework-integration
+test-xcframework-integration: npm-dependencies
+	@echo "--- :apple: Running XCFramework Integration Tests"
+	@set -o pipefail && \
+		xcodebuild test \
+		-project ios/Demo-iOS/Gutenberg.xcodeproj \
+		-scheme XCFrameworkIntegrationTests \
+		-sdk iphonesimulator \
+		-destination '${SIMULATOR_DESTINATION}' \
+		| xcbeautify
+
 ################################################################################
 # Release Target
 ################################################################################
