@@ -7,7 +7,15 @@ let package = Package(
     name: "GutenbergKit",
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
-        .library(name: "GutenbergKit", targets: ["GutenbergKit"])
+        .library(
+            name: "GutenbergKit",
+            // Seems like to build for XCFrameworks, we need dynamic libraries
+            // https://forums.swift.org/t/how-to-build-swift-package-as-xcframework/41414/57
+            //
+            // TODO: Use env var to switch between static by default and dynamic opt-in
+            type: .dynamic,
+            targets: ["GutenbergKit"]
+        )
     ],
     dependencies: [
         .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.5"),
