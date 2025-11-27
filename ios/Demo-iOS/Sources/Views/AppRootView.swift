@@ -99,15 +99,13 @@ struct AppRootView: View {
     }
 
     private func createBundledConfiguration() -> EditorConfiguration {
-        let config = EditorConfigurationBuilder()
+        EditorConfigurationBuilder()
             .setShouldUsePlugins(false)
-            .setSiteUrl("bundled")
+            .setSiteUrl("")
             .setSiteApiRoot("")
             .setAuthHeader("")
             .setNativeInserterEnabled(isNativeInserterEnabled)
             .build()
-
-        return config
     }
 }
 
