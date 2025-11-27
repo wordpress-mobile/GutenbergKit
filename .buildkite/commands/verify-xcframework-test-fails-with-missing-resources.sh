@@ -3,7 +3,8 @@
 set -o pipefail
 
 echo "--- :pencil2: Breaking bundle resource path to verify test catches failures"
-# Replace "Gutenberg" with "folder_that_does_not_exist" in the HTMLPreviewManager
+# Replace "Gutenberg" with "folder_that_does_not_exist" in the HTMLPreviewManager to trigger `assert`.
+# (`assert` works because we build the XCFramework with -Onone in these tests)
 sed -i.bak 's/forResource: "Gutenberg", withExtension: nil/forResource: "folder_that_does_not_exist", withExtension: nil/g' ios/Sources/GutenbergKit/Sources/Views/HTMLPreview/HTMLPreviewManager.swift
 
 echo "--- :package: Rebuilding XCFramework with broken resource path"
