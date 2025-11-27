@@ -148,8 +148,13 @@ test-android: ## Run Android tests
 	@echo "--- :android: Running Android Tests"
 	./android/gradlew -p ./android :gutenberg:test
 
+.PHONY: build-xcframework
+build-xcframework: build ## Build XCFramework for iOS
+	@echo "--- :package: Building XCFramework"
+	@./build_xcframework.sh GutenbergKit
+
 .PHONY: test-xcframework-integration
-test-xcframework-integration: npm-dependencies
+test-xcframework-integration: build-xcframework ## Run XCFramework integration tests
 	@echo "--- :apple: Running XCFramework Integration Tests"
 	@set -o pipefail && \
 		xcodebuild test \
