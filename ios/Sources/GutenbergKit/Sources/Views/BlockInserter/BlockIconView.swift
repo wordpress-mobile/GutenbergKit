@@ -1,5 +1,5 @@
 import SwiftUI
-import SVGView
+internal import SVGView
 
 struct BlockIconView: View {
     let block: BlockType

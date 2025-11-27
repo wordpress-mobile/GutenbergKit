@@ -1,6 +1,6 @@
 import Foundation
 import CryptoKit
-import SwiftSoup
+internal import SwiftSoup
 
 public actor EditorAssetsLibrary {
     enum ManifestError: Error {

@@ -1,5 +1,5 @@
 import Foundation
-import SVGView
+internal import SVGView
 
 @MainActor
 final class BlockIconCache: ObservableObject {
