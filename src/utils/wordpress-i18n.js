@@ -1,13 +1,12 @@
 /**
- * WordPress dependencies - import i18n packages that need to be loaded
- * before other WordPress modules that depend on localization
+ * WordPress dependencies
  */
 import * as hooks from '@wordpress/hooks';
 import * as i18n from '@wordpress/i18n';
 
 /**
  * Initialize WordPress i18n globals by defining i18n-related modules on the
- * window.wp namespace. This must be done before other WordPress modules are
+ * `window.wp` namespace. This must be done before other WordPress modules are
  * loaded, as they depend on i18n being configured.
  *
  * @return {void}
