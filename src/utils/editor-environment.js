@@ -43,14 +43,18 @@ function setBodyClasses( global ) {
 	if ( typeof global === 'undefined' ) {
 		return;
 	}
+
 	const { document: { body } = {} } = global;
+	const classNames = [];
 
 	// Detect platform and add class to body for platform-specific styling
 	if ( global.webkit ) {
-		body.classList.add( 'is-ios' );
+		classNames.push( 'is-ios' );
 	} else if ( global.editorDelegate ) {
-		body.classList.add( 'is-android' );
+		classNames.push( 'is-android' );
 	}
+
+	body.classList.add( ...classNames );
 }
 
 /**
