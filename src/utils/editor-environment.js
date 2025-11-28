@@ -53,7 +53,7 @@ async function configureLocale() {
 }
 
 async function loadWordPressGlobals() {
-	// Load remaining WordPress globals after i18n is configured.
+	// Load remaining WordPress globals after locale is configured.
 	await import( './wordpress-globals' );
 }
 
