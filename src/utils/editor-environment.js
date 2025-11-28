@@ -8,6 +8,7 @@ import { initializeVideoPressAjaxBridge } from './videopress-bridge';
 import EditorLoadError from '../components/editor-load-error';
 import { error } from './logger';
 import { setUpGlobalErrorHandlers } from './global-error-handler';
+import { Platform } from './platform';
 import './editor-styles';
 
 /**
@@ -48,9 +49,9 @@ function setBodyClasses( global ) {
 	const classNames = [];
 
 	// Detect platform and add class to body for platform-specific styling
-	if ( global.webkit ) {
+	if ( Platform.isIOS ) {
 		classNames.push( 'is-ios' );
-	} else if ( global.editorDelegate ) {
+	} else if ( Platform.isAndroid ) {
 		classNames.push( 'is-android' );
 	}
 

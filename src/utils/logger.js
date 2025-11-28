@@ -1,3 +1,8 @@
+/**
+ * Internal dependencies
+ */
+import { Platform } from './platform';
+
 // Log levels in order of verbosity
 const LOG_LEVELS = {
 	ERROR: 'error',
@@ -67,7 +72,7 @@ const error = ( message, data ) => {
 		// eslint-disable-next-line no-console
 		console.error( `[GBK] ${ message }`, data || '' );
 
-		if ( typeof window !== 'undefined' && window.webkit ) {
+		if ( Platform.isIOS ) {
 			window.webkit.messageHandlers.editorDelegate.postMessage( {
 				message: 'log',
 				body: {
@@ -90,7 +95,7 @@ const warn = ( message, data ) => {
 		// eslint-disable-next-line no-console
 		console.warn( `[GBK] ${ message }`, data || '' );
 
-		if ( typeof window !== 'undefined' && window.webkit ) {
+		if ( Platform.isIOS ) {
 			window.webkit.messageHandlers.editorDelegate.postMessage( {
 				message: 'log',
 				body: {
@@ -113,7 +118,7 @@ const info = ( message, data ) => {
 		// eslint-disable-next-line no-console
 		console.info( `[GBK] ${ message }`, data || '' );
 
-		if ( typeof window !== 'undefined' && window.webkit ) {
+		if ( Platform.isIOS ) {
 			window.webkit.messageHandlers.editorDelegate.postMessage( {
 				message: 'log',
 				body: {
@@ -136,7 +141,7 @@ const debug = ( message, data ) => {
 		// eslint-disable-next-line no-console
 		console.debug( `[GBK] ${ message }`, data || '' );
 
-		if ( typeof window !== 'undefined' && window.webkit ) {
+		if ( Platform.isIOS ) {
 			window.webkit.messageHandlers.editorDelegate.postMessage( {
 				message: 'log',
 				body: {
