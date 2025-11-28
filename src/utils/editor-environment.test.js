@@ -12,6 +12,7 @@ import { loadEditorAssets } from './editor-loader.js';
 import EditorLoadError from '../components/editor-load-error/index.jsx';
 import { error } from './logger.js';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge.js';
+import { initializeWordPressGlobals } from './wordpress-globals.js';
 import { configureLocale } from './localization.js';
 import { initializeApiFetch } from './api-fetch.js';
 import { initializeEditor } from './editor.jsx';
@@ -20,7 +21,10 @@ vi.mock( './bridge.js' );
 vi.mock( './logger.js' );
 vi.mock( './editor-styles.js' );
 vi.mock( './videopress-bridge.js' );
-vi.mock( './wordpress-globals.js' );
+
+vi.mock( './wordpress-globals.js', () => ( {
+	initializeWordPressGlobals: vi.fn(),
+} ) );
 
 vi.mock( '../components/editor-load-error/index.jsx', () => ( {
 	default: vi.fn(),
@@ -49,6 +53,7 @@ describe( 'setUpEditorEnvironment', () => {
 		awaitGBKitGlobal.mockResolvedValue( undefined );
 		getGBKit.mockReturnValue( { plugins: false } );
 		configureLocale.mockResolvedValue( undefined );
+		initializeWordPressGlobals.mockImplementation( () => {} );
 		initializeApiFetch.mockImplementation( () => {} );
 		initializeVideoPressAjaxBridge.mockImplementation( () => {} );
 		initializeEditor.mockImplementation( () => {} );
@@ -71,9 +76,8 @@ describe( 'setUpEditorEnvironment', () => {
 			return Promise.resolve();
 		} );
 
-		vi.doMock( './wordpress-globals.js', () => {
+		initializeWordPressGlobals.mockImplementation( () => {
 			callOrder.push( 'loadRemainingGlobals' );
-			return {};
 		} );
 
 		initializeApiFetch.mockImplementation( () => {

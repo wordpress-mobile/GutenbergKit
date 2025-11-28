@@ -140,5 +140,3 @@ export function initializeWordPressGlobals() {
 	// React JSX runtime for plugin compatibility
 	window.ReactJSXRuntime = ReactJSXRuntime;
 }
-
-initializeWordPressGlobals();

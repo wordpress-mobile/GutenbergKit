@@ -61,7 +61,10 @@ async function configureLocale() {
 
 async function loadWordPressGlobals() {
 	// Load remaining WordPress globals after locale is configured.
-	await import( './wordpress-globals' );
+	const { initializeWordPressGlobals } = await import(
+		'./wordpress-globals'
+	);
+	initializeWordPressGlobals();
 }
 
 async function initializeApiFetchWrapper() {
