@@ -20,7 +20,7 @@ import './editor-styles';
  *
  * @return {Promise} Promise that resolves when initialization is complete
  */
-export function setUpEditorEnvironment() {
+export async function setUpEditorEnvironment() {
 	setUpGlobalErrorHandlers();
 
 	window.jQuery = jquery; // Expose jQuery for plugins
@@ -32,70 +32,60 @@ export function setUpEditorEnvironment() {
 		document.body.classList.add( 'is-android' );
 	}
 
-	// Rely upon promises rather than async/await to avoid timeouts caused by
-	// circular dependencies. Addressing the circular dependencies is quite
-	// challenging due to Vite's preload helpers and bugs in `manualChunks`
-	// configuration.
-	//
-	// See:
-	// - https://github.com/vitejs/vite/issues/18551
-	// - https://github.com/vitejs/vite/issues/13952
-	// - https://github.com/vitejs/vite/issues/5189#issuecomment-2175410148
-	return awaitGBKitGlobal()
-		.then( configureLocale )
-		.then( loadRemainingGlobals )
-		.then( initializeApiFetchWrapper )
-		.then( initializeVideoPressAjaxBridge )
-		.then( loadPluginsIfEnabled )
-		.then( initializeEditor )
-		.catch( handleError );
+	try {
+		await awaitGBKitGlobal();
+		await configureLocale();
+		await loadRemainingGlobals();
+		await initializeApiFetchWrapper();
+		initializeVideoPressAjaxBridge();
+		const pluginLoadResult = await loadPluginsIfEnabled();
+		await initializeEditor( pluginLoadResult );
+	} catch ( err ) {
+		handleError( err );
+	}
 }
 
-function configureLocale() {
-	return import( './localization' ).then(
-		( { configureLocale: _configureLocale } ) => _configureLocale()
+async function configureLocale() {
+	const { configureLocale: _configureLocale } = await import(
+		'./localization'
 	);
+	return _configureLocale();
 }
 
-function loadRemainingGlobals() {
+async function loadRemainingGlobals() {
 	// Load remaining WordPress globals after i18n is configured.
-	return import( './wordpress-globals' );
+	await import( './wordpress-globals' );
 }
 
-function initializeApiFetchWrapper() {
+async function initializeApiFetchWrapper() {
 	// Load api-fetch now that WordPress globals are available.
-	return import( './api-fetch' ).then(
-		( { initializeApiFetch: _initializeApiFetch } ) => {
-			_initializeApiFetch();
-		}
+	const { initializeApiFetch: _initializeApiFetch } = await import(
+		'./api-fetch'
 	);
+	_initializeApiFetch();
 }
 
-function loadPluginsIfEnabled() {
+async function loadPluginsIfEnabled() {
 	const { plugins } = getGBKit();
 
 	if ( plugins ) {
-		return loadEditorAssets()
-			.then( ( { allowedBlockTypes } ) => {
-				return { allowedBlockTypes };
-			} )
-			.catch( () => {
-				return Promise.resolve( { pluginLoadFailed: true } );
-			} );
+		try {
+			const { allowedBlockTypes } = await loadEditorAssets();
+			return { allowedBlockTypes };
+		} catch {
+			return { pluginLoadFailed: true };
+		}
 	}
 
-	return Promise.resolve( {} );
+	return {};
 }
 
-function initializeEditor( pluginLoadResult = {} ) {
-	return import( './editor' ).then(
-		( { initializeEditor: _initializeEditor } ) => {
-			_initializeEditor( {
-				allowedBlockTypes: pluginLoadResult?.allowedBlockTypes,
-				pluginLoadFailed: pluginLoadResult?.pluginLoadFailed,
-			} );
-		}
-	);
+async function initializeEditor( pluginLoadResult = {} ) {
+	const { initializeEditor: _initializeEditor } = await import( './editor' );
+	_initializeEditor( {
+		allowedBlockTypes: pluginLoadResult?.allowedBlockTypes,
+		pluginLoadFailed: pluginLoadResult?.pluginLoadFailed,
+	} );
 }
 
 function handleError( err ) {
