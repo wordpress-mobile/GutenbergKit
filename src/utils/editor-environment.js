@@ -35,7 +35,7 @@ export async function setUpEditorEnvironment() {
 	try {
 		await awaitGBKitGlobal();
 		await configureLocale();
-		await loadRemainingGlobals();
+		await loadWordPressGlobals();
 		await initializeApiFetchWrapper();
 		initializeVideoPressAjaxBridge();
 		const pluginLoadResult = await loadPluginsIfEnabled();
@@ -52,7 +52,7 @@ async function configureLocale() {
 	return _configureLocale();
 }
 
-async function loadRemainingGlobals() {
+async function loadWordPressGlobals() {
 	// Load remaining WordPress globals after i18n is configured.
 	await import( './wordpress-globals' );
 }
