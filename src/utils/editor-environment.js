@@ -1,9 +1,4 @@
 /**
- * External dependencies
- */
-import jquery from 'jquery';
-
-/**
  * Internal dependencies
  */
 import { awaitGBKitGlobal, editorLoaded, getGBKit } from './bridge';
@@ -22,9 +17,6 @@ import './editor-styles';
  */
 export async function setUpEditorEnvironment() {
 	setUpGlobalErrorHandlers();
-
-	window.jQuery = jquery; // Expose jQuery for plugins
-
 	setBodyClasses( window );
 
 	try {

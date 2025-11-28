@@ -6,6 +6,7 @@ import ReactDOM from 'react-dom';
 import moment from 'moment';
 import lodash from 'lodash';
 import * as ReactJSXRuntime from 'react/jsx-runtime';
+import jquery from 'jquery';
 
 /**
  * WordPress dependencies
@@ -67,6 +68,8 @@ import * as wordcount from '@wordpress/wordcount';
  * @return {void}
  */
 export function initializeWordPressGlobals() {
+	window.jQuery = jquery; // Expose jQuery for plugins
+
 	// Initialize the wp namespace if it doesn't exist
 	window.wp = window.wp || {};
 
