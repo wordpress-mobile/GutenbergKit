@@ -2,6 +2,7 @@
  * Internal dependencies
  */
 import { awaitGBKitGlobal, editorLoaded, getGBKit } from './bridge';
+import { configureLocale } from './localization';
 import { loadEditorAssets } from './editor-loader';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge';
 import EditorLoadError from '../components/editor-load-error';
@@ -51,18 +52,6 @@ function setBodyClasses( global ) {
 	} else if ( global.editorDelegate ) {
 		body.classList.add( 'is-android' );
 	}
-}
-
-/**
- * Lazy-load and configure locale settings.
- *
- * @return {Promise} Promise that resolves when locale is configured
- */
-async function configureLocale() {
-	const { configureLocale: _configureLocale } = await import(
-		'./localization'
-	);
-	return _configureLocale();
 }
 
 /**
