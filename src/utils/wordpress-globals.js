@@ -1,7 +1,14 @@
 /**
- * WordPress dependencies - import all packages used by the project
- * Note: i18n and hooks are loaded separately via wordpress-i18n.js to ensure
- * they are configured before other modules that depend on localization.
+ * External dependencies
+ */
+import React from 'react';
+import ReactDOM from 'react-dom';
+import moment from 'moment';
+import lodash from 'lodash';
+import * as ReactJSXRuntime from 'react/jsx-runtime';
+
+/**
+ * WordPress dependencies
  */
 import * as a11y from '@wordpress/a11y';
 import * as apiFetch from '@wordpress/api-fetch';
@@ -51,15 +58,6 @@ import * as viewport from '@wordpress/viewport';
 import * as warning from '@wordpress/warning';
 import * as widgets from '@wordpress/widgets';
 import * as wordcount from '@wordpress/wordcount';
-
-/**
- * External dependencies that plugins expect
- */
-import React from 'react';
-import ReactDOM from 'react-dom';
-import moment from 'moment';
-import lodash from 'lodash';
-import * as ReactJSXRuntime from 'react/jsx-runtime';
 
 /**
  * Initialize WordPress globals by defining all @wordpress modules on the
