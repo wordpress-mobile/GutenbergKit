@@ -17,10 +17,9 @@ import './editor-styles';
  * @return {Promise} Promise that resolves when initialization is complete
  */
 export async function setUpEditorEnvironment() {
-	setUpGlobalErrorHandlers();
-	setBodyClasses( window );
-
 	try {
+		setUpGlobalErrorHandlers();
+		setBodyClasses( window );
 		await awaitGBKitGlobal();
 		await configureLocale();
 		await loadWordPressGlobals();
