@@ -104,7 +104,6 @@ actor EditorService {
            let settings = String(data: data, encoding: .utf8) {
             dependencies.editorSettings = settings
         }
-        dependencies.manifest = try? loadProcessedManifest()
         let loadTime = CFAbsoluteTimeGetCurrent() - startTime
         log(.info, "Loaded dependencies in \(String(format: "%.3f", loadTime))s")
 
@@ -243,6 +242,11 @@ actor EditorService {
             throw URLError(.cannotDecodeContentData)
         }
         return jsonString
+    }
+
+    /// Returns the processed manifest for use by the editor
+    func getProcessedManifest() throws -> String {
+        try loadProcessedManifest()
     }
 
     // MARK: - Assets

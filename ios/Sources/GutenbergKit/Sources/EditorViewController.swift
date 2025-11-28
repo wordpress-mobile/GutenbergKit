@@ -10,6 +10,7 @@ import UIKit
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
     public let webView: WKWebView
     let service: EditorService
+    let assetsLibrary: EditorAssetsLibrary
 
     public var configuration: EditorConfiguration
     private var dependencies: EditorDependencies?
@@ -54,6 +55,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         self.service = EditorService.shared(for: configuration.siteURL)
         self.configuration = configuration
         self.mediaPicker = mediaPicker
+        self.assetsLibrary = EditorAssetsLibrary(service: service, configuration: configuration)
         self.controller = GutenbergEditorController(configuration: configuration)
 
         // The `allowFileAccessFromFileURLs` allows the web view to access the
@@ -129,6 +131,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func loadEditor() {
+        webView.configuration.userContentController.addScriptMessageHandler(
+            EditorAssetsProvider(library: assetsLibrary),
+            contentWorld: .page,
+            name: "loadFetchedEditorAssets"
+        )
+
         if let editorURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
             webView.load(URLRequest(url: editorURL))
         } else {
@@ -156,8 +164,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 title: '\(configuration.escapedTitle)',
                 content: '\(configuration.escapedContent)'
             },
-            logLevel: '\(EditorLogger.logLevel.rawValue)',
-            manifest: \(dependencies?.manifest ?? "undefined")
+            logLevel: '\(EditorLogger.logLevel.rawValue)'
         };
 
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));

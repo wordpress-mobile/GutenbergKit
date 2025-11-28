@@ -182,7 +182,6 @@ export function onModalDialogClosed( dialogType ) {
  * @property {string}   [authHeader]             The authentication header.
  * @property {string}   [hideTitle]              Whether to hide the title.
  * @property {Post}     [post]                   The post data.
- * @property {Object}   [manifest]               The editor assets manifest (iOS only).
  */
 
 /**
@@ -337,15 +336,13 @@ export function awaitGBKitGlobal( timeoutMs = 3000 ) {
  * @return {Promise<{scripts: string, styles: string, allowed_block_types: string[]}>} Promise that resolves with the assets object.
  */
 export async function fetchEditorAssets() {
-	const gbkit = getGBKit();
-
-	// iOS provides manifest directly in GBKit configuration
-	if ( window.webkit && gbkit.manifest ) {
-		return gbkit.manifest;
+	if ( window.webkit ) {
+		return await window.webkit.messageHandlers.loadFetchedEditorAssets.postMessage(
+			{ asset: 'manifest' }
+		);
 	}
 
-	// Android fallback - fetch from API
-	const { siteApiRoot, editorAssetsEndpoint, authHeader } = gbkit;
+	const { siteApiRoot, editorAssetsEndpoint, authHeader } = getGBKit();
 	const url = new URL(
 		editorAssetsEndpoint || `${ siteApiRoot }wpcom/v2/editor-assets`
 	);

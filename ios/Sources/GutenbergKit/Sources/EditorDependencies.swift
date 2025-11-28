@@ -4,8 +4,6 @@ import Foundation
 struct EditorDependencies: Sendable {
     /// Raw block editor settings from the WordPress REST API
     var editorSettings: String?
-    /// Editor assets manifest containing scripts and styles for plugins, and allowed block types
-    var manifest: String?
 
     /// Extracts CSS styles from the editor settings JSON string
     func extractThemeStyles() -> String? {
