@@ -25,12 +25,7 @@ export async function setUpEditorEnvironment() {
 
 	window.jQuery = jquery; // Expose jQuery for plugins
 
-	// Detect platform and add class to body for platform-specific styling
-	if ( typeof window !== 'undefined' && window.webkit ) {
-		document.body.classList.add( 'is-ios' );
-	} else if ( typeof window !== 'undefined' && window.editorDelegate ) {
-		document.body.classList.add( 'is-android' );
-	}
+	setBodyClasses( window );
 
 	try {
 		await awaitGBKitGlobal();
@@ -42,6 +37,26 @@ export async function setUpEditorEnvironment() {
 		await initializeEditor( pluginLoadResult );
 	} catch ( err ) {
 		handleError( err );
+	}
+}
+
+/**
+ * Adds platform-specific CSS classes to document.body based on the provided global-like object.
+ *
+ * @param {Object} [global] - `window` or a mocked environment, used to detect platform features.
+ * @return {void}
+ */
+function setBodyClasses( global ) {
+	if ( typeof global === 'undefined' ) {
+		return;
+	}
+	const { document: { body } = {} } = global;
+
+	// Detect platform and add class to body for platform-specific styling
+	if ( global.webkit ) {
+		body.classList.add( 'is-ios' );
+	} else if ( global.editorDelegate ) {
+		body.classList.add( 'is-android' );
 	}
 }
 
