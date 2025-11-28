@@ -33,7 +33,7 @@ public struct EditorConfiguration: Sendable {
     /// Enables the native inserter UI in the editor
     public let isNativeInserterEnabled: Bool
     /// Logs emitted at or above this level will be printed to the debug console
-    public let logLevel: LogLevel
+    public let logLevel: EditorLogLevel
 
     /// Deliberately non-public – consumers should use `EditorConfigurationBuilder` to construct a configuration
     init(
@@ -52,7 +52,7 @@ public struct EditorConfiguration: Sendable {
         editorSettings: String,
         locale: String,
         isNativeInserterEnabled: Bool,
-        logLevel: LogLevel
+        logLevel: EditorLogLevel
     ) {
         self.title = title
         self.content = content
@@ -119,7 +119,7 @@ public struct EditorConfigurationBuilder {
     private var editorSettings: String
     private var locale: String
     private var isNativeInserterEnabled: Bool
-    private var logLevel: LogLevel
+    private var logLevel: EditorLogLevel
 
     public init(
         title: String = "",
@@ -137,7 +137,7 @@ public struct EditorConfigurationBuilder {
         editorSettings: String = "undefined",
         locale: String = "en",
         isNativeInserterEnabled: Bool = false,
-        logLevel: LogLevel = .error
+        logLevel: EditorLogLevel = .error
     ){
         self.title = title
         self.content = content
@@ -247,7 +247,7 @@ public struct EditorConfigurationBuilder {
         return copy
     }
 
-    public func setLogLevel(_ logLevel: LogLevel) -> EditorConfigurationBuilder {
+    public func setLogLevel(_ logLevel: EditorLogLevel) -> EditorConfigurationBuilder {
         var copy = self
         copy.logLevel = logLevel
         return copy
