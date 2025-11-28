@@ -33,9 +33,10 @@ export async function setUpEditorEnvironment() {
 }
 
 /**
- * Adds platform-specific CSS classes to document.body based on the provided global-like object.
+ * Adds platform-specific CSS classes to document.body based on the provided
+ * global-like object.
  *
- * @param {Object} [global] - `window` or a mocked environment, used to detect platform features.
+ * @param {Object} [global] - `window` or a mocked environment
  * @return {void}
  */
 function setBodyClasses( global ) {
@@ -52,6 +53,11 @@ function setBodyClasses( global ) {
 	}
 }
 
+/**
+ * Lazy-load and configure locale settings.
+ *
+ * @return {Promise} Promise that resolves when locale is configured
+ */
 async function configureLocale() {
 	const { configureLocale: _configureLocale } = await import(
 		'./localization'
@@ -59,45 +65,79 @@ async function configureLocale() {
 	return _configureLocale();
 }
 
+/**
+ * Initialize WordPress global modules. Lazy-loaded to ensure the locale is
+ * configured before importing these modules and referencing the corresponding
+ * `window.wp` globals.
+ *
+ * @return {Promise} Promise that resolves when WordPress globals are initialized
+ */
 async function loadWordPressGlobals() {
-	// Load remaining WordPress globals after locale is configured.
 	const { initializeWordPressGlobals } = await import(
 		'./wordpress-globals'
 	);
 	initializeWordPressGlobals();
 }
 
+/**
+ * Configure `api-fetch` middleware and settings. Lazy-loaded to ensure
+ * WordPress globals are available before importing `api-fetch` and
+ * referencing `window.wp.apiFetch`.
+ */
 async function initializeApiFetchWrapper() {
-	// Load api-fetch now that WordPress globals are available.
 	const { initializeApiFetch: _initializeApiFetch } = await import(
 		'./api-fetch'
 	);
 	_initializeApiFetch();
 }
 
+/**
+ * @typedef {Object} PluginLoadResult
+ *
+ * @property {string[] | undefined} [allowedBlockTypes] Array of allowed block types provided by the API.
+ * @property {boolean}              [pluginLoadFailed]  Indicates if plugin loading failed.
+ */
+
+/**
+ * Load plugins if enabled in GBKit settings.
+ *
+ * @return {Promise<PluginLoadResult>} Promise resolving to plugin load results
+ */
 async function loadPluginsIfEnabled() {
 	const { plugins } = getGBKit();
 
 	if ( plugins ) {
 		try {
 			const { allowedBlockTypes } = await loadEditorAssets();
-			return { allowedBlockTypes };
+			return { allowedBlockTypes, pluginLoadFailed: false };
 		} catch {
 			return { pluginLoadFailed: true };
 		}
 	}
 
-	return {};
+	return { pluginLoadFailed: false };
 }
 
+/**
+ * Initialize the editor module. Lazy-loaded to ensure WordPress globals are
+ * before importing the editor module and referencing `window.wp` globals.
+ *
+ * @param {Object} pluginLoadResult - Results from plugin loading
+ * @return {Promise} Promise that resolves when the editor is initialized
+ */
 async function initializeEditor( pluginLoadResult = {} ) {
 	const { initializeEditor: _initializeEditor } = await import( './editor' );
 	_initializeEditor( {
-		allowedBlockTypes: pluginLoadResult?.allowedBlockTypes,
-		pluginLoadFailed: pluginLoadResult?.pluginLoadFailed,
+		allowedBlockTypes: pluginLoadResult.allowedBlockTypes,
+		pluginLoadFailed: pluginLoadResult.pluginLoadFailed,
 	} );
 }
 
+/**
+ * Log and display an editor load error message.
+ *
+ * @param {Error} err - The error that occurred
+ */
 function handleError( err ) {
 	error( 'Error initializing editor', err );
 	const errorDetails = EditorLoadError( { error: err } );
