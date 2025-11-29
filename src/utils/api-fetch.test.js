@@ -19,7 +19,7 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import { initializeApiFetch } from './api-fetch';
+import { configureApiFetch } from './api-fetch';
 import * as bridge from './bridge';
 
 vi.mock( './bridge' );
@@ -34,7 +34,7 @@ describe( 'api-fetch credentials handling', () => {
 		} );
 
 		// Initialize middleware once - it will persist across all tests
-		initializeApiFetch();
+		configureApiFetch();
 	} );
 
 	beforeEach( () => {

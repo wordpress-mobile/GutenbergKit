@@ -18,7 +18,7 @@ import { getGBKit } from './bridge';
  *
  * @return {void}
  */
-export function initializeApiFetch() {
+export function configureApiFetch() {
 	const { siteApiRoot = '' } = getGBKit();
 
 	apiFetch.use( apiFetch.createRootURLMiddleware( siteApiRoot ) );

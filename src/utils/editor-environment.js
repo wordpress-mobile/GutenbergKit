@@ -23,8 +23,8 @@ export async function setUpEditorEnvironment() {
 		setBodyClasses( window );
 		await awaitGBKitGlobal();
 		await configureLocale();
-		await loadWordPressGlobals();
-		await initializeApiFetchWrapper();
+		await initializeWordPressGlobals();
+		await configureApiFetch();
 		initializeVideoPressAjaxBridge();
 		const pluginLoadResult = await loadPluginsIfEnabled();
 		await initializeEditor( pluginLoadResult );
@@ -65,11 +65,10 @@ function setBodyClasses( global ) {
  *
  * @return {Promise} Promise that resolves when WordPress globals are initialized
  */
-async function loadWordPressGlobals() {
-	const { initializeWordPressGlobals } = await import(
-		'./wordpress-globals'
-	);
-	initializeWordPressGlobals();
+async function initializeWordPressGlobals() {
+	const { initializeWordPressGlobals: _initializeWordPressGlobals } =
+		await import( './wordpress-globals' );
+	_initializeWordPressGlobals();
 }
 
 /**
@@ -77,11 +76,11 @@ async function loadWordPressGlobals() {
  * WordPress globals are available before importing `api-fetch` and
  * referencing `window.wp.apiFetch`.
  */
-async function initializeApiFetchWrapper() {
-	const { initializeApiFetch: _initializeApiFetch } = await import(
+async function configureApiFetch() {
+	const { configureApiFetch: _configureApiFetch } = await import(
 		'./api-fetch'
 	);
-	_initializeApiFetch();
+	_configureApiFetch();
 }
 
 /**
