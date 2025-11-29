@@ -1,7 +1,7 @@
 /**
  * Internal dependencies
  */
-import { Platform } from './platform';
+import { Platform } from './platform.js';
 
 // Log levels in order of verbosity
 const LOG_LEVELS = {
