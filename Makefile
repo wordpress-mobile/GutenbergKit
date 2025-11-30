@@ -152,6 +152,8 @@ test-android: ## Run Android tests
 build-xcframework: build ## Build XCFramework for iOS
 	@echo "--- :package: Building XCFramework"
 	@SWIFT_OPTIMIZATION_LEVEL="${SWIFT_OPTIMIZATION_LEVEL:--O}" ./build_xcframework.sh GutenbergKit
+	@echo "+++ :swift: XCFramework checksum"
+	@swift package compute-checksum ./build/GutenbergKit.xcframework.zip
 
 .PHONY: build-xcframework-debug
 build-xcframework-debug: build ## Build XCFramework for iOS with no optimizations (for testing)
