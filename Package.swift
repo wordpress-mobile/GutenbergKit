@@ -13,7 +13,9 @@ let package = Package(
             // https://forums.swift.org/t/how-to-build-swift-package-as-xcframework/41414/57
             //
             // TODO: Use env var to switch between static by default and dynamic opt-in
-            type: .dynamic,
+            //
+            // Disabled to test binary target
+            // type: .dynamic,
             targets: ["GutenbergKit"]
         )
     ],
