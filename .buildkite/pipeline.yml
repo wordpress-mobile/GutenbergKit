@@ -45,3 +45,9 @@ steps:
     - label: ':xcode: Verify XCFramework Integration Test Fails With Missing Resources'
       command: .buildkite/commands/verify-xcframework-test-fails-with-missing-resources.sh
       plugins: *plugins
+
+    - label: ':swift: Build XCFramework'
+      command: make build-xcframework
+      artifact_paths:
+        - build/GutenbergKit.xcframework.zip
+      plugins: *plugins
