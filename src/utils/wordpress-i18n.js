@@ -4,6 +4,8 @@
 import * as hooks from '@wordpress/hooks';
 import * as i18n from '@wordpress/i18n';
 
+initializeWordPressI18n();
+
 /**
  * Initialize WordPress i18n globals by defining i18n-related modules on the
  * `window.wp` namespace. This must be done before other WordPress modules are
@@ -11,7 +13,7 @@ import * as i18n from '@wordpress/i18n';
  *
  * @return {void}
  */
-export function initializeWordPressI18n() {
+function initializeWordPressI18n() {
 	// Initialize the wp namespace if it doesn't exist
 	window.wp = window.wp || {};
 
@@ -19,5 +21,3 @@ export function initializeWordPressI18n() {
 	window.wp.hooks = hooks;
 	window.wp.i18n = i18n;
 }
-
-initializeWordPressI18n();
