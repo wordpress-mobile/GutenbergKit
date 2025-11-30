@@ -11,7 +11,7 @@ const pluginLoadFailedNotice = __(
 );
 
 /**
- * Displays a notice with actions to retry or dismiss.
+ * Displays a notice regarding the plugin loading outcome.
  *
  * @param {Object}  props                  Component props.
  * @param {string}  props.className        Additional class names to apply.
