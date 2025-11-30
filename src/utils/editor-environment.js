@@ -20,7 +20,7 @@ import './editor-styles';
 export async function setUpEditorEnvironment() {
 	try {
 		setUpGlobalErrorHandlers();
-		setBodyClasses( window );
+		setBodyClasses();
 		await awaitGBKitGlobal();
 		await configureLocale();
 		await initializeWordPressGlobals();
@@ -34,28 +34,24 @@ export async function setUpEditorEnvironment() {
 }
 
 /**
- * Adds platform-specific CSS classes to document.body based on the provided
- * global-like object.
+ * Adds conditional CSS classes to `document.body`.
  *
- * @param {Object} [global] - `window` or a mocked environment
  * @return {void}
  */
-function setBodyClasses( global ) {
-	if ( typeof global === 'undefined' ) {
+function setBodyClasses() {
+	if ( typeof window === 'undefined' ) {
 		return;
 	}
 
-	const { document: { body } = {} } = global;
 	const classNames = [];
 
-	// Detect platform and add class to body for platform-specific styling
 	if ( Platform.isIOS ) {
 		classNames.push( 'is-ios' );
 	} else if ( Platform.isAndroid ) {
 		classNames.push( 'is-android' );
 	}
 
-	body.classList.add( ...classNames );
+	window.document.body.classList.add( ...classNames );
 }
 
 /**
