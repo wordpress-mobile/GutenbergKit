@@ -7,7 +7,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 /**
  * Internal dependencies
  */
-import EditorLoadNotice from './editor-load-notice';
+import EditorLoadNotice from '.';
 
 vi.mock( '@wordpress/i18n' );
 vi.mock( '@wordpress/components' );
