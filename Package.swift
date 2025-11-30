@@ -28,7 +28,7 @@ let package = Package(
         //
         .binaryTarget(
             name: "GutenbergKit",
-            url: "https://a8c-apps-public-artifacts.s3.us-east-2.amazonaws.com/gutenberg-kit/xcframework/a4374acb25d8f31bc17e9664294ba392c6fb03cd51d39cc4681ba48694afccda/GutenbergKit.xcframework.zip",
+            url: "https://cdn.a8c-ci.services/gutenberg-kit/xcframework/a4374acb25d8f31bc17e9664294ba392c6fb03cd51d39cc4681ba48694afccda/GutenbergKit.xcframework.zip",
             checksum: "a4374acb25d8f31bc17e9664294ba392c6fb03cd51d39cc4681ba48694afccda"
         )
         // Temporarily disabled just so we can try the binary distribution in a client.
