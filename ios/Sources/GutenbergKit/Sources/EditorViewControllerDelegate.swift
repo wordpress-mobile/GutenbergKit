@@ -61,7 +61,7 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// It provides visibility into all fetch-based network requests made by the editor.
     ///
     /// - parameter request: The network request details including URL, headers, body, response, and timing.
-    func editor(_ viewController: EditorViewController, didLogNetworkRequest request: NetworkRequest)
+    func editor(_ viewController: EditorViewController, didLogNetworkRequest request: RecordedNetworkRequest)
 }
 
 #endif
@@ -165,7 +165,7 @@ public struct OpenMediaLibraryAction: Codable {
     }
 }
 
-public struct NetworkRequest {
+public struct RecordedNetworkRequest {
     /// The request URL
     public let url: String
     /// The HTTP method (GET, POST, etc.)

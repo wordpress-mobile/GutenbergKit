@@ -476,7 +476,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 delegate?.editor(self, didLogMessage: log.message, level: log.level)
             case .onNetworkRequest:
                 guard let requestDict = message.body as? [String: Any],
-                      let networkRequest = NetworkRequest(from: requestDict) else {
+                      let networkRequest = RecordedNetworkRequest(from: requestDict) else {
                     return
                 }
                 delegate?.editor(self, didLogNetworkRequest: networkRequest)

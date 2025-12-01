@@ -183,7 +183,7 @@ private struct _EditorView: UIViewControllerRepresentable {
             viewModel.isModalDialogOpen = false
         }
 
-        func editor(_ viewController: EditorViewController, didLogNetworkRequest request: NetworkRequest) {
+        func editor(_ viewController: EditorViewController, didLogNetworkRequest request: RecordedNetworkRequest) {
             print("🌐 Network Request: \(request.method) \(request.url)")
             print("   Status: \(request.status), Duration: \(request.duration)ms")
 

@@ -410,7 +410,7 @@ class GutenbergView : WebView {
     }
 
     interface NetworkRequestListener {
-        fun onNetworkRequest(request: NetworkRequest)
+        fun onNetworkRequest(request: RecordedNetworkRequest)
     }
 
     fun getTitleAndContent(originalContent: CharSequence, callback: TitleAndContentCallback, completeComposition: Boolean = false) {
@@ -624,7 +624,7 @@ class GutenbergView : WebView {
         handler.post {
             try {
                 val json = JSONObject(requestData)
-                val request = NetworkRequest.fromJson(json)
+                val request = RecordedNetworkRequest.fromJson(json)
                 networkRequestListener?.onNetworkRequest(request)
             } catch (e: Exception) {
                 Log.e("GutenbergView", "Error parsing network request: ${e.message}")
