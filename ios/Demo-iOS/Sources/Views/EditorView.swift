@@ -185,7 +185,7 @@ private struct _EditorView: UIViewControllerRepresentable {
 
         func editor(_ viewController: EditorViewController, didLogNetworkRequest request: RecordedNetworkRequest) {
             print("🌐 Network Request: \(request.method) \(request.url)")
-            print("   Status: \(request.status), Duration: \(request.duration)ms")
+            print("   Status: \(request.status) \(request.statusText), Duration: \(request.duration)ms")
 
             // Log request headers
             if !request.requestHeaders.isEmpty {

@@ -228,7 +228,7 @@ fun EditorScreen(
                     setNetworkRequestListener(object : GutenbergView.NetworkRequestListener {
                         override fun onNetworkRequest(request: org.wordpress.gutenberg.RecordedNetworkRequest) {
                             android.util.Log.d("EditorActivity", "🌐 Network Request: ${request.method} ${request.url}")
-                            android.util.Log.d("EditorActivity", "   Status: ${request.status}, Duration: ${request.duration}ms")
+                            android.util.Log.d("EditorActivity", "   Status: ${request.status} ${request.statusText}, Duration: ${request.duration}ms")
 
                             // Log request headers
                             if (request.requestHeaders.isNotEmpty()) {

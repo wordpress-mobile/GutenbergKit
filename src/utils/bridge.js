@@ -181,6 +181,7 @@ export function onModalDialogClosed( dialogType ) {
  * @param {Object|null} requestData.requestHeaders  The request headers object.
  * @param {string|null} requestData.requestBody     The request body.
  * @param {number}      requestData.status          The HTTP response status code.
+ * @param {string}      requestData.statusText      The HTTP response status text (e.g., "OK", "Not Found").
  * @param {Object|null} requestData.responseHeaders The response headers object.
  * @param {string|null} requestData.responseBody    The response body.
  * @param {number}      requestData.duration        The request duration in milliseconds.

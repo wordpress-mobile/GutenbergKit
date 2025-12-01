@@ -31,6 +31,7 @@ describe( 'initializeFetchInterceptor', () => {
 			Promise.resolve( {
 				ok: true,
 				status: 200,
+				statusText: 'OK',
 				headers: new Headers( {
 					'content-type': 'application/json',
 				} ),
@@ -76,6 +77,45 @@ describe( 'initializeFetchInterceptor', () => {
 		expect( window.fetch ).toBe( currentFetch );
 	} );
 
+	it( 'should derive statusText from status code when empty (HTTP/2)', async () => {
+		// Mock fetch with empty statusText (common with HTTP/2)
+		global.fetch = vi.fn( () =>
+			Promise.resolve( {
+				ok: true,
+				status: 201,
+				statusText: '', // Empty, as with HTTP/2
+				headers: new Headers( {
+					'content-type': 'application/json',
+				} ),
+				clone() {
+					return {
+						headers: this.headers,
+						text: () => Promise.resolve( '{}' ),
+						blob: () =>
+							Promise.resolve(
+								new Blob( [ '{}' ], {
+									type: 'application/json',
+								} )
+							),
+					};
+				},
+			} )
+		);
+
+		initializeFetchInterceptor();
+
+		await window.fetch( 'https://example.com/api', { method: 'POST' } );
+
+		await waitForAsyncLogging();
+
+		expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				status: 201,
+				statusText: 'Created', // Derived from status code
+			} )
+		);
+	} );
+
 	describe( 'request header capture', () => {
 		it( 'should capture headers from plain object with string URL', async () => {
 			initializeFetchInterceptor();
@@ -98,6 +138,7 @@ describe( 'initializeFetchInterceptor', () => {
 						Authorization: 'Bearer test-token',
 						'X-Custom-Header': 'custom-value',
 					} ),
+					statusText: 'OK',
 				} )
 			);
 		} );

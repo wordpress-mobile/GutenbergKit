@@ -176,6 +176,8 @@ public struct RecordedNetworkRequest {
     public let requestBody: String?
     /// The HTTP response status code
     public let status: Int
+    /// The HTTP response status text (e.g., "OK", "Not Found")
+    public let statusText: String
     /// The response headers
     public let responseHeaders: [String: String]
     /// The response body
@@ -199,6 +201,7 @@ public struct RecordedNetworkRequest {
         self.requestHeaders = requestHeaders
         self.requestBody = dict["requestBody"] as? String
         self.status = status
+        self.statusText = dict["statusText"] as? String ?? ""
         self.responseHeaders = responseHeaders
         self.responseBody = dict["responseBody"] as? String
         self.duration = duration
