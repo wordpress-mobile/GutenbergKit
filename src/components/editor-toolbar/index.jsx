@@ -28,7 +28,7 @@ import './style.scss';
 import { useModalize } from './use-modalize';
 import { useModalDialogState } from '../editor/use-modal-dialog-state';
 import { getGBKit } from '../../utils/bridge';
-import NativeBlockInserterButton from '../native-block-inserter-button';
+import NativeInserter from '../native-inserter';
 import { useScrollIndicators } from './use-scroll-indicators';
 
 /**
@@ -98,7 +98,7 @@ const EditorToolbar = ( { className } ) => {
 	);
 
 	const addBlockButton = enableNativeBlockInserter ? (
-		<NativeBlockInserterButton
+		<NativeInserter
 			open={ isInserterOpened }
 			onToggle={ setIsInserterOpened }
 		/>

@@ -1,7 +1,15 @@
 /**
- * WordPress dependencies - import all packages used by the project
- * Note: i18n and hooks are loaded separately via wordpress-i18n.js to ensure
- * they are configured before other modules that depend on localization.
+ * External dependencies
+ */
+import React from 'react';
+import ReactDOM from 'react-dom';
+import moment from 'moment';
+import lodash from 'lodash';
+import * as ReactJSXRuntime from 'react/jsx-runtime';
+import jquery from 'jquery';
+
+/**
+ * WordPress dependencies
  */
 import * as a11y from '@wordpress/a11y';
 import * as apiFetch from '@wordpress/api-fetch';
@@ -53,15 +61,6 @@ import * as widgets from '@wordpress/widgets';
 import * as wordcount from '@wordpress/wordcount';
 
 /**
- * External dependencies that plugins expect
- */
-import React from 'react';
-import ReactDOM from 'react-dom';
-import moment from 'moment';
-import lodash from 'lodash';
-import * as ReactJSXRuntime from 'react/jsx-runtime';
-
-/**
  * Initialize WordPress globals by defining all @wordpress modules on the
  * window.wp namespace. This allows plugin scripts loaded from the editor
  * assets endpoint to access these modules.
@@ -69,6 +68,8 @@ import * as ReactJSXRuntime from 'react/jsx-runtime';
  * @return {void}
  */
 export function initializeWordPressGlobals() {
+	window.jQuery = jquery; // Expose jQuery for plugins
+
 	// Initialize the wp namespace if it doesn't exist
 	window.wp = window.wp || {};
 
@@ -139,5 +140,3 @@ export function initializeWordPressGlobals() {
 	// React JSX runtime for plugin compatibility
 	window.ReactJSXRuntime = ReactJSXRuntime;
 }
-
-initializeWordPressGlobals();

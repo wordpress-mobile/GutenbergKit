@@ -9,13 +9,15 @@ import { setLocaleData } from '@wordpress/i18n';
 import { getGBKit } from './bridge';
 import { error, debug } from './logger';
 
+const DEFAULT_LOCALE = 'en';
+
 /**
  * Initializes i18n support for the editor.
  *
  * @return {Promise<void>} A promise that resolves when i18n is initialized.
  */
 export async function configureLocale() {
-	const { locale = 'en' } = getGBKit();
+	const { locale = DEFAULT_LOCALE } = getGBKit();
 	await loadTranslations( locale );
 }
 
@@ -42,5 +44,3 @@ async function loadTranslations( locale ) {
 		error( 'Error loading translations', err );
 	}
 }
-
-const DEFAULT_LOCALE = 'en';
