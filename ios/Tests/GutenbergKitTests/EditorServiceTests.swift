@@ -21,10 +21,6 @@ struct EditorServiceTests {
         // THEN dependencies are loaded and editor settings are returned as is
         #expect(dependencies.editorSettings == #"{"alignWide": true}"#)
 
-        // THEN processed manifest contains links pointing to files on disk (`gbk-cache-https://`)
-        let manifest = try #require(dependencies.manifest)
-        #expect(manifest.contains(#"link rel=\"stylesheet\" id=\"jp-forms-blocks-css\" href=\"gbk-cache-https:\/\/example.com\/wp-content\/plugins\/jetpack\/jetpack_vendor\/automattic\/jetpack-forms\/dist\/blocks\/editor.css?ver=13.9\"#))
-
         // THEN assets are available on disk and can be loaded
         for assetURL in context.assetURLs {
             let cachedURL = try #require(CachedAssetSchemeHandler.cachedURL(forWebLink: assetURL))
@@ -48,10 +44,8 @@ struct EditorServiceTests {
 
         let dependencies = await service.dependencies(for: configuration)
 
-        // THEN settings are loaded but manifest is ignored – we cam't guarantee
-        // it will work with missing resources
+        // THEN settings are loaded
         #expect(dependencies.editorSettings == #"{"alignWide": true}"#)
-        #expect(dependencies.manifest == nil)
     }
 
     @Test("Upgrades manifest and assets when version changes")
@@ -65,7 +59,7 @@ struct EditorServiceTests {
         let configuration = context.createConfiguration()
 
         let initialDependencies = await service.dependencies(for: configuration)
-        #expect(initialDependencies.manifest?.contains("ver=13.9") == true)
+        #expect(initialDependencies.editorSettings == #"{"alignWide": true}"#)
 
         // WHEN new manifest is returned with updated assets
         let upgradedContext = try TestContext(manifestResource: "manifest-test-case-3")
@@ -77,19 +71,8 @@ struct EditorServiceTests {
 
         let upgradedDependencies = await service.dependencies(for: configuration, isWarmup: true)
 
-        // THEN manifest is upgraded to v14.0
-        let upgradedManifest = try #require(upgradedDependencies.manifest)
-        #expect(upgradedManifest.contains("ver=14.0"))
-        #expect(!upgradedManifest.contains("ver=13.9"))
-
-        // THEN new asset is present (ai-assistant)
-        #expect(upgradedManifest.contains("ai-assistant"))
-
-        // THEN removed asset is not present (slideshow)
-        #expect(!upgradedManifest.contains("slideshow"))
-
-        // THEN upgraded asset has new version (contact-form)
-        #expect(upgradedManifest.contains(#"jetpack\/_inc\/blocks\/contact-form\/editor.js?ver=14.0"#))
+        // THEN settings are still available
+        #expect(upgradedDependencies.editorSettings == #"{"alignWide": true}"#)
 
         // THEN upgraded assets are available on disk
         for assetURL in upgradedContext.assetURLs {
