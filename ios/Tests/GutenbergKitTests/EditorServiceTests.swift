@@ -84,6 +84,151 @@ struct EditorServiceTests {
         }
     }
 
+    @Test("Handles concurrent refresh requests correctly")
+    func concurrentRefreshRequests() async throws {
+        let context = try TestContext(manifestResource: "manifest-test-case-2")
+        context.session.mockSettings()
+        context.session.mockManifest(context.manifestData)
+        context.session.mockAllAssets(context.assetURLs)
+
+        let service = context.createService()
+        let configuration = context.createConfiguration()
+
+        // Trigger multiple refreshes concurrently
+        async let refresh1: Void = service.refresh(configuration: configuration)
+        async let refresh2: Void = service.refresh(configuration: configuration)
+        async let refresh3: Void = service.refresh(configuration: configuration)
+
+        _ = await (refresh1, refresh2, refresh3)
+
+        // Verify network was only called once despite 3 refresh calls
+        #expect(context.session.requestCount(for: "wp-block-editor/v1/settings") == 1)
+        #expect(context.session.requestCount(for: "wpcom/v2/editor-assets") == 1)
+    }
+
+    @Test("Successfully loads cached asset from disk")
+    func getCachedAssetSuccess() async throws {
+        let context = try TestContext(manifestResource: "manifest-test-case-2")
+        context.session.mockSettings()
+        context.session.mockManifest(context.manifestData)
+        context.session.mockAllAssets(context.assetURLs)
+
+        let service = context.createService()
+        let configuration = context.createConfiguration()
+
+        // Load dependencies to cache assets
+        _ = await service.dependencies(for: configuration)
+
+        // Now try to load a cached asset
+        let testAssetURL = context.assetURLs[0]
+        let cachedURL = try #require(CachedAssetSchemeHandler.cachedURL(forWebLink: testAssetURL))
+        let gbkURL = try #require(URL(string: cachedURL))
+
+        let (response, data) = try await service.getCachedAsset(from: gbkURL)
+
+        // Verify response
+        #expect(response.url == gbkURL)
+        #expect(!data.isEmpty)
+        #expect(response.mimeType == "application/javascript")
+    }
+
+    @Test("Skips refresh when data is fresh (< 30s)")
+    func refreshNotNeededWithin30Seconds() async throws {
+        let context = try TestContext(manifestResource: "manifest-test-case-2")
+        context.session.mockSettings()
+        context.session.mockManifest(context.manifestData)
+        context.session.mockAllAssets(context.assetURLs)
+
+        let service = context.createService()
+        let configuration = context.createConfiguration()
+
+        // Initial load
+        _ = await service.dependencies(for: configuration)
+
+        // Wait briefly to allow background refresh task to start (but not complete 30s threshold)
+        try await Task.sleep(for: .milliseconds(100))
+
+        // Second load within 30 seconds with warmup flag - should not trigger refresh
+        _ = await service.dependencies(for: configuration, isWarmup: true)
+
+        // Wait to ensure background refresh logic has time to evaluate (but not execute)
+        try await Task.sleep(for: .milliseconds(100))
+
+        // Verify network was only called once
+        #expect(context.session.requestCount(for: "wp-block-editor/v1/settings") == 1)
+        #expect(context.session.requestCount(for: "wpcom/v2/editor-assets") == 1)
+    }
+
+    @Test("Handles invalid siteApiRoot URL gracefully")
+    func invalidSiteApiRootURL() async throws {
+        let context = try TestContext(manifestResource: "manifest-test-case-2")
+        let service = context.createService()
+
+        // Create configuration with invalid URL
+        let configuration = EditorConfigurationBuilder()
+            .setSiteUrl("https://example.com")
+            .setSiteApiRoot("not a valid url!")
+            .setAuthHeader("Bearer test-token")
+            .build()
+
+        // Should not crash, just log error and return empty dependencies
+        let dependencies = await service.dependencies(for: configuration)
+
+        // Dependencies should be empty since refresh failed
+        #expect(dependencies.editorSettings == nil)
+    }
+
+    @Test("Returns error when cached asset doesn't exist")
+    func getCachedAssetNotFound() async throws {
+        let context = try TestContext(manifestResource: "manifest-test-case-2")
+        let service = context.createService()
+
+        // Try to load an asset that was never cached
+        let fakeURL = URL(string: "gbk-cache-https://example.com/missing.js")!
+
+        // Should throw file not found error
+        await #expect(throws: URLError.self) {
+            try await service.getCachedAsset(from: fakeURL)
+        }
+    }
+
+    @Test("Successfully loads processed manifest")
+    func getProcessedManifestSuccess() async throws {
+        let context = try TestContext(manifestResource: "manifest-test-case-2")
+        context.session.mockSettings()
+        context.session.mockManifest(context.manifestData)
+        context.session.mockAllAssets(context.assetURLs)
+
+        let service = context.createService()
+        let configuration = context.createConfiguration()
+
+        // Load dependencies to create and cache the processed manifest
+        _ = await service.dependencies(for: configuration)
+
+        // Now get the processed manifest
+        let manifest = try await service.getProcessedManifest()
+
+        // Verify manifest is valid JSON string
+        #expect(!manifest.isEmpty)
+
+        // Verify it contains gbk-cache scheme URLs (processed format)
+        #expect(manifest.contains("gbk-cache-https:"))
+
+        // Verify it contains expected asset references
+        #expect(manifest.contains("jetpack"))
+    }
+
+    @Test("Returns error when processed manifest doesn't exist")
+    func getProcessedManifestNotFound() async throws {
+        let context = try TestContext(manifestResource: "manifest-test-case-2")
+        let service = context.createService()
+
+        // Try to get manifest before it's been created
+        await #expect(throws: Error.self) {
+            try await service.getProcessedManifest()
+        }
+    }
+
     @Test("Cleans up orphaned assets after upgrade")
     func cleansUpOrphanedAssets() async throws {
         let context = try TestContext(manifestResource: "manifest-test-case-2")

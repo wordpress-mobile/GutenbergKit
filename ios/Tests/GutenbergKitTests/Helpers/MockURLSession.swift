@@ -4,6 +4,7 @@ import Foundation
 /// Mock implementation of URLSessionProtocol for testing
 final class MockURLSession: URLSessionProtocol, @unchecked Sendable {
     private var mockedResponses: [String: (Data, HTTPURLResponse)] = [:]
+    private var requestCounts: [String: Int] = [:]
     private let lock = NSLock()
 
     func mockResponse(for urlString: String, data: Data, statusCode: Int) {
@@ -25,6 +26,10 @@ final class MockURLSession: URLSessionProtocol, @unchecked Sendable {
             throw URLError(.badURL)
         }
 
+        lock.withLock {
+            requestCounts[urlString, default: 0] += 1
+        }
+
         let result = lock.withLock { mockedResponses[urlString] }
         guard let (data, response) = result else {
             throw URLError(.badURL)
@@ -38,6 +43,10 @@ final class MockURLSession: URLSessionProtocol, @unchecked Sendable {
             throw URLError(.badURL)
         }
 
+        lock.withLock {
+            requestCounts[urlString, default: 0] += 1
+        }
+
         let result = lock.withLock { mockedResponses[urlString] }
         guard let (data, response) = result else {
             throw URLError(.badURL)
@@ -49,6 +58,15 @@ final class MockURLSession: URLSessionProtocol, @unchecked Sendable {
         try data.write(to: tempURL)
 
         return (tempURL, response)
+    }
+
+    func requestCount(for urlSubstring: String) -> Int {
+        lock.withLock {
+            requestCounts
+                .filter { $0.key.contains(urlSubstring) }
+                .values
+                .reduce(0, +)
+        }
     }
 
     private func getCanonicalURLString(for url: URL) -> String? {
