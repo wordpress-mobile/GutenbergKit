@@ -173,6 +173,37 @@ export function onModalDialogClosed( dialogType ) {
 }
 
 /**
+ * Notifies the native host about a network request and its response.
+ *
+ * @param {Object}      requestData                 The network request data.
+ * @param {string}      requestData.url             The request URL.
+ * @param {string}      requestData.method          The HTTP method (GET, POST, etc.).
+ * @param {Object|null} requestData.requestHeaders  The request headers object.
+ * @param {string|null} requestData.requestBody     The request body.
+ * @param {number}      requestData.status          The HTTP response status code.
+ * @param {string}      requestData.statusText      The HTTP response status text (e.g., "OK", "Not Found").
+ * @param {Object|null} requestData.responseHeaders The response headers object.
+ * @param {string|null} requestData.responseBody    The response body.
+ * @param {number}      requestData.duration        The request duration in milliseconds.
+ *
+ * @return {void}
+ */
+export function onNetworkRequest( requestData ) {
+	debug( `Bridge event: onNetworkRequest`, requestData );
+
+	if ( window.editorDelegate ) {
+		window.editorDelegate.onNetworkRequest( JSON.stringify( requestData ) );
+	}
+
+	if ( window.webkit ) {
+		window.webkit.messageHandlers.editorDelegate.postMessage( {
+			message: 'onNetworkRequest',
+			body: requestData,
+		} );
+	}
+}
+
+/**
  * @typedef GBKitConfig
  *
  * @property {boolean}  [themeStyles]            Controls if theme styles are applied to the editor.
@@ -182,6 +213,7 @@ export function onModalDialogClosed( dialogType ) {
  * @property {string}   [authHeader]             The authentication header.
  * @property {string}   [hideTitle]              Whether to hide the title.
  * @property {Post}     [post]                   The post data.
+ * @property {boolean}  [enableNetworkLogging]   Enables logging of all network requests/responses to the native host via onNetworkRequest bridge method.
  */
 
 /**

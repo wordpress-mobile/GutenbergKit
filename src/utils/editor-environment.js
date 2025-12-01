@@ -5,6 +5,7 @@ import { awaitGBKitGlobal, editorLoaded, getGBKit } from './bridge';
 import { configureLocale } from './localization';
 import { loadEditorAssets } from './editor-loader';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge';
+import { initializeFetchInterceptor } from './fetch-interceptor';
 import EditorLoadError from '../components/editor-load-error';
 import { error } from './logger';
 import { setUpGlobalErrorHandlers } from './global-error-handler';
@@ -20,6 +21,7 @@ import './editor-styles';
 export async function setUpEditorEnvironment() {
 	try {
 		setUpGlobalErrorHandlers();
+		initializeFetchInterceptor();
 		setBodyClasses();
 		await awaitGBKitGlobal();
 		await configureLocale();

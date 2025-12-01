@@ -164,7 +164,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 title: '\(configuration.escapedTitle)',
                 content: '\(configuration.escapedContent)'
             },
-            logLevel: '\(configuration.logLevel)'
+            logLevel: '\(configuration.logLevel)',
+            enableNetworkLogging: \(configuration.enableNetworkLogging)
         };
 
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
@@ -473,6 +474,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             case .log:
                 let log = try message.decode(EditorJSMessage.LogMessage.self)
                 delegate?.editor(self, didLogMessage: log.message, level: log.level)
+            case .onNetworkRequest:
+                guard let requestDict = message.body as? [String: Any],
+                      let networkRequest = RecordedNetworkRequest(from: requestDict) else {
+                    return
+                }
+                delegate?.editor(self, didLogNetworkRequest: networkRequest)
             }
         } catch {
             // Capture detailed diagnostic information for crash reporting

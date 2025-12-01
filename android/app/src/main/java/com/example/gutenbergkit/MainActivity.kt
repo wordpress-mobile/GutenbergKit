@@ -160,6 +160,7 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
             .setThemeStyles(false)
             .setHideTitle(false)
             .setCookies(emptyMap())
+            .setEnableNetworkLogging(true)
 
     private fun launchEditor(configuration: EditorConfiguration) {
         val intent = Intent(this, EditorActivity::class.java)

@@ -54,6 +54,14 @@ public protocol EditorViewControllerDelegate: AnyObject {
     ///
     /// - parameter dialogType: The type of modal dialog that closed (e.g., "block-inserter", "media-library").
     func editor(_ viewController: EditorViewController, didCloseModalDialog dialogType: String)
+
+    /// Notifies the client about a network request and its response.
+    ///
+    /// This method is called when network logging is enabled via `EditorConfiguration.enableNetworkLogging`.
+    /// It provides visibility into all fetch-based network requests made by the editor.
+    ///
+    /// - parameter request: The network request details including URL, headers, body, response, and timing.
+    func editor(_ viewController: EditorViewController, didLogNetworkRequest request: RecordedNetworkRequest)
 }
 
 #endif
@@ -154,5 +162,48 @@ public struct OpenMediaLibraryAction: Codable {
     public enum Value: Codable {
         case single(Int)
         case multiple([Int])
+    }
+}
+
+public struct RecordedNetworkRequest {
+    /// The request URL
+    public let url: String
+    /// The HTTP method (GET, POST, etc.)
+    public let method: String
+    /// The request headers
+    public let requestHeaders: [String: String]
+    /// The request body
+    public let requestBody: String?
+    /// The HTTP response status code
+    public let status: Int
+    /// The HTTP response status text (e.g., "OK", "Not Found")
+    public let statusText: String
+    /// The response headers
+    public let responseHeaders: [String: String]
+    /// The response body
+    public let responseBody: String?
+    /// The request duration in milliseconds
+    public let duration: Int
+
+    init?(from dict: [AnyHashable: Any]) {
+        guard let url = dict["url"] as? String,
+              let method = dict["method"] as? String,
+              let requestHeaders = dict["requestHeaders"] as? [String: String],
+              let status = dict["status"] as? Int,
+              let responseHeaders = dict["responseHeaders"] as? [String: String],
+              let duration = dict["duration"] as? Int
+        else {
+            return nil
+        }
+
+        self.url = url
+        self.method = method
+        self.requestHeaders = requestHeaders
+        self.requestBody = dict["requestBody"] as? String
+        self.status = status
+        self.statusText = dict["statusText"] as? String ?? ""
+        self.responseHeaders = responseHeaders
+        self.responseBody = dict["responseBody"] as? String
+        self.duration = duration
     }
 }

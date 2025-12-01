@@ -55,6 +55,7 @@ class GutenbergView : WebView {
     private var logJsExceptionListener: LogJsExceptionListener? = null
     private var autocompleterTriggeredListener: AutocompleterTriggeredListener? = null
     private var modalDialogStateListener: ModalDialogStateListener? = null
+    private var networkRequestListener: NetworkRequestListener? = null
 
     /**
      * Stores the contextId from the most recent openMediaLibrary call
@@ -97,6 +98,10 @@ class GutenbergView : WebView {
 
     fun setModalDialogStateListener(listener: ModalDialogStateListener) {
         modalDialogStateListener = listener
+    }
+
+    fun setNetworkRequestListener(listener: NetworkRequestListener) {
+        networkRequestListener = listener
     }
 
     fun setOnFileChooserRequestedListener(listener: (Intent, Int) -> Unit) {
@@ -307,6 +312,7 @@ class GutenbergView : WebView {
                 "editorSettings": $editorSettings,
                 "locale": "${configuration.locale}",
                 ${if (configuration.editorAssetsEndpoint != null) "\"editorAssetsEndpoint\": \"${configuration.editorAssetsEndpoint}\"," else ""}
+                "enableNetworkLogging": ${configuration.enableNetworkLogging},
                 "post": {
                     "id": ${configuration.postId ?: -1},
                     "title": "$escapedTitle",
@@ -401,6 +407,10 @@ class GutenbergView : WebView {
     interface ModalDialogStateListener {
         fun onModalDialogOpened(dialogType: String)
         fun onModalDialogClosed(dialogType: String)
+    }
+
+    interface NetworkRequestListener {
+        fun onNetworkRequest(request: RecordedNetworkRequest)
     }
 
     fun getTitleAndContent(originalContent: CharSequence, callback: TitleAndContentCallback, completeComposition: Boolean = false) {
@@ -609,6 +619,19 @@ class GutenbergView : WebView {
         }
     }
 
+    @JavascriptInterface
+    fun onNetworkRequest(requestData: String) {
+        handler.post {
+            try {
+                val json = JSONObject(requestData)
+                val request = RecordedNetworkRequest.fromJson(json)
+                networkRequestListener?.onNetworkRequest(request)
+            } catch (e: Exception) {
+                Log.e("GutenbergView", "Error parsing network request: ${e.message}")
+            }
+        }
+    }
+
     fun resetFilePathCallback() {
         filePathCallback = null
     }
@@ -690,6 +713,7 @@ class GutenbergView : WebView {
         onFileChooserRequested = null
         autocompleterTriggeredListener = null
         modalDialogStateListener = null
+        networkRequestListener = null
         handler.removeCallbacksAndMessages(null)
         this.destroy()
     }

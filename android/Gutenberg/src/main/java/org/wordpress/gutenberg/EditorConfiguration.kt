@@ -22,7 +22,8 @@ open class EditorConfiguration constructor(
     val cookies: Map<String, String>,
     val enableAssetCaching: Boolean = false,
     val cachedAssetHosts: Set<String> = emptySet(),
-    val editorAssetsEndpoint: String? = null
+    val editorAssetsEndpoint: String? = null,
+    val enableNetworkLogging: Boolean = false
 ): Parcelable {
     companion object {
         @JvmStatic
@@ -48,6 +49,7 @@ open class EditorConfiguration constructor(
         private var enableAssetCaching: Boolean = false
         private var cachedAssetHosts: Set<String> = emptySet()
         private var editorAssetsEndpoint: String? = null
+        private var enableNetworkLogging: Boolean = false
 
         fun setTitle(title: String) = apply { this.title = title }
         fun setContent(content: String) = apply { this.content = content }
@@ -67,6 +69,7 @@ open class EditorConfiguration constructor(
         fun setEnableAssetCaching(enableAssetCaching: Boolean) = apply { this.enableAssetCaching = enableAssetCaching }
         fun setCachedAssetHosts(cachedAssetHosts: Set<String>) = apply { this.cachedAssetHosts = cachedAssetHosts }
         fun setEditorAssetsEndpoint(editorAssetsEndpoint: String?) = apply { this.editorAssetsEndpoint = editorAssetsEndpoint }
+        fun setEnableNetworkLogging(enableNetworkLogging: Boolean) = apply { this.enableNetworkLogging = enableNetworkLogging }
 
         fun build(): EditorConfiguration = EditorConfiguration(
             title = title,
@@ -86,7 +89,8 @@ open class EditorConfiguration constructor(
             cookies = cookies,
             enableAssetCaching = enableAssetCaching,
             cachedAssetHosts = cachedAssetHosts,
-            editorAssetsEndpoint = editorAssetsEndpoint
+            editorAssetsEndpoint = editorAssetsEndpoint,
+            enableNetworkLogging = enableNetworkLogging
         )
     }
 
@@ -114,6 +118,7 @@ open class EditorConfiguration constructor(
         if (enableAssetCaching != other.enableAssetCaching) return false
         if (cachedAssetHosts != other.cachedAssetHosts) return false
         if (editorAssetsEndpoint != other.editorAssetsEndpoint) return false
+        if (enableNetworkLogging != other.enableNetworkLogging) return false
 
         return true
     }
@@ -137,6 +142,7 @@ open class EditorConfiguration constructor(
         result = 31 * result + enableAssetCaching.hashCode()
         result = 31 * result + cachedAssetHosts.hashCode()
         result = 31 * result + (editorAssetsEndpoint?.hashCode() ?: 0)
+        result = 31 * result + enableNetworkLogging.hashCode()
         return result
     }
 }

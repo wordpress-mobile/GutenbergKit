@@ -80,6 +80,7 @@ struct AppRootView: View {
                     .setAuthHeader(config.authHeader)
                     .setNativeInserterEnabled(isNativeInserterEnabled)
                     .setLogLevel(.debug)
+                    .setEnableNetworkLogging(true)
                     .build()
 
                 self.activeEditorConfiguration = updatedConfiguration
@@ -102,6 +103,7 @@ struct AppRootView: View {
             .setSiteApiRoot("")
             .setAuthHeader("")
             .setNativeInserterEnabled(isNativeInserterEnabled)
+            .setEnableNetworkLogging(true)
             .build()
     }
 }
