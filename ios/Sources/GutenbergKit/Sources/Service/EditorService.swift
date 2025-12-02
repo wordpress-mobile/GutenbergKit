@@ -377,7 +377,6 @@ actor EditorService {
         let localURL = assetsDirectoryURL.appendingPathComponent(cachedFilename(for: urlString))
 
         if FileManager.default.fileExists(atPath: localURL.path) {
-            log(.debug, "Found cached asset for: \(url.lastPathComponent) (\(localURL.fileSize.formatted))")
             return localURL
         }
 
