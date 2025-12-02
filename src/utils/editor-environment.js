@@ -21,9 +21,9 @@ import './editor-styles';
 export async function setUpEditorEnvironment() {
 	try {
 		setUpGlobalErrorHandlers();
-		initializeFetchInterceptor();
 		setBodyClasses();
 		await awaitGBKitGlobal();
+		initializeFetchInterceptor();
 		await configureLocale();
 		await initializeWordPressGlobals();
 		await configureApiFetch();
