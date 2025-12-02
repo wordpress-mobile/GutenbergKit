@@ -198,9 +198,6 @@ private final class EditorViewModel {
 
 #Preview {
     NavigationStack {
-        let config = EditorConfigurationBuilder()
-            .setSiteUrl("preview")
-            .build()
-        EditorView(configuration: config)
+        EditorView(configuration: .default)
     }
 }
