@@ -40,9 +40,13 @@ struct AppRootView: View {
         }
         .onChange(of: self.selectedConfiguration) { oldValue, newValue in
             switch newValue {
-            case .bundledEditor: activeEditorConfiguration = createBundledConfiguration()
-            case .editorConfiguration(let config): self.loadEditorConfiguration(for: config)
-            case .none: self.activeEditorConfiguration = nil
+            case .bundledEditor:
+                let config = createBundledConfiguration()
+                activeEditorConfiguration = config
+            case .editorConfiguration(let config):
+                self.loadEditorConfiguration(for: config)
+            case .none:
+                self.activeEditorConfiguration = nil
             }
         }
     }
@@ -85,10 +89,10 @@ struct AppRootView: View {
 
                 if let baseURL = URL(string: config.siteApiRoot) {
                     let service = EditorService(
-                        siteID: config.siteUrl,
-                        baseURL: baseURL,
-                        authHeader: config.authHeader
+                        siteURL: config.siteUrl,
+                        networkSession: URLSession.shared
                     )
+
                     do {
                         try await service.setup(&updatedConfiguration)
                     } catch {

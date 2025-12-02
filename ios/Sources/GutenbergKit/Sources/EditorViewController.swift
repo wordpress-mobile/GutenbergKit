@@ -9,9 +9,11 @@ import UIKit
 @MainActor
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate, UIAdaptivePresentationControllerDelegate, UIPopoverPresentationControllerDelegate, UISheetPresentationControllerDelegate {
     public let webView: WKWebView
+    let service: EditorService
     let assetsLibrary: EditorAssetsLibrary
 
     public var configuration: EditorConfiguration
+    private var dependencies: EditorDependencies?
     private var _isEditorRendered = false
     private var _isEditorSetup = false
     private let mediaPicker: MediaPickerController?
@@ -42,7 +44,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }()
 
     /// HTML Preview Manager instance for rendering pattern previews
-    private(set) lazy var htmlPreviewManager = HTMLPreviewManager(themeStyles: configuration.extractThemeStyles())
+    private(set) lazy var htmlPreviewManager = HTMLPreviewManager(themeStyles: dependencies?.extractThemeStyles())
 
     /// Initalizes the editor with the initial content (Gutenberg).
     public init(
@@ -50,9 +52,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         mediaPicker: MediaPickerController? = nil,
         isWarmupMode: Bool = false
     ) {
+        self.service = EditorService.shared(for: configuration.siteURL)
         self.configuration = configuration
         self.mediaPicker = mediaPicker
-        self.assetsLibrary = EditorAssetsLibrary(configuration: configuration)
+        self.assetsLibrary = EditorAssetsLibrary(service: service, configuration: configuration)
         self.controller = GutenbergEditorController(configuration: configuration)
 
         // The `allowFileAccessFromFileURLs` allows the web view to access the
@@ -67,7 +70,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // This is important so they user can't select anything but text across blocks.
         config.selectionGranularity = .character
 
-        let schemeHandler = CachedAssetSchemeHandler(library: assetsLibrary)
+        let schemeHandler = CachedAssetSchemeHandler(service: service)
         for scheme in CachedAssetSchemeHandler.supportedURLSchemes {
             config.setURLSchemeHandler(schemeHandler, forURLScheme: scheme)
         }
@@ -106,8 +109,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         webView.alpha = 0
 
         if isWarmupMode {
-            setUpEditor()
-            loadEditor()
+            startEditorSetup()
         }
     }
 
@@ -144,9 +146,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func getEditorConfiguration() -> WKUserScript {
-
         let jsCode = """
-
         window.GBKit = {
             siteURL: '\(configuration.siteURL)',
             siteApiRoot: '\(configuration.siteApiRoot)',
@@ -157,7 +157,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             plugins: \(configuration.shouldUsePlugins),
             enableNativeBlockInserter: \(configuration.isNativeInserterEnabled),
             hideTitle: \(configuration.shouldHideTitle),
-            editorSettings: \(configuration.editorSettings),
+            editorSettings: \(dependencies?.editorSettings ?? "undefined"),
             locale: '\(configuration.locale)',
             post: {
                 id: \(configuration.postID ?? -1),
@@ -175,6 +175,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         let editorScript = WKUserScript(source: jsCode, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         return editorScript
+    }
+
+    /// Deletes all cached editor data for all sites
+    public static func deleteAllData() throws {
+        try EditorService.deleteAllData()
     }
 
     // MARK: - Public API
@@ -248,8 +253,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         guard !_isEditorSetup else { return }
         _isEditorSetup = true
 
-        setUpEditor()
-        loadEditor()
+        Task { @MainActor in
+            dependencies = await service.dependencies(for: configuration, isWarmup: isWarmupMode)
+            setUpEditor()
+            loadEditor()
+        }
     }
 
     // MARK: - Internal (JavaScript)
@@ -472,8 +480,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 hideNavigationOverlay()
                 delegate?.editor(self, didCloseModalDialog: body.dialogType)
             case .log:
-                let log = try message.decode(EditorJSMessage.LogMessage.self)
-                delegate?.editor(self, didLogMessage: log.message, level: log.level)
+                let logMessage = try message.decode(EditorJSMessage.LogMessage.self)
+                log(logMessage.level, logMessage.message)
             case .onNetworkRequest:
                 guard let requestDict = message.body as? [String: Any],
                       let networkRequest = RecordedNetworkRequest(from: requestDict) else {
@@ -523,7 +531,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Calls this at any moment before showing the actual editor. The warmup
     /// shaves a couple of hundred milliseconds off the first load.
-    public static func warmup(configuration: EditorConfiguration = .default) {
+    public static func warmup(configuration: EditorConfiguration) {
         let editorViewController = EditorViewController(configuration: configuration, isWarmupMode: true)
         _ = editorViewController.view // Trigger viewDidLoad
 

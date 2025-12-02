@@ -33,9 +33,9 @@ public struct EditorConfiguration: Sendable {
     /// Enables the native inserter UI in the editor
     public let isNativeInserterEnabled: Bool
     /// Endpoint for loading editor assets, used when enabling `shouldUsePlugins`
-    public var editorAssetsEndpoint: URL?
+    public let editorAssetsEndpoint: URL?
     /// Logs emitted at or above this level will be printed to the debug console
-    public let logLevel: LogLevel
+    public let logLevel: EditorLogLevel
     /// Enables logging of all network requests/responses to the native host
     public let enableNetworkLogging: Bool
 
@@ -56,8 +56,8 @@ public struct EditorConfiguration: Sendable {
         editorSettings: String,
         locale: String,
         isNativeInserterEnabled: Bool,
-        editorAssetsEndpoint: URL? = nil,
-        logLevel: LogLevel,
+        editorAssetsEndpoint: URL?,
+        logLevel: EditorLogLevel,
         enableNetworkLogging: Bool = false
     ) {
         self.title = title
@@ -131,7 +131,7 @@ public struct EditorConfigurationBuilder {
     private var locale: String
     private var isNativeInserterEnabled: Bool
     private var editorAssetsEndpoint: URL?
-    private var logLevel: LogLevel
+    private var logLevel: EditorLogLevel
     private var enableNetworkLogging: Bool
 
     public init(
@@ -151,7 +151,7 @@ public struct EditorConfigurationBuilder {
         locale: String = "en",
         isNativeInserterEnabled: Bool = false,
         editorAssetsEndpoint: URL? = nil,
-        logLevel: LogLevel = .error,
+        logLevel: EditorLogLevel = .error,
         enableNetworkLogging: Bool = false
     ){
         self.title = title
@@ -270,7 +270,7 @@ public struct EditorConfigurationBuilder {
         return copy
     }
 
-    public func setLogLevel(_ logLevel: LogLevel) -> EditorConfigurationBuilder {
+    public func setLogLevel(_ logLevel: EditorLogLevel) -> EditorConfigurationBuilder {
         var copy = self
         copy.logLevel = logLevel
         return copy
@@ -359,4 +359,3 @@ private extension String {
             .replacingOccurrences(of: "\u{12}", with: "\\f")
     }
 }
-

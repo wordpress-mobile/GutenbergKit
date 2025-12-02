@@ -20,7 +20,6 @@ struct EditorConfigurationBuilderTests {
         #expect(builder.siteApiNamespace == [])
         #expect(builder.namespaceExcludedPaths == [])
         #expect(builder.authHeader == "")
-        #expect(builder.editorSettings == "undefined")
         #expect(builder.locale == "en")
         #expect(builder.editorAssetsEndpoint == nil)
         #expect(builder.isNativeInserterEnabled == false)
@@ -43,7 +42,6 @@ struct EditorConfigurationBuilderTests {
             .setSiteApiNamespace(["wp", "v2"])
             .setNamespaceExcludedPaths(["jetpack"])
             .setAuthHeader("Bearer Token")
-            .setEditorSettings(#"{"foo":"bar"}"#)
             .setLocale("fr")
             .setEditorAssetsEndpoint(URL(string: "https://example.com/wp-content/plugins/gutenberg/build/"))
             .setNativeInserterEnabled(true)
@@ -65,7 +63,6 @@ struct EditorConfigurationBuilderTests {
         #expect(configuration.siteApiNamespace == ["wp", "v2"])
         #expect(configuration.namespaceExcludedPaths == ["jetpack"])
         #expect(configuration.authHeader == "Bearer Token")
-        #expect(configuration.editorSettings == #"{"foo":"bar"}"#)
         #expect(configuration.locale == "fr")
         #expect(configuration.editorAssetsEndpoint == URL(string: "https://example.com/wp-content/plugins/gutenberg/build/"))
         #expect(configuration.isNativeInserterEnabled == true)
@@ -142,18 +139,6 @@ struct EditorConfigurationBuilderTests {
     @Test("Sets authHeader Correctly")
     func editorConfigurationBuilderSetsAuthHeaderCorrectly() throws {
         #expect(EditorConfigurationBuilder().setAuthHeader("Bearer token").build().authHeader == "Bearer token")
-    }
-
-    @Test("Sets editorSettings Correctly")
-    func editorConfigurationBuilderSetsEditorSettingsCorrectly() throws {
-        let json = #"{"foo":"bar"}"#
-        #expect(
-            EditorConfigurationBuilder()
-                .setEditorSettings(json)
-                .build()
-                .editorSettings
-            == json
-        )
     }
 
     @Test("Sets locale Correctly")

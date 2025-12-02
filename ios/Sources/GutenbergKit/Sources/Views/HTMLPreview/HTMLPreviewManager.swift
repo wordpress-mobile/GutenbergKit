@@ -61,7 +61,7 @@ public final class HTMLPreviewManager: ObservableObject {
         // for caching purposes. This way, if you make any changes to the template,
         // it will automatically invaliate the previous caches.
         let template = makePatternHTML(content: "", viewportWidth: 0, editorStyles: gutenbergCSS, themeStyles: themeStyles)
-        self.templateHash = template.sha256
+        self.templateHash = template.sha1
 
         self.urlCache = HTMLPreviewManager.makeCache()
     }
@@ -247,7 +247,7 @@ public final class HTMLPreviewManager: ObservableObject {
 // MARK: - Private Helper Functions
 
 private func makeDiskCacheKey(content: String, viewportWidth: Int, templateHash: String) -> String {
-    "\(content)-\(viewportWidth)-\(templateHash)".sha256
+    "\(content)-\(viewportWidth)-\(templateHash)".sha1
 }
 
 /// Creates the HTML for rendering the pattern preview.
@@ -324,11 +324,3 @@ private func encode(_ image: UIImage) -> Data? {
     return data as Data
 }
 
-private extension String {
-    /// Creates a SHA256 hash of the string
-    var sha256: String {
-        let data = Data(self.utf8)
-        let hash = SHA256.hash(data: data)
-        return hash.compactMap { String(format: "%02x", $0) }.joined()
-    }
-}

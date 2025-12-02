@@ -94,7 +94,7 @@ private struct _EditorView: UIViewControllerRepresentable {
 
     init(
         configuration: EditorConfiguration,
-        viewModel: EditorViewModel,
+        viewModel: EditorViewModel
     ) {
         self.configuration = configuration
         self.viewModel = viewModel
@@ -157,10 +157,6 @@ private struct _EditorView: UIViewControllerRepresentable {
 
         func editor(_ viewController: EditorViewController, didUpdateFeaturedImage mediaID: Int) {
             // No-op for demo
-        }
-
-        func editor(_ viewController: EditorViewController, didLogMessage message: String, level: LogLevel) {
-            print("[\(level)]: \(message)")
         }
 
         func editor(_ viewController: EditorViewController, didLogException error: GutenbergJSException) {
