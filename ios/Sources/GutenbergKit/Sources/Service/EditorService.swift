@@ -151,7 +151,7 @@ actor EditorService {
             try await fetchEditorSettings(baseURL: baseURL, authHeader: configuration.authHeader)
         }
         async let manifestFuture = Result {
-            try await fetchManifestData(baseURL: baseURL, authHeader: configuration.authHeader)
+            try await fetchManifestData(configuration: configuration)
         }
 
         let (settingsResult, manifestResult) = await (settingsFuture, manifestFuture)
@@ -213,13 +213,9 @@ actor EditorService {
 
     /// Fetches the editor assets manifest from the WordPress REST API
     /// Does not write to disk - use this to get manifest data without persisting it
-    private func fetchManifestData(baseURL: URL, authHeader: String) async throws -> Data {
-        let excludeParam = URLQueryItem(name: "exclude", value: "core,gutenberg")
-        let endpoint = baseURL
-            .appendingPathComponent("/wpcom/v2/editor-assets")
-            .appending(queryItems: [excludeParam])
-
-        let data = try await fetchData(for: endpoint, authHeader: authHeader)
+    private func fetchManifestData(configuration: EditorConfiguration) async throws -> Data {
+        let endpoint = try configuration.editorAssetsManifestEndpoint()
+        let data = try await fetchData(for: endpoint, authHeader: configuration.authHeader)
         return data
     }
 
@@ -482,5 +478,22 @@ private extension FileManager {
         if !fileExists(atPath: url.path) {
             try? createDirectory(at: url, withIntermediateDirectories: true)
         }
+    }
+}
+
+private extension EditorConfiguration {
+    /// Returns the endpoint URL for fetching the editor assets manifest
+    func editorAssetsManifestEndpoint() throws -> URL {
+        if let customEndpoint = editorAssetsEndpoint {
+            return customEndpoint
+        }
+        // Fall back to constructing endpoint from siteApiRoot
+        guard let baseURL = URL(string: siteApiRoot) else {
+            throw URLError(.badURL)
+        }
+        let excludeParam = URLQueryItem(name: "exclude", value: "core,gutenberg")
+        return baseURL
+            .appendingPathComponent("/wpcom/v2/editor-assets")
+            .appending(queryItems: [excludeParam])
     }
 }

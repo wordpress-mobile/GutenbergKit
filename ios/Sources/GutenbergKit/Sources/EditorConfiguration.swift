@@ -32,6 +32,8 @@ public struct EditorConfiguration: Sendable {
     public let locale: String
     /// Enables the native inserter UI in the editor
     public let isNativeInserterEnabled: Bool
+    /// Endpoint for loading editor assets, used when enabling `shouldUsePlugins`
+    public let editorAssetsEndpoint: URL?
     /// Logs emitted at or above this level will be printed to the debug console
     public let logLevel: EditorLogLevel
 
@@ -52,6 +54,7 @@ public struct EditorConfiguration: Sendable {
         editorSettings: String,
         locale: String,
         isNativeInserterEnabled: Bool,
+        editorAssetsEndpoint: URL?,
         logLevel: EditorLogLevel
     ) {
         self.title = title
@@ -69,6 +72,7 @@ public struct EditorConfiguration: Sendable {
         self.editorSettings = editorSettings
         self.locale = locale
         self.isNativeInserterEnabled = isNativeInserterEnabled
+        self.editorAssetsEndpoint = editorAssetsEndpoint
         self.logLevel = logLevel
     }
 
@@ -88,7 +92,8 @@ public struct EditorConfiguration: Sendable {
             authHeader: authHeader,
             editorSettings: editorSettings,
             locale: locale,
-            isNativeInserterEnabled: isNativeInserterEnabled
+            isNativeInserterEnabled: isNativeInserterEnabled,
+            editorAssetsEndpoint: editorAssetsEndpoint
         )
     }
 
@@ -119,6 +124,7 @@ public struct EditorConfigurationBuilder {
     private var editorSettings: String
     private var locale: String
     private var isNativeInserterEnabled: Bool
+    private var editorAssetsEndpoint: URL?
     private var logLevel: EditorLogLevel
 
     public init(
@@ -137,6 +143,7 @@ public struct EditorConfigurationBuilder {
         editorSettings: String = "undefined",
         locale: String = "en",
         isNativeInserterEnabled: Bool = false,
+        editorAssetsEndpoint: URL? = nil,
         logLevel: EditorLogLevel = .error
     ){
         self.title = title
@@ -154,6 +161,7 @@ public struct EditorConfigurationBuilder {
         self.editorSettings = editorSettings
         self.locale = locale
         self.isNativeInserterEnabled = isNativeInserterEnabled
+        self.editorAssetsEndpoint = editorAssetsEndpoint
         self.logLevel = logLevel
     }
 
@@ -247,6 +255,12 @@ public struct EditorConfigurationBuilder {
         return copy
     }
 
+    public func setEditorAssetsEndpoint(_ editorAssetsEndpoint: URL?) -> EditorConfigurationBuilder {
+        var copy = self
+        copy.editorAssetsEndpoint = editorAssetsEndpoint
+        return copy
+    }
+
     public func setLogLevel(_ logLevel: EditorLogLevel) -> EditorConfigurationBuilder {
         var copy = self
         copy.logLevel = logLevel
@@ -292,6 +306,7 @@ public struct EditorConfigurationBuilder {
             editorSettings: editorSettings,
             locale: locale,
             isNativeInserterEnabled: isNativeInserterEnabled,
+            editorAssetsEndpoint: editorAssetsEndpoint,
             logLevel: logLevel
         )
     }
