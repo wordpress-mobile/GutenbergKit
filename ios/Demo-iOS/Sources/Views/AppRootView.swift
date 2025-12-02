@@ -72,7 +72,7 @@ struct AppRootView: View {
                 let canUsePlugins = apiRoot.hasRoute(route: "/wpcom/v2/editor-assets")
                 let canUseEditorStyles = apiRoot.hasRoute(route: "/wp-block-editor/v1/settings")
 
-                let updatedConfiguration = EditorConfigurationBuilder()
+                var updatedConfiguration = EditorConfigurationBuilder()
                     .setShouldUseThemeStyles(canUseEditorStyles)
                     .setShouldUsePlugins(canUsePlugins)
                     .setSiteUrl(config.siteUrl)
@@ -82,6 +82,19 @@ struct AppRootView: View {
                     .setLogLevel(.debug)
                     .setEnableNetworkLogging(true)
                     .build()
+
+                if let baseURL = URL(string: config.siteApiRoot) {
+                    let service = EditorService(
+                        siteID: config.siteUrl,
+                        baseURL: baseURL,
+                        authHeader: config.authHeader
+                    )
+                    do {
+                        try await service.setup(&updatedConfiguration)
+                    } catch {
+                        print("Failed to setup editor environment, confinuing with the default or cached configuration:", error)
+                    }
+                }
 
                 self.activeEditorConfiguration = updatedConfiguration
             } catch {
