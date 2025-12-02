@@ -1,4 +1,16 @@
+.DEFAULT_GOAL := help
+
 SIMULATOR_DESTINATION := OS=26.0,name=iPhone 17
+
+.PHONY: help
+help: ## Display this help menu
+	@echo "Usage: make [target]"
+	@echo ""
+	@echo "Available targets:"
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
+	awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-25s\033[0m %s\n", $$1, $$2}' | \
+	sort
+	@echo ""
 
 define XCODEBUILD_CMD
 	@set -o pipefail && \
@@ -9,59 +21,139 @@ define XCODEBUILD_CMD
 		| xcbeautify
 endef
 
-npm-dependencies:
-	@if [ "$(SKIP_DEPS)" != "true" ] && [ "$(SKIP_DEPS)" != "1" ]; then \
+################################################################################
+# Utility Targets
+################################################################################
+
+.PHONY: npm-dependencies
+npm-dependencies: ## Install npm dependencies
+# Skip unless...
+# - node_modules doesn't exist
+# - REFRESH_DEPS is set to true or 1
+# - npm-dependencies was invoked directly
+	@if [ ! -d "node_modules" ] || [ "$(REFRESH_DEPS)" = "true" ] || [ "$(REFRESH_DEPS)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^npm-dependencies$$"; then \
 		echo "--- :npm: Installing NPM Dependencies"; \
 		npm ci; \
+	else \
+		echo "--- :white_check_mark: Skipping NPM dependencies installation (node_modules already exists). Use REFRESH_DEPS=1 to force refresh."; \
 	fi
 
-prep-translations:
-	@if [ "$(SKIP_L10N)" != "true" ] && [ "$(SKIP_L10N)" != "1" ]; then \
+.PHONY: prep-translations
+prep-translations: ## Fetch and cache locale string files
+# Skip unless...
+# - src/translations doesn't exist
+# - REFRESH_L10N is set to true or 1
+# - prep-translations was invoked directly
+	@if [ ! -d "src/translations" ] || [ "$(REFRESH_L10N)" = "true" ] || [ "$(REFRESH_L10N)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^prep-translations$$"; then \
 		echo "--- :npm: Preparing Translations"; \
-		npm run prep-translations -- --force; \
+		if ! npm run prep-translations -- --force; then \
+			if [ "$(STRICT_L10N)" = "true" ] || [ "$(STRICT_L10N)" = "1" ]; then \
+				echo "--- :x: ERROR: Translation fetching failed and STRICT_L10N is enabled"; \
+				exit 1; \
+			else \
+				echo "--- :warning: WARNING: Translation fetching failed, but continuing anyway. Use STRICT_L10N=1 to make this fatal."; \
+			fi; \
+		fi; \
+	else \
+		echo "--- :white_check_mark: Skipping translations fetch (src/translations already exists). Use REFRESH_L10N=1 to force refresh."; \
 	fi
 
-build: npm-dependencies prep-translations
-	echo "--- :node: Building Gutenberg"
+.PHONY: clean
+clean: ## Remove build artifacts and translation string files
+	npm run clean
+
+################################################################################
+# Build Targets
+################################################################################
+
+.PHONY: build
+build: npm-dependencies prep-translations ## Build the project for all platforms (iOS, Android, web)
+	@echo "--- :node: Building Gutenberg"
 
 	npm run build
 
-	# Copy build products into place
-	echo "--- :open_file_folder: Copying Build Products into place"
+# Copy build products into place
+	@echo "--- :open_file_folder: Copying Build Products into place"
 	rm -rf ./ios/Sources/GutenbergKit/Gutenberg/ ./android/Gutenberg/src/main/assets/
 	cp -r ./dist/. ./ios/Sources/GutenbergKit/Gutenberg/
 	cp -r ./dist/. ./android/Gutenberg/src/main/assets
 
-dev-server: npm-dependencies
-	npm run dev
-
-fmt-js: npm-dependencies
-	npm run format
-
-lint-js: npm-dependencies
-	npm run lint
-
-test-js: npm-dependencies
-	npm run test -- run
-
-lint-swift:
-	swift package plugin swiftlint
-
-local-android-library: build
-	echo "--- :android: Building Library"
-	./android/gradlew -p ./android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3
-
-test-android:
-	echo "--- :android: Running Android Tests"
-	./android/gradlew -p ./android :gutenberg:test
-
-build-swift-package: build
+.PHONY: build-swift-package
+build-swift-package: build ## Build the Swift package for iOS
 	$(call XCODEBUILD_CMD, build)
 
-test-swift-package: build
+.PHONY: local-android-library
+local-android-library: build ## Build the Android library to local Maven
+	@echo "--- :android: Building Library"
+	./android/gradlew -p ./android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3
+
+################################################################################
+# Development Targets
+################################################################################
+
+.PHONY: dev-server
+dev-server: npm-dependencies ## Start the development server
+	npm run dev
+
+.PHONY: dev-server-force
+dev-server-force: npm-dependencies ## Start the development server, ignore the cache and re-bundle
+	npm run dev:force
+
+.PHONY: dev-tools
+dev-tools: npm-dependencies ## Start the React Developer Tools
+	npm run dev:tools
+
+.PHONY: preview
+preview: npm-dependencies ## Preview the production build locally
+	npm run preview
+
+################################################################################
+# Code Quality Targets
+################################################################################
+
+.PHONY: format
+format: npm-dependencies ## Format code
+	npm run format
+
+.PHONY: lint-js
+lint-js: npm-dependencies ## Lint JavaScript code
+	npm run lint:js
+
+.PHONY: lint-fix-js
+lint-js-fix: npm-dependencies ## Lint and auto-fix JavaScript code
+	npm run lint:js:fix
+
+.PHONY: lint-swift
+lint-swift: ## Lint Swift code
+	swift package plugin swiftlint
+
+################################################################################
+# Testing Targets
+################################################################################
+
+.PHONY: test-js
+test-js: npm-dependencies ## Run JavaScript tests
+	npm run test:unit
+
+.PHONY: test-js-watch
+test-js-watch: npm-dependencies ## Run JavaScript tests in watch mode
+	npm run test:unit:watch
+
+.PHONY: test-swift-package
+test-swift-package: build ## Run Swift package tests
 	$(call XCODEBUILD_CMD, test)
 
-release:
+.PHONY: test-android
+test-android: ## Run Android tests
+	@echo "--- :android: Running Android Tests"
+	./android/gradlew -p ./android :gutenberg:test
+
+################################################################################
+# Release Target
+################################################################################
+
+.PHONY: release
+release: ## Create and publish a new release
 	@echo "--- :rocket: Starting GutenbergKit Release Process"
 	@echo "Usage: make release VERSION_TYPE=[<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease | from-git] [DRY_RUN=true]"
 	@echo ""

@@ -173,6 +173,37 @@ export function onModalDialogClosed( dialogType ) {
 }
 
 /**
+ * Notifies the native host about a network request and its response.
+ *
+ * @param {Object}      requestData                 The network request data.
+ * @param {string}      requestData.url             The request URL.
+ * @param {string}      requestData.method          The HTTP method (GET, POST, etc.).
+ * @param {Object|null} requestData.requestHeaders  The request headers object.
+ * @param {string|null} requestData.requestBody     The request body.
+ * @param {number}      requestData.status          The HTTP response status code.
+ * @param {string}      requestData.statusText      The HTTP response status text (e.g., "OK", "Not Found").
+ * @param {Object|null} requestData.responseHeaders The response headers object.
+ * @param {string|null} requestData.responseBody    The response body.
+ * @param {number}      requestData.duration        The request duration in milliseconds.
+ *
+ * @return {void}
+ */
+export function onNetworkRequest( requestData ) {
+	debug( `Bridge event: onNetworkRequest`, requestData );
+
+	if ( window.editorDelegate ) {
+		window.editorDelegate.onNetworkRequest( JSON.stringify( requestData ) );
+	}
+
+	if ( window.webkit ) {
+		window.webkit.messageHandlers.editorDelegate.postMessage( {
+			message: 'onNetworkRequest',
+			body: requestData,
+		} );
+	}
+}
+
+/**
  * @typedef GBKitConfig
  *
  * @property {boolean}  [themeStyles]            Controls if theme styles are applied to the editor.
@@ -182,6 +213,7 @@ export function onModalDialogClosed( dialogType ) {
  * @property {string}   [authHeader]             The authentication header.
  * @property {string}   [hideTitle]              Whether to hide the title.
  * @property {Post}     [post]                   The post data.
+ * @property {boolean}  [enableNetworkLogging]   Enables logging of all network requests/responses to the native host via onNetworkRequest bridge method.
  */
 
 /**
@@ -288,7 +320,7 @@ export function logException(
  *
  * @param {number} timeoutMs Timeout in milliseconds after which to reject.
  *
- * @return {Promise<GBKitConfig>} Promise that resolves with GBKit config or rejects after timeout.
+ * @return {Promise<void>} Promise that resolves with GBKit config or rejects after timeout.
  */
 export function awaitGBKitGlobal( timeoutMs = 3000 ) {
 	return new Promise( ( resolve, reject ) => {
@@ -296,27 +328,18 @@ export function awaitGBKitGlobal( timeoutMs = 3000 ) {
 
 		const checkGBKit = () => {
 			if ( window.GBKit ) {
-				resolve( window.GBKit );
+				resolve();
 				return;
 			}
 
-			// In development mode, bypass the GBKit requirement and seed a default post,
-			// allowing the editor to load without the native bridge to simplify testing.
-			if ( isDevMode() ) {
-				resolve( {
-					post: {
-						id: -1,
-						type: 'post',
-						title: '',
-						content: '',
-						status: 'auto-draft',
-					},
-					themeStyles: false,
-					hideTitle: false,
-				} );
-			}
-
 			if ( Date.now() - startTime >= timeoutMs ) {
+				// In development mode, bypass the GBKit requirement allowing the editor
+				// to load without the native bridge to simplify testing.
+				if ( isDevMode() ) {
+					resolve();
+					return;
+				}
+
 				reject(
 					new Error( 'GBKit global not available after timeout' )
 				);

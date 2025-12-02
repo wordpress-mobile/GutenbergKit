@@ -45,6 +45,8 @@ struct EditorJSMessage {
         case onModalDialogClosed
         /// The app is emitting logging data
         case log
+        /// A network request was made
+        case onNetworkRequest
     }
 
     struct DidUpdateBlocksBody: Decodable {

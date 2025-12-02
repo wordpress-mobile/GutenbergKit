@@ -2,21 +2,24 @@
 	"name": "gutenberg-kit",
 	"private": true,
 	"homepage": "https://github.com/wordpress-mobile/GutenbergKit",
-	"version": "0.10.2",
+	"version": "0.11.1",
 	"type": "module",
 	"scripts": {
 		"clean": "npm run clean:dist && npm run clean:l10n",
 		"clean:dist": "rm -rf dist",
 		"clean:l10n": "rm -rf src/translations",
 		"dev": "vite --host",
+		"dev:force": "vite --host --force",
+		"dev:tools": "react-devtools",
 		"build": "vite --emptyOutDir build",
-		"lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
-		"lintfix": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0 --fix",
 		"format": "prettier --write .",
+		"lint:js": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+		"lint:js:fix": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0 --fix",
 		"postinstall": "patch-package && npm run prep-translations",
 		"prep-translations": "node bin/prep-translations.js",
 		"preview": "vite preview --host",
-		"test": "vitest"
+		"test:unit": "vitest run",
+		"test:unit:watch": "vitest"
 	},
 	"dependencies": {
 		"@wordpress/api-fetch": "^7.10",
@@ -66,6 +69,8 @@
 		"node-fetch": "^3.3.2",
 		"patch-package": "^8.0.0",
 		"prettier": "npm:wp-prettier@^3.0.3",
+		"react-devtools": "^7.0.1",
+		"react-devtools-core": "^7.0.1",
 		"sass-embedded": "^1.86.3",
 		"vite": "^6.3.5",
 		"vitest": "^3.1.3"

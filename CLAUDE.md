@@ -13,6 +13,18 @@ GutenbergKit is an experimental Gutenberg block editor for native iOS and Androi
 
 ## Common Development Commands
 
+**IMPORTANT**: Prefer `make` commands over `npm` commands when they exist. The Makefile provides convenient wrappers that handle dependencies and configuration automatically.
+
+To see all available make commands, run:
+
+```bash
+make help
+# or simply
+make
+```
+
+This will display a list of all available targets with descriptions.
+
 ### Web Development
 
 ```bash
@@ -24,18 +36,38 @@ make dev-server
 # or
 npm run dev
 
-# Run JavaScript tests
+# Start standalone React DevTools server
+make dev-tools
+# or
+npm run dev:tools
+
+# Preview production build locally
+make preview
+# or
+npm run preview
+
+# Run JavaScript tests (one-time run)
 make test-js
 # or
-npm run test -- run
+npm run test:unit
+
+# Run JavaScript tests in watch mode (for active development)
+make test-js-watch
+# or
+npm run test:unit:watch
 
 # Lint JavaScript code
 make lint-js
 # or
-npm run lint
+npm run lint:js
+
+# Lint and auto-fix JavaScript code
+make lint-fix-js
+# or
+npm run lint:js:fix
 
 # Format JavaScript code
-make fmt-js
+make format
 # or
 npm run format
 ```
@@ -49,6 +81,17 @@ make build
 # This builds the web app and copies assets to:
 # - ios/Sources/GutenbergKit/Gutenberg/
 # - android/Gutenberg/src/main/assets/
+
+# By default, dependencies and translations are only installed if their directories don't exist
+# Force refresh of dependencies and translations
+make build REFRESH_DEPS=1 REFRESH_L10N=1
+
+# Clean build artifacts
+make clean            # Clean both dist and translations
+# or
+npm run clean         # Clean both dist and translations
+npm run clean:dist    # Clean only dist directory
+npm run clean:l10n    # Clean only translations directory
 ```
 
 ### iOS Development
@@ -56,6 +99,9 @@ make build
 ```bash
 # Build Swift package
 make build-swift-package
+
+# Build Swift package (force refresh of npm deps/translations if needed)
+make build-swift-package REFRESH_DEPS=1 REFRESH_L10N=1
 
 # Run Swift tests
 make test-swift-package
@@ -66,6 +112,9 @@ make test-swift-package
 ```bash
 # Build Android library to local Maven
 make local-android-library
+
+# Build Android library (force refresh of npm deps/translations if needed)
+make local-android-library REFRESH_DEPS=1 REFRESH_L10N=1
 
 # Run Android tests
 make test-android
@@ -124,6 +173,16 @@ The project follows WordPress coding standards for JavaScript:
 -   **ESLint**: Uses `@wordpress/eslint-plugin/recommended` configuration
 -   **Prettier**: Uses `@wordpress/prettier-config` for code formatting
 
+### Function Ordering Convention
+
+Functions in this project are ordered by usage/call order rather than alphabetically:
+
+-   **Main/exported functions first**: The primary exported function appears at the top of the file
+-   **Helper functions follow in call order**: Helper functions are ordered based on when they are first called in the main function
+-   **Example**: If `mainFunction()` calls `helperA()` then `helperB()`, the file order should be: `mainFunction`, `helperA`, `helperB`
+
+This ordering makes code easier to read top-to-bottom, as you encounter function definitions before needing to understand their implementation details.
+
 ### Logging Guidelines
 
 The project uses a custom logger utility (`src/utils/logger.js`) instead of direct `console` methods:
@@ -137,12 +196,19 @@ The project uses a custom logger utility (`src/utils/logger.js`) instead of dire
 
 Note: Console logs should be used sparingly. For verbose or development-specific logging, prefer the `debug()` function which can be controlled via log levels.
 
-Always run these commands before committing:
+### Pre-Commit Checklist
+
+**IMPORTANT**: Always run these commands after making code changes and before presenting work for review/commit:
 
 ```bash
-# Lint JavaScript code
-npm run lint
-
 # Format JavaScript code
-npm run format
+make format
+
+# Auto-fix linting errors
+make lint-js-fix
+
+# Verify linting passes
+make lint-js
 ```
+
+These commands ensure code quality and prevent lint errors from blocking commits.

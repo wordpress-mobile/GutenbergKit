@@ -77,15 +77,57 @@ async function prepareTranslations( force = false ) {
 		info( 'Verifying translations...' );
 	}
 
-	for ( const locale of SUPPORTED_LOCALES ) {
-		try {
-			await downloadTranslations( locale, force );
-		} catch ( err ) {
-			error( `✗ Failed to download translations for ${ locale }:`, err );
-		}
+	// Download translations in batches to balance speed with server load
+	const CONCURRENCY_LIMIT = 10;
+
+	// Process locales in batches, fail early on first error
+	for ( let i = 0; i < SUPPORTED_LOCALES.length; i += CONCURRENCY_LIMIT ) {
+		const batch = SUPPORTED_LOCALES.slice( i, i + CONCURRENCY_LIMIT );
+		await Promise.all(
+			batch.map( ( locale ) => downloadWithRetry( locale, force ) )
+		);
 	}
 
 	info( '✓ Translations ready!' );
+}
+
+/**
+ * Downloads translations with retry logic.
+ *
+ * @param {string}  locale      The locale to download translations for.
+ * @param {boolean} force       Whether to force download even if cache exists.
+ * @param {number}  maxAttempts Maximum number of attempts (default: 3).
+ *
+ * @return {Promise<void>} A promise that resolves when translations are downloaded.
+ */
+async function downloadWithRetry( locale, force = false, maxAttempts = 3 ) {
+	let lastError;
+
+	for ( let attempt = 1; attempt <= maxAttempts; attempt++ ) {
+		try {
+			await downloadTranslations( locale, force );
+			return; // Success - exit retry loop
+		} catch ( err ) {
+			lastError = err;
+
+			if ( attempt < maxAttempts ) {
+				// Calculate backoff: 1s for first retry, 2s for second retry
+				const backoffMs = attempt * 1000;
+				info(
+					`Retrying download for '${ locale }' (attempt ${
+						attempt + 1
+					}/${ maxAttempts }) in ${ backoffMs }ms...`
+				);
+				await new Promise( ( resolve ) =>
+					setTimeout( resolve, backoffMs )
+				);
+			}
+		}
+	}
+
+	// All attempts failed
+	error( `Failed to download '${ locale }' after ${ maxAttempts } attempts` );
+	throw lastError;
 }
 
 /**
@@ -104,23 +146,41 @@ async function downloadTranslations( locale, force = false ) {
 	debug( `Downloading translations for ${ locale }...` );
 
 	const url = `https://translate.wordpress.org/projects/wp-plugins/gutenberg/dev/${ locale }/default/export-translations/?format=json`;
-	const response = await fetch( url );
 
-	if ( ! response.ok ) {
-		throw new Error( `Failed to download translations for ${ locale }` );
+	try {
+		const response = await fetch( url );
+
+		if ( ! response.ok ) {
+			throw new Error(
+				`HTTP ${ response.status } ${ response.statusText } - ${ url }`
+			);
+		}
+
+		let translations;
+		try {
+			translations = await response.json();
+		} catch ( jsonError ) {
+			throw new Error(
+				`Invalid JSON response from ${ url }: ${ jsonError.message }`
+			);
+		}
+
+		const outputPath = path.join( TRANSLATIONS_DIR, `${ locale }.json` );
+
+		// Ensure the translations directory exists
+		if ( ! fs.existsSync( TRANSLATIONS_DIR ) ) {
+			fs.mkdirSync( TRANSLATIONS_DIR, { recursive: true } );
+		}
+
+		// Write translations to file
+		fs.writeFileSync( outputPath, JSON.stringify( translations, null, 2 ) );
+		debug( `✓ Downloaded translations for ${ locale }` );
+	} catch ( err ) {
+		// Re-throw with more context
+		throw new Error(
+			`Failed to download translations for ${ locale }: ${ err.message }`
+		);
 	}
-
-	const translations = await response.json();
-	const outputPath = path.join( TRANSLATIONS_DIR, `${ locale }.json` );
-
-	// Ensure the translations directory exists
-	if ( ! fs.existsSync( TRANSLATIONS_DIR ) ) {
-		fs.mkdirSync( TRANSLATIONS_DIR, { recursive: true } );
-	}
-
-	// Write translations to file
-	fs.writeFileSync( outputPath, JSON.stringify( translations, null, 2 ) );
-	debug( `✓ Downloaded translations for ${ locale }` );
 }
 
 /**

@@ -6,13 +6,15 @@ An experimental Gutenberg block editor for native iOS and Android apps relying u
 
 ## Development
 
+To see all available development commands, run `make help` (or simply `make`) in your terminal. This will display a list of all available build, test, and development commands.
+
 ### Preqrequisites
 
 In order to build GutenbergKit, the following tools must be installed on your development machine:
 
 -   [Node.js](https://nodejs.org/en/download/) - Required for building the web app; recommend using [Node Version Manager](https://github.com/nvm-sh/nvm).
--   [Xcode](https://developer.apple.com/xcode/) - Required if building iOS demo app.
--   [Android Studio](https://developer.android.com/studio) - Required if building Android demo app.
+-   [Xcode](https://developer.apple.com/xcode/) - Required if building the iOS demo app.
+-   [Android Studio](https://developer.android.com/studio) - Required if building the Android demo app.
 
 ### Web App
 
@@ -48,7 +50,7 @@ Alternatively, you can load a production build of the web app bundled with the G
 
 #### Android
 
-The Android demo app loads the production build of the web app bundled with the GutenbergKit package by default—i.e., the output of the project's `make build` command). It can be configured to load the development server by setting a `GUTENBERG_EDITOR_URL` environment variable in the `android/local.properties` file.
+The Android demo app loads the production build of the web app bundled with the GutenbergKit package by default—i.e., the output of the project's `make build` command. It can be configured to load the development server by setting a `GUTENBERG_EDITOR_URL` environment variable in the `android/local.properties` file.
 
 1. Start the development server by running `make dev-server`.
 1. Launch Android Studio and open the `android` project.

@@ -5,9 +5,13 @@ import OSLog
 
 /// Service for fetching the editor settings and other parts of the environment
 /// required to launch the editor.
-actor EditorService {
+public actor EditorService {
     internal struct State: Codable {
         let refreshDate: Date
+    }
+
+    enum EditorServiceError: Error {
+        case invalidResponseData
     }
 
     @MainActor private static var instances: [String: EditorService] = [:]
@@ -26,7 +30,7 @@ actor EditorService {
 
     /// Returns the shared EditorService instance for the given siteURL
     @MainActor
-    static func shared(for siteURL: String) -> EditorService {
+    public static func shared(for siteURL: String) -> EditorService {
         if let existing = instances[siteURL] {
             return existing
         }
@@ -40,7 +44,7 @@ actor EditorService {
     ///   - siteURL: Unique identifier for the site (used for caching)
     ///   - storeURL: Custom store URL for testing
     ///   - networkSession: Network session to use for network requests
-    init(siteURL: String, storeURL: URL? = nil, networkSession: URLSessionProtocol) {
+    public init(siteURL: String, storeURL: URL? = nil, networkSession: URLSessionProtocol) {
         self.siteURL = siteURL
         self.networkSession = networkSession
         self.storeURL = storeURL ?? EditorService.rootURL
@@ -50,6 +54,7 @@ actor EditorService {
             await scheduleAutomaticCleanup()
         }
     }
+
 
     /// Schedules automatic cleanup of orphaned assets after a brief delay.
     ///
@@ -190,6 +195,25 @@ actor EditorService {
 
         let totalTime = CFAbsoluteTimeGetCurrent() - startTime
         log(.info, "Editor refresh completed in \(String(format: "%.2f", totalTime))s")
+    }
+
+    /// Set up the editor for the given site.
+    ///
+    /// - warning: The request make take a significant amount of time the first
+    /// time you open the editor.
+    public func setup(_ configuration: inout EditorConfiguration) async throws {
+        var builder = configuration.toBuilder()
+
+        if !isEditorLoaded {
+            try await refresh(configuration: configuration)
+        }
+
+        if let data = try? Data(contentsOf: editorSettingsFileURL),
+           let settings = String(data: data, encoding: .utf8) {
+            builder = builder.setEditorSettings(settings)
+        }
+
+        return configuration = builder.build()
     }
 
     // MARK: – Editor Settings
@@ -435,6 +459,12 @@ actor EditorService {
             return ext.isEmpty ? hash : "\(hash).\(ext)"
         }
         return hash
+    }
+
+    private func createStoreDirectoryIfNeeded() {
+        if !FileManager.default.fileExists(atPath: storeURL.path) {
+            try? FileManager.default.createDirectory(at: storeURL, withIntermediateDirectories: true)
+        }
     }
 
     private func fetchData(for requestURL: URL, authHeader: String) async throws -> Data {

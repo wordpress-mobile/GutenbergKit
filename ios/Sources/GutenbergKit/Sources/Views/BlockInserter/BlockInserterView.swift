@@ -16,6 +16,7 @@ struct BlockInserterView: View {
     let mediaPicker: MediaPickerController?
     let presentationContext: MediaPickerPresentationContext
     let onSelection: (BlockInserterSelection) -> Void
+    let onClose: () -> Void
 
     @StateObject private var viewModel: BlockInserterViewModel
     @StateObject private var iconCache = BlockIconCache()
@@ -40,7 +41,8 @@ struct BlockInserterView: View {
         patternCategories: [PatternCategory],
         mediaPicker: MediaPickerController?,
         presentationContext: MediaPickerPresentationContext,
-        onSelection: @escaping (BlockInserterSelection) -> Void
+        onSelection: @escaping (BlockInserterSelection) -> Void,
+        onClose: @escaping () -> Void
     ) {
         self.sections = sections
         self.patterns = patterns
@@ -48,6 +50,7 @@ struct BlockInserterView: View {
         self.mediaPicker = mediaPicker
         self.presentationContext = presentationContext
         self.onSelection = onSelection
+        self.onClose = onClose
 
         let viewModel = BlockInserterViewModel(sections: sections)
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -141,6 +144,7 @@ struct BlockInserterView: View {
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
             Button {
+                onClose()
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
@@ -325,6 +329,9 @@ private extension View {
             presentationContext: MediaPickerPresentationContext(),
             onSelection: { selection in
                 print("on selected: \(selection)")
+            },
+            onClose: {
+                print("on close")
             }
         )
     }

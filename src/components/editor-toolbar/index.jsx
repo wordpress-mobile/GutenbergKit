@@ -28,7 +28,7 @@ import './style.scss';
 import { useModalize } from './use-modalize';
 import { useModalDialogState } from '../editor/use-modal-dialog-state';
 import { getGBKit } from '../../utils/bridge';
-import NativeBlockInserterButton from '../native-block-inserter-button';
+import NativeInserter from '../native-inserter';
 import { useScrollIndicators } from './use-scroll-indicators';
 
 /**
@@ -60,10 +60,13 @@ const EditorToolbar = ( { className } ) => {
 	}, [] );
 	const { setIsInserterOpened } = useDispatch( editorStore );
 
-	useModalize( isInserterOpened );
+	useModalize( isInserterOpened && ! enableNativeBlockInserter );
 	useModalize( isBlockInspectorShown );
 
-	useModalDialogState( isInserterOpened, 'block-inserter' );
+	useModalDialogState(
+		isInserterOpened && ! enableNativeBlockInserter,
+		'block-inserter'
+	);
 	useModalDialogState( isBlockInspectorShown, 'block-inspector' );
 
 	function openSettings() {
@@ -95,7 +98,10 @@ const EditorToolbar = ( { className } ) => {
 	);
 
 	const addBlockButton = enableNativeBlockInserter ? (
-		<NativeBlockInserterButton />
+		<NativeInserter
+			open={ isInserterOpened }
+			onToggle={ setIsInserterOpened }
+		/>
 	) : (
 		<Inserter
 			popoverProps={ {

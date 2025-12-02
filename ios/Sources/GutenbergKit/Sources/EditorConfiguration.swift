@@ -36,6 +36,8 @@ public struct EditorConfiguration: Sendable {
     public let editorAssetsEndpoint: URL?
     /// Logs emitted at or above this level will be printed to the debug console
     public let logLevel: EditorLogLevel
+    /// Enables logging of all network requests/responses to the native host
+    public let enableNetworkLogging: Bool
 
     /// Deliberately non-public – consumers should use `EditorConfigurationBuilder` to construct a configuration
     init(
@@ -55,7 +57,8 @@ public struct EditorConfiguration: Sendable {
         locale: String,
         isNativeInserterEnabled: Bool,
         editorAssetsEndpoint: URL?,
-        logLevel: EditorLogLevel
+        logLevel: EditorLogLevel,
+        enableNetworkLogging: Bool = false
     ) {
         self.title = title
         self.content = content
@@ -74,6 +77,7 @@ public struct EditorConfiguration: Sendable {
         self.isNativeInserterEnabled = isNativeInserterEnabled
         self.editorAssetsEndpoint = editorAssetsEndpoint
         self.logLevel = logLevel
+        self.enableNetworkLogging = enableNetworkLogging
     }
 
     public func toBuilder() -> EditorConfigurationBuilder {
@@ -93,7 +97,9 @@ public struct EditorConfiguration: Sendable {
             editorSettings: editorSettings,
             locale: locale,
             isNativeInserterEnabled: isNativeInserterEnabled,
-            editorAssetsEndpoint: editorAssetsEndpoint
+            editorAssetsEndpoint: editorAssetsEndpoint,
+            logLevel: logLevel,
+            enableNetworkLogging: enableNetworkLogging
         )
     }
 
@@ -126,6 +132,7 @@ public struct EditorConfigurationBuilder {
     private var isNativeInserterEnabled: Bool
     private var editorAssetsEndpoint: URL?
     private var logLevel: EditorLogLevel
+    private var enableNetworkLogging: Bool
 
     public init(
         title: String = "",
@@ -144,7 +151,8 @@ public struct EditorConfigurationBuilder {
         locale: String = "en",
         isNativeInserterEnabled: Bool = false,
         editorAssetsEndpoint: URL? = nil,
-        logLevel: EditorLogLevel = .error
+        logLevel: EditorLogLevel = .error,
+        enableNetworkLogging: Bool = false
     ){
         self.title = title
         self.content = content
@@ -163,6 +171,7 @@ public struct EditorConfigurationBuilder {
         self.isNativeInserterEnabled = isNativeInserterEnabled
         self.editorAssetsEndpoint = editorAssetsEndpoint
         self.logLevel = logLevel
+        self.enableNetworkLogging = enableNetworkLogging
     }
 
     public func setTitle(_ title: String) -> EditorConfigurationBuilder {
@@ -267,6 +276,12 @@ public struct EditorConfigurationBuilder {
         return copy
     }
 
+    public func setEnableNetworkLogging(_ enableNetworkLogging: Bool) -> EditorConfigurationBuilder {
+        var copy = self
+        copy.enableNetworkLogging = enableNetworkLogging
+        return copy
+    }
+
     /// Simplify conditionally applying a configuration change
     ///
     /// Sample Code:
@@ -307,7 +322,8 @@ public struct EditorConfigurationBuilder {
             locale: locale,
             isNativeInserterEnabled: isNativeInserterEnabled,
             editorAssetsEndpoint: editorAssetsEndpoint,
-            logLevel: logLevel
+            logLevel: logLevel,
+            enableNetworkLogging: enableNetworkLogging
         )
     }
 }

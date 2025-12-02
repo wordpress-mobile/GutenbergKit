@@ -7,7 +7,7 @@ import CryptoKit
 import UIKit
 
 @MainActor
-public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate {
+public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate, UIAdaptivePresentationControllerDelegate, UIPopoverPresentationControllerDelegate, UISheetPresentationControllerDelegate {
     public let webView: WKWebView
     let service: EditorService
     let assetsLibrary: EditorAssetsLibrary
@@ -164,7 +164,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 title: '\(configuration.escapedTitle)',
                 content: '\(configuration.escapedContent)'
             },
-            logLevel: '\(EditorLogger.logLevel.rawValue)'
+            logLevel: '\(configuration.logLevel)',
+            enableNetworkLogging: \(configuration.enableNetworkLogging)
         };
 
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
@@ -296,17 +297,22 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 patternCategories: data.patternCategories,
                 mediaPicker: mediaPicker,
                 presentationContext: context,
-                onSelection: { [weak self] in self?.didSelectBlockInserterItem($0) }
+                onSelection: { [weak self] in self?.didSelectBlockInserterItem($0) },
+                onClose: { [weak self] in self?.notifyInserterClosed() }
             )
             .environmentObject(htmlPreviewManager)
         })
 
         context.viewController = host
 
+        // Set presentation delegate to track dismissal
+        host.presentationController?.delegate = self
+
         if let sourceRect = data.sourceRect {
             host.modalPresentationStyle = .popover
 
             if let popover = host.popoverPresentationController {
+                popover.delegate = self
                 popover.sourceView = webView
                 popover.sourceRect = CGRect(
                     x: sourceRect.x,
@@ -320,6 +326,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
 
         if let sheet = host.popoverPresentationController?.adaptiveSheetPresentationController ?? host.sheetPresentationController {
+            sheet.delegate = self
             sheet.detents = [.custom(identifier: .medium, resolver: { context in
                 context.containerTraitCollection.horizontalSizeClass == .compact ? 536 : 900
             }), .large()]
@@ -331,6 +338,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func didSelectBlockInserterItem(_ selection: BlockInserterSelection) {
+        notifyInserterClosed()
+
         switch selection {
         case .block(let block):
             insertBlockFromInserter(block.id)
@@ -341,6 +350,16 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 await insertMediaFromInserter(items)
             }
         }
+    }
+
+    // MARK: - UIAdaptivePresentationControllerDelegate
+
+    public func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        notifyInserterClosed()
+    }
+
+    private func notifyInserterClosed() {
+        evaluate("window.blockInserter?.onClose?.()")
     }
 
     private func insertBlockFromInserter(_ blockID: String) {
@@ -463,9 +482,30 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             case .log:
                 let logMessage = try message.decode(EditorJSMessage.LogMessage.self)
                 log(logMessage.level, logMessage.message)
+            case .onNetworkRequest:
+                guard let requestDict = message.body as? [String: Any],
+                      let networkRequest = RecordedNetworkRequest(from: requestDict) else {
+                    return
+                }
+                delegate?.editor(self, didLogNetworkRequest: networkRequest)
             }
         } catch {
-            fatalError("failed to decode message: \(error)")
+            // Capture detailed diagnostic information for crash reporting
+            let messageType = message.type
+            let messageBodyDescription = String(describing: message.body)
+
+            let errorMessage = """
+                Failed to decode editor message:
+                - Message type: \(messageType)
+                - Decode error: \(error)
+                - Message body: \(messageBodyDescription)
+                """
+
+            NSLog("❌ GutenbergKit Message Decode Error: %@", errorMessage)
+
+            assertionFailure(errorMessage)
+
+            fatalError(errorMessage)
         }
     }
 
