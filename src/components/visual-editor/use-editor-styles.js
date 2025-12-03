@@ -3,16 +3,9 @@
  */
 import { store as editorStore } from '@wordpress/editor';
 import { useSelect } from '@wordpress/data';
-import { privateApis as blockEditorPrivateApis } from '@wordpress/block-editor';
 import { store as editPostStore } from '@wordpress/edit-post';
 import { useMemo } from '@wordpress/element';
-
-/**
- * Internal dependencies
- */
-import { unlock } from '../../lock-unlock';
-
-const { getLayoutStyles } = unlock( blockEditorPrivateApis );
+import { getLayoutStyles } from '@wordpress/global-styles-engine';
 
 /**
  * Custom hook to retrieve and memoize editor styles.
