@@ -197,25 +197,6 @@ public actor EditorService {
         log(.info, "Editor refresh completed in \(String(format: "%.2f", totalTime))s")
     }
 
-    /// Set up the editor for the given site.
-    ///
-    /// - warning: The request make take a significant amount of time the first
-    /// time you open the editor.
-    public func setup(_ configuration: inout EditorConfiguration) async throws {
-        var builder = configuration.toBuilder()
-
-        if !isEditorLoaded {
-            try await refresh(configuration: configuration)
-        }
-
-        if let data = try? Data(contentsOf: editorSettingsFileURL),
-           let settings = String(data: data, encoding: .utf8) {
-            builder = builder.setEditorSettings(settings)
-        }
-
-        return configuration = builder.build()
-    }
-
     // MARK: – Editor Settings
 
     /// Fetches block editor settings from the WordPress REST API
