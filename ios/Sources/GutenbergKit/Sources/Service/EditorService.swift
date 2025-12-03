@@ -451,6 +451,10 @@ public actor EditorService {
     private func fetchData(for requestURL: URL, authHeader: String) async throws -> Data {
         var request = URLRequest(url: requestURL)
         request.setValue(authHeader, forHTTPHeaderField: "Authorization")
+        // Prevent wordpress_logged_in cookies from being sent, which could interfere with
+        // application password authentication in the Authorization header.
+        // See: https://github.com/wordpress-mobile/GutenbergKit/commit/30ebac210924ecc8e9dee3980c101ef24b1befa6
+        request.httpShouldHandleCookies = false
 
         let (data, response) = try await networkSession.data(for: request)
         guard let status = (response as? HTTPURLResponse)?.statusCode,
