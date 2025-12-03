@@ -153,7 +153,7 @@ public actor EditorService {
 
         // Fetch settings and manifest in parallel
         async let settingsFuture = Result {
-            try await fetchEditorSettings(baseURL: baseURL, authHeader: configuration.authHeader)
+            try await fetchEditorSettings(configuration: configuration)
         }
         async let manifestFuture = Result {
             try await fetchManifestData(configuration: configuration)
@@ -203,8 +203,9 @@ public actor EditorService {
     ///
     /// - Returns: Raw settings data from the API
     @discardableResult
-    private func fetchEditorSettings(baseURL: URL, authHeader: String) async throws -> Data {
-        let data = try await fetchData(for: baseURL.appendingPathComponent("/wp-block-editor/v1/settings"), authHeader: authHeader)
+    private func fetchEditorSettings(configuration: EditorConfiguration) async throws -> Data {
+        let endpoint = try configuration.editorSettingsEndpointURL()
+        let data = try await fetchData(for: endpoint, authHeader: configuration.authHeader)
         do {
             FileManager.default.createDirectoryIfNeeded(at: storeURL)
             try data.write(to: editorSettingsFileURL)
@@ -492,18 +493,33 @@ private extension FileManager {
 }
 
 private extension EditorConfiguration {
-    /// Returns the endpoint URL for fetching the editor assets manifest
-    func editorAssetsManifestEndpoint() throws -> URL {
-        if let customEndpoint = editorAssetsEndpoint {
+    /// Returns the endpoint URL for fetching the editor settings
+    func editorSettingsEndpointURL() throws -> URL {
+        if let customEndpoint = editorSettingsEndpoint {
             return customEndpoint
         }
         // Fall back to constructing endpoint from siteApiRoot
         guard let baseURL = URL(string: siteApiRoot) else {
             throw URLError(.badURL)
         }
+        return baseURL.appendingPathComponent("/wp-block-editor/v1/settings")
+    }
+
+    /// Returns the endpoint URL for fetching the editor assets manifest
+    func editorAssetsManifestEndpoint() throws -> URL {
+        let endpoint: URL
+        if let customEndpoint = editorAssetsEndpoint {
+            endpoint = customEndpoint
+        } else {
+            // Fall back to constructing endpoint from siteApiRoot
+            guard let baseURL = URL(string: siteApiRoot) else {
+                throw URLError(.badURL)
+            }
+            endpoint = baseURL.appendingPathComponent("/wpcom/v2/editor-assets")
+        }
+
+        // Always add query parameters
         let excludeParam = URLQueryItem(name: "exclude", value: "core,gutenberg")
-        return baseURL
-            .appendingPathComponent("/wpcom/v2/editor-assets")
-            .appending(queryItems: [excludeParam])
+        return endpoint.appending(queryItems: [excludeParam])
     }
 }
