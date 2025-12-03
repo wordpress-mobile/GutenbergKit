@@ -66,7 +66,7 @@ function wordPressExternals() {
 					match;
 				const imports = defaultImport || namedImports;
 
-				if ( module.match( /\.css\?inline$/ ) ) {
+				if ( module.match( /\.css\?(inline|raw)$/ ) ) {
 					continue; // Exclude inlined CSS files from externalization
 				}
 
