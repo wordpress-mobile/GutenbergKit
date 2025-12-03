@@ -21,7 +21,6 @@ import * as blocks from '@wordpress/blocks';
 import * as commands from '@wordpress/commands';
 import * as components from '@wordpress/components';
 import * as compose from '@wordpress/compose';
-import * as coreCommands from '@wordpress/core-commands';
 import * as coreData from '@wordpress/core-data';
 import * as data from '@wordpress/data';
 import * as dataControls from '@wordpress/data-controls';
@@ -84,7 +83,6 @@ export function initializeWordPressGlobals() {
 	window.wp.commands = commands;
 	window.wp.components = components;
 	window.wp.compose = compose;
-	window.wp.coreCommands = coreCommands;
 	window.wp.coreData = coreData;
 	window.wp.data = data;
 	window.wp.dataControls = dataControls;
