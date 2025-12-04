@@ -41,8 +41,10 @@ struct AppRootView: View {
         .onChange(of: self.selectedConfiguration) { oldValue, newValue in
             switch newValue {
             case .bundledEditor:
-                let config = createBundledConfiguration()
-                activeEditorConfiguration = config
+                activeEditorConfiguration = EditorConfiguration.bundled
+                    .toBuilder()
+                    .setNativeInserterEnabled(self.isNativeInserterEnabled)
+                    .build()
             case .editorConfiguration(let config):
                 self.loadEditorConfiguration(for: config)
             case .none:
@@ -65,9 +67,10 @@ struct AppRootView: View {
     private func loadEditorConfiguration(for config: ConfiguredEditor) {
         Task {
             do {
+                let parsedApiRoot = try ParsedUrl.parse(input: config.siteApiRoot)
                 let client = WordPressAPI(
                     urlSession: .shared,
-                    apiRootUrl: try ParsedUrl.parse(input: config.siteApiRoot),
+                    apiRootUrl: parsedApiRoot,
                     authentication: .authorizationHeader(token: config.authHeader)
                 )
 
@@ -76,16 +79,18 @@ struct AppRootView: View {
                 let canUsePlugins = apiRoot.hasRoute(route: "/wpcom/v2/editor-assets")
                 let canUseEditorStyles = apiRoot.hasRoute(route: "/wp-block-editor/v1/settings")
 
-                self.activeEditorConfiguration = EditorConfigurationBuilder()
-                    .setShouldUseThemeStyles(canUseEditorStyles)
-                    .setShouldUsePlugins(canUsePlugins)
-                    .setSiteUrl(config.siteUrl)
-                    .setSiteApiRoot(config.siteApiRoot)
-                    .setAuthHeader(config.authHeader)
-                    .setNativeInserterEnabled(isNativeInserterEnabled)
-                    .setLogLevel(.debug)
-                    .setEnableNetworkLogging(true)
-                    .build()
+                self.activeEditorConfiguration = EditorConfigurationBuilder(
+                    postType: "post",
+                    siteURL: URL(string: apiRoot.siteUrlString())!,
+                    siteApiRoot: parsedApiRoot.asURL()
+                )
+                .setShouldUseThemeStyles(canUseEditorStyles)
+                .setShouldUsePlugins(canUsePlugins)
+                .setAuthHeader(config.authHeader)
+                .setNativeInserterEnabled(isNativeInserterEnabled)
+                .setLogLevel(.debug)
+                .setEnableNetworkLogging(true)
+                .build()
             } catch {
                 self.hasError = true
                 self.error = AppError(errorDescription: error.localizedDescription)
@@ -96,17 +101,6 @@ struct AppRootView: View {
     private func deleteConfiguration(_ config: ConfigurationItem) {
         configurations.removeAll { $0.id == config.id }
         configurationStorage.saveConfigurations(configurations)
-    }
-
-    private func createBundledConfiguration() -> EditorConfiguration {
-        EditorConfigurationBuilder()
-            .setShouldUsePlugins(false)
-            .setSiteUrl("")
-            .setSiteApiRoot("")
-            .setAuthHeader("")
-            .setNativeInserterEnabled(isNativeInserterEnabled)
-            .setEnableNetworkLogging(true)
-            .build()
     }
 }
 

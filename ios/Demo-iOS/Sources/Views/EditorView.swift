@@ -108,7 +108,6 @@ private struct _EditorView: UIViewControllerRepresentable {
         let viewController = EditorViewController(configuration: configuration)
         viewController.delegate = context.coordinator
         viewController.webView.isInspectable = true
-        viewController.startEditorSetup()
 
         viewModel.perform = { [weak viewController] in
             switch $0 {
@@ -227,6 +226,19 @@ private final class EditorViewModel {
 
 #Preview {
     NavigationStack {
-        EditorView(configuration: .default)
+        EditorView(configuration: .bundled)
     }
+}
+
+extension EditorConfiguration {
+    static let bundled = EditorConfigurationBuilder(
+        postType: "post",
+        siteURL: URL(string: "https://example.com")!,
+        siteApiRoot: URL(string: "https://example.com/wp-json")!
+    )
+    .setShouldUsePlugins(false)
+    .setAuthHeader("")
+    .setNativeInserterEnabled(true)
+    .setIsOfflineModeEnabled(true)
+    .build()
 }

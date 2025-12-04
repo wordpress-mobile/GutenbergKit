@@ -122,6 +122,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				245D6BE42EDFCD640076D741 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				2468525B2EAAC62B00ED1F09 /* Views */,
@@ -196,6 +197,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		245D6BE42EDFCD640076D741 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			productRef = 245D6BE32EDFCD640076D741 /* GutenbergKit */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		0C4F59972BEFF4980028BD96 /* Debug */ = {
@@ -428,6 +436,10 @@
 			productName = WordPressAPI;
 		};
 		0CF6E04B2BEFF60E00EDEE8A /* GutenbergKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = GutenbergKit;
+		};
+		245D6BE32EDFCD640076D741 /* GutenbergKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = GutenbergKit;
 		};
