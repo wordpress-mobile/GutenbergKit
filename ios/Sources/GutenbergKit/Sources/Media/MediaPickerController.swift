@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import UIKit
 
 public struct MediaPickerAction: Identifiable {
@@ -55,3 +56,4 @@ public protocol MediaPickerController {
 final class MediaPickerPresentationContext {
     weak var viewController: UIViewController?
 }
+#endif

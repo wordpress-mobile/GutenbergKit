@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import UIKit
 import WebKit
 import CryptoKit
@@ -324,3 +325,4 @@ private func encode(_ image: UIImage) -> Data? {
     return data as Data
 }
 
+#endif

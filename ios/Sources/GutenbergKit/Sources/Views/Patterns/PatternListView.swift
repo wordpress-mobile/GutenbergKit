@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import SwiftUI
 
 /// A full-screen view showing all patterns in a category
@@ -63,3 +64,4 @@ struct PatternListView: View {
         }
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import UIKit
 import SwiftUI
 
@@ -48,3 +49,4 @@ extension EnvironmentValues {
         set { self[HTMLPreviewMemoryCacheKey.self] = newValue }
     }
 }
+#endif

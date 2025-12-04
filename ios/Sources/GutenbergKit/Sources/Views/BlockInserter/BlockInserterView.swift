@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import SwiftUI
 import PhotosUI
 import UIKit
@@ -350,4 +351,5 @@ struct MockMediaPickerController: MediaPickerController {
         return []
     }
 }
+#endif
 #endif

@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import SwiftUI
 import SVGView
 
@@ -28,3 +29,4 @@ struct BlockIconView: View {
         }
     }
 }
+#endif

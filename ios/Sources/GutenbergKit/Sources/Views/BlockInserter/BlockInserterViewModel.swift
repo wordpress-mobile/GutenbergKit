@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import SwiftUI
 import PhotosUI
 import Combine
@@ -133,3 +134,4 @@ class BlockInserterViewModel: ObservableObject {
          isProcessingMedia = false
      }
 }
+#endif
