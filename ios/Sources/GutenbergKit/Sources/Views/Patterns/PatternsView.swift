@@ -32,7 +32,9 @@ struct PatternsView: View {
         content
             .searchable(text: $viewModel.searchText)
             .navigationTitle(EditorLocalization[.patterns])
+            #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 toolbar
             }

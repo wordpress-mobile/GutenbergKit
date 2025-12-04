@@ -87,7 +87,6 @@ class BlockInserterViewModel: ObservableObject {
         return await task.value
     }
 
-
     func processCameraMedia(_ media: CameraMedia) async -> [MediaInfo] {
         isProcessingMedia = true
         defer { isProcessingMedia = false }

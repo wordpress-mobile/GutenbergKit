@@ -1,11 +1,11 @@
-import UIKit
+import Foundation
 
 public struct MediaPickerAction: Identifiable {
     public let id: String
     public let title: String
-    public let image: UIImage
+    public let image: PlatformImage
 
-    public init(id: String, title: String, image: UIImage) {
+    public init(id: String, title: String, image: PlatformImage) {
         self.id = id
         self.title = title
         self.image = image
@@ -49,9 +49,9 @@ public protocol MediaPickerController {
     func getActions(for parameters: MediaPickerParameters) -> [MediaPickerActionGroup]
 
     /// Perform the action and return the selected media.
-    func perform(_ action: MediaPickerAction, parameters: MediaPickerParameters, from presentingViewController: UIViewController) async -> [MediaInfo]
+    func perform(_ action: MediaPickerAction, parameters: MediaPickerParameters, from presentingViewController: PlatformViewController) async -> [MediaInfo]
 }
 
 final class MediaPickerPresentationContext {
-    weak var viewController: UIViewController?
+    weak var viewController: PlatformViewController?
 }

@@ -1,4 +1,3 @@
-import UIKit
 import SwiftUI
 
 /// Memory cache for HTML preview thumbnails.
@@ -8,7 +7,7 @@ import SwiftUI
 /// automatically deallocate when the view is dismissed, conserving resources.
 @MainActor
 final class HTMLPreviewMemoryCache: ObservableObject {
-    private let cache = NSCache<NSString, UIImage>()
+    private let cache = NSCache<NSString, PlatformImage>()
 
     init(countLimit: Int = 200) {
         cache.countLimit = countLimit
@@ -24,13 +23,13 @@ final class HTMLPreviewMemoryCache: ObservableObject {
     }
 
     /// Retrieves an image from the cache
-    func image(for patternName: String, size: CGSize, viewportWidth: Int? = nil) -> UIImage? {
+    func image(for patternName: String, size: CGSize, viewportWidth: Int? = nil) -> PlatformImage? {
         let key = cacheKey(patternName: patternName, size: size, viewportWidth: viewportWidth)
         return cache.object(forKey: key as NSString)
     }
 
     /// Stores an image in the cache
-    func setImage(_ image: UIImage, for patternName: String, size: CGSize, viewportWidth: Int? = nil) {
+    func setImage(_ image: PlatformImage, for patternName: String, size: CGSize, viewportWidth: Int? = nil) {
         let key = cacheKey(patternName: patternName, size: size, viewportWidth: viewportWidth)
         cache.setObject(image, forKey: key as NSString)
     }

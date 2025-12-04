@@ -30,7 +30,7 @@ struct MediaPickerMenu: View {
             Label {
                 Text(action.title)
             } icon: {
-                Image(uiImage: action.image)
+                Image(platformImage: action.image)
             }
         }
     }

@@ -50,7 +50,9 @@ struct PatternListView: View {
         .listStyle(.plain)
         .background(Color(.secondarySystemBackground))
         .navigationTitle(section.name)
+        #if canImport(UIKit)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
             toolbar
         }
