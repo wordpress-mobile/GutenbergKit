@@ -31,10 +31,7 @@ import { useEditorStyles } from './use-editor-styles';
 import { unlock } from '../../lock-unlock';
 import DefaultBlockAppender from '../default-block-appender';
 import { useEditorVisible } from './use-editor-visible';
-// The Vite query parameter breaks the linter's import resolution
-// eslint-disable-next-line import/no-unresolved
 import defaultThemeStyles from './default-theme-styles.scss?inline';
-// eslint-disable-next-line import/no-unresolved
 import commonStyles from './wp-common-styles.scss?inline';
 
 const {

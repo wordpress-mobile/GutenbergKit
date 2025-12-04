@@ -2,7 +2,7 @@
  * External dependencies
  */
 import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react'; // eslint-disable-line import/no-unresolved
+import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import MagicString from 'magic-string';
 
