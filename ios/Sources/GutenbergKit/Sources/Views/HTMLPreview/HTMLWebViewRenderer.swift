@@ -13,7 +13,7 @@ final class HTMLWebViewRenderer {
     nonisolated init() {}
 
     /// Renders HTML content to an image.
-    func render(html: String, viewportWidth: Int) async throws -> PlatformImage {
+    func render(html: String, viewportWidth: Int) async throws -> UIImage {
         cancelCleanup()
 
         let pooledView = getAvailableWebView()
@@ -35,11 +35,7 @@ final class HTMLWebViewRenderer {
 
         // Take screenshot of entire content with the maximum target size we'll ever need (roughly)
         // Calculate snapshot width such that neither dimension exceeds the maximum size
-        #if canImport(UIKit)
         let maxDimension = min(UIScreen.main.bounds.width, UIScreen.main.bounds.height, 640) - 48
-        #else
-        let maxDimension = 640.0
-        #endif
         let scaleForWidth = maxDimension / width
         let scaleForHeight = maxDimension / contentHeight
         let scale = min(scaleForWidth, scaleForHeight, 1.0) // Don't scale up, only down

@@ -43,9 +43,7 @@ struct BlockInserterBlockView: View {
     }
 
     private func onSelected() {
-        #if canImport(UIKit)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        #endif
         isPressed = true
         action()
     }
@@ -91,6 +89,6 @@ private struct BlockDetailedView: View {
         }
         .padding(16)
         .frame(width: 360)
-        .background(Color(platformColor: .systemBackground))
+        .background(Color(uiColor: .systemBackground))
     }
 }

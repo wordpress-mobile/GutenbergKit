@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import UIKit
 import WebKit
 
 enum BlockInserterSelection {
@@ -59,21 +60,17 @@ struct BlockInserterView: View {
         content
             .background(Material.ultraThin)
             .conditionallySearchable(text: $viewModel.searchText, isEnabled: !isLargeWidth)
-            #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
-            #endif
             .disabled(viewModel.isProcessingMedia)
             .environmentObject(iconCache)
             .toolbar {
                 toolbar
             }
             .sheet(isPresented: $isShowingCamera) {
-                #if canImport(UIKit)
                 CameraView { media in
                     insertCameraMedia(media)
                 }
                 .ignoresSafeArea()
-                #endif
             }
             .animation(.smooth(duration: 2), value: viewModel.isProcessingMedia)
             .animation(.snappy, value: inlineSelectedMediaItems.count)
@@ -155,7 +152,7 @@ struct BlockInserterView: View {
             .tint(Color.primary)
         }
 
-        #if canImport(UIKit)
+
         ToolbarItemGroup(placement: .topBarTrailing) {
             if isLargeWidth {
                 customSearchField
@@ -194,7 +191,6 @@ struct BlockInserterView: View {
                 }
             }
         }
-        #endif
 
         ToolbarItemGroup(placement: .confirmationAction) {
             if !inlineSelectedMediaItems.isEmpty {
@@ -250,7 +246,7 @@ struct BlockInserterView: View {
             .font(.headline.monospacedDigit())
             .contentTransition(.numericText())
 
-        if #available(iOS 26, macOS 26, *) {
+        if #available(iOS 26, *) {
             Button(role: .confirm) {
                 insertInlineMedia()
             } label: {
@@ -344,12 +340,12 @@ private extension View {
 struct MockMediaPickerController: MediaPickerController {
     func getActions(for parameters: MediaPickerParameters) -> [MediaPickerActionGroup] {
         let group = MediaPickerActionGroup(id: "extra", actions: [
-            MediaPickerAction(id: "files", title: "Files", image: PlatformImage(systemName: "folder")!)
+            MediaPickerAction(id: "files", title: "Files", image: UIImage(systemName: "folder")!)
         ])
         return [group]
     }
 
-    func perform(_ action: MediaPickerAction, parameters: MediaPickerParameters, from presentingViewController: PlatformViewController) async -> [MediaInfo] {
+    func perform(_ action: MediaPickerAction, parameters: MediaPickerParameters, from presentingViewController: UIViewController) async -> [MediaInfo] {
         print("action selected:", action)
         return []
     }

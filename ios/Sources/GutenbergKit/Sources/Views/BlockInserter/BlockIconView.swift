@@ -10,7 +10,7 @@ struct BlockIconView: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color(platformColor: .secondarySystemFill))
+                .fill(Color(uiColor: .secondarySystemFill))
                 .frame(width: size, height: size)
                 .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
 

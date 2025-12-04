@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// A view that displays a block pattern preview using HTMLPreviewRenderer
 struct HTMLPreviewView: View {
@@ -6,7 +7,7 @@ struct HTMLPreviewView: View {
     let targetSize: CGSize?
     let viewportWidth: Int?
 
-    @State private var previewImage: PlatformImage?
+    @State private var previewImage: UIImage?
     @State private var isLoadingFailed = false
     @State private var cachedAspectRatio: CGFloat?
     @Environment(\.htmlPreviewMemoryCache) private var memoryCache
@@ -22,14 +23,14 @@ struct HTMLPreviewView: View {
     var body: some View {
         ZStack {
             if let previewImage {
-                Image(platformImage: previewImage)
+                Image(uiImage: previewImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .background(Color.white)
                     .clipped()
             } else if isLoadingFailed {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(platformColor: .tertiarySystemBackground))
+                    .fill(Color(uiColor: .tertiarySystemBackground))
                     .overlay {
                         VStack(spacing: 4) {
                             Image(systemName: "square.grid.2x2")
@@ -39,7 +40,7 @@ struct HTMLPreviewView: View {
                     }
             } else {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(platformColor: .secondarySystemBackground))
+                    .fill(Color(uiColor: .secondarySystemBackground))
                     .aspectRatio(cachedAspectRatio, contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -70,7 +71,7 @@ struct HTMLPreviewView: View {
             )
             try Task.checkCancellation()
 
-            let processedImage: PlatformImage
+            let processedImage: UIImage
             if let targetSize {
                 processedImage = await createThumbnail(
                     from: fullSizeImage,
@@ -96,7 +97,7 @@ struct HTMLPreviewView: View {
     }
 
     /// Updates the cached aspect ratio from an image
-    private func updateAspectRatio(from image: PlatformImage, viewportWidth: Int) {
+    private func updateAspectRatio(from image: UIImage, viewportWidth: Int) {
         let aspectRatio = image.size.width / image.size.height
         cachedAspectRatio = aspectRatio
         AspectRatioCache.shared.setAspectRatio(aspectRatio, for: pattern.name, viewportWidth: viewportWidth)
@@ -104,7 +105,7 @@ struct HTMLPreviewView: View {
 
     /// Creates a thumbnail from an image using preparingThumbnail
     /// The thumbnail will fit within targetSize while maintaining aspect ratio (aspect fit)
-    private func createThumbnail(from image: PlatformImage, targetSize: CGSize, scale: CGFloat) async -> PlatformImage {
+    private func createThumbnail(from image: UIImage, targetSize: CGSize, scale: CGFloat) async -> UIImage {
         // Calculate the thumbnail size in points maintaining aspect ratio
         // Scale so that the image fits within both width and height constraints
         let aspectRatio = image.size.width / image.size.height

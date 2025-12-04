@@ -1,3 +1,4 @@
+import UIKit
 import WebKit
 import CryptoKit
 import ImageIO
@@ -37,7 +38,7 @@ public final class HTMLPreviewManager: ObservableObject {
         let diskCacheKey: String
         let html: String
         let viewportWidth: Int
-        var continuations: [UUID: CheckedContinuation<PlatformImage, Error>] = [:]
+        var continuations: [UUID: CheckedContinuation<UIImage, Error>] = [:]
         var task: Task<Void, Never>?
 
         init(diskCacheKey: String, html: String, viewportWidth: Int) {
@@ -89,7 +90,7 @@ public final class HTMLPreviewManager: ObservableObject {
     ///   - html: The HTML content to render
     ///   - viewportWidth: The viewport width for rendering
     /// - Returns: Full-size rendered image at the specified viewport width
-    public func render(html: String, viewportWidth: Int) async throws -> PlatformImage {
+    public func render(html: String, viewportWidth: Int) async throws -> UIImage {
         let diskCacheKey = makeDiskCacheKey(content: html, viewportWidth: viewportWidth, templateHash: templateHash)
 
         if let diskImage = loadImageFromCache(forKey: diskCacheKey) {
@@ -167,19 +168,19 @@ public final class HTMLPreviewManager: ObservableObject {
     }
 
     /// Load image from URLCache
-    private func loadImageFromCache(forKey key: String) -> PlatformImage? {
+    private func loadImageFromCache(forKey key: String) -> UIImage? {
         let url = URL(string: "preview://\(key)")!
         let request = URLRequest(url: url)
 
         guard let cachedResponse = urlCache.cachedResponse(for: request),
-              let image = PlatformImage(data: cachedResponse.data) else {
+              let image = UIImage(data: cachedResponse.data) else {
             return nil
         }
         return image
     }
 
     /// Save image to URLCache
-    private func saveImageToCache(_ image: PlatformImage, forKey key: String) {
+    private func saveImageToCache(_ image: UIImage, forKey key: String) {
         guard let data = encode(image) else { return }
 
         let url = URL(string: "preview://\(key)")!
@@ -297,7 +298,7 @@ private func makePatternHTML(content: String, viewportWidth: Int, editorStyles: 
 }
 
 /// Converts UIImage to HEIC data format.
-private func encode(_ image: PlatformImage) -> Data? {
+private func encode(_ image: UIImage) -> Data? {
     guard let cgImage = image.cgImage else { return nil }
 
     let data = NSMutableData()
@@ -322,3 +323,4 @@ private func encode(_ image: PlatformImage) -> Data? {
 
     return data as Data
 }
+

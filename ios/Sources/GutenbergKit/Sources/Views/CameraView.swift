@@ -1,12 +1,11 @@
+import UIKit
 import SwiftUI
 import UniformTypeIdentifiers
 
 enum CameraMedia {
-    case photo(PlatformImage)
+    case photo(UIImage)
     case video(URL)
 }
-
-#if canImport(UIKit)
 
 struct CameraView: UIViewControllerRepresentable {
     var onMediaCaptured: ((CameraMedia) -> Void)?
@@ -50,4 +49,3 @@ struct CameraView: UIViewControllerRepresentable {
         }
     }
 }
-#endif

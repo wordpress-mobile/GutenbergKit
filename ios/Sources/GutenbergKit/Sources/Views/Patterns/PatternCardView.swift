@@ -62,7 +62,7 @@ private struct PatternDetailedView: View {
             HTMLPreviewView(pattern: pattern, targetSize: CGSize(width: 400, height: 300), viewportWidth: viewportWidth)
                 .frame(maxWidth: .infinity)
                 .frame(height: 300)
-                .background(Color(platformColor: .white))
+                .background(Color(uiColor: .white))
                 .clipped()
 
             // Pattern information
@@ -103,6 +103,6 @@ private struct PatternDetailedView: View {
             .padding(20)
         }
         .frame(width: 400)
-        .background(Color(platformColor: .systemBackground))
+        .background(Color(uiColor: .systemBackground))
     }
 }
