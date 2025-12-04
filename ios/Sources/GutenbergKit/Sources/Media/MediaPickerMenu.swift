@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import SwiftUI
 
 struct MediaPickerMenu: View {
@@ -35,3 +36,4 @@ struct MediaPickerMenu: View {
         }
     }
 }
+#endif

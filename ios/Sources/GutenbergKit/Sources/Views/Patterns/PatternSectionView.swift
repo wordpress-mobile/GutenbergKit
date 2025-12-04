@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import SwiftUI
 
 /// Displays a category section with horizontal scrolling pattern previews
@@ -67,3 +68,4 @@ struct PatternGridSection: View {
         }
     }
 }
+#endif

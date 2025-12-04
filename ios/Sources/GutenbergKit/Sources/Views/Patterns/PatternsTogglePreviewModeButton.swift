@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import SwiftUI
 
 /// A toolbar button that toggles between mobile and desktop preview modes for patterns
@@ -13,3 +14,4 @@ struct PatternsTogglePreviewModeButton: View {
         .tint(Color.primary)
     }
 }
+#endif

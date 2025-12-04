@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import WebKit
 
 /// Manages a pool of WKWebView instances for rendering HTML content.
@@ -132,3 +133,4 @@ final class HTMLWebViewRenderer {
         }
     }
 }
+#endif

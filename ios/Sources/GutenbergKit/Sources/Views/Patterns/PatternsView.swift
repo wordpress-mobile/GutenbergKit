@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import SwiftUI
 import WebKit
 
@@ -105,4 +106,5 @@ enum PreviewMode: String {
         .environmentObject(HTMLPreviewManager())
     }
 }
+#endif
 #endif

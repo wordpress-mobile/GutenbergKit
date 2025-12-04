@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import SwiftUI
 
 /// A simple card view showing only the pattern preview image
@@ -106,3 +107,4 @@ private struct PatternDetailedView: View {
         .background(Color(uiColor: .systemBackground))
     }
 }
+#endif

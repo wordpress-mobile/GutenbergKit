@@ -1,5 +1,5 @@
+#if canImport(UIKit)
 import SwiftUI
-
 struct BlockInserterBlockView: View {
     let block: BlockType
     let action: () -> Void
@@ -92,3 +92,4 @@ private struct BlockDetailedView: View {
         .background(Color(uiColor: .systemBackground))
     }
 }
+#endif

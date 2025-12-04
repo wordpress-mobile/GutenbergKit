@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import SwiftUI
 import UIKit
 
@@ -165,3 +166,4 @@ private class AspectRatioCache: ObservableObject {
         }
     }
 }
+#endif

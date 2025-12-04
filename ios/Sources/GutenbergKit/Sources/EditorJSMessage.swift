@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import WebKit
 
 /// A type that represents JavaScript messages send from and to the web view.
@@ -105,3 +106,4 @@ struct EditorJSMessage {
         let level: EditorLogLevel
     }
 }
+#endif

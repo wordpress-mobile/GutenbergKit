@@ -1,5 +1,5 @@
+#if canImport(UIKit)
 import SwiftUI
-
 struct BlockInserterSection: Identifiable, Decodable {
     var id: String { category }
     let category: String
@@ -98,3 +98,4 @@ struct BlockInserterSectionView: View {
         .padding(.horizontal, 12)
     }
 }
+#endif

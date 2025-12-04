@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import SwiftUI
 
 struct CardModifier: ViewModifier {
@@ -17,3 +18,4 @@ extension View {
         modifier(CardModifier(cornerRadius: cornerRadius))
     }
  }
+#endif
