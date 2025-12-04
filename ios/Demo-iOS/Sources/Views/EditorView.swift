@@ -3,31 +3,26 @@ import GutenbergKit
 
 struct EditorView: View {
     private let configuration: EditorConfiguration
+    private let dependencies: EditorDependencies?
 
-    @State private var viewModel = EditorViewModel()
+    @ObservedObject private var viewModel = EditorViewModel()
 
-    @Environment(\.dismiss) private var dismiss
-
-    init(configuration: EditorConfiguration) {
+    init(configuration: EditorConfiguration, dependencies: EditorDependencies? = nil) {
         self.configuration = configuration
+        self.dependencies = dependencies
     }
 
     var body: some View {
-        _EditorView(configuration: configuration, viewModel: viewModel)
+        _EditorView(
+            configuration: configuration,
+            dependencies: dependencies,
+            viewModel: viewModel
+        )
             .toolbar { toolbar }
     }
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-            }
-            .disabled(viewModel.isModalDialogOpen)
-        }
-
         ToolbarItemGroup(placement: .topBarTrailing) {
             Group {
                 Button {
@@ -90,13 +85,16 @@ struct EditorView: View {
 
 private struct _EditorView: UIViewControllerRepresentable {
     private let configuration: EditorConfiguration
+    private let dependencies: EditorDependencies?
     private let viewModel: EditorViewModel
 
     init(
         configuration: EditorConfiguration,
+        dependencies: EditorDependencies? = nil,
         viewModel: EditorViewModel
     ) {
         self.configuration = configuration
+        self.dependencies = dependencies
         self.viewModel = viewModel
     }
 
@@ -105,7 +103,7 @@ private struct _EditorView: UIViewControllerRepresentable {
     }
 
     func makeUIViewController(context: Context) -> EditorViewController {
-        let viewController = EditorViewController(configuration: configuration)
+        let viewController = EditorViewController(configuration: configuration, dependencies: dependencies)
         viewController.delegate = context.coordinator
         viewController.webView.isInspectable = true
 
@@ -209,8 +207,7 @@ private struct _EditorView: UIViewControllerRepresentable {
     }
 }
 
-@Observable
-private final class EditorViewModel {
+private final class EditorViewModel: ObservableObject {
     var isModalDialogOpen = false
     var hasUndo = false
     var hasRedo = false

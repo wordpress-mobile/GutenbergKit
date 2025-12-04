@@ -7,17 +7,15 @@ struct EditorList: View {
 
     @State private var showAddDialog = false
     @State private var showDebugSettings = false
-    @Binding var isNativeInserterEnabled: Bool
-
-    @Binding var selectedConfiguration: ConfigurationItem?
 
     @State var configurationToDelete: ConfigurationItem?
 
     var body: some View {
         List {
             Section {
-                Button("Default Editor") {
-                    selectedConfiguration = .bundledEditor
+                NavigationLink("Default Editor") {
+                    SitePreparationView(site: .bundledEditor)
+
                 }
             } header: {
                 if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"] != nil
@@ -46,10 +44,6 @@ struct EditorList: View {
                 Text("Editor Configurations")
             } footer: {
                 Text("Editors with site configuration; enabling media uploads, plugin support, etc.")
-            }
-
-            Section("Feature Configuration") {
-                Toggle("Native Inserter", isOn: $isNativeInserterEnabled)
             }
         }
         .alert(
@@ -105,9 +99,7 @@ struct EditorList: View {
             if case .editorConfiguration = $0 { return true }
             return false
         }) { config in
-            Button(config.displayName) {
-                self.selectedConfiguration = config
-            }
+            NavigationLink(config.displayName, value: config)
             .swipeActions(edge: .trailing) {
                 Button(role: .destructive) {
                     configurationToDelete = config
