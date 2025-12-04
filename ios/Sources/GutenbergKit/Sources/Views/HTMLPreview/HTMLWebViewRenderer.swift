@@ -35,7 +35,11 @@ final class HTMLWebViewRenderer {
 
         // Take screenshot of entire content with the maximum target size we'll ever need (roughly)
         // Calculate snapshot width such that neither dimension exceeds the maximum size
-        let maxDimension = CGFloat(640 - 48)
+        #if canImport(UIKit)
+        let maxDimension = min(UIScreen.main.bounds.width, UIScreen.main.bounds.height, 640) - 48
+        #else
+        let maxDimension = 640.0
+        #endif
         let scaleForWidth = maxDimension / width
         let scaleForHeight = maxDimension / contentHeight
         let scale = min(scaleForWidth, scaleForHeight, 1.0) // Don't scale up, only down
