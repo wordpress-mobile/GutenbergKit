@@ -118,7 +118,7 @@ const EditorToolbar = ( { className } ) => {
 			<div className={ classes }>
 				<Toolbar
 					label="Editor toolbar"
-					variant="unstyled"
+					variant="toolbar"
 					ref={ scrollViewRef }
 					className={ scrollViewClasses }
 				>

@@ -1,6 +1,6 @@
 @use "@wordpress/base-styles/colors" as wordpress;
 
-$border-color: #c8c7cc;
+$border-color: wordpress.$gray-300;
 $border-radius: 2px;
 $min-touch-target-size: 46px;
 $scroll-indicator-elevation: 32;
@@ -12,6 +12,10 @@ $scroll-indicator-elevation: 32;
 	border-right: none;
 	border-top: 1px solid $border-color;
 	border-radius: 0;
+}
+
+.gutenberg-kit-editor-toolbar .components-accessible-toolbar {
+	border: none; // Remove "toolbar" variant's default black border
 }
 
 // Disable overflow scrolling for the block toolbar, and rely upon scrolling the
@@ -91,6 +95,11 @@ $scroll-indicator-elevation: 32;
 .gutenberg-kit-editor-toolbar .components-toolbar-group {
 	border-right-color: $border-color;
 	min-height: $min-touch-target-size;
+	// Reset Gutenberg's negative margin that oddly create a gap at the top/bottom
+	// of the toolbar, rather than extending the button height as intended in
+	// Gutenberg.
+	margin-top: initial;
+	margin-bottom: initial;
 	padding-left: 0;
 	padding-right: 0;
 }
