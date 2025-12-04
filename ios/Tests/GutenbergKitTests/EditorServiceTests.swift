@@ -212,7 +212,9 @@ struct EditorServiceTests {
         #expect(!manifest.isEmpty)
 
         // Verify it contains gbk-cache scheme URLs (processed format)
+        #if canImport(UIKit)
         #expect(manifest.contains("gbk-cache-https:"))
+        #endif
 
         // Verify it contains expected asset references
         #expect(manifest.contains("jetpack"))
