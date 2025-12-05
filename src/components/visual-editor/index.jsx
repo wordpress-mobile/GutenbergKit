@@ -17,6 +17,7 @@ import { useSelect } from '@wordpress/data';
 import { store as editPostStore } from '@wordpress/edit-post';
 import '@wordpress/format-library';
 // Base styles for the content within the block canvas iframe.
+import componentStyles from '@wordpress/components/build-style/style.css?inline';
 import blockEditorContentStyles from '@wordpress/block-editor/build-style/content.css?inline';
 import blocksStyles from '@wordpress/block-library/build-style/style.css?inline';
 import blocksEditorStyles from '@wordpress/block-library/build-style/editor.css?inline';
@@ -91,6 +92,7 @@ function VisualEditor( { hideTitle } ) {
 		commonStyles,
 		// Add sensible default styles if theme styles are not present.
 		hasThemeStyles ? '' : defaultThemeStyles,
+		componentStyles,
 		blockEditorContentStyles,
 		blocksStyles,
 		blocksEditorStyles
