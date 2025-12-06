@@ -152,6 +152,10 @@ describe( 'setUpEditorEnvironment', () => {
 
 		await setUpEditorEnvironment();
 
+		expect( logException ).toHaveBeenCalledWith( testError, {
+			isHandled: true,
+			handledBy: 'setUpEditorEnvironment',
+		} );
 		expect( error ).toHaveBeenCalledWith(
 			'Error initializing editor',
 			testError
@@ -169,6 +173,10 @@ describe( 'setUpEditorEnvironment', () => {
 
 		await setUpEditorEnvironment();
 
+		expect( logException ).toHaveBeenCalledWith( testError, {
+			isHandled: true,
+			handledBy: 'setUpEditorEnvironment',
+		} );
 		expect( error ).toHaveBeenCalledWith(
 			'Error initializing editor',
 			testError
@@ -184,6 +192,10 @@ describe( 'setUpEditorEnvironment', () => {
 
 		await setUpEditorEnvironment();
 
+		expect( logException ).toHaveBeenCalledWith( testError, {
+			isHandled: true,
+			handledBy: 'setUpEditorEnvironment',
+		} );
 		expect( error ).toHaveBeenCalledWith(
 			'Error initializing editor',
 			testError
@@ -201,6 +213,10 @@ describe( 'setUpEditorEnvironment', () => {
 
 		await setUpEditorEnvironment();
 
+		expect( logException ).toHaveBeenCalledWith( testError, {
+			isHandled: true,
+			handledBy: 'setUpEditorEnvironment',
+		} );
 		expect( error ).toHaveBeenCalledWith(
 			'Error initializing editor',
 			testError
