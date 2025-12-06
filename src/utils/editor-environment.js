@@ -12,7 +12,7 @@ import { loadEditorAssets } from './editor-loader';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge';
 import { initializeFetchInterceptor } from './fetch-interceptor';
 import EditorLoadError from '../components/editor-load-error';
-import { error } from './logger';
+import { setLogLevel, error } from './logger';
 import { setUpGlobalErrorHandlers } from './global-error-handler';
 import { Platform } from './platform';
 import './editor-styles';
@@ -28,6 +28,7 @@ export async function setUpEditorEnvironment() {
 		setUpGlobalErrorHandlers();
 		setBodyClasses();
 		await awaitGBKitGlobal();
+		setLogLevelFromGBKit();
 		initializeFetchInterceptor();
 		await configureLocale();
 		await initializeWordPressGlobals();
@@ -59,6 +60,18 @@ function setBodyClasses() {
 	}
 
 	window.document.body.classList.add( ...classNames );
+}
+
+/**
+ * Set the log level based on GBKit configuration.
+ *
+ * @return {void}
+ */
+function setLogLevelFromGBKit() {
+	const { logLevel } = getGBKit();
+	if ( logLevel ) {
+		setLogLevel( logLevel );
+	}
 }
 
 /**
