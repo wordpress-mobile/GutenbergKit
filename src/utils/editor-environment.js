@@ -151,6 +151,10 @@ async function initializeEditor( pluginLoadResult = {} ) {
  * @param {Error} err - The error that occurred
  */
 function handleError( err ) {
+	logException( err, {
+		isHandled: true,
+		handledBy: 'setUpEditorEnvironment',
+	} );
 	error( 'Error initializing editor', err );
 	const errorDetails = EditorLoadError( { error: err } );
 	document.body.innerHTML = errorDetails;
