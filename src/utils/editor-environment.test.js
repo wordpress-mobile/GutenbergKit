@@ -7,7 +7,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * Internal dependencies
  */
 import { setUpEditorEnvironment } from './editor-environment';
-import { awaitGBKitGlobal, getGBKit, editorLoaded } from './bridge.js';
+import {
+	awaitGBKitGlobal,
+	getGBKit,
+	editorLoaded,
+	logException,
+} from './bridge.js';
 import { loadEditorAssets } from './editor-loader.js';
 import EditorLoadError from '../components/editor-load-error/index.jsx';
 import { error } from './logger.js';
@@ -208,5 +213,23 @@ describe( 'setUpEditorEnvironment', () => {
 
 		expect( result ).toBeInstanceOf( Promise );
 		await expect( result ).resolves.toBeUndefined();
+	} );
+
+	it( 'logs exception when plugin loading fails', async () => {
+		getGBKit.mockReturnValue( { plugins: true } );
+
+		const testError = new Error( 'Asset loading failed' );
+		loadEditorAssets.mockRejectedValue( testError );
+
+		await setUpEditorEnvironment();
+
+		expect( logException ).toHaveBeenCalledWith( testError, {
+			isHandled: true,
+			handledBy: 'loadPluginsIfEnabled',
+		} );
+		expect( initializeEditor ).toHaveBeenCalledWith( {
+			allowedBlockTypes: undefined,
+			pluginLoadFailed: true,
+		} );
 	} );
 } );

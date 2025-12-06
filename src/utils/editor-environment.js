@@ -1,7 +1,12 @@
 /**
  * Internal dependencies
  */
-import { awaitGBKitGlobal, editorLoaded, getGBKit } from './bridge';
+import {
+	awaitGBKitGlobal,
+	editorLoaded,
+	getGBKit,
+	logException,
+} from './bridge';
 import { configureLocale } from './localization';
 import { loadEditorAssets } from './editor-loader';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge';
@@ -100,7 +105,11 @@ async function loadPluginsIfEnabled() {
 		try {
 			const { allowedBlockTypes } = await loadEditorAssets();
 			return { allowedBlockTypes, pluginLoadFailed: false };
-		} catch {
+		} catch ( err ) {
+			logException( err, {
+				isHandled: true,
+				handledBy: 'loadPluginsIfEnabled',
+			} );
 			return { pluginLoadFailed: true };
 		}
 	}
