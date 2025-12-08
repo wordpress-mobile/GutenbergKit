@@ -1,0 +1,13 @@
+version: 2
+updates:
+    - package-ecosystem: 'npm'
+      directory: '/'
+      schedule:
+          interval: 'weekly'
+      ignore:
+          - dependency-name: 'eslint' # eslint@>=9.x.x blocked by https://github.com/WordPress/gutenberg/issues/64782
+            update-types: ['version-update:semver-major']
+          - dependency-name: 'react' # react@>=19.x.x blocked by https://github.com/WordPress/gutenberg/issues/71336
+            update-types: ['version-update:semver-major']
+          - dependency-name: 'react-dom' # react@>=19.x.x blocked by https://github.com/WordPress/gutenberg/issues/71336
+            update-types: ['version-update:semver-major']
