@@ -21,7 +21,6 @@ import * as blocks from '@wordpress/blocks';
 import * as commands from '@wordpress/commands';
 import * as components from '@wordpress/components';
 import * as compose from '@wordpress/compose';
-import * as coreCommands from '@wordpress/core-commands';
 import * as coreData from '@wordpress/core-data';
 import * as data from '@wordpress/data';
 import * as dataControls from '@wordpress/data-controls';
@@ -34,6 +33,7 @@ import * as editor from '@wordpress/editor';
 import * as element from '@wordpress/element';
 import * as escapeHtml from '@wordpress/escape-html';
 import * as formatLibrary from '@wordpress/format-library';
+import * as globalStylesEngine from '@wordpress/global-styles-engine';
 import * as htmlEntities from '@wordpress/html-entities';
 import * as icons from '@wordpress/icons';
 import * as isShallowEqual from '@wordpress/is-shallow-equal';
@@ -84,7 +84,6 @@ export function initializeWordPressGlobals() {
 	window.wp.commands = commands;
 	window.wp.components = components;
 	window.wp.compose = compose;
-	window.wp.coreCommands = coreCommands;
 	window.wp.coreData = coreData;
 	window.wp.data = data;
 	window.wp.dataControls = dataControls;
@@ -97,6 +96,7 @@ export function initializeWordPressGlobals() {
 	window.wp.element = element;
 	window.wp.escapeHtml = escapeHtml;
 	window.wp.formatLibrary = formatLibrary;
+	window.wp.globalStylesEngine = globalStylesEngine;
 	// hooks and i18n are initialized via wordpress-i18n.js
 	// Ensure they exist (they should, but handle case where wordpress-i18n.js hasn't loaded)
 	if ( ! window.wp.hooks ) {

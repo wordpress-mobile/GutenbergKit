@@ -17,9 +17,13 @@ Existing patches should be described and justified here.
 
 -   Enable image resizing on mobile devices by removing the `isLargeViewport` check from the `isResizable` condition in the `Image` component. The resizing feature appears to work well enough now, in contrast to the description in https://github.com/WordPress/gutenberg/issues/2675.
 
-### `@wordpress/components`
+### `@wordpress/editor`
 
--   Apply workaround to `FormFileUpload` to address iOS Safari's lack of support for a wildcard `audio/*` MIME type. Can be removed once [the issue](https://github.com/WordPress/gutenberg/issues/70119) is resolved in a future release.
+-   Add `./build-style/*` to the package's `exports` field to allow importing CSS files. The package added an `exports` field in [this commit](https://github.com/WordPress/gutenberg/commit/f13dcfaa60) that restricts importable paths, but omitted CSS assets. Note: Creating this patch required using `--exclude='^$'` due to a [patch-package limitation](https://github.com/ds300/patch-package/issues/250).
+
+### `@wordpress/format-library`
+
+-   Add `./build-style/*` to the package's `exports` field to allow importing CSS files. The package added an `exports` field in [this commit](https://github.com/WordPress/gutenberg/commit/f13dcfaa60) that restricts importable paths, but omitted CSS assets. Note: Creating this patch required using `--exclude='^$'` due to a [patch-package limitation](https://github.com/ds300/patch-package/issues/250).
 
 ### `@wordpress/rich-text`
 

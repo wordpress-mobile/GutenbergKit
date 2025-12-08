@@ -16,6 +16,11 @@ import { store as editorStore, PostTitle } from '@wordpress/editor';
 import { useSelect } from '@wordpress/data';
 import { store as editPostStore } from '@wordpress/edit-post';
 import '@wordpress/format-library';
+// Base styles for the content within the block canvas iframe.
+import componentStyles from '@wordpress/components/build-style/style.css?inline';
+import blockEditorContentStyles from '@wordpress/block-editor/build-style/content.css?inline';
+import blocksStyles from '@wordpress/block-library/build-style/style.css?inline';
+import blocksEditorStyles from '@wordpress/block-library/build-style/editor.css?inline';
 
 /**
  * Internal dependencies
@@ -26,10 +31,7 @@ import { useEditorStyles } from './use-editor-styles';
 import { unlock } from '../../lock-unlock';
 import DefaultBlockAppender from '../default-block-appender';
 import { useEditorVisible } from './use-editor-visible';
-// The Vite query parameter breaks the linter's import resolution
-// eslint-disable-next-line import/no-unresolved
 import defaultThemeStyles from './default-theme-styles.scss?inline';
-// eslint-disable-next-line import/no-unresolved
 import commonStyles from './wp-common-styles.scss?inline';
 
 const {
@@ -89,7 +91,11 @@ function VisualEditor( { hideTitle } ) {
 		// context.
 		commonStyles,
 		// Add sensible default styles if theme styles are not present.
-		hasThemeStyles ? '' : defaultThemeStyles
+		hasThemeStyles ? '' : defaultThemeStyles,
+		componentStyles,
+		blockEditorContentStyles,
+		blocksStyles,
+		blocksEditorStyles
 	);
 
 	const editorClasses = clsx( 'gutenberg-kit-visual-editor', {

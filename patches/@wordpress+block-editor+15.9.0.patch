@@ -1,0 +1,67 @@
+diff --git a/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.js b/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.js
+index 59f2a09..e609306 100644
+--- a/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.js
++++ b/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.js
+@@ -23,6 +23,10 @@ function InserterListItem({
+   ...props
+ }) {
+   const isDraggingRef = useRef(false);
++  const isTouchDeviceRef = useRef(
++    window.matchMedia( '(hover: none)' ).matches ||
++    window.matchMedia( '(pointer: coarse)' ).matches
++  );
+   const itemIconStyle = item.icon ? {
+     backgroundColor: item.icon.background,
+     color: item.icon.foreground
+@@ -96,7 +100,7 @@ function InserterListItem({
+                 }
+               },
+               onMouseEnter: () => {
+-                if (isDraggingRef.current) {
++                if (isDraggingRef.current || isTouchDeviceRef.current) {
+                   return;
+                 }
+                 onHover(item);
+diff --git a/node_modules/@wordpress/block-editor/build-module/components/inserter/index.js b/node_modules/@wordpress/block-editor/build-module/components/inserter/index.js
+index d762257..8ea6b39 100644
+--- a/node_modules/@wordpress/block-editor/build-module/components/inserter/index.js
++++ b/node_modules/@wordpress/block-editor/build-module/components/inserter/index.js
+@@ -174,8 +174,9 @@ var Inserter = class extends Component {
+         contentClassName: clsx("block-editor-inserter__popover", {
+           "is-quick": isQuick
+         }),
+-        popoverProps: { position, shift: true },
++        popoverProps: { ...this.props.popoverProps, position, shift: true },
+         onToggle: this.onToggle,
++        open: this.props.open,
+         expandOnMobile: true,
+         headerTitle: __("Add a block"),
+         renderToggle: this.renderToggle,
+diff --git a/node_modules/@wordpress/block-editor/build-module/components/provider/index.js b/node_modules/@wordpress/block-editor/build-module/components/provider/index.js
+index ef8110e..8b3d55f 100644
+--- a/node_modules/@wordpress/block-editor/build-module/components/provider/index.js
++++ b/node_modules/@wordpress/block-editor/build-module/components/provider/index.js
+@@ -91,7 +91,7 @@ var ExperimentalBlockEditorProvider = withRegistryProvider(
+   }
+ );
+ var BlockEditorProvider = (props) => {
+-  return /* @__PURE__ */ jsx(ExperimentalBlockEditorProvider, { ...props, stripExperimentalSettings: true, children: props.children });
++  return /* @__PURE__ */ jsx(ExperimentalBlockEditorProvider, { ...props, stripExperimentalSettings: false, children: props.children });
+ };
+ var provider_default = BlockEditorProvider;
+ export {
+diff --git a/node_modules/@wordpress/block-editor/package.json b/node_modules/@wordpress/block-editor/package.json
+index 589edd8..84748cf 100644
+--- a/node_modules/@wordpress/block-editor/package.json
++++ b/node_modules/@wordpress/block-editor/package.json
+@@ -31,7 +31,9 @@
+ 			"require": "./build/index.js"
+ 		},
+ 		"./package.json": "./package.json",
+-		"./build-style/": "./build-style/"
++		"./build-style/": "./build-style/",
++		"./build-module/components/inserter/media-tab/*": "./build-module/components/inserter/media-tab/*",
++		"./build-module/components/inserter/hooks/*": "./build-module/components/inserter/hooks/*"
+ 	},
+ 	"react-native": "src/index",
+ 	"wpScript": true,
