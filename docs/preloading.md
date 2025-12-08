@@ -1,0 +1,405 @@
+# Preloading System
+
+## Overview
+
+The preloading system in GutenbergKit pre-fetches WordPress REST API responses before the editor loads, eliminating network latency during editor initialization. By injecting cached API responses directly into the JavaScript runtime, the Gutenberg editor can almost always initialize instantly without waiting for network requests.
+
+## Architecture
+
+The preloading system consists of several interconnected components:
+
+```
++---------------------------------------------------------------------+
+|                         EditorService                               |
+|  (Orchestrates dependency fetching and caching)                     |
++----------------------------------+----------------------------------+
+                                   |
+                +------------------+------------------+
+                |                  |                  |
+                v                  v                  v
+   +--------------------+ +--------------+ +--------------------+
+   | RESTAPIRepository  | |EditorPreload | |EditorAssetLibrary  |
+   | (API caching)      | |    List      | | (JS/CSS bundles)   |
+   +---------+----------+ +------+-------+ +--------------------+
+             |                   |
+             v                   v
+   +--------------------+ +-------------------------------------+
+   |  EditorURLCache    | |           GBKitGlobal               |
+   | (Disk caching)     | | (Serialized to window.GBKit)        |
+   +---------+----------+ +------------------+------------------+
+             |                               |
+             v                               v
+   +--------------------+        +-----------------------------+
+   |EditorCachePolicy   |        |   JavaScript Preloading     |
+   | (TTL management)   |        |       Middleware            |
+   +--------------------+        +-----------------------------+
+```
+
+## Key Components
+
+### EditorService
+
+The `EditorService` actor coordinates fetching all editor dependencies concurrently:
+
+**Swift**
+```swift
+let service = EditorService(configuration: config)
+let dependencies = try await service.prepare { progress in
+    print("Loading: \(progress.fractionCompleted * 100)%")
+}
+```
+
+**Kotlin**
+```kotlin
+// TBD
+```
+
+The `prepare` method fetches these resources in parallel:
+- Editor settings (theme styles, block settings)
+- Asset bundles (JavaScript and CSS files)
+- Preload list (API responses for editor initialization)
+
+### EditorPreloadList
+
+The `EditorPreloadList` struct contains pre-fetched API responses that are serialized to JSON and injected into the editor's JavaScript runtime:
+
+| Property | API Endpoint | Description |
+|----------|--------------|-------------|
+| `postData` | `/wp/v2/posts/{id}?context=edit` | The post being edited (existing posts only) |
+| `postTypeData` | `/wp/v2/types/{type}?context=edit` | Schema for the current post type |
+| `postTypesData` | `/wp/v2/types?context=view` | All available post types |
+| `activeThemeData` | `/wp/v2/themes?context=edit&status=active` | Active theme information |
+| `settingsOptionsData` | `OPTIONS /wp/v2/settings` | Site settings schema |
+
+### EditorURLCache
+
+The `EditorURLCache` provides disk-based caching for API responses, keyed by URL and HTTP method. It supports three cache policies via `EditorCachePolicy`:
+
+| Policy | Behavior |
+|--------|----------|
+| `.ignore` | Never use cached responses (force fresh data) |
+| `.maxAge(TimeInterval)` | Use cached responses younger than the specified age |
+| `.always` | Always use cached responses regardless of age |
+
+Example:
+
+**Swift**
+```swift
+// Cache responses for up to 1 hour
+let service = EditorService(
+    configuration: config,
+    cachePolicy: .maxAge(3600)
+)
+```
+
+**Kotlin**
+```kotlin
+// TBD
+```
+
+### RESTAPIRepository
+
+The `RESTAPIRepository` handles fetching and caching individual API responses. It follows a read-through caching pattern:
+
+1. Check cache for existing response
+2. If cache hit and valid per policy, return cached data
+3. If cache miss or expired, fetch from network
+4. Store response in cache
+5. Return response
+
+## Data Flow
+
+### 1. Preparation Phase (Native)
+
+When `EditorService.prepare()` is called:
+
+```
+EditorService.prepare()
+    |-- prepareEditorSettings()      -> EditorSettings
+    |-- prepareAssetBundle()         -> EditorAssetBundle
+    +-- preparePreloadList()
+        |-- prepareActiveTheme()     -> EditorURLResponse
+        |-- prepareSettingsOptions() -> EditorURLResponse
+        |-- preparePost(type:)       -> EditorURLResponse
+        |-- preparePostTypes()       -> EditorURLResponse
+        +-- preparePost(id:)         -> EditorURLResponse (if editing existing post)
+```
+
+### 2. Serialization Phase (Native)
+
+The `EditorPreloadList` is converted to JSON via `build()`:
+
+```json
+{
+  "/wp/v2/types/post?context=edit": {
+    "body": { "slug": "post", "supports": { ... } },
+    "headers": { "Link": "<...>; rel=\"https://api.w.org/\"" }
+  },
+  "/wp/v2/types?context=view": {
+    "body": { "post": { ... }, "page": { ... } },
+    "headers": {}
+  },
+  "/wp/v2/themes?context=edit&status=active": {
+    "body": [ ... ],
+    "headers": {}
+  },
+  "OPTIONS": {
+    "/wp/v2/settings": {
+      "body": { ... },
+      "headers": {}
+    }
+  }
+}
+```
+
+### 3. Injection Phase (Native to Web)
+
+The `GBKitGlobal` struct packages all configuration and preload data, then injects it into the WebView as `window.GBKit`:
+
+```javascript
+window.GBKit = {
+  siteURL: "https://example.com",
+  siteApiRoot: "https://example.com/wp-json",
+  authHeader: "Bearer ...",
+  preloadData: { /* serialized EditorPreloadList */ },
+  editorSettings: { /* theme styles, colors, etc. */ },
+  // ... other configuration
+};
+```
+
+### 4. Consumption Phase (JavaScript)
+
+The `@wordpress/api-fetch` package includes a preloading middleware that intercepts API requests:
+
+```javascript
+// In src/utils/api-fetch.js
+export function configureApiFetch() {
+  const { preloadData } = getGBKit();
+
+  apiFetch.use(
+    apiFetch.createPreloadingMiddleware(preloadData ?? defaultPreloadData)
+  );
+}
+```
+
+When Gutenberg makes an API request:
+
+1. The preloading middleware checks if the request path exists in `preloadData`
+2. If found, the cached response is returned immediately (no network request)
+3. If not found, the request proceeds to the network
+4. The preload entry is consumed (one-time use) to ensure fresh data on subsequent requests
+
+## Header Filtering
+
+Only certain headers are preserved in preload responses to match WordPress core's behavior:
+
+- `Accept` - Content type negotiation
+- `Link` - REST API discovery and pagination
+
+This filtering is performed by `EditorURLResponse.asPreloadResponse()`.
+
+## Cache Management
+
+### Automatic Cleanup
+
+`EditorService` automatically cleans up old asset bundles once per day:
+
+**Swift**
+```swift
+try await onceEvery(.seconds(86_400)) {
+    try await self.cleanup()
+}
+```
+
+**Kotlin**
+```kotlin
+//tbd
+```
+
+### Manual Cache Control
+
+**Swift**
+```swift
+// Clear unused resources (keeps most recent)
+try await service.cleanup()
+
+// Clear all resources (requires re-download)
+try await service.purge()
+```
+
+**Kotlin**
+```kotlin
+//tbd
+```
+
+## Offline Mode
+
+When `EditorConfiguration.isOfflineModeEnabled` is `true`, the preloading system returns empty dependencies:
+
+```swift
+if self.configuration.isOfflineModeEnabled {
+    return EditorDependencies(
+        editorSettings: .undefined,
+        assetBundle: .empty,
+        preloadList: nil
+    )
+}
+```
+
+Offline mode doesn't refer to reguar site that are offline – it's for when you're using GutenbergKit separately from a WordPress
+site (for instance, the bundled editor in the demo app, or you just want an editor without the WP integration).
+
+The JavaScript side falls back to `defaultPreloadData` which contains minimal type definitions to allow basic editor functionality.
+
+## Progress Reporting
+
+The preloading system reports its progress to give the user high-quality feedback about the loading process - if the user loads the
+editor without `EditorDependencies` present, the editor will display a loading screen with a progress bar. If the user provides `EditorDependencies`
+that contain everything the editor needs, the progress bar will never be displayed.
+
+## EditorDependencies
+
+`EditorDependencies` is the output of the preloading system - a container holding all pre-fetched resources needed to initialize the editor instantly.
+
+### What It Contains
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `editorSettings` | `EditorSettings` | Theme styles, colors, typography, and block settings |
+| `assetBundle` | `EditorAssetBundle` | Cached JavaScript and CSS files for plugins/themes |
+| `preloadList` | `EditorPreloadList?` | Pre-fetched API responses (nil if preloading disabled) |
+
+### How to Obtain EditorDependencies
+
+Use `EditorService.prepare()` to fetch dependencies asynchronously:
+
+**Swift**
+```swift
+let configuration = EditorConfiguration(/* ... */)
+let service = EditorService(configuration: configuration)
+
+// Fetch dependencies with progress reporting
+let dependencies = try await service.prepare { progress in
+    // Update your UI with progress.fractionCompleted (0.0 to 1.0)
+    loadingView.progress = progress.fractionCompleted
+}
+```
+
+**Kotlin**
+```kotlin
+// TBD
+```
+
+### Using EditorDependencies with EditorViewController
+
+`EditorViewController` can be initialized in two ways:
+
+#### 1. With Pre-fetched Dependencies (Recommended)
+
+Pass `EditorDependencies` to the initializer for instant editor loading:
+
+**Swift**
+```swift
+// Fetch dependencies ahead of time (e.g., when user taps "Edit")
+let dependencies = try await service.prepare { progress in
+    // Show loading UI
+}
+
+// Later, create the editor with dependencies ready
+let editor = EditorViewController(
+    configuration: configuration,
+    dependencies: dependencies  // Editor loads instantly
+)
+```
+
+When dependencies are provided:
+1. The editor skips the loading/progress UI entirely
+2. The WebView loads immediately with all configuration injected
+3. The user sees the editor content with minimal delay
+
+#### 2. Without Dependencies (Lazy Loading)
+
+If no dependencies are provided, the editor fetches them on-demand:
+
+**Swift**
+```swift
+let editor = EditorViewController(
+    configuration: configuration
+    // No dependencies - will fetch automatically
+)
+```
+
+When dependencies are NOT provided:
+1. The editor displays a progress bar while fetching
+2. `EditorService.prepare()` runs internally
+3. Once complete, the editor loads and the progress bar hides
+
+### EditorViewController State Machine
+
+The editor transitions through these states based on dependency availability:
+
+```
++-------+     No deps      +---------+     Fetch complete     +--------+
+| start | ---------------> | loading | ---------------------> | loaded |
++-------+                  +---------+                        +--------+
+    |                                                              |
+    | Has deps                                                     |
+    +------------------------------------------------------------->+
+                                                                   |
+                                                              JS initialized
+                                                                   |
+                                                                   v
+                                                              +-------+
+                                                              | ready |
+                                                              +-------+
+```
+
+| State | Description |
+|-------|-------------|
+| `start` | Initial state before `viewDidLoad` |
+| `loading` | Fetching dependencies, showing progress bar |
+| `loaded` | Dependencies ready, WebView loading HTML/JS |
+| `ready` | Editor fully initialized, safe to call JS APIs |
+
+### Best Practices
+
+#### Prepare Dependencies Early
+
+For the best user experience, fetch dependencies before the user needs the editor:
+
+**Swift**
+```swift
+class PostListViewController: UIViewController {
+    private var editorDependencies: EditorDependencies?
+    private let editorService: EditorService
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+
+        // Start fetching in the background
+        Task {
+            self.editorDependencies = try? await editorService.prepare { _ in }
+        }
+    }
+
+    func editPost(_ post: Post) {
+        let config = EditorConfiguration(post: post)
+        let editor = EditorViewController(
+            configuration: config,
+            dependencies: editorDependencies  // Already available!
+        )
+        navigationController?.pushViewController(editor, animated: true)
+    }
+}
+```
+
+#### Cache Dependencies Per-Site
+
+Dependencies are site-specific (different themes, plugins, settings). Create separate `EditorService` instances per site and cache their dependencies independently.
+
+#### Handle Missing Dependencies Gracefully
+
+Even without pre-fetched dependencies, the editor will work - it just shows a loading state first. This is useful for:
+- First launch (no cache yet)
+- Cache expired or cleared
+- Error recovery scenarios
