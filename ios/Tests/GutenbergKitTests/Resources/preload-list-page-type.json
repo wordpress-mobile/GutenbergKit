@@ -1,0 +1,22 @@
+{
+  "/wp/v2/themes?context=edit&status=active": {
+    "body": [],
+    "headers": {}
+  },
+  "/wp/v2/types?context=view": {
+    "body": {},
+    "headers": {}
+  },
+  "/wp/v2/types/page?context=edit": {
+    "body": {
+      "slug": "page"
+    },
+    "headers": {}
+  },
+  "OPTIONS": {
+    "/wp/v2/settings": {
+      "body": {},
+      "headers": {}
+    }
+  }
+}

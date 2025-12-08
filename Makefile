@@ -143,6 +143,10 @@ test-js-watch: npm-dependencies ## Run JavaScript tests in watch mode
 test-swift-package: build ## Run Swift package tests
 	$(call XCODEBUILD_CMD, test)
 
+.PHONY: test-swift-package-logic
+test-swift-package-logic:
+	$(call XCODEBUILD_LOGIC_CMD, test)
+
 .PHONY: test-android
 test-android: ## Run Android tests
 	@echo "--- :android: Running Android Tests"

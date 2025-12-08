@@ -98,13 +98,10 @@ npm run clean:l10n    # Clean only translations directory
 
 ```bash
 # Build Swift package
-make build-swift-package
-
-# Build Swift package (force refresh of npm deps/translations if needed)
-make build-swift-package REFRESH_DEPS=1 REFRESH_L10N=1
+swift build
 
 # Run Swift tests
-make test-swift-package
+swift test
 ```
 
 ### Android Development
