@@ -1,6 +1,6 @@
 import Foundation
 
-public struct MediaInfo: Codable {
+public struct MediaInfo: Sendable, Codable {
     public let id: Int32?
     public let url: String?
     public let type: String?

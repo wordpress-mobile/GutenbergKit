@@ -573,20 +573,18 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
         NSLog("didFailProvisionalNavigation: \(error)")
     }
 
-    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
         guard let url = navigationAction.request.url else {
-            decisionHandler(.allow)
-            return
+            return .allow
         }
 
         if navigationAction.navigationType == .linkActivated {
             // Open the request in OS browser
-            UIApplication.shared.open(url)
-            decisionHandler(.cancel)
-            return
+            await UIApplication.shared.open(url)
+            return .cancel
         }
 
-        decisionHandler(.allow)
+        return .allow
     }
 
     // MARK: - WKScriptMessageHandler

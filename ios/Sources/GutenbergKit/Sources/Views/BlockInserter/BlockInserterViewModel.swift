@@ -61,17 +61,14 @@ class BlockInserterViewModel: ObservableObject {
         let task = Task<[MediaInfo], Never> { @MainActor in
             var results: [MediaInfo] = []
             var anyError: Error?
-            await withTaskGroup(of: Void.self) { group in
+
+            do {
                 for item in items {
-                    group.addTask {
-                        do {
-                            let item = try await self.fileManager.import(item)
-                            results.append(item)
-                        } catch {
-                            anyError = error
-                        }
-                    }
+                    let item = try await self.fileManager.import(item)
+                    results.append(item)
                 }
+            } catch {
+                anyError = error
             }
 
             guard !Task.isCancelled else {
