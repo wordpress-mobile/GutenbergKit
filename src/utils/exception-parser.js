@@ -76,10 +76,7 @@ const parseException = ( originalException ) => {
 		message: extractMessage( originalException ),
 	};
 
-	const stacktrace = parseStacktrace( originalException );
-	if ( stacktrace.length ) {
-		exception.stacktrace = stacktrace;
-	}
+	exception.stacktrace = parseStacktrace( originalException );
 
 	if ( exception.type === undefined && exception.message === '' ) {
 		exception.message = 'Unknown error';
