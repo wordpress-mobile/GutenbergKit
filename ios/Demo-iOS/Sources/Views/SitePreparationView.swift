@@ -111,7 +111,7 @@ struct SitePreparationView: View {
 @Observable
 class SitePreparationViewModel {
 
-    var enableNativeInserter: Bool = false
+    var enableNativeInserter: Bool = true
 
     var enableNetworkLogging: Bool = false
 
