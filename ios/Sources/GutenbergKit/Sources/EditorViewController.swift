@@ -656,13 +656,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         self.viewState = .ready(editorDependencies)
 
-        // If the editor uses `location.reload`, we'll end up here more than once
-        guard case .loaded(let editorDependencies) = viewState else {
-            return
-        }
-
-        self.viewState = .ready(editorDependencies)
-
         UIView.animate(withDuration: 0.2, delay: 0.1, options: [.allowUserInteraction]) {
             self.webView.alpha = 1
         }
