@@ -55,7 +55,7 @@ public struct EditorURLCache: Sendable {
             storagePolicy: .allowed
         )
 
-        self.cache.storeCachedResponse(response, for: URLRequest(url: url, method: httpMethod))
+        self.cache.storeCachedResponse(response, for: URLRequest(method: httpMethod, url: url))
         Thread.sleep(forTimeInterval: 0.05)  // Hack to make `URLCache` work
     }
 
@@ -100,7 +100,7 @@ public struct EditorURLCache: Sendable {
             storagePolicy: .allowed
         )
 
-        self.cache.storeCachedResponse(response, for: URLRequest(url: url, method: httpMethod))
+        self.cache.storeCachedResponse(response, for: URLRequest(method: httpMethod, url: url))
         Thread.sleep(forTimeInterval: 0.05)  // Hack to make `URLCache` work
     }
 
@@ -137,7 +137,7 @@ public struct EditorURLCache: Sendable {
     ) throws -> EditorURLResponse? {
         performanceMonitor.measure { () -> EditorURLResponse? in
             guard
-                let response = self.cache.cachedResponse(for: URLRequest(url: url, method: httpMethod)),
+                let response = self.cache.cachedResponse(for: URLRequest(method: httpMethod, url: url)),
                 let storageDate = response.userInfo?["storageDate"] as? Date,
                 self.cachePolicy.allowsResponseWith(date: storageDate, currentDate: currentDate)
             else {

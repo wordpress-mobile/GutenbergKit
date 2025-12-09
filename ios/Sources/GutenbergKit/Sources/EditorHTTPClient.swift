@@ -3,9 +3,8 @@ import OSLog
 
 /// A protocol for making authenticated HTTP requests to the WordPress REST API.
 public protocol EditorHTTPClientProtocol: Sendable {
-    func GET(url: URL) async throws -> (Data, HTTPURLResponse)
-    func OPTIONS(url: URL) async throws -> (Data, HTTPURLResponse)
-    func download(url: URL) async throws -> (URL, HTTPURLResponse)
+    func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse)
+    func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse)
 }
 
 /// A delegate for observing HTTP requests made by the editor.
@@ -40,65 +39,58 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
     private let urlSession: URLSession
     private let authHeader: String
     private let delegate: EditorHTTPClientDelegate?
-    
+    private let requestTimeout: TimeInterval
+
     public init(
         urlSession: URLSession,
         authHeader: String,
-        delegate: EditorHTTPClientDelegate? = nil
+        delegate: EditorHTTPClientDelegate? = nil,
+        requestTimeout: TimeInterval = 60 // `URLRequest` default
     ) {
         self.urlSession = urlSession
         self.authHeader = authHeader
         self.delegate = delegate
+        self.requestTimeout = requestTimeout
     }
-    
-    public func GET(url: URL) async throws -> (Data, HTTPURLResponse) {
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        return try await self.perform(request: request)
-    }
-    
-    public func OPTIONS(url: URL) async throws -> (Data, HTTPURLResponse) {
-        var request = URLRequest(url: url)
-        request.httpMethod = "OPTIONS"
-        return try await self.perform(request: request)
-    }
-    
-    public func download(url: URL) async throws -> (URL, HTTPURLResponse) {
-        var request = URLRequest(url: url)
-        request.addValue(self.authHeader, forHTTPHeaderField: "Authorization")
-        
-        let (url, response) = try await self.urlSession.download(for: request)
-        
+
+    public func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        var mutableRequest = urlRequest
+        mutableRequest.setValue(self.authHeader, forHTTPHeaderField: "Authorization")
+        mutableRequest.timeoutInterval = self.requestTimeout
+
+        let (data, response) = try await self.urlSession.data(for: mutableRequest)
+        self.delegate?.didPerformRequest(mutableRequest, response: response, data: data)
+
         let httpResponse = response as! HTTPURLResponse
-        
+
         guard 200...299 ~= httpResponse.statusCode else {
-            throw ClientError.downloadFailed(statusCode: httpResponse.statusCode)
-        }
-        
-        return (url, response as! HTTPURLResponse)
-    }
-    
-    private func perform(request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        var signedRequest = request
-        signedRequest.setValue(self.authHeader, forHTTPHeaderField: "Authorization")
-        signedRequest.timeoutInterval = 60
-        
-        let (data, response) = try await self.urlSession.data(for: signedRequest)
-        self.delegate?.didPerformRequest(signedRequest, response: response, data: data)
-        
-        let httpResponse = response as! HTTPURLResponse
-        
-        guard 200...299 ~= httpResponse.statusCode else {
-            Logger.http.error("📡 HTTP error fetching \(request.url!.absoluteString): \(httpResponse.statusCode)")
-            
+            Logger.http.error("📡 HTTP error fetching \(mutableRequest.url!.absoluteString): \(httpResponse.statusCode)")
+
             if let wpError = try? JSONDecoder().decode(WPError.self, from: data) {
                 throw ClientError.wpError(wpError)
             }
-            
+
             throw ClientError.unknown(response: data, statusCode: httpResponse.statusCode)
         }
-        
+
         return (data, httpResponse)
     }
-    
+
+    public func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse) {
+        var mutableRequest = urlRequest
+        mutableRequest.addValue(self.authHeader, forHTTPHeaderField: "Authorization")
+        mutableRequest.timeoutInterval = self.requestTimeout
+
+        let (url, response) = try await self.urlSession.download(for: mutableRequest)
+
+        let httpResponse = response as! HTTPURLResponse
+
+        guard 200...299 ~= httpResponse.statusCode else {
+            Logger.http.error("📡 HTTP error fetching \(mutableRequest.url!.absoluteString): \(httpResponse.statusCode)")
+
+            throw ClientError.downloadFailed(statusCode: httpResponse.statusCode)
+        }
+
+        return (url, response as! HTTPURLResponse)
+    }
 }

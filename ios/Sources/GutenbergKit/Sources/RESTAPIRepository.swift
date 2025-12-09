@@ -44,7 +44,8 @@ public struct RESTAPIRepository: Sendable {
     // MARK: Post
     @discardableResult
     public func fetchPost(id: Int) async throws -> EditorURLResponse {
-        let response = try await self.httpClient.GET(url: buildPostUrl(id: id))
+        let request = URLRequest(method: .GET, url: self.buildPostUrl(id: id))
+        let response = try await self.httpClient.perform(request)
         return EditorURLResponse(response)
     }
 
@@ -68,7 +69,9 @@ public struct RESTAPIRepository: Sendable {
             return .undefined
         }
 
-        let response = try await self.httpClient.GET(url: editorSettingsUrl)
+        let request = URLRequest(method: .GET, url: editorSettingsUrl)
+        let response = try await self.httpClient.perform(request)
+
         let editorSettings = EditorSettings(data: response.0)
 
         let urlResponse = EditorURLResponse((try JSONEncoder().encode(editorSettings), response.1))
@@ -87,7 +90,7 @@ public struct RESTAPIRepository: Sendable {
     // MARK: GET Post Type
     @discardableResult
     package func fetchPostType(for type: String) async throws -> EditorURLResponse {
-        try await GET(url: buildPostTypeUrl(type: type))
+        try await self.perform(method: .GET, url: self.buildPostTypeUrl(type: type))
     }
 
     package func readPostType(for type: String) throws -> EditorURLResponse? {
@@ -105,7 +108,7 @@ public struct RESTAPIRepository: Sendable {
     // MARK: GET Active Theme
     @discardableResult
     package func fetchActiveTheme() async throws -> EditorURLResponse {
-        try await GET(url: self.activeThemeUrl)
+        try await self.perform(method: .GET, url: self.activeThemeUrl)
     }
 
     package func readActiveTheme() throws -> EditorURLResponse? {
@@ -115,7 +118,7 @@ public struct RESTAPIRepository: Sendable {
     // MARK: OPTIONS Settings
     @discardableResult
     package func fetchSettingsOptions() async throws -> EditorURLResponse {
-        try await OPTIONS(url: self.siteSettingsUrl)
+        try await self.perform(method: .OPTIONS, url: self.siteSettingsUrl)
     }
 
     package func readSettingsOptions() throws -> EditorURLResponse? {
@@ -125,24 +128,19 @@ public struct RESTAPIRepository: Sendable {
     // MARK: Post Types
     @discardableResult
     package func fetchPostTypes() async throws -> EditorURLResponse {
-        try await self.GET(url: self.postTypesUrl)
+        try await self.perform(method: .GET, url: self.postTypesUrl)
     }
 
     package func readPostTypes() throws -> EditorURLResponse? {
         try self.cache.response(for: self.postTypesUrl, httpMethod: .GET)
     }
 
-    private func GET(url: URL) async throws -> EditorURLResponse {
-        let response = try await self.httpClient.GET(url: url)
+    private func perform(method: EditorHttpMethod, url: URL) async throws -> EditorURLResponse {
+        let request = URLRequest(method: method, url: url)
+        let response = try await self.httpClient.perform(request)
         let urlResponse = EditorURLResponse(response)
-        try self.cache.store(urlResponse, for: url, httpMethod: .GET)
+        try self.cache.store(urlResponse, for: url, httpMethod: method)
         return urlResponse
     }
 
-    private func OPTIONS(url: URL) async throws -> EditorURLResponse {
-        let response = try await self.httpClient.OPTIONS(url: url)
-        let urlResponse = EditorURLResponse(response)
-        try self.cache.store(urlResponse, for: url, httpMethod: .OPTIONS)
-        return urlResponse
-    }
 }

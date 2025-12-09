@@ -38,7 +38,9 @@ public actor EditorAssetLibrary {
     package func fetchManifest(cachePolicy: CachePolicy = .useExisting) async throws
     -> LocalEditorAssetManifest {
         guard configuration.shouldUsePlugins else { return .empty }
-        let data = try await httpClient.GET(url: self.editorAssetsUrl(for: self.configuration)).0
+        let data = try await httpClient.perform(
+            URLRequest(method: .GET, url: self.editorAssetsUrl(for: self.configuration))
+        ).0
         let remoteManifest = try RemoteEditorAssetManifest(data: data)
         
         if case .useExisting = cachePolicy,
@@ -146,7 +148,7 @@ public actor EditorAssetLibrary {
     ///
     private func fetchAsset(url: URL, into bundle: EditorAssetBundle) async throws -> URL {
         let tempUrl = try await logExecutionTime("Downloading \(url.lastPathComponent)") {
-            try await httpClient.download(url: url).0
+            try await httpClient.download(URLRequest(method: .GET, url: url)).0
         }
 
         let destinationPath = bundle.bundleRoot.appending(path: url.path(percentEncoded: false))

@@ -78,7 +78,7 @@ extension URLRequest {
     /// - Parameters:
     ///   - url: The URL for the request.
     ///   - method: The HTTP method to use.
-    init(url: URL, method: EditorHttpMethod) {
+    init(method: EditorHttpMethod, url: URL) {
         var request = URLRequest(url: url)
         request.httpMethod = method.rawValue
         self = request
