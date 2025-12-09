@@ -9,7 +9,7 @@ public protocol EditorLogging: Sendable {
 
 extension Logger {
 
-    public static let performance = OSSignposter(subsystem: "GutenbergKit", category: "timing")
+    public static let performance = OSSignposter(subsystem: "GutenbergKit", category: "performance")
 
     /// Logs timings for performance optimization
     public static let timing = Logger(subsystem: "GutenbergKit", category: "timing")
