@@ -64,8 +64,7 @@ public enum EditorLogger {
     public nonisolated(unsafe) static var logLevel: EditorLogLevel = .error
 }
 
-
-public func log(_ level: EditorLogLevel, _ message: @autoclosure () -> String) {
+func log(_ level: EditorLogLevel, _ message: @autoclosure () -> String) {
     guard level.priority >= EditorLogger.logLevel.priority,
           let logger = EditorLogger.shared
     else {
