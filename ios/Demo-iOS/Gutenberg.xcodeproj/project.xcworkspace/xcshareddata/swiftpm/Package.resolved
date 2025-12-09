@@ -1,4 +1,5 @@
 {
+  "originHash" : "2aee256c0b38622aa9bb903b83d446aa51554bf7f6d1f43aca6d447f82d2a906",
   "pins" : [
     {
       "identity" : "svgview",
@@ -28,5 +29,5 @@
       }
     }
   ],
-  "version" : 2
+  "version" : 3
 }
