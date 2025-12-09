@@ -146,11 +146,6 @@ public actor EditorService {
         let startTime = CFAbsoluteTimeGetCurrent()
         log(.info, "Starting editor resources refresh")
 
-        guard let baseURL = URL(string: configuration.siteApiRoot) else {
-            log(.error, "Invalid siteApiRoot URL: \(configuration.siteApiRoot)")
-            return
-        }
-
         // Fetch settings and manifest in parallel
         async let settingsFuture = Result {
             try await fetchEditorSettings(configuration: configuration)

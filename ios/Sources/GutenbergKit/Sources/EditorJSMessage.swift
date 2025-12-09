@@ -2,6 +2,7 @@
 import WebKit
 
 /// A type that represents JavaScript messages send from and to the web view.
+@MainActor
 struct EditorJSMessage {
     let type: MessageType
     let body: Any?
