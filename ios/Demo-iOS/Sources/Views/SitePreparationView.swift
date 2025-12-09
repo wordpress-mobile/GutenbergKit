@@ -85,7 +85,7 @@ struct SitePreparationView: View {
                 }
             }.disabled(self.viewModel.disableButtons)
 
-            Button("Prepare Editor ignoring cache") {
+            Button("Prepare Editor Ignoring Cache") {
                 withAnimation {
                     self.viewModel.prepareEditorFromScratch()
                 }
