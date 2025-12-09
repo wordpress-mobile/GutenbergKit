@@ -242,7 +242,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         // If we don't have dependencies yet, we need to load them
         if case .start = viewState {
-            self.viewState = .loading(self.loadEditorTask)
+            self.viewState = .loading(Task(priority: .userInitiated) {
+                await self.prepareEditor()
+            })
         }
 
         // If we already have the dependencies, we can just load the editor right away
@@ -265,23 +267,24 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         removeNavigationOverlay()
     }
 
-    @MainActor
-    private var loadEditorTask: Task<Void, Never> {
-        Task(priority: .userInitiated) {
-            do {
-                let dependencies = try await self.editorService.prepare { @MainActor progress in
-                    self.progressView.setProgress(progress, animated: true)
-                }
-                try self.loadEditor(dependencies: dependencies)
-
-                self.viewState = .loaded(dependencies)
-                
-            } catch {
-                self.viewState = .error(error)
+    /// Fetch (or read from cache) everything the editor needs to launch
+    ///
+    private func prepareEditor() async {
+        do {
+            let dependencies = try await self.editorService.prepare { @MainActor progress in
+                self.progressView.setProgress(progress, animated: true)
             }
+            try self.loadEditor(dependencies: dependencies)
+
+            self.viewState = .loaded(dependencies)
+
+        } catch {
+            self.viewState = .error(error)
         }
     }
 
+    /// Load the editor JS into the webview
+    ///
     @MainActor
     private func loadEditor(dependencies: EditorDependencies) throws {
         self.bundleProvider.set(bundle: dependencies.assetBundle)
