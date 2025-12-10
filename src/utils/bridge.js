@@ -356,7 +356,8 @@ export function awaitGBKitGlobal( timeoutMs = 3000 ) {
 /**
  * Retrieves the editor assets from the native host.
  *
- * @return {Promise<{scripts: string, styles: string, allowed_block_types: string[]}>} Promise that resolves with the assets object.
+ * @return {Promise<Object>} Promise that resolves with the assets object containing
+ *                           scripts, styles, inline_scripts, and inline_styles.
  */
 export async function fetchEditorAssets() {
 	if ( window.webkit ) {
@@ -367,10 +368,8 @@ export async function fetchEditorAssets() {
 
 	const { siteApiRoot, editorAssetsEndpoint, authHeader } = getGBKit();
 	const url = new URL(
-		editorAssetsEndpoint || `${ siteApiRoot }wpcom/v2/editor-assets`
+		editorAssetsEndpoint || `${ siteApiRoot }wpcom/v2.1/editor-assets`
 	);
-	// The GutenbergKit bundle includes the required `@wordpress` modules
-	url.searchParams.set( 'exclude', 'core,gutenberg' );
 	// Use our fetch utility, as we have not yet loaded the `wp.apiFetch` utility
 	return await basicFetch( url.toString(), {
 		headers: { Authorization: authHeader },
