@@ -83,6 +83,7 @@ public actor EditorService {
         self.assetLibrary = EditorAssetLibrary(
             configuration: configuration,
             httpClient: httpClient,
+            cachePolicy: cachePolicy,
             storageRoot: storageRoot ?? Paths.storageRoot(for: configuration)
         )
     }

@@ -3,16 +3,12 @@ import Foundation
 /// The Editor Asset Library is a site-specific repository of remote assets that can be downloaded to the local device to support plugins and theme styles.
 ///
 public actor EditorAssetLibrary {
-    
-    public enum CachePolicy: Sendable {
-        case useExisting
-        case forceRefresh
-    }
-    
+
     private let configuration: EditorConfiguration
     private let httpClient: EditorHTTPClientProtocol
     private let storageRoot: URL
-    
+    private let cachePolicy: EditorCachePolicy
+
     /// Creates a new `EditorAssetLibrary` instance.
     ///
     /// - Parameters:
@@ -22,33 +18,36 @@ public actor EditorAssetLibrary {
     public init(
         configuration: EditorConfiguration,
         httpClient: EditorHTTPClientProtocol,
+        cachePolicy: EditorCachePolicy = .always,
         storageRoot: URL
     ) {
         self.configuration = configuration
         self.httpClient = httpClient
         self.storageRoot = storageRoot
+        self.cachePolicy = cachePolicy
     }
-    
+
     // MARK: - Manifest Handling
-    
+
     /// Retrieve the manifest for a given site configuration.
     ///
     /// Applications should periodically check for a new editor manifest. This can be very expensive, so this method defaults to returning an existing one on-disk.
     ///
-    package func fetchManifest(cachePolicy: CachePolicy = .useExisting) async throws
-    -> LocalEditorAssetManifest {
+    package func fetchManifest() async throws -> LocalEditorAssetManifest {
         guard configuration.shouldUsePlugins else { return .empty }
         let data = try await httpClient.perform(
             URLRequest(method: .GET, url: self.editorAssetsUrl(for: self.configuration))
         ).0
         let remoteManifest = try RemoteEditorAssetManifest(data: data)
-        
-        if case .useExisting = cachePolicy,
-           let existingManifest = try self.existingBundle(forManifestChecksum: remoteManifest.checksum) {
-            return existingManifest.manifest
+
+        guard
+            let existingManifest = try self.existingBundle(forManifestChecksum: remoteManifest.checksum),
+            self.cachePolicy.allowsResponseWith(date: existingManifest.downloadDate)
+        else {
+            return try LocalEditorAssetManifest(remoteManifest: remoteManifest)
         }
-        
-        return try LocalEditorAssetManifest(remoteManifest: remoteManifest)
+
+        return existingManifest.manifest
     }
     
     // MARK: - Bundle Handling
@@ -72,10 +71,10 @@ public actor EditorAssetLibrary {
     /// - Returns: The downloaded `EditorAssetBundle` containing all cached assets.
     /// - Throws: An error if the manifest cannot be fetched or assets fail to download.
     public func downloadAssetBundle(
-        cachePolicy: CachePolicy = .useExisting,
+        cachePolicy: EditorCachePolicy = .always,
         progress: EditorProgressCallback? = nil
     ) async throws -> EditorAssetBundle {
-        let manifest = try await self.fetchManifest(cachePolicy: cachePolicy)
+        let manifest = try await self.fetchManifest()
         return try await self.buildBundle(for: manifest, progress: progress)
     }
     
