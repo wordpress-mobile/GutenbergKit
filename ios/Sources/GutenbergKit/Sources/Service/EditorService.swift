@@ -1,6 +1,5 @@
 import Foundation
 import CryptoKit
-import SwiftSoup
 import OSLog
 
 /// Service for fetching the editor settings and other parts of the environment
@@ -228,7 +227,7 @@ public actor EditorService {
         // Process and save processed manifest
         let manifest = try JSONDecoder().decode(EditorAssetsManifest.self, from: originalData)
         let siteURLScheme = URL(string: siteURL)?.scheme
-        let processedData = try manifest.renderForEditor(defaultScheme: siteURLScheme)
+        let processedData = manifest.renderForEditor(defaultScheme: siteURLScheme)
         try processedData.write(to: manifestProcessedFileURL)
     }
 
@@ -262,7 +261,7 @@ public actor EditorService {
 
         let manifestData = try Data(contentsOf: manifestOriginalFileURL)
         let manifest = try JSONDecoder().decode(EditorAssetsManifest.self, from: manifestData)
-        let currentAssetLinks = try manifest.parseAssetLinks()
+        let currentAssetLinks = manifest.parseAssetLinks()
             .filter { isSupportedAsset($0) }
 
         // Build set of expected filenames
@@ -309,7 +308,7 @@ public actor EditorService {
     private func fetchAssets(manifestData: Data) async throws {
         let startTime = CFAbsoluteTimeGetCurrent()
         let manifest = try JSONDecoder().decode(EditorAssetsManifest.self, from: manifestData)
-        let assetLinks = try manifest.parseAssetLinks()
+        let assetLinks = manifest.parseAssetLinks()
             .filter { isSupportedAsset($0) }
 
         log(.info, "Found \(assetLinks.count) assets to fetch")
@@ -504,21 +503,15 @@ private extension EditorConfiguration {
         return baseURL.appendingPathComponent("/wp-block-editor/v1/settings")
     }
 
-    /// Returns the endpoint URL for fetching the editor assets manifest
+    /// Returns the endpoint URL for fetching the editor assets manifest (v2.1)
     func makeEditorAssetsManifestEndpointURL() throws -> URL {
-        let endpoint: URL
         if let customEndpoint = editorAssetsEndpoint {
-            endpoint = customEndpoint
-        } else {
-            // Fall back to constructing endpoint from siteApiRoot
-            guard let baseURL = URL(string: siteApiRoot) else {
-                throw URLError(.badURL)
-            }
-            endpoint = baseURL.appendingPathComponent("/wpcom/v2/editor-assets")
+            return customEndpoint
         }
-
-        // Always add query parameters
-        let excludeParam = URLQueryItem(name: "exclude", value: "core,gutenberg")
-        return endpoint.appending(queryItems: [excludeParam])
+        // Fall back to constructing endpoint from siteApiRoot
+        guard let baseURL = URL(string: siteApiRoot) else {
+            throw URLError(.badURL)
+        }
+        return baseURL.appendingPathComponent("/wpcom/v2.1/editor-assets")
     }
 }

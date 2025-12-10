@@ -36,8 +36,10 @@ struct EditorServiceTests {
         let context = try TestContext(manifestResource: "manifest-test-case-2")
         context.session.mockSettings()
         context.session.mockManifest(context.manifestData)
-        context.session.mockAllAssets(Array(context.assetURLs[0...1]))
-        context.session.mockFailedAssets(Array(context.assetURLs[2...4]))
+        // Mock only first 2 assets as successful
+        context.session.mockAllAssets(Array(context.assetURLs.prefix(2)))
+        // Mock remaining assets as failed
+        context.session.mockFailedAssets(Array(context.assetURLs.dropFirst(2)))
 
         let service = context.createService()
         let configuration = context.createConfiguration()
@@ -103,7 +105,7 @@ struct EditorServiceTests {
 
         // Verify network was only called once despite 3 refresh calls
         #expect(context.session.requestCount(for: "wp-block-editor/v1/settings") == 1)
-        #expect(context.session.requestCount(for: "wpcom/v2/editor-assets") == 1)
+        #expect(context.session.requestCount(for: "wpcom/v2.1/editor-assets") == 1)
     }
 
     @Test("Successfully loads cached asset from disk")
@@ -156,7 +158,7 @@ struct EditorServiceTests {
 
         // Verify network was only called once
         #expect(context.session.requestCount(for: "wp-block-editor/v1/settings") == 1)
-        #expect(context.session.requestCount(for: "wpcom/v2/editor-assets") == 1)
+        #expect(context.session.requestCount(for: "wpcom/v2.1/editor-assets") == 1)
     }
 
     @Test("Handles invalid siteApiRoot URL gracefully")
@@ -244,10 +246,10 @@ struct EditorServiceTests {
         // Load initial v13.9 dependencies
         _ = await service.dependencies(for: configuration)
 
-        // Verify all v13.9 assets exist on disk
+        // Verify v13.9 assets exist on disk (3 scripts + 2 styles = 5 assets)
         let assetsDir = context.testDir.appendingPathComponent("assets")
         let initialFiles = try FileManager.default.contentsOfDirectory(atPath: assetsDir.path)
-        #expect(initialFiles.count == 5) // All 5 v13.9 assets
+        #expect(initialFiles.count == context.assetURLs.count)
 
         // Upgrade to v14.0 (which removes slideshow, upgrades forms, adds ai-assistant)
         let upgradedContext = try TestContext(manifestResource: "manifest-test-case-3")
@@ -261,7 +263,7 @@ struct EditorServiceTests {
 
         // Verify orphaned assets (slideshow v13.9, old versions) are deleted
         let filesAfterCleanup = try FileManager.default.contentsOfDirectory(atPath: assetsDir.path)
-        #expect(filesAfterCleanup.count == 4) // Only 4 v14.0 assets remain
+        #expect(filesAfterCleanup.count == upgradedContext.assetURLs.count)
 
         // Verify slideshow assets are gone
         let slideshowFilename = service.cachedFilename(for: "https://example.com/wp-content/plugins/jetpack/_inc/blocks/slideshow/editor.js?ver=13.9")
@@ -288,7 +290,7 @@ private struct TestContext {
         self.manifestData = try Data(contentsOf: manifestURL)
 
         let manifest = try JSONDecoder().decode(EditorAssetsManifest.self, from: manifestData)
-        self.assetURLs = try manifest.parseAssetLinks()
+        self.assetURLs = manifest.parseAssetLinks()
 
         self.testDir = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -328,7 +330,7 @@ private extension MockURLSession {
 
     func mockManifest(_ data: Data) {
         mockResponse(
-            for: "https://example.com/wpcom/v2/editor-assets?exclude=core,gutenberg",
+            for: "https://example.com/wpcom/v2.1/editor-assets",
             data: data,
             statusCode: 200
         )
