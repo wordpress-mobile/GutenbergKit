@@ -104,7 +104,7 @@ struct EditorServiceTests {
         _ = await (refresh1, refresh2, refresh3)
 
         // Verify network was only called once despite 3 refresh calls
-        #expect(context.session.requestCount(for: "wp-block-editor/v1/settings") == 1)
+        #expect(context.session.requestCount(for: "wp-block-editor/v1/settings?context=mobile") == 1)
         #expect(context.session.requestCount(for: "wpcom/v2.1/editor-assets") == 1)
     }
 
@@ -157,7 +157,7 @@ struct EditorServiceTests {
         try await Task.sleep(for: .milliseconds(100))
 
         // Verify network was only called once
-        #expect(context.session.requestCount(for: "wp-block-editor/v1/settings") == 1)
+        #expect(context.session.requestCount(for: "wp-block-editor/v1/settings?context=mobile") == 1)
         #expect(context.session.requestCount(for: "wpcom/v2.1/editor-assets") == 1)
     }
 
@@ -320,7 +320,7 @@ private struct TestContext {
 private extension MockURLSession {
     func mockSettings() {
         mockResponse(
-            for: "https://example.com/wp-block-editor/v1/settings",
+            for: "https://example.com/wp-block-editor/v1/settings?context=mobile",
             data: """
             {"alignWide": true}
             """.data(using: .utf8)!,

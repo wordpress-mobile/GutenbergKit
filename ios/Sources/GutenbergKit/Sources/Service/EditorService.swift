@@ -493,14 +493,18 @@ private extension FileManager {
 private extension EditorConfiguration {
     /// Returns the endpoint URL for fetching the editor settings
     func makeEditorSettingsEndpointURL() throws -> URL {
+        let endpoint: URL
         if let customEndpoint = editorSettingsEndpoint {
-            return customEndpoint
+            endpoint = customEndpoint
+        } else {
+            // Fall back to constructing endpoint from siteApiRoot
+            guard let baseURL = URL(string: siteApiRoot) else {
+                throw URLError(.badURL)
+            }
+            endpoint = baseURL.appendingPathComponent("/wp-block-editor/v1/settings")
         }
-        // Fall back to constructing endpoint from siteApiRoot
-        guard let baseURL = URL(string: siteApiRoot) else {
-            throw URLError(.badURL)
-        }
-        return baseURL.appendingPathComponent("/wp-block-editor/v1/settings")
+        // Add context=mobile query parameter
+        return endpoint.appending(queryItems: [URLQueryItem(name: "context", value: "mobile")])
     }
 
     /// Returns the endpoint URL for fetching the editor assets manifest (v2.1)
