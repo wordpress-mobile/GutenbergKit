@@ -84,7 +84,7 @@ struct EditorManifestTests {
         let manifest = try JSONDecoder().decode(EditorAssetsManifest.self, from: json)
 
         let script = manifest.scripts["jetpack-forms-blocks"]
-        #expect(script?.src == "http://localhost/wp-content/plugins/jetpack/forms/dist/blocks/view.js")
+        #expect(script?.src?.urlString == "http://localhost/wp-content/plugins/jetpack/forms/dist/blocks/view.js")
         #expect(script?.deps == ["wp-element", "wp-blocks"])
         #expect(script?.version?.stringValue == "1.0.0")
         #expect(script?.inFooter == true)
@@ -96,7 +96,7 @@ struct EditorManifestTests {
         let manifest = try JSONDecoder().decode(EditorAssetsManifest.self, from: json)
 
         let style = manifest.styles["jetpack-contact-form-css"]
-        #expect(style?.src == "http://localhost/wp-content/plugins/jetpack/modules/contact-form/css/editor.css")
+        #expect(style?.src?.urlString == "http://localhost/wp-content/plugins/jetpack/modules/contact-form/css/editor.css")
         #expect(style?.deps == ["jetpack-forms-blocks-css"])
         #expect(style?.version?.stringValue == "2.0.0")
         #expect(style?.media == "screen")

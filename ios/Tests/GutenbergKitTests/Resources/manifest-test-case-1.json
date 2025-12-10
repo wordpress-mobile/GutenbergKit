@@ -43,7 +43,7 @@
   },
   "inline_styles": {
     "before": {
-      "jetpack-forms-blocks-css": ":root { --jetpack-form-color: blue; }"
+      "jetpack-forms-blocks-css": [":root { --jetpack-form-color: blue; }"]
     },
     "after": {}
   }
