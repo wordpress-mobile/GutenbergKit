@@ -221,14 +221,20 @@ struct EditorAssetsManifest: Codable {
         "moment", "regenerator-runtime"
     ]
 
-    /// Checks if a script handle should be excluded (bundled in GutenbergKit)
-    private static func shouldExcludeScript(_ handle: String) -> Bool {
-        handle.hasPrefix("wp-") || bundledScriptHandles.contains(handle)
+    /// Checks if an asset URL points to WordPress core (wp-includes directory)
+    private static func isWordPressCoreAsset(_ src: String?) -> Bool {
+        guard let src = src else { return false }
+        return src.contains("/wp-includes/")
     }
 
-    /// Checks if a style handle should be excluded (bundled in GutenbergKit)
-    private static func shouldExcludeStyle(_ handle: String) -> Bool {
-        handle.hasPrefix("wp-")
+    /// Checks if a script should be excluded (bundled in GutenbergKit or WordPress core)
+    private static func shouldExcludeScript(_ handle: String, src: String?) -> Bool {
+        handle.hasPrefix("wp-") || bundledScriptHandles.contains(handle) || isWordPressCoreAsset(src)
+    }
+
+    /// Checks if a style should be excluded (bundled in GutenbergKit or WordPress core)
+    private static func shouldExcludeStyle(_ handle: String, src: String?) -> Bool {
+        handle.hasPrefix("wp-") || isWordPressCoreAsset(src)
     }
 
     /// Extracts all asset URLs from scripts and styles for caching
@@ -238,24 +244,26 @@ struct EditorAssetsManifest: Codable {
         var assetLinks: [String] = []
 
         // Extract script URLs (only if src is a valid URL string, not false)
-        // Exclude bundled scripts (wp-* and other bundled handles)
+        // Exclude bundled scripts (wp-*, bundled handles, and wp-includes assets)
         for (handle, script) in scripts {
-            if Self.shouldExcludeScript(handle) {
+            let src = script.src?.urlString
+            if Self.shouldExcludeScript(handle, src: src) {
                 continue
             }
-            if let src = script.src?.urlString {
+            if let src {
                 let versionedSrc = Self.buildVersionedURL(src, version: script.version)
                 assetLinks.append(Self.resolveAssetLink(versionedSrc, defaultScheme: defaultScheme))
             }
         }
 
         // Extract style URLs (only if src is a valid URL string, not false)
-        // Exclude bundled styles (wp-*)
+        // Exclude bundled styles (wp-* and wp-includes assets)
         for (handle, style) in styles {
-            if Self.shouldExcludeStyle(handle) {
+            let src = style.src?.urlString
+            if Self.shouldExcludeStyle(handle, src: src) {
                 continue
             }
-            if let src = style.src?.urlString {
+            if let src {
                 let versionedSrc = Self.buildVersionedURL(src, version: style.version)
                 assetLinks.append(Self.resolveAssetLink(versionedSrc, defaultScheme: defaultScheme))
             }
@@ -271,14 +279,15 @@ struct EditorAssetsManifest: Codable {
         var rendered = self
 
         // Transform script URLs (only if src is a valid URL string, not false)
-        // Exclude bundled scripts (wp-* and other bundled handles)
+        // Exclude bundled scripts (wp-*, bundled handles, and wp-includes assets)
         var transformedScripts: [String: ScriptAsset] = [:]
         for (handle, script) in scripts {
-            if Self.shouldExcludeScript(handle) {
+            let src = script.src?.urlString
+            if Self.shouldExcludeScript(handle, src: src) {
                 continue
             }
             var transformedScript = script
-            if let src = script.src?.urlString {
+            if let src {
                 let versionedSrc = Self.buildVersionedURL(src, version: script.version)
                 let resolvedLink = Self.resolveAssetLink(versionedSrc, defaultScheme: defaultScheme)
                 #if canImport(UIKit)
@@ -298,14 +307,15 @@ struct EditorAssetsManifest: Codable {
         rendered.scripts = transformedScripts
 
         // Transform style URLs (only if src is a valid URL string, not false)
-        // Exclude bundled styles (wp-*)
+        // Exclude bundled styles (wp-* and wp-includes assets)
         var transformedStyles: [String: StyleAsset] = [:]
         for (handle, style) in styles {
-            if Self.shouldExcludeStyle(handle) {
+            let src = style.src?.urlString
+            if Self.shouldExcludeStyle(handle, src: src) {
                 continue
             }
             var transformedStyle = style
-            if let src = style.src?.urlString {
+            if let src {
                 let versionedSrc = Self.buildVersionedURL(src, version: style.version)
                 let resolvedLink = Self.resolveAssetLink(versionedSrc, defaultScheme: defaultScheme)
                 #if canImport(UIKit)

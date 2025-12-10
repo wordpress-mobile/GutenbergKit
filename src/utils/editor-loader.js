@@ -27,13 +27,28 @@ const BUNDLED_HANDLES = new Set( [
 ] );
 
 /**
- * Check if a script handle should be excluded (bundled in GutenbergKit)
+ * Check if an asset URL points to WordPress core (wp-includes directory)
  *
- * @param {string} handle Script handle to check
+ * @param {string|undefined} src Asset URL to check
+ * @return {boolean} True if the asset is from WordPress core
+ */
+function isWordPressCoreAsset( src ) {
+	return src && src.includes( '/wp-includes/' );
+}
+
+/**
+ * Check if a script should be excluded (bundled in GutenbergKit or WordPress core)
+ *
+ * @param {string}           handle Script handle to check
+ * @param {string|undefined} src    Script URL to check
  * @return {boolean} True if the script should be excluded
  */
-function shouldExcludeScript( handle ) {
-	return handle.startsWith( 'wp-' ) || BUNDLED_HANDLES.has( handle );
+function shouldExcludeScript( handle, src ) {
+	return (
+		handle.startsWith( 'wp-' ) ||
+		BUNDLED_HANDLES.has( handle ) ||
+		isWordPressCoreAsset( src )
+	);
 }
 
 /**
@@ -78,16 +93,27 @@ async function processEditorAssets( assets ) {
 		inline_styles: inlineStyles = {},
 	} = assets;
 
-	// Filter out bundled scripts (but keep all styles)
+	// Filter out bundled/core scripts
 	const filteredScripts = {};
 	for ( const [ handle, data ] of Object.entries( scripts ) ) {
-		if ( ! shouldExcludeScript( handle ) ) {
+		if ( ! shouldExcludeScript( handle, data?.src ) ) {
 			filteredScripts[ handle ] = data;
 		}
 	}
 
+	// Filter out core styles (wp-* handles and wp-includes assets)
+	const filteredStyles = {};
+	for ( const [ handle, data ] of Object.entries( styles ) ) {
+		if (
+			! handle.startsWith( 'wp-' ) &&
+			! isWordPressCoreAsset( data?.src )
+		) {
+			filteredStyles[ handle ] = data;
+		}
+	}
+
 	// Build dependency-ordered lists
-	const orderedStyles = buildDependencyOrderedList( styles );
+	const orderedStyles = buildDependencyOrderedList( filteredStyles );
 	const orderedScripts = buildDependencyOrderedList( filteredScripts );
 
 	// Load stylesheets with inline styles
@@ -99,7 +125,7 @@ async function processEditorAssets( assets ) {
 		}
 
 		// Load external stylesheet
-		await loadStylesheet( handle, styles[ handle ] );
+		await loadStylesheet( handle, filteredStyles[ handle ] );
 
 		// Inject "after" inline style
 		const afterInline = inlineStyles.after?.[ handle ];

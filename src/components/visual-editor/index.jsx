@@ -140,7 +140,7 @@ function VisualEditor( { hideTitle } ) {
 
 	return (
 		<div className={ editorClasses } ref={ editorVisibleRef }>
-			<BlockCanvas shouldIframe={ false } height="100%" styles={ styles }>
+			<BlockCanvas height="100%" styles={ styles }>
 				{ themeSupportsLayout &&
 					! themeHasDisabledLayoutStyles &&
 					renderingMode === 'post-only' && (
