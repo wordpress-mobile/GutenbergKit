@@ -1,106 +1,191 @@
 import Foundation
-import CryptoKit
-import SwiftSoup
 
+// MARK: - v2.1 Asset Types
+
+/// Represents a script asset from the v2.1 editor assets endpoint
+struct ScriptAsset: Codable {
+    let src: String?
+    let deps: [String]?
+    let version: StringOrBool?
+    let inFooter: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case src
+        case deps
+        case version
+        case inFooter = "in_footer"
+    }
+}
+
+/// Represents a style asset from the v2.1 editor assets endpoint
+struct StyleAsset: Codable {
+    let src: String?
+    let deps: [String]?
+    let version: StringOrBool?
+    let media: String?
+}
+
+/// Represents inline assets (before/after) from the v2.1 editor assets endpoint
+struct InlineAssets: Codable {
+    let before: [String: String]?
+    let after: [String: String]?
+
+    init(before: [String: String]? = nil, after: [String: String]? = nil) {
+        self.before = before
+        self.after = after
+    }
+}
+
+/// Helper type to handle version field which can be string, bool, or null
+enum StringOrBool: Codable {
+    case string(String)
+    case bool(Bool)
+    case int(Int)
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let stringValue = try? container.decode(String.self) {
+            self = .string(stringValue)
+        } else if let boolValue = try? container.decode(Bool.self) {
+            self = .bool(boolValue)
+        } else if let intValue = try? container.decode(Int.self) {
+            self = .int(intValue)
+        } else {
+            throw DecodingError.typeMismatch(
+                StringOrBool.self,
+                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Expected String, Bool, or Int")
+            )
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let value):
+            try container.encode(value)
+        case .bool(let value):
+            try container.encode(value)
+        case .int(let value):
+            try container.encode(value)
+        }
+    }
+
+    var stringValue: String? {
+        switch self {
+        case .string(let value): return value
+        case .int(let value): return String(value)
+        case .bool: return nil
+        }
+    }
+}
+
+// MARK: - Main Manifest
+
+/// Represents the v2.1 editor assets manifest response
 struct EditorAssetsManifest: Codable {
-    var scripts: String
-    var styles: String
-    var allowedBlockTypes: [String]
+    var scripts: [String: ScriptAsset]
+    var styles: [String: StyleAsset]
+    var inlineScripts: InlineAssets
+    var inlineStyles: InlineAssets
 
     enum CodingKeys: String, CodingKey {
         case scripts
         case styles
-        case allowedBlockTypes = "allowed_block_types"
+        case inlineScripts = "inline_scripts"
+        case inlineStyles = "inline_styles"
     }
 
-    func parseAssetLinks(defaultScheme: String? = nil) throws -> [String] {
-        let html = """
-            <html>
-                <head>
-                \(scripts)
-                \(styles)
-                </head>
-                <body></body>
-            </html>
-            """
-        let document = try SwiftSoup.parse(html)
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        scripts = try container.decode([String: ScriptAsset].self, forKey: .scripts)
+        styles = try container.decode([String: StyleAsset].self, forKey: .styles)
+        inlineScripts = try container.decodeIfPresent(InlineAssets.self, forKey: .inlineScripts) ?? InlineAssets()
+        inlineStyles = try container.decodeIfPresent(InlineAssets.self, forKey: .inlineStyles) ?? InlineAssets()
+    }
 
+    /// Extracts all asset URLs from scripts and styles for caching
+    func parseAssetLinks(defaultScheme: String? = nil) -> [String] {
         var assetLinks: [String] = []
-        assetLinks += try document.select("script[src]").map {
-            Self.resolveAssetLink(try $0.attr("src"), defaultScheme: defaultScheme)
+
+        // Extract script URLs
+        for (_, script) in scripts {
+            if let src = script.src, !src.isEmpty {
+                assetLinks.append(Self.resolveAssetLink(src, defaultScheme: defaultScheme))
+            }
         }
-        assetLinks += try document.select(#"link[rel="stylesheet"][href]"#).map {
-            Self.resolveAssetLink(try $0.attr("href"), defaultScheme: defaultScheme)
+
+        // Extract style URLs
+        for (_, style) in styles {
+            if let src = style.src, !src.isEmpty {
+                assetLinks.append(Self.resolveAssetLink(src, defaultScheme: defaultScheme))
+            }
         }
+
         return assetLinks
     }
 
-    func renderForEditor(defaultScheme: String?) throws -> Data {
+    /// Transforms asset URLs to use the cache scheme handler and returns JSON for the editor
+    func renderForEditor(defaultScheme: String?) -> Data {
         var rendered = self
-        rendered.scripts = try Self.renderForEditor(scripts: self.scripts, defaultScheme: defaultScheme)
-        rendered.styles = try Self.renderForEditor(styles: self.styles, defaultScheme: defaultScheme)
-        return try JSONEncoder().encode(rendered)
-    }
 
-    private static func renderForEditor(scripts: String, defaultScheme: String?) throws -> String {
-        let html = """
-            <html>
-                <head>
-                \(scripts)
-                </head>
-                <body></body>
-            </html>
-            """
-        let document = try SwiftSoup.parse(html)
-
-        for script in try document.select("script[src]") {
-            if let src = try? script.attr("src") {
-                let link = Self.resolveAssetLink(src, defaultScheme: defaultScheme)
+        // Transform script URLs
+        var transformedScripts: [String: ScriptAsset] = [:]
+        for (handle, script) in scripts {
+            var transformedScript = script
+            if let src = script.src, !src.isEmpty {
+                let resolvedLink = Self.resolveAssetLink(src, defaultScheme: defaultScheme)
                 #if canImport(UIKit)
-                let newLink = CachedAssetSchemeHandler.cachedURL(forWebLink: link) ?? link
+                let cachedLink = CachedAssetSchemeHandler.cachedURL(forWebLink: resolvedLink) ?? resolvedLink
                 #else
-                let newLink = link
+                let cachedLink = resolvedLink
                 #endif
-                try script.attr("src", newLink)
+                transformedScript = ScriptAsset(
+                    src: cachedLink,
+                    deps: script.deps,
+                    version: script.version,
+                    inFooter: script.inFooter
+                )
             }
+            transformedScripts[handle] = transformedScript
         }
+        rendered.scripts = transformedScripts
 
-        let head = document.head()!
-        return try head.html()
-    }
-
-    private static func renderForEditor(styles: String, defaultScheme: String?) throws -> String {
-        let html = """
-            <html>
-                <head>
-                \(styles)
-                </head>
-                <body></body>
-            </html>
-            """
-        let document = try SwiftSoup.parse(html)
-
-        for stylesheet in try document.select(#"link[rel="stylesheet"][href]"#) {
-            if let href = try? stylesheet.attr("href") {
-                let link = Self.resolveAssetLink(href, defaultScheme: defaultScheme)
+        // Transform style URLs
+        var transformedStyles: [String: StyleAsset] = [:]
+        for (handle, style) in styles {
+            var transformedStyle = style
+            if let src = style.src, !src.isEmpty {
+                let resolvedLink = Self.resolveAssetLink(src, defaultScheme: defaultScheme)
                 #if canImport(UIKit)
-                let newLink = CachedAssetSchemeHandler.cachedURL(forWebLink: link) ?? link
+                let cachedLink = CachedAssetSchemeHandler.cachedURL(forWebLink: resolvedLink) ?? resolvedLink
                 #else
-                let newLink = link
+                let cachedLink = resolvedLink
                 #endif
-                try stylesheet.attr("href", newLink)
+                transformedStyle = StyleAsset(
+                    src: cachedLink,
+                    deps: style.deps,
+                    version: style.version,
+                    media: style.media
+                )
             }
+            transformedStyles[handle] = transformedStyle
         }
+        rendered.styles = transformedStyles
 
-        let head = document.head()!
-        return try head.html()
+        // Encode and return
+        do {
+            return try JSONEncoder().encode(rendered)
+        } catch {
+            // Return empty object if encoding fails
+            return "{}".data(using: .utf8) ?? Data()
+        }
     }
 
+    /// Resolves protocol-relative URLs to absolute URLs
     private static func resolveAssetLink(_ link: String, defaultScheme: String?) -> String {
         if link.starts(with: "//") {
             return "\(defaultScheme ?? "https"):\(link)"
         }
-
         return link
     }
 }
