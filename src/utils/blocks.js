@@ -8,10 +8,16 @@ import { debug } from './logger';
 /**
  * Unregister blocks that are disallowed.
  *
- * @param {Array} allowedBlockTypes The list of allowed block types.
+ * @param {Array|boolean} allowedBlockTypes The list of allowed block types, or true if all blocks are allowed.
  */
 export function unregisterDisallowedBlocks( allowedBlockTypes ) {
-	if ( ! allowedBlockTypes ) {
+	// If allowedBlockTypes is not provided, undefined, or true, all blocks are allowed
+	if ( ! allowedBlockTypes || allowedBlockTypes === true ) {
+		return;
+	}
+
+	// Ensure allowedBlockTypes is an array before using .includes()
+	if ( ! Array.isArray( allowedBlockTypes ) ) {
 		return;
 	}
 
