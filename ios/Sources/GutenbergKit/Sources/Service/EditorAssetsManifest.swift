@@ -233,6 +233,7 @@ struct EditorAssetsManifest: Codable {
 
     /// Extracts all asset URLs from scripts and styles for caching
     /// Excludes bundled assets that are already part of GutenbergKit
+    /// URLs include version query parameter to match what the editor will request
     func parseAssetLinks(defaultScheme: String? = nil) -> [String] {
         var assetLinks: [String] = []
 
@@ -243,7 +244,8 @@ struct EditorAssetsManifest: Codable {
                 continue
             }
             if let src = script.src?.urlString {
-                assetLinks.append(Self.resolveAssetLink(src, defaultScheme: defaultScheme))
+                let versionedSrc = Self.buildVersionedURL(src, version: script.version)
+                assetLinks.append(Self.resolveAssetLink(versionedSrc, defaultScheme: defaultScheme))
             }
         }
 
@@ -254,7 +256,8 @@ struct EditorAssetsManifest: Codable {
                 continue
             }
             if let src = style.src?.urlString {
-                assetLinks.append(Self.resolveAssetLink(src, defaultScheme: defaultScheme))
+                let versionedSrc = Self.buildVersionedURL(src, version: style.version)
+                assetLinks.append(Self.resolveAssetLink(versionedSrc, defaultScheme: defaultScheme))
             }
         }
 
@@ -263,6 +266,7 @@ struct EditorAssetsManifest: Codable {
 
     /// Transforms asset URLs to use the cache scheme handler and returns JSON for the editor
     /// Excludes bundled assets that are already part of GutenbergKit
+    /// URLs include version query parameter to enable proper cache lookup
     func renderForEditor(defaultScheme: String?) -> Data {
         var rendered = self
 
@@ -275,7 +279,8 @@ struct EditorAssetsManifest: Codable {
             }
             var transformedScript = script
             if let src = script.src?.urlString {
-                let resolvedLink = Self.resolveAssetLink(src, defaultScheme: defaultScheme)
+                let versionedSrc = Self.buildVersionedURL(src, version: script.version)
+                let resolvedLink = Self.resolveAssetLink(versionedSrc, defaultScheme: defaultScheme)
                 #if canImport(UIKit)
                 let cachedLink = CachedAssetSchemeHandler.cachedURL(forWebLink: resolvedLink) ?? resolvedLink
                 #else
@@ -301,7 +306,8 @@ struct EditorAssetsManifest: Codable {
             }
             var transformedStyle = style
             if let src = style.src?.urlString {
-                let resolvedLink = Self.resolveAssetLink(src, defaultScheme: defaultScheme)
+                let versionedSrc = Self.buildVersionedURL(src, version: style.version)
+                let resolvedLink = Self.resolveAssetLink(versionedSrc, defaultScheme: defaultScheme)
                 #if canImport(UIKit)
                 let cachedLink = CachedAssetSchemeHandler.cachedURL(forWebLink: resolvedLink) ?? resolvedLink
                 #else
@@ -333,5 +339,13 @@ struct EditorAssetsManifest: Codable {
             return "\(defaultScheme ?? "https"):\(link)"
         }
         return link
+    }
+
+    /// Builds a URL with version query parameter appended
+    /// Matches the behavior of buildVersionedURL in editor-loader.js
+    private static func buildVersionedURL(_ src: String, version: StringOrBool?) -> String {
+        guard let versionString = version?.stringValue else { return src }
+        let separator = src.contains("?") ? "&" : "?"
+        return "\(src)\(separator)ver=\(versionString)"
     }
 }

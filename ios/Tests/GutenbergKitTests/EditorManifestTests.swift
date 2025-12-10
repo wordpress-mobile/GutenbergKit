@@ -59,10 +59,10 @@ struct EditorManifestTests {
         """.data(using: .utf8)!
 
         let manifestHTTP = try JSONDecoder().decode(EditorAssetsManifest.self, from: json)
-        #expect(manifestHTTP.parseAssetLinks(defaultScheme: "http") == ["http://w.org/lib.js"])
+        #expect(manifestHTTP.parseAssetLinks(defaultScheme: "http") == ["http://w.org/lib.js?ver=1.0.0"])
 
         let manifestHTTPS = try JSONDecoder().decode(EditorAssetsManifest.self, from: json)
-        #expect(manifestHTTPS.parseAssetLinks(defaultScheme: "https") == ["https://w.org/lib.js"])
+        #expect(manifestHTTPS.parseAssetLinks(defaultScheme: "https") == ["https://w.org/lib.js?ver=1.0.0"])
     }
 
     @Test

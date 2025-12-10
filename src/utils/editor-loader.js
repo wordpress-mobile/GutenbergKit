@@ -205,7 +205,7 @@ function loadStylesheet( handle, styleData ) {
 
 		const link = document.createElement( 'link' );
 		link.rel = 'stylesheet';
-		link.href = buildVersionedURL( styleData.src, styleData.version );
+		link.href = styleData.src;
 		link.id = handle + '-css';
 		link.media = styleData.media || 'all';
 
@@ -258,7 +258,7 @@ function createExternalScript( handle, scriptData ) {
 	script.id = handle + '-js';
 
 	if ( scriptData?.src ) {
-		script.src = buildVersionedURL( scriptData.src, scriptData.version );
+		script.src = scriptData.src;
 		script.async = false; // Maintain execution order
 	} else {
 		// Mark as processed even if no external source
@@ -322,26 +322,6 @@ async function performScriptLoad( scriptElements ) {
 
 	// Wait for any remaining external scripts
 	await Promise.all( parallel );
-}
-
-/**
- * Build a URL with version query parameter
- *
- * @param {string}             src     The asset URL
- * @param {string|number|null} version The version string or number
- * @return {string} URL with version query parameter if applicable
- */
-function buildVersionedURL( src, version ) {
-	if ( ! version ) {
-		return src;
-	}
-	// Handle version objects (StringOrBool from Swift)
-	const versionStr =
-		typeof version === 'object' ? version.string || version.int : version;
-	if ( ! versionStr ) {
-		return src;
-	}
-	return src + ( src.includes( '?' ) ? '&' : '?' ) + 'ver=' + versionStr;
 }
 
 /**
