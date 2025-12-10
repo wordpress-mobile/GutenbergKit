@@ -102,8 +102,8 @@ async function configureApiFetch() {
 /**
  * @typedef {Object} PluginLoadResult
  *
- * @property {string[] | undefined} [allowedBlockTypes] Array of allowed block types provided by the API.
- * @property {boolean}              [pluginLoadFailed]  Indicates if plugin loading failed.
+ * @property {string[] | boolean | undefined} [allowedBlockTypes] Allowed block types from editor settings.
+ * @property {boolean}                        [pluginLoadFailed]  Indicates if plugin loading failed.
  */
 
 /**
@@ -112,22 +112,25 @@ async function configureApiFetch() {
  * @return {Promise<PluginLoadResult>} Promise resolving to plugin load results
  */
 async function loadPluginsIfEnabled() {
-	const { plugins } = getGBKit();
+	const { plugins, editorSettings } = getGBKit();
+
+	// Get allowedBlockTypes from editor settings (not from assets endpoint)
+	const allowedBlockTypes = editorSettings?.allowedBlockTypes;
 
 	if ( plugins ) {
 		try {
-			const { allowedBlockTypes } = await loadEditorAssets();
+			await loadEditorAssets();
 			return { allowedBlockTypes, pluginLoadFailed: false };
 		} catch ( err ) {
 			logException( err, {
 				isHandled: true,
 				handledBy: 'loadPluginsIfEnabled',
 			} );
-			return { pluginLoadFailed: true };
+			return { allowedBlockTypes, pluginLoadFailed: true };
 		}
 	}
 
-	return { pluginLoadFailed: false };
+	return { allowedBlockTypes, pluginLoadFailed: false };
 }
 
 /**

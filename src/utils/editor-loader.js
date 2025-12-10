@@ -2,7 +2,7 @@
  * Internal dependencies
  */
 import { fetchEditorAssets } from './bridge';
-import { error } from './logger';
+import { error, warn } from './logger';
 
 /**
  * Cache for editor assets to avoid unnecessary network requests
@@ -11,21 +11,42 @@ import { error } from './logger';
 let editorAssetsCache = null;
 
 /**
- * @typedef {Object} EditorAssetConfig
- *
- * @property {string[]} allowedBlockTypes Array of allowed block types provided by the API.
+ * Handles that should be excluded because they're bundled in GutenbergKit
+ * @type {Set<string>}
  */
+const BUNDLED_HANDLES = new Set( [
+	'react',
+	'react-dom',
+	'react-jsx-runtime',
+	'lodash',
+	'jquery',
+	'jquery-core',
+	'jquery-migrate',
+	'moment',
+	'regenerator-runtime',
+] );
 
 /**
- * Fetch editor assets and return select WordPress dependencies.
+ * Check if a script handle should be excluded (bundled in GutenbergKit)
  *
- * @return {EditorAssetConfig} Editor configuration provided by the API.
+ * @param {string} handle Script handle to check
+ * @return {boolean} True if the script should be excluded
+ */
+function shouldExcludeScript( handle ) {
+	return handle.startsWith( 'wp-' ) || BUNDLED_HANDLES.has( handle );
+}
+
+/**
+ * Fetch editor assets and load them into the page.
+ * Assets are loaded in dependency order with inline scripts/styles
+ * positioned correctly around their associated handles.
  */
 export async function loadEditorAssets() {
 	try {
 		// Return cached response if available
 		if ( editorAssetsCache ) {
-			return processEditorAssets( editorAssetsCache );
+			await processEditorAssets( editorAssetsCache );
+			return;
 		}
 
 		const response = await fetchEditorAssets();
@@ -33,7 +54,7 @@ export async function loadEditorAssets() {
 		// Cache the response
 		editorAssetsCache = response;
 
-		return processEditorAssets( response );
+		await processEditorAssets( response );
 	} catch ( err ) {
 		error( 'Error loading editor assets', err );
 		throw err;
@@ -41,108 +62,299 @@ export async function loadEditorAssets() {
 }
 
 /**
- * Process editor assets and return the configuration
+ * Process editor assets and load them into the page
  *
- * @param {Object}   assets                   The assets to process
- * @param {string[]} assets.styles            Array of style assets
- * @param {string[]} assets.scripts           Array of script assets
- * @param {string[]} assets.allowedBlockTypes Array of allowed block types
- *
- * @return {EditorAssetConfig} Processed editor configuration
+ * @param {Object} assets                The v2.1 assets to process
+ * @param {Object} assets.scripts        Script assets keyed by handle
+ * @param {Object} assets.styles         Style assets keyed by handle
+ * @param {Object} assets.inline_scripts Inline scripts with before/after
+ * @param {Object} assets.inline_styles  Inline styles with before/after
  */
 async function processEditorAssets( assets ) {
-	const { styles, scripts, allowed_block_types: allowedBlockTypes } = assets;
+	const {
+		scripts = {},
+		styles = {},
+		inline_scripts: inlineScripts = {},
+		inline_styles: inlineStyles = {},
+	} = assets;
 
-	await loadAssets( [ ...styles, ...scripts ].join( '' ) );
-
-	return { allowedBlockTypes };
-}
-
-/**
- * Load the asset files for a block
- *
- * @param {string} html The HTML content to parse for assets.
- */
-async function loadAssets( html ) {
-	const doc = new window.DOMParser().parseFromString( html, 'text/html' );
-
-	const newAssets = Array.from(
-		doc.querySelectorAll( 'link[rel="stylesheet"],script' )
-	).filter( ( asset ) => {
-		/**
-		 * TODO: Remove this once the relevant Jetpack plugin release is available.
-		 *
-		 * Exclude WordPress core and Gutenberg assets to avoid loading duplicate
-		 * assets, which causes editor loading failures.
-		 *
-		 * This is a temporary measure until users update to the latest Jetpack REST
-		 * API endpoint that excludes these assets. This can be removed a few weeks
-		 * after the relevant Jetpack plugin release.
-		 *
-		 * See: https://github.com/Automattic/jetpack/pull/45715
-		 */
-		const coreOrGutenbergRegex = new RegExp(
-			'wp-(includes|admin)/(js|css)|plugins/gutenberg(-core)?/'
-		);
-		if ( coreOrGutenbergRegex.test( asset.src || asset.href ) ) {
-			return false;
+	// Filter out bundled scripts (but keep all styles)
+	const filteredScripts = {};
+	for ( const [ handle, data ] of Object.entries( scripts ) ) {
+		if ( ! shouldExcludeScript( handle ) ) {
+			filteredScripts[ handle ] = data;
 		}
-
-		return !! asset.id;
-	} );
-
-	/*
-	 * Load each asset in order, as they may depend upon an earlier loaded script.
-	 * Stylesheets and Inline Scripts will resolve immediately upon insertion.
-	 */
-	for ( const newAsset of newAssets ) {
-		await loadAsset( newAsset );
 	}
+
+	// Build dependency-ordered lists
+	const orderedStyles = buildDependencyOrderedList( styles );
+	const orderedScripts = buildDependencyOrderedList( filteredScripts );
+
+	// Load stylesheets with inline styles
+	for ( const handle of orderedStyles ) {
+		// Inject "before" inline style
+		const beforeInline = inlineStyles.before?.[ handle ];
+		if ( beforeInline ) {
+			injectInlineStyle( handle, beforeInline, 'before' );
+		}
+
+		// Load external stylesheet
+		await loadStylesheet( handle, styles[ handle ] );
+
+		// Inject "after" inline style
+		const afterInline = inlineStyles.after?.[ handle ];
+		if ( afterInline ) {
+			injectInlineStyle( handle, afterInline, 'after' );
+		}
+	}
+
+	// Prepare script elements (including inline scripts)
+	const scriptElements = [];
+	for ( const handle of orderedScripts ) {
+		// Add "before" inline script
+		const beforeInline = inlineScripts.before?.[ handle ];
+		if ( beforeInline ) {
+			scriptElements.push(
+				createInlineScript( handle, beforeInline, 'before' )
+			);
+		}
+
+		// Add external script
+		scriptElements.push(
+			createExternalScript( handle, filteredScripts[ handle ] )
+		);
+
+		// Add "after" inline script
+		const afterInline = inlineScripts.after?.[ handle ];
+		if ( afterInline ) {
+			scriptElements.push(
+				createInlineScript( handle, afterInline, 'after' )
+			);
+		}
+	}
+
+	// Load all scripts in order (parallel load with ordered execution)
+	await performScriptLoad( scriptElements );
 }
 
 /**
- * Load an asset for a block.
+ * Build a dependency-ordered list of asset handles using topological sort
  *
- * This function returns a Promise that will resolve once the asset is loaded,
- * or in the case of Stylesheets and Inline JavaScript, will resolve immediately.
- *
- * @param {HTMLElement} el A HTML Element asset to inject.
- *
- * @return {Promise} Promise which will resolve when the asset is loaded.
+ * @param {Object} assetsData Assets keyed by handle with deps property
+ * @return {string[]} Ordered list of handles
  */
-function loadAsset( el ) {
-	return new Promise( ( resolve ) => {
-		/*
-		 * Reconstruct the passed element, this is required as inserting the Node directly
-		 * won't always fire the required onload events, even if the asset wasn't already loaded.
-		 */
-		const newNode = document.createElement( el.nodeName );
+function buildDependencyOrderedList( assetsData ) {
+	const visited = new Set();
+	const visiting = new Set();
+	const orderedList = [];
 
-		[ 'id', 'rel', 'src', 'href', 'type' ].forEach( ( attr ) => {
-			if ( el[ attr ] ) {
-				newNode[ attr ] = el[ attr ];
-			}
-		} );
-
-		// Append inline <script> contents.
-		if ( el.innerHTML ) {
-			newNode.appendChild( document.createTextNode( el.innerHTML ) );
+	function visit( handle ) {
+		if ( visited.has( handle ) ) {
+			return;
+		}
+		if ( visiting.has( handle ) ) {
+			warn( `Circular dependency detected for handle: ${ handle }` );
+			return;
 		}
 
-		newNode.onload = () => resolve( true );
-		newNode.onerror = () => {
-			// TODO: Communicate the error to the user.
-			resolve( false );
+		visiting.add( handle );
+
+		if ( assetsData[ handle ] ) {
+			const deps = assetsData[ handle ].deps || [];
+			for ( const dep of deps ) {
+				if ( assetsData[ dep ] ) {
+					visit( dep );
+				}
+			}
+		}
+
+		visiting.delete( handle );
+		visited.add( handle );
+
+		if ( assetsData[ handle ] ) {
+			orderedList.push( handle );
+		}
+	}
+
+	for ( const handle of Object.keys( assetsData ) ) {
+		visit( handle );
+	}
+
+	return orderedList;
+}
+
+/**
+ * Load a stylesheet into the document head
+ *
+ * @param {string} handle    The stylesheet handle
+ * @param {Object} styleData The stylesheet data with src, version, media
+ * @return {Promise<void>} Resolves when loaded (or immediately if no src)
+ */
+function loadStylesheet( handle, styleData ) {
+	return new Promise( ( resolve ) => {
+		if ( ! styleData?.src ) {
+			resolve();
+			return;
+		}
+
+		const existingLink = document.getElementById( handle + '-css' );
+		if ( existingLink ) {
+			resolve();
+			return;
+		}
+
+		const link = document.createElement( 'link' );
+		link.rel = 'stylesheet';
+		link.href = buildVersionedURL( styleData.src, styleData.version );
+		link.id = handle + '-css';
+		link.media = styleData.media || 'all';
+
+		link.onload = () => resolve();
+		link.onerror = () => {
+			error( `Failed to load stylesheet: ${ handle }` );
+			resolve();
 		};
 
-		document.body.appendChild( newNode );
-
-		// Resolve Stylesheets and Inline JavaScript immediately.
-		if (
-			'link' === newNode.nodeName.toLowerCase() ||
-			( 'script' === newNode.nodeName.toLowerCase() && ! newNode.src )
-		) {
-			resolve();
-		}
+		document.head.appendChild( link );
 	} );
+}
+
+/**
+ * Inject an inline style into the document head
+ *
+ * @param {string}          handle      The associated stylesheet handle
+ * @param {string|string[]} inlineStyle The inline CSS content
+ * @param {string}          position    'before' or 'after'
+ */
+function injectInlineStyle( handle, inlineStyle, position ) {
+	const styleContent = Array.isArray( inlineStyle )
+		? inlineStyle.join( '\n' )
+		: inlineStyle;
+
+	if ( ! styleContent?.trim() ) {
+		return;
+	}
+
+	const styleId = `${ handle }-${ position }-inline-css`;
+	if ( document.getElementById( styleId ) ) {
+		return;
+	}
+
+	const style = document.createElement( 'style' );
+	style.id = styleId;
+	style.textContent = styleContent.trim();
+	document.head.appendChild( style );
+}
+
+/**
+ * Create an external script element (not yet appended to DOM)
+ *
+ * @param {string} handle     The script handle
+ * @param {Object} scriptData The script data with src, version
+ * @return {HTMLScriptElement} The script element
+ */
+function createExternalScript( handle, scriptData ) {
+	const script = document.createElement( 'script' );
+	script.id = handle + '-js';
+
+	if ( scriptData?.src ) {
+		script.src = buildVersionedURL( scriptData.src, scriptData.version );
+		script.async = false; // Maintain execution order
+	} else {
+		// Mark as processed even if no external source
+		script.textContent = '// Processed: ' + handle;
+	}
+
+	return script;
+}
+
+/**
+ * Create an inline script element (not yet appended to DOM)
+ *
+ * @param {string}          handle       The associated script handle
+ * @param {string|string[]} inlineScript The inline JavaScript content
+ * @param {string}          position     'before' or 'after'
+ * @return {HTMLScriptElement} The script element
+ */
+function createInlineScript( handle, inlineScript, position ) {
+	const scriptContent = Array.isArray( inlineScript )
+		? inlineScript.join( '\n' )
+		: inlineScript;
+
+	const script = document.createElement( 'script' );
+	script.id = `${ handle }-${ position }-js`;
+	script.textContent = scriptContent.trim();
+
+	return script;
+}
+
+/**
+ * Load script elements in order with parallel external loading
+ *
+ * External scripts are loaded in parallel with async=false (maintains order).
+ * Inline scripts are executed after waiting for all prior external scripts.
+ *
+ * @param {HTMLScriptElement[]} scriptElements Scripts to load
+ */
+async function performScriptLoad( scriptElements ) {
+	let parallel = [];
+
+	for ( const scriptElement of scriptElements ) {
+		if ( scriptElement.src ) {
+			// External scripts can be loaded in parallel
+			// They execute in DOM order due to async=false
+			const loader = createPromiseWithResolvers();
+			scriptElement.onload = () => loader.resolve();
+			scriptElement.onerror = () => {
+				error( `Failed to load script: ${ scriptElement.id }` );
+				loader.resolve();
+			};
+			parallel.push( loader.promise );
+		} else {
+			// Inline script - wait for all external scripts first
+			await Promise.all( parallel );
+			parallel = [];
+		}
+
+		// Append to DOM (triggers load for external, executes inline immediately)
+		document.body.appendChild( scriptElement );
+	}
+
+	// Wait for any remaining external scripts
+	await Promise.all( parallel );
+}
+
+/**
+ * Build a URL with version query parameter
+ *
+ * @param {string}             src     The asset URL
+ * @param {string|number|null} version The version string or number
+ * @return {string} URL with version query parameter if applicable
+ */
+function buildVersionedURL( src, version ) {
+	if ( ! version ) {
+		return src;
+	}
+	// Handle version objects (StringOrBool from Swift)
+	const versionStr =
+		typeof version === 'object' ? version.string || version.int : version;
+	if ( ! versionStr ) {
+		return src;
+	}
+	return src + ( src.includes( '?' ) ? '&' : '?' ) + 'ver=' + versionStr;
+}
+
+/**
+ * Create a promise with externally accessible resolve/reject functions
+ * (Polyfill for Promise.withResolvers which may not be available)
+ *
+ * @return {Object} Object with promise, resolve, and reject properties
+ */
+function createPromiseWithResolvers() {
+	let resolve, reject;
+	const promise = new Promise( ( res, rej ) => {
+		resolve = res;
+		reject = rej;
+	} );
+	return { promise, resolve, reject };
 }
