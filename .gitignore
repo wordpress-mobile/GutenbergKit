@@ -198,3 +198,6 @@ src/translations/
 
 # Claude
 .claude/settings.local.json
+
+# Local HTTPS certificates for dev server
+.cert/

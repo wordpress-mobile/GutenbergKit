@@ -30,15 +30,23 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.util.Locale
 
-const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
+/**
+ * Custom path for serving bundled assets when using loadDataWithBaseURL.
+ * This allows the WebView to load local assets while having the site URL as document origin.
+ */
+const val BUNDLED_ASSET_PATH = "/gbk-assets/"
 
 class GutenbergView : WebView {
     private var isEditorLoaded = false
     private var didFireEditorLoaded = false
-    private var assetLoader = WebViewAssetLoader.Builder()
-        .addPathHandler("/assets/", AssetsPathHandler(this.context))
-        .build()
+    private var assetLoader: WebViewAssetLoader? = null
     private var configuration: EditorConfiguration = EditorConfiguration.builder().build()
+
+    /**
+     * Tracks whether we're using dev server mode.
+     * In dev server mode, assets are loaded from a local development server.
+     */
+    private var devServerURL: String? = null
 
     private val handler = Handler(Looper.getMainLooper())
     var filePathCallback: ValueCallback<Array<Uri?>?>? = null
@@ -149,9 +157,17 @@ class GutenbergView : WebView {
             ): WebResourceResponse? {
                 if (request.url == null) {
                     return super.shouldInterceptRequest(view, request)
-                } else if (request.url.host?.contains("appassets.androidplatform.net") == true) {
-                    return assetLoader.shouldInterceptRequest(request.url)
-                } else if (requestInterceptor.canIntercept(request)) {
+                }
+
+                // Intercept requests to our bundled asset path
+                val path = request.url.path
+                if (path?.startsWith(BUNDLED_ASSET_PATH) == true) {
+                    return assetLoader?.shouldInterceptRequest(request.url)
+                        ?: super.shouldInterceptRequest(view, request)
+                }
+
+                // Handle request interceptor (for API requests, cached assets, etc.)
+                if (requestInterceptor.canIntercept(request)) {
                     return requestInterceptor.handleRequest(request)
                 }
 
@@ -181,26 +197,28 @@ class GutenbergView : WebView {
                     return false
                 }
 
-                // Allow asset URLs
-                if (url.host == Uri.parse(ASSET_URL).host) {
-                    return false
-                }
-
                 // Allow WordPress.com REST API
                 if (url.host == "public-api.wordpress.com") {
                     return false
                 }
 
                 // Allow WordPress REST API
-                if (url.host == configuration.siteApiRoot.removePrefix("https://").removePrefix("http://")) {
+                val siteHost = Uri.parse(configuration.siteApiRoot).host
+                if (url.host == siteHost) {
                     if (url.path?.contains("/wp-json/") == true || url.query?.contains("rest_route=") == true) {
                         return false
+                    }
+
+                    // Intercept navigation to site root (reload scenario)
+                    if (url.path == "/" || url.path.isNullOrEmpty()) {
+                        reloadEditorHTML()
+                        return true
                     }
                 }
 
                 // Allow local development server if configured
-                if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
-                    val editorUrl = Uri.parse(BuildConfig.GUTENBERG_EDITOR_URL)
+                if (devServerURL != null) {
+                    val editorUrl = Uri.parse(devServerURL)
                     if (url.host == editorUrl.host) {
                         return false
                     }
@@ -268,19 +286,27 @@ class GutenbergView : WebView {
             requestInterceptor = cachedInterceptor
         }
 
+        // Set up asset loader with site domain for same-origin loading
+        // This allows the WebView to serve bundled assets while using the site URL as document origin
+        val siteHost = Uri.parse(configuration.siteApiRoot).host ?: "localhost"
+        assetLoader = WebViewAssetLoader.Builder()
+            .setDomain(siteHost)
+            .addPathHandler(BUNDLED_ASSET_PATH, AssetsPathHandler(this.context))
+            .build()
+
         initializeWebView()
 
-        val editorUrl = if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
+        // Check for dev server URL
+        devServerURL = if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
             BuildConfig.GUTENBERG_EDITOR_URL
         } else {
-            ASSET_URL
+            null
         }
 
         WebStorage.getInstance().deleteAllData()
         this.clearCache(true)
-        // All cookies are third-party cookies because the root of this document
-        // lives under `https://appassets.androidplatform.net`
-        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true);
+        // Accept third-party cookies since plugin stylesheets may set them
+        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
 
         // Erase all local cookies before loading the URL – we don't want to persist
         // anything between uses – otherwise we might send the wrong cookies
@@ -289,9 +315,85 @@ class GutenbergView : WebView {
             for(cookie in configuration.cookies) {
                 CookieManager.getInstance().setCookie(cookie.key, cookie.value)
             }
-            this.loadUrl(editorUrl)
+
+            if (devServerURL != null) {
+                loadDevServerHTML()
+            } else {
+                loadBundledHTML()
+            }
 
             Log.i("GutenbergView", "Startup Complete")
+        }
+    }
+
+    /**
+     * Load the editor HTML from bundled assets.
+     * Transforms relative URLs to use the bundled asset path.
+     */
+    private fun loadBundledHTML() {
+        try {
+            val inputStream = context.assets.open("index.html")
+            var html = inputStream.bufferedReader().use { it.readText() }
+
+            // Transform relative URLs to use our bundled asset path
+            html = html.replace("src=\"/", "src=\"$BUNDLED_ASSET_PATH")
+            html = html.replace("href=\"/", "href=\"$BUNDLED_ASSET_PATH")
+
+            // Load with site URL as base to enable same-origin stylesheet access
+            val baseUrl = configuration.siteApiRoot.removeSuffix("/wp-json")
+            loadDataWithBaseURL(baseUrl, html, "text/html", "UTF-8", null)
+        } catch (e: Exception) {
+            Log.e("GutenbergView", "Failed to load bundled index.html: ${e.message}")
+        }
+    }
+
+    /**
+     * Load the editor HTML from a development server.
+     * Transforms relative URLs to absolute dev server URLs.
+     */
+    private fun loadDevServerHTML() {
+        val serverUrl = devServerURL ?: return
+
+        Thread {
+            try {
+                val url = java.net.URL(serverUrl)
+                val connection = url.openConnection() as java.net.HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 5000
+                connection.readTimeout = 5000
+
+                val responseCode = connection.responseCode
+                if (responseCode == java.net.HttpURLConnection.HTTP_OK) {
+                    var html = connection.inputStream.bufferedReader().use { it.readText() }
+
+                    // Transform relative URLs to absolute dev server URLs
+                    val devServerBase = serverUrl.trimEnd('/')
+                    html = html.replace("src=\"/", "src=\"$devServerBase/")
+                    html = html.replace("href=\"/", "href=\"$devServerBase/")
+
+                    // Load with site URL as base to enable same-origin stylesheet access
+                    val baseUrl = configuration.siteApiRoot.removeSuffix("/wp-json")
+                    handler.post {
+                        loadDataWithBaseURL(baseUrl, html, "text/html", "UTF-8", null)
+                    }
+                } else {
+                    Log.e("GutenbergView", "Failed to load dev server HTML: HTTP $responseCode")
+                }
+                connection.disconnect()
+            } catch (e: Exception) {
+                Log.e("GutenbergView", "Failed to load dev server HTML: ${e.message}")
+            }
+        }.start()
+    }
+
+    /**
+     * Reload the editor HTML (used when intercepting reload navigation).
+     */
+    private fun reloadEditorHTML() {
+        if (devServerURL != null) {
+            loadDevServerHTML()
+        } else {
+            loadBundledHTML()
         }
     }
 

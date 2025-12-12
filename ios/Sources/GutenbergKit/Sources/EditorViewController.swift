@@ -75,6 +75,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             config.setURLSchemeHandler(schemeHandler, forURLScheme: scheme)
         }
         config.setURLSchemeHandler(MediaFileSchemeHandler(), forURLScheme: MediaFileSchemeHandler.scheme)
+        config.setURLSchemeHandler(BundledAssetSchemeHandler(), forURLScheme: BundledAssetSchemeHandler.scheme)
 
         self.webView = GBWebView(frame: .zero, configuration: config)
         self.webView.scrollView.keyboardDismissMode = .interactive
@@ -130,6 +131,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         userContentController.addUserScript(editorInitialConfig)
     }
 
+    /// URL for the dev server, if running in dev mode
+    private var devServerURL: URL?
+
     private func loadEditor() {
         webView.configuration.userContentController.addScriptMessageHandler(
             EditorAssetsProvider(library: assetsLibrary),
@@ -138,10 +142,45 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         )
 
         if let editorURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
-            webView.load(URLRequest(url: editorURL))
+            devServerURL = editorURL
+            loadDevServerHTML()
         } else {
-            let indexURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
-            webView.loadFileURL(indexURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+            loadBundledHTML()
+        }
+    }
+
+    /// Loads HTML from the bundled assets with the site URL as the document origin.
+    /// Asset URLs are transformed to use the gbk-bundle:// scheme.
+    private func loadBundledHTML() {
+        guard let indexURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg"),
+              var html = try? String(contentsOf: indexURL, encoding: .utf8) else {
+            NSLog("Failed to load bundled index.html")
+            return
+        }
+
+        // Transform relative URLs to use gbk-bundle:// scheme
+        // Handles: src="/path" and href="/path"
+        html = html.replacingOccurrences(of: "src=\"/", with: "src=\"\(BundledAssetSchemeHandler.scheme):///")
+        html = html.replacingOccurrences(of: "href=\"/", with: "href=\"\(BundledAssetSchemeHandler.scheme):///")
+
+        let baseURL = URL(string: configuration.siteURL)
+        webView.loadHTMLString(html, baseURL: baseURL)
+    }
+
+    /// Loads HTML from the Vite dev server.
+    /// In dev mode, we load directly from the dev server URL to avoid mixed content issues.
+    /// The cross-origin stylesheet limitation is acceptable during development.
+    private func loadDevServerHTML() {
+        guard let devServerURL else { return }
+        webView.load(URLRequest(url: devServerURL))
+    }
+
+    /// Reloads the editor HTML (called when intercepting page reloads)
+    private func reloadEditorHTML() {
+        if devServerURL != nil {
+            loadDevServerHTML()
+        } else {
+            loadBundledHTML()
         }
     }
 
@@ -509,6 +548,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
+    fileprivate func controllerDidRequestReload(_ controller: GutenbergEditorController) {
+        reloadEditorHTML()
+    }
+
     // Only after this point it's safe to use JS `editor` API.
     private func didLoadEditor() {
         guard !_isEditorRendered else { return }
@@ -545,6 +588,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 @MainActor
 private protocol GutenbergEditorControllerDelegate: AnyObject {
     func controller(_ controller: GutenbergEditorController, didReceiveMessage message: EditorJSMessage)
+    func controllerDidRequestReload(_ controller: GutenbergEditorController)
 }
 
 /// Hiding the conformances, and breaking retain cycles.
@@ -576,6 +620,14 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
         guard let url = navigationAction.request.url else {
             return .allow
+        }
+
+        // Intercept explicit reload requests and re-serve our HTML
+        if navigationAction.navigationType == .reload {
+            await MainActor.run {
+                delegate?.controllerDidRequestReload(self)
+            }
+            return .cancel
         }
 
         if navigationAction.navigationType == .linkActivated {

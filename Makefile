@@ -91,6 +91,21 @@ local-android-library: build ## Build the Android library to local Maven
 # Development Targets
 ################################################################################
 
+.PHONY: setup-https
+setup-https: ## Generate local HTTPS certificates for dev server (requires: brew install mkcert)
+	@if ! command -v mkcert &> /dev/null; then \
+		echo "Error: mkcert not found. Install with: brew install mkcert"; \
+		exit 1; \
+	fi
+	@mkdir -p .cert
+	@mkcert -install 2>/dev/null || true
+	@mkcert -key-file .cert/localhost-key.pem -cert-file .cert/localhost.pem localhost 127.0.0.1
+	@echo ""
+	@echo "HTTPS certificates generated in .cert/"
+	@echo "Dev server will now use HTTPS automatically."
+	@echo ""
+	@echo "Set your GUTENBERG_EDITOR_URL to https://localhost:5173 in your iOS scheme."
+
 .PHONY: dev-server
 dev-server: npm-dependencies ## Start the development server
 	npm run dev
