@@ -118,7 +118,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let waitingView = UIActivityIndicatorView(style: .medium)
 
     /// View controller that displays error information when loading fails.
-    private let errorViewController = EditorErrorViewController()
+    private var errorViewController: UIHostingController<AnyView>?
 
     /// Stores the contextId from the most recent `openMediaLibrary` JS call.
     /// Passed back to JavaScript when media selection completes.
@@ -771,14 +771,20 @@ extension EditorViewController {
 
     @MainActor
     func displayError(_ error: Error) {
-        self.displayAndCenterView(errorViewController.view!)
-        self.errorViewController.didMove(toParent: self)
-        errorViewController.error = error
+        let view = ContentUnavailableView(
+            "Editor Error",
+            systemImage: "exclamationmark.circle",
+            description: Text(error.localizedDescription)
+        )
+
+        self.errorViewController = UIHostingController(rootView: AnyView(view))
+        self.displayAndCenterView(errorViewController!.view)
+        self.errorViewController?.didMove(toParent: self)
     }
 
     @MainActor
     func hideError() {
-        self.errorViewController.view.removeFromSuperview()
+        self.errorViewController?.view.removeFromSuperview()
     }
 
     @MainActor
