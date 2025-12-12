@@ -22,6 +22,13 @@ struct SitePreparationView: View {
                 ProgressView("Loading Site Configuration")
             }
         }
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Start") {
+                    self.viewModel.buildAndLoadConfiguration(navigation: navigation)
+                }.buttonStyle(.borderedProminent)
+            }
+        }
         .navigationTitle("Editor Configuration")
         .onAppear {
             self.viewModel.startLoading()
@@ -63,16 +70,6 @@ struct SitePreparationView: View {
                 Section("Error") {
                     Text(error.localizedDescription)
                 }
-            }
-
-            Section {} footer: {
-                Button(action: {
-                    self.viewModel.buildAndLoadConfiguration(navigation: navigation)
-                }) {
-                    Spacer()
-                    Text("Start Editor")
-                    Spacer()
-                }.buttonStyle(.borderedProminent)
             }
         }
     }
