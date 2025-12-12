@@ -278,7 +278,12 @@ class SitePreparationViewModel {
     }
 
     func buildAndLoadConfiguration(navigation: Navigation) {
-        navigation.push(RunnableEditor(configuration: buildConfiguration(), dependencies: self.editorDependencies))
+        let editor = RunnableEditor(
+            configuration: buildConfiguration(),
+            dependencies: self.editorDependencies
+        )
+
+        navigation.present(editor)
     }
 }
 

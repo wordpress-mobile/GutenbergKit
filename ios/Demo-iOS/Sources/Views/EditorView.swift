@@ -7,6 +7,8 @@ struct EditorView: View {
 
     @ObservedObject private var viewModel = EditorViewModel()
 
+    @Environment(\.dismiss) var dismiss
+
     init(configuration: EditorConfiguration, dependencies: EditorDependencies? = nil) {
         self.configuration = configuration
         self.dependencies = dependencies
@@ -23,6 +25,13 @@ struct EditorView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button {
+                self.dismiss()
+            } label: {
+                Image(systemName: "xmark")
+            }
+        }
         ToolbarItemGroup(placement: .topBarTrailing) {
             Group {
                 Button {

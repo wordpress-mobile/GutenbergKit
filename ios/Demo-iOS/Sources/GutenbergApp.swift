@@ -5,8 +5,17 @@ import GutenbergKit
 final class Navigation: ObservableObject {
     @Published var path = NavigationPath()
 
+    @Published var hasEditor: Bool = false
+
+    @Published var editor: RunnableEditor?
+
     func push(_ path: any Hashable) {
         self.path.append(path)
+    }
+
+    func present(_ editor: RunnableEditor) {
+        self.hasEditor = true
+        self.editor = editor
     }
 }
 
@@ -39,12 +48,17 @@ struct GutenbergApp: App {
         WindowGroup {
             NavigationStack(path: $navigation.path) {
                 AppRootView()
-                .navigationDestination(for: RunnableEditor.self) { editor in
-                    EditorView(configuration: editor.configuration, dependencies: editor.dependencies)
-                }
                 .navigationDestination(for: ConfigurationItem.self) { item in
                     SitePreparationView(site: item)
                 }
+                .fullScreenCover(isPresented: $navigation.hasEditor) {
+                    let editor = navigation.editor!
+
+                    NavigationStack {
+                        EditorView(configuration: editor.configuration, dependencies: editor.dependencies)
+                    }
+                }
+
             }
         }
         .environment(\.navigation, navigation)
