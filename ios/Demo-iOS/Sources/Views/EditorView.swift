@@ -5,7 +5,7 @@ struct EditorView: View {
     private let configuration: EditorConfiguration
     private let dependencies: EditorDependencies?
 
-    @ObservedObject private var viewModel = EditorViewModel()
+    @StateObject private var viewModel = EditorViewModel()
 
     @Environment(\.dismiss) var dismiss
 
