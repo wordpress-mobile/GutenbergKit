@@ -94,6 +94,7 @@ final class HTMLWebViewRenderer {
             // Create web view with small initial frame for off-screen rendering
             // Frame will be adjusted per render based on viewport width and content height
             webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1200, height: 100), configuration: config)
+            webView.customUserAgent = GBWebView.createCustomUserAgent()
 
             delegate = RenderDelegate()
             webView.navigationDelegate = delegate
