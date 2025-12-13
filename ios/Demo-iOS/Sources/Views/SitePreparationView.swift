@@ -264,7 +264,6 @@ class SitePreparationViewModel {
         .setShouldUsePlugins(canUsePlugins)
         .setAuthHeader(config.authHeader)
         .setLogLevel(.debug)
-        .setEnableNetworkLogging(true)
         .build()
     }
 
