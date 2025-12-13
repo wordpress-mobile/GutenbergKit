@@ -2,9 +2,6 @@ import WebKit
 
 class GBWebView: WKWebView {
     
-    /// The GutenbergKit version string
-    static let version = "0.11.1"
-    
     /// Cached custom user agent to avoid repeated WebView instantiation
     private static var cachedCustomUserAgent: String?
     
@@ -35,7 +32,7 @@ class GBWebView: WKWebView {
         group.wait()
         
         // Cache and return the result
-        let customUserAgent = "\(defaultUserAgent) GutenbergKit/\(version)"
+        let customUserAgent = "\(defaultUserAgent) GutenbergKit/\(GutenbergKit.version)"
         cachedCustomUserAgent = customUserAgent
         return customUserAgent
     }

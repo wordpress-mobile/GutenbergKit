@@ -161,6 +161,6 @@ class GutenbergViewTest {
         assertTrue("User agent should contain GutenbergKit identifier",
             userAgent.contains("GutenbergKit/"))
         assertTrue("User agent should contain version number",
-            userAgent.contains("GutenbergKit/${GutenbergView.VERSION}"))
+            userAgent.contains("GutenbergKit/${GutenbergKitVersion.VERSION}"))
     }
 }
