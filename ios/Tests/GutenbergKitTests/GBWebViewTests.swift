@@ -11,7 +11,7 @@ final class GBWebViewTests: XCTestCase {
         // Then
         XCTAssertTrue(customUserAgent.contains("GutenbergKit/"), 
                      "User agent should contain GutenbergKit identifier")
-        XCTAssertTrue(customUserAgent.contains("GutenbergKit/\(GutenbergKit.version)"), 
+        XCTAssertTrue(customUserAgent.contains("GutenbergKit/\(GBKVersion.version)"), 
                      "User agent should contain version number")
         XCTAssertTrue(customUserAgent.contains("Mozilla"), 
                      "User agent should contain Mozilla identifier from default user agent")
@@ -22,7 +22,7 @@ final class GBWebViewTests: XCTestCase {
         let customUserAgent = GBWebView.createCustomUserAgent()
         
         // Then
-        XCTAssertTrue(customUserAgent.hasSuffix(" GutenbergKit/\(GutenbergKit.version)"), 
+        XCTAssertTrue(customUserAgent.hasSuffix(" GutenbergKit/\(GBKVersion.version)"), 
                      "Custom user agent should end with GutenbergKit identifier")
     }
     

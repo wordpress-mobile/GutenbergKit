@@ -32,7 +32,7 @@ class GBWebView: WKWebView {
         group.wait()
         
         // Cache and return the result
-        let customUserAgent = "\(defaultUserAgent) GutenbergKit/\(GutenbergKit.version)"
+        let customUserAgent = "\(defaultUserAgent) GutenbergKit/\(GBKVersion.version)"
         cachedCustomUserAgent = customUserAgent
         return customUserAgent
     }
