@@ -725,7 +725,7 @@ class GutenbergView : WebView {
 
     companion object {
         private const val ASSET_LOADING_TIMEOUT_MS = 5000L
-        private const val VERSION = "0.11.1"
+        internal const val VERSION = "0.11.1"
 
         // Warmup state management
         private var warmupHandler: Handler? = null
