@@ -5,28 +5,39 @@ class GBWebView: WKWebView {
     /// The GutenbergKit version string
     static let version = "0.11.1"
     
-    /// Cached default user agent, lazily initialized
-    private static let defaultUserAgent: String = {
-        // Use a temporary WKWebView to get the default user agent
-        // We need to use evaluateJavaScript since customUserAgent is write-only
+    /// Cached custom user agent to avoid repeated WebView instantiation
+    private static var cachedCustomUserAgent: String?
+    
+    /// Creates a custom user agent string by appending GutenbergKit identifier to the default user agent
+    /// The result is cached after the first call to avoid performance overhead
+    static func createCustomUserAgent() -> String {
+        // Return cached value if available
+        if let cached = cachedCustomUserAgent {
+            return cached
+        }
+        
+        // Get the default user agent by creating a temporary WKWebView
         let webView = WKWebView()
-        let semaphore = DispatchSemaphore(value: 0)
-        var userAgent = ""
+        var defaultUserAgent = ""
+        
+        // Use DispatchGroup for synchronous wait
+        // This is safe during view initialization as it's not on a critical path
+        let group = DispatchGroup()
+        group.enter()
         
         webView.evaluateJavaScript("navigator.userAgent") { result, error in
             if let result = result as? String {
-                userAgent = result
+                defaultUserAgent = result
             }
-            semaphore.signal()
+            group.leave()
         }
         
-        semaphore.wait()
-        return userAgent
-    }()
-    
-    /// Creates a custom user agent string by appending GutenbergKit identifier to the default user agent
-    static func createCustomUserAgent() -> String {
-        return "\(defaultUserAgent) GutenbergKit/\(version)"
+        group.wait()
+        
+        // Cache and return the result
+        let customUserAgent = "\(defaultUserAgent) GutenbergKit/\(version)"
+        cachedCustomUserAgent = customUserAgent
+        return customUserAgent
     }
 
     #if canImport(UIKit)
