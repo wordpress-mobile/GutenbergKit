@@ -13,9 +13,13 @@ public struct EditorURLCache: Sendable {
 
     /// Creates a new URL cache.
     ///
-    /// - Parameter cacheRoot: The directory where cached responses will be stored.
-    ///   If `nil`, the system default cache directory is used. The cache has a
-    ///   maximum disk capacity of 100 MB.
+    /// - Parameters:
+    ///   - cacheRoot: The directory where cached responses will be stored.
+    ///     If `nil`, the system default cache directory is used. The cache has a
+    ///     maximum disk capacity of 100 MB.
+    ///   - cachePolicy: The policy that determines when cached responses are considered valid.
+    ///     Use `.ignore` to always fetch fresh data, `.maxAge(_:)` to expire entries after
+    ///     a time interval, or `.always` (the default) to use cached data regardless of age.
     public init(cacheRoot: URL? = nil, cachePolicy: EditorCachePolicy = .always) {
         // About enough for 10 sites
         self.cache = URLCache(memoryCapacity: 0, diskCapacity: 100 * 1024 * 1024, directory: cacheRoot)

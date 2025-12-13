@@ -52,6 +52,10 @@ public actor EditorService {
     ///   - configuration: The editor configuration specifying site credentials and settings.
     ///   - httpClient: An optional HTTP client for making API requests. If `nil`, a default
     ///     client is created using the configuration's auth header.
+    ///   - cachePolicy: The policy that determines when cached responses are considered valid.
+    ///     Use `.ignore` to always fetch fresh data, `.maxAge(_:)` to expire entries after
+    ///     a time interval, or `.always` (the default) to use cached data regardless of age.
+    ///     This policy applies to both API response caching and asset manifest caching.
     ///   - storageRoot: The directory for storing downloaded asset bundles. If `nil`, uses
     ///     a default location based on the site ID.
     ///   - cacheRoot: The directory for caching API responses. If `nil`, uses a default

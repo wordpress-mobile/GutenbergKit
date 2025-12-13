@@ -14,6 +14,9 @@ public actor EditorAssetLibrary {
     /// - Parameters:
     ///   - configuration: The editor configuration containing site-specific settings.
     ///   - httpClient: The HTTP client used to fetch remote assets.
+    ///   - cachePolicy: The policy that determines when cached asset manifests are considered valid.
+    ///     Use `.ignore` to always fetch fresh manifests, `.maxAge(_:)` to expire entries after
+    ///     a time interval, or `.always` (the default) to use cached manifests regardless of age.
     ///   - storageRoot: The root directory where asset bundles will be stored on disk.
     public init(
         configuration: EditorConfiguration,
