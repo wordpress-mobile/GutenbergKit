@@ -125,6 +125,11 @@ class GutenbergView : WebView {
         this.settings.javaScriptCanOpenWindowsAutomatically = true
         this.settings.javaScriptEnabled = true
         this.settings.domStorageEnabled = true
+        
+        // Set custom user agent
+        val defaultUserAgent = this.settings.userAgentString
+        this.settings.userAgentString = "$defaultUserAgent GutenbergKit/$VERSION"
+        
         this.addJavascriptInterface(this, "editorDelegate")
         this.visibility = View.GONE
 
@@ -720,6 +725,7 @@ class GutenbergView : WebView {
 
     companion object {
         private const val ASSET_LOADING_TIMEOUT_MS = 5000L
+        private const val VERSION = "0.11.1"
 
         // Warmup state management
         private var warmupHandler: Handler? = null
