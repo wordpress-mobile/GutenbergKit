@@ -244,7 +244,6 @@ extension EditorConfiguration {
     )
     .setShouldUsePlugins(false)
     .setAuthHeader("")
-    .setNativeInserterEnabled(true)
     .setIsOfflineModeEnabled(true)
     .build()
 }
