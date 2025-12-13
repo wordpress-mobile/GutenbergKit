@@ -259,115 +259,53 @@ that contain everything the editor needs, the progress bar will never be display
 
 ## EditorDependencies
 
-`EditorDependencies` is the output of the preloading system - a container holding all pre-fetched resources needed to initialize the editor instantly.
-
-### What It Contains
+`EditorDependencies` contains all pre-fetched resources needed to initialize the editor instantly.
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `editorSettings` | `EditorSettings` | Theme styles, colors, typography, and block settings |
-| `assetBundle` | `EditorAssetBundle` | Cached JavaScript and CSS files for plugins/themes |
-| `preloadList` | `EditorPreloadList?` | Pre-fetched API responses (nil if preloading disabled) |
+| `editorSettings` | `EditorSettings` | Theme styles, colors, typography, block settings |
+| `assetBundle` | `EditorAssetBundle` | Cached JavaScript/CSS for plugins/themes |
+| `preloadList` | `EditorPreloadList?` | Pre-fetched API responses |
 
-### How to Obtain EditorDependencies
+### Obtaining Dependencies
 
-Use `EditorService.prepare()` to fetch dependencies asynchronously:
-
-**Swift**
 ```swift
-let configuration = EditorConfiguration(/* ... */)
 let service = EditorService(configuration: configuration)
-
-// Fetch dependencies with progress reporting
 let dependencies = try await service.prepare { progress in
-    // Update your UI with progress.fractionCompleted (0.0 to 1.0)
     loadingView.progress = progress.fractionCompleted
 }
 ```
 
-**Kotlin**
-```kotlin
-// TBD
-```
+### EditorViewController Loading Flows
 
-### Using EditorDependencies with EditorViewController
+`EditorViewController` supports two loading flows based on whether dependencies are provided:
 
-`EditorViewController` can be initialized in two ways:
+#### Flow 1: Dependencies Provided (Recommended)
 
-#### 1. With Pre-fetched Dependencies (Recommended)
-
-Pass `EditorDependencies` to the initializer for instant editor loading:
-
-**Swift**
 ```swift
-// Fetch dependencies ahead of time (e.g., when user taps "Edit")
-let dependencies = try await service.prepare { progress in
-    // Show loading UI
-}
-
-// Later, create the editor with dependencies ready
 let editor = EditorViewController(
     configuration: configuration,
-    dependencies: dependencies  // Editor loads instantly
+    dependencies: dependencies  // Loads immediately
 )
 ```
 
-When dependencies are provided:
-1. The editor skips the loading/progress UI entirely
-2. The WebView loads immediately with all configuration injected
-3. The user sees the editor content with minimal delay
+The editor skips the progress UI and loads the WebView immediately.
 
-#### 2. Without Dependencies (Lazy Loading)
+#### Flow 2: No Dependencies (Fallback)
 
-If no dependencies are provided, the editor fetches them on-demand:
-
-**Swift**
 ```swift
 let editor = EditorViewController(
     configuration: configuration
-    // No dependencies - will fetch automatically
+    // No dependencies - fetches automatically
 )
 ```
 
-When dependencies are NOT provided:
-1. The editor displays a progress bar while fetching
-2. `EditorService.prepare()` runs internally
-3. Once complete, the editor loads and the progress bar hides
+The editor displays a progress bar while fetching, then loads once complete.
 
-### EditorViewController State Machine
+### Best Practice: Prepare Early
 
-The editor transitions through these states based on dependency availability:
+Fetch dependencies before the user needs the editor:
 
-```
-+-------+     No deps      +---------+     Fetch complete     +--------+
-| start | ---------------> | loading | ---------------------> | loaded |
-+-------+                  +---------+                        +--------+
-    |                                                              |
-    | Has deps                                                     |
-    +------------------------------------------------------------->+
-                                                                   |
-                                                              JS initialized
-                                                                   |
-                                                                   v
-                                                              +-------+
-                                                              | ready |
-                                                              +-------+
-```
-
-| State | Description |
-|-------|-------------|
-| `start` | Initial state before `viewDidLoad` |
-| `loading` | Fetching dependencies, showing progress bar |
-| `loaded` | Dependencies ready, WebView loading HTML/JS |
-| `ready` | Editor fully initialized, safe to call JS APIs |
-
-### Best Practices
-
-#### Prepare Dependencies Early
-
-For the best user experience, fetch dependencies before the user needs the editor:
-
-**Swift**
 ```swift
 class PostListViewController: UIViewController {
     private var editorDependencies: EditorDependencies?
@@ -375,31 +313,16 @@ class PostListViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-
-        // Start fetching in the background
         Task {
             self.editorDependencies = try? await editorService.prepare { _ in }
         }
     }
 
     func editPost(_ post: Post) {
-        let config = EditorConfiguration(post: post)
         let editor = EditorViewController(
-            configuration: config,
-            dependencies: editorDependencies  // Already available!
+            configuration: EditorConfiguration(post: post),
+            dependencies: editorDependencies
         )
         navigationController?.pushViewController(editor, animated: true)
     }
 }
-```
-
-#### Cache Dependencies Per-Site
-
-Dependencies are site-specific (different themes, plugins, settings). Create separate `EditorService` instances per site and cache their dependencies independently.
-
-#### Handle Missing Dependencies Gracefully
-
-Even without pre-fetched dependencies, the editor will work - it just shows a loading state first. This is useful for:
-- First launch (no cache yet)
-- Cache expired or cleared
-- Error recovery scenarios
