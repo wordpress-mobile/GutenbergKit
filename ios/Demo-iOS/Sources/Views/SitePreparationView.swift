@@ -24,9 +24,12 @@ struct SitePreparationView: View {
         }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("Start") {
-                    self.viewModel.buildAndLoadConfiguration(navigation: navigation)
-                }.buttonStyle(.borderedProminent)
+                if self.viewModel.editorConfiguration != nil {
+                    Button("Start") {
+                        self.viewModel.buildAndLoadConfiguration(navigation: navigation)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
             }
         }
         .navigationTitle("Editor Configuration")
