@@ -1,10 +1,13 @@
-import XCTest
+import Foundation
+import Testing
 import WebKit
 @testable import GutenbergKit
 
-final class GBWebViewTests: XCTestCase {
+@Suite("GBWebView Tests")
+struct GBWebViewTests {
     
-    func testApplicationNameForUserAgent() {
+    @Test("Application name for user agent is set correctly")
+    func testApplicationNameForUserAgent() async throws {
         // Given
         let webView = GBWebView()
         
@@ -12,15 +15,36 @@ final class GBWebViewTests: XCTestCase {
         webView.applicationNameForUserAgent = "GutenbergKit/\(GBKVersion.version)"
         
         // Then
-        XCTAssertEqual(webView.applicationNameForUserAgent, "GutenbergKit/\(GBKVersion.version)",
-                      "Application name should be set correctly")
+        #expect(webView.applicationNameForUserAgent == "GutenbergKit/\(GBKVersion.version)")
     }
     
-    func testVersionConstantExists() {
+    @Test("Version constant exists and is valid")
+    func testVersionConstantExists() async throws {
         // Then
-        XCTAssertFalse(GBKVersion.version.isEmpty,
-                      "Version constant should not be empty")
-        XCTAssertTrue(GBKVersion.version.contains("."),
-                     "Version should be in semantic versioning format")
+        #expect(!GBKVersion.version.isEmpty)
+        #expect(GBKVersion.version.contains("."))
+    }
+    
+    @Test("Navigator user agent includes GutenbergKit identifier")
+    func testNavigatorUserAgentIncludesGutenbergKit() async throws {
+        // Given
+        let webView = GBWebView()
+        webView.applicationNameForUserAgent = "GutenbergKit/\(GBKVersion.version)"
+        
+        // Load a simple HTML page to ensure the WebView is ready
+        let html = "<html><body>Test</body></html>"
+        webView.loadHTMLString(html, baseURL: nil)
+        
+        // Wait for the page to load
+        try await Task.sleep(for: .milliseconds(500))
+        
+        // When - evaluate navigator.userAgent in the WebView
+        let userAgent = try await webView.evaluateJavaScript("navigator.userAgent") as? String
+        
+        // Then
+        #expect(userAgent != nil)
+        if let userAgent = userAgent {
+            #expect(userAgent.contains("GutenbergKit/\(GBKVersion.version)"))
+        }
     }
 }
