@@ -4,37 +4,23 @@ import WebKit
 
 final class GBWebViewTests: XCTestCase {
     
-    func testCreateCustomUserAgent() {
-        // When
-        let customUserAgent = GBWebView.createCustomUserAgent()
-        
-        // Then
-        XCTAssertTrue(customUserAgent.contains("GutenbergKit/"), 
-                     "User agent should contain GutenbergKit identifier")
-        XCTAssertTrue(customUserAgent.contains("GutenbergKit/\(GBKVersion.version)"), 
-                     "User agent should contain version number")
-        XCTAssertTrue(customUserAgent.contains("Mozilla"), 
-                     "User agent should contain Mozilla identifier from default user agent")
-    }
-    
-    func testCustomUserAgentEndsWithGutenbergKitIdentifier() {
-        // When
-        let customUserAgent = GBWebView.createCustomUserAgent()
-        
-        // Then
-        XCTAssertTrue(customUserAgent.hasSuffix(" GutenbergKit/\(GBKVersion.version)"), 
-                     "Custom user agent should end with GutenbergKit identifier")
-    }
-    
-    func testCustomUserAgentIsConsistent() {
+    func testApplicationNameForUserAgent() {
         // Given
-        let firstCall = GBWebView.createCustomUserAgent()
+        let webView = GBWebView()
         
         // When
-        let secondCall = GBWebView.createCustomUserAgent()
+        webView.applicationNameForUserAgent = "GutenbergKit/\(GBKVersion.version)"
         
         // Then
-        XCTAssertEqual(firstCall, secondCall, 
-                      "Custom user agent should be consistent across calls")
+        XCTAssertEqual(webView.applicationNameForUserAgent, "GutenbergKit/\(GBKVersion.version)",
+                      "Application name should be set correctly")
+    }
+    
+    func testVersionConstantExists() {
+        // Then
+        XCTAssertFalse(GBKVersion.version.isEmpty,
+                      "Version constant should not be empty")
+        XCTAssertTrue(GBKVersion.version.contains("."),
+                     "Version should be in semantic versioning format")
     }
 }

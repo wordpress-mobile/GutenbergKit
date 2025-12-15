@@ -177,7 +177,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         self.webView = GBWebView(frame: .zero, configuration: config)
         self.webView.scrollView.keyboardDismissMode = .interactive
-        self.webView.customUserAgent = GBWebView.createCustomUserAgent()
+        self.webView.applicationNameForUserAgent = "GutenbergKit/\(GBKVersion.version)"
 
         self.isWarmupMode = isWarmupMode
 
