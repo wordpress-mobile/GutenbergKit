@@ -42,9 +42,6 @@ struct GBWebViewTests {
         let userAgent = try await webView.evaluateJavaScript("navigator.userAgent") as? String
         
         // Then
-        #expect(userAgent != nil)
-        if let userAgent = userAgent {
-            #expect(userAgent.contains("GutenbergKit/\(GBKVersion.version)"))
-        }
+        #expect(userAgent?.contains("GutenbergKit/\(GBKVersion.version)") == true)
     }
 }
