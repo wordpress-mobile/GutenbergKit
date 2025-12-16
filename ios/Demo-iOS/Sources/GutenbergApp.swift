@@ -2,8 +2,42 @@ import SwiftUI
 import OSLog
 import GutenbergKit
 
+final class Navigation: ObservableObject {
+    @Published var path = NavigationPath()
+
+    @Published var hasEditor: Bool = false
+
+    @Published var editor: RunnableEditor?
+
+    func push(_ path: any Hashable) {
+        self.path.append(path)
+    }
+
+    func present(_ editor: RunnableEditor) {
+        self.hasEditor = true
+        self.editor = editor
+    }
+}
+
+extension EnvironmentValues {
+    private struct NavigationKey: EnvironmentKey {
+        static let defaultValue = Navigation()
+    }
+
+    var navigation: Navigation {
+        get { self[NavigationKey.self] }
+        set { self[NavigationKey.self] = newValue }
+    }
+}
+
 @main
 struct GutenbergApp: App {
+    @StateObject
+    private var navigation = Navigation()
+
+    private let configurationStorage = ConfigurationStorage()
+    private let authenticationManager = AuthenticationManager()
+
     init() {
         // Configure logger for GutenbergKit
         EditorLogger.shared = OSLogEditorLogger()
@@ -12,12 +46,24 @@ struct GutenbergApp: App {
 
     var body: some Scene {
         WindowGroup {
-            NavigationStack {
+            NavigationStack(path: $navigation.path) {
                 AppRootView()
+                .navigationDestination(for: ConfigurationItem.self) { item in
+                    SitePreparationView(site: item)
+                }
+                .fullScreenCover(isPresented: $navigation.hasEditor) {
+                    let editor = navigation.editor!
+
+                    NavigationStack {
+                        EditorView(configuration: editor.configuration, dependencies: editor.dependencies)
+                    }
+                }
+
             }
         }
-        .environmentObject(ConfigurationStorage())
-        .environmentObject(AuthenticationManager())
+        .environment(\.navigation, navigation)
+        .environmentObject(configurationStorage)
+        .environmentObject(authenticationManager)
     }
 }
 

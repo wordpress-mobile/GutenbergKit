@@ -17,6 +17,10 @@ public enum EditorLocalizableString {
     case insertPattern
     case patternsCategoryUncategorized
     case patternsCategoryAll
+
+    // MARK: - Editor Loading
+    case loadingEditor
+    case editorError
 }
 
 /// Provides localized strings for the editor.
@@ -40,6 +44,8 @@ public final class EditorLocalization {
         case .insertPattern: "Insert Pattern"
         case .patternsCategoryUncategorized: "Uncategorized"
         case .patternsCategoryAll: "All"
+        case .loadingEditor: "Loading Editor"
+        case .editorError: "Editor Error"
         }
     }
 

@@ -1,7 +1,8 @@
 import Foundation
+import GutenbergKit
 
 /// Represents a configuration item for the editor
-enum ConfigurationItem: Codable, Identifiable, Equatable {
+enum ConfigurationItem: Codable, Identifiable, Equatable, Hashable {
     case bundledEditor
     case editorConfiguration(ConfiguredEditor)
 
@@ -24,8 +25,13 @@ enum ConfigurationItem: Codable, Identifiable, Equatable {
     }
 }
 
+struct RunnableEditor: Equatable, Hashable {
+    let configuration: EditorConfiguration
+    let dependencies: EditorDependencies?
+}
+
 /// Configuration for an editor with site integration
-struct ConfiguredEditor: Codable, Identifiable, Equatable {
+struct ConfiguredEditor: Codable, Identifiable, Equatable, Hashable {
     let id: String
     let name: String
     let siteUrl: String

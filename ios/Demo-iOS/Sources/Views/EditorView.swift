@@ -3,17 +3,23 @@ import GutenbergKit
 
 struct EditorView: View {
     private let configuration: EditorConfiguration
+    private let dependencies: EditorDependencies?
 
-    @State private var viewModel = EditorViewModel()
+    @StateObject private var viewModel = EditorViewModel()
 
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.dismiss) var dismiss
 
-    init(configuration: EditorConfiguration) {
+    init(configuration: EditorConfiguration, dependencies: EditorDependencies? = nil) {
         self.configuration = configuration
+        self.dependencies = dependencies
     }
 
     var body: some View {
-        _EditorView(configuration: configuration, viewModel: viewModel)
+        _EditorView(
+            configuration: configuration,
+            dependencies: dependencies,
+            viewModel: viewModel
+        )
             .toolbar { toolbar }
     }
 
@@ -21,13 +27,11 @@ struct EditorView: View {
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
             Button {
-                dismiss()
+                self.dismiss()
             } label: {
                 Image(systemName: "xmark")
             }
-            .disabled(viewModel.isModalDialogOpen)
         }
-
         ToolbarItemGroup(placement: .topBarTrailing) {
             Group {
                 Button {
@@ -90,13 +94,16 @@ struct EditorView: View {
 
 private struct _EditorView: UIViewControllerRepresentable {
     private let configuration: EditorConfiguration
+    private let dependencies: EditorDependencies?
     private let viewModel: EditorViewModel
 
     init(
         configuration: EditorConfiguration,
+        dependencies: EditorDependencies? = nil,
         viewModel: EditorViewModel
     ) {
         self.configuration = configuration
+        self.dependencies = dependencies
         self.viewModel = viewModel
     }
 
@@ -105,10 +112,9 @@ private struct _EditorView: UIViewControllerRepresentable {
     }
 
     func makeUIViewController(context: Context) -> EditorViewController {
-        let viewController = EditorViewController(configuration: configuration)
+        let viewController = EditorViewController(configuration: configuration, dependencies: dependencies)
         viewController.delegate = context.coordinator
         viewController.webView.isInspectable = true
-        viewController.startEditorSetup()
 
         viewModel.perform = { [weak viewController] in
             switch $0 {
@@ -210,8 +216,7 @@ private struct _EditorView: UIViewControllerRepresentable {
     }
 }
 
-@Observable
-private final class EditorViewModel {
+private final class EditorViewModel: ObservableObject {
     var isModalDialogOpen = false
     var hasUndo = false
     var hasRedo = false
@@ -227,6 +232,18 @@ private final class EditorViewModel {
 
 #Preview {
     NavigationStack {
-        EditorView(configuration: .default)
+        EditorView(configuration: .bundled)
     }
+}
+
+extension EditorConfiguration {
+    static let bundled = EditorConfigurationBuilder(
+        postType: "post",
+        siteURL: URL(string: "https://example.com")!,
+        siteApiRoot: URL(string: "https://example.com/wp-json")!
+    )
+    .setShouldUsePlugins(false)
+    .setAuthHeader("")
+    .setIsOfflineModeEnabled(true)
+    .build()
 }

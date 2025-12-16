@@ -19,7 +19,7 @@ import { getGBKit } from './bridge';
  * @return {void}
  */
 export function configureApiFetch() {
-	const { siteApiRoot = '' } = getGBKit();
+	const { siteApiRoot = '', preloadData = null } = getGBKit();
 
 	apiFetch.use( apiFetch.createRootURLMiddleware( siteApiRoot ) );
 	apiFetch.use( corsMiddleware );
@@ -28,7 +28,9 @@ export function configureApiFetch() {
 	apiFetch.use( filterEndpointsMiddleware );
 	apiFetch.use( mediaUploadMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
-	apiFetch.use( apiFetch.createPreloadingMiddleware( preloadData ) );
+	apiFetch.use(
+		apiFetch.createPreloadingMiddleware( preloadData ?? defaultPreloadData )
+	);
 }
 
 /**
@@ -201,13 +203,7 @@ function transformOEmbedApiResponse( options, next ) {
 	return next( options, next );
 }
 
-/**
- * Initial data to reduce initial render time. E.g., the PostTitle component
- * requires the post type data to render the title placeholder.
- *
- * @todo Provide this data from the host app
- */
-const preloadData = {
+const defaultPreloadData = {
 	'/wp/v2/types?context=view': {
 		body: {
 			post: {

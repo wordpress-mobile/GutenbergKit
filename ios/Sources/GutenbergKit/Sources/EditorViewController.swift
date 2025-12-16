@@ -1,61 +1,164 @@
 @preconcurrency import WebKit
 import SwiftUI
-import Combine
-import CryptoKit
+import OSLog
 
 #if canImport(UIKit)
 import UIKit
 
+// MARK: - EditorViewController Loading Process
+//
+// The EditorViewController manages the Gutenberg block editor on iOS.
+// It supports two distinct loading flows based on whether dependencies are pre-fetched or not.
+//
+// ## Loading Flow
+//
+// ```
+// ┌───────────────────────────────────────────────────────────────────────────────┐
+// │                              INITIALIZATION                                   │
+// └───────────────────────────────────────────────────────────────────────────────┘
+//                                      ▼
+// ┌───────────────────────────────────────────────────────────────────────────────┐
+// │                               viewDidLoad()                                   │
+// │  • Branch based on initialization parameters                                  │
+// └───────────────────────────────────────────────────────────────────────────────┘
+//              ┌───────────────────────┼───────────────────────┐
+//              ▼                       ▼                       ▼
+// ┌────────────────────┐  ┌────────────────────┐  ┌───────────────────────────────┐
+// │   WARMUP MODE      │  │ DEPENDENCIES       │  │ NO DEPENDENCIES               │
+// │   (isWarmupMode)   │  │ PROVIDED           │  │ (Async Flow)                  │
+// │                    │  │ (Fast Path)        │  │                               │
+// │ Load HTML without  │  │                    │  │ Spawn Task to fetch           │
+// │ any dependencies   │  │ loadEditor()       │  │ dependencies                  │
+// │ for prewarming     │  │ immediately        │  │                               │
+// └────────────────────┘  └────────────────────┘  └───────────────────────────────┘
+//                                      │                       ▼
+//                                      │          ┌───────────────────────────────┐
+//                                      │          │ prepareEditor()               │
+//                                      │          │  • Load editor dependencies   │
+//                                      │          └───────────────────────────────┘
+//                                      │                       ▼
+//                                      │          ┌───────────────────────────────┐
+//                                      └─────────►│ loadEditor()                  │
+//                                                 │  • Load editor JS into webview│
+//                                                 └───────────────────────────────┘
+//                                                             ▼
+//                                                 ┌───────────────────────────────┐
+//                                                 │   WebView Navigation          │
+//                                                 │  • JS Compiled                │
+//                                                 │  • Gutenberg initialized      │
+//                                                 │  • `onEditorLoaded` sent      │
+//                                                 └───────────────────────────────┘
+//                                                             ▼
+//                                                 ┌───────────────────────────────┐
+//                                                 │ didLoadEditor()               │
+//                                                 │  • isReady = true             │
+//                                                 │  • JS methods now safe to use │
+//                                                 └───────────────────────────────┘
+// ```
+//
+// ## Flow 1: Dependencies Provided (Fast Path)
+//
+// When `EditorDependencies` are passed to `init()`, the editor skips the async
+// dependency fetching phase entirely. This is useful when:
+// - Dependencies were pre-fetched by the host app
+// - The app wants to control caching/fetching separately
+//
+// ## Flow 2: No Dependencies (Async Flow)
+//
+// When no dependencies are provided, the controller fetches them asynchronously.
+// This is a fallback behaviour – the host app should provide the dependencies if it can,
+// because it'll be a much better user experience.
+//
 @MainActor
 public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate, UIAdaptivePresentationControllerDelegate, UIPopoverPresentationControllerDelegate, UISheetPresentationControllerDelegate {
+
     public let webView: WKWebView
-    let service: EditorService
-    let assetsLibrary: EditorAssetsLibrary
-
     public var configuration: EditorConfiguration
-    private var dependencies: EditorDependencies?
-    private var _isEditorRendered = false
-    private var _isEditorSetup = false
-    private let mediaPicker: MediaPickerController?
-    private let controller: GutenbergEditorController
-    private let timestampInit = CFAbsoluteTimeGetCurrent()
 
+    /// The current editor state (empty, has undo/redo history).
     public private(set) var state = EditorState()
 
+    /// Delegate for receiving editor lifecycle and content change callbacks.
     public weak var delegate: EditorViewControllerDelegate?
 
-    private var cancellables: [AnyCancellable] = []
+    /// The fetched or provided editor dependencies (settings, assets, preload data).
+    private var dependencies: EditorDependencies?
+    private var dependencyTaskHandle: Task<Void, Never>?
 
-    /// Stores the contextId from the most recent openMediaLibrary call
-    /// to pass back to JavaScript when media is selected
-    private var currentMediaContextId: String?
+    /// Error encountered while loading dependencies.
+    private var error: Error? {
+        didSet {
+            if let error {
+                self.displayError(error)
+            }
+        }
+    }
 
-    /// Warmup mode preloads resources into memory to make the UI transition seamless when displaying the editor for the first time
+    /// Indicates whether the editor JavaScript has initialized and is ready for use.
+    /// Set to `true` when the `onEditorLoaded` message is received from JavaScript.
+    /// - Important: JS `editor` APIs are only safe to call after this becomes `true`.
+    private var isReady: Bool = false
+
+    /// When `true`, loads editor HTML without dependencies for WebKit prewarming.
+    /// Used by `EditorViewController.warmup()` to reduce first-render latency.
     private let isWarmupMode: Bool
 
-    /// Overlay view shown over the navigation bar when modal dialogs are open
+    // MARK: - Private Properties (Services)
+    private let editorService: EditorService
+    private let mediaPicker: MediaPickerController?
+    private let controller: GutenbergEditorController
+    private let bundleProvider = EditorAssetBundleProvider()
+
+    // MARK: - Private Properties (UI)
+
+    /// Progress bar shown during async dependency fetching ("No Dependencies" flow).
+    private let progressView = UIEditorProgressView(loadingText: EditorLocalization.localize(.loadingEditor))
+
+    /// Spinning indicator shown while WebKit loads and parses the editor JavaScript.
+    private let waitingView = UIActivityIndicatorView(style: .medium)
+
+    /// View controller that displays error information when loading fails.
+    private var errorViewController: UIHostingController<AnyView>?
+
+    /// Stores the contextId from the most recent `openMediaLibrary` JS call.
+    /// Passed back to JavaScript when media selection completes.
+    private var currentMediaContextId: String?
+
+    // MARK: - Private Properties (Timing)
+
+    /// Timestamp captured at initialization for measuring first-render performance.
+    private let timestampInit = CFAbsoluteTimeGetCurrent()
+
+    /// Semi-transparent overlay shown over the navigation bar when JS modal dialogs are open.
+    /// Prevents user interaction with navigation items while a modal is displayed.
     private lazy var navigationOverlayView: UIView = {
         let view = UIView()
         view.backgroundColor = UIColor.black.withAlphaComponent(0.3)
         view.isUserInteractionEnabled = true
-        view.isHidden =  true
+        view.isHidden = true
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
     }()
 
-    /// HTML Preview Manager instance for rendering pattern previews
-    private(set) lazy var htmlPreviewManager = HTMLPreviewManager(themeStyles: dependencies?.extractThemeStyles())
+    /// Renders HTML previews for block patterns in the block inserter.
+    private lazy var htmlPreviewManager: HTMLPreviewManager = {
+        guard let dependencies else {
+            preconditionFailure("Editor does not have dependencies, cannot create HTMLPreviewManager")
+        }
 
-    /// Initalizes the editor with the initial content (Gutenberg).
+        return HTMLPreviewManager(themeStyles: dependencies.editorSettings.themeStyles)
+    }()
+
     public init(
-        configuration: EditorConfiguration = .default,
+        configuration: EditorConfiguration,
+        dependencies: EditorDependencies? = nil,
         mediaPicker: MediaPickerController? = nil,
         isWarmupMode: Bool = false
     ) {
-        self.service = EditorService.shared(for: configuration.siteURL)
         self.configuration = configuration
+        self.dependencies = dependencies
+        self.editorService = EditorService(configuration: configuration)
         self.mediaPicker = mediaPicker
-        self.assetsLibrary = EditorAssetsLibrary(service: service, configuration: configuration)
         self.controller = GutenbergEditorController(configuration: configuration)
 
         // The `allowFileAccessFromFileURLs` allows the web view to access the
@@ -70,11 +173,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // This is important so they user can't select anything but text across blocks.
         config.selectionGranularity = .character
 
-        let schemeHandler = CachedAssetSchemeHandler(service: service)
-        for scheme in CachedAssetSchemeHandler.supportedURLSchemes {
-            config.setURLSchemeHandler(schemeHandler, forURLScheme: scheme)
-        }
-        config.setURLSchemeHandler(MediaFileSchemeHandler(), forURLScheme: MediaFileSchemeHandler.scheme)
+        self.bundleProvider.bind(to: config)
 
         self.webView = GBWebView(frame: .zero, configuration: config)
         self.webView.scrollView.keyboardDismissMode = .interactive
@@ -88,6 +187,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         fatalError("init(coder:) has not been implemented")
     }
 
+    // MARK: - View Lifecycle (Loading Entry Point)
     public override func viewDidLoad() {
         super.viewDidLoad()
 
@@ -106,10 +206,26 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             webView.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
         ])
 
+        // WebView starts hidden; fades in when editor is ready (see didLoadEditor())
         webView.alpha = 0
 
+        // Warmup mode - load HTML without dependencies for WebKit prewarming
         if isWarmupMode {
-            startEditorSetup()
+            self.loadEditorWithoutDependencies()
+        }
+
+        if let dependencies {
+            // FAST PATH: Dependencies were provided at init() - load immediately
+            do {
+                try self.loadEditor(dependencies: dependencies)
+            } catch {
+                self.error = error
+            }
+        } else {
+            // ASYNC FLOW: No dependencies - fetch them asynchronously
+            self.dependencyTaskHandle = Task(priority: .userInitiated) {
+                await self.prepareEditor()
+            }
         }
     }
 
@@ -123,20 +239,58 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         removeNavigationOverlay()
     }
 
-    private func setUpEditor() {
-        let webViewConfiguration = webView.configuration
-        let userContentController = webViewConfiguration.userContentController
-        let editorInitialConfig = getEditorConfiguration()
-        userContentController.addUserScript(editorInitialConfig)
+    public override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        self.dependencyTaskHandle?.cancel()
     }
 
-    private func loadEditor() {
-        webView.configuration.userContentController.addScriptMessageHandler(
-            EditorAssetsProvider(library: assetsLibrary),
-            contentWorld: .page,
-            name: "loadFetchedEditorAssets"
-        )
+    /// Fetches all required dependencies and then loads the editor.
+    ///
+    /// This method is the entry point for the **Async Flow** (when no dependencies were provided at init).
+    @MainActor
+    private func prepareEditor() async {
+        self.displayProgressView()
+        defer { self.hideProgressView() }
 
+        do {
+            // EditorService.prepare() fetches dependencies concurrently with progress reporting
+            let dependencies = try await self.editorService.prepare { @MainActor progress in
+                self.progressView.setProgress(progress, animated: true)
+            }
+
+            // Store dependencies for later use (e.g., HTMLPreviewManager)
+            self.dependencies = dependencies
+
+            // Continue to the shared loading path
+            try self.loadEditor(dependencies: dependencies)
+        } catch {
+            // Display error view - this sets self.error which triggers displayError()
+            self.error = error
+        }
+    }
+
+    // MARK: - Shared Loading Path: Load Editor into WebView
+
+    /// Loads the editor HTML into the WebView with the given dependencies.
+    ///
+    /// This is the **shared loading path** used by both flows after dependencies are available.
+    ///
+    /// After this method completes, WebKit will parse the HTML and execute JavaScript.
+    /// The editor will eventually emit an `onEditorLoaded` message, triggering `didLoadEditor()`.
+    ///
+    @MainActor
+    private func loadEditor(dependencies: EditorDependencies) throws {
+        self.displayActivityView()
+        defer { self.hideActivityView() }
+
+        // Set asset bundle for the URL scheme handler to serve cached plugin/theme assets
+        self.bundleProvider.set(bundle: dependencies.assetBundle)
+
+        // Build and inject editor configuration as window.GBKit
+        let editorConfig = try buildEditorConfiguration(dependencies: dependencies)
+        webView.configuration.userContentController.addUserScript(editorConfig)
+
+        // Load editor HTML - supports dev server via environment variable
         if let editorURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
             webView.load(URLRequest(url: editorURL))
         } else {
@@ -145,41 +299,46 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
-    private func getEditorConfiguration() -> WKUserScript {
+    /// Loads the editor HTML without any dependencies (warmup mode only).
+    ///
+    /// This method is used exclusively by the warmup mechanism to preload editor resources
+    /// into WebKit's memory cache. The editor won't be functional without dependencies,
+    /// but subsequent loads will be faster because WebKit has already parsed the HTML/JS.
+    ///
+    /// - Note: Only called when `isWarmupMode` is true.
+    private func loadEditorWithoutDependencies() {
+        let indexURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
+        webView.loadFileURL(indexURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+    }
+
+    /// Builds a `WKUserScript` that injects the editor configuration into the page.
+    ///
+    /// The configuration is injected as `window.GBKit` at document start, before any other
+    /// scripts run. This ensures the editor JavaScript has access to all configuration data
+    /// when it initializes.
+    ///
+    private func buildEditorConfiguration(dependencies: EditorDependencies) throws -> WKUserScript {
+        let gbkitGlobal = try GBKitGlobal(configuration: self.configuration, dependencies: dependencies)
+        let stringValue = try gbkitGlobal.toString()
+
         let jsCode = """
-        window.GBKit = {
-            siteURL: '\(configuration.siteURL)',
-            siteApiRoot: '\(configuration.siteApiRoot)',
-            siteApiNamespace: \(Array(configuration.siteApiNamespace)),
-            namespaceExcludedPaths: \(Array(configuration.namespaceExcludedPaths)),
-            authHeader: '\(configuration.authHeader)',
-            themeStyles: \(configuration.shouldUseThemeStyles),
-            plugins: \(configuration.shouldUsePlugins),
-            enableNativeBlockInserter: \(configuration.isNativeInserterEnabled),
-            hideTitle: \(configuration.shouldHideTitle),
-            editorSettings: \(dependencies?.editorSettings ?? "undefined"),
-            locale: '\(configuration.locale)',
-            post: {
-                id: \(configuration.postID ?? -1),
-                title: '\(configuration.escapedTitle)',
-                content: '\(configuration.escapedContent)'
-            },
-            logLevel: '\(configuration.logLevel)',
-            enableNetworkLogging: \(configuration.enableNetworkLogging)
-        };
-
+        window.GBKit = \(stringValue);
         localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
-
         "done";
         """
 
-        let editorScript = WKUserScript(source: jsCode, injectionTime: .atDocumentStart, forMainFrameOnly: true)
-        return editorScript
+        return WKUserScript(source: jsCode, injectionTime: .atDocumentStart, forMainFrameOnly: true)
     }
 
     /// Deletes all cached editor data for all sites
     public static func deleteAllData() throws {
-        try EditorService.deleteAllData()
+        if FileManager.default.directoryExists(at: Paths.defaultCacheRoot) {
+            try FileManager.default.removeItem(at: Paths.defaultCacheRoot)
+        }
+
+        if FileManager.default.directoryExists(at: Paths.defaultStorageRoot) {
+            try FileManager.default.removeItem(at: Paths.defaultStorageRoot)
+        }
     }
 
     // MARK: - Public API
@@ -191,7 +350,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func _setContent(_ content: String) {
-        guard _isEditorRendered else { return }
+        guard self.isReady else {
+            return
+        }
 
         let escapedString = content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
         evaluate("editor.setContent('\(escapedString)');", isCritical: true)
@@ -246,18 +407,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Updates the editor configuration
     public func updateConfiguration(_ newConfiguration: EditorConfiguration) {
         self.configuration = newConfiguration
-    }
-
-    /// Starts the editor setup process
-    public func startEditorSetup() {
-        guard !_isEditorSetup else { return }
-        _isEditorSetup = true
-
-        Task { @MainActor in
-            dependencies = await service.dependencies(for: configuration, isWarmup: isWarmupMode)
-            setUpEditor()
-            loadEditor()
-        }
     }
 
     // MARK: - Internal (JavaScript)
@@ -509,17 +658,35 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
-    // Only after this point it's safe to use JS `editor` API.
-    private func didLoadEditor() {
-        guard !_isEditorRendered else { return }
-        _isEditorRendered = true
+    // MARK: - Loading Complete: Editor Ready
 
+    /// Called when the editor JavaScript emits the `onEditorLoaded` message.
+    ///
+    /// This method marks the **final step of the loading process** for both flows.
+    /// At this point:
+    /// - All dependencies have been fetched (or were provided)
+    /// - The HTML has been loaded and parsed
+    /// - The JavaScript has executed and the editor has mounted
+    ///
+    /// **Important**: Only after this method completes is it safe to call JS `editor` APIs
+    ///
+    private func didLoadEditor() {
+        // Guard against multiple onEditorLoaded events (e.g., from location.reload())
+        guard !self.isReady else {
+            return
+        }
+
+        self.isReady = true
+
+        // Fade in the WebView - it was hidden (alpha = 0) since viewDidLoad()
         UIView.animate(withDuration: 0.2, delay: 0.1, options: [.allowUserInteraction]) {
             self.webView.alpha = 1
         }
 
+        // Log performance timing for monitoring
         let duration = CFAbsoluteTimeGetCurrent() - timestampInit
         print("gutenbergkit-measure_editor-first-render:", duration)
+
         delegate?.editorDidLoad(self)
 
         if configuration.content.isEmpty {
@@ -599,5 +766,78 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     }
 }
 
+//MARK: - View Transformation
+extension EditorViewController {
+
+    @MainActor
+    func displayError(_ error: Error) {
+        let view = ContentUnavailableView(
+            EditorLocalization.localize(.editorError),
+            systemImage: "exclamationmark.circle",
+            description: Text(error.localizedDescription)
+        )
+
+        self.errorViewController = UIHostingController(rootView: AnyView(view))
+        self.displayAndCenterView(errorViewController!.view)
+        self.errorViewController?.didMove(toParent: self)
+    }
+
+    @MainActor
+    func hideError() {
+        self.errorViewController?.view.removeFromSuperview()
+    }
+
+    @MainActor
+    func displayProgressView() {
+        self.progressView.layer.opacity = 0
+        self.displayAndCenterView(self.progressView)
+
+        UIView.animate(withDuration: 0.2, delay: 0.2) {
+            self.progressView.layer.opacity = 1
+        }
+    }
+
+    @MainActor
+    func hideProgressView() {
+        UIView.animate(withDuration: 0.2) {
+            self.progressView.layer.opacity = 0
+        } completion: { _ in
+            self.progressView.removeFromSuperview()
+        }
+    }
+
+    @MainActor
+    func displayActivityView() {
+        self.waitingView.layer.opacity = 0
+        self.displayAndCenterView(self.waitingView)
+        self.waitingView.startAnimating()
+
+        UIView.animate(withDuration: 0.2) {
+            self.waitingView.layer.opacity = 1
+        }
+    }
+
+    @MainActor
+    func hideActivityView() {
+        UIView.animate(withDuration: 0.2) {
+            self.waitingView.layer.opacity = 0
+        } completion: { _ in
+            self.waitingView.stopAnimating()
+            self.waitingView.removeFromSuperview()
+        }
+    }
+
+    private func displayAndCenterView(_ newView: UIView) {
+        newView.translatesAutoresizingMaskIntoConstraints = false
+        self.view.addSubview(newView)
+        self.view.bringSubviewToFront(newView)
+        NSLayoutConstraint.activate([
+            newView.centerXAnchor.constraint(equalTo: self.view.centerXAnchor),
+            newView.centerYAnchor.constraint(equalTo: self.view.centerYAnchor),
+            newView.leadingAnchor.constraint(equalTo: self.view.leadingAnchor),
+            newView.trailingAnchor.constraint(equalTo: self.view.trailingAnchor),
+        ])
+    }
+}
 
 #endif
