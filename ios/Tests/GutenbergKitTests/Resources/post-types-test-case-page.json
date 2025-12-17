@@ -1,0 +1,106 @@
+{
+  "capabilities": {
+    "edit_post": "edit_page",
+    "read_post": "read_page",
+    "delete_post": "delete_page",
+    "edit_posts": "edit_pages",
+    "edit_others_posts": "edit_others_pages",
+    "delete_posts": "delete_pages",
+    "publish_posts": "publish_pages",
+    "read_private_posts": "read_private_pages",
+    "read": "read",
+    "delete_private_posts": "delete_private_pages",
+    "delete_published_posts": "delete_published_pages",
+    "delete_others_posts": "delete_others_pages",
+    "edit_private_posts": "edit_private_pages",
+    "edit_published_posts": "edit_published_pages",
+    "create_posts": "edit_pages"
+  },
+  "description": "",
+  "hierarchical": true,
+  "has_archive": false,
+  "visibility": {
+    "show_in_nav_menus": true,
+    "show_ui": true
+  },
+  "viewable": true,
+  "labels": {
+    "name": "Pages",
+    "singular_name": "Page",
+    "add_new": "Add",
+    "add_new_item": "Add Page",
+    "edit_item": "Edit Page",
+    "new_item": "New Page",
+    "view_item": "View Page",
+    "view_items": "View Pages",
+    "search_items": "Search Pages",
+    "not_found": "No pages found.",
+    "not_found_in_trash": "No pages found in Trash.",
+    "parent_item_colon": "Parent Page:",
+    "all_items": "All Pages",
+    "archives": "Page Archives",
+    "attributes": "Page Attributes",
+    "insert_into_item": "Insert into page",
+    "uploaded_to_this_item": "Uploaded to this page",
+    "featured_image": "Featured image",
+    "set_featured_image": "Set featured image",
+    "remove_featured_image": "Remove featured image",
+    "use_featured_image": "Use as featured image",
+    "filter_items_list": "Filter pages list",
+    "filter_by_date": "Filter by date",
+    "items_list_navigation": "Pages list navigation",
+    "items_list": "Pages list",
+    "item_published": "Page published.",
+    "item_published_privately": "Page published privately.",
+    "item_reverted_to_draft": "Page reverted to draft.",
+    "item_trashed": "Page trashed.",
+    "item_scheduled": "Page scheduled.",
+    "item_updated": "Page updated.",
+    "item_link": "Page Link",
+    "item_link_description": "A link to a page.",
+    "menu_name": "Pages",
+    "name_admin_bar": "Page"
+  },
+  "name": "Pages",
+  "slug": "page",
+  "icon": "dashicons-admin-page",
+  "supports": {
+    "title": true,
+    "editor": [
+      {
+        "notes": true
+      }
+    ],
+    "author": true,
+    "thumbnail": true,
+    "page-attributes": true,
+    "custom-fields": true,
+    "comments": true,
+    "revisions": true,
+    "autosave": true
+  },
+  "taxonomies": [],
+  "rest_base": "pages",
+  "rest_namespace": "wp/v2",
+  "template": [],
+  "template_lock": false,
+  "_links": {
+    "collection": [
+      {
+        "href": "http://localhost/wp-json/wp/v2/types"
+      }
+    ],
+    "wp:items": [
+      {
+        "href": "http://localhost/wp-json/wp/v2/pages"
+      }
+    ],
+    "curies": [
+      {
+        "name": "wp",
+        "href": "https://api.w.org/{rel}",
+        "templated": true
+      }
+    ]
+  }
+}

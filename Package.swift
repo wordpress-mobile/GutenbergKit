@@ -24,11 +24,11 @@ let package = Package(
         .testTarget(
             name: "GutenbergKitTests",
             dependencies: ["GutenbergKit"],
-            path: "ios/Tests",
+            path: "ios/Tests/GutenbergKitTests",
             exclude: [],
             resources: [
-                .process("GutenbergKitTests/Resources/")
+                .process("Resources")
             ]
-        ),
+        )
     ]
 )

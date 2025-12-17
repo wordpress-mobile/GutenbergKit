@@ -1,0 +1,118 @@
+{
+  "id": 163,
+  "date": "2023-01-16T07:08:31",
+  "date_gmt": "2023-01-16T07:08:31",
+  "guid": {
+    "rendered": "https://wpthemetestdata.wordpress.com/wp-6-1-font-size-scale/"
+  },
+  "modified": "2023-01-16T07:08:31",
+  "modified_gmt": "2023-01-16T07:08:31",
+  "slug": "wp-6-1-font-size-scale",
+  "status": "publish",
+  "type": "post",
+  "link": "http://localhost/2023/01/wp-6-1-font-size-scale/",
+  "title": {
+    "rendered": "WP 6.1 Font size scale"
+  },
+  "content": {
+    "rendered": "\n<p>This test post was generated using the block theme Emptytheme in WordPress 6.1.1.</p>\n\n\n\n<h2 class=\"has-small-font-size wp-block-heading\">Small H2 Heading</h2>\n\n\n\n<h2 class=\"has-medium-font-size wp-block-heading\">Medium H2 Heading</h2>\n\n\n\n<h2 class=\"has-large-font-size wp-block-heading\">Large H2 Heading</h2>\n\n\n\n<h2 class=\"has-large-font-size wp-block-heading\">Extra Large H2 Heading</h2>\n\n\n\n<p class=\"has-small-font-size\">Small paragraph</p>\n\n\n\n<p class=\"has-medium-font-size\">Medium paragraph</p>\n\n\n\n<p class=\"has-large-font-size\">Large paragraph</p>\n\n\n\n<p class=\"has-x-large-font-size\">Extra Large paragraph</p>\n\n\t",
+    "protected": false
+  },
+  "excerpt": {
+    "rendered": "<p>This test post was generated using the block theme Emptytheme in WordPress 6.1.1. Small H2 Heading Medium H2 Heading Large H2 Heading Extra Large H2 Heading Small paragraph Medium paragraph Large paragraph Extra Large paragraph</p>\n",
+    "protected": false
+  },
+  "author": 3,
+  "featured_media": 0,
+  "comment_status": "open",
+  "ping_status": "open",
+  "sticky": false,
+  "template": "",
+  "format": "standard",
+  "meta": {
+    "footnotes": ""
+  },
+  "categories": [
+    2,
+    7
+  ],
+  "tags": [],
+  "class_list": [
+    "post-163",
+    "post",
+    "type-post",
+    "status-publish",
+    "format-standard",
+    "hentry",
+    "category-6-1",
+    "category-block"
+  ],
+  "_links": {
+    "self": [
+      {
+        "href": "http://localhost/wp-json/wp/v2/posts/163",
+        "targetHints": {
+          "allow": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ]
+        }
+      }
+    ],
+    "collection": [
+      {
+        "href": "http://localhost/wp-json/wp/v2/posts"
+      }
+    ],
+    "about": [
+      {
+        "href": "http://localhost/wp-json/wp/v2/types/post"
+      }
+    ],
+    "author": [
+      {
+        "embeddable": true,
+        "href": "http://localhost/wp-json/wp/v2/users/3"
+      }
+    ],
+    "replies": [
+      {
+        "embeddable": true,
+        "href": "http://localhost/wp-json/wp/v2/comments?post=163"
+      }
+    ],
+    "version-history": [
+      {
+        "count": 0,
+        "href": "http://localhost/wp-json/wp/v2/posts/163/revisions"
+      }
+    ],
+    "wp:attachment": [
+      {
+        "href": "http://localhost/wp-json/wp/v2/media?parent=163"
+      }
+    ],
+    "wp:term": [
+      {
+        "taxonomy": "category",
+        "embeddable": true,
+        "href": "http://localhost/wp-json/wp/v2/categories?post=163"
+      },
+      {
+        "taxonomy": "post_tag",
+        "embeddable": true,
+        "href": "http://localhost/wp-json/wp/v2/tags?post=163"
+      }
+    ],
+    "curies": [
+      {
+        "name": "wp",
+        "href": "https://api.w.org/{rel}",
+        "templated": true
+      }
+    ]
+  }
+}
