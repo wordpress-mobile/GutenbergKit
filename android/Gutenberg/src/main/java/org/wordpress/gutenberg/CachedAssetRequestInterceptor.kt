@@ -3,10 +3,11 @@ package org.wordpress.gutenberg
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.util.Log
+import org.wordpress.gutenberg.model.EditorAssetBundle
 import java.io.ByteArrayInputStream
 
 class CachedAssetRequestInterceptor(
-    private val library: EditorAssetsLibrary,
+    private val bundle: EditorAssetBundle,
     private val allowedHosts: Set<String> = emptySet()
 ) : GutenbergRequestInterceptor {
     companion object {
@@ -44,26 +45,19 @@ class CachedAssetRequestInterceptor(
             }
 
             // Handle asset caching - only serve if already cached
-            val cachedData = library.getCachedAsset(url)
-            if (cachedData != null) {
+            if (bundle.hasAssetData(url)) {
+                val cachedData = bundle.assetData(url)
                 Log.d(TAG, "Serving cached asset: $url")
                 return createResponse(url, cachedData)
             }
 
-            // Not cached - let WebView fetch normally and cache in background
-            Log.d(TAG, "Asset not cached, will cache in background: $url")
-            // Start background caching for next time
-            library.cacheAssetInBackground(url)
-            
+            // Not cached - let WebView fetch normally
+            Log.d(TAG, "Asset not cached: $url")
             return null // Let WebView handle the request normally
         } catch (e: Exception) {
             Log.e(TAG, "Error handling request: $url", e)
             return null
         }
-    }
-
-    fun shutdown() {
-        library.shutdown()
     }
 
     private fun createResponse(url: String, data: ByteArray): WebResourceResponse {
