@@ -79,9 +79,7 @@ object EditorDependenciesSerializer {
      * @param filePath The absolute path to the serialized dependencies file.
      * @return The deserialized dependencies, or `null` if the file doesn't exist or is invalid.
      */
-    fun readFromDisk(filePath: String?): EditorDependencies? {
-        if (filePath == null) return null
-
+    fun readFromDisk(filePath: String): EditorDependencies? {
         val file = File(filePath)
         if (!file.exists()) return null
 

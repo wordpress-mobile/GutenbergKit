@@ -22,6 +22,9 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.lifecycle.coroutineScope
+import androidx.lifecycle.findViewTreeLifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
 import kotlinx.coroutines.CoroutineScope
@@ -47,8 +50,8 @@ class GutenbergView : WebView {
     private var assetLoader = WebViewAssetLoader.Builder()
         .addPathHandler("/assets/", AssetsPathHandler(this.context))
         .build()
-    private var configuration: EditorConfiguration = EditorConfiguration.bundled()
-    private var dependencies: EditorDependencies? = null
+    private val configuration: EditorConfiguration
+    private lateinit var dependencies: EditorDependencies
 
     private val handler = Handler(Looper.getMainLooper())
     var filePathCallback: ValueCallback<Array<Uri?>?>? = null
@@ -68,13 +71,13 @@ class GutenbergView : WebView {
     private var networkRequestListener: NetworkRequestListener? = null
     private var loadingListener: EditorLoadingListener? = null
 
-    private val coroutineScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-
     /**
      * Stores the contextId from the most recent openMediaLibrary call
      * to pass back to JavaScript when media is selected
      */
     private var currentMediaContextId: String? = null
+
+    private val coroutineScope: CoroutineScope
 
     var textEditorEnabled: Boolean = false
         set(value) {
@@ -129,16 +132,23 @@ class GutenbergView : WebView {
         loadingListener = listener
     }
 
-    constructor(context: Context) : super(context)
-    constructor(context: Context, attrs: AttributeSet) : super(context, attrs)
-    constructor(context: Context, attrs: AttributeSet, defStyle: Int) : super(
-        context,
-        attrs,
-        defStyle
-    )
+    constructor(configuration: EditorConfiguration, dependencies: EditorDependencies?, coroutineScope: CoroutineScope, context: Context) : super(context) {
+        this.configuration = configuration
+        this.coroutineScope = coroutineScope
+
+        if (dependencies != null) {
+            this.dependencies = dependencies
+
+            // FAST PATH: Dependencies were provided - load immediately
+            loadEditor(dependencies)
+        } else {
+            // ASYNC FLOW: No dependencies - fetch them asynchronously
+            prepareAndLoadEditor()
+        }
+    }
 
     @SuppressLint("SetJavaScriptEnabled") // Without JavaScript we have no Gutenberg
-    fun initializeWebView() {
+    private fun initializeWebView() {
         this.settings.javaScriptCanOpenWindowsAutomatically = true
         this.settings.javaScriptEnabled = true
         this.settings.domStorageEnabled = true
@@ -278,38 +288,6 @@ class GutenbergView : WebView {
     }
 
     /**
-     * Starts the editor with the given configuration and optional dependencies.
-     *
-     * ## Loading Flows
-     *
-     * **When dependencies are provided (Fast Path):**
-     * The editor loads immediately using the pre-fetched dependencies.
-     * Only `onDependencyLoadingFinished()` and `onEditorReady()` callbacks are invoked.
-     *
-     * **When dependencies are null (Async Flow):**
-     * Dependencies are fetched asynchronously with progress reporting.
-     * All loading callbacks are invoked in order:
-     * 1. `onDependencyLoadingStarted()`
-     * 2. `onDependencyLoadingProgress()` (multiple times)
-     * 3. `onDependencyLoadingFinished()`
-     * 4. `onEditorReady()`
-     *
-     * @param configuration The editor configuration.
-     * @param dependencies Pre-fetched dependencies, or null to fetch them asynchronously.
-     */
-    fun start(configuration: EditorConfiguration, dependencies: EditorDependencies? = null) {
-        this.configuration = configuration
-
-        if (dependencies != null) {
-            // FAST PATH: Dependencies were provided - load immediately
-            loadEditor(dependencies)
-        } else {
-            // ASYNC FLOW: No dependencies - fetch them asynchronously
-            prepareAndLoadEditor()
-        }
-    }
-
-    /**
      * Fetches all required dependencies and then loads the editor.
      *
      * This method is the entry point for the async flow when no dependencies were provided.
@@ -317,16 +295,24 @@ class GutenbergView : WebView {
     private fun prepareAndLoadEditor() {
         loadingListener?.onDependencyLoadingStarted()
 
+        Log.i("GutenbergView", "Fetching dependencies...")
+
         coroutineScope.launch {
+            Log.i("GutenbergView", "In coroutine scope")
+            Log.i("GutenbergView", "Fetching dependencies in IO context")
             try {
                 val editorService = EditorService.create(
                     context = context,
                     configuration = configuration
                 )
-
+                Log.i("GutenbergView", "Created editor service")
                 val fetchedDependencies = editorService.prepare { progress ->
                     loadingListener?.onDependencyLoadingProgress(progress)
+
+                    Log.i("GutenbergView", "Progress: $progress")
                 }
+
+                Log.i("GutenbergView", "Finished fetching dependencies")
 
                 // Store dependencies and load the editor
                 loadEditor(fetchedDependencies)
@@ -764,7 +750,6 @@ class GutenbergView : WebView {
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        coroutineScope.cancel()
         clearConfig()
         this.stopLoading()
         FileCache.clearCache(context)
@@ -791,40 +776,6 @@ class GutenbergView : WebView {
         private var warmupWebView: GutenbergView? = null
 
         /**
-         * Warmup the editor by preloading assets in a temporary WebView.
-         * This pre-caches assets to improve editor launch speed.
-         */
-        @JvmStatic
-        fun warmup(context: Context, configuration: EditorConfiguration) {
-            // Cancel any existing warmup
-            cancelWarmup()
-
-            // Create dedicated warmup WebView
-            val webView = GutenbergView(context)
-            webView.initializeWebView()
-            webView.start(configuration, EditorDependencies.empty)
-            warmupWebView = webView
-
-            // Schedule cleanup after assets are loaded
-            warmupHandler = Handler(Looper.getMainLooper())
-            warmupRunnable = Runnable {
-                cleanupWarmup()
-            }
-            warmupHandler?.postDelayed(warmupRunnable!!, ASSET_LOADING_TIMEOUT_MS)
-        }
-
-        /**
-         * Cancel any pending warmup and clean up resources.
-         */
-        @JvmStatic
-        fun cancelWarmup() {
-            warmupRunnable?.let { runnable ->
-                warmupHandler?.removeCallbacks(runnable)
-            }
-            cleanupWarmup()
-        }
-
-        /**
          * Clean up warmup resources.
          */
         private fun cleanupWarmup() {
@@ -836,21 +787,6 @@ class GutenbergView : WebView {
             warmupWebView = null
             warmupHandler = null
             warmupRunnable = null
-        }
-
-        /**
-         * Create a new GutenbergView for the editor.
-         * Cancels any pending warmup to free resources.
-         */
-        @JvmStatic
-        fun createForEditor(context: Context): GutenbergView {
-            // Cancel any pending warmup to free resources
-            cancelWarmup()
-
-            // Create fresh WebView for editor
-            val webView = GutenbergView(context)
-            webView.initializeWebView()
-            return webView
         }
     }
 }

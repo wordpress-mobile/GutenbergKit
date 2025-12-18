@@ -35,7 +35,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -48,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
 import com.example.gutenbergkit.ui.theme.AppTheme
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.GutenbergView
@@ -98,13 +98,14 @@ class EditorActivity : ComponentActivity() {
 
         // Read dependencies from disk if a file path was provided
         val dependenciesPath = intent.getStringExtra(EXTRA_DEPENDENCIES_PATH)
-        val dependencies = EditorDependenciesSerializer.readFromDisk(dependenciesPath)
+        val dependencies = dependenciesPath?.let { EditorDependenciesSerializer.readFromDisk(it) }
 
         setContent {
             AppTheme {
                 EditorScreen(
                     configuration = configuration,
                     dependencies = dependencies,
+                    coroutineScope =  this.lifecycleScope,
                     onClose = { finish() },
                     onGutenbergViewCreated = { view ->
                         gutenbergView = view
@@ -141,6 +142,7 @@ enum class EditorLoadingState {
 fun EditorScreen(
     configuration: EditorConfiguration,
     dependencies: EditorDependencies? = null,
+    coroutineScope: CoroutineScope,
     onClose: () -> Unit,
     onGutenbergViewCreated: (GutenbergView) -> Unit = {}
 ) {
@@ -264,6 +266,7 @@ fun EditorScreen(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
+
                     gutenbergViewRef = this
                     setModalDialogStateListener(object : GutenbergView.ModalDialogStateListener {
                         override fun onModalDialogOpened(dialogType: String) {
@@ -333,7 +336,6 @@ fun EditorScreen(
                             loadingError = error.message ?: "Unknown error"
                         }
                     })
-                    start(configuration, dependencies)
                     onGutenbergViewCreated(this)
                 }
             },

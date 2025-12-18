@@ -6,8 +6,10 @@ import android.os.Looper
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebView
+import kotlinx.coroutines.test.TestScope
 import org.junit.Before
 import org.junit.Test
+import org.junit.Rule
 import org.junit.runner.RunWith
 import org.mockito.Mock
 import org.mockito.Mockito.`when`
@@ -20,6 +22,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import org.wordpress.gutenberg.model.EditorConfiguration
+import org.wordpress.gutenberg.model.EditorDependencies
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], manifest = Config.NONE)
@@ -35,11 +39,18 @@ class GutenbergViewTest {
 
     private lateinit var gutenbergView: GutenbergView
 
+    val testScope = TestScope() // Creates a StandardTestDispatcher
+
     @Before
     fun setup() {
         MockitoAnnotations.openMocks(this)
-        gutenbergView = GutenbergView(RuntimeEnvironment.getApplication())
-        gutenbergView.initializeWebView()
+
+        gutenbergView = GutenbergView(
+            EditorConfiguration.bundled(),
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
     }
 
     @Test

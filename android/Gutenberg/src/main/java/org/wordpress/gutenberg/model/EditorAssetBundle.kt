@@ -85,7 +85,7 @@ data class EditorAssetBundle(
         val empty = EditorAssetBundle(
             manifest = LocalEditorAssetManifest.empty,
             downloadDate = Date(),
-            bundleRoot = File(System.getProperty("java.io.tmpdir"))
+            bundleRoot = File("/tmp/empty-bundle")
         )
 
         /**
