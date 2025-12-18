@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -45,7 +46,8 @@ import com.example.gutenbergkit.ui.theme.AppTheme
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import org.wordpress.gutenberg.BuildConfig
-import org.wordpress.gutenberg.EditorConfiguration
+import org.wordpress.gutenberg.model.EditorConfiguration
+import uniffi.wp_api.PostType
 
 class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCallback {
     private val configurations = mutableStateListOf<ConfigurationItem>()
@@ -78,7 +80,7 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
                     configurations = configurations,
                     onConfigurationClick = { config ->
                         when (config) {
-                            is ConfigurationItem.BundledEditor -> launchEditor(createBundledConfiguration())
+                            is ConfigurationItem.BundledEditor -> launchSitePreparation(config)
                             is ConfigurationItem.ConfiguredEditor -> loadConfiguredEditor(config)
                         }
                     },
@@ -105,58 +107,36 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
     }
 
     private fun createBundledConfiguration(): EditorConfiguration =
-        createCommonConfigurationBuilder()
+        createCommonConfigurationBuilder(
+            siteUrl = "https://example.com",
+            siteApiRoot = "https://example.com",
+            postType = "post"
+        )
             .setPlugins(false)
-            .setSiteURL("")
-            .setSiteApiRoot("")
             .setSiteApiNamespace(arrayOf())
             .setNamespaceExcludedPaths(arrayOf())
             .setAuthHeader("")
             .setCookies(emptyMap())
+            .setEnableOfflineMode(true)
             .build()
 
     private fun loadConfiguredEditor(config: ConfigurationItem.ConfiguredEditor) {
-        isLoadingCapabilities.value = true
-
-        lifecycleScope.launch {
-            try {
-                val capabilities = siteCapabilitiesDiscovery.discoverCapabilities(
-                    siteApiRoot = config.siteApiRoot
-                )
-
-                val editorConfiguration = createCommonConfigurationBuilder()
-                    .setPlugins(capabilities.supportsPlugins)
-                    .setThemeStyles(capabilities.supportsThemeStyles)
-                    .setSiteURL(config.siteUrl)
-                    .setSiteApiRoot(config.siteApiRoot)
-                    .setNamespaceExcludedPaths(arrayOf())
-                    .setAuthHeader(config.authHeader)
-                    .build()
-
-                isLoadingCapabilities.value = false
-                launchEditor(editorConfiguration)
-            } catch (e: Exception) {
-                isLoadingCapabilities.value = false
-                // If capability discovery fails, use default configuration
-                val defaultConfiguration = createCommonConfigurationBuilder()
-                    .setPlugins(false)
-                    .setThemeStyles(false)
-                    .setSiteURL(config.siteUrl)
-                    .setSiteApiRoot(config.siteApiRoot)
-                    .setNamespaceExcludedPaths(arrayOf())
-                    .setAuthHeader(config.authHeader)
-                    .build()
-
-                launchEditor(defaultConfiguration)
-            }
-        }
+        launchSitePreparation(config)
     }
 
-    private fun createCommonConfigurationBuilder(): EditorConfiguration.Builder =
-        EditorConfiguration.builder()
+    private fun launchSitePreparation(config: ConfigurationItem) {
+        val intent = SitePreparationActivity.createIntent(this, config)
+        startActivity(intent)
+    }
+
+    private fun createCommonConfigurationBuilder(siteUrl: String, siteApiRoot: String, postType: String = "post"): EditorConfiguration.Builder =
+        EditorConfiguration.builder(
+            siteURL = siteUrl,
+            siteApiRoot = siteApiRoot,
+            postType = postType
+        )
             .setTitle("")
             .setContent("")
-            .setPostType("post")
             .setThemeStyles(false)
             .setHideTitle(false)
             .setCookies(emptyMap())
@@ -343,7 +323,7 @@ fun MainScreen(
     }
 }
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ConfigurationCard(
     configuration: ConfigurationItem,
