@@ -107,6 +107,7 @@ data class EditorPreloadList private constructor(
     fun build(formatted: Boolean = false): String {
         val jsonElement = build()
         return if (formatted) {
+            @Suppress("JSON_FORMAT_REDUNDANT") // This is only used in debug builds
             Json { prettyPrint = true }.encodeToString(jsonElement)
         } else {
             Json.encodeToString(jsonElement)
