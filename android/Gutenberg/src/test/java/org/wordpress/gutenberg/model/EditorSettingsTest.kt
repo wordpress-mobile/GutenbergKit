@@ -4,12 +4,22 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class EditorSettingsTest {
 
     private val json = Json { ignoreUnknownKeys = true }
+
+    @Test
+    fun `throws when JSON is invalid`() {
+        val invalidJSON = "not valid json"
+
+        assertThrows(Exception::class.java, {
+            EditorSettings.fromData(invalidJSON)
+        })
+    }
 
     // MARK: - themeStyles Tests
 
@@ -46,13 +56,6 @@ class EditorSettingsTest {
         val jsonString = """{"styles": [{"isGlobalStyles": true}, {"css": "h1 { font-size: 2em; }", "isGlobalStyles": false}]}"""
         val settings = EditorSettings.fromData(jsonString)
         assertEquals("h1 { font-size: 2em; }", settings.themeStyles)
-    }
-
-    @Test
-    fun `themeStyles is empty when JSON is invalid`() {
-        val invalidJSON = "not valid json"
-        val settings = EditorSettings.fromData(invalidJSON)
-        assertTrue(settings.themeStyles.isEmpty())
     }
 
     @Test

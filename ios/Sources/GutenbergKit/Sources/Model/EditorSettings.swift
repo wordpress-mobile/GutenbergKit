@@ -25,18 +25,15 @@ public struct EditorSettings: Sendable, Codable, Equatable, Hashable {
     /// be cached.
     ///
     /// - Parameter data: The raw JSON data from the block editor settings endpoint.
-    init(data: Data) {
-        let json = try? JSON(data)
+    init(data: Data) throws {
+        let json = try JSON(data)
         self.jsonValue = json
 
-        let encodedJSON = try? JSONEncoder().encode(json)
-        self.stringValue = String(decoding: encodedJSON ?? Data(), as: UTF8.self)
+        let encodedJSON = try JSONEncoder().encode(json)
+        self.stringValue = String(decoding: encodedJSON, as: UTF8.self)
 
-        if let settings = try? JSONDecoder().decode(InternalEditorSettings.self, from: data) {
-            self.themeStyles = settings.styles.compactMap { $0.css }.joined(separator: "\n")
-        } else {
-            self.themeStyles = ""
-        }
+        let settings = try JSONDecoder().decode(InternalEditorSettings.self, from: data)
+        self.themeStyles = settings.styles?.compactMap { $0.css }.joined(separator: "\n") ?? ""
     }
 
     private init(
@@ -67,5 +64,5 @@ struct InternalEditorSettings: Decodable {
     }
 
     /// All style entries from the theme.
-    let styles: [CSSStyle]
+    let styles: [CSSStyle]?
 }

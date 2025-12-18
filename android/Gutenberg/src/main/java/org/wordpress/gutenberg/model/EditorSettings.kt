@@ -41,22 +41,18 @@ data class EditorSettings(
          * be cached.
          *
          * @param data The raw JSON string from the block editor settings endpoint.
+         * @throws kotlinx.serialization.SerializationException if [data] is not valid JSON.
          */
         fun fromData(data: String): EditorSettings {
-            val jsonValue = try {
-                json.parseToJsonElement(data)
-            } catch (e: Exception) {
-                null
-            }
+            val jsonValue = json.parseToJsonElement(data)
+            val stringValue = jsonValue.toString().orEmpty()
 
-            val stringValue = jsonValue?.toString() ?: ""
-
-            val themeStyles = try {
-                val settings = json.decodeFromString<InternalEditorSettings>(data)
-                settings.styles.mapNotNull { it.css }.joinToString("\n")
-            } catch (e: Exception) {
-                ""
-            }
+            val themeStyles = runCatching {
+                json.decodeFromString<InternalEditorSettings>(data)
+                    .styles
+                    .mapNotNull { it.css }
+                    .joinToString("\n")
+            }.getOrDefault("")
 
             return EditorSettings(
                 jsonValue = jsonValue,
