@@ -32,13 +32,14 @@ struct EditorAssetLibraryTests {
     private func makeLibrary(
         configuration: EditorConfiguration = EditorAssetLibraryTests.testConfiguration,
         httpClient: EditorHTTPClientProtocol = EditorAssetLibraryMockHTTPClient(),
-        cachePolicy: EditorCachePolicy = .always
+        cachePolicy: EditorCachePolicy = .always,
+        storageRoot: URL = .randomTemporaryDirectory
     ) -> EditorAssetLibrary {
         EditorAssetLibrary(
             configuration: configuration,
             httpClient: httpClient,
             cachePolicy: cachePolicy,
-            storageRoot: .randomTemporaryDirectory
+            storageRoot: storageRoot
         )
     }
 
@@ -267,15 +268,15 @@ struct EditorAssetLibraryTests {
         let mockClient = EditorAssetLibraryMockHTTPClient()
         mockClient.getResponse = Data(manifestJSON.utf8)
 
-        let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
+        let siteCacheRoot = URL.randomTemporaryDirectory
+        let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore, storageRoot: siteCacheRoot)
 
         let manifest = try await library.fetchManifest()
 
         _ = try await library.buildBundle(for: manifest)
 
         // Add a non-directory file to the site root
-        let siteRoot = Paths.cacheRoot(for: Self.testConfiguration)
-        let randomFile = siteRoot.appending(path: "random-file.txt")
+        let randomFile = siteCacheRoot.appending(path: "random-file.txt")
         try Data("random content".utf8).write(to: randomFile, options: .atomic)
 
         let bundles = try await library.readAssetBundles()
