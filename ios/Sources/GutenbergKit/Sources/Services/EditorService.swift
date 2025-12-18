@@ -70,7 +70,7 @@ public actor EditorService {
         self.configuration = configuration
 
         let httpClient = httpClient ?? EditorHTTPClient(
-            urlSession: .shared,
+            urlSession: URLSession.shared,
             authHeader: configuration.authHeader,
             delegate: nil
         )
