@@ -11,7 +11,12 @@ public protocol EditorHTTPClientProtocol: Sendable {
 ///
 /// Implement this protocol to inspect or log all network requests.
 public protocol EditorHTTPClientDelegate {
-    func didPerformRequest(_ request: URLRequest, response: URLResponse, data: Data)
+    func didPerformRequest(_ request: URLRequest, response: URLResponse, data: EditorResponseData)
+}
+
+public enum EditorResponseData {
+    case bytes(Data)
+    case file(URL)
 }
 
 /// A WordPress REST API error response.
@@ -35,17 +40,17 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
         /// An unexpected error occurred with the given response data and status code.
         case unknown(response: Data, statusCode: Int)
     }
-    
-    private let urlSession: URLSession
+
+    private let urlSession: URLSessionProtocol
     private let authHeader: String
     private let delegate: EditorHTTPClientDelegate?
-    private let requestTimeout: TimeInterval
+    private let requestTimeout: TimeInterval?
 
     public init(
-        urlSession: URLSession,
+        urlSession: URLSessionProtocol,
         authHeader: String,
         delegate: EditorHTTPClientDelegate? = nil,
-        requestTimeout: TimeInterval = 60 // `URLRequest` default
+        requestTimeout: TimeInterval? = nil
     ) {
         self.urlSession = urlSession
         self.authHeader = authHeader
@@ -54,17 +59,15 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
     }
 
     public func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        var mutableRequest = urlRequest
-        mutableRequest.setValue(self.authHeader, forHTTPHeaderField: "Authorization")
-        mutableRequest.timeoutInterval = self.requestTimeout
 
-        let (data, response) = try await self.urlSession.data(for: mutableRequest)
-        self.delegate?.didPerformRequest(mutableRequest, response: response, data: data)
+        let configuredRequest = self.configureRequest(urlRequest)
+        let (data, response) = try await self.urlSession.data(for: configuredRequest)
+        self.delegate?.didPerformRequest(configuredRequest, response: response, data: .bytes(data))
 
         let httpResponse = response as! HTTPURLResponse
 
         guard 200...299 ~= httpResponse.statusCode else {
-            Logger.http.error("📡 HTTP error fetching \(mutableRequest.url!.absoluteString): \(httpResponse.statusCode)")
+            Logger.http.error("📡 HTTP error fetching \(configuredRequest.url!.absoluteString): \(httpResponse.statusCode)")
 
             if let wpError = try? JSONDecoder().decode(WPError.self, from: data) {
                 throw ClientError.wpError(wpError)
@@ -77,20 +80,35 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
     }
 
     public func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse) {
-        var mutableRequest = urlRequest
-        mutableRequest.addValue(self.authHeader, forHTTPHeaderField: "Authorization")
-        mutableRequest.timeoutInterval = self.requestTimeout
 
-        let (url, response) = try await self.urlSession.download(for: mutableRequest)
+        let configuredRequest = self.configureRequest(urlRequest)
+        let (url, response) = try await self.urlSession.download(for: configuredRequest, delegate: nil)
+        self.delegate?.didPerformRequest(configuredRequest, response: response, data: .file(url))
 
         let httpResponse = response as! HTTPURLResponse
 
         guard 200...299 ~= httpResponse.statusCode else {
-            Logger.http.error("📡 HTTP error fetching \(mutableRequest.url!.absoluteString): \(httpResponse.statusCode)")
+            Logger.http.error("📡 HTTP error fetching \(configuredRequest.url!.absoluteString): \(httpResponse.statusCode)")
 
             throw ClientError.downloadFailed(statusCode: httpResponse.statusCode)
         }
 
         return (url, response as! HTTPURLResponse)
+    }
+
+    private func configureRequest(_ request: URLRequest) -> URLRequest {
+        var mutableRequest = request
+        mutableRequest.addValue(self.authHeader, forHTTPHeaderField: "Authorization")
+
+        if let requestTimeout {
+            mutableRequest.timeoutInterval = requestTimeout
+        }
+
+        // Prevent wordpress_logged_in cookies from being sent, which could interfere with
+        // application password authentication in the Authorization header.
+        // See: https://github.com/wordpress-mobile/GutenbergKit/commit/30ebac210924ecc8e9dee3980c101ef24b1befa6
+        mutableRequest.httpShouldHandleCookies = false
+
+        return mutableRequest
     }
 }
