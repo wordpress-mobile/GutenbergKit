@@ -82,9 +82,9 @@ make build
 # - ios/Sources/GutenbergKit/Gutenberg/
 # - android/Gutenberg/src/main/assets/
 
-# By default, dependencies and translations are only installed if their directories don't exist
-# Force refresh of dependencies and translations
-make build REFRESH_DEPS=1 REFRESH_L10N=1
+# By default, the build is skipped if output directories already exist
+# Force refresh of dependencies, translations, and JS build
+make build REFRESH_DEPS=1 REFRESH_L10N=1 REFRESH_JS_BUILD=1
 
 # Clean build artifacts
 make clean            # Clean both dist and translations

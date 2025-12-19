@@ -68,15 +68,20 @@ clean: ## Remove build artifacts and translation string files
 
 .PHONY: build
 build: npm-dependencies prep-translations ## Build the project for all platforms (iOS, Android, web)
-	@echo "--- :node: Building Gutenberg"
-
-	npm run build
-
-# Copy build products into place
-	@echo "--- :open_file_folder: Copying Build Products into place"
-	rm -rf ./ios/Sources/GutenbergKit/Gutenberg/ ./android/Gutenberg/src/main/assets/
-	cp -r ./dist/. ./ios/Sources/GutenbergKit/Gutenberg/
-	cp -r ./dist/. ./android/Gutenberg/src/main/assets
+# Skip unless...
+# - dist doesn't exist
+# - REFRESH_JS_BUILD is set to true or 1
+# - build was invoked directly
+	@if [ ! -d "dist" ] || [ "$(REFRESH_JS_BUILD)" = "true" ] || [ "$(REFRESH_JS_BUILD)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^build$$"; then \
+		echo "--- :node: Building Gutenberg"; \
+		npm run build; \
+		echo "--- :open_file_folder: Copying Build Products into place"; \
+		rm -rf ./ios/Sources/GutenbergKit/Gutenberg/ ./android/Gutenberg/src/main/assets/; \
+		cp -r ./dist/. ./ios/Sources/GutenbergKit/Gutenberg/; \
+		cp -r ./dist/. ./android/Gutenberg/src/main/assets; \
+	else \
+		echo "--- :white_check_mark: Skipping JS build (dist already exists). Use REFRESH_JS_BUILD=1 to force refresh."; \
+	fi
 
 .PHONY: build-swift-package
 build-swift-package: build ## Build the Swift package for iOS
