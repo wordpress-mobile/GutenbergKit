@@ -111,7 +111,7 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
     private func configureRequest(_ request: URLRequest) -> URLRequest {
         var mutableRequest = request
         mutableRequest.addValue(self.authHeader, forHTTPHeaderField: "Authorization")
-        mutableRequest.addValue("\(Self.baseUserAgent) GutenbergKit/\(GutenbergKit.version)", forHTTPHeaderField: "User-Agent")
+        mutableRequest.addValue("\(Self.baseUserAgent) GutenbergKit/\(GutenbergKitVersion.version)", forHTTPHeaderField: "User-Agent")
 
         if let requestTimeout {
             mutableRequest.timeoutInterval = requestTimeout

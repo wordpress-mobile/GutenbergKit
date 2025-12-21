@@ -9,11 +9,11 @@ struct GBWebViewTests {
         let result = try await GBWebView().evaluateJavaScript("navigator.userAgent")
         let string = try #require(result as? String)
 
-        #expect(string.hasSuffix("GutenbergKit/\(GutenbergKit.version)"))
+        #expect(string.hasSuffix("GutenbergKit/\(GutenbergKitVersion.version)"))
     }
 
     func testVersionConstantExists() {
-        #expect(!GutenbergKit.version.isEmpty, "Version constant should not be empty")
-        #expect(GutenbergKit.version.contains("."), "Version should be in semantic versioning format")
+        #expect(!GutenbergKitVersion.version.isEmpty, "Version constant should not be empty")
+        #expect(GutenbergKitVersion.version.contains("."), "Version should be in semantic versioning format")
     }
 }

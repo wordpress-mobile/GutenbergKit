@@ -45,7 +45,7 @@ class EditorAssetsLibrary(
                 connection.requestMethod = "GET"
 
                 val defaultUserAgent = System.getProperty("http.agent") ?: ""
-                connection.setRequestProperty("User-Agent", "$defaultUserAgent GutenbergKit/${GutenbergKit.VERSION}")
+                connection.setRequestProperty("User-Agent", "$defaultUserAgent GutenbergKit/${GutenbergKitVersion.VERSION}")
 
                 // Set headers from configuration
                 if (configuration.authHeader.isNotEmpty()) {
@@ -107,7 +107,7 @@ class EditorAssetsLibrary(
             connection.requestMethod = "GET"
 
             val defaultUserAgent = System.getProperty("http.agent") ?: ""
-            connection.setRequestProperty("User-Agent", "$defaultUserAgent GutenbergKit/${GutenbergKit.VERSION}")
+            connection.setRequestProperty("User-Agent", "$defaultUserAgent GutenbergKit/${GutenbergKitVersion.VERSION}")
 
             connection.connectTimeout = 30000
             connection.readTimeout = 30000
