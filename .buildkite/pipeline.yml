@@ -35,5 +35,5 @@ steps:
       plugins: *plugins
 
     - label: ':swift: Test Swift Package'
-      command: make test-swift-package
+      command: swift test
       plugins: *plugins
