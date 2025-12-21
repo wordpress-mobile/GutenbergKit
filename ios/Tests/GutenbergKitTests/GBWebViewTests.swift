@@ -13,7 +13,7 @@ struct GBWebViewTests {
     }
 
     func testVersionConstantExists() {
-        #expect(GutenbergKit.version.isEmpty, "Version constant should not be empty")
+        #expect(!GutenbergKit.version.isEmpty, "Version constant should not be empty")
         #expect(GutenbergKit.version.contains("."), "Version should be in semantic versioning format")
     }
 }
