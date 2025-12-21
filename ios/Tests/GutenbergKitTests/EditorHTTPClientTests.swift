@@ -352,7 +352,7 @@ struct EditorHTTPClientTests {
         let capturedRequest = try #require(spySession.lastCapturedRequest)
         let userAgent = try #require(capturedRequest.value(forHTTPHeaderField: "User-Agent"))
         #expect(userAgent.contains("GutenbergKit/"))
-        #expect(userAgent.contains(GBKVersion.version))
+        #expect(userAgent.contains(GutenbergKit.version))
     }
 
     @Test("download() sets User-Agent header with GutenbergKit identifier")
@@ -369,7 +369,7 @@ struct EditorHTTPClientTests {
         let capturedRequest = try #require(spySession.lastCapturedRequest)
         let userAgent = try #require(capturedRequest.value(forHTTPHeaderField: "User-Agent"))
         #expect(userAgent.contains("GutenbergKit/"))
-        #expect(userAgent.contains(GBKVersion.version))
+        #expect(userAgent.contains(GutenbergKit.version))
     }
 
     @Test("User-Agent header includes platform identifier")

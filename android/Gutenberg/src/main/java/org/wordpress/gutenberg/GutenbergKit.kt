@@ -4,11 +4,11 @@
 package org.wordpress.gutenberg
 
 /**
- * GutenbergKit version information
+ * GutenbergKit library constants and utilities.
  */
-object GutenbergKitVersion {
+object GutenbergKit {
     /**
-     * The GutenbergKit version string
+     * The current version of GutenbergKit.
      */
     const val VERSION = "0.11.1"
 }

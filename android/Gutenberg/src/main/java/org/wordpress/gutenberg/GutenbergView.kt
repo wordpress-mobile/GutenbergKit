@@ -128,7 +128,7 @@ class GutenbergView : WebView {
         
         // Set custom user agent
         val defaultUserAgent = this.settings.userAgentString
-        this.settings.userAgentString = "$defaultUserAgent GutenbergKit/${GutenbergKitVersion.VERSION}"
+        this.settings.userAgentString = "$defaultUserAgent GutenbergKit/${GutenbergKit.VERSION}"
         
         this.addJavascriptInterface(this, "editorDelegate")
         this.visibility = View.GONE
