@@ -335,6 +335,63 @@ struct EditorHTTPClientTests {
         #expect(lastCall.request.value(forHTTPHeaderField: "Authorization") == authHeader)
         #expect(lastCall.request.httpShouldHandleCookies == false)
     }
+
+    // MARK: - User-Agent Header Tests
+
+    @Test("perform() sets User-Agent header with GutenbergKit identifier")
+    func performSetsUserAgentHeader() async throws {
+        let spySession = SpyURLSession()
+        let client = EditorHTTPClient(
+            urlSession: spySession,
+            authHeader: "Bearer token"
+        )
+
+        let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/posts")!)
+        _ = try await client.perform(request)
+
+        let capturedRequest = try #require(spySession.lastCapturedRequest)
+        let userAgent = try #require(capturedRequest.value(forHTTPHeaderField: "User-Agent"))
+        #expect(userAgent.contains("GutenbergKit/"))
+        #expect(userAgent.contains(GBKVersion.version))
+    }
+
+    @Test("download() sets User-Agent header with GutenbergKit identifier")
+    func downloadSetsUserAgentHeader() async throws {
+        let spySession = SpyURLSession()
+        let client = EditorHTTPClient(
+            urlSession: spySession,
+            authHeader: "Bearer token"
+        )
+
+        let request = URLRequest(url: URL(string: "https://example.com/wp-content/file.js")!)
+        _ = try await client.download(request)
+
+        let capturedRequest = try #require(spySession.lastCapturedRequest)
+        let userAgent = try #require(capturedRequest.value(forHTTPHeaderField: "User-Agent"))
+        #expect(userAgent.contains("GutenbergKit/"))
+        #expect(userAgent.contains(GBKVersion.version))
+    }
+
+    @Test("User-Agent header includes platform identifier")
+    func userAgentIncludesPlatformIdentifier() async throws {
+        let spySession = SpyURLSession()
+        let client = EditorHTTPClient(
+            urlSession: spySession,
+            authHeader: "Bearer token"
+        )
+
+        let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/posts")!)
+        _ = try await client.perform(request)
+
+        let capturedRequest = try #require(spySession.lastCapturedRequest)
+        let userAgent = try #require(capturedRequest.value(forHTTPHeaderField: "User-Agent"))
+
+        #if os(iOS)
+        #expect(userAgent.contains("iOS/"))
+        #elseif os(macOS)
+        #expect(userAgent.contains("macOS/"))
+        #endif
+    }
 }
 
 fileprivate extension EditorResponseData {

@@ -41,6 +41,18 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
         case unknown(response: Data, statusCode: Int)
     }
 
+    /// The base user agent string identifying the platform.
+    private static let baseUserAgent: String = {
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        #if os(iOS)
+        return "iOS/\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
+        #elseif os(macOS)
+        return "macOS/\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
+        #else
+        return "Darwin"
+        #endif
+    }()
+
     private let urlSession: URLSessionProtocol
     private let authHeader: String
     private let delegate: EditorHTTPClientDelegate?
@@ -99,6 +111,7 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
     private func configureRequest(_ request: URLRequest) -> URLRequest {
         var mutableRequest = request
         mutableRequest.addValue(self.authHeader, forHTTPHeaderField: "Authorization")
+        mutableRequest.addValue("\(Self.baseUserAgent) GutenbergKit/\(GBKVersion.version)", forHTTPHeaderField: "User-Agent")
 
         if let requestTimeout {
             mutableRequest.timeoutInterval = requestTimeout

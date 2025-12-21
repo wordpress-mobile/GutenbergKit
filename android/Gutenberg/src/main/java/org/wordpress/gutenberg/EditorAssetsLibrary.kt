@@ -44,6 +44,9 @@ class EditorAssetsLibrary(
             try {
                 connection.requestMethod = "GET"
 
+                val defaultUserAgent = System.getProperty("http.agent") ?: ""
+                connection.setRequestProperty("User-Agent", "$defaultUserAgent GutenbergKit/${GutenbergKitVersion.VERSION}")
+
                 // Set headers from configuration
                 if (configuration.authHeader.isNotEmpty()) {
                     connection.setRequestProperty("Authorization", configuration.authHeader)
@@ -102,6 +105,10 @@ class EditorAssetsLibrary(
         val connection = URL(httpURL).openConnection() as HttpURLConnection
         try {
             connection.requestMethod = "GET"
+
+            val defaultUserAgent = System.getProperty("http.agent") ?: ""
+            connection.setRequestProperty("User-Agent", "$defaultUserAgent GutenbergKit/${GutenbergKitVersion.VERSION}")
+
             connection.connectTimeout = 30000
             connection.readTimeout = 30000
 
@@ -149,7 +156,7 @@ class EditorAssetsLibrary(
      */
     fun cacheAssetInBackground(url: String) {
         if (!shouldCacheUrl(url)) return
-        
+
         scope.launch {
             try {
                 cacheAsset(url)
