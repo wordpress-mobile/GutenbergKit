@@ -284,7 +284,7 @@ val configuration = EditorConfiguration.builder()
 
 ### Theme Styles
 
-Apply your site's theme styles to the editor:
+Apply your site's theme styles to the editor. This requires valid editor settings that provide theme style configuration (colors, typography, etc.) from your WordPress site's block editor settings endpoint or elsewhere.
 
 ```swift
 // iOS
