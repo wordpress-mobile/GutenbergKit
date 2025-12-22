@@ -19,12 +19,6 @@ To integrate GutenbergKit into your iOS or Android app, include the package as a
 -   **iOS**: Add the Swift package from the `ios/` directory
 -   **Android**: Add the Kotlin library from the `android/` directory
 
-See the [architecture overview](./docs/architecture.md) for details on project organization and communication patterns.
-
 ### Contributing
 
 We welcome contributions! See the [Contributing Guide](./CONTRIBUTING.md) for setup instructions, development workflow, and how to submit changes.
-
--   [Architecture Overview](./docs/architecture.md) - Project structure and communication patterns
--   [Plugin Support](./docs/plugins.md) - How to load custom blocks and editor assets
--   [Development Guide](./docs/development.md) - Development mode, debugging, and logging
