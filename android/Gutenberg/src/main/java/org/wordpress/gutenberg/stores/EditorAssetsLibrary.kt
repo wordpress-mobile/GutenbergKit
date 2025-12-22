@@ -1,12 +1,10 @@
 package org.wordpress.gutenberg.stores
 
 import android.util.Log
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -31,7 +29,6 @@ class EditorAssetsLibrary(
     private val configuration: EditorConfiguration,
     private val httpClient: EditorHTTPClientProtocol,
     private val cachePolicy: EditorCachePolicy = EditorCachePolicy.Always,
-    private val coroutineScope: CoroutineScope,
     private val storageRoot: File,
     private val tempStorageRoot: File
 ) {
@@ -332,62 +329,5 @@ class EditorAssetsLibrary(
         bundle.bundleRoot.deleteRecursively()
 
         return EditorAssetBundle.fromFile(File(destination, MANIFEST_FILENAME))
-    }
-
-    // MARK: - WebView Asset Caching Support
-    // These methods support on-demand asset caching from the CachedAssetRequestInterceptor
-
-    /**
-     * Gets cached asset data from any downloaded bundle if available.
-     *
-     * This checks all downloaded bundles for the requested asset and returns
-     * the data if found.
-     *
-     * @param url The original asset URL.
-     * @return The asset's binary data, or null if not cached.
-     */
-    fun getCachedAsset(url: String): ByteArray? {
-        val bundles = readAssetBundles()
-        for (bundle in bundles) {
-            if (bundle.hasAssetData(url)) {
-                return try {
-                    bundle.assetData(url)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Error reading cached asset: $url", e)
-                    null
-                }
-            }
-        }
-        return null
-    }
-
-    /**
-     * Caches an asset in the background without blocking.
-     *
-     * This is used by CachedAssetRequestInterceptor to opportunistically cache
-     * assets as they're requested by the WebView.
-     *
-     * @param url The URL of the asset to cache.
-     */
-    fun cacheAssetInBackground(url: String) {
-        if (!isSupportedAsset(url)) return
-
-        coroutineScope.launch {
-            try {
-                // Find the most recent bundle and add the asset to it
-                val bundles = readAssetBundles()
-                val bundle = bundles.firstOrNull()
-                if (bundle != null && bundle != EditorAssetBundle.empty) {
-                    val destinationPath = bundle.assetDataPath(url)
-                    if (!destinationPath.exists()) {
-                        destinationPath.parentFile?.mkdirs()
-                        httpClient.download(url, destinationPath)
-                        Log.d(TAG, "Background cached: $url")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to background cache: $url", e)
-            }
-        }
     }
 }

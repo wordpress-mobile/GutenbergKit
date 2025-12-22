@@ -111,7 +111,6 @@ class EditorService(
                 httpClient = client,
                 cachePolicy = cachePolicy,
                 storageRoot = storageRoot ?: Paths.storageRoot(context, configuration),
-                coroutineScope = coroutineScope,
                 tempStorageRoot = tempStorageRoot ?: Paths.defaultTempStorageRoot(context)
             )
 
@@ -157,7 +156,6 @@ class EditorService(
                 httpClient = httpClient,
                 cachePolicy = cachePolicy,
                 storageRoot = storageRoot,
-                coroutineScope = coroutineScope,
                 tempStorageRoot = tempStorageRoot
             )
 
