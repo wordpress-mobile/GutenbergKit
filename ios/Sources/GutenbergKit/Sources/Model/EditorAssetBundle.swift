@@ -109,10 +109,17 @@ public struct EditorAssetBundle: Sendable, Equatable, Hashable {
     ///
     /// - Parameter url: The original remote URL of the asset.
     /// - Returns: The local file URL where the asset is stored.
-    /// - Throws: `Errors.invalidRequest` if the asset is not in this bundle.
+    /// - Precondition: The URL path must not escape the bundle root directory.
     public func assetDataPath(for url: URL) -> URL {
         let path = url.path(percentEncoded: false)
-        let bundlePath = self.bundleRoot.appending(rawPath: path)
+        let bundlePath = self.bundleRoot.appending(rawPath: path).standardizedFileURL
+        let bundleRootPath = self.bundleRoot.standardizedFileURL.path
+
+        precondition(
+            bundlePath.path.hasPrefix(bundleRootPath + "/") || bundlePath.path == bundleRootPath,
+            "Asset path escapes bundle root: \(path)"
+        )
+
         return bundlePath
     }
 

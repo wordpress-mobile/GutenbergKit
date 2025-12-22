@@ -128,10 +128,21 @@ data class EditorAssetBundle(
      *
      * @param url The original asset URL.
      * @return The file where the asset is (or should be) stored.
+     * @throws IllegalArgumentException if the URL path would escape the bundle root.
      */
     fun assetDataPath(url: String): File {
         val urlPath = java.net.URL(url).path
-        return File(bundleRoot, urlPath)
+        val resolvedFile = File(bundleRoot, urlPath).canonicalFile
+        val bundleRootCanonical = bundleRoot.canonicalFile
+
+        require(
+            resolvedFile.path.startsWith(bundleRootCanonical.path + File.separator) ||
+                resolvedFile.path == bundleRootCanonical.path
+        ) {
+            "Asset path escapes bundle root: $urlPath"
+        }
+
+        return resolvedFile
     }
 
     /**

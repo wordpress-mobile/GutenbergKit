@@ -271,6 +271,46 @@ class EditorAssetBundleTest {
         tempDir.deleteRecursively()
     }
 
+    @Test(expected = IllegalArgumentException::class)
+    fun `assetDataPath throws for path traversal attempt with parent directory`() {
+        val tempDir = createTempDir()
+        val bundle = makeBundle(bundleRoot = tempDir)
+
+        try {
+            bundle.assetDataPath("https://example.com/../../../etc/passwd")
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `assetDataPath allows valid nested paths`() {
+        val tempDir = createTempDir()
+        val bundle = makeBundle(bundleRoot = tempDir)
+
+        val url = "https://example.com/wp-content/plugins/my-plugin/assets/js/script.js"
+        val result = bundle.assetDataPath(url)
+
+        assertTrue(result.canonicalPath.startsWith(tempDir.canonicalPath))
+
+        tempDir.deleteRecursively()
+    }
+
+    @Test
+    fun `assetDataPath normalizes paths with dot segments`() {
+        val tempDir = createTempDir()
+        val bundle = makeBundle(bundleRoot = tempDir)
+
+        // This path has ./  which should be normalized but stay within bundle
+        val url = "https://example.com/wp-content/./plugins/script.js"
+        val result = bundle.assetDataPath(url)
+
+        assertTrue(result.canonicalPath.startsWith(tempDir.canonicalPath))
+        assertTrue(result.path.contains("plugins/script.js"))
+
+        tempDir.deleteRecursively()
+    }
+
     // MARK: - assetData Tests
 
     @Test
