@@ -12,6 +12,9 @@ import org.wordpress.gutenberg.model.http.EditorURLResponse
 import java.io.File
 import java.security.MessageDigest
 import java.util.Date
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
+import kotlin.concurrent.write
 
 /**
  * A URL-based cache for storing HTTP responses keyed by URL and HTTP method.
@@ -24,6 +27,7 @@ class EditorURLCache(
     private val cachePolicy: EditorCachePolicy = EditorCachePolicy.Always
 ) {
     private val json = Json { ignoreUnknownKeys = true }
+    private val lock = ReentrantReadWriteLock()
 
     companion object {
         private const val TAG = "EditorURLCache"
@@ -51,19 +55,8 @@ class EditorURLCache(
         url: String,
         httpMethod: EditorHttpMethod,
         currentDate: Date
-    ) {
-        val cacheKey = buildCacheKey(url, httpMethod)
-        val cacheFile = File(cacheRoot, cacheKey)
-
-        val entry = CachedEntry(
-            data = response.data,
-            headers = response.responseHeaders.dictionaryValue,
-            storageDate = currentDate.time
-        )
-
-        val encodedEntry = json.encodeToString(entry)
-        cacheFile.writeText(encodedEntry)
-        Log.d(TAG, "Wrote cache entry: file=${cacheFile.absolutePath}, size=${encodedEntry.length} bytes, url=$url")
+    ) = lock.write {
+        __store(response, url, httpMethod, currentDate)
     }
 
     /**
@@ -89,10 +82,30 @@ class EditorURLCache(
         url: String,
         httpMethod: EditorHttpMethod,
         currentDate: Date
-    ) {
+    ) = lock.write {
         val data = file.readText()
         val response = EditorURLResponse(data = data, responseHeaders = headers)
-        store(response, url, httpMethod, currentDate)
+        __store(response, url, httpMethod, currentDate)
+    }
+
+    private fun __store(
+        response: EditorURLResponse,
+        url: String,
+        httpMethod: EditorHttpMethod,
+        currentDate: Date
+    ) {
+        val cacheKey = buildCacheKey(url, httpMethod)
+        val cacheFile = File(cacheRoot, cacheKey)
+
+        val entry = CachedEntry(
+            data = response.data,
+            headers = response.responseHeaders.dictionaryValue,
+            storageDate = currentDate.time
+        )
+
+        val encodedEntry = json.encodeToString(entry)
+        cacheFile.writeText(encodedEntry)
+        Log.d(TAG, "Wrote cache entry: file=${cacheFile.absolutePath}, size=${encodedEntry.length} bytes, url=$url")
     }
 
     /**
@@ -125,20 +138,20 @@ class EditorURLCache(
         url: String,
         httpMethod: EditorHttpMethod,
         currentDate: Date
-    ): EditorURLResponse? {
+    ): EditorURLResponse? = lock.read {
         val cacheKey = buildCacheKey(url, httpMethod)
         val cacheFile = File(cacheRoot, cacheKey)
 
         if (!cacheFile.exists()) {
-            return null
+            return@read null
         }
 
-        return runCatching {
+        runCatching {
             val entry = json.decodeFromString<CachedEntry>(cacheFile.readText())
             val storageDate = Date(entry.storageDate)
 
             if (!cachePolicy.allowsResponseWith(storageDate, currentDate)) {
-                return null
+                return@read null
             }
 
             EditorURLResponse(
@@ -151,7 +164,7 @@ class EditorURLCache(
     /**
      * Removes all cached responses.
      */
-    fun clear() {
+    fun clear() = lock.write {
         cacheRoot.listFiles()?.forEach { it.delete() }
     }
 
