@@ -48,37 +48,7 @@ editorViewController.delegate = self
 
 ### Configuration Options
 
-Use `EditorConfigurationBuilder` to configure the editor:
-
-```swift
-let configuration = EditorConfigurationBuilder(
-    postType: "post",
-    siteURL: siteURL,
-    siteApiRoot: apiRoot
-)
-    // Content
-    .setTitle("Post Title")
-    .setContent("<p>Initial content</p>")
-    .setPostID(123)
-
-    // Features
-    .setShouldUseThemeStyles(true)
-    .setShouldUsePlugins(true)
-    .setShouldHideTitle(false)
-    .setNativeInserterEnabled(true)
-
-    // Authentication
-    .setAuthHeader("Bearer token")
-
-    // Localization
-    .setLocale("en")
-
-    // Debugging
-    .setLogLevel(.debug)
-    .setEnableNetworkLogging(true)
-
-    .build()
-```
+The `EditorConfigurationBuilder` provides many options for customizing the editor. See [`EditorConfiguration.swift`](../ios/Sources/GutenbergKit/Sources/Model/EditorConfiguration.swift) for all available options.
 
 ### Implementing the Delegate
 
@@ -177,42 +147,7 @@ gutenbergView.start(configuration)
 
 ### Configuration Options
 
-Use `EditorConfiguration.builder()` to configure the editor:
-
-```kotlin
-val configuration = EditorConfiguration.builder()
-    // Content
-    .setTitle("Post Title")
-    .setContent("<p>Initial content</p>")
-    .setPostId(123)
-    .setPostType("post")
-
-    // Features
-    .setThemeStyles(true)
-    .setPlugins(true)
-    .setHideTitle(false)
-
-    // Site settings
-    .setSiteURL("https://example.com")
-    .setSiteApiRoot("https://example.com/wp-json")
-    .setSiteApiNamespace(arrayOf("wp/v2"))
-
-    // Authentication
-    .setAuthHeader("Bearer token")
-    .setCookies(mapOf("session" to "value"))
-
-    // Localization
-    .setLocale("en")
-
-    // Caching
-    .setEnableAssetCaching(true)
-    .setCachedAssetHosts(setOf("example.com", "cdn.example.com"))
-
-    // Debugging
-    .setEnableNetworkLogging(true)
-
-    .build()
-```
+The `EditorConfiguration.builder()` provides many options for customizing the editor. See [`EditorConfiguration.kt`](../android/Gutenberg/src/main/java/org/wordpress/gutenberg/EditorConfiguration.kt) for all available options.
 
 ### Setting Up Listeners
 
