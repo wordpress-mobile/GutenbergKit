@@ -2,6 +2,23 @@
 
 This guide covers how to integrate GutenbergKit into your iOS or Android app.
 
+## Requirements
+
+### iOS
+
+-   **Platform**: iOS 17+ / macOS 14+
+-   **Dependencies** (automatically resolved via Swift Package Manager):
+    -   [SwiftSoup](https://github.com/scinfu/SwiftSoup) - HTML parsing
+    -   [SVGView](https://github.com/exyte/SVGView) - SVG rendering for block icons
+
+### Android
+
+-   **Platform**: minSdk 24 (Android 7.0), targetSdk 34
+-   **Dependencies** (managed via Gradle):
+    -   `androidx.webkit:webkit` - Enhanced WebView features
+    -   `com.google.code.gson:gson` - JSON serialization
+    -   `kotlinx-coroutines-android` - Async operations
+
 ## iOS Integration
 
 ### Adding the Package
