@@ -225,6 +225,7 @@ class EditorService(
      */
     fun cleanup() {
         assetLibrary.cleanup()
+        restRepository.cleanup()
     }
 
     /**

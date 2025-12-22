@@ -179,26 +179,91 @@ class EditorURLCacheTest {
         assertFalse(cache.hasResponse(missingURL, EditorHttpMethod.GET))
     }
 
-    // MARK: - clear()
+    // MARK: - purge()
 
     @Test
-    fun `clear removes all entries`() {
+    fun `purge removes all entries`() {
         cache.store(makeResponse(), testURL, EditorHttpMethod.GET)
         val otherURL = "https://example.com/other"
         cache.store(makeResponse(), otherURL, EditorHttpMethod.GET)
-        cache.clear()
+        cache.purge()
 
         assertNull(cache.getResponse(testURL, EditorHttpMethod.GET))
         assertNull(cache.getResponse(otherURL, EditorHttpMethod.GET))
     }
 
     @Test
-    fun `store succeeds after clear`() {
+    fun `store succeeds after purge`() {
         cache.store(makeResponse(), testURL, EditorHttpMethod.GET)
-        cache.clear()
-        val newResponse = makeResponse(data = "after clear")
+        cache.purge()
+        val newResponse = makeResponse(data = "after purge")
         cache.store(newResponse, testURL, EditorHttpMethod.GET)
         assertEquals(newResponse, cache.getResponse(testURL, EditorHttpMethod.GET))
+    }
+
+    // MARK: - clean()
+
+    @Test
+    fun `clean with Always policy removes nothing`() {
+        val alwaysCache = EditorURLCache(cacheRoot, EditorCachePolicy.Always)
+        alwaysCache.store(makeResponse(), testURL, EditorHttpMethod.GET)
+        alwaysCache.store(makeResponse(), "https://example.com/other", EditorHttpMethod.GET)
+
+        val removedCount = alwaysCache.clean()
+
+        assertEquals(0, removedCount)
+        assertTrue(alwaysCache.hasResponse(testURL, EditorHttpMethod.GET))
+    }
+
+    @Test
+    fun `clean with MaxAge policy removes expired entries`() {
+        val maxAgeCache = EditorURLCache(cacheRoot, EditorCachePolicy.MaxAge(intervalMillis = 3600_000)) // 1 hour
+        val oldDate = Date(0) // Very old date
+        val recentDate = Date() // Now
+
+        // Store an old entry and a recent entry
+        maxAgeCache.store(makeResponse(data = "old"), testURL, EditorHttpMethod.GET, oldDate)
+        maxAgeCache.store(makeResponse(data = "recent"), "https://example.com/recent", EditorHttpMethod.GET, recentDate)
+
+        val removedCount = maxAgeCache.clean(Date())
+
+        assertEquals(1, removedCount)
+        assertNull(maxAgeCache.getResponse(testURL, EditorHttpMethod.GET))
+        assertTrue(maxAgeCache.hasResponse("https://example.com/recent", EditorHttpMethod.GET))
+    }
+
+    @Test
+    fun `clean with Ignore policy removes all entries`() {
+        val ignoreCache = EditorURLCache(cacheRoot, EditorCachePolicy.Ignore)
+        ignoreCache.store(makeResponse(), testURL, EditorHttpMethod.GET)
+        ignoreCache.store(makeResponse(), "https://example.com/other", EditorHttpMethod.GET)
+
+        val removedCount = ignoreCache.clean()
+
+        assertEquals(2, removedCount)
+        assertNull(ignoreCache.getResponse(testURL, EditorHttpMethod.GET))
+    }
+
+    @Test
+    fun `clean removes corrupted entries`() {
+        cache.store(makeResponse(), testURL, EditorHttpMethod.GET)
+
+        // Write a corrupted file directly to the cache directory
+        val corruptedFile = File(cacheRoot, "corrupted-entry")
+        corruptedFile.writeText("not valid json")
+
+        val removedCount = cache.clean()
+
+        // The corrupted file should be removed, but valid entries remain
+        assertEquals(1, removedCount)
+        assertFalse(corruptedFile.exists())
+        assertTrue(cache.hasResponse(testURL, EditorHttpMethod.GET))
+    }
+
+    @Test
+    fun `clean returns zero when cache is empty`() {
+        val removedCount = cache.clean()
+        assertEquals(0, removedCount)
     }
 
     // MARK: - URLs with query parameters

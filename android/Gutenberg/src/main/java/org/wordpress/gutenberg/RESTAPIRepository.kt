@@ -30,10 +30,18 @@ class RESTAPIRepository(
     private val postTypesUrl = "$apiRoot$POST_TYPES_PATH"
 
     /**
+     * Cleanup any expired cache entries.
+     *
+     */
+    fun cleanup() {
+        cache.clean()
+    }
+
+    /**
      * Clears all cached API responses.
      */
     fun purge() {
-        cache.clear()
+        cache.purge()
     }
 
     // MARK: Post

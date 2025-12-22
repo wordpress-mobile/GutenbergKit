@@ -164,8 +164,48 @@ class EditorURLCache(
     /**
      * Removes all cached responses.
      */
-    fun clear() = lock.write {
+    fun purge() = lock.write {
         cacheRoot.listFiles()?.forEach { it.delete() }
+    }
+
+    /**
+     * Removes cached responses that are no longer valid according to the cache policy.
+     *
+     * This method iterates through all cached entries and deletes those whose storage date
+     * is no longer allowed by the current cache policy. Use this periodically to prevent
+     * unbounded cache growth.
+     *
+     * @return The number of entries removed.
+     */
+    fun clean(): Int {
+        return clean(Date())
+    }
+
+    internal fun clean(currentDate: Date): Int = lock.write {
+        var removedCount = 0
+
+        cacheRoot.listFiles()?.forEach { file ->
+            if (!file.isFile) return@forEach
+
+            val shouldRemove = runCatching {
+                val entry = json.decodeFromString<CachedEntry>(file.readText())
+                val storageDate = Date(entry.storageDate)
+                !cachePolicy.allowsResponseWith(storageDate, currentDate)
+            }.getOrDefault(true) // Remove entries that can't be parsed
+
+            if (shouldRemove) {
+                if (file.delete()) {
+                    removedCount++
+                    Log.d(TAG, "Cleaned expired cache entry: ${file.name}")
+                }
+            }
+        }
+
+        if (removedCount > 0) {
+            Log.d(TAG, "Cache cleanup complete: removed $removedCount entries")
+        }
+
+        removedCount
     }
 
     /**
