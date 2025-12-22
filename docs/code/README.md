@@ -15,3 +15,7 @@ This guide is for developers who want to contribute code to GutenbergKit.
 -   [Plugins](./plugins.md) - Plugin loading and custom blocks
 -   [Preloading](./preloading.md) - Asset preloading
 -   [Physical Device Setup](./physical-device-setup.md) - Running on physical devices
+
+## Get Involved
+
+Have questions or want to discuss development? Join the [#mobile](https://wordpress.slack.com/archives/C02RQC4LY) channel on [WordPress Slack](https://make.wordpress.org/chat/).

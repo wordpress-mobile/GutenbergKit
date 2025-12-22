@@ -24,3 +24,7 @@ See the [Integration Guide](./docs/integration.md) for detailed setup instructio
 ### Contributing
 
 We welcome contributions! See the [Contributing Guide](./CONTRIBUTING.md) for setup instructions, development workflow, and how to submit changes.
+
+## Get Involved
+
+Join the conversation in the [#mobile](https://wordpress.slack.com/archives/C02RQC4LY) channel on [WordPress Slack](https://make.wordpress.org/chat/).
