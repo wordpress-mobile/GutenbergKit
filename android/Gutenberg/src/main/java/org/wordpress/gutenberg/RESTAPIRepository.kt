@@ -111,11 +111,10 @@ class RESTAPIRepository(
      */
     fun readEditorSettings(): EditorSettings? {
         val response = cache.getResponse(editorSettingsUrl, EditorHttpMethod.GET) ?: return null
-        return try {
+
+        return runCatching {
             json.decodeFromString<EditorSettings>(response.data)
-        } catch (e: Exception) {
-            null
-        }
+        }.getOrNull()
     }
 
     // MARK: GET Post Type

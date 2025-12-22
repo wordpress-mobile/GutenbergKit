@@ -185,12 +185,7 @@ class EditorHTTPClient(
                 .method(method, requestBody)
                 .build()
 
-            val response: Response
-            try {
-                response = client.newCall(request).execute()
-            } catch (e: IOException) {
-                throw e
-            }
+            val response = client.newCall(request).execute()
 
             // Note: This loads the entire response into memory. This is acceptable because
             // this method is only used for WordPress REST API responses (editor settings, post
