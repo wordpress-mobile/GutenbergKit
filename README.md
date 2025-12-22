@@ -1,6 +1,6 @@
 # GutenbergKit
 
-<img width="250" style="display:block; margin-left:auto; margin-right:auto;" alt="GutenbergKit running on an iPhone" src="./docs/gutenberg-kit-preview.png">
+<img width="250" alt="GutenbergKit running on an iPhone" src="./docs/gutenberg-kit-preview.png">
 
 GutenbergKit brings the WordPress block editor to native mobile applications. It bridges WordPress's web-based Gutenberg editor with native iOS and Android apps, enabling a consistent editing experience across platforms.
 
