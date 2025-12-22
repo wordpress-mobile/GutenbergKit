@@ -2,7 +2,7 @@
 
 <img width="250" alt="GutenbergKit running on an iPhone" src="./docs/gutenberg-kit-preview.png">
 
-GutenbergKit brings the WordPress block editor to native mobile applications. It bridges WordPress's web-based Gutenberg editor with native iOS and Android apps, enabling a consistent editing experience across platforms.
+GutenbergKit brings the [WordPress](https://wordpress.org/) block editor to native mobile applications. It bridges WordPress's web-based [Gutenberg](https://github.com/WordPress/gutenberg/) editor with native iOS and Android apps, enabling a consistent editing experience across platforms.
 
 The architecture consists of three main layers:
 
