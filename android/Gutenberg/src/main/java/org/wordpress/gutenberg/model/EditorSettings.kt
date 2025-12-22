@@ -41,7 +41,9 @@ data class EditorSettings(
          * be cached.
          *
          * @param data The raw JSON string from the block editor settings endpoint.
-         * @throws kotlinx.serialization.SerializationException if [data] is not valid JSON.
+         *             Must be valid JSON (empty or blank strings will throw).
+         * @throws kotlinx.serialization.SerializationException if [data] is not valid JSON,
+         *         including empty or blank strings.
          */
         fun fromData(data: String): EditorSettings {
             val jsonValue = json.parseToJsonElement(data)
