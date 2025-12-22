@@ -44,6 +44,44 @@ import java.util.Locale
 
 const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
 
+/**
+ * A WebView-based Gutenberg block editor for Android.
+ *
+ * ## Creating a GutenbergView
+ *
+ * This view must be created programmatically - XML layout inflation is not supported.
+ * Use the constructor directly or create it within a Compose `AndroidView`:
+ *
+ * ```kotlin
+ * // In an Activity or Fragment:
+ * val editor = GutenbergView(
+ *     configuration = EditorConfiguration.builder(...).build(),
+ *     dependencies = null,  // or pre-fetched dependencies
+ *     coroutineScope = lifecycleScope,
+ *     context = this
+ * )
+ *
+ * // In Jetpack Compose:
+ * AndroidView(factory = { context ->
+ *     GutenbergView(configuration, dependencies, lifecycleScope, context)
+ * })
+ * ```
+ *
+ * ## Coroutine Scope Requirements
+ *
+ * The `coroutineScope` parameter is used for async operations like fetching editor
+ * dependencies. The caller owns this scope and is responsible for its lifecycle:
+ *
+ * - **Use a lifecycle-aware scope** (e.g., `lifecycleScope`, `viewModelScope`)
+ *   to automatically cancel operations when the host is destroyed
+ * - The view does **not** cancel the scope in `onDetachedFromWindow()`
+ * - If using a custom scope, ensure it's cancelled when the editor is no longer needed
+ *
+ * ## Loading Behavior
+ *
+ * - If `dependencies` is provided, the editor loads immediately (fast path)
+ * - If `dependencies` is null, dependencies are fetched asynchronously before loading
+ */
 class GutenbergView : WebView {
     private var isEditorLoaded = false
     private var didFireEditorLoaded = false
@@ -132,6 +170,17 @@ class GutenbergView : WebView {
         loadingListener = listener
     }
 
+    /**
+     * Creates a new GutenbergView with the specified configuration.
+     *
+     * @param configuration The editor configuration specifying site details and capabilities.
+     * @param dependencies Pre-fetched editor dependencies, or null to fetch asynchronously.
+     *                     Providing dependencies enables instant editor loading.
+     * @param coroutineScope The scope for async operations. **Caller owns this scope** -
+     *                       use a lifecycle-aware scope like `lifecycleScope` to ensure
+     *                       operations are cancelled when the Activity/Fragment is destroyed.
+     * @param context The Android context.
+     */
     constructor(configuration: EditorConfiguration, dependencies: EditorDependencies?, coroutineScope: CoroutineScope, context: Context) : super(context) {
         this.configuration = configuration
         this.coroutineScope = coroutineScope
