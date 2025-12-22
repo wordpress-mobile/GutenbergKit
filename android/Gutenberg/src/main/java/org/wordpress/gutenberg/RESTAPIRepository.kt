@@ -23,19 +23,11 @@ class RESTAPIRepository(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    private val editorSettingsUrl: String
-    private val activeThemeUrl: String
-    private val siteSettingsUrl: String
-    private val postTypesUrl: String
-
-    init {
-        val apiRoot = configuration.siteApiRoot.trimEnd('/')
-
-        editorSettingsUrl = "$apiRoot$EDITOR_SETTINGS_PATH"
-        activeThemeUrl = "$apiRoot$ACTIVE_THEME_PATH"
-        siteSettingsUrl = "$apiRoot$SITE_SETTINGS_PATH"
-        postTypesUrl = "$apiRoot$POST_TYPES_PATH"
-    }
+    private val apiRoot = configuration.siteApiRoot.trimEnd('/')
+    private val editorSettingsUrl = "$apiRoot$EDITOR_SETTINGS_PATH"
+    private val activeThemeUrl = "$apiRoot$ACTIVE_THEME_PATH"
+    private val siteSettingsUrl = "$apiRoot$SITE_SETTINGS_PATH"
+    private val postTypesUrl = "$apiRoot$POST_TYPES_PATH"
 
     /**
      * Clears all cached API responses.
@@ -72,7 +64,6 @@ class RESTAPIRepository(
     }
 
     private fun buildPostUrl(id: Int): String {
-        val apiRoot = configuration.siteApiRoot.trimEnd('/')
         return "$apiRoot/wp/v2/posts/$id?context=edit"
     }
 
@@ -140,7 +131,6 @@ class RESTAPIRepository(
     }
 
     private fun buildPostTypeUrl(type: String): String {
-        val apiRoot = configuration.siteApiRoot.trimEnd('/')
         return "$apiRoot/wp/v2/types/$type?context=edit"
     }
 

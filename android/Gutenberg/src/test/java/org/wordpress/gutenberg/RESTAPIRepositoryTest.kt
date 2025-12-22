@@ -267,6 +267,81 @@ class RESTAPIRepositoryTest {
     // MARK: - URL Building Tests
 
     @Test
+    fun `URLs are normalized when API root has no trailing slash`() = runBlocking {
+        val capturedURLs = mutableListOf<String>()
+        val capturingClient = createCapturingClient { capturedURLs.add(it) }
+
+        val configuration = EditorConfiguration.builder(
+            TEST_SITE_URL,
+            "https://example.com/wp-json",  // No trailing slash
+            "post"
+        ).setPlugins(true).setThemeStyles(true).setAuthHeader("Bearer test").build()
+
+        val cache = EditorURLCache(cacheRoot, EditorCachePolicy.Always)
+        val repository = RESTAPIRepository(configuration, capturingClient, cache)
+
+        repository.fetchPost(id = 1)
+        repository.fetchPostType("post")
+        repository.fetchActiveTheme()
+        repository.fetchPostTypes()
+
+        val expectedURLs = setOf(
+            "https://example.com/wp-json/wp/v2/posts/1?context=edit",
+            "https://example.com/wp-json/wp/v2/types/post?context=edit",
+            "https://example.com/wp-json/wp/v2/themes?context=edit&status=active",
+            "https://example.com/wp-json/wp/v2/types?context=view"
+        )
+
+        assertEquals(expectedURLs, capturedURLs.toSet())
+    }
+
+    @Test
+    fun `URLs are normalized when API root has trailing slash`() = runBlocking {
+        val capturedURLs = mutableListOf<String>()
+        val capturingClient = createCapturingClient { capturedURLs.add(it) }
+
+        val configuration = EditorConfiguration.builder(
+            TEST_SITE_URL,
+            "https://example.com/wp-json/",  // With trailing slash
+            "post"
+        ).setPlugins(true).setThemeStyles(true).setAuthHeader("Bearer test").build()
+
+        val cache = EditorURLCache(cacheRoot, EditorCachePolicy.Always)
+        val repository = RESTAPIRepository(configuration, capturingClient, cache)
+
+        repository.fetchPost(id = 1)
+        repository.fetchPostType("post")
+        repository.fetchActiveTheme()
+        repository.fetchPostTypes()
+
+        val expectedURLs = setOf(
+            "https://example.com/wp-json/wp/v2/posts/1?context=edit",
+            "https://example.com/wp-json/wp/v2/types/post?context=edit",
+            "https://example.com/wp-json/wp/v2/themes?context=edit&status=active",
+            "https://example.com/wp-json/wp/v2/types?context=view"
+        )
+
+        assertEquals(expectedURLs, capturedURLs.toSet())
+    }
+
+    private fun createCapturingClient(onRequest: (String) -> Unit): EditorHTTPClientProtocol {
+        return object : EditorHTTPClientProtocol {
+            override suspend fun download(url: String, destination: File): EditorHTTPClientDownloadResponse {
+                throw NotImplementedError()
+            }
+
+            override suspend fun perform(method: String, url: String): EditorHTTPClientResponse {
+                onRequest(url)
+                return EditorHTTPClientResponse(
+                    data = "{}".toByteArray(),
+                    statusCode = 200,
+                    headers = EditorHTTPHeaders()
+                )
+            }
+        }
+    }
+
+    @Test
     fun `post URL includes context=edit query parameter`() = runBlocking {
         var capturedURL: String? = null
         val capturingClient = object : EditorHTTPClientProtocol {
