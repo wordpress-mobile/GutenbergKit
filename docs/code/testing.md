@@ -24,7 +24,7 @@ make test-js
 To run the Swift tests:
 
 ```bash
-make test-swift
+make test-swift-package
 ```
 
 ### Android Tests
@@ -43,7 +43,7 @@ Before submitting a pull request, ensure your code passes formatting and linting
 
 ### Formatting
 
-Format JavaScript code using Prettier:
+Format code using Prettier:
 
 ```bash
 make format
