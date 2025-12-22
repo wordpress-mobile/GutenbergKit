@@ -133,7 +133,7 @@ class EditorURLCache(
             return null
         }
 
-        return try {
+        return runCatching {
             val entry = json.decodeFromString<CachedEntry>(cacheFile.readText())
             val storageDate = Date(entry.storageDate)
 
@@ -145,9 +145,7 @@ class EditorURLCache(
                 data = entry.data,
                 responseHeaders = EditorHTTPHeaders(entry.headers)
             )
-        } catch (e: Exception) {
-            null
-        }
+        }.getOrNull()
     }
 
     /**
