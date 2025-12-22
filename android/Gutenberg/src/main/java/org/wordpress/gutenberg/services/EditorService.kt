@@ -2,6 +2,7 @@ package org.wordpress.gutenberg.services
 
 import android.content.Context
 import android.content.SharedPreferences
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
@@ -89,6 +90,7 @@ class EditorService(
             configuration: EditorConfiguration,
             httpClient: EditorHTTPClientProtocol? = null,
             cachePolicy: EditorCachePolicy = EditorCachePolicy.Always,
+            coroutineScope: CoroutineScope,
             storageRoot: File? = null,
             cacheRoot: File? = null
         ): EditorService {
@@ -107,7 +109,8 @@ class EditorService(
                 configuration = configuration,
                 httpClient = client,
                 cachePolicy = cachePolicy,
-                storageRoot = storageRoot ?: Paths.storageRoot(context, configuration)
+                storageRoot = storageRoot ?: Paths.storageRoot(context, configuration),
+                coroutineScope = coroutineScope
             )
 
             val sharedPrefs = context.getSharedPreferences("EditorService", Context.MODE_PRIVATE)
@@ -133,6 +136,7 @@ class EditorService(
             configuration: EditorConfiguration,
             httpClient: EditorHTTPClientProtocol,
             cachePolicy: EditorCachePolicy = EditorCachePolicy.Always,
+            coroutineScope: CoroutineScope,
             storageRoot: File,
             cacheRoot: File
         ): EditorService {
@@ -149,7 +153,9 @@ class EditorService(
                 configuration = configuration,
                 httpClient = httpClient,
                 cachePolicy = cachePolicy,
-                storageRoot = storageRoot
+                storageRoot = storageRoot,
+                coroutineScope = coroutineScope
+
             )
 
             return EditorService(

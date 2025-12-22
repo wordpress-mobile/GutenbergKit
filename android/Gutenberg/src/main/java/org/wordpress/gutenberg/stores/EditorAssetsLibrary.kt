@@ -3,10 +3,8 @@ package org.wordpress.gutenberg.stores
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -33,10 +31,10 @@ class EditorAssetsLibrary(
     private val configuration: EditorConfiguration,
     private val httpClient: EditorHTTPClientProtocol,
     private val cachePolicy: EditorCachePolicy = EditorCachePolicy.Always,
+    private val coroutineScope: CoroutineScope,
     private val storageRoot: File
 ) {
     private val mutex = Mutex()
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     companion object {
         private const val TAG = "EditorAssetsLibrary"
@@ -371,7 +369,7 @@ class EditorAssetsLibrary(
     fun cacheAssetInBackground(url: String) {
         if (!isSupportedAsset(url)) return
 
-        scope.launch {
+        coroutineScope.launch {
             try {
                 // Find the most recent bundle and add the asset to it
                 val bundles = readAssetBundles()
@@ -388,12 +386,5 @@ class EditorAssetsLibrary(
                 Log.w(TAG, "Failed to background cache: $url", e)
             }
         }
-    }
-
-    /**
-     * Shuts down background operations.
-     */
-    fun shutdown() {
-        scope.cancel()
     }
 }

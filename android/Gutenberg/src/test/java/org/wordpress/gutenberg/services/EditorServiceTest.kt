@@ -1,6 +1,7 @@
 package org.wordpress.gutenberg.services
 
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Before
@@ -19,6 +20,9 @@ class EditorServiceTest {
 
     @get:Rule
     val tempFolder = TemporaryFolder()
+
+    // Coroutine Scope for Tests
+    val testScope = TestScope()
 
     private lateinit var storageRoot: File
     private lateinit var cacheRoot: File
@@ -52,7 +56,8 @@ class EditorServiceTest {
             configuration = configuration,
             httpClient = httpClient,
             storageRoot = storageRoot,
-            cacheRoot = cacheRoot
+            cacheRoot = cacheRoot,
+            coroutineScope = testScope
         )
     }
 

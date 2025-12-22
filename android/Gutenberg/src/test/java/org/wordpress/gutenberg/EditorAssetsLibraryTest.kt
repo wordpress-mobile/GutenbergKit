@@ -1,6 +1,7 @@
 package org.wordpress.gutenberg
 
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -26,6 +27,9 @@ class EditorAssetsLibraryTest {
 
     @get:Rule
     val tempFolder = TemporaryFolder()
+
+    // Coroutine Scope for Tests
+    val testScope = TestScope()
 
     private lateinit var storageRoot: File
 
@@ -66,7 +70,8 @@ class EditorAssetsLibraryTest {
             configuration = configuration,
             httpClient = httpClient,
             cachePolicy = cachePolicy,
-            storageRoot = storageRoot
+            storageRoot = storageRoot,
+            coroutineScope = testScope
         )
     }
 

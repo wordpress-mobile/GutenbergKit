@@ -303,7 +303,8 @@ class GutenbergView : WebView {
             try {
                 val editorService = EditorService.create(
                     context = context,
-                    configuration = configuration
+                    configuration = configuration,
+                    coroutineScope = coroutineScope
                 )
                 Log.i("GutenbergView", "Created editor service")
                 val fetchedDependencies = editorService.prepare { progress ->
