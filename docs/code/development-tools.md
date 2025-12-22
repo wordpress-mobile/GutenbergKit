@@ -7,7 +7,7 @@ This guide covers debugging tools and development features available in Gutenber
 Development mode (`?dev_mode` query parameter) enables debugging features and bypasses certain production behaviors to simplify development and testing:
 
 -   **Development notice is displayed** - A warning notice appears to inform developers that they're running in development mode.
--   **Mock GBKit global is provided** - If the native bridge (`window.GBKit`) is not available, a mock object is automatically provided to allow the editor to load without native integration.
+-   **Make GBKit global optional** - If the native bridge (`window.GBKit`) is not available, the editor is allowed to load without native integration, but some features may be limited.
 -   **React Dev Tools integration** - The editor connects to the React Dev Tools standalone server for component inspection and debugging. See the React Dev Tools section below for setup instructions.
 
 Add the `?dev_mode` query parameter to the editor URL:
