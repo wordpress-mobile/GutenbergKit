@@ -32,7 +32,8 @@ class EditorAssetsLibrary(
     private val httpClient: EditorHTTPClientProtocol,
     private val cachePolicy: EditorCachePolicy = EditorCachePolicy.Always,
     private val coroutineScope: CoroutineScope,
-    private val storageRoot: File
+    private val storageRoot: File,
+    private val tempStorageRoot: File
 ) {
     private val mutex = Mutex()
 
@@ -174,7 +175,7 @@ class EditorAssetsLibrary(
             return@withContext EditorAssetBundle.empty
         }
 
-        val tempDirectory = File(System.getProperty("java.io.tmpdir"), UUID.randomUUID().toString())
+        val tempDirectory = File(tempStorageRoot, UUID.randomUUID().toString())
         tempDirectory.mkdirs()
 
         val bundle = EditorAssetBundle(

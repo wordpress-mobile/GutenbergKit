@@ -71,7 +71,8 @@ class EditorAssetsLibraryTest {
             httpClient = httpClient,
             cachePolicy = cachePolicy,
             storageRoot = storageRoot,
-            coroutineScope = testScope
+            coroutineScope = testScope,
+            tempStorageRoot = tempFolder.newFolder("temp-storage")
         )
     }
 

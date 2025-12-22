@@ -92,6 +92,7 @@ class EditorService(
             cachePolicy: EditorCachePolicy = EditorCachePolicy.Always,
             coroutineScope: CoroutineScope,
             storageRoot: File? = null,
+            tempStorageRoot: File? = null,
             cacheRoot: File? = null
         ): EditorService {
             val client = httpClient ?: EditorHTTPClient(authHeader = configuration.authHeader)
@@ -110,7 +111,8 @@ class EditorService(
                 httpClient = client,
                 cachePolicy = cachePolicy,
                 storageRoot = storageRoot ?: Paths.storageRoot(context, configuration),
-                coroutineScope = coroutineScope
+                coroutineScope = coroutineScope,
+                tempStorageRoot = tempStorageRoot ?: Paths.defaultTempStorageRoot(context)
             )
 
             val sharedPrefs = context.getSharedPreferences("EditorService", Context.MODE_PRIVATE)
@@ -138,6 +140,7 @@ class EditorService(
             cachePolicy: EditorCachePolicy = EditorCachePolicy.Always,
             coroutineScope: CoroutineScope,
             storageRoot: File,
+            tempStorageRoot: File,
             cacheRoot: File
         ): EditorService {
             val restRepository = RESTAPIRepository(
@@ -154,8 +157,8 @@ class EditorService(
                 httpClient = httpClient,
                 cachePolicy = cachePolicy,
                 storageRoot = storageRoot,
-                coroutineScope = coroutineScope
-
+                coroutineScope = coroutineScope,
+                tempStorageRoot = tempStorageRoot
             )
 
             return EditorService(

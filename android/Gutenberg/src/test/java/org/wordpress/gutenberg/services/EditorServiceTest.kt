@@ -57,7 +57,8 @@ class EditorServiceTest {
             httpClient = httpClient,
             storageRoot = storageRoot,
             cacheRoot = cacheRoot,
-            coroutineScope = testScope
+            coroutineScope = testScope,
+            tempStorageRoot = tempFolder.newFolder("temp-storage")
         )
     }
 

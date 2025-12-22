@@ -42,6 +42,10 @@ object Paths {
         return File(File(baseDir, "GutenbergKit"), configuration.siteId)
     }
 
+    fun defaultTempStorageRoot(context: Context): File {
+        return File(context.cacheDir, "GutenbergKit")
+    }
+
     /**
      * Returns the default cache root directory for GutenbergKit.
      *

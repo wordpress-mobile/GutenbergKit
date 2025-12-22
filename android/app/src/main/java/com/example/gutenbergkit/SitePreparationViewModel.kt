@@ -71,7 +71,8 @@ class SitePreparationViewModel(
         val editorService = EditorService.create(
             context = getApplication(),
             configuration = configuration,
-            cachePolicy = EditorCachePolicy.MaxAge(cacheIntervalSeconds)
+            cachePolicy = EditorCachePolicy.MaxAge(cacheIntervalSeconds),
+            coroutineScope = viewModelScope
         )
         prepareEditor(editorService)
     }
@@ -82,7 +83,8 @@ class SitePreparationViewModel(
         val editorService = EditorService.create(
             context = getApplication(),
             configuration = configuration,
-            cachePolicy = EditorCachePolicy.Ignore
+            cachePolicy = EditorCachePolicy.Ignore,
+            coroutineScope = viewModelScope
         )
         prepareEditor(editorService)
     }
@@ -128,7 +130,8 @@ class SitePreparationViewModel(
 
                 val editorService = EditorService.create(
                     context = getApplication(),
-                    configuration = configuration
+                    configuration = configuration,
+                    coroutineScope = viewModelScope
                 )
                 editorService.purge()
 
@@ -156,7 +159,8 @@ class SitePreparationViewModel(
 
                 val editorService = EditorService.create(
                     context = getApplication(),
-                    configuration = configuration
+                    configuration = configuration,
+                    coroutineScope = viewModelScope
                 )
                 val count = editorService.fetchAssetBundleCount()
 
