@@ -126,11 +126,16 @@ data class EditorAssetBundle(
      * The path is constructed by appending the URL's path component to
      * the bundle's root directory.
      *
+     * Note: This method must not be called on [EditorAssetBundle.empty].
+     * In debug builds, an assertion will catch this misuse.
+     *
      * @param url The original asset URL.
      * @return The file where the asset is (or should be) stored.
      * @throws IllegalArgumentException if the URL path would escape the bundle root.
      */
     fun assetDataPath(url: String): File {
+        assert(this != empty) { "Cannot get asset path from empty bundle" }
+
         val urlPath = java.net.URL(url).path
         val resolvedFile = File(bundleRoot, urlPath).canonicalFile
         val bundleRootCanonical = bundleRoot.canonicalFile
