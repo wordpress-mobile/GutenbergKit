@@ -764,6 +764,7 @@ class GutenbergView : WebView {
         autocompleterTriggeredListener = null
         modalDialogStateListener = null
         networkRequestListener = null
+        requestInterceptor = DefaultGutenbergRequestInterceptor()
         handler.removeCallbacksAndMessages(null)
         this.destroy()
     }
