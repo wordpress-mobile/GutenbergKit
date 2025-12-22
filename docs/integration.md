@@ -236,18 +236,26 @@ val configuration = EditorConfiguration.builder()
 
 ### Theme Styles
 
-Apply your site's theme styles to the editor. This requires valid editor settings that provide theme style configuration (colors, typography, etc.) from your WordPress site's block editor settings endpoint or elsewhere.
+Apply your site's theme styles to the editor. This requires valid editor settings (JSON) that provide theme style configuration (colors, typography, etc.) from your WordPress site's block editor settings endpoint (`/wp-block-editor/v1/settings`) or elsewhere.
 
 ```swift
 // iOS
+// Fetch editor settings JSON from your WordPress site
+let editorSettingsJSON = try await fetchEditorSettings()
+
 let configuration = EditorConfigurationBuilder(...)
     .setShouldUseThemeStyles(true)
+    .setEditorSettings(editorSettingsJSON)
     .build()
 ```
 
 ```kotlin
 // Android
+// Fetch editor settings JSON from your WordPress site
+val editorSettingsJSON = fetchEditorSettings()
+
 val configuration = EditorConfiguration.builder()
     .setThemeStyles(true)
+    .setEditorSettings(editorSettingsJSON)
     .build()
 ```
