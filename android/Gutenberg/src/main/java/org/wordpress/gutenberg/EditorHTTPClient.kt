@@ -192,6 +192,10 @@ class EditorHTTPClient(
                 throw e
             }
 
+            // Note: This loads the entire response into memory. This is acceptable because
+            // this method is only used for WordPress REST API responses (editor settings, post
+            // data, themes, etc.) which are expected to be small (KB range). Large assets like
+            // JS/CSS files use the download() method which streams directly to disk.
             val data = response.body?.bytes() ?: ByteArray(0)
             val statusCode = response.code
             val headers = extractHeaders(response)
