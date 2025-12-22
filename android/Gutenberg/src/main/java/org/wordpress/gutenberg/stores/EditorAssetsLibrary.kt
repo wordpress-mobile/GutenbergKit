@@ -193,7 +193,9 @@ class EditorAssetsLibrary(
         )
         bundle.setEditorRepresentation(editorRepresentation)
 
-        // Download all assets concurrently
+        // Download all assets concurrently. If any download fails, the entire operation fails
+        // (fail-fast). This is intentional: a partial bundle would result in a broken editor
+        // experience, so it's better to fail completely and let the caller retry.
         val assets = (manifest.scripts + manifest.styles).filter { isSupportedAsset(it) }
         var completed = 0
 
