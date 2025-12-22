@@ -1,6 +1,6 @@
 # GutenbergKit
 
-An experimental Gutenberg block editor for native iOS and Android apps relying upon web technologies.
+An experimental [Gutenberg](https://github.com/WordPress/gutenberg) block editor for native iOS and Android apps relying upon web technologies.
 
 <img width="320" alt="GutenbergKit running on an iPhone" src="./docs/gutenberg-kit-preview.png">
 
