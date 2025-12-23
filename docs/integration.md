@@ -126,7 +126,33 @@ let editorViewController = EditorViewController(
 
 ### Adding the Library
 
-Add the GutenbergKit library from the `android/Gutenberg/` directory to your project.
+There are two ways to add GutenbergKit to your Android project:
+
+**Option 1: Maven dependency (recommended for production)**
+
+Add the Automattic Maven repository to your `settings.gradle.kts`:
+
+```kotlin
+dependencyResolutionManagement {
+    repositories {
+        maven {
+            url = uri("https://a8c-libs.s3.amazonaws.com/android")
+        }
+    }
+}
+```
+
+Then add the dependency to your `build.gradle.kts`:
+
+```kotlin
+dependencies {
+    implementation("org.wordpress.gutenbergkit:android:<version>")
+}
+```
+
+**Option 2: Local module (for development)**
+
+Include the `android/Gutenberg/` module directly in your project.
 
 ### Basic Setup
 

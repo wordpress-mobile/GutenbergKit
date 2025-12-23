@@ -17,7 +17,7 @@ The architecture consists of three main layers:
 To integrate GutenbergKit into your iOS or Android app, include the package as a dependency:
 
 -   **iOS**: Add the Swift package from the repository root
--   **Android**: Add the Kotlin library from the `android/` directory
+-   **Android**: Add the Kotlin library as a Maven dependency or include the `android/Gutenberg/` module
 
 See the [Integration Guide](./docs/integration.md) for detailed setup instructions and code examples.
 
