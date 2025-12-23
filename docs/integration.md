@@ -23,7 +23,13 @@ This guide covers how to integrate GutenbergKit into your iOS or Android app.
 
 ### Adding the Package
 
-Add the GutenbergKit Swift package from the `ios/` directory to your Xcode project.
+Add GutenbergKit as a Swift Package dependency in Xcode:
+
+1. Go to **File → Add Package Dependencies...**
+2. Enter the GutenbergKit repository URL
+3. Select the `GutenbergKit` library product
+
+Note: The `Package.swift` is at the repository root, not in the `ios/` directory.
 
 ### Basic Setup
 
