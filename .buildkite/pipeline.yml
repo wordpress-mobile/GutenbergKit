@@ -35,5 +35,6 @@ steps:
       plugins: *plugins
 
     - label: ':swift: Test Swift Package'
-      command: make test-swift-package
+      # With the HTML assets in the GutenbergKitResources package and ignored by Git, we need to generated on demand for the moment
+      command: make build && swift test
       plugins: *plugins
