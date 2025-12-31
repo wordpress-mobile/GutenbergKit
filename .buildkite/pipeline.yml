@@ -5,33 +5,8 @@ env:
     IMAGE_ID: $IMAGE_ID
 
 steps:
-    - label: ':react: Build React App'
-      command: make build REFRESH_L10N=1
-      plugins: &plugins
-          - $CI_TOOLKIT_PLUGIN
-          - $NVM_PLUGIN
-
-    - label: ':eslint: Lint React App'
-      command: make lint-js
-      plugins: *plugins
-
     - label: ':javascript: Test JavaScript'
       command: make test-js
-      plugins: *plugins
-
-    - label: ':android: Publish Android Library'
-      command: |
-          make build REFRESH_L10N=1
-          echo "--- :android: Publishing Android Library"
-          ./android/gradlew -p ./android :gutenberg:prepareToPublishToS3 $(prepare_to_publish_to_s3_params) :gutenberg:publish
-      agents:
-          queue: android
-      plugins: *plugins
-
-    - label: ':android: Test Android Library'
-      command: make test-android
-      agents:
-          queue: android
       plugins: *plugins
 
     - label: ':swift: Test Swift Package'
