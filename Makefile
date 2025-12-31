@@ -30,6 +30,7 @@ build: npm-dependencies prep-translations
 	echo "--- :open_file_folder: Copying Build Products into place"
 	rm -rf ./ios/Sources/GutenbergKit/Gutenberg/ ./android/Gutenberg/src/main/assets/
 	cp -r ./dist/. ./ios/Sources/GutenbergKit/Gutenberg/
+	cp -r ./dist/. ./ios/Sources/GutenbergKitResources/Resources/
 	cp -r ./dist/. ./android/Gutenberg/src/main/assets
 
 dev-server: npm-dependencies

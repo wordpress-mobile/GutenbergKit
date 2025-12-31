@@ -16,7 +16,11 @@ let package = Package(
     targets: [
         .target(
             name: "GutenbergKit",
-            dependencies: ["SwiftSoup", "SVGView"],
+            dependencies: [
+                "SwiftSoup",
+                "SVGView",
+                .target(name: "GutenbergKitResources")
+            ],
             path: "ios/Sources/GutenbergKit",
             exclude: [],
             resources: [.copy("Gutenberg")]
@@ -30,5 +34,10 @@ let package = Package(
                 .copy("GutenbergKitTests/Resources/manifest-test-case-1.json")
             ]
         ),
+        .target(
+            name: "GutenbergKitResources",
+            path: "ios/Sources/GutenbergKitResources",
+            resources: [.copy("Resources")]
+        )
     ]
 )
