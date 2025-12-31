@@ -5,34 +5,11 @@ env:
     IMAGE_ID: $IMAGE_ID
 
 steps:
-    - label: ':react: Build React App'
-      command: make build
-      plugins: &plugins
-          - $CI_TOOLKIT_PLUGIN
-          - $NVM_PLUGIN
-
-    - label: ':eslint: Lint React App'
-      command: make lint-js
-      plugins: *plugins
-
     - label: ':javascript: Test JavaScript'
       command: make test-js
-      plugins: *plugins
-
-    - label: ':android: Publish Android Library'
-      command: |
-          make build
-          echo "--- :android: Publishing Android Library"
-          ./android/gradlew -p ./android :gutenberg:prepareToPublishToS3 $(prepare_to_publish_to_s3_params) :gutenberg:publish
-      agents:
-          queue: android
-      plugins: *plugins
-
-    - label: ':android: Test Android Library'
-      command: make test-android
-      agents:
-          queue: android
-      plugins: *plugins
+      plugins: &plugins
+        - $CI_TOOLKIT_PLUGIN
+        - $NVM_PLUGIN
 
     - label: ':swift: Test Swift Package'
       # With the HTML assets in the GutenbergKitResources package and ignored by Git, we need to generated on demand for the moment
