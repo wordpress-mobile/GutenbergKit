@@ -16,7 +16,11 @@ let package = Package(
     targets: [
         .target(
             name: "GutenbergKit",
-            dependencies: ["SwiftSoup", "SVGView"],
+            dependencies: [
+                "SwiftSoup",
+                "SVGView",
+                .target(name: "GutenbergKitResources")
+            ],
             path: "ios/Sources/GutenbergKit",
             exclude: [],
             resources: [.copy("Gutenberg")]
@@ -29,6 +33,12 @@ let package = Package(
             resources: [
                 .process("Resources")
             ]
+        ),
+
+        .target(
+            name: "GutenbergKitResources",
+            path: "ios/Sources/GutenbergKitResources",
+            resources: [.copy("Resources")]
         )
     ]
 )
