@@ -5,7 +5,7 @@ struct EditorView: View {
     private let configuration: EditorConfiguration
     private let dependencies: EditorDependencies?
 
-    @StateObject private var viewModel = EditorViewModel()
+    @State private var viewModel = EditorViewModel()
 
     @Environment(\.dismiss) var dismiss
 
@@ -216,7 +216,8 @@ private struct _EditorView: UIViewControllerRepresentable {
     }
 }
 
-private final class EditorViewModel: ObservableObject {
+@Observable
+private final class EditorViewModel {
     var isModalDialogOpen = false
     var hasUndo = false
     var hasRedo = false
