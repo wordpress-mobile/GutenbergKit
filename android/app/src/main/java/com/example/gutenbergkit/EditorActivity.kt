@@ -2,6 +2,7 @@ package com.example.gutenbergkit
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.ViewGroup
 import android.webkit.WebView
 import android.content.pm.ApplicationInfo
 import androidx.activity.ComponentActivity
@@ -209,6 +210,12 @@ fun EditorScreen(
         AndroidView(
             factory = { context ->
                 GutenbergView(context).apply {
+                    // Explicitly set layoutParams to MATCH_PARENT to ensure proper
+                    // viewport dimension communication to the WebView for CSS units.
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
                     gutenbergViewRef = this
                     setModalDialogStateListener(object : GutenbergView.ModalDialogStateListener {
                         override fun onModalDialogOpened(dialogType: String) {
