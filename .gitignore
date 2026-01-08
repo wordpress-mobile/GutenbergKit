@@ -189,6 +189,9 @@ local.properties
 /android/Gutenberg/src/main/assets/assets
 /android/Gutenberg/src/main/assets/index.html
 /android/Gutenberg/src/main/assets/remote.html
+/ios/Sources/GutenbergKitResources/Resources/assets
+/ios/Sources/GutenbergKitResources/Resources/index.html
+/ios/Sources/GutenbergKitResources/Resources/remote.html
 
 # Disabled removing these files until this is published like Android in CI.
 # /ios/Sources/GutenbergKit/Gutenberg/assets
