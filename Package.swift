@@ -59,7 +59,12 @@ let package = Package(
             ],
             path: "ios/Sources/GutenbergKit",
             exclude: [],
-            resources: [.copy("Gutenberg")]
+            resources: [.copy("Gutenberg")],
+            // Required to allow importing GutenbergKitResources when it's a binary target (XCFramework).
+            // Without this, Swift treats both as "same package" and fails with:
+            // "module was built from a non-package interface"
+            // See: https://developer.apple.com/documentation/packagedescription/target/packageaccess
+            packageAccess: false
         ),
         .testTarget(
             name: "GutenbergKitTests",
