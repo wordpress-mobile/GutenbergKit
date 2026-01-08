@@ -61,8 +61,9 @@ let package = Package(
             exclude: [],
             resources: [.copy("Gutenberg")],
             // Required to allow importing GutenbergKitResources when it's a binary target (XCFramework).
-            // Without this, Swift treats both as "same package" and fails with:
-            // "module was built from a non-package interface"
+            // Without this, Swift fails with "module was built from a non-package interface" because
+            // it treats both targets as same-package but the XCFramework was built for distribution.
+            // Note: This means GutenbergKit source cannot use the `package` access modifier.
             // See: https://developer.apple.com/documentation/packagedescription/target/packageaccess
             packageAccess: false
         ),
