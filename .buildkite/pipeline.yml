@@ -19,3 +19,5 @@ steps:
     - label: ':xcode: Build XCFramework'
       command: make build-resources-xcframework
       plugins: *plugins
+      artifact_paths:
+        - 'build/*.xcframework.zip'
