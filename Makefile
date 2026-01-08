@@ -93,7 +93,7 @@ build-resources-xcframework: build # Build the resources XCFramework
 	@echo "--- :package: Building Gutenberg resources XCFramework"
 	@SWIFT_OPTIMIZATION_LEVEL="${SWIFT_OPTIMIZATION_LEVEL:--O}" ./build_xcframework.sh ${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}
 	@echo "+++ :swift: XCFramework checksum"
-	@swift package compute-checksum "./build/${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}.xcframework.zip"
+	@swift package compute-checksum "./build/${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}-$$(git rev-parse HEAD).xcframework.zip"
 
 .PHONY: local-android-library
 local-android-library: build ## Build the Android library to local Maven

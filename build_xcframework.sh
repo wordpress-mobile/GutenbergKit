@@ -140,9 +140,12 @@ xcodebuild -create-xcframework  \
 cp -r "$PACKAGE_NAME-iphonesimulator.xcarchive/dSYMs" "$PACKAGE_NAME.xcframework/ios-arm64_x86_64-simulator"
 cp -r "$PACKAGE_NAME-iphoneos.xcarchive/dSYMs" "$PACKAGE_NAME.xcframework/ios-arm64"
 
-zip -r "$PACKAGE_NAME.xcframework.zip" "$PACKAGE_NAME.xcframework" > /dev/null
+GIT_SHA=$(git rev-parse HEAD)
+ZIP_NAME="$PACKAGE_NAME-$GIT_SHA.xcframework.zip"
+zip -r "$ZIP_NAME" "$PACKAGE_NAME.xcframework" > /dev/null
 
 # TODO: Remove emoji, print all in green
 echo "✅ XCFramework generated at $(pwd)/$PACKAGE_NAME.xcframework"
+echo "✅ Zip archive: $(pwd)/$ZIP_NAME"
 
 popd > /dev/null
