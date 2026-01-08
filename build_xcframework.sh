@@ -144,8 +144,13 @@ GIT_SHA=$(git rev-parse HEAD)
 ZIP_NAME="$PACKAGE_NAME-$GIT_SHA.xcframework.zip"
 zip -r "$ZIP_NAME" "$PACKAGE_NAME.xcframework" > /dev/null
 
+CHECKSUM=$(swift package compute-checksum "$ZIP_NAME")
+
 # TODO: Remove emoji, print all in green
 echo "✅ XCFramework generated at $(pwd)/$PACKAGE_NAME.xcframework"
 echo "✅ Zip archive: $(pwd)/$ZIP_NAME"
+
+echo "+++ :swift: XCFramework checksum"
+echo "$CHECKSUM"
 
 popd > /dev/null
