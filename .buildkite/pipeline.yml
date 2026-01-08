@@ -13,3 +13,7 @@ steps:
       # With the HTML assets in the GutenbergKitResources package and ignored by Git, we need to generated on demand for the moment
       command: make build && swift test
       plugins: *plugins
+
+    - label: ':xcode: Build XCFramework'
+      command: make build-resources-xcframework
+      plugins: *plugins
