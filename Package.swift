@@ -11,7 +11,12 @@ let package = Package(
         // Required to be defined here even though it's not meant for
         // standalone use so that xcodebuild can generate a scheme for it to use to
         // generate the XCFramework
-        .library(name: "GutenbergKitResources", targets: ["GutenbergKitResources"])
+        .library(
+            name: "GutenbergKitResources",
+            // Required for XCFramework generation
+            type: .dynamic,
+            targets: ["GutenbergKitResources"]
+        )
     ],
     dependencies: [
         .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.5"),
