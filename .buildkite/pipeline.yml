@@ -7,7 +7,9 @@ env:
 steps:
     - label: ':javascript: Test JavaScript'
       command: make test-js
-      plugins: *plugins
+      plugins: &plugins
+        - $CI_TOOLKIT_PLUGIN
+        - $NVM_PLUGIN
 
     - label: ':swift: Test Swift Package'
       # With the HTML assets in the GutenbergKitResources package and ignored by Git, we need to generated on demand for the moment
