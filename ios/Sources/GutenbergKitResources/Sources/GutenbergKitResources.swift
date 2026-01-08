@@ -1,6 +1,6 @@
 import Foundation
 
-struct GutenbergKitResources {
+public struct GutenbergKitResources {
 
     /// Loads the Gutenberg CSS from the bundled assets.
     public static func loadGutenbergCSS() -> String? {
