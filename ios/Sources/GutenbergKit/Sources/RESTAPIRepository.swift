@@ -8,7 +8,7 @@ import Foundation
 /// and returned on subsequent requests to improve loading performance.
 public struct RESTAPIRepository: Sendable {
 
-    package let httpClient: EditorHTTPClientProtocol
+    internal let httpClient: EditorHTTPClientProtocol
     private let configuration: EditorConfiguration
     private let cache: EditorURLCache
 
@@ -89,11 +89,11 @@ public struct RESTAPIRepository: Sendable {
 
     // MARK: GET Post Type
     @discardableResult
-    package func fetchPostType(for type: String) async throws -> EditorURLResponse {
+    internal func fetchPostType(for type: String) async throws -> EditorURLResponse {
         try await self.perform(method: .GET, url: self.buildPostTypeUrl(type: type))
     }
 
-    package func readPostType(for type: String) throws -> EditorURLResponse? {
+    internal func readPostType(for type: String) throws -> EditorURLResponse? {
         try self.cache.response(for: buildPostTypeUrl(type: type), httpMethod: .GET)
     }
 
@@ -107,31 +107,31 @@ public struct RESTAPIRepository: Sendable {
 
     // MARK: GET Active Theme
     @discardableResult
-    package func fetchActiveTheme() async throws -> EditorURLResponse {
+    internal func fetchActiveTheme() async throws -> EditorURLResponse {
         try await self.perform(method: .GET, url: self.activeThemeUrl)
     }
 
-    package func readActiveTheme() throws -> EditorURLResponse? {
+    internal func readActiveTheme() throws -> EditorURLResponse? {
         try self.cache.response(for: self.activeThemeUrl, httpMethod: .GET)
     }
 
     // MARK: OPTIONS Settings
     @discardableResult
-    package func fetchSettingsOptions() async throws -> EditorURLResponse {
+    internal func fetchSettingsOptions() async throws -> EditorURLResponse {
         try await self.perform(method: .OPTIONS, url: self.siteSettingsUrl)
     }
 
-    package func readSettingsOptions() throws -> EditorURLResponse? {
+    internal func readSettingsOptions() throws -> EditorURLResponse? {
         try self.cache.response(for: self.siteSettingsUrl, httpMethod: .OPTIONS)
     }
 
     // MARK: Post Types
     @discardableResult
-    package func fetchPostTypes() async throws -> EditorURLResponse {
+    internal func fetchPostTypes() async throws -> EditorURLResponse {
         try await self.perform(method: .GET, url: self.postTypesUrl)
     }
 
-    package func readPostTypes() throws -> EditorURLResponse? {
+    internal func readPostTypes() throws -> EditorURLResponse? {
         try self.cache.response(for: self.postTypesUrl, httpMethod: .GET)
     }
 

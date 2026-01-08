@@ -47,7 +47,7 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
   /// Don't make HTTP requests
   public let isOfflineModeEnabled: Bool
   /// A site ID derived from the URL that can be used in file system paths
-  package let siteId: String
+  internal let siteId: String
 
   /// Deliberately non-public – consumers should use `EditorConfigurationBuilder` to construct a configuration
   init(
@@ -125,11 +125,11 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
     )
   }
 
-  package var escapedTitle: String {
+  internal var escapedTitle: String {
     title.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
   }
 
-  package var escapedContent: String {
+  internal var escapedContent: String {
     content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
   }
 }

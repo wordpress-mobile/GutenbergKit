@@ -39,7 +39,7 @@ public struct EditorURLCache: Sendable {
         try self.store(response, for: url, httpMethod: httpMethod, currentDate: .now)
     }
 
-    package func store(
+    internal func store(
         _ response: EditorURLResponse,
         for url: URL,
         httpMethod: EditorHttpMethod,
@@ -82,7 +82,7 @@ public struct EditorURLCache: Sendable {
         try self.store(fileAt: path, headers: headers, for: url, httpMethod: httpMethod, currentDate: .now)
     }
 
-    package func store(
+    internal func store(
         fileAt path: URL,
         headers: EditorHTTPHeaders,
         for url: URL,
@@ -119,7 +119,7 @@ public struct EditorURLCache: Sendable {
         try self.response(for: url, httpMethod: httpMethod, currentDate: .now) != nil
     }
 
-    package func hasData(for url: URL, httpMethod: EditorHttpMethod, currentDate: Date) throws -> Bool {
+    internal func hasData(for url: URL, httpMethod: EditorHttpMethod, currentDate: Date) throws -> Bool {
         try self.response(for: url, httpMethod: httpMethod, currentDate: currentDate) != nil
     }
 
@@ -134,7 +134,7 @@ public struct EditorURLCache: Sendable {
         try self.response(for: url, httpMethod: httpMethod, currentDate: .now)
     }
 
-    package func response(
+    internal func response(
         for url: URL,
         httpMethod: EditorHttpMethod,
         currentDate: Date

@@ -36,7 +36,7 @@ public actor EditorAssetLibrary {
     ///
     /// Applications should periodically check for a new editor manifest. This can be very expensive, so this method defaults to returning an existing one on-disk.
     ///
-    package func fetchManifest() async throws -> LocalEditorAssetManifest {
+    internal func fetchManifest() async throws -> LocalEditorAssetManifest {
         guard configuration.shouldUsePlugins else { return .empty }
         let data = try await httpClient.perform(
             URLRequest(method: .GET, url: self.editorAssetsUrl(for: self.configuration))
@@ -83,13 +83,13 @@ public actor EditorAssetLibrary {
     
     /// Checks whether a bundle with the given manifest checksum exists on disk.
     ///
-    package func hasBundle(forManifestChecksum checksum: String) -> Bool {
+    internal func hasBundle(forManifestChecksum checksum: String) -> Bool {
         FileManager.default.directoryExists(at: self.bundleRoot(for: checksum))
     }
     
     /// Retrieves an existing bundle from disk if one exists for the given manifest checksum.
     ///
-    package func existingBundle(forManifestChecksum checksum: String) throws -> EditorAssetBundle? {
+    internal func existingBundle(forManifestChecksum checksum: String) throws -> EditorAssetBundle? {
         guard self.hasBundle(forManifestChecksum: checksum) else {
             return nil
         }
@@ -103,7 +103,7 @@ public actor EditorAssetLibrary {
     ///
     /// Assets are downloaded concurrently and stored in a temporary directory. Once all downloads
     /// complete successfully, the bundle is atomically moved to its final location.
-    package func buildBundle(
+    internal func buildBundle(
         for manifest: LocalEditorAssetManifest,
         progress: EditorProgressCallback? = nil
     ) async throws -> EditorAssetBundle {
