@@ -2,22 +2,49 @@
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
+import Foundation
 
-let package = Package(
-    name: "GutenbergKit",
-    platforms: [.iOS(.v17), .macOS(.v14)],
-    products: [
-        .library(name: "GutenbergKit", targets: ["GutenbergKit"]),
-        // Required to be defined here even though it's not meant for
-        // standalone use so that xcodebuild can generate a scheme for it to use to
-        // generate the XCFramework
+// Set GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES=1 to build resources from source instead of using the pre-built XCFramework
+let useLocalResources = ProcessInfo.processInfo.environment["GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES"] != nil
+
+// TODO: This has been manually uploaded, we'll need automation to both upload and update the URL and checksum
+let xcframeworkURL = "https://cdn.a8c-ci.services/gutenbergkit/GutenbergKitResources.xcframework.zip"
+let xcframeworkChecksum = "57a6cfa631ca343651ef46ad8a7bd16832ab5dd721d6ff228a3dcd3eacb82eba"
+
+// Only expose GutenbergKitResources as a product when building from source (needed for XCFramework generation)
+let resourcesProducts: [Product] = useLocalResources
+    ? [
         .library(
             name: "GutenbergKitResources",
             // Required for XCFramework generation
             type: .dynamic,
             targets: ["GutenbergKitResources"]
         )
-    ],
+    ]
+    : []
+
+let resourcesTargets: [Target] = useLocalResources
+    ? [
+        .target(
+            name: "GutenbergKitResources",
+            path: "ios/Sources/GutenbergKitResources",
+            resources: [.copy("Resources")]
+        )
+    ]
+    : [
+        .binaryTarget(
+            name: "GutenbergKitResources",
+            url: xcframeworkURL,
+            checksum: xcframeworkChecksum
+        )
+    ]
+
+let package = Package(
+    name: "GutenbergKit",
+    platforms: [.iOS(.v17), .macOS(.v14)],
+    products: [
+        .library(name: "GutenbergKit", targets: ["GutenbergKit"]),
+    ] + resourcesProducts,
     dependencies: [
         .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.5"),
         .package(url: "https://github.com/exyte/SVGView.git", from: "1.0.6"),
@@ -43,11 +70,5 @@ let package = Package(
                 .process("Resources")
             ]
         ),
-
-        .target(
-            name: "GutenbergKitResources",
-            path: "ios/Sources/GutenbergKitResources",
-            resources: [.copy("Resources")]
-        )
-    ]
+    ] + resourcesTargets
 )
