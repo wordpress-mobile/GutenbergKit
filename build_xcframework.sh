@@ -42,6 +42,8 @@ build_framework() {
     local destination="$2"
     local scheme="$3"
 
+    echo "--- Build framework for $scheme $sdk $destination"
+
     local XCODEBUILD_ARCHIVE_PATH="./build/$scheme-$sdk.xcarchive"
 
     rm -rf "$XCODEBUILD_ARCHIVE_PATH"
@@ -88,6 +90,8 @@ build_framework() {
 copy_resource_bundles() {
     local sdk="$1"
     local scheme="$2"
+
+    echo "--- Copy resource bundles for $scheme $sdk"
 
     local XCODEBUILD_ARCHIVE_PATH="./build/$scheme-$sdk.xcarchive"
     local FRAMEWORK_PATH="$XCODEBUILD_ARCHIVE_PATH/Products/Library/Frameworks/$scheme.framework"
