@@ -1,6 +1,7 @@
 .DEFAULT_GOAL := help
 
 SIMULATOR_DESTINATION := OS=26.0,name=iPhone 17
+GUTENBERG_RESOURCES_XCFRAMEWORK_NAME := GutenbergKitResources
 
 .PHONY: help
 help: ## Display this help menu
@@ -76,12 +77,19 @@ build: npm-dependencies prep-translations ## Build the project for all platforms
 	@echo "--- :open_file_folder: Copying Build Products into place"
 	rm -rf ./ios/Sources/GutenbergKit/Gutenberg/ ./android/Gutenberg/src/main/assets/
 	cp -r ./dist/. ./ios/Sources/GutenbergKit/Gutenberg/
-	cp -r ./dist/. ./ios/Sources/GutenbergKitResources/Resources/
+	cp -r ./dist/. "./ios/Sources/${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}/Resources/"
 	cp -r ./dist/. ./android/Gutenberg/src/main/assets
 
 .PHONY: build-swift-package
-build-swift-package: build ## Build the Swift package for iOS
+build-swift-package: build-resources-xcframework ## Build the Swift package for iOS
 	$(call XCODEBUILD_CMD, build)
+
+.PHONY: build-resources-xcframework
+build-resources-xcframework: build # Build the resources XCFramework
+	@echo "--- :package: Building Gutenberg resources XCFramework"
+	@SWIFT_OPTIMIZATION_LEVEL="${SWIFT_OPTIMIZATION_LEVEL:--O}" ./build_xcframework.sh ${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}
+	@echo "+++ :swift: XCFramework checksum"
+	@swift package compute-checksum "./build/${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}.xcframework.zip"
 
 .PHONY: local-android-library
 local-android-library: build ## Build the Android library to local Maven
