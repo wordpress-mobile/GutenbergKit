@@ -64,6 +64,9 @@ build_framework() {
         INSTALL_PATH='Library/Frameworks' \
         SWIFT_OPTIMIZATION_LEVEL="$SWIFT_OPTIMIZATION_LEVEL" \
         OTHER_SWIFT_FLAGS=-no-verify-emitted-module-interface \
+        CODE_SIGN_IDENTITY="-" \
+        CODE_SIGNING_REQUIRED=NO \
+        CODE_SIGNING_ALLOWED=NO \
         | xcbeautify
 
     if [ "$sdk" = "macosx" ]; then
