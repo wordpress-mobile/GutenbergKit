@@ -1,6 +1,10 @@
 SIMULATOR_DESTINATION := OS=26.0,name=iPhone 17
 GUTENBERG_RESOURCES_XCFRAMEWORK_NAME := GutenbergKitResources
 
+# Use local resources instead of pre-built XCFramework for Swift package.
+# After all, this is the automation that builds the XCFramework, among others.
+export GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES := 1
+
 define XCODEBUILD_CMD
 	@set -o pipefail && \
 		xcodebuild $(1) \
