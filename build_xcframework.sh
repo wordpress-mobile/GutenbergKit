@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+# Colors for output
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
 # Originally sourced from:
 # https://github.com/OpenSwiftUIProject/ProtobufKit/blob/937eae5426277bec040c7f99bc8e1498c30ed467/Scripts/build_xcframework.sh
 #
@@ -146,9 +150,8 @@ zip -r "$ZIP_NAME" "$PACKAGE_NAME.xcframework" > /dev/null
 
 CHECKSUM=$(swift package compute-checksum "$ZIP_NAME")
 
-# TODO: Remove emoji, print all in green
-echo "✅ XCFramework generated at $(pwd)/$PACKAGE_NAME.xcframework"
-echo "✅ Zip archive: $(pwd)/$ZIP_NAME"
+echo -e "${GREEN}XCFramework generated at $(pwd)/$PACKAGE_NAME.xcframework${NC}"
+echo -e "${GREEN}Zip archive: $(pwd)/$ZIP_NAME${NC}"
 
 echo "+++ :swift: XCFramework checksum"
 echo "$CHECKSUM"
