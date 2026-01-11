@@ -33,10 +33,11 @@ build: npm-dependencies prep-translations
 
 	# Copy build products into place
 	echo "--- :open_file_folder: Copying Build Products into place"
-	rm -rf ./ios/Sources/GutenbergKit/Gutenberg/ ./android/Gutenberg/src/main/assets/
-	cp -r ./dist/. ./ios/Sources/GutenbergKit/Gutenberg/
-	cp -r ./dist/. "./ios/Sources/${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}/Resources/"
+	rm -rf ./android/Gutenberg/src/main/assets/
 	cp -r ./dist/. ./android/Gutenberg/src/main/assets
+	rm -rf "./ios/Sources/${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}/Resources/"
+	cp -r ./dist/. "./ios/Sources/${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}/Resources/"
+	touch "./ios/Sources/${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}/Resources/.gitkeep"
 
 
 .PHONY: build-swift-package
