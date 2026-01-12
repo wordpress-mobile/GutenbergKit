@@ -84,6 +84,9 @@ build-swift-package: build
 test-swift-package: build
 	$(call XCODEBUILD_CMD, test)
 
+test-swift-package-no-build:
+	$(call XCODEBUILD_CMD, test)
+
 release:
 	@echo "--- :rocket: Starting GutenbergKit Release Process"
 	@echo "Usage: make release VERSION_TYPE=[<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease | from-git] [DRY_RUN=true]"
