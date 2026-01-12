@@ -2,6 +2,7 @@
 import SwiftUI
 import Combine
 import CryptoKit
+import GutenbergKitResources
 
 #if canImport(UIKit)
 import UIKit
@@ -115,8 +116,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         if let editorURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
             webView.load(URLRequest(url: editorURL))
         } else {
-            let indexURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
-            webView.loadFileURL(indexURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+            webView.loadFileURL(
+                GutenbergKitResources.indexURL(),
+                allowingReadAccessTo: GutenbergKitResources.resourcesURL()
+            )
         }
     }
 
