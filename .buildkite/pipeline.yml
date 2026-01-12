@@ -12,7 +12,7 @@ steps:
         - $NVM_PLUGIN
 
     - label: ':swift: Test Swift Package'
-      command: make test-swift-package
+      command: GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES=1 make test-swift-package
       plugins: *plugins
 
     - label: ':swift: Test Swift Package with XCFramework (hardcoded)'
