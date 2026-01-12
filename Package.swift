@@ -8,10 +8,9 @@ import Foundation
 let useLocalResources = ProcessInfo.processInfo.environment["GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES"] != nil
 
 // TODO: This has been manually uploaded, we'll need automation to both upload and update the URL and checksum
-let revision = "e0c9c4d8df3d6fc607e5011f1fbdf1791159c5b3"
+let revision = "ce2527a6b79cbf55f3878fc96636452174e6942b"
+let xcframeworkChecksum = "f5d1d1d92578cba8a9a6a58c5e23238ce8391c7662e2881243d41af0001adedc"
 let xcframeworkURL = "https://cdn.a8c-ci.services/gutenbergkit/GutenbergKitResources-\(revision).xcframework.zip"
-
-let xcframeworkChecksum = "270fb3f8a4b1db7be8a29f5c7a28dd5ce2127a2072c0e1bf95b7ddae7e8d7f9c"
 
 // Only expose GutenbergKitResources as a product when building from source (needed for XCFramework generation)
 let resourcesProducts: [Product] = useLocalResources
