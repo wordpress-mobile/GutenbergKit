@@ -195,11 +195,6 @@ local.properties
 /ios/Sources/GutenbergKitResources/Resources/index.html
 /ios/Sources/GutenbergKitResources/Resources/remote.html
 
-# Disabled removing these files until this is published like Android in CI.
-# /ios/Sources/GutenbergKit/Gutenberg/assets
-# /ios/Sources/GutenbergKit/Gutenberg/index.html
-# /ios/Sources/GutenbergKit/Gutenberg/remote.html
-
 # Translation files
 src/translations/
 
