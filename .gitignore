@@ -4,7 +4,6 @@
 ## Build generated
 build/
 DerivedData
-.swiftpm/
 UserInterfaceState.xcuserstate
 
 ## Various settings
@@ -37,9 +36,12 @@ playground.xcworkspace
 #
 # Add this line if you want to avoid checking in source code from Swift Package Manager dependencies.
 # Packages/
-
 .build/
-.swiftpm
+.swiftpm/*
+# To track xcshareddata, we also need rules for its parent folder
+!.swiftpm/xcode/
+.swiftpm/xcode/*
+!.swiftpm/xcode/xcshareddata/
 
 # Logs
 logs
