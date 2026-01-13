@@ -24,7 +24,8 @@ npm-dependencies:
 	fi
 
 ruby-dependencies:
-	@if [ "$(BUILDKITE)" == "1" ]; then \
+	@if [ "$(BUILDKITE)" == "true" ]; then \
+		echo "--- :ruby: Installing Ruby Dependencies"; \
 		install_gems; \
 	else \
 		bundle install; \
@@ -63,7 +64,7 @@ REVISION ?= $(or $(BUILDKITE_COMMIT),$(shell git rev-parse HEAD))
 
 .PHONY: publish-resources-xcframework
 publish-resources-xcframework: ruby-dependencies build-resources-xcframework
-  bundle exec fastlane publish_to_s3 version:$(REVISION)
+	@bundle exec fastlane publish_to_s3 version:$(REVISION)
 
 CHECKSUM ?= $(shell cat build/GutenbergKit.xcframework.zip.checksum.txt)
 
