@@ -24,3 +24,4 @@ steps:
       plugins: *plugins
       artifact_paths:
         - 'build/*.xcframework.zip'
+        - 'build/*.checksum.txt'

@@ -150,6 +150,8 @@ zip -r "$ZIP_NAME" "$PACKAGE_NAME.xcframework" > /dev/null
 
 CHECKSUM=$(swift package compute-checksum "$ZIP_NAME")
 
+echo "$CHECKSUM" > "$ZIP_NAME.checksum.txt"
+
 echo -e "${GREEN}XCFramework generated at $(pwd)/$PACKAGE_NAME.xcframework${NC}"
 echo -e "${GREEN}Zip archive: $(pwd)/$ZIP_NAME${NC}"
 
