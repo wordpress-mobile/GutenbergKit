@@ -16,10 +16,10 @@ lane :publish_to_s3 do |version:|
   files.each do |file_name|
     upload_to_s3(
       bucket: 'a8c-apps-public-artifacts',
-      key: File.join(key_root, file_name)
+      key: File.join(key_root, file_name),
       file: File.join(PROJECT_ROOT, 'build', file_name),
-        auto_prefix: false,
-        if_exists: :fail
+      auto_prefix: false,
+      if_exists: :fail
     )
   end
 end
