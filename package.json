@@ -40,7 +40,7 @@
 		"@wordpress/i18n": "^6.9.0",
 		"@wordpress/icons": "^11.3.0",
 		"@wordpress/preferences": "^4.36.0",
-		"@wordpress/preferences-persistence": "^2.36.0",
+		"@wordpress/preferences-persistence": "^2.37.0",
 		"@wordpress/private-apis": "^1.36.0",
 		"@wordpress/rich-text": "^7.36.0",
 		"@wordpress/style-engine": "^2.36.0",
