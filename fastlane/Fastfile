@@ -1,0 +1,25 @@
+# frozen_string_literal: true
+
+PROJECT_ROOT = File.expand_path('..', __dir__)
+
+lane :publish_to_s3 do |version:|
+  identifier = version || last_git_commit[:commit_hash]
+
+  UI.message("Uploading XCFramework to S3 with identifier #{identifier}")
+
+  key_root = File.join('gutenbergkit', identifier)
+
+  xcframework_name = 'GutenbergKit.xcframework.zip'
+
+  files = [xcframework_name, "#{xcframework_name}.checksum.txt"]
+
+  files.each do |file_name|
+    upload_to_s3(
+      bucket: 'a8c-apps-public-artifacts',
+      key: File.join(key_root, file_name)
+      file: File.join(PROJECT_ROOT, 'build', file_name),
+        auto_prefix: false,
+        if_exists: :fail
+    )
+  end
+end

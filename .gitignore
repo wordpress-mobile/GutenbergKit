@@ -200,3 +200,8 @@ src/translations/
 
 # Claude
 .claude/settings.local.json
+
+# Ruby tooling
+.bundle
+vendor/bundle
+fastlane/report.xml
