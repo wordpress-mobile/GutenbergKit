@@ -50,31 +50,6 @@ build: npm-dependencies prep-translations
 	cp -r ./dist/. "./ios/Sources/${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}/Resources/"
 	touch "./ios/Sources/${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}/Resources/.gitkeep"
 
-
-.PHONY: build-swift-package
-build-swift-package: build-resources-xcframework ## Build the Swift package for iOS
-	$(call XCODEBUILD_CMD, build)
-
-.PHONY: build-resources-xcframework
-build-resources-xcframework: build # Build the resources XCFramework
-	@echo "--- :package: Building Gutenberg resources XCFramework"
-	@SWIFT_OPTIMIZATION_LEVEL="${SWIFT_OPTIMIZATION_LEVEL:--O}" ./build_xcframework.sh ${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}
-
-REVISION ?= $(or $(BUILDKITE_COMMIT),$(shell git rev-parse HEAD))
-
-.PHONY: publish-resources-xcframework
-publish-resources-xcframework: ruby-dependencies build-resources-xcframework
-	@echo "--- :s3: Uploading XCFramework to S3"
-	@bundle exec fastlane publish_to_s3 version:$(REVISION)
-
-CHECKSUM ?= $(shell cat build/${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}.xcframework.zip.checksum.txt)
-
-.PHONY: update-xcframework-reference
-update-xcframework-reference:
-	@echo "Updating Package.swift with revision=$(REVISION) checksum=$(CHECKSUM)..."
-	@sed -i '' 's/let revision = ".*"/let revision = "$(REVISION)"/' Package.swift
-	@sed -i '' 's/let xcframeworkChecksum = ".*"/let xcframeworkChecksum = "$(CHECKSUM)"/' Package.swift
-
 dev-server: npm-dependencies
 	npm run dev
 
@@ -101,8 +76,29 @@ test-android:
 	echo "--- :android: Running Android Tests"
 	./android/gradlew -p ./android :gutenberg:test
 
-build-swift-package: build
+.PHONY: build-swift-package
+build-swift-package: build-resources-xcframework ## Build the Swift package for iOS
 	$(call XCODEBUILD_CMD, build)
+
+.PHONY: build-resources-xcframework
+build-resources-xcframework: build # Build the resources XCFramework
+	@echo "--- :package: Building Gutenberg resources XCFramework"
+	@SWIFT_OPTIMIZATION_LEVEL="${SWIFT_OPTIMIZATION_LEVEL:--O}" ./build_xcframework.sh ${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}
+
+REVISION ?= $(or $(BUILDKITE_COMMIT),$(shell git rev-parse HEAD))
+
+.PHONY: publish-resources-xcframework
+publish-resources-xcframework: ruby-dependencies build-resources-xcframework
+	@echo "--- :s3: Uploading XCFramework to S3"
+	@bundle exec fastlane publish_to_s3 version:$(REVISION)
+
+CHECKSUM ?= $(shell cat build/${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}.xcframework.zip.checksum.txt)
+
+.PHONY: update-xcframework-reference
+update-xcframework-reference:
+	@echo "Updating Package.swift with revision=$(REVISION) checksum=$(CHECKSUM)..."
+	@sed -i '' 's/let revision = ".*"/let revision = "$(REVISION)"/' Package.swift
+	@sed -i '' 's/let xcframeworkChecksum = ".*"/let xcframeworkChecksum = "$(CHECKSUM)"/' Package.swift
 
 test-swift-package: build
 	$(call XCODEBUILD_CMD, test)
