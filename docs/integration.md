@@ -291,3 +291,43 @@ val configuration = EditorConfiguration.builder()
     .setEditorSettings(editorSettingsJSON)
     .build()
 ```
+
+### AJAX Support
+
+Some Gutenberg blocks and features use WordPress AJAX (`admin-ajax.php`) for functionality like form submissions. GutenbergKit supports AJAX requests when properly configured.
+
+**Requirements:**
+
+1. **Production bundle required**: AJAX requests fail with CORS errors when using the development server because the editor runs on `localhost` while AJAX requests target your WordPress site. You must use a production bundle built with `make build`.
+
+2. **Configure `siteURL`**: The `siteURL` configuration option must be set to your WordPress site URL. This is used to construct the AJAX endpoint (`{siteURL}/wp-admin/admin-ajax.php`).
+
+3. **Set authentication header**: The `authHeader` configuration must be set. GutenbergKit injects this header into all AJAX requests since the WebView lacks WordPress authentication cookies.
+
+4. **Android: Configure `assetLoaderDomain`**: On Android, you must set the `assetLoaderDomain` to a domain that your WordPress site/plugin allows. This is because Android's WebViewAssetLoader serves the editor from a configurable domain, and AJAX requests must pass CORS validation on your server.
+
+   For example, the Jetpack mobile plugin allows requests from `android-app-assets.jetpack.com`:
+
+```swift
+// iOS - siteURL and authHeader are required
+let configuration = EditorConfigurationBuilder(
+    postType: "post",
+    siteURL: URL(string: "https://example.com")!,
+    siteApiRoot: URL(string: "https://example.com/wp-json")!
+)
+    .setAuthHeader("Bearer your-token")
+    .build()
+```
+
+```kotlin
+// Android - assetLoaderDomain is also required for AJAX
+val configuration = EditorConfiguration.builder()
+    .setPostType("post")
+    .setSiteURL("https://example.com")
+    .setSiteApiRoot("https://example.com/wp-json")
+    .setAuthHeader("Bearer your-token")
+    .setAssetLoaderDomain("android-app-assets.jetpack.com") // Must be allowed by your WordPress site
+    .build()
+```
+
+**Server-side CORS configuration**: Your WordPress site must include the `assetLoaderDomain` in its CORS allowed origins. This is typically handled by your WordPress plugin (e.g., Jetpack) that integrates with the mobile app.
