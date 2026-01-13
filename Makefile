@@ -85,6 +85,14 @@ build-resources-xcframework: build # Build the resources XCFramework
 	@echo "--- :package: Building Gutenberg resources XCFramework"
 	@SWIFT_OPTIMIZATION_LEVEL="${SWIFT_OPTIMIZATION_LEVEL:--O}" ./build_xcframework.sh ${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}
 
+test-swift-package: build
+	$(call XCODEBUILD_CMD, test)
+
+# Notice no build dependency because all assets come from XCFramework
+test-swift-package-with-xcframework: export GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES = 0
+test-swift-package-with-xcframework:
+	$(call XCODEBUILD_CMD, test)
+
 REVISION ?= $(or $(BUILDKITE_COMMIT),$(shell git rev-parse HEAD))
 
 .PHONY: publish-resources-xcframework
@@ -99,14 +107,6 @@ update-xcframework-reference:
 	@echo "Updating Package.swift with revision=$(REVISION) checksum=$(CHECKSUM)..."
 	@sed -i '' 's/let revision = ".*"/let revision = "$(REVISION)"/' Package.swift
 	@sed -i '' 's/let xcframeworkChecksum = ".*"/let xcframeworkChecksum = "$(CHECKSUM)"/' Package.swift
-
-test-swift-package: build
-	$(call XCODEBUILD_CMD, test)
-
-# Notice no build dependency because all assets come from XCFramework
-test-swift-package-with-xcframework: export GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES = 0
-test-swift-package-with-xcframework:
-	$(call XCODEBUILD_CMD, test)
 
 release:
 	@echo "--- :rocket: Starting GutenbergKit Release Process"
