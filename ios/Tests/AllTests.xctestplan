@@ -1,0 +1,32 @@
+{
+  "configurations" : [
+    {
+      "id" : "9106515C-F10B-4413-BFD3-3031C2E0A06F",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "performanceAntipatternCheckerEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : false,
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "GutenbergKitTests",
+        "name" : "GutenbergKitTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "GutenbergKitResourcesTests",
+        "name" : "GutenbergKitResourcesTests"
+      }
+    }
+  ],
+  "version" : 1
+}
