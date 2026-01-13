@@ -2,7 +2,7 @@
 
 PROJECT_ROOT = File.expand_path('..', __dir__)
 
-lane :publish_to_s3 do |version:|
+lane :publish_to_s3 do |version: nil|
   identifier = version || last_git_commit[:commit_hash]
 
   UI.message("Uploading XCFramework to S3 with identifier #{identifier}")
