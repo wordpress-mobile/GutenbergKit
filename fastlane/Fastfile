@@ -9,7 +9,7 @@ lane :publish_to_s3 do |version: nil|
 
   key_root = File.join('gutenbergkit', identifier)
 
-  xcframework_name = 'GutenbergKit.xcframework.zip'
+  xcframework_name = 'GutenbergKitResources.xcframework.zip'
 
   files = [xcframework_name, "#{xcframework_name}.checksum.txt"]
 
