@@ -15,13 +15,18 @@ steps:
       command: GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES=1 make test-swift-package
       plugins: *plugins
 
-    - label: ':swift: Test Swift Package with XCFramework (hardcoded)'
-      command: make test-swift-package-no-build
-      plugins: *plugins
-
     - label: ':xcode: Publish XCFramework'
+      key: publish-xcframework
       command: make publish-resources-xcframework
       plugins: *plugins
       artifact_paths:
         - 'build/*.xcframework.zip'
         - 'build/*.checksum.txt'
+
+    - label: ':swift: Test Swift Package with XCFramework'
+      depends_on: publish-xcframework
+      command:
+        buildkite-agent download build/*.checksum.txt .
+        make update-xcframework-reference
+        make test-swift-package-no-build
+      plugins: *plugins
