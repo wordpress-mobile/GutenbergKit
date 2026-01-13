@@ -144,8 +144,7 @@ xcodebuild -create-xcframework  \
 cp -r "$PACKAGE_NAME-iphonesimulator.xcarchive/dSYMs" "$PACKAGE_NAME.xcframework/ios-arm64_x86_64-simulator"
 cp -r "$PACKAGE_NAME-iphoneos.xcarchive/dSYMs" "$PACKAGE_NAME.xcframework/ios-arm64"
 
-GIT_SHA=$(git rev-parse HEAD)
-ZIP_NAME="$PACKAGE_NAME-$GIT_SHA.xcframework.zip"
+ZIP_NAME="$PACKAGE_NAME.xcframework.zip"
 zip -r "$ZIP_NAME" "$PACKAGE_NAME.xcframework" > /dev/null
 
 CHECKSUM=$(swift package compute-checksum "$ZIP_NAME")

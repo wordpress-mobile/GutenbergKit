@@ -23,6 +23,13 @@ npm-dependencies:
 		npm ci; \
 	fi
 
+ruby-dependencies:
+	@if [ "$(BUILDKITE)" == "1" ]; then \
+		install_gems; \
+	else \
+		bundle install; \
+	fi
+
 prep-translations:
 	@if [ "$(SKIP_L10N)" != "true" ] && [ "$(SKIP_L10N)" != "1" ]; then \
 		echo "--- :npm: Preparing Translations"; \
@@ -51,6 +58,10 @@ build-swift-package: build-resources-xcframework ## Build the Swift package for 
 build-resources-xcframework: build # Build the resources XCFramework
 	@echo "--- :package: Building Gutenberg resources XCFramework"
 	@SWIFT_OPTIMIZATION_LEVEL="${SWIFT_OPTIMIZATION_LEVEL:--O}" ./build_xcframework.sh ${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}
+
+.PHONY: publish-resources-xcframework
+publish-resources-xcframework: ruby-dependencies build-resources-xcframework
+	bundle exec fastlane publish_to_s3
 
 dev-server: npm-dependencies
 	npm run dev

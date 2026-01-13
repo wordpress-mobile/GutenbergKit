@@ -19,8 +19,8 @@ steps:
       command: make test-swift-package-no-build
       plugins: *plugins
 
-    - label: ':xcode: Build XCFramework'
-      command: make build-resources-xcframework
+    - label: ':xcode: Publish XCFramework'
+      command: make publish-resources-xcframework
       plugins: *plugins
       artifact_paths:
         - 'build/*.xcframework.zip'
