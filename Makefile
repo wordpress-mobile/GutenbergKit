@@ -67,7 +67,7 @@ publish-resources-xcframework: ruby-dependencies build-resources-xcframework
 	@echo "--- :s3: Uploading XCFramework to S3"
 	@bundle exec fastlane publish_to_s3 version:$(REVISION)
 
-CHECKSUM ?= $(shell cat build/GutenbergKit.xcframework.zip.checksum.txt)
+CHECKSUM ?= $(shell cat build/${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}.xcframework.zip.checksum.txt)
 
 .PHONY: update-xcframework-reference
 update-xcframework-reference:
