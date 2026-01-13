@@ -5,7 +5,7 @@ import PackageDescription
 import Foundation
 
 // Set GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES=1 to build resources from source instead of using the pre-built XCFramework
-let useLocalResources = ProcessInfo.processInfo.environment["GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES"] != nil
+let useLocalResources = ProcessInfo.processInfo.environment["GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES"] == "1"
 
 // TODO: This has been manually uploaded, we'll need automation to both upload and update the URL and checksum
 let revision = "89502dd215ef37df93592c06342137aed4df51f8"

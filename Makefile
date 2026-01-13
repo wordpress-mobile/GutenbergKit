@@ -107,7 +107,9 @@ build-swift-package: build
 test-swift-package: build
 	$(call XCODEBUILD_CMD, test)
 
-test-swift-package-no-build:
+# Notice no build dependency because all assets come from XCFramework
+test-swift-package-with-xcframework: export GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES = 0
+test-swift-package-with-xcframework:
 	$(call XCODEBUILD_CMD, test)
 
 release:

@@ -26,7 +26,10 @@ steps:
     - label: ':swift: Test Swift Package with XCFramework'
       depends_on: publish-xcframework
       command: |
+        echo "--- :arrow_down: Downloading checksum..."
         buildkite-agent artifact download build/*.checksum.txt .
+        echo "--- :swift: Updating Package.swift..."
         make update-xcframework-reference
-        make test-swift-package-no-build
+        echo "--- :microscope: Testing with XCFramework dependency"
+        make test-swift-package-with-xcframework
       plugins: *plugins
