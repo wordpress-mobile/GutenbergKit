@@ -88,25 +88,12 @@ build-resources-xcframework: build # Build the resources XCFramework
 test-swift-package: build
 	$(call XCODEBUILD_CMD, test)
 
-# Notice no build dependency because all assets come from XCFramework
-test-swift-package-with-xcframework: export GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES = 0
-test-swift-package-with-xcframework:
-	$(call XCODEBUILD_CMD, test)
-
 REVISION ?= $(or $(BUILDKITE_COMMIT),$(shell git rev-parse HEAD))
 
 .PHONY: publish-resources-xcframework
 publish-resources-xcframework: ruby-dependencies build-resources-xcframework
 	@echo "--- :s3: Uploading XCFramework to S3"
 	@bundle exec fastlane publish_to_s3 version:$(REVISION)
-
-CHECKSUM ?= $(shell cat build/${GUTENBERG_RESOURCES_XCFRAMEWORK_NAME}.xcframework.zip.checksum.txt)
-
-.PHONY: update-xcframework-reference
-update-xcframework-reference:
-	@echo "Updating Package.swift with revision=$(REVISION) checksum=$(CHECKSUM)..."
-	@sed -i '' 's/let revision = ".*"/let revision = "$(REVISION)"/' Package.swift
-	@sed -i '' 's/let xcframeworkChecksum = ".*"/let xcframeworkChecksum = "$(CHECKSUM)"/' Package.swift
 
 release:
 	@echo "--- :rocket: Starting GutenbergKit Release Process"

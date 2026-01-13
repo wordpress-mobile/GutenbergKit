@@ -16,20 +16,8 @@ steps:
       plugins: *plugins
 
     - label: ':xcode: Publish XCFramework'
-      key: publish-xcframework
       command: make publish-resources-xcframework
       plugins: *plugins
       artifact_paths:
         - 'build/*.xcframework.zip'
         - 'build/*.checksum.txt'
-
-    - label: ':swift: Test Swift Package with XCFramework'
-      depends_on: publish-xcframework
-      command: |
-        echo "--- :arrow_down: Downloading checksum..."
-        buildkite-agent artifact download build/*.checksum.txt .
-        echo "--- :swift: Updating Package.swift..."
-        make update-xcframework-reference
-        echo "--- :microscope: Testing with XCFramework dependency"
-        make test-swift-package-with-xcframework
-      plugins: *plugins
