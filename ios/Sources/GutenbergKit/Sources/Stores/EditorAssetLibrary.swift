@@ -184,9 +184,18 @@ public actor EditorAssetLibrary {
     
     // MARK: - Helpers
     private func editorAssetsUrl(for configuration: EditorConfiguration) -> URL {
-        configuration.siteApiRoot
-            .appending(path: "/wpcom/v2/editor-assets")
-            .appending(queryItems: [URLQueryItem(name: "exclude", value: "core,gutenberg")])
+        let baseUrl: URL
+        if let customEndpoint = configuration.editorAssetsEndpoint {
+            baseUrl = customEndpoint
+        } else if let namespace = configuration.siteApiNamespace.first {
+            // Insert namespace: /wpcom/v2/editor-assets -> /wpcom/v2/sites/123/editor-assets
+            baseUrl = configuration.siteApiRoot
+                .appending(path: "/wpcom/v2/\(namespace)editor-assets")
+        } else {
+            baseUrl = configuration.siteApiRoot
+                .appending(path: "/wpcom/v2/editor-assets")
+        }
+        return baseUrl.appending(queryItems: [URLQueryItem(name: "exclude", value: "core,gutenberg")])
     }
     
     /// Cleans up outdated library entries for this site.

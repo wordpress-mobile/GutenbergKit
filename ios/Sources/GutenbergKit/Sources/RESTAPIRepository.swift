@@ -30,10 +30,62 @@ public struct RESTAPIRepository: Sendable {
 
         let apiRoot = configuration.siteApiRoot
 
-        self.editorSettingsUrl = apiRoot.appending(rawPath: Constants.API.editorSettingsPath)
-        self.activeThemeUrl = apiRoot.appending(rawPath: Constants.API.activeThemePath)
-        self.siteSettingsUrl = apiRoot.appending(rawPath: Constants.API.siteSettingsPath)
-        self.postTypesUrl = apiRoot.appending(rawPath: Constants.API.postTypesPath)
+        // Use custom endpoint if provided, otherwise build from apiRoot with namespace
+        if let customEndpoint = configuration.editorSettingsEndpoint {
+            self.editorSettingsUrl = customEndpoint
+        } else {
+            self.editorSettingsUrl = Self.buildNamespacedURL(
+                apiRoot: apiRoot,
+                path: Constants.API.editorSettingsPath,
+                namespace: configuration.siteApiNamespace.first
+            )
+        }
+
+        self.activeThemeUrl = Self.buildNamespacedURL(
+            apiRoot: apiRoot,
+            path: Constants.API.activeThemePath,
+            namespace: configuration.siteApiNamespace.first
+        )
+        self.siteSettingsUrl = Self.buildNamespacedURL(
+            apiRoot: apiRoot,
+            path: Constants.API.siteSettingsPath,
+            namespace: configuration.siteApiNamespace.first
+        )
+        self.postTypesUrl = Self.buildNamespacedURL(
+            apiRoot: apiRoot,
+            path: Constants.API.postTypesPath,
+            namespace: configuration.siteApiNamespace.first
+        )
+    }
+
+    /// Builds a URL by inserting the namespace after the version segment of the path.
+    /// For example: `/wp/v2/posts` with namespace `sites/123/` becomes `/wp/v2/sites/123/posts`
+    private static func buildNamespacedURL(apiRoot: URL, path: String, namespace: String?) -> URL {
+        guard let namespace = namespace else {
+            return apiRoot.appending(rawPath: path)
+        }
+
+        // Parse the path to find where to insert the namespace
+        // Path format is typically: /prefix/version/endpoint (e.g., /wp/v2/posts or /wp-block-editor/v1/settings)
+        let components = path.split(separator: "/", omittingEmptySubsequences: true)
+        guard components.count >= 2 else {
+            return apiRoot.appending(rawPath: path)
+        }
+
+        // Insert namespace after the version segment (second component)
+        // e.g., /wp-block-editor/v1/settings -> /wp-block-editor/v1/sites/123/settings
+        let prefix = components[0]
+        let version = components[1]
+        let remainder = components.dropFirst(2).joined(separator: "/")
+
+        let namespacedPath: String
+        if remainder.isEmpty {
+            namespacedPath = "/\(prefix)/\(version)/\(namespace)"
+        } else {
+            namespacedPath = "/\(prefix)/\(version)/\(namespace)\(remainder)"
+        }
+
+        return apiRoot.appending(rawPath: namespacedPath)
     }
 
     /// Clears all cached API responses.
@@ -54,12 +106,13 @@ public struct RESTAPIRepository: Sendable {
     }
 
     private func buildPostUrl(id: Int) -> URL {
-        configuration.siteApiRoot
-            .appending(path: "wp/v2/posts")
-            .appendingPathComponent(String(id))
-            .appending(queryItems: [
-                URLQueryItem(name: "context", value: "edit")
-            ])
+        Self.buildNamespacedURL(
+            apiRoot: configuration.siteApiRoot,
+            path: "/wp/v2/posts/\(id)",
+            namespace: configuration.siteApiNamespace.first
+        ).appending(queryItems: [
+            URLQueryItem(name: "context", value: "edit")
+        ])
     }
 
     // MARK: Editor Settings
@@ -98,11 +151,13 @@ public struct RESTAPIRepository: Sendable {
     }
 
     private func buildPostTypeUrl(type: String) -> URL {
-        configuration.siteApiRoot.appending(path: "wp/v2/types/")
-            .appending(path: type)
-            .appending(queryItems: [
-                URLQueryItem(name: "context", value: "edit")
-            ])
+        Self.buildNamespacedURL(
+            apiRoot: configuration.siteApiRoot,
+            path: "/wp/v2/types/\(type)",
+            namespace: configuration.siteApiNamespace.first
+        ).appending(queryItems: [
+            URLQueryItem(name: "context", value: "edit")
+        ])
     }
 
     // MARK: GET Active Theme
