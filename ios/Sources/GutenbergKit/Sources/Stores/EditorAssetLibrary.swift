@@ -64,7 +64,7 @@ public actor EditorAssetLibrary {
             .filter { $0.hasDirectoryPath }  // Only include directories
             .filter { $0.pathExtension != "download" }  // Don't include bundles that are being downloaded
             .map { $0.appending(path: "manifest.json") }
-            .map { try EditorAssetBundle(url: $0) }
+            .compactMap { try? EditorAssetBundle(url: $0) }  // Skip invalid/incomplete bundles
             .sorted { $0.downloadDate > $1.downloadDate }
     }
     
@@ -84,17 +84,17 @@ public actor EditorAssetLibrary {
     /// Checks whether a bundle with the given manifest checksum exists on disk.
     ///
     package func hasBundle(forManifestChecksum checksum: String) -> Bool {
-        FileManager.default.directoryExists(at: self.bundleRoot(for: checksum))
+        FileManager.default.fileExists(atPath: self.bundleManifestPath(for: checksum).path)
     }
-    
+
     /// Retrieves an existing bundle from disk if one exists for the given manifest checksum.
     ///
-    package func existingBundle(forManifestChecksum checksum: String) throws -> EditorAssetBundle? {
+    package func existingBundle(forManifestChecksum checksum: String) -> EditorAssetBundle? {
         guard self.hasBundle(forManifestChecksum: checksum) else {
             return nil
         }
-        
-        return try EditorAssetBundle(url: self.bundleManifestPath(for: checksum))
+
+        return try? EditorAssetBundle(url: self.bundleManifestPath(for: checksum))
     }
     
     // MARK: - Individual Asset Handling
