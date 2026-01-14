@@ -402,6 +402,9 @@ describe( 'configureAjax', () => {
 
 			expect( () => configureAjax() ).not.toThrow();
 
+			// Should not wrap send (it doesn't exist)
+			expect( global.window.wp.ajax.send ).toBeUndefined();
+
 			// Should still wrap post
 			expect( global.window.wp.ajax.post ).not.toBe( originalWpAjaxPost );
 		} );
@@ -420,6 +423,9 @@ describe( 'configureAjax', () => {
 			};
 
 			expect( () => configureAjax() ).not.toThrow();
+
+			// Should not wrap post (it doesn't exist)
+			expect( global.window.wp.ajax.post ).toBeUndefined();
 
 			// Should still wrap send
 			expect( global.window.wp.ajax.send ).not.toBe( originalWpAjaxSend );

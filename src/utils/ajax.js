@@ -46,35 +46,39 @@ function configureAjaxAuth( authHeader ) {
 		},
 	} );
 
-	const originalSend = window.wp.ajax.send;
-	window.wp.ajax.send = function ( options ) {
-		const originalBeforeSend = options.beforeSend;
+	if ( typeof window.wp.ajax.send === 'function' ) {
+		const originalSend = window.wp.ajax.send;
+		window.wp.ajax.send = function ( options ) {
+			const originalBeforeSend = options.beforeSend;
 
-		options.beforeSend = function ( xhr ) {
-			xhr.setRequestHeader( 'Authorization', authHeader );
+			options.beforeSend = function ( xhr ) {
+				xhr.setRequestHeader( 'Authorization', authHeader );
 
-			if ( typeof originalBeforeSend === 'function' ) {
-				originalBeforeSend( xhr );
-			}
+				if ( typeof originalBeforeSend === 'function' ) {
+					originalBeforeSend( xhr );
+				}
+			};
+
+			return originalSend.call( this, options );
 		};
+	}
 
-		return originalSend.call( this, options );
-	};
+	if ( typeof window.wp.ajax.post === 'function' ) {
+		const originalPost = window.wp.ajax.post;
+		window.wp.ajax.post = function ( options ) {
+			const originalBeforeSend = options.beforeSend;
 
-	const originalPost = window.wp.ajax.post;
-	window.wp.ajax.post = function ( options ) {
-		const originalBeforeSend = options.beforeSend;
+			options.beforeSend = function ( xhr ) {
+				xhr.setRequestHeader( 'Authorization', authHeader );
 
-		options.beforeSend = function ( xhr ) {
-			xhr.setRequestHeader( 'Authorization', authHeader );
+				if ( typeof originalBeforeSend === 'function' ) {
+					originalBeforeSend( xhr );
+				}
+			};
 
-			if ( typeof originalBeforeSend === 'function' ) {
-				originalBeforeSend( xhr );
-			}
+			return originalPost.call( this, options );
 		};
-
-		return originalPost.call( this, options );
-	};
+	}
 
 	debug( 'AJAX auth configured' );
 }
