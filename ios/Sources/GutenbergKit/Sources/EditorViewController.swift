@@ -281,7 +281,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     @MainActor
     private func loadEditor(dependencies: EditorDependencies) throws {
         self.displayActivityView()
-        defer { self.hideActivityView() }
 
         // Set asset bundle for the URL scheme handler to serve cached plugin/theme assets
         self.bundleProvider.set(bundle: dependencies.assetBundle)
@@ -676,6 +675,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             return
         }
 
+        self.hideActivityView()
         self.isReady = true
 
         // Fade in the WebView - it was hidden (alpha = 0) since viewDidLoad()
