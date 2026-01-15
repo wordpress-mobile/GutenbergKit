@@ -106,7 +106,7 @@ public actor EditorService {
     /// - Returns: The complete set of dependencies needed to initialize the editor.
     /// - Throws: An error if any required resource fails to download.
     @discardableResult
-    public func prepare(progress: @escaping EditorProgressCallback) async throws -> EditorDependencies {
+    public func prepare(progress: EditorProgressCallback? = nil) async throws -> EditorDependencies {
 
         if self.configuration.isOfflineModeEnabled {
             return EditorDependencies(
