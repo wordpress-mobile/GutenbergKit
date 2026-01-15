@@ -81,10 +81,14 @@ public actor EditorAssetLibrary {
         return try await self.buildBundle(for: manifest, progress: progress)
     }
     
-    /// Checks whether a bundle with the given manifest checksum exists on disk.
+    /// Checks whether a complete bundle with the given manifest checksum exists on disk.
     ///
+    /// A bundle is considered complete only if both `manifest.json` and `editor-representation.json` exist.
     package func hasBundle(forManifestChecksum checksum: String) -> Bool {
-        FileManager.default.fileExists(atPath: self.bundleManifestPath(for: checksum).path)
+        let bundleRoot = self.bundleRoot(for: checksum)
+        let manifestExists = FileManager.default.fileExists(atPath: bundleRoot.appending(path: "manifest.json").path)
+        let editorRepExists = FileManager.default.fileExists(atPath: bundleRoot.appending(path: "editor-representation.json").path)
+        return manifestExists && editorRepExists
     }
 
     /// Retrieves an existing bundle from disk if one exists for the given manifest checksum.
