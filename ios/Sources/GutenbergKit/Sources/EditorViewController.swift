@@ -744,15 +744,18 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
             return (nil, "Unknown message handler: \(message.name)")
         }
 
-        return await MainActor.run {
-            guard let content = delegate?.controllerRequestsLatestContent(self) else {
-                return (nil, nil)  // No content available - not an error
-            }
-            return ([
-                "title": content.title,
-                "content": content.content
-            ], nil)
+        let content = await MainActor.run {
+            delegate?.controllerRequestsLatestContent(self)
         }
+
+        guard let content else {
+            return (nil, nil)  // No content available - not an error
+        }
+
+        return ([
+            "title": content.title,
+            "content": content.content
+        ] as [String: String], nil)
     }
 
     // MARK: - WKNavigationDelegate
