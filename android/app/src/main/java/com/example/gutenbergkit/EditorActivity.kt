@@ -344,6 +344,13 @@ fun EditorScreen(
                             loadingError = error.message ?: "Unknown error"
                         }
                     })
+                    // Demo app has no persistence layer, so return null.
+                    // In a real app, return the persisted title and content from autosave.
+                    setLatestContentProvider(object : GutenbergView.LatestContentProvider {
+                        override fun getLatestContent(): GutenbergView.LatestContent? {
+                            return null
+                        }
+                    })
                     onGutenbergViewCreated(this)
                 }
             },
