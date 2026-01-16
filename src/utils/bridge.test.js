@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 /**
  * Internal dependencies
  */
-import { requestLatestContent } from './bridge';
+import { requestLatestContent, getPost } from './bridge';
 
 describe( 'requestLatestContent', () => {
 	let originalWindow;
@@ -208,6 +208,199 @@ describe( 'requestLatestContent', () => {
 			expect(
 				window.editorDelegate.requestLatestContent
 			).not.toHaveBeenCalled();
+		} );
+	} );
+} );
+
+describe( 'getPost', () => {
+	let originalWindow;
+
+	beforeEach( () => {
+		// Store original window properties
+		originalWindow = {
+			webkit: window.webkit,
+			editorDelegate: window.editorDelegate,
+			GBKit: window.GBKit,
+		};
+		// Clear any existing properties
+		delete window.webkit;
+		delete window.editorDelegate;
+		delete window.GBKit;
+	} );
+
+	afterEach( () => {
+		// Restore original window properties
+		if ( originalWindow.webkit !== undefined ) {
+			window.webkit = originalWindow.webkit;
+		}
+		if ( originalWindow.editorDelegate !== undefined ) {
+			window.editorDelegate = originalWindow.editorDelegate;
+		}
+		if ( originalWindow.GBKit !== undefined ) {
+			window.GBKit = originalWindow.GBKit;
+		}
+	} );
+
+	describe( 'content from native host', () => {
+		it( 'should return host content when available', async () => {
+			const hostContent = {
+				title: 'Host Title',
+				content: 'Host Content',
+			};
+			window.webkit = {
+				messageHandlers: {
+					requestLatestContent: {
+						postMessage: vi.fn().mockResolvedValue( hostContent ),
+					},
+				},
+			};
+			window.GBKit = {
+				post: {
+					id: 123,
+					type: 'page',
+					status: 'draft',
+					title: 'GBKit%20Title',
+					content: 'GBKit%20Content',
+				},
+			};
+
+			const result = await getPost();
+
+			expect( result ).toEqual( {
+				id: 123,
+				type: 'page',
+				status: 'draft',
+				title: { raw: 'Host Title' },
+				content: { raw: 'Host Content' },
+			} );
+		} );
+
+		it( 'should use GBKit post metadata with host content', async () => {
+			const hostContent = {
+				title: 'Updated Title',
+				content: 'Updated Content',
+			};
+			window.webkit = {
+				messageHandlers: {
+					requestLatestContent: {
+						postMessage: vi.fn().mockResolvedValue( hostContent ),
+					},
+				},
+			};
+			window.GBKit = {
+				post: {
+					id: 456,
+					type: 'post',
+					status: 'publish',
+					title: 'Original%20Title',
+					content: 'Original%20Content',
+				},
+			};
+
+			const result = await getPost();
+
+			// Should use id/type/status from GBKit, but title/content from host
+			expect( result.id ).toBe( 456 );
+			expect( result.type ).toBe( 'post' );
+			expect( result.status ).toBe( 'publish' );
+			expect( result.title.raw ).toBe( 'Updated Title' );
+			expect( result.content.raw ).toBe( 'Updated Content' );
+		} );
+	} );
+
+	describe( 'fallback to GBKit', () => {
+		it( 'should fall back to GBKit when host returns null', async () => {
+			window.webkit = {
+				messageHandlers: {
+					requestLatestContent: {
+						postMessage: vi.fn().mockResolvedValue( null ),
+					},
+				},
+			};
+			window.GBKit = {
+				post: {
+					id: 789,
+					type: 'post',
+					status: 'draft',
+					title: 'GBKit%20Title',
+					content: 'GBKit%20Content',
+				},
+			};
+
+			const result = await getPost();
+
+			expect( result ).toEqual( {
+				id: 789,
+				type: 'post',
+				status: 'draft',
+				title: { raw: 'GBKit Title' },
+				content: { raw: 'GBKit Content' },
+			} );
+		} );
+
+		it( 'should fall back to GBKit when no bridge available', async () => {
+			// No bridge set up
+			window.GBKit = {
+				post: {
+					id: 101,
+					type: 'page',
+					status: 'publish',
+					title: 'Fallback%20Title',
+					content: 'Fallback%20Content',
+				},
+			};
+
+			const result = await getPost();
+
+			expect( result ).toEqual( {
+				id: 101,
+				type: 'page',
+				status: 'publish',
+				title: { raw: 'Fallback Title' },
+				content: { raw: 'Fallback Content' },
+			} );
+		} );
+	} );
+
+	describe( 'default empty post', () => {
+		it( 'should return default empty post when both are unavailable', async () => {
+			// No bridge and no GBKit
+
+			const result = await getPost();
+
+			expect( result ).toEqual( {
+				id: -1,
+				type: 'post',
+				status: 'auto-draft',
+				title: { raw: '' },
+				content: { raw: '' },
+			} );
+		} );
+
+		it( 'should use defaults when GBKit post lacks optional fields', async () => {
+			const hostContent = {
+				title: 'Title',
+				content: 'Content',
+			};
+			window.webkit = {
+				messageHandlers: {
+					requestLatestContent: {
+						postMessage: vi.fn().mockResolvedValue( hostContent ),
+					},
+				},
+			};
+			// GBKit exists but post is empty/undefined
+			window.GBKit = {};
+
+			const result = await getPost();
+
+			expect( result ).toEqual( {
+				id: -1,
+				type: 'post',
+				status: 'auto-draft',
+				title: { raw: 'Title' },
+				content: { raw: 'Content' },
+			} );
 		} );
 	} );
 } );

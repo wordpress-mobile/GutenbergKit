@@ -278,13 +278,36 @@ export async function requestLatestContent() {
 }
 
 /**
- * Retrieves the current post data from the GBKit global.
+ * Retrieves the current post data from the native host
  *
- * @return {Post} The post object containing the following properties:
+ * Always requests content from the native host first, as it maintains the
+ * latest content via autosave. Falls back to `window.GBKit.post` only if the
+ * native bridge is unavailable (e.g., dev mode).
+ *
+ * Note: `window.GBKit.post.title/content` are "initial values" injected at
+ * WebView load. After a WebView refresh, these may be stale. The native host
+ * has the authoritative content from autosave.
+ *
+ * @return {Promise<Post>} The post object.
  */
-export function getPost() {
+export async function getPost() {
 	const { post } = getGBKit();
+
+	const hostContent = await requestLatestContent();
+
+	if ( hostContent ) {
+		debug( 'Using content from native host' );
+		return {
+			id: post?.id ?? -1,
+			type: post?.type || 'post',
+			status: post?.status || 'auto-draft',
+			title: { raw: hostContent.title },
+			content: { raw: hostContent.content },
+		};
+	}
+
 	if ( post ) {
+		debug( 'Native bridge unavailable, using GBKit initial content' );
 		return {
 			id: post.id,
 			type: post.type || 'post',
@@ -294,8 +317,6 @@ export function getPost() {
 		};
 	}
 
-	// Since we don't use the auto-save functionality, draft posts need to have an ID.
-	// We assign a temporary ID of -1.
 	return {
 		id: -1,
 		type: 'post',
