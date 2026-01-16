@@ -245,6 +245,39 @@ export function getGBKit() {
  */
 
 /**
+ * Requests the latest persisted content from the native host.
+ *
+ * Used during editor initialization to recover content after WebView refresh.
+ * The native host maintains the authoritative content via autosave events.
+ *
+ * @return {Promise<{title: string, content: string}|null>} The latest content or null if unavailable.
+ */
+export async function requestLatestContent() {
+	if ( window.webkit?.messageHandlers?.requestLatestContent ) {
+		try {
+			return await window.webkit.messageHandlers.requestLatestContent.postMessage(
+				{}
+			);
+		} catch ( error ) {
+			debug( 'Failed to request content from iOS host', error );
+			return null;
+		}
+	}
+
+	if ( window.editorDelegate?.requestLatestContent ) {
+		try {
+			const result = window.editorDelegate.requestLatestContent();
+			return result ? JSON.parse( result ) : null;
+		} catch ( error ) {
+			debug( 'Failed to request content from Android host', error );
+			return null;
+		}
+	}
+
+	return null;
+}
+
+/**
  * Retrieves the current post data from the GBKit global.
  *
  * @return {Post} The post object containing the following properties:
