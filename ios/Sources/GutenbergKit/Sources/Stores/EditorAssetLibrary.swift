@@ -44,7 +44,7 @@ public actor EditorAssetLibrary {
         let remoteManifest = try RemoteEditorAssetManifest(data: data)
 
         guard
-            let existingManifest = try self.existingBundle(forManifestChecksum: remoteManifest.checksum),
+            let existingManifest = self.existingBundle(forManifestChecksum: remoteManifest.checksum),
             self.cachePolicy.allowsResponseWith(date: existingManifest.downloadDate)
         else {
             return try LocalEditorAssetManifest(remoteManifest: remoteManifest)
@@ -64,7 +64,7 @@ public actor EditorAssetLibrary {
             .filter { $0.hasDirectoryPath }  // Only include directories
             .filter { $0.pathExtension != "download" }  // Don't include bundles that are being downloaded
             .map { $0.appending(path: "manifest.json") }
-            .map { try EditorAssetBundle(url: $0) }
+            .compactMap { try? EditorAssetBundle(url: $0) }  // Skip invalid/incomplete bundles
             .sorted { $0.downloadDate > $1.downloadDate }
     }
     
@@ -81,20 +81,24 @@ public actor EditorAssetLibrary {
         return try await self.buildBundle(for: manifest, progress: progress)
     }
     
-    /// Checks whether a bundle with the given manifest checksum exists on disk.
+    /// Checks whether a complete bundle with the given manifest checksum exists on disk.
     ///
+    /// A bundle is considered complete only if both `manifest.json` and `editor-representation.json` exist.
     package func hasBundle(forManifestChecksum checksum: String) -> Bool {
-        FileManager.default.directoryExists(at: self.bundleRoot(for: checksum))
+        let bundleRoot = self.bundleRoot(for: checksum)
+        let manifestExists = FileManager.default.fileExists(atPath: bundleRoot.appending(path: "manifest.json").path)
+        let editorRepExists = FileManager.default.fileExists(atPath: bundleRoot.appending(path: "editor-representation.json").path)
+        return manifestExists && editorRepExists
     }
-    
+
     /// Retrieves an existing bundle from disk if one exists for the given manifest checksum.
     ///
-    package func existingBundle(forManifestChecksum checksum: String) throws -> EditorAssetBundle? {
+    package func existingBundle(forManifestChecksum checksum: String) -> EditorAssetBundle? {
         guard self.hasBundle(forManifestChecksum: checksum) else {
             return nil
         }
-        
-        return try EditorAssetBundle(url: self.bundleManifestPath(for: checksum))
+
+        return try? EditorAssetBundle(url: self.bundleManifestPath(for: checksum))
     }
     
     // MARK: - Individual Asset Handling
@@ -123,10 +127,8 @@ public actor EditorAssetLibrary {
             bundleRoot: tempDirectory
         )
 
-        try bundle.writeManifest()
-
         let editorRepresentation = try manifest.buildEditorRepresentation(for: self.configuration)
-        try bundle.setEditorRepresentation(editorRepresentation)
+        try bundle.writeManifest(editorRepresentation: editorRepresentation)
 
         try await withThrowingTaskGroup { group in
             let links = (manifest.scripts + manifest.styles).filter { self.isSupportedAsset($0) }
@@ -184,9 +186,18 @@ public actor EditorAssetLibrary {
     
     // MARK: - Helpers
     private func editorAssetsUrl(for configuration: EditorConfiguration) -> URL {
-        configuration.siteApiRoot
-            .appending(path: "/wpcom/v2/editor-assets")
-            .appending(queryItems: [URLQueryItem(name: "exclude", value: "core,gutenberg")])
+        let baseUrl: URL
+        if let customEndpoint = configuration.editorAssetsEndpoint {
+            baseUrl = customEndpoint
+        } else if let namespace = configuration.siteApiNamespace.first {
+            // Insert namespace: /wpcom/v2/editor-assets -> /wpcom/v2/sites/123/editor-assets
+            baseUrl = configuration.siteApiRoot
+                .appending(path: "/wpcom/v2/\(namespace)editor-assets")
+        } else {
+            baseUrl = configuration.siteApiRoot
+                .appending(path: "/wpcom/v2/editor-assets")
+        }
+        return baseUrl.appending(queryItems: [URLQueryItem(name: "exclude", value: "core,gutenberg")])
     }
     
     /// Cleans up outdated library entries for this site.

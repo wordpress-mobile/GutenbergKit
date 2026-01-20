@@ -191,8 +191,8 @@ struct EditorAssetBundleTests {
             manifest: originalBundle.manifest,
             downloadDate: originalBundle.downloadDate
         )
-        let encoded = try JSONEncoder().encode(rawBundle)
-        try encoded.write(to: manifestURL)
+        let bundleToWrite = EditorAssetBundle(raw: rawBundle, bundleRoot: tempDir)
+        try bundleToWrite.writeManifest(editorRepresentation: .empty)
 
         // Initialize from URL
         let loadedBundle = try EditorAssetBundle(url: manifestURL)
@@ -358,8 +358,8 @@ struct EditorAssetBundleTests {
             manifest: originalBundle.manifest,
             downloadDate: originalBundle.downloadDate
         )
-        let encoded = try JSONEncoder().encode(rawBundle)
-        try encoded.write(to: tempURL)
+        let bundleToWrite = EditorAssetBundle(raw: rawBundle, bundleRoot: tempDir)
+        try bundleToWrite.writeManifest(to: tempURL, editorRepresentation: .empty)
 
         // Read back
         let loadedBundle = try EditorAssetBundle(url: tempURL)

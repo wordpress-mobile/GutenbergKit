@@ -76,9 +76,17 @@ public struct EditorAssetBundle: Sendable, Equatable, Hashable {
     /// Loads a bundle from a JSON file on disk.
     ///
     /// - Parameter url: The file URL of the bundle's `manifest.json`.
-    /// - Throws: An error if the file cannot be read or decoded.
+    /// - Throws: An error if the file cannot be read or decoded, or if required files are missing.
     init(url: URL) throws {
-        self = try EditorAssetBundle(data:  Data(contentsOf: url), bundleRoot: url.deletingLastPathComponent())
+        let bundleRoot = url.deletingLastPathComponent()
+
+        // Validate that editor-representation.json exists (required for the bundle to be usable)
+        let editorRepPath = bundleRoot.appending(path: "editor-representation.json")
+        guard FileManager.default.fileExists(atPath: editorRepPath.path) else {
+            throw CocoaError(.fileNoSuchFile, userInfo: [NSFilePathErrorKey: editorRepPath.path])
+        }
+
+        self = try EditorAssetBundle(data: Data(contentsOf: url), bundleRoot: bundleRoot)
     }
 
     init(data: Data, bundleRoot: URL) throws {
@@ -163,10 +171,14 @@ public struct EditorAssetBundle: Sendable, Equatable, Hashable {
     ///
     /// - Parameter path: The file URL where the bundle should be saved.
     /// - Throws: An error if encoding fails or the file cannot be written.
-    func writeManifest(to path: URL? = nil) throws {
+    func writeManifest(to path: URL? = nil, editorRepresentation: EditorRepresentation? = nil) throws {
         try FileManager.default.createDirectory(at: self.bundleRoot, withIntermediateDirectories: true)
         let destination = path ?? self.bundleRoot.appendingPathComponent("manifest.json")
         try self.dataRepresentation().write(to: destination, options: .atomic)
+
+        if let editorRepresentation {
+            try setEditorRepresentation(editorRepresentation)
+        }
     }
 
     /// Copies the bundle to the given directoy.
