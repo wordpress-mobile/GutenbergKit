@@ -318,6 +318,7 @@ export async function getPost() {
 		};
 	}
 
+	// Fallback to default empty post
 	return {
 		id: -1,
 		type: 'post',
