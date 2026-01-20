@@ -770,10 +770,15 @@ class GutenbergView : WebView {
     @JavascriptInterface
     fun requestLatestContent(): String? {
         val content = latestContentProvider?.getLatestContent() ?: return null
-        return JSONObject().apply {
-            put("title", content.title)
-            put("content", content.content)
-        }.toString()
+        return try {
+            JSONObject().apply {
+                put("title", content.title)
+                put("content", content.content)
+            }.toString()
+        } catch (e: JSONException) {
+            Log.e("GutenbergView", "Failed to serialize latest content", e)
+            null
+        }
     }
 
     fun resetFilePathCallback() {
