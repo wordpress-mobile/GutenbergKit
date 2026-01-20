@@ -10,5 +10,5 @@ object GutenbergKitVersion {
     /**
      * The current version of GutenbergKit.
      */
-    const val VERSION = "0.11.1"
+    const val VERSION = "0.12.1"
 }
