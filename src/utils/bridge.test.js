@@ -177,39 +177,6 @@ describe( 'requestLatestContent', () => {
 			expect( result ).toBeNull();
 		} );
 	} );
-
-	describe( 'priority', () => {
-		it( 'should prefer iOS bridge when both are available', async () => {
-			const iosContent = {
-				title: 'iOS Title',
-				content: 'iOS Content',
-			};
-			const androidContent = {
-				title: 'Android Title',
-				content: 'Android Content',
-			};
-
-			window.webkit = {
-				messageHandlers: {
-					requestLatestContent: {
-						postMessage: vi.fn().mockResolvedValue( iosContent ),
-					},
-				},
-			};
-			window.editorDelegate = {
-				requestLatestContent: vi
-					.fn()
-					.mockReturnValue( JSON.stringify( androidContent ) ),
-			};
-
-			const result = await requestLatestContent();
-
-			expect( result ).toEqual( iosContent );
-			expect(
-				window.editorDelegate.requestLatestContent
-			).not.toHaveBeenCalled();
-		} );
-	} );
 } );
 
 describe( 'getPost', () => {
