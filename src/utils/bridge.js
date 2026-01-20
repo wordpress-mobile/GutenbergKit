@@ -2,7 +2,7 @@
  * Internal dependencies
  */
 import parseException from './exception-parser';
-import { debug } from './logger';
+import { debug, error } from './logger';
 import { isDevMode } from './dev-mode';
 import { basicFetch } from './fetch';
 
@@ -229,7 +229,8 @@ export function getGBKit() {
 
 	try {
 		return JSON.parse( localStorage.getItem( 'GBKit' ) ) || {};
-	} catch ( error ) {
+	} catch ( err ) {
+		error( 'Failed to parse GBKit from localStorage', err );
 		return {};
 	}
 }
@@ -258,8 +259,8 @@ export async function requestLatestContent() {
 			return await window.webkit.messageHandlers.requestLatestContent.postMessage(
 				{}
 			);
-		} catch ( error ) {
-			debug( 'Failed to request content from iOS host', error );
+		} catch ( err ) {
+			error( 'Failed to request content from iOS host', err );
 			return null;
 		}
 	}
@@ -268,8 +269,8 @@ export async function requestLatestContent() {
 		try {
 			const result = window.editorDelegate.requestLatestContent();
 			return result ? JSON.parse( result ) : null;
-		} catch ( error ) {
-			debug( 'Failed to request content from Android host', error );
+		} catch ( err ) {
+			error( 'Failed to request content from Android host', err );
 			return null;
 		}
 	}
