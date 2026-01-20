@@ -312,7 +312,7 @@ export async function getPost() {
 		return {
 			id: post.id,
 			type: post.type || 'post',
-			status: post.status,
+			status: post.status || 'auto-draft',
 			title: { raw: decodeURIComponent( post.title ) },
 			content: { raw: decodeURIComponent( post.content ) },
 		};
