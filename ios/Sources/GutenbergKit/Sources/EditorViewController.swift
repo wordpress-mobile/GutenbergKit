@@ -175,6 +175,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         self.bundleProvider.bind(to: config)
 
+        config.applicationNameForUserAgent = "GutenbergKit/\(GutenbergKitVersion.version)"
+
         self.webView = GBWebView(frame: .zero, configuration: config)
         self.webView.scrollView.keyboardDismissMode = .interactive
 

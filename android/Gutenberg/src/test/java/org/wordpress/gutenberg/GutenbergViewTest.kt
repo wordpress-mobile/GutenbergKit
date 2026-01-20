@@ -147,4 +147,20 @@ class GutenbergViewTest {
         assertEquals("File path callback should be null after reset",
             null, gutenbergView.filePathCallback)
     }
+
+    @Test
+    fun `initializeWebView sets custom user agent with GutenbergKit identifier`() {
+        // Given
+        val gutenbergView = GutenbergView(RuntimeEnvironment.getApplication())
+
+        // When
+        gutenbergView.initializeWebView()
+
+        // Then
+        val userAgent = gutenbergView.settings.userAgentString
+        assertTrue("User agent should contain GutenbergKit identifier",
+            userAgent.contains("GutenbergKit/"))
+        assertTrue("User agent should contain version number",
+            userAgent.contains("GutenbergKit/${GutenbergKitVersion.VERSION}"))
+    }
 }

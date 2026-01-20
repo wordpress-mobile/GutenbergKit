@@ -125,6 +125,11 @@ class GutenbergView : WebView {
         this.settings.javaScriptCanOpenWindowsAutomatically = true
         this.settings.javaScriptEnabled = true
         this.settings.domStorageEnabled = true
+        
+        // Set custom user agent
+        val defaultUserAgent = this.settings.userAgentString
+        this.settings.userAgentString = "$defaultUserAgent GutenbergKit/${GutenbergKitVersion.VERSION}"
+        
         this.addJavascriptInterface(this, "editorDelegate")
         this.visibility = View.GONE
 

@@ -90,6 +90,7 @@ final class HTMLWebViewRenderer {
         init() {
             let config = WKWebViewConfiguration()
             config.suppressesIncrementalRendering = true
+            config.applicationNameForUserAgent = "GutenbergKit/\(GutenbergKitVersion.version)"
 
             // Create web view with small initial frame for off-screen rendering
             // Frame will be adjusted per render based on viewport width and content height
