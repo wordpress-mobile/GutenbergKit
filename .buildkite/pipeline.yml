@@ -6,7 +6,7 @@ env:
 
 steps:
     - label: ':react: Build React App'
-      command: make build REFRESH_L10N=1
+      command: make build REFRESH_L10N=1 REFRESH_JS_BUILD=1
       plugins: &plugins
           - $CI_TOOLKIT_PLUGIN
           - $NVM_PLUGIN
@@ -21,7 +21,7 @@ steps:
 
     - label: ':android: Publish Android Library'
       command: |
-          make build REFRESH_L10N=1
+          make build REFRESH_L10N=1 REFRESH_JS_BUILD=1
           echo "--- :android: Publishing Android Library"
           ./android/gradlew -p ./android :gutenberg:prepareToPublishToS3 $(prepare_to_publish_to_s3_params) :gutenberg:publish
       agents:

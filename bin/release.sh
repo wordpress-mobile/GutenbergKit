@@ -243,7 +243,7 @@ build_project() {
         return
     fi
 
-    make build REFRESH_DEPS=1 REFRESH_L10N=1 STRICT_L10N=1
+    make build REFRESH_DEPS=1 REFRESH_L10N=1 REFRESH_JS_BUILD=1 STRICT_L10N=1
     print_success "Build completed successfully"
 }
 

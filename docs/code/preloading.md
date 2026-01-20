@@ -42,6 +42,7 @@ The preloading system consists of several interconnected components:
 The `EditorService` actor coordinates fetching all editor dependencies concurrently:
 
 **Swift**
+
 ```swift
 let service = EditorService(configuration: config)
 let dependencies = try await service.prepare { progress in
@@ -50,40 +51,43 @@ let dependencies = try await service.prepare { progress in
 ```
 
 **Kotlin**
+
 ```kotlin
 // TBD
 ```
 
 The `prepare` method fetches these resources in parallel:
-- Editor settings (theme styles, block settings)
-- Asset bundles (JavaScript and CSS files)
-- Preload list (API responses for editor initialization)
+
+-   Editor settings (theme styles, block settings)
+-   Asset bundles (JavaScript and CSS files)
+-   Preload list (API responses for editor initialization)
 
 ### EditorPreloadList
 
 The `EditorPreloadList` struct contains pre-fetched API responses that are serialized to JSON and injected into the editor's JavaScript runtime:
 
-| Property | API Endpoint | Description |
-|----------|--------------|-------------|
-| `postData` | `/wp/v2/posts/{id}?context=edit` | The post being edited (existing posts only) |
-| `postTypeData` | `/wp/v2/types/{type}?context=edit` | Schema for the current post type |
-| `postTypesData` | `/wp/v2/types?context=view` | All available post types |
-| `activeThemeData` | `/wp/v2/themes?context=edit&status=active` | Active theme information |
-| `settingsOptionsData` | `OPTIONS /wp/v2/settings` | Site settings schema |
+| Property              | API Endpoint                               | Description                                 |
+| --------------------- | ------------------------------------------ | ------------------------------------------- |
+| `postData`            | `/wp/v2/posts/{id}?context=edit`           | The post being edited (existing posts only) |
+| `postTypeData`        | `/wp/v2/types/{type}?context=edit`         | Schema for the current post type            |
+| `postTypesData`       | `/wp/v2/types?context=view`                | All available post types                    |
+| `activeThemeData`     | `/wp/v2/themes?context=edit&status=active` | Active theme information                    |
+| `settingsOptionsData` | `OPTIONS /wp/v2/settings`                  | Site settings schema                        |
 
 ### EditorURLCache
 
 The `EditorURLCache` provides disk-based caching for API responses, keyed by URL and HTTP method. It supports three cache policies via `EditorCachePolicy`:
 
-| Policy | Behavior |
-|--------|----------|
-| `.ignore` | Never use cached responses (force fresh data) |
+| Policy                  | Behavior                                            |
+| ----------------------- | --------------------------------------------------- |
+| `.ignore`               | Never use cached responses (force fresh data)       |
 | `.maxAge(TimeInterval)` | Use cached responses younger than the specified age |
-| `.always` | Always use cached responses regardless of age |
+| `.always`               | Always use cached responses regardless of age       |
 
 Example:
 
 **Swift**
+
 ```swift
 // Cache responses for up to 1 hour
 let service = EditorService(
@@ -93,6 +97,7 @@ let service = EditorService(
 ```
 
 **Kotlin**
+
 ```kotlin
 // TBD
 ```
@@ -158,12 +163,16 @@ The `GBKitGlobal` struct packages all configuration and preload data, then injec
 
 ```javascript
 window.GBKit = {
-  siteURL: "https://example.com",
-  siteApiRoot: "https://example.com/wp-json",
-  authHeader: "Bearer ...",
-  preloadData: { /* serialized EditorPreloadList */ },
-  editorSettings: { /* theme styles, colors, etc. */ },
-  // ... other configuration
+	siteURL: 'https://example.com',
+	siteApiRoot: 'https://example.com/wp-json',
+	authHeader: 'Bearer ...',
+	preloadData: {
+		/* serialized EditorPreloadList */
+	},
+	editorSettings: {
+		/* theme styles, colors, etc. */
+	},
+	// ... other configuration
 };
 ```
 
@@ -174,11 +183,11 @@ The `@wordpress/api-fetch` package includes a preloading middleware that interce
 ```javascript
 // In src/utils/api-fetch.js
 export function configureApiFetch() {
-  const { preloadData } = getGBKit();
+	const { preloadData } = getGBKit();
 
-  apiFetch.use(
-    apiFetch.createPreloadingMiddleware(preloadData ?? defaultPreloadData)
-  );
+	apiFetch.use(
+		apiFetch.createPreloadingMiddleware( preloadData ?? defaultPreloadData )
+	);
 }
 ```
 
@@ -193,8 +202,8 @@ When Gutenberg makes an API request:
 
 Only certain headers are preserved in preload responses to match WordPress core's behavior:
 
-- `Accept` - Content type negotiation
-- `Link` - REST API discovery and pagination
+-   `Accept` - Content type negotiation
+-   `Link` - REST API discovery and pagination
 
 This filtering is performed by `EditorURLResponse.asPreloadResponse()`.
 
@@ -205,6 +214,7 @@ This filtering is performed by `EditorURLResponse.asPreloadResponse()`.
 `EditorService` automatically cleans up old asset bundles once per day:
 
 **Swift**
+
 ```swift
 try await onceEvery(.seconds(86_400)) {
     try await self.cleanup()
@@ -212,6 +222,7 @@ try await onceEvery(.seconds(86_400)) {
 ```
 
 **Kotlin**
+
 ```kotlin
 //tbd
 ```
@@ -219,6 +230,7 @@ try await onceEvery(.seconds(86_400)) {
 ### Manual Cache Control
 
 **Swift**
+
 ```swift
 // Clear unused resources (keeps most recent)
 try await service.cleanup()
@@ -228,6 +240,7 @@ try await service.purge()
 ```
 
 **Kotlin**
+
 ```kotlin
 //tbd
 ```
@@ -261,11 +274,11 @@ that contain everything the editor needs, the progress bar will never be display
 
 `EditorDependencies` contains all pre-fetched resources needed to initialize the editor instantly.
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `editorSettings` | `EditorSettings` | Theme styles, colors, typography, block settings |
-| `assetBundle` | `EditorAssetBundle` | Cached JavaScript/CSS for plugins/themes |
-| `preloadList` | `EditorPreloadList?` | Pre-fetched API responses |
+| Property         | Type                 | Description                                      |
+| ---------------- | -------------------- | ------------------------------------------------ |
+| `editorSettings` | `EditorSettings`     | Theme styles, colors, typography, block settings |
+| `assetBundle`    | `EditorAssetBundle`  | Cached JavaScript/CSS for plugins/themes         |
+| `preloadList`    | `EditorPreloadList?` | Pre-fetched API responses                        |
 
 ### Obtaining Dependencies
 
@@ -326,3 +339,4 @@ class PostListViewController: UIViewController {
         navigationController?.pushViewController(editor, animated: true)
     }
 }
+```
