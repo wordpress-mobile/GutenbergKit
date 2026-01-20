@@ -171,10 +171,14 @@ public struct EditorAssetBundle: Sendable, Equatable, Hashable {
     ///
     /// - Parameter path: The file URL where the bundle should be saved.
     /// - Throws: An error if encoding fails or the file cannot be written.
-    func writeManifest(to path: URL? = nil) throws {
+    func writeManifest(to path: URL? = nil, editorRepresentation: EditorRepresentation? = nil) throws {
         try FileManager.default.createDirectory(at: self.bundleRoot, withIntermediateDirectories: true)
         let destination = path ?? self.bundleRoot.appendingPathComponent("manifest.json")
         try self.dataRepresentation().write(to: destination, options: .atomic)
+
+        if let editorRepresentation {
+            try setEditorRepresentation(editorRepresentation)
+        }
     }
 
     /// Copies the bundle to the given directoy.

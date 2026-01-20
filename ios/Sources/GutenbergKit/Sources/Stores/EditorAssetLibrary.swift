@@ -44,7 +44,7 @@ public actor EditorAssetLibrary {
         let remoteManifest = try RemoteEditorAssetManifest(data: data)
 
         guard
-            let existingManifest = try self.existingBundle(forManifestChecksum: remoteManifest.checksum),
+            let existingManifest = self.existingBundle(forManifestChecksum: remoteManifest.checksum),
             self.cachePolicy.allowsResponseWith(date: existingManifest.downloadDate)
         else {
             return try LocalEditorAssetManifest(remoteManifest: remoteManifest)
@@ -127,10 +127,8 @@ public actor EditorAssetLibrary {
             bundleRoot: tempDirectory
         )
 
-        try bundle.writeManifest()
-
         let editorRepresentation = try manifest.buildEditorRepresentation(for: self.configuration)
-        try bundle.setEditorRepresentation(editorRepresentation)
+        try bundle.writeManifest(editorRepresentation: editorRepresentation)
 
         try await withThrowingTaskGroup { group in
             let links = (manifest.scripts + manifest.styles).filter { self.isSupportedAsset($0) }
