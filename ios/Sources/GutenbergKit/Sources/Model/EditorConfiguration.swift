@@ -12,8 +12,10 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
   public let content: String
   /// ID of the post being edited
   public let postID: Int?
-  /// Type of the post being edited
+  /// Type of the post being edited (e.g., "post", "page")
   public let postType: String
+  /// Status of the post being edited (e.g., "draft", "publish", "pending")
+  public let status: String
   /// Toggles application of theme styles
   public let shouldUseThemeStyles: Bool
   /// Toggles loading plugin-provided editor assets
@@ -55,6 +57,7 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
     content: String,
     postID: Int?,
     postType: String,
+    status: String,
     shouldUseThemeStyles: Bool,
     shouldUsePlugins: Bool,
     shouldHideTitle: Bool,
@@ -76,6 +79,7 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
     self.content = content
     self.postID = postID
     self.postType = postType
+    self.status = status
     self.shouldUseThemeStyles = shouldUseThemeStyles
     self.shouldUsePlugins = shouldUsePlugins
     self.shouldHideTitle = shouldHideTitle
@@ -106,6 +110,7 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
       content: content,
       postID: postID,
       postType: postType,
+      status: status,
       shouldUseThemeStyles: shouldUseThemeStyles,
       shouldUsePlugins: shouldUsePlugins,
       shouldHideTitle: shouldHideTitle,
@@ -150,6 +155,7 @@ public struct EditorConfigurationBuilder {
   private var content: String
   private var postID: Int?
   private var postType: String
+  private var status: String
   private var shouldUseThemeStyles: Bool
   private var shouldUsePlugins: Bool
   private var shouldHideTitle: Bool
@@ -172,6 +178,7 @@ public struct EditorConfigurationBuilder {
     content: String = "",
     postID: Int? = nil,
     postType: String,
+    status: String = "draft",
     shouldUseThemeStyles: Bool = false,
     shouldUsePlugins: Bool = false,
     shouldHideTitle: Bool = false,
@@ -193,6 +200,7 @@ public struct EditorConfigurationBuilder {
     self.content = content
     self.postID = postID
     self.postType = postType
+    self.status = status
     self.shouldUseThemeStyles = shouldUseThemeStyles
     self.shouldUsePlugins = shouldUsePlugins
     self.shouldHideTitle = shouldHideTitle
@@ -262,6 +270,12 @@ public struct EditorConfigurationBuilder {
   public func setPostType(_ type: String) -> EditorConfigurationBuilder {
     var copy = self
     copy.postType = type
+    return copy
+  }
+
+  public func setStatus(_ status: String) -> EditorConfigurationBuilder {
+    var copy = self
+    copy.status = status
     return copy
   }
 
@@ -365,6 +379,7 @@ public struct EditorConfigurationBuilder {
       content: content,
       postID: postID,
       postType: postType,
+      status: status,
       shouldUseThemeStyles: shouldUseThemeStyles,
       shouldUsePlugins: shouldUsePlugins,
       shouldHideTitle: shouldHideTitle,
