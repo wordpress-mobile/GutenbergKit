@@ -338,7 +338,7 @@ describe( 'getPost', () => {
 			expect( result ).toEqual( {
 				id: -1,
 				type: 'post',
-				status: 'auto-draft',
+				status: 'draft',
 				title: { raw: '' },
 				content: { raw: '' },
 			} );
@@ -364,7 +364,7 @@ describe( 'getPost', () => {
 			expect( result ).toEqual( {
 				id: -1,
 				type: 'post',
-				status: 'auto-draft',
+				status: 'draft',
 				title: { raw: 'Title' },
 				content: { raw: 'Content' },
 			} );

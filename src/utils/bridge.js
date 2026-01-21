@@ -301,7 +301,7 @@ export async function getPost() {
 		return {
 			id: post?.id ?? -1,
 			type: post?.type || 'post',
-			status: post?.status || 'auto-draft',
+			status: post?.status || 'draft',
 			title: { raw: hostContent.title },
 			content: { raw: hostContent.content },
 		};
@@ -312,7 +312,7 @@ export async function getPost() {
 		return {
 			id: post.id,
 			type: post.type || 'post',
-			status: post.status || 'auto-draft',
+			status: post.status || 'draft',
 			title: { raw: decodeURIComponent( post.title ) },
 			content: { raw: decodeURIComponent( post.content ) },
 		};
@@ -322,7 +322,7 @@ export async function getPost() {
 	return {
 		id: -1,
 		type: 'post',
-		status: 'auto-draft',
+		status: 'draft',
 		title: { raw: '' },
 		content: { raw: '' },
 	};
