@@ -160,12 +160,9 @@ class GutenbergViewTest {
     }
 
     @Test
-    fun `initializeWebView sets custom user agent with GutenbergKit identifier`() {
-        // Given
-        val gutenbergView = GutenbergView(RuntimeEnvironment.getApplication())
-
-        // When
-        gutenbergView.initializeWebView()
+    fun `GutenbergView sets custom user agent with GutenbergKit identifier`() {
+        // The user agent is set during construction, so we can verify it on the gutenbergView
+        // that was already set up in the @Before method
 
         // Then
         val userAgent = gutenbergView.settings.userAgentString

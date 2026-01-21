@@ -8,6 +8,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import org.wordpress.gutenberg.EditorHTTPClient
 import org.wordpress.gutenberg.EditorHTTPClientProtocol
 import org.wordpress.gutenberg.model.EditorAssetBundle
 import org.wordpress.gutenberg.model.EditorCachePolicy
@@ -16,6 +17,7 @@ import org.wordpress.gutenberg.model.EditorProgress
 import org.wordpress.gutenberg.model.EditorProgressCallback
 import org.wordpress.gutenberg.model.LocalEditorAssetManifest
 import org.wordpress.gutenberg.model.RemoteEditorAssetManifest
+import org.wordpress.gutenberg.model.http.EditorHttpMethod
 import java.io.File
 import java.net.URL
 import java.util.Date
@@ -61,7 +63,7 @@ class EditorAssetsLibrary(
             }
 
             val url = editorAssetsUrl(configuration)
-            val response = httpClient.perform("GET", url)
+            val response = httpClient.perform(EditorHttpMethod.GET, url)
             val remoteManifest = RemoteEditorAssetManifest.fromData(response.stringData)
 
             val downloadDate = existingBundleDownloadDate(remoteManifest.checksum)

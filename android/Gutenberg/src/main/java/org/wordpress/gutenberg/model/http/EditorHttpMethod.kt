@@ -8,5 +8,6 @@ enum class EditorHttpMethod {
     POST,
     PUT,
     DELETE,
-    OPTIONS
+    OPTIONS,
+    PATCH,
 }

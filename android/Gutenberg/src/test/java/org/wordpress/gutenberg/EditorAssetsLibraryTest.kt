@@ -17,6 +17,7 @@ import org.wordpress.gutenberg.model.EditorProgress
 import org.wordpress.gutenberg.model.LocalEditorAssetManifest
 import org.wordpress.gutenberg.model.TestResources
 import org.wordpress.gutenberg.model.http.EditorHTTPHeaders
+import org.wordpress.gutenberg.model.http.EditorHttpMethod
 import org.wordpress.gutenberg.stores.EditorAssetsLibrary
 import java.io.File
 import java.util.UUID
@@ -748,9 +749,9 @@ class EditorAssetsLibraryMockHTTPClient : EditorHTTPClientProtocol {
         )
     }
 
-    override suspend fun perform(method: String, url: String): EditorHTTPClientResponse {
+    override suspend fun perform(method: EditorHttpMethod, url: String): EditorHTTPClientResponse {
         synchronized(lock) {
-            if (method == "GET") {
+            if (method == EditorHttpMethod.GET) {
                 getCallCount++
             }
         }

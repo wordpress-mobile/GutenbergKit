@@ -13,6 +13,7 @@ import org.wordpress.gutenberg.model.EditorCachePolicy
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorSettings
 import org.wordpress.gutenberg.model.http.EditorHTTPHeaders
+import org.wordpress.gutenberg.model.http.EditorHttpMethod
 import org.wordpress.gutenberg.stores.EditorURLCache
 import java.io.File
 
@@ -330,7 +331,7 @@ class RESTAPIRepositoryTest {
                 throw NotImplementedError()
             }
 
-            override suspend fun perform(method: String, url: String): EditorHTTPClientResponse {
+            override suspend fun perform(method: EditorHttpMethod, url: String): EditorHTTPClientResponse {
                 onRequest(url)
                 return EditorHTTPClientResponse(
                     data = "{}".toByteArray(),
@@ -349,7 +350,7 @@ class RESTAPIRepositoryTest {
                 throw NotImplementedError()
             }
 
-            override suspend fun perform(method: String, url: String): EditorHTTPClientResponse {
+            override suspend fun perform(method: EditorHttpMethod, url: String): EditorHTTPClientResponse {
                 capturedURL = url
                 return EditorHTTPClientResponse(
                     data = "{}".toByteArray(),
@@ -395,13 +396,13 @@ class MockHTTPClient : EditorHTTPClientProtocol {
         )
     }
 
-    override suspend fun perform(method: String, url: String): EditorHTTPClientResponse {
-        if (method == "GET") {
+    override suspend fun perform(method: EditorHttpMethod, url: String): EditorHTTPClientResponse {
+        if (method == EditorHttpMethod.GET) {
             getCallCount++
         }
 
         val responseData = when (method) {
-            "OPTIONS" -> optionsResponse
+            EditorHttpMethod.OPTIONS -> optionsResponse
             else -> getResponse
         }
 

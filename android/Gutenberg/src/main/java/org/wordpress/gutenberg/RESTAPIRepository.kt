@@ -54,7 +54,7 @@ class RESTAPIRepository(
      */
     suspend fun fetchPost(id: Int): EditorURLResponse {
         val url = buildPostUrl(id)
-        val response = httpClient.perform("GET", url)
+        val response = httpClient.perform(EditorHttpMethod.GET, url)
         return EditorURLResponse(
             data = response.stringData,
             responseHeaders = response.headers
@@ -90,7 +90,7 @@ class RESTAPIRepository(
             return EditorSettings.undefined
         }
 
-        val response = httpClient.perform("GET", editorSettingsUrl)
+        val response = httpClient.perform(EditorHttpMethod.GET, editorSettingsUrl)
         val editorSettings = EditorSettings.fromData(response.stringData)
 
         // Store the parsed settings in cache
@@ -203,7 +203,7 @@ class RESTAPIRepository(
     }
 
     private suspend fun perform(method: EditorHttpMethod, url: String): EditorURLResponse {
-        val response = httpClient.perform(method.name, url)
+        val response = httpClient.perform(method, url)
         val urlResponse = EditorURLResponse(
             data = response.stringData,
             responseHeaders = response.headers

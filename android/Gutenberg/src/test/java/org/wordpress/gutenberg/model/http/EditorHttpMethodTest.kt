@@ -23,9 +23,20 @@ class EditorHttpMethodTest {
                 EditorHttpMethod.POST,
                 EditorHttpMethod.PUT,
                 EditorHttpMethod.DELETE,
-                EditorHttpMethod.OPTIONS
+                EditorHttpMethod.OPTIONS,
+                EditorHttpMethod.PATCH
             ),
             allMethods
         )
+    }
+
+    @Test
+    fun `toString returns all-caps HTTP method name`() {
+        assertEquals("GET", EditorHttpMethod.GET.toString())
+        assertEquals("POST", EditorHttpMethod.POST.toString())
+        assertEquals("PUT", EditorHttpMethod.PUT.toString())
+        assertEquals("DELETE", EditorHttpMethod.DELETE.toString())
+        assertEquals("OPTIONS", EditorHttpMethod.OPTIONS.toString())
+        assertEquals("PATCH", EditorHttpMethod.PATCH.toString())
     }
 }

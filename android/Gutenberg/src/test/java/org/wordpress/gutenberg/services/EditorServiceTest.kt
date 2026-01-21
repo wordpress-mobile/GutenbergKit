@@ -13,6 +13,7 @@ import org.wordpress.gutenberg.EditorHTTPClientProtocol
 import org.wordpress.gutenberg.EditorHTTPClientResponse
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.http.EditorHTTPHeaders
+import org.wordpress.gutenberg.model.http.EditorHttpMethod
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -194,9 +195,9 @@ class EditorServiceMockHTTPClient : EditorHTTPClientProtocol {
         )
     }
 
-    override suspend fun perform(method: String, url: String): EditorHTTPClientResponse {
+    override suspend fun perform(method: EditorHttpMethod, url: String): EditorHTTPClientResponse {
         synchronized(lock) {
-            if (method == "GET") {
+            if (method == EditorHttpMethod.GET) {
                 getCallCount++
             }
         }

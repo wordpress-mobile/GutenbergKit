@@ -14,6 +14,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.wordpress.gutenberg.model.http.EditorHttpMethod
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -171,7 +172,7 @@ class EditorHTTPClientTest {
         )
 
         val client = makeClient()
-        val response = client.perform("GET", "${baseUrl}wp/v2/posts/1")
+        val response = client.perform(EditorHttpMethod.GET, "${baseUrl}wp/v2/posts/1")
 
         assertEquals(200, response.statusCode)
         assertEquals(responseBody, response.stringData)
@@ -182,7 +183,7 @@ class EditorHTTPClientTest {
         mockWebServer.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
 
         val client = makeClient(authHeader = "Bearer my-secret-token")
-        client.perform("GET", "${baseUrl}test")
+        client.perform(EditorHttpMethod.GET, "${baseUrl}test")
 
         val recordedRequest = mockWebServer.takeRequest()
         assertEquals("Bearer my-secret-token", recordedRequest.getHeader("Authorization"))
@@ -193,7 +194,7 @@ class EditorHTTPClientTest {
         mockWebServer.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
 
         val client = makeClient()
-        client.perform("OPTIONS", "${baseUrl}test")
+        client.perform(EditorHttpMethod.OPTIONS, "${baseUrl}test")
 
         val recordedRequest = mockWebServer.takeRequest()
         assertEquals("OPTIONS", recordedRequest.method)
@@ -210,7 +211,7 @@ class EditorHTTPClientTest {
         )
 
         val client = makeClient()
-        val response = client.perform("GET", "${baseUrl}test")
+        val response = client.perform(EditorHttpMethod.GET, "${baseUrl}test")
 
         assertEquals("custom-value", response.headers["X-Custom-Header"])
         assertEquals("application/json", response.headers["Content-Type"])
@@ -228,7 +229,7 @@ class EditorHTTPClientTest {
         val client = makeClient()
 
         try {
-            client.perform("GET", "${baseUrl}test")
+            client.perform(EditorHttpMethod.GET, "${baseUrl}test")
             fail("Expected WPErrorResponse to be thrown")
         } catch (e: EditorHTTPClientError.WPErrorResponse) {
             assertEquals("rest_forbidden", e.error.code)
@@ -247,7 +248,7 @@ class EditorHTTPClientTest {
         val client = makeClient()
 
         try {
-            client.perform("GET", "${baseUrl}test")
+            client.perform(EditorHttpMethod.GET, "${baseUrl}test")
             fail("Expected Unknown error to be thrown")
         } catch (e: EditorHTTPClientError.Unknown) {
             assertEquals(500, e.statusCode)
@@ -261,11 +262,11 @@ class EditorHTTPClientTest {
 
         var delegateCalled = false
         var capturedUrl: String? = null
-        var capturedMethod: String? = null
+        var capturedMethod: EditorHttpMethod? = null
         var capturedData: ByteArray? = null
 
         val delegate = object : EditorHTTPClientDelegate {
-            override fun didPerformRequest(url: String, method: String, response: Response, data: ByteArray) {
+            override fun didPerformRequest(url: String, method: EditorHttpMethod, response: Response, data: ByteArray) {
                 delegateCalled = true
                 capturedUrl = url
                 capturedMethod = method
@@ -274,11 +275,11 @@ class EditorHTTPClientTest {
         }
 
         val client = makeClient(delegate = delegate)
-        client.perform("GET", "${baseUrl}test")
+        client.perform(EditorHttpMethod.GET, "${baseUrl}test")
 
         assertTrue(delegateCalled)
         assertTrue(capturedUrl?.contains("test") == true)
-        assertEquals("GET", capturedMethod)
+        assertEquals(EditorHttpMethod.GET, capturedMethod)
         assertEquals("response data", capturedData?.toString(Charsets.UTF_8))
     }
 
@@ -287,7 +288,7 @@ class EditorHTTPClientTest {
         mockWebServer.enqueue(MockResponse().setResponseCode(204))
 
         val client = makeClient()
-        val response = client.perform("DELETE", "${baseUrl}test")
+        val response = client.perform(EditorHttpMethod.DELETE, "${baseUrl}test")
 
         assertEquals(204, response.statusCode)
         assertTrue(response.data.isEmpty())
@@ -416,7 +417,7 @@ class EditorHTTPClientTest {
             okHttpClient = customOkHttpClient
         )
 
-        val response = client.perform("GET", "${baseUrl}test")
+        val response = client.perform(EditorHttpMethod.GET, "${baseUrl}test")
         assertEquals(200, response.statusCode)
     }
 
@@ -444,7 +445,7 @@ class EditorHTTPClientTest {
         val client = makeClient()
 
         try {
-            client.perform("GET", "${baseUrl}test")
+            client.perform(EditorHttpMethod.GET, "${baseUrl}test")
             fail("Expected WPErrorResponse to be thrown")
         } catch (e: EditorHTTPClientError.WPErrorResponse) {
             assertEquals("rest_invalid_param", e.error.code)
@@ -463,7 +464,7 @@ class EditorHTTPClientTest {
         val client = makeClient()
 
         try {
-            client.perform("GET", "${baseUrl}test")
+            client.perform(EditorHttpMethod.GET, "${baseUrl}test")
             fail("Expected Unknown error to be thrown")
         } catch (e: EditorHTTPClientError.Unknown) {
             assertEquals(500, e.statusCode)
@@ -481,7 +482,7 @@ class EditorHTTPClientTest {
         val client = makeClient()
 
         try {
-            client.perform("GET", "${baseUrl}test")
+            client.perform(EditorHttpMethod.GET, "${baseUrl}test")
             fail("Expected Unknown error to be thrown")
         } catch (e: EditorHTTPClientError.Unknown) {
             assertEquals(500, e.statusCode)
@@ -499,7 +500,7 @@ class EditorHTTPClientTest {
         val client = makeClient()
 
         try {
-            client.perform("GET", "${baseUrl}test")
+            client.perform(EditorHttpMethod.GET, "${baseUrl}test")
             fail("Expected Unknown error to be thrown")
         } catch (e: EditorHTTPClientError.Unknown) {
             assertEquals(500, e.statusCode)
@@ -518,7 +519,7 @@ class EditorHTTPClientTest {
         val client = makeClient()
 
         try {
-            client.perform("GET", "${baseUrl}test")
+            client.perform(EditorHttpMethod.GET, "${baseUrl}test")
             fail("Expected WPErrorResponse to be thrown")
         } catch (e: EditorHTTPClientError.WPErrorResponse) {
             assertEquals("rest_invalid_param", e.error.code)
@@ -538,7 +539,7 @@ class EditorHTTPClientTest {
         val client = makeClient()
 
         try {
-            client.perform("GET", "${baseUrl}test")
+            client.perform(EditorHttpMethod.GET, "${baseUrl}test")
             fail("Expected WPErrorResponse to be thrown")
         } catch (e: EditorHTTPClientError.WPErrorResponse) {
             assertEquals("rest_invalid_param", e.error.code)
@@ -558,7 +559,7 @@ class EditorHTTPClientTest {
         val client = makeClient()
 
         try {
-            client.perform("GET", "${baseUrl}test")
+            client.perform(EditorHttpMethod.GET, "${baseUrl}test")
             fail("Expected WPErrorResponse to be thrown")
         } catch (e: EditorHTTPClientError.WPErrorResponse) {
             assertEquals("custom_error", e.error.code)
@@ -578,7 +579,7 @@ class EditorHTTPClientTest {
         val client = makeClient()
 
         try {
-            client.perform("GET", "${baseUrl}test")
+            client.perform(EditorHttpMethod.GET, "${baseUrl}test")
             fail("Expected WPErrorResponse to be thrown")
         } catch (e: EditorHTTPClientError.WPErrorResponse) {
             assertEquals("simple_error", e.error.code)
@@ -598,7 +599,7 @@ class EditorHTTPClientTest {
         val client = makeClient()
 
         try {
-            client.perform("GET", "${baseUrl}test")
+            client.perform(EditorHttpMethod.GET, "${baseUrl}test")
             fail("Expected WPErrorResponse to be thrown")
         } catch (e: EditorHTTPClientError.WPErrorResponse) {
             assertEquals("", e.error.code)
@@ -618,7 +619,7 @@ class EditorHTTPClientTest {
         val client = makeClient()
 
         try {
-            client.perform("GET", "${baseUrl}test")
+            client.perform(EditorHttpMethod.GET, "${baseUrl}test")
             fail("Expected WPErrorResponse to be thrown")
         } catch (e: EditorHTTPClientError.WPErrorResponse) {
             assertEquals("empty_message", e.error.code)
@@ -637,7 +638,7 @@ class EditorHTTPClientTest {
         val client = makeClient()
 
         try {
-            client.perform("GET", "${baseUrl}test")
+            client.perform(EditorHttpMethod.GET, "${baseUrl}test")
             fail("Expected Unknown error to be thrown")
         } catch (e: EditorHTTPClientError.Unknown) {
             assertEquals(500, e.statusCode)
@@ -655,7 +656,7 @@ class EditorHTTPClientTest {
         val client = makeClient()
 
         try {
-            client.perform("GET", "${baseUrl}test")
+            client.perform(EditorHttpMethod.GET, "${baseUrl}test")
             fail("Expected Unknown error to be thrown")
         } catch (e: EditorHTTPClientError.Unknown) {
             assertEquals(500, e.statusCode)
@@ -673,7 +674,7 @@ class EditorHTTPClientTest {
         val client = makeClient()
 
         try {
-            client.perform("GET", "${baseUrl}test")
+            client.perform(EditorHttpMethod.GET, "${baseUrl}test")
             fail("Expected Unknown error to be thrown")
         } catch (e: EditorHTTPClientError.Unknown) {
             assertEquals(500, e.statusCode)
@@ -692,7 +693,7 @@ class EditorHTTPClientTest {
         val client = makeClient()
 
         try {
-            client.perform("GET", "${baseUrl}test")
+            client.perform(EditorHttpMethod.GET, "${baseUrl}test")
             fail("Expected Unknown error to be thrown")
         } catch (e: EditorHTTPClientError.Unknown) {
             assertEquals(500, e.statusCode)
@@ -711,7 +712,7 @@ class EditorHTTPClientTest {
         val client = makeClient()
 
         try {
-            client.perform("GET", "${baseUrl}test")
+            client.perform(EditorHttpMethod.GET, "${baseUrl}test")
             fail("Expected WPErrorResponse to be thrown")
         } catch (e: EditorHTTPClientError.WPErrorResponse) {
             assertEquals("null_data_error", e.error.code)
@@ -738,7 +739,7 @@ class EditorHTTPClientTest {
         )
 
         val client = makeClient()
-        val response = client.perform("POST", "${baseUrl}test")
+        val response = client.perform(EditorHttpMethod.POST, "${baseUrl}test")
 
         assertEquals(201, response.statusCode)
     }

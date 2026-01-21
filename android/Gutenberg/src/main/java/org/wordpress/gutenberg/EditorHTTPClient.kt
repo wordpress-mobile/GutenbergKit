@@ -11,6 +11,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.wordpress.gutenberg.model.http.EditorHTTPHeaders
+import org.wordpress.gutenberg.model.http.EditorHttpMethod
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -20,7 +21,7 @@ import java.util.concurrent.TimeUnit
  */
 interface EditorHTTPClientProtocol {
     suspend fun download(url: String, destination: File): EditorHTTPClientDownloadResponse
-    suspend fun perform(method: String, url: String): EditorHTTPClientResponse
+    suspend fun perform(method: EditorHttpMethod, url: String): EditorHTTPClientResponse
 }
 
 /**
@@ -29,7 +30,7 @@ interface EditorHTTPClientProtocol {
  * Implement this interface to inspect or log all network requests.
  */
 interface EditorHTTPClientDelegate {
-    fun didPerformRequest(url: String, method: String, response: Response, data: ByteArray)
+    fun didPerformRequest(url: String, method: EditorHttpMethod, response: Response, data: ByteArray)
 }
 
 /**
@@ -172,17 +173,21 @@ class EditorHTTPClient(
             )
         }
 
-    override suspend fun perform(method: String, url: String): EditorHTTPClientResponse =
+    override suspend fun perform(method: EditorHttpMethod, url: String): EditorHTTPClientResponse =
         withContext(Dispatchers.IO) {
             // OkHttp requires a body for POST, PUT, PATCH methods
             // GET, HEAD, OPTIONS, DELETE don't require a body
-            val requiresBody = method.uppercase() in listOf("POST", "PUT", "PATCH")
+            val requiresBody = method in listOf(
+                EditorHttpMethod.POST,
+                EditorHttpMethod.PUT,
+                EditorHttpMethod.PATCH
+            )
             val requestBody = if (requiresBody) "".toRequestBody(null) else null
 
             val request = Request.Builder()
                 .url(url)
                 .addHeader("Authorization", authHeader)
-                .method(method, requestBody)
+                .method(method.toString(), requestBody)
                 .build()
 
             val response = client.newCall(request).execute()
