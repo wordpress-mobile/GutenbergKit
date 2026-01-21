@@ -5,6 +5,8 @@ import android.os.Bundle
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.content.pm.ApplicationInfo
+import android.os.Build
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -52,6 +54,7 @@ import kotlinx.coroutines.launch
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.GutenbergView
 import org.wordpress.gutenberg.EditorLoadingListener
+import org.wordpress.gutenberg.RecordedNetworkRequest
 import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.model.EditorDependenciesSerializer
 import org.wordpress.gutenberg.model.EditorProgress
@@ -86,7 +89,7 @@ class EditorActivity : ComponentActivity() {
 
         // Get the configuration from the intent
         val configuration =
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 intent.getParcelableExtra(
                     MainActivity.EXTRA_CONFIGURATION,
                     EditorConfiguration::class.java
@@ -259,7 +262,12 @@ fun EditorScreen(
     ) { innerPadding ->
         AndroidView(
             factory = { context ->
-                GutenbergView(context).apply {
+                GutenbergView(
+                    configuration = configuration,
+                    dependencies = dependencies,
+                    coroutineScope = coroutineScope,
+                    context = context
+                ).apply {
                     // Explicitly set layoutParams to MATCH_PARENT to ensure proper
                     // viewport dimension communication to the WebView for CSS units.
                     layoutParams = ViewGroup.LayoutParams(
@@ -284,32 +292,32 @@ fun EditorScreen(
                         }
                     })
                     setNetworkRequestListener(object : GutenbergView.NetworkRequestListener {
-                        override fun onNetworkRequest(request: org.wordpress.gutenberg.RecordedNetworkRequest) {
-                            android.util.Log.d("EditorActivity", "🌐 Network Request: ${request.method} ${request.url}")
-                            android.util.Log.d("EditorActivity", "   Status: ${request.status} ${request.statusText}, Duration: ${request.duration}ms")
+                        override fun onNetworkRequest(request: RecordedNetworkRequest) {
+                            Log.d("EditorActivity", "🌐 Network Request: ${request.method} ${request.url}")
+                            Log.d("EditorActivity", "   Status: ${request.status} ${request.statusText}, Duration: ${request.duration}ms")
 
                             // Log request headers
                             if (request.requestHeaders.isNotEmpty()) {
-                                android.util.Log.d("EditorActivity", "   Request Headers:")
+                                Log.d("EditorActivity", "   Request Headers:")
                                 request.requestHeaders.toSortedMap().forEach { (key, value) ->
-                                    android.util.Log.d("EditorActivity", "      $key: $value")
+                                    Log.d("EditorActivity", "      $key: $value")
                                 }
                             }
 
                             request.requestBody?.let {
-                                android.util.Log.d("EditorActivity", "   Request Body: ${it.take(200)}...")
+                                Log.d("EditorActivity", "   Request Body: ${it.take(200)}...")
                             }
 
                             // Log response headers
                             if (request.responseHeaders.isNotEmpty()) {
-                                android.util.Log.d("EditorActivity", "   Response Headers:")
+                                Log.d("EditorActivity", "   Response Headers:")
                                 request.responseHeaders.toSortedMap().forEach { (key, value) ->
-                                    android.util.Log.d("EditorActivity", "      $key: $value")
+                                    Log.d("EditorActivity", "      $key: $value")
                                 }
                             }
 
                             request.responseBody?.let {
-                                android.util.Log.d("EditorActivity", "   Response Body: ${it.take(200)}...")
+                                Log.d("EditorActivity", "   Response Body: ${it.take(200)}...")
                             }
                         }
                     })
