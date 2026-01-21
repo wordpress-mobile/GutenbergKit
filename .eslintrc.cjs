@@ -17,4 +17,13 @@ module.exports = {
 			{ allowConstantExport: true },
 		],
 	},
+	settings: {
+		'import/resolver': {
+			node: {
+				// Matches file extensions supported by WordPress build tools
+				// See: https://github.com/WordPress/gutenberg/blob/760acec3522516c2212e0213ff10cd2a8c9e8df0/tools/eslint/import-resolver.js#L15
+				extensions: [ '.js', '.jsx', '.mjs', '.cjs' ],
+			},
+		},
+	},
 };
