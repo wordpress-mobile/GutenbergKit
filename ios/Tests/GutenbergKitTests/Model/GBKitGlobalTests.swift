@@ -107,13 +107,13 @@ struct GBKitGlobalTests: MakesTestFixtures {
     #expect(pageGlobal.post.type == "page")
   }
 
-  @Test("maps status to post.status")
-  func mapsStatus() throws {
+  @Test("maps postStatus to post.status")
+  func mapsPostStatus() throws {
     let draftConfig = makeConfigurationBuilder()
-      .setStatus("draft")
+      .setPostStatus("draft")
       .build()
     let publishConfig = makeConfigurationBuilder()
-      .setStatus("publish")
+      .setPostStatus("publish")
       .build()
 
     let draftGlobal = try GBKitGlobal(configuration: draftConfig, dependencies: makeDependencies())

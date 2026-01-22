@@ -100,7 +100,7 @@ public struct GBKitGlobal: Sendable, Codable {
         self.post = Post(
             id: configuration.postID ?? -1,
             type: configuration.postType,
-            status: configuration.status,
+            status: configuration.postStatus,
             title: configuration.escapedTitle,
             content: configuration.escapedContent
         )
