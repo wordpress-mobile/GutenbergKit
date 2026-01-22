@@ -1,7 +1,7 @@
-diff --git a/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.js b/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.js
-index 59f2a09..e609306 100644
---- a/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.js
-+++ b/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.js
+diff --git a/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.mjs b/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.mjs
+index ea5da25..19cdf5e 100644
+--- a/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.mjs
++++ b/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.mjs
 @@ -23,6 +23,10 @@ function InserterListItem({
    ...props
  }) {
@@ -22,10 +22,10 @@ index 59f2a09..e609306 100644
                    return;
                  }
                  onHover(item);
-diff --git a/node_modules/@wordpress/block-editor/build-module/components/inserter/index.js b/node_modules/@wordpress/block-editor/build-module/components/inserter/index.js
-index d762257..8ea6b39 100644
---- a/node_modules/@wordpress/block-editor/build-module/components/inserter/index.js
-+++ b/node_modules/@wordpress/block-editor/build-module/components/inserter/index.js
+diff --git a/node_modules/@wordpress/block-editor/build-module/components/inserter/index.mjs b/node_modules/@wordpress/block-editor/build-module/components/inserter/index.mjs
+index ecc4131..be3da24 100644
+--- a/node_modules/@wordpress/block-editor/build-module/components/inserter/index.mjs
++++ b/node_modules/@wordpress/block-editor/build-module/components/inserter/index.mjs
 @@ -174,8 +174,9 @@ var Inserter = class extends Component {
          contentClassName: clsx("block-editor-inserter__popover", {
            "is-quick": isQuick
@@ -37,10 +37,10 @@ index d762257..8ea6b39 100644
          expandOnMobile: true,
          headerTitle: __("Add a block"),
          renderToggle: this.renderToggle,
-diff --git a/node_modules/@wordpress/block-editor/build-module/components/provider/index.js b/node_modules/@wordpress/block-editor/build-module/components/provider/index.js
-index ef8110e..8b3d55f 100644
---- a/node_modules/@wordpress/block-editor/build-module/components/provider/index.js
-+++ b/node_modules/@wordpress/block-editor/build-module/components/provider/index.js
+diff --git a/node_modules/@wordpress/block-editor/build-module/components/provider/index.mjs b/node_modules/@wordpress/block-editor/build-module/components/provider/index.mjs
+index a46a5d2..4a7d6e5 100644
+--- a/node_modules/@wordpress/block-editor/build-module/components/provider/index.mjs
++++ b/node_modules/@wordpress/block-editor/build-module/components/provider/index.mjs
 @@ -91,7 +91,7 @@ var ExperimentalBlockEditorProvider = withRegistryProvider(
    }
  );
@@ -51,11 +51,11 @@ index ef8110e..8b3d55f 100644
  var provider_default = BlockEditorProvider;
  export {
 diff --git a/node_modules/@wordpress/block-editor/package.json b/node_modules/@wordpress/block-editor/package.json
-index 2cb09ec..11546c8 100644
+index eea18fd..dbf80c5 100644
 --- a/node_modules/@wordpress/block-editor/package.json
 +++ b/node_modules/@wordpress/block-editor/package.json
-@@ -31,7 +31,9 @@
- 			"require": "./build/index.js"
+@@ -39,7 +39,9 @@
+ 			"require": "./build/index.cjs"
  		},
  		"./package.json": "./package.json",
 -		"./build-style/": "./build-style/"
