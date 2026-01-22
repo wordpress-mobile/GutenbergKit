@@ -2,7 +2,7 @@
  * Internal dependencies
  */
 import parseException from './exception-parser';
-import { debug } from './logger';
+import { debug, error } from './logger';
 import { isDevMode } from './dev-mode';
 import { basicFetch } from './fetch';
 
@@ -229,7 +229,8 @@ export function getGBKit() {
 
 	try {
 		return JSON.parse( localStorage.getItem( 'GBKit' ) ) || {};
-	} catch ( error ) {
+	} catch ( err ) {
+		error( 'Failed to parse GBKit from localStorage', err );
 		return {};
 	}
 }
@@ -245,28 +246,83 @@ export function getGBKit() {
  */
 
 /**
- * Retrieves the current post data from the GBKit global.
+ * Requests the latest persisted content from the native host.
  *
- * @return {Post} The post object containing the following properties:
+ * Used during editor initialization to recover content after WebView refresh.
+ * The native host maintains the authoritative content via autosave events.
+ *
+ * @return {Promise<{title: string, content: string}|null>} The latest content or null if unavailable.
  */
-export function getPost() {
+export async function requestLatestContent() {
+	if ( window.webkit?.messageHandlers?.requestLatestContent ) {
+		try {
+			return await window.webkit.messageHandlers.requestLatestContent.postMessage(
+				{}
+			);
+		} catch ( err ) {
+			error( 'Failed to request content from iOS host', err );
+			return null;
+		}
+	}
+
+	if ( window.editorDelegate?.requestLatestContent ) {
+		try {
+			const result = window.editorDelegate.requestLatestContent();
+			return result ? JSON.parse( result ) : null;
+		} catch ( err ) {
+			error( 'Failed to request content from Android host', err );
+			return null;
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Retrieves the current post data from the native host
+ *
+ * Always requests content from the native host first, as it maintains the
+ * latest content via autosave. Falls back to `window.GBKit.post` only if the
+ * native bridge is unavailable (e.g., dev mode).
+ *
+ * Note: `window.GBKit.post.title/content` are "initial values" injected at
+ * WebView load. After a WebView refresh, these may be stale. The native host
+ * has the authoritative content from autosave.
+ *
+ * @return {Promise<Post>} The post object.
+ */
+export async function getPost() {
 	const { post } = getGBKit();
+
+	const hostContent = await requestLatestContent();
+
+	if ( hostContent ) {
+		debug( 'Using content from native host' );
+		return {
+			id: post?.id ?? -1,
+			type: post?.type || 'post',
+			status: post?.status || 'draft',
+			title: { raw: hostContent.title },
+			content: { raw: hostContent.content },
+		};
+	}
+
 	if ( post ) {
+		debug( 'Native bridge unavailable, using GBKit initial content' );
 		return {
 			id: post.id,
 			type: post.type || 'post',
-			status: post.status,
+			status: post.status || 'draft',
 			title: { raw: decodeURIComponent( post.title ) },
 			content: { raw: decodeURIComponent( post.content ) },
 		};
 	}
 
-	// Since we don't use the auto-save functionality, draft posts need to have an ID.
-	// We assign a temporary ID of -1.
+	// Fallback to default empty post
 	return {
 		id: -1,
 		type: 'post',
-		status: 'auto-draft',
+		status: 'draft',
 		title: { raw: '' },
 		content: { raw: '' },
 	};

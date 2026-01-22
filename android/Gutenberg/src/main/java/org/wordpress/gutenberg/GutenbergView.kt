@@ -108,6 +108,7 @@ class GutenbergView : WebView {
     private var modalDialogStateListener: ModalDialogStateListener? = null
     private var networkRequestListener: NetworkRequestListener? = null
     private var loadingListener: EditorLoadingListener? = null
+    private var latestContentProvider: LatestContentProvider? = null
 
     /**
      * Stores the contextId from the most recent openMediaLibrary call
@@ -156,6 +157,10 @@ class GutenbergView : WebView {
 
     fun setNetworkRequestListener(listener: NetworkRequestListener) {
         networkRequestListener = listener
+    }
+
+    fun setLatestContentProvider(provider: LatestContentProvider?) {
+        latestContentProvider = provider
     }
 
     fun setOnFileChooserRequestedListener(listener: (Intent, Int) -> Unit) {
@@ -511,6 +516,29 @@ class GutenbergView : WebView {
         fun onNetworkRequest(request: RecordedNetworkRequest)
     }
 
+    /**
+     * Provides the latest persisted content for recovery after WebView refresh.
+     *
+     * When the WebView reinitializes (e.g., due to OS memory pressure or page refresh),
+     * the editor requests the latest content from this provider. The host app should
+     * return the most recently persisted title and content from autosave.
+     */
+    interface LatestContentProvider {
+        /**
+         * Returns the most recently persisted title and content from autosave.
+         * @return LatestContent if available, null if no persisted content exists.
+         */
+        fun getLatestContent(): LatestContent?
+    }
+
+    /**
+     * Represents persisted editor content for recovery.
+     */
+    data class LatestContent(
+        val title: String,
+        val content: String
+    )
+
     fun getTitleAndContent(originalContent: CharSequence, callback: TitleAndContentCallback, completeComposition: Boolean = false) {
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
@@ -731,6 +759,28 @@ class GutenbergView : WebView {
         }
     }
 
+    /**
+     * Called by JavaScript to request the latest persisted content.
+     *
+     * This method is invoked during editor initialization to recover content
+     * after WebView refresh. The host app provides content via [LatestContentProvider].
+     *
+     * @return JSON string with title and content fields, or null if unavailable.
+     */
+    @JavascriptInterface
+    fun requestLatestContent(): String? {
+        val content = latestContentProvider?.getLatestContent() ?: return null
+        return try {
+            JSONObject().apply {
+                put("title", content.title)
+                put("content", content.content)
+            }.toString()
+        } catch (e: JSONException) {
+            Log.e("GutenbergView", "Failed to serialize latest content", e)
+            null
+        }
+    }
+
     fun resetFilePathCallback() {
         filePathCallback = null
     }
@@ -814,6 +864,7 @@ class GutenbergView : WebView {
         modalDialogStateListener = null
         networkRequestListener = null
         requestInterceptor = DefaultGutenbergRequestInterceptor()
+        latestContentProvider = null
         handler.removeCallbacksAndMessages(null)
         this.destroy()
     }

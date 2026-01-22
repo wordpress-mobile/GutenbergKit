@@ -20,6 +20,7 @@ struct EditorConfigurationBuilderTests: MakesTestFixtures {
     #expect(config.content == "")
     #expect(config.postID == nil)
     #expect(config.postType == "post")
+    #expect(config.postStatus == "draft")
     #expect(config.shouldUseThemeStyles == false)
     #expect(config.shouldUsePlugins == false)
     #expect(config.shouldHideTitle == false)
@@ -214,6 +215,22 @@ struct EditorConfigurationBuilderTests: MakesTestFixtures {
     #expect(config.enableNetworkLogging == true)
   }
 
+  @Test("Builder uses draft as default postStatus")
+  func builderDefaultPostStatus() {
+    let config = makeConfigurationBuilder().build()
+
+    #expect(config.postStatus == "draft")
+  }
+
+  @Test("setPostStatus updates postStatus")
+  func setPostStatusUpdatesPostStatus() {
+    let config = makeConfigurationBuilder()
+      .setPostStatus("publish")
+      .build()
+
+    #expect(config.postStatus == "publish")
+  }
+
   // MARK: - Method Chaining Tests
 
   @Test("Builder supports method chaining")
@@ -308,6 +325,7 @@ struct EditorConfigurationBuilderTests: MakesTestFixtures {
       .setTitle("Round Trip Title")
       .setContent("<p>Round trip content</p>")
       .setPostID(789)
+      .setPostStatus("publish")
       .setShouldUseThemeStyles(true)
       .setShouldUsePlugins(true)
       .setShouldHideTitle(true)

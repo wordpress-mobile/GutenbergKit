@@ -95,6 +95,35 @@ struct GBKitGlobalTests: MakesTestFixtures {
     #expect(globalWithout.post.id == -1)
   }
 
+  @Test("maps postType to post.type")
+  func mapsPostType() throws {
+    let postConfig = makeConfiguration(postType: "post")
+    let pageConfig = makeConfiguration(postType: "page")
+
+    let postGlobal = try GBKitGlobal(configuration: postConfig, dependencies: makeDependencies())
+    let pageGlobal = try GBKitGlobal(configuration: pageConfig, dependencies: makeDependencies())
+
+    #expect(postGlobal.post.type == "post")
+    #expect(pageGlobal.post.type == "page")
+  }
+
+  @Test("maps postStatus to post.status")
+  func mapsPostStatus() throws {
+    let draftConfig = makeConfigurationBuilder()
+      .setPostStatus("draft")
+      .build()
+    let publishConfig = makeConfigurationBuilder()
+      .setPostStatus("publish")
+      .build()
+
+    let draftGlobal = try GBKitGlobal(configuration: draftConfig, dependencies: makeDependencies())
+    let publishGlobal = try GBKitGlobal(
+      configuration: publishConfig, dependencies: makeDependencies())
+
+    #expect(draftGlobal.post.status == "draft")
+    #expect(publishGlobal.post.status == "publish")
+  }
+
   @Test("maps title with percent encoding")
   func mapsTitleWithEncoding() throws {
     let configuration = makeConfiguration(title: "Hello World")
@@ -137,6 +166,8 @@ struct GBKitGlobalTests: MakesTestFixtures {
     #expect(jsonString.contains("themeStyles"))
     #expect(jsonString.contains("plugins"))
     #expect(jsonString.contains("post"))
+    #expect(jsonString.contains("\"type\""))
+    #expect(jsonString.contains("\"status\""))
     #expect(jsonString.contains("locale"))
     #expect(jsonString.contains("logLevel"))
   }
@@ -152,6 +183,8 @@ struct GBKitGlobalTests: MakesTestFixtures {
 
     #expect(decoded.siteURL == original.siteURL)
     #expect(decoded.post.id == original.post.id)
+    #expect(decoded.post.type == original.post.type)
+    #expect(decoded.post.status == original.post.status)
     #expect(decoded.post.title == original.post.title)
     #expect(decoded.themeStyles == original.themeStyles)
     #expect(decoded.plugins == original.plugins)

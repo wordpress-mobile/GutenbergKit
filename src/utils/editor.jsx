@@ -18,7 +18,7 @@ import { getDefaultEditorSettings } from './editor-settings';
  * @param {Array}   [options.allowedBlockTypes] Array of allowed block types
  * @param {boolean} [options.pluginLoadFailed]  Whether plugin loading failed
  */
-export function initializeEditor( {
+export async function initializeEditor( {
 	allowedBlockTypes,
 	pluginLoadFailed,
 } = {} ) {
@@ -42,7 +42,8 @@ export function initializeEditor( {
 
 	registerCoreBlocks();
 	unregisterDisallowedBlocks( allowedBlockTypes );
-	const post = getPost();
+
+	const post = await getPost();
 
 	createRoot( document.getElementById( 'root' ) ).render(
 		<StrictMode>

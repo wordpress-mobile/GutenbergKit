@@ -12,6 +12,7 @@ data class EditorConfiguration(
     val content: String,
     val postId: Int?,
     val postType: String,
+    val postStatus: String,
     val themeStyles: Boolean,
     val plugins: Boolean,
     val hideTitle: Boolean,
@@ -57,6 +58,7 @@ data class EditorConfiguration(
         private var title: String = ""
         private var content: String = ""
         private var postId: Int? = null
+        private var postStatus: String = "draft"
         private var themeStyles: Boolean = false
         private var plugins: Boolean = false
         private var hideTitle: Boolean = false
@@ -76,6 +78,7 @@ data class EditorConfiguration(
         fun setContent(content: String) = apply { this.content = content }
         fun setPostId(postId: Int?) = apply { this.postId = postId }
         fun setPostType(postType: String) = apply { this.postType = postType }
+        fun setPostStatus(postStatus: String) = apply { this.postStatus = postStatus }
         fun setThemeStyles(themeStyles: Boolean) = apply { this.themeStyles = themeStyles }
         fun setPlugins(plugins: Boolean) = apply { this.plugins = plugins }
         fun setHideTitle(hideTitle: Boolean) = apply { this.hideTitle = hideTitle }
@@ -98,6 +101,7 @@ data class EditorConfiguration(
             content = content,
             postId = postId,
             postType = postType,
+            postStatus = postStatus,
             themeStyles = themeStyles,
             plugins = plugins,
             hideTitle = hideTitle,
@@ -126,6 +130,7 @@ data class EditorConfiguration(
         .setTitle(title)
         .setContent(content)
         .setPostId(postId)
+        .setPostStatus(postStatus)
         .setThemeStyles(themeStyles)
         .setPlugins(plugins)
         .setHideTitle(hideTitle)
@@ -151,6 +156,7 @@ data class EditorConfiguration(
         if (content != other.content) return false
         if (postId != other.postId) return false
         if (postType != other.postType) return false
+        if (postStatus != other.postStatus) return false
         if (themeStyles != other.themeStyles) return false
         if (plugins != other.plugins) return false
         if (hideTitle != other.hideTitle) return false
@@ -177,6 +183,7 @@ data class EditorConfiguration(
         result = 31 * result + content.hashCode()
         result = 31 * result + (postId ?: 0)
         result = 31 * result + postType.hashCode()
+        result = 31 * result + postStatus.hashCode()
         result = 31 * result + themeStyles.hashCode()
         result = 31 * result + plugins.hashCode()
         result = 31 * result + hideTitle.hashCode()

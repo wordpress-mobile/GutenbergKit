@@ -213,6 +213,12 @@ private struct _EditorView: UIViewControllerRepresentable {
                 print("   Response Body: \(responseBody.prefix(200))...")
             }
         }
+
+        func editorDidRequestLatestContent(_ controller: EditorViewController) -> (title: String, content: String)? {
+            // Demo app has no persistence layer, so return nil.
+            // In a real app, return the persisted title and content from autosave.
+            return nil
+        }
     }
 }
 

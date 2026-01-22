@@ -11,10 +11,16 @@ public struct GBKitGlobal: Sendable, Codable {
     public struct Post: Sendable, Codable {
         /// The post ID, or -1 for new posts.
         let id: Int
-        
+
+        /// The post type (e.g., "post", "page").
+        let type: String
+
+        /// The post status (e.g., "draft", "publish", "pending").
+        let status: String
+
         /// The post title.
         let title: String
-        
+
         /// The post content (Gutenberg block markup).
         let content: String
     }
@@ -93,6 +99,8 @@ public struct GBKitGlobal: Sendable, Codable {
         self.locale = configuration.locale
         self.post = Post(
             id: configuration.postID ?? -1,
+            type: configuration.postType,
+            status: configuration.postStatus,
             title: configuration.escapedTitle,
             content: configuration.escapedContent
         )

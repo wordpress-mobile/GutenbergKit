@@ -170,6 +170,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // Set-up communications with the editor.
         config.userContentController.add(controller, name: "editorDelegate")
 
+        // Register async message handler for content recovery requests.
+        // This allows JavaScript to request the latest persisted content from the native host.
+        config.userContentController.addScriptMessageHandler(controller, contentWorld: .page, name: "requestLatestContent")
+
         // This is important so they user can't select anything but text across blocks.
         config.selectionGranularity = .character
 
@@ -659,6 +663,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
+    fileprivate func controllerDidRequestLatestContent(_ controller: GutenbergEditorController) -> (title: String, content: String)? {
+        return delegate?.editorDidRequestLatestContent(self)
+    }
+
+    fileprivate func controllerWebContentProcessDidTerminate(_ controller: GutenbergEditorController) {
+        webView.reload()
+    }
+
     // MARK: - Loading Complete: Editor Ready
 
     /// Called when the editor JavaScript emits the `onEditorLoaded` message.
@@ -714,10 +726,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 @MainActor
 private protocol GutenbergEditorControllerDelegate: AnyObject {
     func controller(_ controller: GutenbergEditorController, didReceiveMessage message: EditorJSMessage)
+    func controllerDidRequestLatestContent(_ controller: GutenbergEditorController) -> (title: String, content: String)?
+    func controllerWebContentProcessDidTerminate(_ controller: GutenbergEditorController)
 }
 
 /// Hiding the conformances, and breaking retain cycles.
-private final class GutenbergEditorController: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+private final class GutenbergEditorController: NSObject, WKNavigationDelegate, WKScriptMessageHandler, WKScriptMessageHandlerWithReply {
     weak var delegate: GutenbergEditorControllerDelegate?
     let configuration: EditorConfiguration
     private let editorURL: URL?
@@ -726,6 +740,27 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
         self.configuration = configuration
         self.editorURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init)
         super.init()
+    }
+
+    // MARK: - WKScriptMessageHandlerWithReply
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) async -> (Any?, String?) {
+        guard message.name == "requestLatestContent" else {
+            return (nil, "Unknown message handler: \(message.name)")
+        }
+
+        let content = await MainActor.run {
+            delegate?.controllerDidRequestLatestContent(self)
+        }
+
+        guard let content else {
+            return (nil, nil)  // No content available - not an error
+        }
+
+        return ([
+            "title": content.title,
+            "content": content.content
+        ] as [String: String], nil)
     }
 
     // MARK: - WKNavigationDelegate
@@ -754,6 +789,13 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
         }
 
         return .allow
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        NSLog("webViewWebContentProcessDidTerminate: reloading editor")
+        MainActor.assumeIsolated {
+            delegate?.controllerWebContentProcessDidTerminate(self)
+        }
     }
 
     // MARK: - WKScriptMessageHandler

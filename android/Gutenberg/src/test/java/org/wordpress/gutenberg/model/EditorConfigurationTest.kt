@@ -30,6 +30,7 @@ class EditorConfigurationBuilderTest {
         assertEquals("", config.content)
         assertNull(config.postId)
         assertEquals(TEST_POST_TYPE, config.postType)
+        assertEquals("draft", config.postStatus)
         assertFalse(config.themeStyles)
         assertFalse(config.plugins)
         assertFalse(config.hideTitle)
@@ -94,6 +95,15 @@ class EditorConfigurationBuilderTest {
             .build()
 
         assertEquals("page", config.postType)
+    }
+
+    @Test
+    fun `setPostStatus updates postStatus`() {
+        val config = builder()
+            .setPostStatus("publish")
+            .build()
+
+        assertEquals("publish", config.postStatus)
     }
 
     @Test
@@ -292,6 +302,7 @@ class EditorConfigurationBuilderTest {
             .setContent("<p>Round trip content</p>")
             .setPostId(999)
             .setPostType("page")
+            .setPostStatus("draft")
             .setThemeStyles(true)
             .setPlugins(true)
             .setHideTitle(true)
@@ -368,6 +379,7 @@ class EditorConfigurationBuilderTest {
         val original = builder()
             .setPostId(123)
             .setPostType("post")
+            .setPostStatus("publish")
             .setEditorSettings("""{"test":true}""")
             .setEditorAssetsEndpoint("https://example.com/assets")
             .build()
@@ -376,6 +388,7 @@ class EditorConfigurationBuilderTest {
 
         assertEquals(123, rebuilt.postId)
         assertEquals("post", rebuilt.postType)
+        assertEquals("publish", rebuilt.postStatus)
         assertEquals("""{"test":true}""", rebuilt.editorSettings)
         assertEquals("https://example.com/assets", rebuilt.editorAssetsEndpoint)
     }
@@ -535,6 +548,19 @@ class EditorConfigurationTest {
             .build()
 
         val config2 = EditorConfiguration.builder(TEST_SITE_URL, TEST_API_ROOT, "page")
+            .build()
+
+        assertNotEquals(config1, config2)
+    }
+
+    @Test
+    fun `Configurations with different postStatus are not equal`() {
+        val config1 = builder()
+            .setPostStatus("draft")
+            .build()
+
+        val config2 = builder()
+            .setPostStatus("publish")
             .build()
 
         assertNotEquals(config1, config2)
@@ -820,6 +846,7 @@ class EditorConfigurationTest {
             .setContent("Test Content")
             .setPostId(123)
             .setPostType("post")
+            .setPostStatus("publish")
             .setThemeStyles(true)
             .setPlugins(true)
             .setHideTitle(false)
@@ -842,6 +869,7 @@ class EditorConfigurationTest {
         assertEquals("Test Content", config.content)
         assertEquals(123, config.postId)
         assertEquals("post", config.postType)
+        assertEquals("publish", config.postStatus)
         assertTrue(config.themeStyles)
         assertTrue(config.plugins)
         assertFalse(config.hideTitle)
