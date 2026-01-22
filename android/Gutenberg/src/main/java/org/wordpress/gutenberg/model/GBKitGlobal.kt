@@ -69,6 +69,10 @@ data class GBKitGlobal(
     data class Post(
         /** The post ID, or -1 for new posts. */
         val id: Int,
+        /** The post type (e.g., `post`, `page`). */
+        val type: String,
+        /** The post status (e.g., `draft`, `publish`, `pending`). */
+        val status: String,
         /** The post title (URL-encoded). */
         val title: String,
         /** The post content (URL-encoded Gutenberg block markup). */
@@ -100,6 +104,8 @@ data class GBKitGlobal(
                 locale = configuration.locale ?: "en",
                 post = Post(
                     id = configuration.postId ?: -1,
+                    type = configuration.postType,
+                    status = configuration.postStatus ?: "draft",
                     title = configuration.title.encodeForEditor(),
                     content = configuration.content.encodeForEditor()
                 ),
