@@ -6,8 +6,10 @@ import android.os.Looper
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebView
+import kotlinx.coroutines.test.TestScope
 import org.junit.Before
 import org.junit.Test
+import org.junit.Rule
 import org.junit.runner.RunWith
 import org.mockito.Mock
 import org.mockito.Mockito.`when`
@@ -20,6 +22,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import org.wordpress.gutenberg.model.EditorConfiguration
+import org.wordpress.gutenberg.model.EditorDependencies
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], manifest = Config.NONE)
@@ -35,11 +39,18 @@ class GutenbergViewTest {
 
     private lateinit var gutenbergView: GutenbergView
 
+    val testScope = TestScope() // Creates a StandardTestDispatcher
+
     @Before
     fun setup() {
         MockitoAnnotations.openMocks(this)
-        gutenbergView = GutenbergView(RuntimeEnvironment.getApplication())
-        gutenbergView.initializeWebView()
+
+        gutenbergView = GutenbergView(
+            EditorConfiguration.bundled(),
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
     }
 
     @Test
@@ -149,12 +160,9 @@ class GutenbergViewTest {
     }
 
     @Test
-    fun `initializeWebView sets custom user agent with GutenbergKit identifier`() {
-        // Given
-        val gutenbergView = GutenbergView(RuntimeEnvironment.getApplication())
-
-        // When
-        gutenbergView.initializeWebView()
+    fun `GutenbergView sets custom user agent with GutenbergKit identifier`() {
+        // The user agent is set during construction, so we can verify it on the gutenbergView
+        // that was already set up in the @Before method
 
         // Then
         val userAgent = gutenbergView.settings.userAgentString

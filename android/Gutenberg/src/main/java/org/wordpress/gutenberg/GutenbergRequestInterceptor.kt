@@ -3,7 +3,7 @@ package org.wordpress.gutenberg
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 
-public interface GutenbergRequestInterceptor {
+interface GutenbergRequestInterceptor {
     fun canIntercept(request: WebResourceRequest): Boolean
     fun handleRequest(request: WebResourceRequest): WebResourceResponse?
 }

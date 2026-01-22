@@ -36,6 +36,9 @@
         <activity
             android:name=".EditorActivity"
             android:exported="false" />
+        <activity
+            android:name=".SitePreparationActivity"
+            android:exported="false" />
     </application>
     <uses-permission android:name="android.permission.INTERNET"/>
 </manifest>

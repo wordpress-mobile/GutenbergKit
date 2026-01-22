@@ -125,7 +125,7 @@ public struct RESTAPIRepository: Sendable {
         let request = URLRequest(method: .GET, url: editorSettingsUrl)
         let response = try await self.httpClient.perform(request)
 
-        let editorSettings = EditorSettings(data: response.0)
+        let editorSettings = try EditorSettings(data: response.0)
 
         let urlResponse = EditorURLResponse((try JSONEncoder().encode(editorSettings), response.1))
         try self.cache.store(urlResponse, for: editorSettingsUrl, httpMethod: .GET)

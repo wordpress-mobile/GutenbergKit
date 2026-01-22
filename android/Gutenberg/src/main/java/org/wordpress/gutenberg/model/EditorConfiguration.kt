@@ -1,14 +1,17 @@
-package org.wordpress.gutenberg
+package org.wordpress.gutenberg.model
 
 import android.os.Parcelable
+import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
+import java.net.URI
+import java.util.UUID
 
 @Parcelize
-open class EditorConfiguration constructor(
+data class EditorConfiguration(
     val title: String,
     val content: String,
     val postId: Int?,
-    val postType: String?,
+    val postType: String,
     val themeStyles: Boolean,
     val plugins: Boolean,
     val hideTitle: Boolean,
@@ -23,23 +26,40 @@ open class EditorConfiguration constructor(
     val enableAssetCaching: Boolean = false,
     val cachedAssetHosts: Set<String> = emptySet(),
     val editorAssetsEndpoint: String? = null,
-    val enableNetworkLogging: Boolean = false
+    val enableNetworkLogging: Boolean = false,
+    var enableOfflineMode: Boolean = false,
 ): Parcelable {
+
+    /**
+     * A site ID derived from the URL that can be used in file system paths.
+     *
+     * Returns the host portion of the siteURL, or a UUID if the URL has no host.
+     */
+    @IgnoredOnParcel
+    val siteId: String by lazy {
+        try {
+            URI(siteURL).host ?: UUID.randomUUID().toString()
+        } catch (e: Exception) {
+            UUID.randomUUID().toString()
+        }
+    }
     companion object {
         @JvmStatic
-        fun builder(): Builder = Builder()
+        fun builder(siteURL: String, siteApiRoot: String, postType: String = "post"): Builder = Builder(siteURL, siteApiRoot, postType = postType)
+
+        @JvmStatic
+        fun bundled(): EditorConfiguration = Builder("https://example.com", "https://example.com/wp-json/", "post")
+            .setEnableOfflineMode(true)
+            .build()
     }
 
-    class Builder {
+    class Builder(private var siteURL: String, private var siteApiRoot: String, private var postType: String) {
         private var title: String = ""
         private var content: String = ""
         private var postId: Int? = null
-        private var postType: String? = null
         private var themeStyles: Boolean = false
         private var plugins: Boolean = false
         private var hideTitle: Boolean = false
-        private var siteURL: String = ""
-        private var siteApiRoot: String = ""
         private var siteApiNamespace: Array<String> = arrayOf()
         private var namespaceExcludedPaths: Array<String> = arrayOf()
         private var authHeader: String = ""
@@ -50,11 +70,12 @@ open class EditorConfiguration constructor(
         private var cachedAssetHosts: Set<String> = emptySet()
         private var editorAssetsEndpoint: String? = null
         private var enableNetworkLogging: Boolean = false
+        private var enableOfflineMode: Boolean = false
 
         fun setTitle(title: String) = apply { this.title = title }
         fun setContent(content: String) = apply { this.content = content }
         fun setPostId(postId: Int?) = apply { this.postId = postId }
-        fun setPostType(postType: String?) = apply { this.postType = postType }
+        fun setPostType(postType: String) = apply { this.postType = postType }
         fun setThemeStyles(themeStyles: Boolean) = apply { this.themeStyles = themeStyles }
         fun setPlugins(plugins: Boolean) = apply { this.plugins = plugins }
         fun setHideTitle(hideTitle: Boolean) = apply { this.hideTitle = hideTitle }
@@ -70,6 +91,7 @@ open class EditorConfiguration constructor(
         fun setCachedAssetHosts(cachedAssetHosts: Set<String>) = apply { this.cachedAssetHosts = cachedAssetHosts }
         fun setEditorAssetsEndpoint(editorAssetsEndpoint: String?) = apply { this.editorAssetsEndpoint = editorAssetsEndpoint }
         fun setEnableNetworkLogging(enableNetworkLogging: Boolean) = apply { this.enableNetworkLogging = enableNetworkLogging }
+        fun setEnableOfflineMode(enableOfflineMode: Boolean) = apply { this.enableOfflineMode = enableOfflineMode }
 
         fun build(): EditorConfiguration = EditorConfiguration(
             title = title,
@@ -90,9 +112,34 @@ open class EditorConfiguration constructor(
             enableAssetCaching = enableAssetCaching,
             cachedAssetHosts = cachedAssetHosts,
             editorAssetsEndpoint = editorAssetsEndpoint,
-            enableNetworkLogging = enableNetworkLogging
+            enableNetworkLogging = enableNetworkLogging,
+            enableOfflineMode = enableOfflineMode
         )
     }
+
+    /**
+     * Creates a new Builder pre-populated with all values from this configuration.
+     *
+     * This allows modifying specific fields while preserving others.
+     */
+    fun toBuilder(): Builder = Builder(siteURL, siteApiRoot, postType)
+        .setTitle(title)
+        .setContent(content)
+        .setPostId(postId)
+        .setThemeStyles(themeStyles)
+        .setPlugins(plugins)
+        .setHideTitle(hideTitle)
+        .setSiteApiNamespace(siteApiNamespace)
+        .setNamespaceExcludedPaths(namespaceExcludedPaths)
+        .setAuthHeader(authHeader)
+        .setEditorSettings(editorSettings)
+        .setLocale(locale)
+        .setCookies(cookies)
+        .setEnableAssetCaching(enableAssetCaching)
+        .setCachedAssetHosts(cachedAssetHosts)
+        .setEditorAssetsEndpoint(editorAssetsEndpoint)
+        .setEnableNetworkLogging(enableNetworkLogging)
+        .setEnableOfflineMode(enableOfflineMode)
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -119,6 +166,8 @@ open class EditorConfiguration constructor(
         if (cachedAssetHosts != other.cachedAssetHosts) return false
         if (editorAssetsEndpoint != other.editorAssetsEndpoint) return false
         if (enableNetworkLogging != other.enableNetworkLogging) return false
+        if (enableOfflineMode != other.enableOfflineMode) return false
+        if (siteId != other.siteId) return false
 
         return true
     }
@@ -127,7 +176,7 @@ open class EditorConfiguration constructor(
         var result = title.hashCode()
         result = 31 * result + content.hashCode()
         result = 31 * result + (postId ?: 0)
-        result = 31 * result + (postType?.hashCode() ?: 0)
+        result = 31 * result + postType.hashCode()
         result = 31 * result + themeStyles.hashCode()
         result = 31 * result + plugins.hashCode()
         result = 31 * result + hideTitle.hashCode()
@@ -143,6 +192,8 @@ open class EditorConfiguration constructor(
         result = 31 * result + cachedAssetHosts.hashCode()
         result = 31 * result + (editorAssetsEndpoint?.hashCode() ?: 0)
         result = 31 * result + enableNetworkLogging.hashCode()
+        result = 31 * result + enableOfflineMode.hashCode()
+        result = 31 * result + siteId.hashCode()
         return result
     }
 }

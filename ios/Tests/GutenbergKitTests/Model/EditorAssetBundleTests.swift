@@ -270,6 +270,43 @@ struct EditorAssetBundleTests {
         #expect(result.path.contains("/wp-content/plugins/script.js"))
     }
 
+    @Test("assetDataPath allows valid nested paths")
+    func assetDataPathAllowsValidNestedPaths() {
+        let tempDir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let bundle = makeBundle(bundleRoot: tempDir)
+
+        let url = URL(string: "https://example.com/wp-content/plugins/my-plugin/assets/js/script.js")!
+        let result = bundle.assetDataPath(for: url)
+
+        #expect(result.standardizedFileURL.path.hasPrefix(tempDir.standardizedFileURL.path))
+    }
+
+    @Test("assetDataPath normalizes paths with dot segments")
+    func assetDataPathNormalizesDotsSegments() {
+        let tempDir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let bundle = makeBundle(bundleRoot: tempDir)
+
+        // This path has ./ which should be normalized but stay within bundle
+        let url = URL(string: "https://example.com/wp-content/./plugins/script.js")!
+        let result = bundle.assetDataPath(for: url)
+
+        #expect(result.standardizedFileURL.path.hasPrefix(tempDir.standardizedFileURL.path))
+        #expect(result.path.contains("plugins/script.js"))
+    }
+
+    @Test("assetDataPath crashes for path traversal attempt")
+    func assetDataPathCrashesForPathTraversal() async {
+        await #expect(processExitsWith: .failure) {
+            let tempDir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+            let bundle = EditorAssetBundle(
+                raw: EditorAssetBundle.RawAssetBundle(manifest: .empty, downloadDate: Date()),
+                bundleRoot: tempDir
+            )
+            let url = URL(string: "https://example.com/../../../etc/passwd")!
+            _ = bundle.assetDataPath(for: url)
+        }
+    }
+
     // MARK: - assetData Tests
 
     @Test("assetData returns data for existing file")
