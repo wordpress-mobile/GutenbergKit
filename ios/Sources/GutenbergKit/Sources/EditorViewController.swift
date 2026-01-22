@@ -667,6 +667,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         return delegate?.editorDidRequestLatestContent(self)
     }
 
+    fileprivate func controllerWebContentProcessDidTerminate(_ controller: GutenbergEditorController) {
+        webView.reload()
+    }
+
     // MARK: - Loading Complete: Editor Ready
 
     /// Called when the editor JavaScript emits the `onEditorLoaded` message.
@@ -723,6 +727,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 private protocol GutenbergEditorControllerDelegate: AnyObject {
     func controller(_ controller: GutenbergEditorController, didReceiveMessage message: EditorJSMessage)
     func controllerDidRequestLatestContent(_ controller: GutenbergEditorController) -> (title: String, content: String)?
+    func controllerWebContentProcessDidTerminate(_ controller: GutenbergEditorController)
 }
 
 /// Hiding the conformances, and breaking retain cycles.
@@ -784,6 +789,13 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
         }
 
         return .allow
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        NSLog("webViewWebContentProcessDidTerminate: reloading editor")
+        MainActor.assumeIsolated {
+            delegate?.controllerWebContentProcessDidTerminate(self)
+        }
     }
 
     // MARK: - WKScriptMessageHandler
