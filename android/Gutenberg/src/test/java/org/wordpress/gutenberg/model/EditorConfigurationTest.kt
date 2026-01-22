@@ -30,7 +30,7 @@ class EditorConfigurationBuilderTest {
         assertEquals("", config.content)
         assertNull(config.postId)
         assertEquals(TEST_POST_TYPE, config.postType)
-        assertNull(config.postStatus)
+        assertEquals("draft", config.postStatus)
         assertFalse(config.themeStyles)
         assertFalse(config.plugins)
         assertFalse(config.hideTitle)
@@ -104,16 +104,6 @@ class EditorConfigurationBuilderTest {
             .build()
 
         assertEquals("publish", config.postStatus)
-    }
-
-    @Test
-    fun `setPostStatus with null clears postStatus`() {
-        val config = builder()
-            .setPostStatus("publish")
-            .setPostStatus(null)
-            .build()
-
-        assertNull(config.postStatus)
     }
 
     @Test
@@ -407,7 +397,6 @@ class EditorConfigurationBuilderTest {
     fun `toBuilder preserves nullable values when null`() {
         val original = builder()
             .setPostId(null)
-            .setPostStatus(null)
             .setEditorSettings(null)
             .setEditorAssetsEndpoint(null)
             .build()
@@ -415,7 +404,6 @@ class EditorConfigurationBuilderTest {
         val rebuilt = original.toBuilder().build()
 
         assertNull(rebuilt.postId)
-        assertNull(rebuilt.postStatus)
         assertNull(rebuilt.editorSettings)
         assertNull(rebuilt.editorAssetsEndpoint)
     }

@@ -12,7 +12,7 @@ data class EditorConfiguration(
     val content: String,
     val postId: Int?,
     val postType: String,
-    val postStatus: String?,
+    val postStatus: String,
     val themeStyles: Boolean,
     val plugins: Boolean,
     val hideTitle: Boolean,
@@ -58,7 +58,7 @@ data class EditorConfiguration(
         private var title: String = ""
         private var content: String = ""
         private var postId: Int? = null
-        private var postStatus: String? = null
+        private var postStatus: String = "draft"
         private var themeStyles: Boolean = false
         private var plugins: Boolean = false
         private var hideTitle: Boolean = false
@@ -78,7 +78,7 @@ data class EditorConfiguration(
         fun setContent(content: String) = apply { this.content = content }
         fun setPostId(postId: Int?) = apply { this.postId = postId }
         fun setPostType(postType: String) = apply { this.postType = postType }
-        fun setPostStatus(postStatus: String?) = apply { this.postStatus = postStatus }
+        fun setPostStatus(postStatus: String) = apply { this.postStatus = postStatus }
         fun setThemeStyles(themeStyles: Boolean) = apply { this.themeStyles = themeStyles }
         fun setPlugins(plugins: Boolean) = apply { this.plugins = plugins }
         fun setHideTitle(hideTitle: Boolean) = apply { this.hideTitle = hideTitle }
@@ -183,7 +183,7 @@ data class EditorConfiguration(
         result = 31 * result + content.hashCode()
         result = 31 * result + (postId ?: 0)
         result = 31 * result + postType.hashCode()
-        result = 31 * result + (postStatus?.hashCode() ?: 0)
+        result = 31 * result + postStatus.hashCode()
         result = 31 * result + themeStyles.hashCode()
         result = 31 * result + plugins.hashCode()
         result = 31 * result + hideTitle.hashCode()
