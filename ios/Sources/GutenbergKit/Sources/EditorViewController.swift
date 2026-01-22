@@ -663,8 +663,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
-    fileprivate func controllerRequestsLatestContent(_ controller: GutenbergEditorController) -> (title: String, content: String)? {
-        return delegate?.editorRequestsLatestContent(self)
+    fileprivate func controllerDidRequestLatestContent(_ controller: GutenbergEditorController) -> (title: String, content: String)? {
+        return delegate?.editorDidRequestLatestContent(self)
     }
 
     // MARK: - Loading Complete: Editor Ready
@@ -722,7 +722,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 @MainActor
 private protocol GutenbergEditorControllerDelegate: AnyObject {
     func controller(_ controller: GutenbergEditorController, didReceiveMessage message: EditorJSMessage)
-    func controllerRequestsLatestContent(_ controller: GutenbergEditorController) -> (title: String, content: String)?
+    func controllerDidRequestLatestContent(_ controller: GutenbergEditorController) -> (title: String, content: String)?
 }
 
 /// Hiding the conformances, and breaking retain cycles.
@@ -745,7 +745,7 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
         }
 
         let content = await MainActor.run {
-            delegate?.controllerRequestsLatestContent(self)
+            delegate?.controllerDidRequestLatestContent(self)
         }
 
         guard let content else {

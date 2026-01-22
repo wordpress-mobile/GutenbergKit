@@ -71,7 +71,7 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// allows the host app to provide fresher content from its autosave mechanism.
     ///
     /// - Returns: A tuple of (title, content), or nil if no persisted content is available.
-    func editorRequestsLatestContent(_ controller: EditorViewController) -> (title: String, content: String)?
+    func editorDidRequestLatestContent(_ controller: EditorViewController) -> (title: String, content: String)?
 }
 
 #endif

@@ -214,7 +214,7 @@ private struct _EditorView: UIViewControllerRepresentable {
             }
         }
 
-        func editorRequestsLatestContent(_ controller: EditorViewController) -> (title: String, content: String)? {
+        func editorDidRequestLatestContent(_ controller: EditorViewController) -> (title: String, content: String)? {
             // Demo app has no persistence layer, so return nil.
             // In a real app, return the persisted title and content from autosave.
             return nil
