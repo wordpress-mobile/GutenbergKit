@@ -201,7 +201,7 @@ class EditorService(
 
         return coroutineScope {
             val settingsDeferred = async { prepareEditorSettings() }
-            val assetBundleDeferred = async { prepareAssetBundle() }
+            val assetBundleDeferred = async { prepareAssetBundleIfEnabled() }
             val preloadListDeferred = async { preparePreloadList() }
 
             // Automatically clean up old asset bundles
@@ -267,6 +267,15 @@ class EditorService(
         val settings = restRepository.fetchEditorSettings()
         incrementProgress(DependencyWeights.EDITOR_SETTINGS)
         return settings
+    }
+
+    private suspend fun prepareAssetBundleIfEnabled(): EditorAssetBundle {
+        if (!configuration.plugins) {
+            incrementProgress(DependencyWeights.ASSET_BUNDLE)
+            return EditorAssetBundle.empty
+        }
+
+        return prepareAssetBundle()
     }
 
     private suspend fun prepareAssetBundle(): EditorAssetBundle {

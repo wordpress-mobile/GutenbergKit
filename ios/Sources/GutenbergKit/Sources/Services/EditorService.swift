@@ -120,7 +120,7 @@ public actor EditorService {
         self.progressCallback = progress
 
         async let settings = try prepareEditorSettings()
-        async let assetBundle = try self.prepareAssetBundle()
+        async let assetBundle = try self.prepareAssetBundleIfEnabled()
         async let preloadList = try preparePreloadList()
 
         // Automatically clean up old asset bundles
@@ -172,6 +172,15 @@ public actor EditorService {
         let settings = try await restRepository.fetchEditorSettings()
         await self.incrementProgress(for: .editorSettings)
         return settings
+    }
+
+    private func prepareAssetBundleIfEnabled() async throws -> EditorAssetBundle {
+        guard configuration.shouldUsePlugins else {
+            await self.incrementProgress(for: .assetBundle)
+            return .empty
+        }
+
+        return try await prepareAssetBundle()
     }
 
     private func prepareAssetBundle() async throws -> EditorAssetBundle {
