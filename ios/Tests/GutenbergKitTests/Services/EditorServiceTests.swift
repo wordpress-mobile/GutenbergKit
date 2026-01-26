@@ -118,21 +118,22 @@ struct EditorServiceTests: MakesTestFixtures {
   private static func editorServiceResponseHandler(_ url: URL) -> Data {
     let urlString = url.absoluteString
 
-    if urlString.contains("editor-assets") {
+    switch true {
+    case urlString.contains("editor-assets"):
       return Data(#"{"scripts":"","styles":"","allowed_block_types":[]}"#.utf8)
-    } else if urlString.contains("wp-block-editor/v1/settings") {
+    case urlString.contains("wp-block-editor/v1/settings"):
       return Data(#"{"styles":[]}"#.utf8)
-    } else if urlString.contains("/wp/v2/types/") && urlString.contains("context=edit") {
+    case urlString.contains("/wp/v2/types/") && urlString.contains("context=edit"):
       return Data(#"{"name":"Posts","slug":"post"}"#.utf8)
-    } else if urlString.contains("/wp/v2/types") {
+    case urlString.contains("/wp/v2/types"):
       return Data(#"{"post":{"name":"Posts","slug":"post"}}"#.utf8)
-    } else if urlString.contains("/wp/v2/themes") {
+    case urlString.contains("/wp/v2/themes"):
       return Data(#"[{"name":"Twenty Twenty-Four"}]"#.utf8)
-    } else if urlString.contains("/wp/v2/settings") {
+    case urlString.contains("/wp/v2/settings"):
       return Data(#"{"title":"Test Site"}"#.utf8)
-    } else if urlString.contains("/wp/v2/posts/") {
+    case urlString.contains("/wp/v2/posts/"):
       return Data(#"{"id":123,"title":{"rendered":"Test"}}"#.utf8)
-    } else {
+    default:
       return Data("{}".utf8)
     }
   }
