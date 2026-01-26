@@ -126,6 +126,140 @@ class EditorServiceTest {
         assertNotNull(dependencies)
         assertEquals("undefined", dependencies.editorSettings.themeStyles)
     }
+
+    // MARK: - preparePreloadList Tests (negative postID handling)
+
+    @Test
+    fun `prepare does not fetch post when postID is negative`() = runBlocking {
+        val mockClient = EditorServiceURLTrackingMockHTTPClient()
+        val configuration = testConfiguration.toBuilder()
+            .setPostId(-1)
+            .build()
+
+        val service = makeService(configuration = configuration, httpClient = mockClient)
+        service.prepare()
+
+        // Verify no request was made to /posts/-1
+        val postRequests = mockClient.requestedURLs.filter { it.contains("/posts/-1") }
+        assertEquals(
+            "Should not request /posts/-1 for negative post IDs",
+            emptyList<String>(),
+            postRequests
+        )
+    }
+
+    @Test
+    fun `prepare does not fetch post when postID is zero`() = runBlocking {
+        val mockClient = EditorServiceURLTrackingMockHTTPClient()
+        val configuration = testConfiguration.toBuilder()
+            .setPostId(0)
+            .build()
+
+        val service = makeService(configuration = configuration, httpClient = mockClient)
+        service.prepare()
+
+        // Verify no request was made to /posts/0
+        val postRequests = mockClient.requestedURLs.filter { it.contains("/posts/0") }
+        assertEquals(
+            "Should not request /posts/0 for zero post IDs",
+            emptyList<String>(),
+            postRequests
+        )
+    }
+
+    @Test
+    fun `prepare fetches post when postID is positive`() = runBlocking {
+        val mockClient = EditorServiceURLTrackingMockHTTPClient()
+        val configuration = testConfiguration.toBuilder()
+            .setPostId(123)
+            .build()
+
+        val service = makeService(configuration = configuration, httpClient = mockClient)
+        service.prepare()
+
+        // Verify a request was made to /posts/123
+        val postRequests = mockClient.requestedURLs.filter { it.contains("/posts/123") }
+        assert(postRequests.isNotEmpty()) { "Should request /posts/123 for positive post IDs" }
+    }
+}
+
+/**
+ * Mock HTTP client that tracks requested URLs for verification.
+ */
+class EditorServiceURLTrackingMockHTTPClient : EditorHTTPClientProtocol {
+
+    private val _requestedURLs = CopyOnWriteArrayList<String>()
+    val requestedURLs: List<String> get() = _requestedURLs.toList()
+
+    private val emptyManifestJson = """
+        {
+            "scripts": "",
+            "styles": "",
+            "allowed_block_types": []
+        }
+    """.trimIndent()
+
+    private val emptyEditorSettingsJson = """
+        {
+            "styles": []
+        }
+    """.trimIndent()
+
+    private val emptyPostTypeJson = """
+        {
+            "name": "Posts",
+            "slug": "post"
+        }
+    """.trimIndent()
+
+    private val emptyPostTypesJson = """
+        {
+            "post": {"name": "Posts", "slug": "post"},
+            "page": {"name": "Pages", "slug": "page"}
+        }
+    """.trimIndent()
+
+    private val emptyThemeJson = """
+        [{"name": "Twenty Twenty-Four"}]
+    """.trimIndent()
+
+    private val emptySettingsJson = """
+        {"title": "Test Site"}
+    """.trimIndent()
+
+    override suspend fun download(url: String, destination: File): EditorHTTPClientDownloadResponse {
+        _requestedURLs.add(url)
+
+        destination.parentFile?.mkdirs()
+        destination.writeText("mock content")
+
+        return EditorHTTPClientDownloadResponse(
+            file = destination,
+            statusCode = 200,
+            headers = EditorHTTPHeaders()
+        )
+    }
+
+    override suspend fun perform(method: EditorHttpMethod, url: String): EditorHTTPClientResponse {
+        _requestedURLs.add(url)
+
+        val responseData = when {
+            url.contains("editor-assets") -> emptyManifestJson
+            url.contains("wp-block-editor/v1/settings") -> emptyEditorSettingsJson
+            url.contains("/wp/v2/types/") && url.contains("context=edit") -> emptyPostTypeJson
+            url.contains("/wp/v2/types?context=view") -> emptyPostTypesJson
+            url.contains("/wp/v2/themes") -> emptyThemeJson
+            url.contains("/wp/v2/settings") -> emptySettingsJson
+            url.contains("/wp/v2/posts/") -> """{"id": 1, "title": {"rendered": "Test"}}"""
+            else -> "{}"
+        }
+
+        return EditorHTTPClientResponse(
+            data = responseData.toByteArray(),
+            statusCode = 200,
+            headers = EditorHTTPHeaders()
+        )
+    }
 }
 
 /**
