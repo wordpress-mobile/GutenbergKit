@@ -191,7 +191,7 @@ public actor EditorService {
         async let postTypeData = try self.preparePost(type: configuration.postType)
         async let postTypesData = try self.preparePostTypes()
 
-        if let postID = self.configuration.postID {
+        if let postID = self.configuration.postID, postID > 0 {
             async let postData = try self.preparePost(id: postID)
 
             return try await EditorPreloadList(
