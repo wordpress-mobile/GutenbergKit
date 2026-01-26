@@ -62,14 +62,14 @@ public actor EditorService {
     ///     location based on the site ID.
     public init(
         configuration: EditorConfiguration,
-        httpClient: EditorHTTPClient? = nil,
+        httpClient: (any EditorHTTPClientProtocol)? = nil,
         cachePolicy: EditorCachePolicy = .always,
         storageRoot: URL? = nil,
         cacheRoot: URL? = nil
     ) {
         self.configuration = configuration
 
-        let httpClient = httpClient ?? EditorHTTPClient(
+        let httpClient: any EditorHTTPClientProtocol = httpClient ?? EditorHTTPClient(
             urlSession: URLSession.shared,
             authHeader: configuration.authHeader,
             delegate: nil
