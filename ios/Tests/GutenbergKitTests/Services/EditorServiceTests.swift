@@ -52,4 +52,89 @@ struct EditorServiceTests: MakesTestFixtures {
     try await makeService().purge()  // Check that it can be called multiple times
 
   }
+
+  // MARK: - preparePreloadList Tests
+
+  @Test("prepare does not fetch post when postID is negative")
+  func prepareDoesNotFetchPostWhenPostIDIsNegative() async throws {
+    let mockClient = EditorAssetLibraryMockHTTPClient()
+    mockClient.urlResponseHandler = Self.editorServiceResponseHandler
+    let configuration = makeConfiguration(postID: -1)
+    let service = EditorService(
+      configuration: configuration,
+      httpClient: mockClient,
+      storageRoot: .randomTemporaryDirectory,
+      cacheRoot: .randomTemporaryDirectory
+    )
+
+    _ = try await service.prepare()
+
+    // Verify no request was made to /posts/-1
+    let postRequests = mockClient.requestedURLs.filter { $0.absoluteString.contains("/posts/-1") }
+    #expect(postRequests.isEmpty, "Should not request /posts/-1 for negative post IDs")
+  }
+
+  @Test("prepare does not fetch post when postID is zero")
+  func prepareDoesNotFetchPostWhenPostIDIsZero() async throws {
+    let mockClient = EditorAssetLibraryMockHTTPClient()
+    mockClient.urlResponseHandler = Self.editorServiceResponseHandler
+    let configuration = makeConfiguration(postID: 0)
+    let service = EditorService(
+      configuration: configuration,
+      httpClient: mockClient,
+      storageRoot: .randomTemporaryDirectory,
+      cacheRoot: .randomTemporaryDirectory
+    )
+
+    _ = try await service.prepare()
+
+    // Verify no request was made to /posts/0
+    let postRequests = mockClient.requestedURLs.filter { $0.absoluteString.contains("/posts/0") }
+    #expect(postRequests.isEmpty, "Should not request /posts/0 for zero post IDs")
+  }
+
+  @Test("prepare fetches post when postID is positive")
+  func prepareFetchesPostWhenPostIDIsPositive() async throws {
+    let mockClient = EditorAssetLibraryMockHTTPClient()
+    mockClient.urlResponseHandler = Self.editorServiceResponseHandler
+    let configuration = makeConfiguration(postID: 123)
+    let service = EditorService(
+      configuration: configuration,
+      httpClient: mockClient,
+      storageRoot: .randomTemporaryDirectory,
+      cacheRoot: .randomTemporaryDirectory
+    )
+
+    _ = try await service.prepare()
+
+    // Verify a request was made to /posts/123
+    let postRequests = mockClient.requestedURLs.filter { $0.absoluteString.contains("/posts/123") }
+    #expect(!postRequests.isEmpty, "Should request /posts/123 for positive post IDs")
+  }
+
+  // MARK: - Test Helpers
+
+  /// URL-based response handler for EditorService.prepare() tests.
+  private static func editorServiceResponseHandler(_ url: URL) -> Data {
+    let urlString = url.absoluteString
+
+    switch true {
+    case urlString.contains("editor-assets"):
+      return Data(#"{"scripts":"","styles":"","allowed_block_types":[]}"#.utf8)
+    case urlString.contains("wp-block-editor/v1/settings"):
+      return Data(#"{"styles":[]}"#.utf8)
+    case urlString.contains("/wp/v2/types/") && urlString.contains("context=edit"):
+      return Data(#"{"name":"Posts","slug":"post"}"#.utf8)
+    case urlString.contains("/wp/v2/types"):
+      return Data(#"{"post":{"name":"Posts","slug":"post"}}"#.utf8)
+    case urlString.contains("/wp/v2/themes"):
+      return Data(#"[{"name":"Twenty Twenty-Four"}]"#.utf8)
+    case urlString.contains("/wp/v2/settings"):
+      return Data(#"{"title":"Test Site"}"#.utf8)
+    case urlString.contains("/wp/v2/posts/"):
+      return Data(#"{"id":123,"title":{"rendered":"Test"}}"#.utf8)
+    default:
+      return Data("{}".utf8)
+    }
+  }
 }

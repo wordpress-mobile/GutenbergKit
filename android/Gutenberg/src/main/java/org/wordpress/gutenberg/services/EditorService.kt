@@ -289,7 +289,7 @@ class EditorService(
             val postTypesDataDeferred = async { preparePostTypes() }
 
             val postId = configuration.postId
-            if (postId != null) {
+            if (postId != null && postId > 0) {
                 val postDataDeferred = async { preparePost(postId) }
 
                 EditorPreloadList(

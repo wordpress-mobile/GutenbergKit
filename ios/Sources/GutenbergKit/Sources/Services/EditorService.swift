@@ -62,14 +62,14 @@ public actor EditorService {
     ///     location based on the site ID.
     public init(
         configuration: EditorConfiguration,
-        httpClient: EditorHTTPClient? = nil,
+        httpClient: (any EditorHTTPClientProtocol)? = nil,
         cachePolicy: EditorCachePolicy = .always,
         storageRoot: URL? = nil,
         cacheRoot: URL? = nil
     ) {
         self.configuration = configuration
 
-        let httpClient = httpClient ?? EditorHTTPClient(
+        let httpClient: any EditorHTTPClientProtocol = httpClient ?? EditorHTTPClient(
             urlSession: URLSession.shared,
             authHeader: configuration.authHeader,
             delegate: nil
@@ -191,7 +191,7 @@ public actor EditorService {
         async let postTypeData = try self.preparePost(type: configuration.postType)
         async let postTypesData = try self.preparePostTypes()
 
-        if let postID = self.configuration.postID {
+        if let postID = self.configuration.postID, postID > 0 {
             async let postData = try self.preparePost(id: postID)
 
             return try await EditorPreloadList(

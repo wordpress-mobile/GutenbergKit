@@ -76,7 +76,7 @@ struct EditorAssetLibraryTests {
       """
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -98,7 +98,7 @@ struct EditorAssetLibraryTests {
       """
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -113,7 +113,7 @@ struct EditorAssetLibraryTests {
         let manifestJSON = uniqueManifestJSON(identifier: "test-cached-manifest-\(UUID().uuidString)")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .always)
 
@@ -138,7 +138,7 @@ struct EditorAssetLibraryTests {
         let manifestJSON = uniqueManifestJSON(identifier: "test-no-cache-fallback-\(UUID().uuidString)")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .always)
 
@@ -163,7 +163,7 @@ struct EditorAssetLibraryTests {
       """
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .always)
 
@@ -213,7 +213,7 @@ struct EditorAssetLibraryTests {
         let manifestJSON = uniqueManifestJSON(identifier: "test-single-bundle-\(UUID().uuidString)")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -234,7 +234,7 @@ struct EditorAssetLibraryTests {
 
         // Create first bundle
         let manifest1JSON = uniqueManifestJSON(identifier: "test-multi-bundle-1-\(UUID().uuidString)")
-        mockClient.getResponse = Data(manifest1JSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifest1JSON.utf8) }
 
         let manifest1 = try await library.fetchManifest()
 
@@ -245,7 +245,7 @@ struct EditorAssetLibraryTests {
 
         // Create second bundle
         let manifest2JSON = uniqueManifestJSON(identifier: "test-multi-bundle-2-\(UUID().uuidString)")
-        mockClient.getResponse = Data(manifest2JSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifest2JSON.utf8) }
 
         let manifest2 = try await library.fetchManifest()
 
@@ -266,7 +266,7 @@ struct EditorAssetLibraryTests {
         let manifestJSON = uniqueManifestJSON(identifier: "test-ignores-files-\(UUID().uuidString)")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         let siteCacheRoot = URL.randomTemporaryDirectory
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore, storageRoot: siteCacheRoot)
@@ -297,7 +297,7 @@ struct EditorAssetLibraryTests {
       """
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -326,7 +326,7 @@ struct EditorAssetLibraryTests {
       """
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         let library = makeLibrary(httpClient: mockClient)
 
@@ -342,7 +342,7 @@ struct EditorAssetLibraryTests {
         let manifestJSON = uniqueManifestJSON(identifier: "test-maxage-within-\(UUID().uuidString)")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         // Set maxAge to 1 hour (3600 seconds)
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .maxAge(3600))
@@ -364,7 +364,7 @@ struct EditorAssetLibraryTests {
         let manifestJSON = uniqueManifestJSON(identifier: "test-maxage-expired-\(UUID().uuidString)")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         // Set maxAge to 0 seconds (immediately expired)
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .maxAge(0))
@@ -386,7 +386,7 @@ struct EditorAssetLibraryTests {
         let manifestJSON = uniqueManifestJSON(identifier: "test-maxage-delay-\(UUID().uuidString)")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         // Set maxAge to 0.05 seconds (50 milliseconds)
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .maxAge(0.05))
@@ -410,7 +410,7 @@ struct EditorAssetLibraryTests {
         let manifestJSON = uniqueManifestJSON(identifier: "test-maxage-transition-\(UUID().uuidString)")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         // Set maxAge to 0.1 seconds (100 milliseconds)
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .maxAge(0.1))
@@ -441,7 +441,7 @@ struct EditorAssetLibraryTests {
         let manifestData = try Data.forResource(named: "editor-asset-manifest-test-case-1")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = manifestData
+        mockClient.urlResponseHandler = { _ in manifestData }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -465,7 +465,7 @@ struct EditorAssetLibraryTests {
         let manifestData = try Data.forResource(named: "editor-asset-manifest-test-case-1")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = manifestData
+        mockClient.urlResponseHandler = { _ in manifestData }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -482,7 +482,7 @@ struct EditorAssetLibraryTests {
         let manifestData = try Data.forResource(named: "editor-asset-manifest-test-case-1")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = manifestData
+        mockClient.urlResponseHandler = { _ in manifestData }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -499,7 +499,7 @@ struct EditorAssetLibraryTests {
         let manifestData = try Data.forResource(named: "editor-asset-manifest-test-case-1")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = manifestData
+        mockClient.urlResponseHandler = { _ in manifestData }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -535,7 +535,7 @@ struct EditorAssetLibraryTests {
         let manifestData = try Data.forResource(named: "editor-asset-manifest-test-case-1")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = manifestData
+        mockClient.urlResponseHandler = { _ in manifestData }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -565,7 +565,7 @@ struct EditorAssetLibraryTests {
         let manifestJSON = uniqueManifestJSON(identifier: "test-empty-bundle-\(UUID().uuidString)")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -585,7 +585,7 @@ struct EditorAssetLibraryTests {
         let manifestJSON = uniqueManifestJSON(identifier: "test-creates-dir-\(UUID().uuidString)")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -603,7 +603,7 @@ struct EditorAssetLibraryTests {
         let manifestJSON = uniqueManifestJSON(identifier: "test-saves-manifest-\(UUID().uuidString)")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -625,7 +625,7 @@ struct EditorAssetLibraryTests {
         let manifestJSON = uniqueManifestJSON(identifier: "test-discoverable-\(UUID().uuidString)")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -650,7 +650,7 @@ struct EditorAssetLibraryTests {
       """
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -676,7 +676,7 @@ struct EditorAssetLibraryTests {
       """
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -713,7 +713,7 @@ struct EditorAssetLibraryTests {
       """
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -748,7 +748,7 @@ struct EditorAssetLibraryTests {
         let manifestJSON = uniqueManifestJSON(identifier: "test-download-bundle-\(UUID().uuidString)")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         let library = makeLibrary(httpClient: mockClient)
 
@@ -769,7 +769,7 @@ struct EditorAssetLibraryTests {
       """
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -804,7 +804,7 @@ struct EditorAssetLibraryTests {
       """
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(manifestJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
         let library = makeLibrary(httpClient: mockClient)
 
@@ -841,7 +841,6 @@ final class ProgressTracker: @unchecked Sendable {
 
 final class EditorAssetLibraryMockHTTPClient: EditorHTTPClientProtocol, @unchecked Sendable {
 
-    var getResponse: Data = Data()
     var getCallCount = 0
     var downloadCallCount = 0
     var downloadedURLs: [URL] = []
@@ -849,14 +848,29 @@ final class EditorAssetLibraryMockHTTPClient: EditorHTTPClientProtocol, @uncheck
     var shouldThrowError: Error?
     private let lock = NSLock()
 
+    /// URLs requested via `perform(_:)`. Use this to verify which endpoints were called.
+    private var _requestedURLs: [URL] = []
+    var requestedURLs: [URL] {
+        lock.withLock { _requestedURLs }
+    }
+
+    /// Handler for generating response data based on request URL. Defaults to returning empty data.
+    var urlResponseHandler: ((URL) -> Data) = { _ in Data() }
+
     func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        lock.withLock { getCallCount += 1 }
+        let url = try #require(urlRequest.url)
+
+        lock.withLock {
+            getCallCount += 1
+            _requestedURLs.append(url)
+        }
 
         if let error = shouldThrowError {
             throw error
         }
 
-        let url = try #require(urlRequest.url)
+        let responseData = urlResponseHandler(url)
+
         let response = HTTPURLResponse(
             url: url,
             statusCode: 200,
@@ -864,7 +878,7 @@ final class EditorAssetLibraryMockHTTPClient: EditorHTTPClientProtocol, @uncheck
             headerFields: nil
         )!
 
-        return (getResponse, response)
+        return (responseData, response)
     }
 
     func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse) {

@@ -1,24 +1,6 @@
 {
-  "originHash" : "2aee256c0b38622aa9bb903b83d446aa51554bf7f6d1f43aca6d447f82d2a906",
+  "originHash" : "11fbb2cf922b873080bfec9421893617428fff2aba5645ca7121f53f5debada1",
   "pins" : [
-    {
-      "identity" : "svgview",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/exyte/SVGView.git",
-      "state" : {
-        "revision" : "6465962facdd25cb96eaebc35603afa2f15d2c0d",
-        "version" : "1.0.6"
-      }
-    },
-    {
-      "identity" : "swiftsoup",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/scinfu/SwiftSoup.git",
-      "state" : {
-        "revision" : "aa85ee96017a730031bafe411cde24a08a17a9c9",
-        "version" : "2.8.8"
-      }
-    },
     {
       "identity" : "wordpress-rs",
       "kind" : "remoteSourceControl",

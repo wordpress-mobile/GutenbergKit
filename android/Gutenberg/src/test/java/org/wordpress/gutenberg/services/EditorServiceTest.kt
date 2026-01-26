@@ -126,6 +126,61 @@ class EditorServiceTest {
         assertNotNull(dependencies)
         assertEquals("undefined", dependencies.editorSettings.themeStyles)
     }
+
+    // MARK: - preparePreloadList Tests (negative postID handling)
+
+    @Test
+    fun `prepare does not fetch post when postID is negative`() = runBlocking {
+        val mockClient = EditorServiceMockHTTPClient()
+        val configuration = testConfiguration.toBuilder()
+            .setPostId(-1)
+            .build()
+
+        val service = makeService(configuration = configuration, httpClient = mockClient)
+        service.prepare()
+
+        // Verify no request was made to /posts/-1
+        val postRequests = mockClient.requestedURLs.filter { it.contains("/posts/-1") }
+        assertEquals(
+            "Should not request /posts/-1 for negative post IDs",
+            emptyList<String>(),
+            postRequests
+        )
+    }
+
+    @Test
+    fun `prepare does not fetch post when postID is zero`() = runBlocking {
+        val mockClient = EditorServiceMockHTTPClient()
+        val configuration = testConfiguration.toBuilder()
+            .setPostId(0)
+            .build()
+
+        val service = makeService(configuration = configuration, httpClient = mockClient)
+        service.prepare()
+
+        // Verify no request was made to /posts/0
+        val postRequests = mockClient.requestedURLs.filter { it.contains("/posts/0") }
+        assertEquals(
+            "Should not request /posts/0 for zero post IDs",
+            emptyList<String>(),
+            postRequests
+        )
+    }
+
+    @Test
+    fun `prepare fetches post when postID is positive`() = runBlocking {
+        val mockClient = EditorServiceMockHTTPClient()
+        val configuration = testConfiguration.toBuilder()
+            .setPostId(123)
+            .build()
+
+        val service = makeService(configuration = configuration, httpClient = mockClient)
+        service.prepare()
+
+        // Verify a request was made to /posts/123
+        val postRequests = mockClient.requestedURLs.filter { it.contains("/posts/123") }
+        assert(postRequests.isNotEmpty()) { "Should request /posts/123 for positive post IDs" }
+    }
 }
 
 /**
@@ -139,6 +194,10 @@ class EditorServiceMockHTTPClient : EditorHTTPClientProtocol {
         private set
     var downloadedURLs = CopyOnWriteArrayList<String>()
         private set
+
+    /// URLs requested via `perform()`. Use this to verify which endpoints were called.
+    private val _requestedURLs = CopyOnWriteArrayList<String>()
+    val requestedURLs: List<String> get() = _requestedURLs.toList()
 
     private val lock = Any()
 
@@ -183,6 +242,7 @@ class EditorServiceMockHTTPClient : EditorHTTPClientProtocol {
         synchronized(lock) {
             downloadCallCount++
             downloadedURLs.add(url)
+            _requestedURLs.add(url)
         }
 
         destination.parentFile?.mkdirs()
@@ -200,6 +260,7 @@ class EditorServiceMockHTTPClient : EditorHTTPClientProtocol {
             if (method == EditorHttpMethod.GET) {
                 getCallCount++
             }
+            _requestedURLs.add(url)
         }
 
         val responseData = when {
