@@ -57,7 +57,8 @@ struct EditorServiceTests: MakesTestFixtures {
 
   @Test("prepare does not fetch post when postID is negative")
   func prepareDoesNotFetchPostWhenPostIDIsNegative() async throws {
-    let mockClient = EditorServiceURLTrackingMockHTTPClient()
+    let mockClient = EditorAssetLibraryMockHTTPClient()
+    mockClient.urlResponseHandler = Self.editorServiceResponseHandler
     let configuration = makeConfiguration(postID: -1)
     let service = EditorService(
       configuration: configuration,
@@ -75,7 +76,8 @@ struct EditorServiceTests: MakesTestFixtures {
 
   @Test("prepare does not fetch post when postID is zero")
   func prepareDoesNotFetchPostWhenPostIDIsZero() async throws {
-    let mockClient = EditorServiceURLTrackingMockHTTPClient()
+    let mockClient = EditorAssetLibraryMockHTTPClient()
+    mockClient.urlResponseHandler = Self.editorServiceResponseHandler
     let configuration = makeConfiguration(postID: 0)
     let service = EditorService(
       configuration: configuration,
@@ -93,7 +95,8 @@ struct EditorServiceTests: MakesTestFixtures {
 
   @Test("prepare fetches post when postID is positive")
   func prepareFetchesPostWhenPostIDIsPositive() async throws {
-    let mockClient = EditorServiceURLTrackingMockHTTPClient()
+    let mockClient = EditorAssetLibraryMockHTTPClient()
+    mockClient.urlResponseHandler = Self.editorServiceResponseHandler
     let configuration = makeConfiguration(postID: 123)
     let service = EditorService(
       configuration: configuration,
@@ -108,68 +111,29 @@ struct EditorServiceTests: MakesTestFixtures {
     let postRequests = mockClient.requestedURLs.filter { $0.absoluteString.contains("/posts/123") }
     #expect(!postRequests.isEmpty, "Should request /posts/123 for positive post IDs")
   }
-}
 
-// MARK: - Mock HTTP Client for URL Tracking
+  // MARK: - Test Helpers
 
-final class EditorServiceURLTrackingMockHTTPClient: EditorHTTPClientProtocol, @unchecked Sendable {
-  private let lock = NSLock()
-  private var _requestedURLs: [URL] = []
-
-  var requestedURLs: [URL] {
-    lock.withLock { _requestedURLs }
-  }
-
-  func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
-    let url = urlRequest.url!
-    lock.withLock { _requestedURLs.append(url) }
-
-    let responseData: Data
+  /// URL-based response handler for EditorService.prepare() tests.
+  private static func editorServiceResponseHandler(_ url: URL) -> Data {
     let urlString = url.absoluteString
 
-    // Return appropriate mock responses based on URL
     if urlString.contains("editor-assets") {
-      responseData = Data(#"{"scripts":"","styles":"","allowed_block_types":[]}"#.utf8)
+      return Data(#"{"scripts":"","styles":"","allowed_block_types":[]}"#.utf8)
     } else if urlString.contains("wp-block-editor/v1/settings") {
-      responseData = Data(#"{"styles":[]}"#.utf8)
+      return Data(#"{"styles":[]}"#.utf8)
     } else if urlString.contains("/wp/v2/types/") && urlString.contains("context=edit") {
-      responseData = Data(#"{"name":"Posts","slug":"post"}"#.utf8)
+      return Data(#"{"name":"Posts","slug":"post"}"#.utf8)
     } else if urlString.contains("/wp/v2/types") {
-      responseData = Data(#"{"post":{"name":"Posts","slug":"post"}}"#.utf8)
+      return Data(#"{"post":{"name":"Posts","slug":"post"}}"#.utf8)
     } else if urlString.contains("/wp/v2/themes") {
-      responseData = Data(#"[{"name":"Twenty Twenty-Four"}]"#.utf8)
+      return Data(#"[{"name":"Twenty Twenty-Four"}]"#.utf8)
     } else if urlString.contains("/wp/v2/settings") {
-      responseData = Data(#"{"title":"Test Site"}"#.utf8)
+      return Data(#"{"title":"Test Site"}"#.utf8)
     } else if urlString.contains("/wp/v2/posts/") {
-      responseData = Data(#"{"id":123,"title":{"rendered":"Test"}}"#.utf8)
+      return Data(#"{"id":123,"title":{"rendered":"Test"}}"#.utf8)
     } else {
-      responseData = Data("{}".utf8)
+      return Data("{}".utf8)
     }
-
-    let response = HTTPURLResponse(
-      url: url,
-      statusCode: 200,
-      httpVersion: "HTTP/1.1",
-      headerFields: nil
-    )!
-
-    return (responseData, response)
-  }
-
-  func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse) {
-    let url = urlRequest.url!
-    lock.withLock { _requestedURLs.append(url) }
-
-    let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-    try Data("mock content".utf8).write(to: tempURL)
-
-    let response = HTTPURLResponse(
-      url: url,
-      statusCode: 200,
-      httpVersion: "HTTP/1.1",
-      headerFields: nil
-    )!
-
-    return (tempURL, response)
   }
 }

@@ -849,14 +849,30 @@ final class EditorAssetLibraryMockHTTPClient: EditorHTTPClientProtocol, @uncheck
     var shouldThrowError: Error?
     private let lock = NSLock()
 
+    /// URLs requested via `perform(_:)`. Use this to verify which endpoints were called.
+    private var _requestedURLs: [URL] = []
+    var requestedURLs: [URL] {
+        lock.withLock { _requestedURLs }
+    }
+
+    /// Optional handler for URL-based response routing. If set, this is called to generate
+    /// the response data based on the request URL. If nil, falls back to `getResponse`.
+    var urlResponseHandler: ((URL) -> Data)?
+
     func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        lock.withLock { getCallCount += 1 }
+        let url = try #require(urlRequest.url)
+
+        lock.withLock {
+            getCallCount += 1
+            _requestedURLs.append(url)
+        }
 
         if let error = shouldThrowError {
             throw error
         }
 
-        let url = try #require(urlRequest.url)
+        let responseData = urlResponseHandler?(url) ?? getResponse
+
         let response = HTTPURLResponse(
             url: url,
             statusCode: 200,
@@ -864,7 +880,7 @@ final class EditorAssetLibraryMockHTTPClient: EditorHTTPClientProtocol, @uncheck
             headerFields: nil
         )!
 
-        return (getResponse, response)
+        return (responseData, response)
     }
 
     func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse) {
