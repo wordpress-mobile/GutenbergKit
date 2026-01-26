@@ -13,7 +13,7 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
     @Test("fetchPost returns response for valid post ID")
     func fetchPostReturnsResponse() async throws {
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(#"{"id":123,"title":{"raw":"Test Post"}}"#.utf8)
+        mockClient.urlResponseHandler = { _ in Data(#"{"id":123,"title":{"raw":"Test Post"}}"#.utf8) }
 
         let repository = makeRepository(httpClient: mockClient)
 
@@ -41,8 +41,8 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
     func fetchEditorSettingsParsesResponse() async throws {
         let mockClient = EditorAssetLibraryMockHTTPClient()
         // InternalEditorSettings expects styles array with css and isGlobalStyles
-        mockClient.getResponse = Data(
-            #"{"styles":[{"css":".test{color:red}","isGlobalStyles":false}]}"#.utf8)
+        mockClient.urlResponseHandler = { _ in Data(
+            #"{"styles":[{"css":".test{color:red}","isGlobalStyles":false}]}"#.utf8) }
 
         let repository = makeRepository(httpClient: mockClient)
 
@@ -54,7 +54,7 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
     @Test("fetchEditorSettings caches response")
     func fetchEditorSettingsCachesResponse() async throws {
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(#"{"styles":[]}"#.utf8)
+        mockClient.urlResponseHandler = { _ in Data(#"{"styles":[]}"#.utf8) }
 
         let configuration = makeConfiguration()
         let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory)
@@ -87,7 +87,7 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
         let mockClient = EditorAssetLibraryMockHTTPClient()
         let rawJSON =
         #"{"styles":[{"css":".theme-style{color:blue}","isGlobalStyles":true},{"css":".another{margin:0}","isGlobalStyles":false}]}"#
-        mockClient.getResponse = Data(rawJSON.utf8)
+        mockClient.urlResponseHandler = { _ in Data(rawJSON.utf8) }
 
         let configuration = makeConfiguration()
         let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory)
@@ -112,7 +112,7 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
     @Test("fetchPostType returns response")
     func fetchPostTypeReturnsResponse() async throws {
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(#"{"slug":"post","name":"Posts"}"#.utf8)
+        mockClient.urlResponseHandler = { _ in Data(#"{"slug":"post","name":"Posts"}"#.utf8) }
 
         let repository = makeRepository(httpClient: mockClient)
 
@@ -124,7 +124,7 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
     @Test("fetchPostType caches response")
     func fetchPostTypeCachesResponse() async throws {
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(#"{"slug":"post"}"#.utf8)
+        mockClient.urlResponseHandler = { _ in Data(#"{"slug":"post"}"#.utf8) }
 
         let configuration = makeConfiguration()
         let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory)
@@ -144,7 +144,7 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
     @Test("fetchActiveTheme returns response")
     func fetchActiveThemeReturnsResponse() async throws {
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(#"[{"stylesheet":"twentytwentyfour"}]"#.utf8)
+        mockClient.urlResponseHandler = { _ in Data(#"[{"stylesheet":"twentytwentyfour"}]"#.utf8) }
 
         let repository = makeRepository(httpClient: mockClient)
 
@@ -156,7 +156,7 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
     @Test("fetchActiveTheme caches response")
     func fetchActiveThemeCachesResponse() async throws {
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(#"[{"stylesheet":"theme"}]"#.utf8)
+        mockClient.urlResponseHandler = { _ in Data(#"[{"stylesheet":"theme"}]"#.utf8) }
 
         let configuration = makeConfiguration()
         let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory)
@@ -176,7 +176,7 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
     @Test("fetchSettingsOptions returns response")
     func fetchSettingsOptionsReturnsResponse() async throws {
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        // OPTIONS doesn't use getResponse, it uses the OPTIONS method
+        // OPTIONS doesn't use urlResponseHandler, it uses the OPTIONS method
 
         let repository = makeRepository(httpClient: mockClient)
 
@@ -191,7 +191,7 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
     @Test("fetchPostTypes returns response")
     func fetchPostTypesReturnsResponse() async throws {
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(#"{"post":{"slug":"post"},"page":{"slug":"page"}}"#.utf8)
+        mockClient.urlResponseHandler = { _ in Data(#"{"post":{"slug":"post"},"page":{"slug":"page"}}"#.utf8) }
 
         let repository = makeRepository(httpClient: mockClient)
 
@@ -203,7 +203,7 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
     @Test("fetchPostTypes caches response")
     func fetchPostTypesCachesResponse() async throws {
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.getResponse = Data(#"{"post":{}}"#.utf8)
+        mockClient.urlResponseHandler = { _ in Data(#"{"post":{}}"#.utf8) }
 
         let configuration = makeConfiguration()
         let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory)
