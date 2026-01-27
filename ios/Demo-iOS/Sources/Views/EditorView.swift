@@ -245,7 +245,7 @@ private final class EditorViewModel {
 
 extension EditorConfiguration {
     static let bundled = EditorConfigurationBuilder(
-        postType: "post",
+        postType: .post,
         siteURL: URL(string: "https://example.com")!,
         siteApiRoot: URL(string: "https://example.com/wp-json")!
     )

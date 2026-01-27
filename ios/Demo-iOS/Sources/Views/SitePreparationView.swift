@@ -288,7 +288,7 @@ class SitePreparationViewModel {
         let canUseEditorStyles = apiRoot.hasRoute(route: "/wp-block-editor/v1/settings")
 
         return EditorConfigurationBuilder(
-            postType: "post",
+            postType: .post,
             siteURL: URL(string: apiRoot.siteUrlString())!,
             siteApiRoot: parsedApiRoot.asURL()
         )
@@ -346,7 +346,7 @@ class SitePreparationViewModel {
         return editorConfiguration.toBuilder()
             .setEnableNetworkLogging(self.enableNetworkLogging)
             .setNativeInserterEnabled(self.enableNativeInserter)
-            .setPostType(self.selectedPostTypeDetails.postType)
+            .setPostType(self.selectedPostTypeDetails)
             .build()
     }
 

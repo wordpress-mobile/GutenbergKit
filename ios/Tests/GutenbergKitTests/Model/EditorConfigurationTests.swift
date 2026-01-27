@@ -19,7 +19,7 @@ struct EditorConfigurationBuilderTests: MakesTestFixtures {
     #expect(config.title == "")
     #expect(config.content == "")
     #expect(config.postID == nil)
-    #expect(config.postType == "post")
+    #expect(config.postType == .post)
     #expect(config.postStatus == "draft")
     #expect(config.shouldUseThemeStyles == false)
     #expect(config.shouldUsePlugins == false)
@@ -78,10 +78,10 @@ struct EditorConfigurationBuilderTests: MakesTestFixtures {
   @Test("setPostType updates postType")
   func setPostTypeUpdatesPostType() {
     let config = makeConfigurationBuilder()
-      .setPostType("page")
+      .setPostType(.page)
       .build()
 
-    #expect(config.postType == "page")
+    #expect(config.postType == .page)
   }
 
   @Test("setShouldUseThemeStyles updates shouldUseThemeStyles")
@@ -491,13 +491,13 @@ struct EditorConfigurationTests: MakesTestFixtures {
   @Test("Configurations with different postID are not equal")
   func differentPostIDNotEqual() {
     let config1 = EditorConfigurationBuilder(
-      postType: "post",
+      postType: .post,
       siteURL: Self.testSiteURL,
       siteApiRoot: Self.testApiRoot
     ).setPostID(1).build()
 
     let config2 = EditorConfigurationBuilder(
-      postType: "post",
+      postType: .post,
       siteURL: Self.testSiteURL,
       siteApiRoot: Self.testApiRoot
     ).setPostID(2).build()
@@ -526,19 +526,19 @@ struct EditorConfigurationTests: MakesTestFixtures {
   @Test("Configurations can be used in Set")
   func configurationsCanBeUsedInSet() {
     let config1 = EditorConfigurationBuilder(
-      postType: "post",
+      postType: .post,
       siteURL: Self.testSiteURL,
       siteApiRoot: Self.testApiRoot
     ).setPostID(1).build()
 
     let config2 = EditorConfigurationBuilder(
-      postType: "post",
+      postType: .post,
       siteURL: Self.testSiteURL,
       siteApiRoot: Self.testApiRoot
     ).setPostID(2).build()
 
     let config3 = EditorConfigurationBuilder(
-      postType: "post",
+      postType: .post,
       siteURL: Self.testSiteURL,
       siteApiRoot: Self.testApiRoot
     ).setPostID(1).build()

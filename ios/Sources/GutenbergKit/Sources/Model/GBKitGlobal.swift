@@ -99,7 +99,7 @@ public struct GBKitGlobal: Sendable, Codable {
         self.locale = configuration.locale
         self.post = Post(
             id: configuration.postID ?? -1,
-            type: configuration.postType,
+            type: configuration.postType.postType,
             status: configuration.postStatus,
             title: configuration.escapedTitle,
             content: configuration.escapedContent

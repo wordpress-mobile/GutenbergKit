@@ -68,7 +68,7 @@ struct PostsListView: View {
 
     private func openPost(_ post: AnyPostWithEditContext) {
         let configuration = viewModel.editorConfiguration.toBuilder()
-            .setPostType(viewModel.postTypeDetails.postType)
+            .setPostType(viewModel.postTypeDetails)
             .setPostID(Int(post.id))
             .setTitle(post.title?.raw ?? "")
             .setContent(post.content.raw ?? "")
