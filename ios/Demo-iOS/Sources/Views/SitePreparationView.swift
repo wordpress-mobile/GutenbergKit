@@ -51,10 +51,32 @@ struct SitePreparationView: View {
                 Toggle("Enable Native Inserter", isOn: $viewModel.enableNativeInserter)
                 Toggle("Enable Network Logging", isOn: $viewModel.enableNetworkLogging)
 
-                // TODO: Loading this from the server would allow us to validate Custom Post Type support
-                Picker("Post Type", selection: $viewModel.postType) {
-                    Text("Post").tag("post")
-                    Text("Page").tag("page")
+                if viewModel.postTypes.isEmpty {
+                    HStack {
+                        Text("Post Type")
+                        Spacer()
+                        ProgressView()
+                    }
+                } else {
+                    Picker("Post Type", selection: $viewModel.selectedPostTypeDetails) {
+                        ForEach(viewModel.postTypes, id: \.self) { postType in
+                            Text(postType.name).tag(postType)
+                        }
+                    }
+
+                    NavigationLink {
+                        if let client = viewModel.client,
+                           let configuration = viewModel.editorConfiguration {
+                            PostsListView(
+                                client: client,
+                                postTypeDetails: viewModel.selectedPostTypeDetails,
+                                editorConfiguration: configuration,
+                                editorDependencies: viewModel.editorDependencies
+                            )
+                        }
+                    } label: {
+                        Text("Browse")
+                    }
                 }
             }
 
@@ -115,7 +137,9 @@ class SitePreparationViewModel {
 
     var enableNetworkLogging: Bool = false
 
-    var postType: String = "post"
+    var postTypes: [PostTypeDetails] = []
+
+    var selectedPostTypeDetails: PostTypeDetails = .post
 
     var cacheBundleCount: Int?
 
@@ -135,6 +159,8 @@ class SitePreparationViewModel {
 
     var editorDependencies: EditorDependencies?
 
+    var client: WordPressAPI?
+
     private var taskHandle: Task<Void, Never>?
 
     init(configurationItem: ConfigurationItem) {
@@ -148,9 +174,11 @@ class SitePreparationViewModel {
                 switch configurationItem {
                 case .bundledEditor:
                     self.editorConfiguration = .bundled
+                    self.postTypes = [.post, .page]
                 case .editorConfiguration(let siteDetails):
                     let newConfiguration = try await self.loadConfiguration(for: siteDetails)
                     self.editorConfiguration = newConfiguration
+                    try await self.loadPostTypes()
                 }
             } catch {
                 self.error = error
@@ -244,11 +272,15 @@ class SitePreparationViewModel {
     @MainActor
     private func loadConfiguration(for config: ConfiguredEditor) async throws -> EditorConfiguration {
         let parsedApiRoot = try ParsedUrl.parse(input: config.siteApiRoot)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpAdditionalHeaders = ["Authorization": config.authHeader]
         let client = WordPressAPI(
-            urlSession: .shared,
+            urlSession: .init(configuration: configuration),
             apiRootUrl: parsedApiRoot,
-            authentication: .authorizationHeader(token: config.authHeader)
+            authentication: .none,
         )
+
+        self.client = client
 
         let apiRoot = try await client.apiRoot.get().data
 
@@ -267,6 +299,45 @@ class SitePreparationViewModel {
         .build()
     }
 
+    @MainActor
+    private func loadPostTypes() async throws {
+        guard let client = self.client else {
+            self.postTypes = [.post, .page]
+            return
+        }
+
+        guard self.postTypes.isEmpty else { return }
+
+        let response = try await client.postTypes.listWithEditContext().data
+
+        self.postTypes = response.postTypes
+            .filter { (type, details) in
+                switch type {
+                case .post, .page:
+                    return true
+                case .custom:
+                    break
+                default:
+                    return false
+                }
+
+                return details.viewable && details.visibility.showUi
+            }
+            .values
+            .map { postType in
+                PostTypeDetails(
+                    postType: postType.slug,
+                    restBase: postType.restBase,
+                    restNamespace: postType.restNamespace
+                )
+            }
+            .sorted(using: KeyPathComparator(\.postType))
+
+        if let firstType = postTypes.first {
+            self.selectedPostTypeDetails = firstType
+        }
+    }
+
     private func buildConfiguration() -> EditorConfiguration {
         guard let editorConfiguration = self.editorConfiguration else {
             preconditionFailure("Cannot build configuration as it is not loaded yet")
@@ -275,7 +346,7 @@ class SitePreparationViewModel {
         return editorConfiguration.toBuilder()
             .setEnableNetworkLogging(self.enableNetworkLogging)
             .setNativeInserterEnabled(self.enableNativeInserter)
-            .setPostType(self.postType)
+            .setPostType(self.selectedPostTypeDetails.postType)
             .build()
     }
 
@@ -324,6 +395,12 @@ struct KeyValueRow: View {
                     .foregroundStyle(bool ? Color.green : Color.red)
             }
         }
+    }
+}
+
+extension PostTypeDetails {
+    var name: String {
+        postType.capitalized
     }
 }
 

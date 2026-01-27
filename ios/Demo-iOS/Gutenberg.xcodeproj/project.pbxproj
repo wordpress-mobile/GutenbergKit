@@ -424,7 +424,7 @@
 			repositoryURL = "https://github.com/Automattic/wordpress-rs";
 			requirement = {
 				kind = revision;
-				revision = "alpha-20250926";
+				revision = "alpha-20260122v2";
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
