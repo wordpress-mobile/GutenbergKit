@@ -257,6 +257,53 @@ struct EditorAssetBundleTests {
         try? FileManager.default.removeItem(at: tempDir)
     }
 
+    // MARK: - isValidAssetPath Tests
+
+    @Test("isValidAssetPath returns true for valid path within bundle")
+    func isValidAssetPathReturnsTrueForValidPath() {
+        let tempDir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let bundle = makeBundle(bundleRoot: tempDir)
+
+        let url = URL(string: "https://example.com/wp-content/plugins/script.js")!
+        #expect(bundle.isValidAssetPath(for: url))
+    }
+
+    @Test("isValidAssetPath returns true for nested paths")
+    func isValidAssetPathReturnsTrueForNestedPaths() {
+        let tempDir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let bundle = makeBundle(bundleRoot: tempDir)
+
+        let url = URL(string: "https://example.com/wp-content/plugins/jetpack/assets/js/script.js")!
+        #expect(bundle.isValidAssetPath(for: url))
+    }
+
+    @Test("isValidAssetPath returns false for path traversal attempt")
+    func isValidAssetPathReturnsFalseForPathTraversal() {
+        let tempDir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let bundle = makeBundle(bundleRoot: tempDir)
+
+        let url = URL(string: "https://example.com/../../../etc/passwd")!
+        #expect(!bundle.isValidAssetPath(for: url))
+    }
+
+    @Test("isValidAssetPath returns false for path escaping via encoded traversal")
+    func isValidAssetPathReturnsFalseForEncodedTraversal() {
+        let tempDir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let bundle = makeBundle(bundleRoot: tempDir)
+
+        let url = URL(string: "https://example.com/%2e%2e/%2e%2e/etc/passwd")!
+        #expect(!bundle.isValidAssetPath(for: url))
+    }
+
+    @Test("isValidAssetPath handles paths with dot segments that stay within bundle")
+    func isValidAssetPathHandlesDotSegmentsWithinBundle() {
+        let tempDir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let bundle = makeBundle(bundleRoot: tempDir)
+
+        let url = URL(string: "https://example.com/wp-content/./plugins/script.js")!
+        #expect(bundle.isValidAssetPath(for: url))
+    }
+
     // MARK: - assetDataPath Tests
 
     @Test("assetDataPath returns correct path based on URL path")

@@ -108,6 +108,17 @@ extension EditorAssetBundleProvider: WKURLSchemeHandler {
                 preconditionFailure("Cannot read asset with no bundle present. This is a programmer error.")
             }
 
+            // Check if the path is valid before attempting to access the asset.
+            // This prevents crashes for paths that escape the bundle root (e.g., plugin
+            // SVGs referenced in CSS that weren't downloaded into the bundle).
+            guard bundle.isValidAssetPath(for: url) else {
+                loggerMessages.append("     Path escapes bundle root – sending 404")
+                let response = HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil)!
+                urlSchemeTask.didReceive(response)
+                urlSchemeTask.didFinish()
+                return
+            }
+
             guard bundle.hasAssetData(for: url) else {
                 loggerMessages.append("     Path: <missing>")
 
