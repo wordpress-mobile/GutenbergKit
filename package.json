@@ -72,7 +72,7 @@
 		"@wordpress/url": "^4.36.0",
 		"@wordpress/viewport": "^6.36.0",
 		"@wordpress/warning": "^3.36.0",
-		"@wordpress/widgets": "^4.36.0",
+		"@wordpress/widgets": "^4.38.0",
 		"@wordpress/wordcount": "^4.36.0",
 		"clsx": "^2.1.1",
 		"jquery": "^3.7.1",
