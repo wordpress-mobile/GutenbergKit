@@ -20,7 +20,7 @@ struct GBKitGlobalTests: MakesTestFixtures {
 
   private func makePreloadList() -> EditorPreloadList {
     EditorPreloadList(
-      postType: "post",
+      postType: .post,
       postTypeData: EditorURLResponse(data: Data(), responseHeaders: [:]),
       postTypesData: EditorURLResponse(data: Data(), responseHeaders: [:]),
       activeThemeData: EditorURLResponse(data: Data(), responseHeaders: [:]),
@@ -97,8 +97,8 @@ struct GBKitGlobalTests: MakesTestFixtures {
 
   @Test("maps postType to post.type")
   func mapsPostType() throws {
-    let postConfig = makeConfiguration(postType: "post")
-    let pageConfig = makeConfiguration(postType: "page")
+    let postConfig = makeConfiguration(postType: .post)
+    let pageConfig = makeConfiguration(postType: .page)
 
     let postGlobal = try GBKitGlobal(configuration: postConfig, dependencies: makeDependencies())
     let pageGlobal = try GBKitGlobal(configuration: pageConfig, dependencies: makeDependencies())
