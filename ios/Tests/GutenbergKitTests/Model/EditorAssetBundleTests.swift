@@ -294,6 +294,7 @@ struct EditorAssetBundleTests {
         #expect(result.path.contains("plugins/script.js"))
     }
 
+    #if os(macOS)
     @Test("assetDataPath crashes for path traversal attempt")
     func assetDataPathCrashesForPathTraversal() async {
         await #expect(processExitsWith: .failure) {
@@ -306,6 +307,7 @@ struct EditorAssetBundleTests {
             _ = bundle.assetDataPath(for: url)
         }
     }
+    #endif
 
     // MARK: - assetData Tests
 

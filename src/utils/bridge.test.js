@@ -8,6 +8,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
  */
 import { requestLatestContent, getPost } from './bridge';
 
+vi.mock( './logger.js', () => ( {
+	error: vi.fn(),
+	warn: vi.fn(),
+	info: vi.fn(),
+	debug: vi.fn(),
+} ) );
+
 describe( 'requestLatestContent', () => {
 	let originalWindow;
 
