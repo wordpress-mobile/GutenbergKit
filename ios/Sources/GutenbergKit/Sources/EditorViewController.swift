@@ -107,7 +107,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let editorService: EditorService
     private let mediaPicker: MediaPickerController?
     private let controller: GutenbergEditorController
-    private let bundleProvider = EditorAssetBundleProvider()
+    private let bundleProvider: EditorAssetBundleProvider
 
     // MARK: - Private Properties (UI)
 
@@ -153,11 +153,21 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         configuration: EditorConfiguration,
         dependencies: EditorDependencies? = nil,
         mediaPicker: MediaPickerController? = nil,
+        httpClient: EditorHTTPClient? = nil,
         isWarmupMode: Bool = false
     ) {
+        let httpClient = httpClient ?? EditorHTTPClient(
+            urlSession: URLSession.shared,
+            authHeader: configuration.authHeader
+        )
+
         self.configuration = configuration
         self.dependencies = dependencies
-        self.editorService = EditorService(configuration: configuration)
+        self.editorService = EditorService(
+            configuration: configuration,
+            httpClient: httpClient
+        )
+        self.bundleProvider = EditorAssetBundleProvider(httpClient: httpClient)
         self.mediaPicker = mediaPicker
         self.controller = GutenbergEditorController(configuration: configuration)
 
