@@ -676,7 +676,12 @@ struct EditorAssetLibraryTests {
       """
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
+        mockClient.urlResponseHandler = { url in
+            if url.path.contains("editor-assets") {
+                return Data(manifestJSON.utf8)
+            }
+            return Data("mock content".utf8)
+        }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -769,7 +774,12 @@ struct EditorAssetLibraryTests {
       """
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
+        mockClient.urlResponseHandler = { url in
+            if url.path.contains("editor-assets") {
+                return Data(manifestJSON.utf8)
+            }
+            return Data("mock content".utf8)
+        }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -827,10 +837,17 @@ struct EditorAssetLibraryTests {
       }
       """
 
-        let mockClient = EditorAssetLibrarySelectiveFailureHTTPClient()
-        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
-        // Simulate content blocker blocking stats.js
-        mockClient.urlsToFail = [URL(string: "https://blocked.com/stats.js")!]
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = { url in
+            if url.path.contains("editor-assets") {
+                return Data(manifestJSON.utf8)
+            }
+            // Simulate content blocker blocking stats.js
+            if url.host == "blocked.com" {
+                throw URLError(.badURL)
+            }
+            return Data("mock content".utf8)
+        }
 
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
@@ -884,8 +901,6 @@ final class EditorAssetLibraryMockHTTPClient: EditorHTTPClientProtocol, @uncheck
     var getCallCount = 0
     var downloadCallCount = 0
     var downloadedURLs: [URL] = []
-    var downloadResponse: URL?
-    var shouldThrowError: Error?
     private let lock = NSLock()
 
     /// URLs requested via `perform(_:)`. Use this to verify which endpoints were called.
@@ -894,8 +909,10 @@ final class EditorAssetLibraryMockHTTPClient: EditorHTTPClientProtocol, @uncheck
         lock.withLock { _requestedURLs }
     }
 
-    /// Handler for generating response data based on request URL. Defaults to returning empty data.
-    var urlResponseHandler: ((URL) -> Data) = { _ in Data() }
+    /// Handler for generating response data based on request URL.
+    /// Can throw to simulate failures for specific URLs.
+    /// Used by both `perform()` and `download()` methods.
+    var urlResponseHandler: ((URL) throws -> Data) = { _ in Data() }
 
     func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let url = try #require(urlRequest.url)
@@ -905,11 +922,7 @@ final class EditorAssetLibraryMockHTTPClient: EditorHTTPClientProtocol, @uncheck
             _requestedURLs.append(url)
         }
 
-        if let error = shouldThrowError {
-            throw error
-        }
-
-        let responseData = urlResponseHandler(url)
+        let responseData = try urlResponseHandler(url)
 
         let response = HTTPURLResponse(
             url: url,
@@ -929,9 +942,10 @@ final class EditorAssetLibraryMockHTTPClient: EditorHTTPClientProtocol, @uncheck
             downloadedURLs.append(url)
         }
 
-        if let error = shouldThrowError {
-            throw error
-        }
+        let data = try urlResponseHandler(url)
+
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try data.write(to: tempURL)
 
         let response = HTTPURLResponse(
             url: url,
@@ -939,80 +953,6 @@ final class EditorAssetLibraryMockHTTPClient: EditorHTTPClientProtocol, @uncheck
             httpVersion: "HTTP/1.1",
             headerFields: nil
         )!
-
-        // Create a temporary file with some content
-        let tempURL =
-        downloadResponse
-        ?? FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
-
-        if downloadResponse == nil {
-            try Data("mock content".utf8).write(to: tempURL)
-        }
-
-        return (tempURL, response)
-    }
-}
-
-// MARK: - Selective Failure Mock HTTP Client for Testing Asset Download Failures
-
-final class EditorAssetLibrarySelectiveFailureHTTPClient: EditorHTTPClientProtocol, @unchecked Sendable {
-
-    var getCallCount = 0
-    var downloadCallCount = 0
-    var downloadedURLs: [URL] = []
-    var urlsToFail: [URL] = []
-    private let lock = NSLock()
-
-    /// Handler for generating response data based on request URL.
-    var urlResponseHandler: ((URL) -> Data) = { _ in Data() }
-
-    func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        let url = try #require(urlRequest.url)
-
-        lock.withLock {
-            getCallCount += 1
-        }
-
-        let responseData = urlResponseHandler(url)
-
-        let response = HTTPURLResponse(
-            url: url,
-            statusCode: 200,
-            httpVersion: "HTTP/1.1",
-            headerFields: nil
-        )!
-
-        return (responseData, response)
-    }
-
-    func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse) {
-        let url = urlRequest.url!
-
-        lock.withLock {
-            downloadCallCount += 1
-            downloadedURLs.append(url)
-        }
-
-        // Simulate failure for specified URLs (like content blockers blocking analytics)
-        if urlsToFail.contains(url) {
-            throw URLError(.badURL, userInfo: [
-                NSLocalizedDescriptionKey: "bad URL",
-                NSURLErrorFailingURLStringErrorKey: url.absoluteString
-            ])
-        }
-
-        let response = HTTPURLResponse(
-            url: url,
-            statusCode: 200,
-            httpVersion: "HTTP/1.1",
-            headerFields: nil
-        )!
-
-        // Create a temporary file with some content
-        let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
-        try Data("mock content".utf8).write(to: tempURL)
 
         return (tempURL, response)
     }
