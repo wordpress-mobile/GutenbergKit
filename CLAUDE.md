@@ -212,3 +212,10 @@ make lint-js
 ```
 
 These commands ensure code quality and prevent lint errors from blocking commits.
+
+### Pull Request Guidelines
+
+When creating pull requests:
+
+1. **Use the PR template**: Read `.github/PULL_REQUEST_TEMPLATE.md` to get the current template structure and follow it when writing the PR body.
+2. **Assign a label**: Use `gh label list` to retrieve available labels and select the most relevant one for the PR.
