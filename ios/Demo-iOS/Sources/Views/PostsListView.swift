@@ -58,6 +58,7 @@ struct PostsListView: View {
                         }
                     }
                 }
+                .listStyle(.plain)
             }
         }
         .navigationTitle(viewModel.postTypeDetails.restBase.capitalized)
