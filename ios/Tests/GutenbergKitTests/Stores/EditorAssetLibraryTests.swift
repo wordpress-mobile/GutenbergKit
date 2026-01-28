@@ -59,7 +59,7 @@ struct EditorAssetLibraryTests {
     func existingBundleReturnsNilForMissingChecksum() async throws {
         let library = makeLibrary()
 
-        let result = try await library.existingBundle(forManifestChecksum: "nonexistent-checksum-12345")
+        let result = await library.existingBundle(forManifestChecksum: "nonexistent-checksum-12345")
         #expect(result == nil)
     }
 
