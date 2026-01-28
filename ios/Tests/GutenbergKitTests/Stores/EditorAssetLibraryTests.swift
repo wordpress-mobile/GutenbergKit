@@ -816,6 +816,46 @@ struct EditorAssetLibraryTests {
         #expect(progressTracker.count == 1)
         #expect(progressTracker.updates.first?.total == 1)
     }
+
+    @Test("buildBundle continues when individual asset downloads fail")
+    func buildBundleContinuesWhenAssetDownloadsFail() async throws {
+        let manifestJSON = """
+      {
+          "scripts": "<script src=\\"https://example.com/good-script.js\\"></script><script src=\\"https://blocked.com/stats.js\\"></script>",
+          "styles": "<link rel=\\"stylesheet\\" href=\\"https://example.com/style.css\\">",
+          "allowed_block_types": ["core/paragraph"]
+      }
+      """
+
+        let mockClient = EditorAssetLibrarySelectiveFailureHTTPClient()
+        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
+        // Simulate content blocker blocking stats.js
+        mockClient.urlsToFail = [URL(string: "https://blocked.com/stats.js")!]
+
+        let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
+
+        let manifest = try await library.fetchManifest()
+
+        // Should NOT throw - individual asset failures are caught and logged
+        let bundle = try await library.buildBundle(for: manifest)
+
+        // Bundle should be created successfully
+        #expect(!bundle.id.isEmpty)
+
+        // Verify progress was reported for all assets (including the failed one)
+        #expect(mockClient.downloadCallCount == 3)
+
+        // Verify the successful assets were downloaded
+        let bundleRoot = await library.bundleRoot(for: bundle)
+        let goodScriptPath = bundleRoot.appending(path: "/good-script.js")
+        let stylePath = bundleRoot.appending(path: "/style.css")
+        #expect(FileManager.default.fileExists(at: goodScriptPath))
+        #expect(FileManager.default.fileExists(at: stylePath))
+
+        // The failed asset should not exist
+        let failedScriptPath = bundleRoot.appending(path: "/stats.js")
+        #expect(!FileManager.default.fileExists(at: failedScriptPath))
+    }
 }
 
 // MARK: - Progress Tracker for Tests
@@ -909,6 +949,70 @@ final class EditorAssetLibraryMockHTTPClient: EditorHTTPClientProtocol, @uncheck
         if downloadResponse == nil {
             try Data("mock content".utf8).write(to: tempURL)
         }
+
+        return (tempURL, response)
+    }
+}
+
+// MARK: - Selective Failure Mock HTTP Client for Testing Asset Download Failures
+
+final class EditorAssetLibrarySelectiveFailureHTTPClient: EditorHTTPClientProtocol, @unchecked Sendable {
+
+    var getCallCount = 0
+    var downloadCallCount = 0
+    var downloadedURLs: [URL] = []
+    var urlsToFail: [URL] = []
+    private let lock = NSLock()
+
+    /// Handler for generating response data based on request URL.
+    var urlResponseHandler: ((URL) -> Data) = { _ in Data() }
+
+    func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let url = try #require(urlRequest.url)
+
+        lock.withLock {
+            getCallCount += 1
+        }
+
+        let responseData = urlResponseHandler(url)
+
+        let response = HTTPURLResponse(
+            url: url,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: nil
+        )!
+
+        return (responseData, response)
+    }
+
+    func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse) {
+        let url = urlRequest.url!
+
+        lock.withLock {
+            downloadCallCount += 1
+            downloadedURLs.append(url)
+        }
+
+        // Simulate failure for specified URLs (like content blockers blocking analytics)
+        if urlsToFail.contains(url) {
+            throw URLError(.badURL, userInfo: [
+                NSLocalizedDescriptionKey: "bad URL",
+                NSURLErrorFailingURLStringErrorKey: url.absoluteString
+            ])
+        }
+
+        let response = HTTPURLResponse(
+            url: url,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: nil
+        )!
+
+        // Create a temporary file with some content
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try Data("mock content".utf8).write(to: tempURL)
 
         return (tempURL, response)
     }
