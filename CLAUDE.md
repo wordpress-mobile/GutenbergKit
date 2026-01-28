@@ -212,3 +212,14 @@ make lint-js
 ```
 
 These commands ensure code quality and prevent lint errors from blocking commits.
+
+### Pull Request Guidelines
+
+When creating pull requests, always use the project's PR template (`.github/PULL_REQUEST_TEMPLATE.md`). The template includes:
+
+-   **What?**: Brief description of what the PR does
+-   **Why?**: Why the change is necessary, referencing any issues
+-   **How?**: Implementation details
+-   **Testing Instructions**: Step-by-step instructions to test the PR
+-   **Accessibility Testing Instructions**: Required for UI changes
+-   **Screenshots or screencast**: If applicable
