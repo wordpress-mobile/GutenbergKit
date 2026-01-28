@@ -223,3 +223,5 @@ When creating pull requests, always use the project's PR template (`.github/PULL
 -   **Testing Instructions**: Step-by-step instructions to test the PR
 -   **Accessibility Testing Instructions**: Required for UI changes
 -   **Screenshots or screencast**: If applicable
+
+**Labels**: Always assign an appropriate label when creating PRs. Use `gh label list` to retrieve available labels and select the most relevant one for the PR.
