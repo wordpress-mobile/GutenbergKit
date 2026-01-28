@@ -174,9 +174,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // This allows JavaScript to request the latest persisted content from the native host.
         config.userContentController.addScriptMessageHandler(controller, contentWorld: .page, name: "requestLatestContent")
 
-        // This is important so they user can't select anything but text across blocks.
-        config.selectionGranularity = .character
-
         self.bundleProvider.bind(to: config)
 
         config.applicationNameForUserAgent = "GutenbergKit/\(GutenbergKitVersion.version)"
