@@ -146,7 +146,7 @@ extension EditorAssetBundleProvider: WKURLSchemeHandler {
     /// Fetches an asset from its original remote URL and serves it to the WebView.
     ///
     /// This is used when an asset isn't in the local bundle (e.g., images referenced
-    /// in CSS files that weren't downloaded because only JS/CSS files are cached).s
+    /// in CSS files that weren't downloaded because only JS/CSS files are cached).
     private func fetchFromRemote(for urlSchemeTask: any WKURLSchemeTask) {
         guard let originalRequest = self.originalRequest(for: urlSchemeTask.request) else {
             Logger.assetLibrary.info("     Failed to construct original URL")
