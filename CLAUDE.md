@@ -215,13 +215,7 @@ These commands ensure code quality and prevent lint errors from blocking commits
 
 ### Pull Request Guidelines
 
-When creating pull requests, always use the project's PR template (`.github/PULL_REQUEST_TEMPLATE.md`). The template includes:
+When creating pull requests:
 
--   **What?**: Brief description of what the PR does
--   **Why?**: Why the change is necessary, referencing any issues
--   **How?**: Implementation details
--   **Testing Instructions**: Step-by-step instructions to test the PR
--   **Accessibility Testing Instructions**: Required for UI changes
--   **Screenshots or screencast**: If applicable
-
-**Labels**: Always assign an appropriate label when creating PRs. Use `gh label list` to retrieve available labels and select the most relevant one for the PR.
+1. **Use the PR template**: Read `.github/PULL_REQUEST_TEMPLATE.md` to get the current template structure and follow it when writing the PR body.
+2. **Assign a label**: Use `gh label list` to retrieve available labels and select the most relevant one for the PR.
