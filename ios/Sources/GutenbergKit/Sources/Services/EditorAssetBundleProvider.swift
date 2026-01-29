@@ -82,6 +82,7 @@ extension EditorAssetBundleProvider: WKScriptMessageHandlerWithReply {
                 replyHandler(reply, nil)
             } catch {
                 Logger.assetLibrary.error("📚 Failed to fetch asset manifest: \(error.localizedDescription)")
+                replyHandler(nil, error.localizedDescription)
             }
         }
     }
