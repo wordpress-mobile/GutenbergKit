@@ -130,16 +130,22 @@ public actor EditorAssetLibrary {
         let editorRepresentation = try manifest.buildEditorRepresentation(for: self.configuration)
         try bundle.writeManifest(editorRepresentation: editorRepresentation)
 
-        try await withThrowingTaskGroup { group in
+        await withTaskGroup { group in
             let links = (manifest.scripts + manifest.styles).filter { self.isSupportedAsset($0) }
-            
+
             for asset in links {
                 group.addTask {
-                    (asset, try await self.fetchAsset(url: asset, into: bundle))
+                    do {
+                        try await self.fetchAsset(url: asset, into: bundle)
+                    } catch {
+                        // Log and continue - individual asset failures shouldn't block the editor
+                        // This handles cases like content blockers blocking analytics scripts
+                        log(.warn, "Failed to download asset \(asset.lastPathComponent): \(error.localizedDescription)")
+                    }
                 }
             }
-            
-            for try await _ in group {
+
+            for await _ in group {
                 complete += 1
                 await progress?(EditorProgress(completed: complete, total: links.count))
             }
@@ -150,6 +156,7 @@ public actor EditorAssetLibrary {
     
     /// Downloads a single asset and copies it into the temporary bundle directory.
     ///
+    @discardableResult
     private func fetchAsset(url: URL, into bundle: EditorAssetBundle) async throws -> URL {
         let tempUrl = try await logExecutionTime("Downloading \(url.lastPathComponent)") {
             try await httpClient.download(URLRequest(method: .GET, url: url)).0
@@ -157,7 +164,7 @@ public actor EditorAssetLibrary {
 
         let destinationPath = bundle.bundleRoot.appending(path: url.path(percentEncoded: false))
         let destinationParent = destinationPath.deletingLastPathComponent()
-        
+
         // Ensure the destination directory exists
         try FileManager.default.createDirectory(at: destinationParent, withIntermediateDirectories: true)
 
