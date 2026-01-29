@@ -97,10 +97,27 @@ public struct EditorAssetBundle: Sendable, Equatable, Hashable {
         )
     }
 
+    /// Checks whether the given asset URL resolves to a valid path within the bundle root.
+    ///
+    /// Use this method to validate URLs before calling `assetDataPath(for:)` or `hasAssetData(for:)`
+    /// to avoid precondition failures for paths that escape the bundle root (e.g., plugin assets
+    /// referenced in CSS that weren't downloaded into the bundle).
+    ///
+    /// - Parameter url: The asset URL to validate.
+    /// - Returns: `true` if the URL resolves to a path within the bundle root, `false` otherwise.
+    public func isValidAssetPath(for url: URL) -> Bool {
+        let path = url.path(percentEncoded: false)
+        let bundlePath = self.bundleRoot.appending(rawPath: path).standardizedFileURL
+        let bundleRootPath = self.bundleRoot.standardizedFileURL.path
+        return bundlePath.path.hasPrefix(bundleRootPath + "/") || bundlePath.path == bundleRootPath
+    }
+
     /// Checks whether this bundle contains cached data for the given asset URL.
     ///
     /// - Parameter url: The original remote URL of the asset.
     /// - Returns: `true` if the asset is cached in this bundle, `false` otherwise.
+    /// - Precondition: The URL path must not escape the bundle root directory.
+    ///   Use `isValidAssetPath(for:)` to check validity before calling this method.
     public func hasAssetData(for url: URL) -> Bool {
         FileManager.default.fileExists(at: self.assetDataPath(for: url))
     }
