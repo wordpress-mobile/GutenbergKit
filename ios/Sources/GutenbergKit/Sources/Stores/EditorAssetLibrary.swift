@@ -156,7 +156,8 @@ public actor EditorAssetLibrary {
     
     /// Downloads a single asset and copies it into the temporary bundle directory.
     ///
-    private func fetchAsset(url: URL, into bundle: EditorAssetBundle) async throws {
+    @discardableResult
+    private func fetchAsset(url: URL, into bundle: EditorAssetBundle) async throws -> URL {
         let tempUrl = try await logExecutionTime("Downloading \(url.lastPathComponent)") {
             try await httpClient.download(URLRequest(method: .GET, url: url)).0
         }
@@ -168,6 +169,8 @@ public actor EditorAssetLibrary {
         try FileManager.default.createDirectory(at: destinationParent, withIntermediateDirectories: true)
 
         try FileManager.default.copyItem(at: tempUrl, to: destinationPath)
+
+        return destinationPath
     }
     
     /// Checks if the given `url` is eligible to be downloaded into the local bundle
