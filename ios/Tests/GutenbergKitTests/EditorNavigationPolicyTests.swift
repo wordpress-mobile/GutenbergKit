@@ -130,18 +130,26 @@ struct EditorNavigationPolicyTests {
         #expect(!policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: true))
     }
 
-    // MARK: - Navigation Policy: Other Navigation Types (Should Allow)
+    // MARK: - Navigation Policy: Other Navigation Types
 
-    @Test("allows reload, back/forward, and form navigation types")
-    func allowsOtherNavigationTypes() {
+    @Test("allows reload navigation")
+    func allowsReloadNavigation() {
         let policy = EditorNavigationPolicy()
         let url = URL(string: "https://example.com/editor")!
 
-        let allowedTypes: [WKNavigationType] = [.reload, .backForward, .formSubmitted, .formResubmitted]
-        for navigationType in allowedTypes {
+        #expect(policy.shouldAllowNavigation(url: url, navigationType: .reload, isMainFrame: true))
+    }
+
+    @Test("blocks back/forward and form navigation types")
+    func blocksOtherNavigationTypes() {
+        let policy = EditorNavigationPolicy()
+        let url = URL(string: "https://example.com/page")!
+
+        let blockedTypes: [WKNavigationType] = [.backForward, .formSubmitted, .formResubmitted]
+        for navigationType in blockedTypes {
             #expect(
-                policy.shouldAllowNavigation(url: url, navigationType: navigationType, isMainFrame: true),
-                "Should allow navigation type: \(navigationType)"
+                !policy.shouldAllowNavigation(url: url, navigationType: navigationType, isMainFrame: true),
+                "Should block navigation type: \(navigationType)"
             )
         }
     }
@@ -155,13 +163,13 @@ struct EditorNavigationPolicyTests {
         #expect(policy.shouldAllowNavigation(url: nil, navigationType: .other, isMainFrame: true))
     }
 
-    @Test("handles nil isMainFrame: allows .other, blocks .linkActivated")
-    func handlesNilMainFrame() {
+    @Test("blocks external navigation when isMainFrame is nil")
+    func blocksExternalNavigationWithNilMainFrame() {
         let policy = EditorNavigationPolicy()
         let url = URL(string: "https://example.com/page")!
 
-        // When targetFrame is nil (unknown), allow .other but block link clicks
-        #expect(policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: nil))
+        // When targetFrame is nil (unknown), block external navigation
+        #expect(!policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: nil))
         #expect(!policy.shouldAllowNavigation(url: url, navigationType: .linkActivated, isMainFrame: nil))
     }
 

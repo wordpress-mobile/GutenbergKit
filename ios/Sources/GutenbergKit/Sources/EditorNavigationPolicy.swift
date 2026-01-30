@@ -64,20 +64,16 @@ struct EditorNavigationPolicy {
             return true
         }
 
-        // Block user-initiated link clicks - open in system browser
-        if navigationType == .linkActivated {
-            return false
+        // Allow reload navigation (e.g., pull-to-refresh, manual reload)
+        if navigationType == .reload {
+            return true
         }
 
-        // Block JavaScript-initiated main frame navigation to external URLs.
-        // This catches upsell buttons that use window.top.location.href.
-        // Navigation type .other with a main frame target indicates programmatic navigation.
-        if navigationType == .other && isMainFrame == true {
-            return false
-        }
-
-        // Allow other navigation types (reload, back/forward, form submission within editor)
-        return true
+        // Block all other main frame navigation to external URLs:
+        // - .linkActivated: User tapped a link
+        // - .other: JavaScript navigation (e.g., window.top.location.href for upsell buttons)
+        // - .backForward, .formSubmitted, .formResubmitted: Not expected in the editor
+        return false
     }
 
     // MARK: - Internal helpers (exposed for testing)
