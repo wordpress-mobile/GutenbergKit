@@ -795,13 +795,22 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
             return .allow
         }
 
-        if navigationAction.navigationType == .linkActivated {
-            // Open the request in OS browser
-            await UIApplication.shared.open(url)
-            return .cancel
+        // Allow local editor resources and custom URL schemes
+        let allowedSchemes = ["file", "gbk-cache-https", "gbk-media-file"]
+        if allowedSchemes.contains(url.scheme ?? "") {
+            return .allow
         }
 
-        return .allow
+        // Allow navigation to dev server URL if configured
+        if let editorURL, url.host == editorURL.host {
+            return .allow
+        }
+
+        // Any other navigation (http/https URLs) should open in the system browser.
+        // This catches both user-initiated link clicks (.linkActivated) and JavaScript-based
+        // navigation (.other) such as upsell buttons that use window.top.location.href.
+        await UIApplication.shared.open(url)
+        return .cancel
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
