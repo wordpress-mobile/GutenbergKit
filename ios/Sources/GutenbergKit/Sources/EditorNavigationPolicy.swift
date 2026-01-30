@@ -1,4 +1,5 @@
 import Foundation
+import WebKit
 
 /// Determines how URLs should be handled during WebView navigation.
 ///
@@ -19,23 +20,60 @@ struct EditorNavigationPolicy {
         self.devServerURL = devServerURL
     }
 
-    /// Evaluates whether a URL should be allowed to load within the WebView.
+    /// Evaluates whether a navigation action should be allowed within the WebView.
     ///
-    /// - Parameter url: The URL being navigated to.
-    /// - Returns: `true` if the URL should load in the WebView, `false` if it should
-    ///   be opened in the system browser.
-    func shouldAllowNavigation(to url: URL) -> Bool {
+    /// - Parameter navigationAction: The navigation action to evaluate.
+    /// - Returns: `true` if the navigation should proceed in the WebView, `false` if it
+    ///   should be opened in the system browser.
+    @MainActor
+    func shouldAllowNavigation(for navigationAction: WKNavigationAction) -> Bool {
+        guard let url = navigationAction.request.url else {
+            return true
+        }
+
         // Allow local editor resources and custom URL schemes
-        if let scheme = url.scheme, Self.allowedSchemes.contains(scheme) {
+        if isAllowedScheme(url) {
             return true
         }
 
         // Allow navigation to dev server URL if configured
-        if let devServerURL, url.host == devServerURL.host {
+        if isDevServerURL(url) {
             return true
         }
 
-        // All other URLs (http/https) should open externally
-        return false
+        // Allow subframe navigation (iframes, video embeds, etc.)
+        // Only block main frame navigation to external URLs
+        if navigationAction.targetFrame?.isMainFrame == false {
+            return true
+        }
+
+        // Block user-initiated link clicks - open in system browser
+        if navigationAction.navigationType == .linkActivated {
+            return false
+        }
+
+        // Block JavaScript-initiated main frame navigation to external URLs.
+        // This catches upsell buttons that use window.top.location.href.
+        // Navigation type .other with a main frame target indicates programmatic navigation.
+        if navigationAction.navigationType == .other && navigationAction.targetFrame?.isMainFrame == true {
+            return false
+        }
+
+        // Allow other navigation types (reload, back/forward, form submission within editor)
+        return true
+    }
+
+    // MARK: - Internal helpers (exposed for testing)
+
+    /// Returns `true` if the URL uses an allowed scheme.
+    func isAllowedScheme(_ url: URL) -> Bool {
+        guard let scheme = url.scheme else { return false }
+        return Self.allowedSchemes.contains(scheme)
+    }
+
+    /// Returns `true` if the URL matches the configured dev server host.
+    func isDevServerURL(_ url: URL) -> Bool {
+        guard let devServerURL else { return false }
+        return url.host == devServerURL.host
     }
 }

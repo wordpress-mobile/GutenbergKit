@@ -792,18 +792,14 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
-        guard let url = navigationAction.request.url else {
+        if navigationPolicy.shouldAllowNavigation(for: navigationAction) {
             return .allow
         }
 
-        if navigationPolicy.shouldAllowNavigation(to: url) {
-            return .allow
+        // External main frame navigation should open in the system browser.
+        if let url = navigationAction.request.url {
+            await UIApplication.shared.open(url)
         }
-
-        // External URLs should open in the system browser.
-        // This catches both user-initiated link clicks (.linkActivated) and JavaScript-based
-        // navigation (.other) such as upsell buttons that use window.top.location.href.
-        await UIApplication.shared.open(url)
         return .cancel
     }
 
