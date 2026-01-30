@@ -747,11 +747,12 @@ private protocol GutenbergEditorControllerDelegate: AnyObject {
 private final class GutenbergEditorController: NSObject, WKNavigationDelegate, WKScriptMessageHandler, WKScriptMessageHandlerWithReply {
     weak var delegate: GutenbergEditorControllerDelegate?
     let configuration: EditorConfiguration
-    private let editorURL: URL?
+    private let navigationPolicy: EditorNavigationPolicy
 
     init(configuration: EditorConfiguration) {
         self.configuration = configuration
-        self.editorURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init)
+        let devServerURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init)
+        self.navigationPolicy = EditorNavigationPolicy(devServerURL: devServerURL)
         super.init()
     }
 
@@ -795,18 +796,11 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
             return .allow
         }
 
-        // Allow local editor resources and custom URL schemes
-        let allowedSchemes = ["file", "gbk-cache-https", "gbk-media-file"]
-        if allowedSchemes.contains(url.scheme ?? "") {
+        if navigationPolicy.shouldAllowNavigation(to: url) {
             return .allow
         }
 
-        // Allow navigation to dev server URL if configured
-        if let editorURL, url.host == editorURL.host {
-            return .allow
-        }
-
-        // Any other navigation (http/https URLs) should open in the system browser.
+        // External URLs should open in the system browser.
         // This catches both user-initiated link clicks (.linkActivated) and JavaScript-based
         // navigation (.other) such as upsell buttons that use window.top.location.href.
         await UIApplication.shared.open(url)
