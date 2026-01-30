@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import WebKit
 
 @testable import GutenbergKit
 
@@ -32,7 +33,15 @@ struct EditorNavigationPolicyTests {
         #expect(policy.isAllowedScheme(url))
     }
 
-    // MARK: - External URLs
+    @Test("allowedSchemes contains expected values")
+    func allowedSchemesContainsExpectedValues() {
+        #expect(EditorNavigationPolicy.allowedSchemes.contains("file"))
+        #expect(EditorNavigationPolicy.allowedSchemes.contains("gbk-cache-https"))
+        #expect(EditorNavigationPolicy.allowedSchemes.contains("gbk-media-file"))
+        #expect(EditorNavigationPolicy.allowedSchemes.count == 3)
+    }
+
+    // MARK: - External URL Schemes
 
     @Test("does not allow https:// scheme")
     func doesNotAllowHttpsScheme() {
@@ -50,19 +59,12 @@ struct EditorNavigationPolicyTests {
         #expect(!policy.isAllowedScheme(url))
     }
 
-    @Test("does not allow WordPress.com upgrade URLs by scheme")
-    func doesNotAllowUpgradeUrlSchemes() {
+    @Test("does not allow URLs with nil scheme")
+    func doesNotAllowNilScheme() {
         let policy = EditorNavigationPolicy()
-        let upgradeUrls = [
-            "https://wordpress.com/checkout/example.wordpress.com/premium",
-            "https://wordpress.com/plans/example.wordpress.com",
-            "https://wordpress.com/checkout/example.wordpress.com/videopress"
-        ]
+        let url = URL(string: "//example.com/path")!
 
-        for urlString in upgradeUrls {
-            let url = URL(string: urlString)!
-            #expect(!policy.isAllowedScheme(url), "Should not allow scheme for: \(urlString)")
-        }
+        #expect(!policy.isAllowedScheme(url))
     }
 
     // MARK: - Dev Server
@@ -105,29 +107,31 @@ struct EditorNavigationPolicyTests {
         #expect(!policy.isDevServerURL(url))
     }
 
-    // MARK: - Edge Cases
+    // MARK: - Navigation Policy: Allowed Schemes Always Pass
 
-    @Test("does not allow URLs with nil scheme")
-    func doesNotAllowNilScheme() {
+    @Test("allows file:// URLs regardless of navigation type")
+    func allowsFileUrlsRegardlessOfNavigationType() {
         let policy = EditorNavigationPolicy()
-        // URL without scheme
-        let url = URL(string: "//example.com/path")!
+        let url = URL(string: "file:///path/to/editor.html")!
 
-        #expect(!policy.isAllowedScheme(url))
+        // Should allow even for link clicks or JS navigation
+        #expect(policy.shouldAllowNavigation(url: url, navigationType: .linkActivated, isMainFrame: true))
+        #expect(policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: true))
     }
 
-    @Test("allowedSchemes contains expected values")
-    func allowedSchemesContainsExpectedValues() {
-        #expect(EditorNavigationPolicy.allowedSchemes.contains("file"))
-        #expect(EditorNavigationPolicy.allowedSchemes.contains("gbk-cache-https"))
-        #expect(EditorNavigationPolicy.allowedSchemes.contains("gbk-media-file"))
-        #expect(EditorNavigationPolicy.allowedSchemes.count == 3)
+    @Test("allows gbk-cache-https:// URLs regardless of navigation type")
+    func allowsCacheUrlsRegardlessOfNavigationType() {
+        let policy = EditorNavigationPolicy()
+        let url = URL(string: "gbk-cache-https://example.com/asset.js")!
+
+        #expect(policy.shouldAllowNavigation(url: url, navigationType: .linkActivated, isMainFrame: true))
+        #expect(policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: true))
     }
 
-    // MARK: - Video/Media URL Schemes
+    // MARK: - Navigation Policy: Subframe Navigation (Video/Embed Support)
 
-    @Test("does not treat video URLs as allowed scheme")
-    func doesNotAllowVideoUrlScheme() {
+    @Test("allows subframe navigation to video URLs")
+    func allowsSubframeVideoNavigation() {
         let policy = EditorNavigationPolicy()
         let videoUrls = [
             "https://videos.files.wordpress.com/abc123/video.mp4",
@@ -137,9 +141,162 @@ struct EditorNavigationPolicyTests {
 
         for urlString in videoUrls {
             let url = URL(string: urlString)!
-            // Video URLs use https, which is not in allowedSchemes
-            // They should be allowed via subframe navigation, not scheme
-            #expect(!policy.isAllowedScheme(url), "Video URL should not match allowed scheme: \(urlString)")
+            // Subframe navigation (isMainFrame = false) should be allowed
+            #expect(
+                policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: false),
+                "Should allow subframe navigation to: \(urlString)"
+            )
         }
+    }
+
+    @Test("allows subframe navigation to YouTube embeds")
+    func allowsSubframeYouTubeNavigation() {
+        let policy = EditorNavigationPolicy()
+        let url = URL(string: "https://www.youtube.com/embed/dQw4w9WgXcQ")!
+
+        #expect(policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: false))
+    }
+
+    @Test("allows subframe navigation to Twitter embeds")
+    func allowsSubframeTwitterNavigation() {
+        let policy = EditorNavigationPolicy()
+        let url = URL(string: "https://platform.twitter.com/embed/Tweet.html")!
+
+        #expect(policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: false))
+    }
+
+    @Test("allows subframe navigation to Vimeo embeds")
+    func allowsSubframeVimeoNavigation() {
+        let policy = EditorNavigationPolicy()
+        let url = URL(string: "https://player.vimeo.com/video/123456")!
+
+        #expect(policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: false))
+    }
+
+    // MARK: - Navigation Policy: Link Clicks (Should Open in Browser)
+
+    @Test("blocks link clicks to external URLs")
+    func blocksLinkClicksToExternalUrls() {
+        let policy = EditorNavigationPolicy()
+        let url = URL(string: "https://example.com/page")!
+
+        #expect(!policy.shouldAllowNavigation(url: url, navigationType: .linkActivated, isMainFrame: true))
+    }
+
+    @Test("blocks link clicks to WordPress.com checkout URLs")
+    func blocksLinkClicksToCheckout() {
+        let policy = EditorNavigationPolicy()
+        let checkoutUrls = [
+            "https://wordpress.com/checkout/example.wordpress.com/premium",
+            "https://wordpress.com/plans/example.wordpress.com",
+            "https://wordpress.com/checkout/example.wordpress.com/videopress"
+        ]
+
+        for urlString in checkoutUrls {
+            let url = URL(string: urlString)!
+            #expect(
+                !policy.shouldAllowNavigation(url: url, navigationType: .linkActivated, isMainFrame: true),
+                "Should block link click to: \(urlString)"
+            )
+        }
+    }
+
+    // MARK: - Navigation Policy: JavaScript Navigation (Upsell Buttons)
+
+    @Test("blocks JavaScript main frame navigation to external URLs")
+    func blocksJavaScriptMainFrameNavigation() {
+        let policy = EditorNavigationPolicy()
+        let url = URL(string: "https://wordpress.com/checkout/example.wordpress.com/videopress")!
+
+        // This simulates window.top.location.href = url (upsell button behavior)
+        #expect(!policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: true))
+    }
+
+    @Test("blocks JavaScript navigation to upgrade URLs in main frame")
+    func blocksJavaScriptUpgradeNavigation() {
+        let policy = EditorNavigationPolicy()
+        let upgradeUrls = [
+            "https://wordpress.com/checkout/example.wordpress.com/premium",
+            "https://wordpress.com/plans/example.wordpress.com",
+            "https://wordpress.com/checkout/example.wordpress.com/videopress"
+        ]
+
+        for urlString in upgradeUrls {
+            let url = URL(string: urlString)!
+            #expect(
+                !policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: true),
+                "Should block JS navigation to: \(urlString)"
+            )
+        }
+    }
+
+    // MARK: - Navigation Policy: Other Navigation Types (Should Allow)
+
+    @Test("allows reload navigation")
+    func allowsReloadNavigation() {
+        let policy = EditorNavigationPolicy()
+        let url = URL(string: "https://example.com/editor")!
+
+        #expect(policy.shouldAllowNavigation(url: url, navigationType: .reload, isMainFrame: true))
+    }
+
+    @Test("allows back/forward navigation")
+    func allowsBackForwardNavigation() {
+        let policy = EditorNavigationPolicy()
+        let url = URL(string: "https://example.com/editor")!
+
+        #expect(policy.shouldAllowNavigation(url: url, navigationType: .backForward, isMainFrame: true))
+    }
+
+    @Test("allows form submitted navigation")
+    func allowsFormSubmittedNavigation() {
+        let policy = EditorNavigationPolicy()
+        let url = URL(string: "https://example.com/form-handler")!
+
+        #expect(policy.shouldAllowNavigation(url: url, navigationType: .formSubmitted, isMainFrame: true))
+    }
+
+    @Test("allows form resubmitted navigation")
+    func allowsFormResubmittedNavigation() {
+        let policy = EditorNavigationPolicy()
+        let url = URL(string: "https://example.com/form-handler")!
+
+        #expect(policy.shouldAllowNavigation(url: url, navigationType: .formResubmitted, isMainFrame: true))
+    }
+
+    // MARK: - Navigation Policy: Edge Cases
+
+    @Test("allows navigation when URL is nil")
+    func allowsNavigationWithNilUrl() {
+        let policy = EditorNavigationPolicy()
+
+        #expect(policy.shouldAllowNavigation(url: nil, navigationType: .other, isMainFrame: true))
+    }
+
+    @Test("allows navigation when isMainFrame is nil")
+    func allowsNavigationWithNilMainFrame() {
+        let policy = EditorNavigationPolicy()
+        let url = URL(string: "https://example.com/page")!
+
+        // When targetFrame is nil (unknown), we allow navigation except for linkActivated
+        #expect(policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: nil))
+    }
+
+    @Test("blocks link clicks even when isMainFrame is nil")
+    func blocksLinkClicksWithNilMainFrame() {
+        let policy = EditorNavigationPolicy()
+        let url = URL(string: "https://example.com/page")!
+
+        #expect(!policy.shouldAllowNavigation(url: url, navigationType: .linkActivated, isMainFrame: nil))
+    }
+
+    @Test("allows dev server navigation regardless of navigation type")
+    func allowsDevServerRegardlessOfType() {
+        let devServerURL = URL(string: "http://localhost:5173")!
+        let policy = EditorNavigationPolicy(devServerURL: devServerURL)
+        let url = URL(string: "http://localhost:5173/hot-update.js")!
+
+        #expect(policy.shouldAllowNavigation(url: url, navigationType: .linkActivated, isMainFrame: true))
+        #expect(policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: true))
     }
 }

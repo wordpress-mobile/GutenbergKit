@@ -27,7 +27,24 @@ struct EditorNavigationPolicy {
     ///   should be opened in the system browser.
     @MainActor
     func shouldAllowNavigation(for navigationAction: WKNavigationAction) -> Bool {
-        guard let url = navigationAction.request.url else {
+        shouldAllowNavigation(
+            url: navigationAction.request.url,
+            navigationType: navigationAction.navigationType,
+            isMainFrame: navigationAction.targetFrame?.isMainFrame
+        )
+    }
+
+    /// Evaluates whether a navigation should be allowed based on its properties.
+    ///
+    /// This method extracts the decision logic from WKNavigationAction to enable unit testing.
+    ///
+    /// - Parameters:
+    ///   - url: The URL being navigated to.
+    ///   - navigationType: The type of navigation (link click, JavaScript, etc.).
+    ///   - isMainFrame: Whether the navigation targets the main frame (`true`), a subframe (`false`), or unknown (`nil`).
+    /// - Returns: `true` if the navigation should proceed in the WebView, `false` if it should open externally.
+    func shouldAllowNavigation(url: URL?, navigationType: WKNavigationType, isMainFrame: Bool?) -> Bool {
+        guard let url else {
             return true
         }
 
@@ -43,19 +60,19 @@ struct EditorNavigationPolicy {
 
         // Allow subframe navigation (iframes, video embeds, etc.)
         // Only block main frame navigation to external URLs
-        if navigationAction.targetFrame?.isMainFrame == false {
+        if isMainFrame == false {
             return true
         }
 
         // Block user-initiated link clicks - open in system browser
-        if navigationAction.navigationType == .linkActivated {
+        if navigationType == .linkActivated {
             return false
         }
 
         // Block JavaScript-initiated main frame navigation to external URLs.
         // This catches upsell buttons that use window.top.location.href.
         // Navigation type .other with a main frame target indicates programmatic navigation.
-        if navigationAction.navigationType == .other && navigationAction.targetFrame?.isMainFrame == true {
+        if navigationType == .other && isMainFrame == true {
             return false
         }
 
