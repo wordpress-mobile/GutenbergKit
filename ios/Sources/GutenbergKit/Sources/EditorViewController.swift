@@ -189,6 +189,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         self.bundleProvider.bind(to: config)
 
+        // Register media file scheme handler for serving local media via gbk-media-file:// URLs
+        config.setURLSchemeHandler(MediaFileSchemeHandler(), forURLScheme: MediaFileSchemeHandler.scheme)
+
         config.applicationNameForUserAgent = "GutenbergKit/\(GutenbergKitVersion.version)"
 
         self.webView = GBWebView(frame: .zero, configuration: config)
