@@ -22,10 +22,10 @@ struct PostsListView: View {
     var body: some View {
         Group {
             if viewModel.isLoading && viewModel.posts.isEmpty {
-                ProgressView("Loading Posts...")
+                ProgressView("Loading entries...")
             } else if let error = viewModel.error {
                 ContentUnavailableView {
-                    Label("Error Loading Posts", systemImage: "exclamationmark.triangle")
+                    Label("Error Loading Entries", systemImage: "exclamationmark.triangle")
                 } description: {
                     Text(error.localizedDescription)
                 } actions: {
@@ -37,9 +37,9 @@ struct PostsListView: View {
                 }
             } else if viewModel.posts.isEmpty {
                 ContentUnavailableView {
-                    Label("No Posts", systemImage: "doc.text")
+                    Label("No Entires", systemImage: "doc.text")
                 } description: {
-                    Text("No posts found for this post type.")
+                    Text("No entries found for this post type.")
                 }
             } else {
                 List(viewModel.posts, id: \.id) { post in
