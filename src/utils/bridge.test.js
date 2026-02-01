@@ -246,6 +246,8 @@ describe( 'getPost', () => {
 				status: 'draft',
 				title: { raw: 'Host Title' },
 				content: { raw: 'Host Content' },
+				restBase: 'posts',
+				restNamespace: 'wp/v2',
 			} );
 		} );
 
@@ -309,6 +311,8 @@ describe( 'getPost', () => {
 				status: 'draft',
 				title: { raw: 'GBKit Title' },
 				content: { raw: 'GBKit Content' },
+				restBase: 'posts',
+				restNamespace: 'wp/v2',
 			} );
 		} );
 
@@ -332,6 +336,8 @@ describe( 'getPost', () => {
 				status: 'publish',
 				title: { raw: 'Fallback Title' },
 				content: { raw: 'Fallback Content' },
+				restBase: 'posts',
+				restNamespace: 'wp/v2',
 			} );
 		} );
 	} );
@@ -348,6 +354,8 @@ describe( 'getPost', () => {
 				status: 'draft',
 				title: { raw: '' },
 				content: { raw: '' },
+				restBase: 'posts',
+				restNamespace: 'wp/v2',
 			} );
 		} );
 
@@ -374,6 +382,8 @@ describe( 'getPost', () => {
 				status: 'draft',
 				title: { raw: 'Title' },
 				content: { raw: 'Content' },
+				restBase: 'posts',
+				restNamespace: 'wp/v2',
 			} );
 		} );
 	} );
