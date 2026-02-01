@@ -122,16 +122,18 @@ class PostsListViewModel {
                 endpointType = .custom(postTypeDetails.restBase)
             }
 
-            let sequence = client.posts.sequenceWithEditContext(
-                type: endpointType,
-                params: PostListParams(perPage: 20, status: [.custom("any")])
-            )
+            var currentPage: UInt32 = 1
+            let perPage: UInt32 = 20
+            while true {
+                let params = PostListParams(page: currentPage, perPage: perPage, status: [.custom("any")])
+                let fetched = try await client.posts.listWithEditContext(type: endpointType, params: params).data
+                self.posts.append(contentsOf: fetched)
 
-            var loadedPosts: [AnyPostWithEditContext] = []
-            for try await page in sequence {
-                loadedPosts.append(contentsOf: page)
+                if fetched.count < perPage {
+                    break
+                }
+                currentPage += 1
             }
-            self.posts = loadedPosts
         } catch {
             self.error = error
         }
