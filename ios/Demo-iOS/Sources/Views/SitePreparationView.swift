@@ -194,8 +194,12 @@ class SitePreparationViewModel {
             preconditionFailure("Unable to prepare editor without editor configuration – the UI should prevent this")
         }
 
+        let config = configuration
+            .toBuilder()
+            .setPostType(self.selectedPostTypeDetails)
+            .build()
         let cacheInterval: TimeInterval = 86_400  // Cache for one day
-        self.prepareEditor(with: EditorService(configuration: configuration, cachePolicy: .maxAge(cacheInterval)))
+        self.prepareEditor(with: EditorService(configuration: config, cachePolicy: .maxAge(cacheInterval)))
     }
 
     /// Prepares the editor by caching all resources and preparing an `EditorDependencies` object to inject into the editor.
