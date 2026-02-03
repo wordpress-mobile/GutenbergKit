@@ -18,6 +18,8 @@ struct SitePreparationView: View {
         Group {
             if let configuration = self.viewModel.editorConfiguration {
                 loadedView(configuration: configuration)
+            } else if let error = viewModel.error {
+                Text(error.localizedDescription)
             } else {
                 ProgressView("Loading Site Configuration")
             }
@@ -182,6 +184,16 @@ class SitePreparationViewModel {
                     self.editorConfiguration = .bundled
                     self.postTypes = [.post, .page]
                 case .editorConfiguration(let siteDetails):
+                    let parsedApiRoot = try ParsedUrl.parse(input: siteDetails.siteApiRoot)
+                    let configuration = URLSessionConfiguration.ephemeral
+                    configuration.httpAdditionalHeaders = ["Authorization": siteDetails.authHeader]
+                    let client = WordPressAPI(
+                        urlSession: .init(configuration: configuration),
+                        apiRootUrl: parsedApiRoot,
+                        authentication: .none,
+                    )
+                    self.client = client
+
                     try await self.loadPostTypes()
                     let newConfiguration = try await self.loadConfiguration(for: siteDetails)
                     self.editorConfiguration = newConfiguration
@@ -281,18 +293,8 @@ class SitePreparationViewModel {
 
     @MainActor
     private func loadConfiguration(for config: ConfiguredEditor) async throws -> EditorConfiguration {
-        let parsedApiRoot = try ParsedUrl.parse(input: config.siteApiRoot)
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.httpAdditionalHeaders = ["Authorization": config.authHeader]
-        let client = WordPressAPI(
-            urlSession: .init(configuration: configuration),
-            apiRootUrl: parsedApiRoot,
-            authentication: .none,
-        )
 
-        self.client = client
-
-        let apiRoot = try await client.apiRoot.get().data
+        let apiRoot = try await client!.apiRoot.get().data
 
         let canUsePlugins = apiRoot.hasRoute(route: "/wpcom/v2/editor-assets")
         let canUseEditorStyles = apiRoot.hasRoute(route: "/wp-block-editor/v1/settings")
@@ -300,7 +302,7 @@ class SitePreparationViewModel {
         return EditorConfigurationBuilder(
             postType: selectedPostTypeDetails,
             siteURL: URL(string: apiRoot.siteUrlString())!,
-            siteApiRoot: parsedApiRoot.asURL()
+            siteApiRoot: URL(string: config.siteApiRoot)!
         )
         .setShouldUseThemeStyles(canUseEditorStyles)
         .setShouldUsePlugins(canUsePlugins)
