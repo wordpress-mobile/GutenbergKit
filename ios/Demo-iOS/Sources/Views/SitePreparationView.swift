@@ -133,13 +133,19 @@ struct SitePreparationView: View {
 @Observable
 class SitePreparationViewModel {
 
-    var enableNativeInserter: Bool = true
+    var enableNativeInserter: Bool = true {
+        didSet { updateEditorConfiguration() }
+    }
 
-    var enableNetworkLogging: Bool = false
+    var enableNetworkLogging: Bool = false {
+        didSet { updateEditorConfiguration() }
+    }
 
     var postTypes: [PostTypeDetails] = []
 
-    var selectedPostTypeDetails: PostTypeDetails = .post
+    var selectedPostTypeDetails: PostTypeDetails = .post {
+        didSet { updateEditorConfiguration() }
+    }
 
     var cacheBundleCount: Int?
 
@@ -340,6 +346,11 @@ class SitePreparationViewModel {
         if let firstType = postTypes.first {
             self.selectedPostTypeDetails = firstType
         }
+    }
+
+    private func updateEditorConfiguration() {
+        guard editorConfiguration != nil else { return }
+        self.editorConfiguration = buildConfiguration()
     }
 
     private func buildConfiguration() -> EditorConfiguration {
