@@ -182,9 +182,9 @@ class SitePreparationViewModel {
                     self.editorConfiguration = .bundled
                     self.postTypes = [.post, .page]
                 case .editorConfiguration(let siteDetails):
+                    try await self.loadPostTypes()
                     let newConfiguration = try await self.loadConfiguration(for: siteDetails)
                     self.editorConfiguration = newConfiguration
-                    try await self.loadPostTypes()
                 }
             } catch {
                 self.error = error
@@ -298,7 +298,7 @@ class SitePreparationViewModel {
         let canUseEditorStyles = apiRoot.hasRoute(route: "/wp-block-editor/v1/settings")
 
         return EditorConfigurationBuilder(
-            postType: .post,
+            postType: selectedPostTypeDetails,
             siteURL: URL(string: apiRoot.siteUrlString())!,
             siteApiRoot: parsedApiRoot.asURL()
         )
