@@ -1,6 +1,6 @@
 # Integration Guide
 
-This guide covers how to integrate GutenbergKit into your iOS or Android app.
+This guide covers how to integrate GutenbergKit into your iOS or Android app. If you are instead interested in integrating GutenbergKit into the WordPress-iOS or WordPress-Android apps, see the [WordPress App Integration](./wordpress-app-integration.md) guide.
 
 ## Requirements
 
