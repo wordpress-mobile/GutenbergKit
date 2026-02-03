@@ -135,25 +135,41 @@ struct SitePreparationView: View {
 @Observable
 class SitePreparationViewModel {
 
-    var enableNativeInserter: Bool = true {
-        didSet { updateEditorConfiguration() }
+    var enableNativeInserter: Bool {
+        get { editorConfiguration?.isNativeInserterEnabled ?? true }
+        set {
+            guard let config = editorConfiguration else { return }
+            editorConfiguration = config.toBuilder()
+                .setNativeInserterEnabled(newValue)
+                .build()
+        }
     }
 
-    var enableNetworkLogging: Bool = false {
-        didSet { updateEditorConfiguration() }
+    var enableNetworkLogging: Bool {
+        get { editorConfiguration?.enableNetworkLogging ?? false }
+        set {
+            guard let config = editorConfiguration else { return }
+            editorConfiguration = config.toBuilder()
+                .setEnableNetworkLogging(newValue)
+                .build()
+        }
     }
 
     var postTypes: [PostTypeDetails] = []
 
-    var selectedPostTypeDetails: PostTypeDetails = .post {
-        didSet { updateEditorConfiguration() }
+    var selectedPostTypeDetails: PostTypeDetails {
+        get { editorConfiguration?.postType ?? .post }
+        set {
+            guard let config = editorConfiguration else { return }
+            editorConfiguration = config.toBuilder()
+                .setPostType(newValue)
+                .build()
+            editorDependencies = nil
+        }
     }
 
     var cacheBundleCount: Int?
 
-    var isPreparing: Bool = false
-
-    var isPrepared: Bool = false
 
     var error: Error?
 
@@ -181,7 +197,7 @@ class SitePreparationViewModel {
             do {
                 switch configurationItem {
                 case .bundledEditor:
-                    self.editorConfiguration = .bundled
+                    self.editorConfiguration = Self.applyDemoAppDefaults(to: .bundled)
                     self.postTypes = [.post, .page]
                 case .editorConfiguration(let siteDetails):
                     let parsedApiRoot = try ParsedUrl.parse(input: siteDetails.siteApiRoot)
@@ -196,12 +212,18 @@ class SitePreparationViewModel {
 
                     try await self.loadPostTypes()
                     let newConfiguration = try await self.loadConfiguration(for: siteDetails)
-                    self.editorConfiguration = newConfiguration
+                    self.editorConfiguration = Self.applyDemoAppDefaults(to: newConfiguration)
                 }
             } catch {
                 self.error = error
             }
         }
+    }
+
+    private static func applyDemoAppDefaults(to configuration: EditorConfiguration) -> EditorConfiguration {
+        configuration.toBuilder()
+            .setNativeInserterEnabled(true)
+            .build()
     }
 
     /// Prepares the editor by caching all resources and preparing an `EditorDependencies` object to inject into the editor.
@@ -212,12 +234,8 @@ class SitePreparationViewModel {
             preconditionFailure("Unable to prepare editor without editor configuration – the UI should prevent this")
         }
 
-        let config = configuration
-            .toBuilder()
-            .setPostType(self.selectedPostTypeDetails)
-            .build()
-        let cacheInterval: TimeInterval = 86_400  // Cache for one day
-        self.prepareEditor(with: EditorService(configuration: config, cachePolicy: .maxAge(cacheInterval)))
+        let cacheInterval: TimeInterval = 86_400 // Cache for one day
+        self.prepareEditor(with: EditorService(configuration: configuration, cachePolicy: .maxAge(cacheInterval)))
     }
 
     /// Prepares the editor by caching all resources and preparing an `EditorDependencies` object to inject into the editor.
@@ -350,26 +368,13 @@ class SitePreparationViewModel {
         }
     }
 
-    private func updateEditorConfiguration() {
-        guard editorConfiguration != nil else { return }
-        self.editorConfiguration = buildConfiguration()
-    }
-
-    private func buildConfiguration() -> EditorConfiguration {
-        guard let editorConfiguration = self.editorConfiguration else {
-            preconditionFailure("Cannot build configuration as it is not loaded yet")
+    func buildAndLoadConfiguration(navigation: Navigation) {
+        guard let configuration = self.editorConfiguration else {
+            preconditionFailure("Unable to build configuration without editor configuration – the UI should prevent this")
         }
 
-        return editorConfiguration.toBuilder()
-            .setEnableNetworkLogging(self.enableNetworkLogging)
-            .setNativeInserterEnabled(self.enableNativeInserter)
-            .setPostType(self.selectedPostTypeDetails)
-            .build()
-    }
-
-    func buildAndLoadConfiguration(navigation: Navigation) {
         let editor = RunnableEditor(
-            configuration: buildConfiguration(),
+            configuration: configuration,
             dependencies: self.editorDependencies
         )
 
