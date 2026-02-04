@@ -156,11 +156,12 @@ struct EditorNavigationPolicyTests {
 
     // MARK: - Navigation Policy: Edge Cases
 
-    @Test("allows navigation when URL is nil")
-    func allowsNavigationWithNilUrl() {
+    @Test("blocks navigation when URL is nil")
+    func blocksNavigationWithNilUrl() {
         let policy = EditorNavigationPolicy()
 
-        #expect(policy.shouldAllowNavigation(url: nil, navigationType: .other, isMainFrame: true))
+        // The editor should only load known content
+        #expect(!policy.shouldAllowNavigation(url: nil, navigationType: .other, isMainFrame: true))
     }
 
     @Test("blocks external navigation when isMainFrame is nil")

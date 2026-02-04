@@ -45,7 +45,7 @@ struct EditorNavigationPolicy {
     /// - Returns: `true` if the navigation should proceed in the WebView, `false` if it should open externally.
     func shouldAllowNavigation(url: URL?, navigationType: WKNavigationType, isMainFrame: Bool?) -> Bool {
         guard let url else {
-            return true
+            return false
         }
 
         // Allow local editor resources and custom URL schemes
