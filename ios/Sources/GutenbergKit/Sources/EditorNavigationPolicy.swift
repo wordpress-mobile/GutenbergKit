@@ -11,7 +11,7 @@ struct EditorNavigationPolicy {
     /// - `file`: Local bundled editor resources
     /// - `gbk-cache-https`: Cached remote assets served via custom scheme handler
     /// - `gbk-media-file`: Local media files from the device's photo library
-    static let allowedSchemes: Set<String> = ["file", "gbk-cache-https", "gbk-media-file"]
+    private static let allowedSchemes: Set<String> = ["file", "gbk-cache-https", "gbk-media-file"]
 
     /// Optional development server URL. Navigation to this host is always allowed.
     let devServerURL: URL?
