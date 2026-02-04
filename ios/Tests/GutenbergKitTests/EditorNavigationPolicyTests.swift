@@ -182,4 +182,14 @@ struct EditorNavigationPolicyTests {
         #expect(policy.shouldAllowNavigation(url: url, navigationType: .linkActivated, isMainFrame: true))
         #expect(policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: true))
     }
+
+    @Test("blocks protocol-relative URLs in main frame")
+    func blocksProtocolRelativeUrls() {
+        let policy = EditorNavigationPolicy()
+        // Protocol-relative URLs have a nil scheme, which should not be allowed
+        let url = URL(string: "//example.com/path")!
+
+        #expect(!policy.shouldAllowNavigation(url: url, navigationType: .linkActivated, isMainFrame: true))
+        #expect(!policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: true))
+    }
 }
