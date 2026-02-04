@@ -59,7 +59,8 @@ struct EditorNavigationPolicy {
         }
 
         // Allow subframe navigation (iframes, video embeds, etc.)
-        // Only block main frame navigation to external URLs
+        // When targetFrame is nil (e.g., target="_blank" or window.open()), treat
+        // as external navigation since it's attempting to open a new window.
         if isMainFrame == false {
             return true
         }
