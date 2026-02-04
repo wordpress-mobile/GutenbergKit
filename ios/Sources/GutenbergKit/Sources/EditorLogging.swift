@@ -19,6 +19,9 @@ extension Logger {
     
     /// Logs editor HTTP activity
     public static let http = Logger(subsystem: "GutenbergKit", category: "http")
+
+    /// Logs editor navigation activity
+    public static let navigation = Logger(subsystem: "GutenbergKit", category: "navigation")
 }
 
 public struct SignpostMonitor: Sendable {
