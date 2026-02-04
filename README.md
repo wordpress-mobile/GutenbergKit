@@ -19,7 +19,9 @@ To integrate GutenbergKit into your iOS or Android app, include the package as a
 -   **iOS**: Add the Swift package from the repository root
 -   **Android**: Add the Kotlin library as a Maven dependency or include the `android/Gutenberg/` module
 
-See the [Integration Guide](./docs/integration.md) for detailed setup instructions and code examples.
+See the [Integration Guide](./docs/integration.md) for detailed setup instructions and code examples for integrating GutenbergKit into your app.
+
+For integrating GutenbergKit into the WordPress mobile apps specifically, see the [WordPress App Integration](./docs/wordpress-app-integration.md) guide.
 
 ### Contributing
 
