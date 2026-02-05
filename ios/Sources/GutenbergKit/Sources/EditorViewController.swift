@@ -744,11 +744,12 @@ private protocol GutenbergEditorControllerDelegate: AnyObject {
 private final class GutenbergEditorController: NSObject, WKNavigationDelegate, WKScriptMessageHandler, WKScriptMessageHandlerWithReply {
     weak var delegate: GutenbergEditorControllerDelegate?
     let configuration: EditorConfiguration
-    private let editorURL: URL?
+    private let navigationPolicy: EditorNavigationPolicy
 
     init(configuration: EditorConfiguration) {
         self.configuration = configuration
-        self.editorURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init)
+        let devServerURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init)
+        self.navigationPolicy = EditorNavigationPolicy(devServerURL: devServerURL)
         super.init()
     }
 
@@ -788,17 +789,16 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
-        guard let url = navigationAction.request.url else {
+        if navigationPolicy.shouldAllowNavigation(for: navigationAction) {
             return .allow
         }
 
-        if navigationAction.navigationType == .linkActivated {
-            // Open the request in OS browser
+        // External main frame navigation should open in the system browser.
+        if let url = navigationAction.request.url {
+            Logger.navigation.debug("Opening external URL in system browser: \(url.absoluteString)")
             await UIApplication.shared.open(url)
-            return .cancel
         }
-
-        return .allow
+        return .cancel
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
