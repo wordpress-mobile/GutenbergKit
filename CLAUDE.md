@@ -201,9 +201,6 @@ Note: Console logs should be used sparingly. For verbose or development-specific
 **IMPORTANT**: Always run these commands after making code changes and before presenting work for review/commit:
 
 ```bash
-# Format JavaScript code
-make format
-
 # Auto-fix linting errors
 make lint-js-fix
 
