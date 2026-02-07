@@ -136,6 +136,14 @@ lint-swift: ## Lint Swift code
 # Testing Targets
 ################################################################################
 
+.PHONY: test-e2e
+test-e2e: npm-dependencies ## Run end-to-end tests
+	npm run test:e2e
+
+.PHONY: test-e2e-ui
+test-e2e-ui: npm-dependencies ## Run end-to-end tests in UI mode
+	npm run test:e2e:ui
+
 .PHONY: test-js
 test-js: npm-dependencies ## Run JavaScript tests
 	npm run test:unit
