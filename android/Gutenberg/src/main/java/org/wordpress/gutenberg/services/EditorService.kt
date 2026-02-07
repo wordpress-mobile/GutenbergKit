@@ -258,6 +258,10 @@ class EditorService(
     }
 
     private suspend fun prepareEditorSettings(): EditorSettings {
+        // Don't try to load theme styles if the configuration has them disabled.
+        if(!configuration.themeStyles) {
+            return EditorSettings.undefined
+        }
         val cachedSettings = restRepository.readEditorSettings()
         if (cachedSettings != null) {
             incrementProgress(DependencyWeights.EDITOR_SETTINGS)
