@@ -196,5 +196,9 @@ local.properties
 # Translation files
 src/translations/
 
+# Playwright
+e2e/test-results/
+playwright-report/
+
 # Claude
 .claude/settings.local.json
