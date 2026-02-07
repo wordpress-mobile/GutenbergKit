@@ -65,7 +65,7 @@ class GutenbergViewTest {
         }
 
         // When
-        gutenbergView.webChromeClient?.onShowFileChooser(
+        gutenbergView.editorWebView.webChromeClient?.onShowFileChooser(
             mockWebView,
             mockFilePathCallback,
             mockFileChooserParams
@@ -105,7 +105,7 @@ class GutenbergViewTest {
 
         // When
         `when`(mockFileChooserParams.mode).thenReturn(WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE)
-        gutenbergView.webChromeClient?.onShowFileChooser(
+        gutenbergView.editorWebView.webChromeClient?.onShowFileChooser(
             mockWebView,
             mockFilePathCallback,
             mockFileChooserParams
@@ -131,7 +131,7 @@ class GutenbergViewTest {
     @Test
     fun `onShowFileChooser stores file path callback`() {
         // When
-        gutenbergView.webChromeClient?.onShowFileChooser(
+        gutenbergView.editorWebView.webChromeClient?.onShowFileChooser(
             mockWebView,
             mockFilePathCallback,
             mockFileChooserParams
@@ -145,7 +145,7 @@ class GutenbergViewTest {
     @Test
     fun `resetFilePathCallback clears the callback`() {
         // Given
-        gutenbergView.webChromeClient?.onShowFileChooser(
+        gutenbergView.editorWebView.webChromeClient?.onShowFileChooser(
             mockWebView,
             mockFilePathCallback,
             mockFileChooserParams
@@ -165,7 +165,7 @@ class GutenbergViewTest {
         // that was already set up in the @Before method
 
         // Then
-        val userAgent = gutenbergView.settings.userAgentString
+        val userAgent = gutenbergView.editorWebView.settings.userAgentString
         assertTrue("User agent should contain GutenbergKit identifier",
             userAgent.contains("GutenbergKit/"))
         assertTrue("User agent should contain version number",

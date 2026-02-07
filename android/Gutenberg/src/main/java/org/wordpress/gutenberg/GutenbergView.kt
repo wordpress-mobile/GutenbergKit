@@ -8,8 +8,8 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.AttributeSet
 import android.util.Log
+import android.view.Gravity
 import android.view.inputmethod.InputMethodManager
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
@@ -22,16 +22,12 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.lifecycle.coroutineScope
-import androidx.lifecycle.findViewTreeLifecycleOwner
-import androidx.lifecycle.lifecycleScope
+import android.widget.FrameLayout
+import android.widget.ProgressBar
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONException
@@ -40,12 +36,18 @@ import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.model.GBKitGlobal
 import org.wordpress.gutenberg.services.EditorService
+import org.wordpress.gutenberg.views.EditorErrorView
+import org.wordpress.gutenberg.views.EditorProgressView
 import java.util.Locale
 
 const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
 
 /**
  * A WebView-based Gutenberg block editor for Android.
+ *
+ * This view manages its own loading UI internally (progress bar during dependency
+ * fetching, spinner during WebView initialization, error state on failure).
+ * Consumers do not need to implement loading UI — it is handled automatically.
  *
  * ## Creating a GutenbergView
  *
@@ -82,12 +84,11 @@ const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
  * - If `dependencies` is provided, the editor loads immediately (fast path)
  * - If `dependencies` is null, dependencies are fetched asynchronously before loading
  */
-class GutenbergView : WebView {
+class GutenbergView : FrameLayout {
+    private val webView: WebView
     private var isEditorLoaded = false
     private var didFireEditorLoaded = false
-    private var assetLoader = WebViewAssetLoader.Builder()
-        .addPathHandler("/assets/", AssetsPathHandler(this.context))
-        .build()
+    private lateinit var assetLoader: WebViewAssetLoader
     private val configuration: EditorConfiguration
     private lateinit var dependencies: EditorDependencies
 
@@ -107,7 +108,6 @@ class GutenbergView : WebView {
     private var autocompleterTriggeredListener: AutocompleterTriggeredListener? = null
     private var modalDialogStateListener: ModalDialogStateListener? = null
     private var networkRequestListener: NetworkRequestListener? = null
-    private var loadingListener: EditorLoadingListener? = null
     private var latestContentProvider: LatestContentProvider? = null
 
     /**
@@ -118,12 +118,36 @@ class GutenbergView : WebView {
 
     private val coroutineScope: CoroutineScope
 
+    // Internal loading overlay views
+    private val progressView: EditorProgressView
+    private val spinnerView: ProgressBar
+    private val errorView: EditorErrorView
+
+    /**
+     * Internal loading states for the editor.
+     */
+    private enum class LoadingState {
+        /** Dependencies are being loaded from the network */
+        PROGRESS,
+        /** Dependencies loaded, waiting for WebView to initialize */
+        SPINNER,
+        /** Editor is fully ready */
+        READY,
+        /** Loading failed with an error */
+        ERROR
+    }
+
+    /**
+     * Provides access to the internal WebView for tests and advanced use cases.
+     */
+    val editorWebView: WebView get() = webView
+
     var textEditorEnabled: Boolean = false
         set(value) {
             field = value
             val mode = if (value) "text" else "visual"
             handler.post {
-                this.evaluateJavascript("editor.switchEditorMode('$mode');", null)
+                webView.evaluateJavascript("editor.switchEditorMode('$mode');", null)
             }
         }
 
@@ -171,10 +195,6 @@ class GutenbergView : WebView {
         editorDidBecomeAvailableListener = listener
     }
 
-    fun setEditorLoadingListener(listener: EditorLoadingListener?) {
-        loadingListener = listener
-    }
-
     /**
      * Creates a new GutenbergView with the specified configuration.
      *
@@ -190,37 +210,134 @@ class GutenbergView : WebView {
         this.configuration = configuration
         this.coroutineScope = coroutineScope
 
+        // Initialize the asset loader now that context is available
+        assetLoader = WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", AssetsPathHandler(context))
+            .build()
+
+        // Create the internal WebView as first child (behind overlays)
+        webView = WebView(context).apply {
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+            alpha = 0f
+        }
+        addView(webView)
+
+        // Create loading overlay views
+        progressView = EditorProgressView(context).apply {
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER)
+            loadingText = "Loading Editor..."
+            visibility = GONE
+        }
+        addView(progressView)
+
+        spinnerView = ProgressBar(context).apply {
+            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER)
+            isIndeterminate = true
+            visibility = GONE
+        }
+        addView(spinnerView)
+
+        errorView = EditorErrorView(context).apply {
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER)
+            visibility = GONE
+        }
+        addView(errorView)
+
         if (dependencies != null) {
             this.dependencies = dependencies
 
             // FAST PATH: Dependencies were provided - load immediately
+            showSpinnerPhase()
             loadEditor(dependencies)
         } else {
             // ASYNC FLOW: No dependencies - fetch them asynchronously
+            showProgressPhase()
             prepareAndLoadEditor()
+        }
+    }
+
+    /**
+     * Transitions to the progress bar phase (dependency fetching).
+     */
+    private fun showProgressPhase() {
+        handler.post {
+            progressView.visibility = VISIBLE
+            spinnerView.visibility = GONE
+            errorView.visibility = GONE
+            webView.alpha = 0f
+        }
+    }
+
+    /**
+     * Transitions to the spinner phase (WebView initialization).
+     */
+    private fun showSpinnerPhase() {
+        handler.post {
+            progressView.animate().alpha(0f).setDuration(200).withEndAction {
+                progressView.visibility = GONE
+            }.start()
+            spinnerView.alpha = 0f
+            spinnerView.visibility = VISIBLE
+            spinnerView.animate().alpha(1f).setDuration(200).start()
+            errorView.visibility = GONE
+            webView.alpha = 0f
+        }
+    }
+
+    /**
+     * Transitions to the ready phase (editor visible).
+     */
+    private fun showReadyPhase() {
+        handler.post {
+            spinnerView.animate().alpha(0f).setDuration(200).withEndAction {
+                spinnerView.visibility = GONE
+            }.start()
+            progressView.animate().alpha(0f).setDuration(200).withEndAction {
+                progressView.visibility = GONE
+            }.start()
+            errorView.visibility = GONE
+            webView.animate().alpha(1f).setDuration(200).start()
+        }
+    }
+
+    /**
+     * Transitions to the error phase (loading failed).
+     */
+    private fun showErrorPhase(error: Throwable) {
+        handler.post {
+            progressView.animate().alpha(0f).setDuration(200).withEndAction {
+                progressView.visibility = GONE
+            }.start()
+            spinnerView.animate().alpha(0f).setDuration(200).withEndAction {
+                spinnerView.visibility = GONE
+            }.start()
+            errorView.setError(error)
+            errorView.alpha = 0f
+            errorView.visibility = VISIBLE
+            errorView.animate().alpha(1f).setDuration(200).start()
+            webView.alpha = 0f
         }
     }
 
     @SuppressLint("SetJavaScriptEnabled") // Without JavaScript we have no Gutenberg
     private fun initializeWebView() {
-        this.settings.javaScriptCanOpenWindowsAutomatically = true
-        this.settings.javaScriptEnabled = true
-        this.settings.domStorageEnabled = true
-        
-        // Set custom user agent
-        val defaultUserAgent = this.settings.userAgentString
-        this.settings.userAgentString = "$defaultUserAgent GutenbergKit/${GutenbergKitVersion.VERSION}"
-        
-        this.addJavascriptInterface(this, "editorDelegate")
-        this.visibility = GONE
+        webView.settings.javaScriptCanOpenWindowsAutomatically = true
+        webView.settings.javaScriptEnabled = true
+        webView.settings.domStorageEnabled = true
 
-        this.webViewClient = object : WebViewClient() {
+        // Set custom user agent
+        val defaultUserAgent = webView.settings.userAgentString
+        webView.settings.userAgentString = "$defaultUserAgent GutenbergKit/${GutenbergKitVersion.VERSION}"
+
+        webView.addJavascriptInterface(this, "editorDelegate")
+
+        webView.webViewClient = object : WebViewClient() {
             override fun onReceivedError(
                 view: WebView?,
                 request: WebResourceRequest?,
                 error: WebResourceError?
             ) {
-                Log.e("GutenbergView", error.toString())
+                Log.e("GutenbergView", "Received web error: $error")
                 super.onReceivedError(view, request, error)
             }
 
@@ -300,7 +417,7 @@ class GutenbergView : WebView {
             }
         }
 
-        this.webChromeClient = object : WebChromeClient() {
+        webView.webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
                 if (consoleMessage != null) {
                     Log.i("GutenbergView", consoleMessage.message())
@@ -347,8 +464,6 @@ class GutenbergView : WebView {
      * This method is the entry point for the async flow when no dependencies were provided.
      */
     private fun prepareAndLoadEditor() {
-        loadingListener?.onDependencyLoadingStarted()
-
         Log.i("GutenbergView", "Fetching dependencies...")
 
         coroutineScope.launch {
@@ -362,7 +477,7 @@ class GutenbergView : WebView {
                 )
                 Log.i("GutenbergView", "Created editor service")
                 val fetchedDependencies = editorService.prepare { progress ->
-                    loadingListener?.onDependencyLoadingProgress(progress)
+                    progressView.setProgress(progress)
 
                     Log.i("GutenbergView", "Progress: $progress")
                 }
@@ -373,7 +488,7 @@ class GutenbergView : WebView {
                 loadEditor(fetchedDependencies)
             } catch (e: Exception) {
                 Log.e("GutenbergView", "Failed to load dependencies", e)
-                loadingListener?.onDependencyLoadingFailed(e)
+                showErrorPhase(e)
             }
         }
     }
@@ -392,8 +507,8 @@ class GutenbergView : WebView {
             configuration.cachedAssetHosts
         )
 
-        // Notify that dependency loading is complete (spinner phase begins)
-        loadingListener?.onDependencyLoadingFinished()
+        // Transition to spinner phase (WebView initialization)
+        showSpinnerPhase()
 
         initializeWebView()
 
@@ -402,10 +517,10 @@ class GutenbergView : WebView {
         }
 
         WebStorage.getInstance().deleteAllData()
-        this.clearCache(true)
+        webView.clearCache(true)
         // All cookies are third-party cookies because the root of this document
         // lives under `https://appassets.androidplatform.net`
-        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
 
         // Erase all local cookies before loading the URL – we don't want to persist
         // anything between uses – otherwise we might send the wrong cookies
@@ -414,7 +529,7 @@ class GutenbergView : WebView {
             for (cookie in configuration.cookies) {
                 CookieManager.getInstance().setCookie(cookie.key, cookie.value)
             }
-            this.loadUrl(editorUrl)
+            webView.loadUrl(editorUrl)
 
             Log.i("GutenbergView", "Startup Complete")
         }
@@ -428,7 +543,7 @@ class GutenbergView : WebView {
             localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
         """.trimIndent()
 
-        this.evaluateJavascript(gbKitConfig, null)
+        webView.evaluateJavascript(gbKitConfig, null)
     }
 
 
@@ -438,7 +553,7 @@ class GutenbergView : WebView {
             localStorage.removeItem('GBKit');
         """.trimIndent()
 
-        this.evaluateJavascript(jsCode, null)
+        webView.evaluateJavascript(jsCode, null)
     }
 
     fun setContent(newContent: String) {
@@ -447,7 +562,7 @@ class GutenbergView : WebView {
             return
         }
         val encodedContent = newContent.encodeForEditor()
-        this.evaluateJavascript("editor.setContent('$encodedContent');", null)
+        webView.evaluateJavascript("editor.setContent('$encodedContent');", null)
     }
 
     fun setTitle(newTitle: String) {
@@ -456,7 +571,7 @@ class GutenbergView : WebView {
             return
         }
         val encodedTitle = newTitle.encodeForEditor()
-        this.evaluateJavascript("editor.setTitle('$encodedTitle');", null)
+        webView.evaluateJavascript("editor.setTitle('$encodedTitle');", null)
     }
 
     interface TitleAndContentCallback {
@@ -545,7 +660,7 @@ class GutenbergView : WebView {
             return
         }
         handler.post {
-            this.evaluateJavascript("editor.getTitleAndContent($completeComposition);") { result ->
+            webView.evaluateJavascript("editor.getTitleAndContent($completeComposition);") { result ->
                 var lastUpdatedTitle: CharSequence? = null
                 var lastUpdatedContent: CharSequence? = null
                 var changed = false
@@ -571,19 +686,19 @@ class GutenbergView : WebView {
 
     fun undo() {
         handler.post {
-            this.evaluateJavascript("editor.undo();", null)
+            webView.evaluateJavascript("editor.undo();", null)
         }
     }
 
     fun redo() {
         handler.post {
-            this.evaluateJavascript("editor.redo();", null)
+            webView.evaluateJavascript("editor.redo();", null)
         }
     }
 
     fun dismissTopModal() {
         handler.post {
-            this.evaluateJavascript("editor.dismissTopModal();", null)
+            webView.evaluateJavascript("editor.dismissTopModal();", null)
         }
     }
 
@@ -594,7 +709,7 @@ class GutenbergView : WebView {
         }
         val encodedText = text.encodeForEditor()
         handler.post {
-            this.evaluateJavascript("editor.appendTextAtCursor(decodeURIComponent('$encodedText'));", null)
+            webView.evaluateJavascript("editor.appendTextAtCursor(decodeURIComponent('$encodedText'));", null)
         }
     }
 
@@ -604,25 +719,19 @@ class GutenbergView : WebView {
         isEditorLoaded = true
         handler.post {
             if(!didFireEditorLoaded) {
-                loadingListener?.onEditorReady()
                 editorDidBecomeAvailableListener?.onEditorAvailable(this)
                 this.didFireEditorLoaded = true
-                this.visibility = VISIBLE
-                this.alpha = 0f
-                this.animate()
-                    .alpha(1f)
-                    .setDuration(300)
-                    .start()
+                showReadyPhase()
 
                 if (configuration.content.isEmpty()) {
                     // Focus the editor content
-                    this.evaluateJavascript("editor.focus();", null)
+                    webView.evaluateJavascript("editor.focus();", null)
 
                     // Request focus on the WebView and show the soft keyboard
                     handler.postDelayed({
-                        this.requestFocus()
+                        webView.requestFocus()
                         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                        imm?.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
+                        imm?.showSoftInput(webView, InputMethodManager.SHOW_IMPLICIT)
                     }, 100)
                 }
             }
@@ -709,7 +818,7 @@ class GutenbergView : WebView {
         }
 
         val escapedContextId = contextId.replace("'", "\\'")
-        this.evaluateJavascript("editor.setMediaUploadAttachment($media, '$escapedContextId');", null)
+        webView.evaluateJavascript("editor.setMediaUploadAttachment($media, '$escapedContextId');", null)
 
         currentMediaContextId = null
     }
@@ -851,13 +960,12 @@ class GutenbergView : WebView {
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         clearConfig()
-        this.stopLoading()
+        webView.stopLoading()
         FileCache.clearCache(context)
         contentChangeListener = null
         historyChangeListener = null
         featuredImageChangeListener = null
         editorDidBecomeAvailableListener = null
-        loadingListener = null
         filePathCallback = null
         onFileChooserRequested = null
         autocompleterTriggeredListener = null
@@ -866,7 +974,7 @@ class GutenbergView : WebView {
         requestInterceptor = DefaultGutenbergRequestInterceptor()
         latestContentProvider = null
         handler.removeCallbacksAndMessages(null)
-        this.destroy()
+        webView.destroy()
     }
 
     companion object {
@@ -881,10 +989,10 @@ class GutenbergView : WebView {
          * Clean up warmup resources.
          */
         private fun cleanupWarmup() {
-            warmupWebView?.let { webView ->
-                webView.stopLoading()
-                webView.clearConfig()
-                webView.destroy()
+            warmupWebView?.let { view ->
+                view.webView.stopLoading()
+                view.clearConfig()
+                view.webView.destroy()
             }
             warmupWebView = null
             warmupHandler = null
