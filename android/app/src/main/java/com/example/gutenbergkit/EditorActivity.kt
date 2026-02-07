@@ -13,15 +13,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
@@ -38,14 +33,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
 import com.example.gutenbergkit.ui.theme.AppTheme
@@ -53,11 +45,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.GutenbergView
-import org.wordpress.gutenberg.EditorLoadingListener
 import org.wordpress.gutenberg.RecordedNetworkRequest
 import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.model.EditorDependenciesSerializer
-import org.wordpress.gutenberg.model.EditorProgress
 
 class EditorActivity : ComponentActivity() {
 
@@ -126,20 +116,6 @@ class EditorActivity : ComponentActivity() {
     }
 }
 
-/**
- * Loading state for the editor.
- */
-enum class EditorLoadingState {
-    /** Dependencies are being loaded from the network */
-    LOADING_DEPENDENCIES,
-    /** Dependencies loaded, waiting for WebView to initialize */
-    LOADING_EDITOR,
-    /** Editor is fully ready */
-    READY,
-    /** Loading failed with an error */
-    ERROR
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditorScreen(
@@ -155,16 +131,6 @@ fun EditorScreen(
     var hasRedoState by remember { mutableStateOf(false) }
     var isCodeEditorEnabled by remember { mutableStateOf(false) }
     var gutenbergViewRef by remember { mutableStateOf<GutenbergView?>(null) }
-
-    // Loading state
-    var loadingState by remember {
-        mutableStateOf(
-            if (dependencies != null) EditorLoadingState.LOADING_EDITOR
-            else EditorLoadingState.LOADING_DEPENDENCIES
-        )
-    }
-    var loadingProgress by remember { mutableFloatStateOf(0f) }
-    var loadingError by remember { mutableStateOf<String?>(null) }
 
     BackHandler(enabled = isModalDialogOpen) {
         gutenbergViewRef?.dismissTopModal()
@@ -293,7 +259,7 @@ fun EditorScreen(
                     })
                     setNetworkRequestListener(object : GutenbergView.NetworkRequestListener {
                         override fun onNetworkRequest(request: RecordedNetworkRequest) {
-                            Log.d("EditorActivity", "🌐 Network Request: ${request.method} ${request.url}")
+                            Log.d("EditorActivity", "Network Request: ${request.method} ${request.url}")
                             Log.d("EditorActivity", "   Status: ${request.status} ${request.statusText}, Duration: ${request.duration}ms")
 
                             // Log request headers
@@ -321,29 +287,6 @@ fun EditorScreen(
                             }
                         }
                     })
-                    setEditorLoadingListener(object : EditorLoadingListener {
-                        override fun onDependencyLoadingStarted() {
-                            loadingState = EditorLoadingState.LOADING_DEPENDENCIES
-                            loadingProgress = 0f
-                        }
-
-                        override fun onDependencyLoadingProgress(progress: EditorProgress) {
-                            loadingProgress = progress.fractionCompleted.toFloat()
-                        }
-
-                        override fun onDependencyLoadingFinished() {
-                            loadingState = EditorLoadingState.LOADING_EDITOR
-                        }
-
-                        override fun onEditorReady() {
-                            loadingState = EditorLoadingState.READY
-                        }
-
-                        override fun onDependencyLoadingFailed(error: Throwable) {
-                            loadingState = EditorLoadingState.ERROR
-                            loadingError = error.message ?: "Unknown error"
-                        }
-                    })
                     // Demo app has no persistence layer, so return null.
                     // In a real app, return the persisted title and content from autosave.
                     setLatestContentProvider(object : GutenbergView.LatestContentProvider {
@@ -358,63 +301,5 @@ fun EditorScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         )
-
-        // Loading overlay
-        when (loadingState) {
-            EditorLoadingState.LOADING_DEPENDENCIES -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        LinearProgressIndicator(
-                            progress = { loadingProgress },
-                            modifier = Modifier.fillMaxWidth(0.6f)
-                        )
-                        Text("Loading Editor...")
-                    }
-                }
-            }
-            EditorLoadingState.LOADING_EDITOR -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        CircularProgressIndicator()
-                        Text("Starting Editor...")
-                    }
-                }
-            }
-            EditorLoadingState.ERROR -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Text("Failed to load editor")
-                        loadingError?.let { Text(it) }
-                    }
-                }
-            }
-            EditorLoadingState.READY -> {
-                // Editor is ready, no overlay needed
-            }
-        }
     }
 }
