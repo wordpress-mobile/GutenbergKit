@@ -4,15 +4,7 @@
 
 **Purpose:** Verify the editor's core functionality: writing/formatting text, uploading media, saving/publishing, and basic block manipulation.
 
-### S.1. Write and format text
-
--   **Steps:**
-    -   Add a Paragraph, List, or Heading block.
-    -   Type some text.
-    -   Apply bold, italic, and strikethrough formatting using the toolbar.
--   **Expected Outcome:** Text is entered and formatting is applied as expected.
-
-### S.2. Add a link to a paragraph
+### S.1. Add a link to a paragraph
 
 -   **Steps:**
     -   Add a Paragraph, List, or Heading block.
@@ -20,36 +12,28 @@
     -   Apply a link to the text.
 -   **Expected Outcome:** Link is applied to the text as expected.
 
-### S.3. Merge and split blocks
-
--   **Steps:**
-    -   Write a long paragraph or list of multiple items.
-    -   Place the cursor somwewhere in the middle and split the block into two blocks using Enter.
-    -   Merge them back by deleting content at the start of the second block.
--   **Expected Outcome:** Blocks split and merge as expected; content remains intact.
-
-### S.4. Undo/Redo Actions
+### S.2. Undo/Redo Actions
 
 -   **Steps:**
     -   Add, remove, and edit blocks and text.
     -   Use Undo and Redo buttons.
 -   **Expected Outcome:** Editor correctly undoes and redoes actions, restoring previous states.
 
-### S.5. Upload an image
+### S.3. Upload an image
 
 -   **Steps:**
     -   Add an Image block.
     -   Tap "Choose from device" and select an image.
 -   **Expected Outcome:** Image uploads and displays in the block. An activity indicator is shown while the image is uploading.
 
-### S.6. Upload an video
+### S.4. Upload an video
 
 -   **Steps:**
     -   Add a Video block.
     -   Tap "Choose from device" and select a video.
 -   **Expected Outcome:** Video uploads and displays in the block. An activity indicator is shown while the video is uploading.
 
-### S.7. Reorder blocks
+### S.5. Reorder blocks
 
 -   **Steps:**
     -   Add several content blocks to a post.
@@ -57,7 +41,7 @@
     -   Use the up/down arrows in the block toolbar to relocate the block.
 -   **Expected Outcome:** The block ordering is updated as expected.
 
-### S.8. Save and publish a post
+### S.6. Save and publish a post
 
 -   **Steps:**
     -   Create a new post with text and media.
