@@ -23,6 +23,12 @@ steps:
       command: make test-js
       plugins: *plugins
 
+    - label: ':performing_arts: Test E2E'
+      command: |
+          npx playwright install chromium
+          make test-e2e
+      plugins: *plugins
+
     - label: ':android: Publish Android Library'
       depends_on: build-react
       command: |
