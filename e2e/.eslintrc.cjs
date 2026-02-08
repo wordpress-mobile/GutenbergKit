@@ -1,5 +1,5 @@
 module.exports = {
-	extends: [ 'plugin:playwright/recommended' ],
+	extends: [ 'plugin:@wordpress/eslint-plugin/test-playwright' ],
 	rules: {
 		// Allow non-literal titles for test.describe/test parameterized tests.
 		'playwright/valid-title': 'off',
