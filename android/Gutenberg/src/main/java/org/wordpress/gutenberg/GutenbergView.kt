@@ -247,10 +247,12 @@ class GutenbergView : FrameLayout {
             this.dependencies = dependencies
 
             // FAST PATH: Dependencies were provided - load immediately
+            Log.d(TAG, "Constructor: dependencies provided – using fast path")
             showSpinnerPhase()
             loadEditor(dependencies)
         } else {
             // ASYNC FLOW: No dependencies - fetch them asynchronously
+            Log.d(TAG, "Constructor: no dependencies provided – using async path")
             showProgressPhase()
             prepareAndLoadEditor()
         }
@@ -260,6 +262,7 @@ class GutenbergView : FrameLayout {
      * Transitions to the progress bar phase (dependency fetching).
      */
     private fun showProgressPhase() {
+        Log.d(TAG, "Phase transition -> PROGRESS (fetching dependencies)")
         handler.post {
             progressView.visibility = VISIBLE
             spinnerView.visibility = GONE
@@ -272,6 +275,7 @@ class GutenbergView : FrameLayout {
      * Transitions to the spinner phase (WebView initialization).
      */
     private fun showSpinnerPhase() {
+        Log.d(TAG, "Phase transition -> SPINNER (initializing WebView)")
         handler.post {
             progressView.animate().alpha(0f).setDuration(200).withEndAction {
                 progressView.visibility = GONE
@@ -288,6 +292,7 @@ class GutenbergView : FrameLayout {
      * Transitions to the ready phase (editor visible).
      */
     private fun showReadyPhase() {
+        Log.d(TAG, "Phase transition -> READY (editor visible)")
         handler.post {
             spinnerView.animate().alpha(0f).setDuration(200).withEndAction {
                 spinnerView.visibility = GONE
@@ -304,6 +309,7 @@ class GutenbergView : FrameLayout {
      * Transitions to the error phase (loading failed).
      */
     private fun showErrorPhase(error: Throwable) {
+        Log.d(TAG, "Phase transition -> ERROR: ${error.message}")
         handler.post {
             progressView.animate().alpha(0f).setDuration(200).withEndAction {
                 progressView.visibility = GONE
@@ -321,6 +327,7 @@ class GutenbergView : FrameLayout {
 
     @SuppressLint("SetJavaScriptEnabled") // Without JavaScript we have no Gutenberg
     private fun initializeWebView() {
+        Log.d(TAG, "initializeWebView: configuring WebView settings")
         webView.settings.javaScriptCanOpenWindowsAutomatically = true
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
@@ -328,7 +335,9 @@ class GutenbergView : FrameLayout {
         // Set custom user agent
         val defaultUserAgent = webView.settings.userAgentString
         webView.settings.userAgentString = "$defaultUserAgent GutenbergKit/${GutenbergKitVersion.VERSION}"
+        Log.d(TAG, "initializeWebView: user agent set to ${webView.settings.userAgentString}")
 
+        Log.d(TAG, "initializeWebView: registering JavaScript interface 'editorDelegate'")
         webView.addJavascriptInterface(this, "editorDelegate")
 
         webView.webViewClient = object : WebViewClient() {
@@ -337,13 +346,30 @@ class GutenbergView : FrameLayout {
                 request: WebResourceRequest?,
                 error: WebResourceError?
             ) {
-                Log.e("GutenbergView", "Received web error: $error")
+                Log.e(TAG, "onReceivedError: url=${request?.url}" +
+                    " isMainFrame=${request?.isForMainFrame} error=$error")
                 super.onReceivedError(view, request, error)
             }
 
+            override fun onReceivedHttpError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                errorResponse: WebResourceResponse?
+            ) {
+                Log.e(TAG, "onReceivedHttpError: url=${request?.url}" +
+                    " status=${errorResponse?.statusCode} reason=${errorResponse?.reasonPhrase}")
+                super.onReceivedHttpError(view, request, errorResponse)
+            }
+
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                Log.d(TAG, "onPageStarted: url=$url")
                 super.onPageStarted(view, url, favicon)
                 setGlobalJavaScriptVariables()
+            }
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                Log.d(TAG, "onPageFinished: url=$url")
+                super.onPageFinished(view, url)
             }
 
             override fun shouldInterceptRequest(
@@ -351,13 +377,17 @@ class GutenbergView : FrameLayout {
                 request: WebResourceRequest
             ): WebResourceResponse? {
                 if (request.url == null) {
+                    Log.d(TAG, "shouldInterceptRequest: null URL – passing to super")
                     return super.shouldInterceptRequest(view, request)
                 } else if (request.url.host?.contains("appassets.androidplatform.net") == true) {
+                    Log.d(TAG, "shouldInterceptRequest: asset URL – delegating to assetLoader: ${request.url}")
                     return assetLoader.shouldInterceptRequest(request.url)
                 } else if (requestInterceptor.canIntercept(request)) {
+                    Log.d(TAG, "shouldInterceptRequest: interceptor handling: ${request.url}")
                     return requestInterceptor.handleRequest(request)
                 }
 
+                Log.d(TAG, "shouldInterceptRequest: passing through to WebView: ${request.url}")
                 return super.shouldInterceptRequest(view, request)
             }
 
@@ -366,37 +396,44 @@ class GutenbergView : FrameLayout {
 
                 // Allow local file URLs
                 if (url.scheme == "file") {
+                    Log.d(TAG, "shouldOverrideUrlLoading: allowing file:// URL")
                     return false
                 }
 
                 // Allow blob URLs (used by block inserter)
                 if (url.scheme == "blob") {
+                    Log.d(TAG, "shouldOverrideUrlLoading: allowing blob:// URL")
                     return false
                 }
 
                 // Allow data URLs (used by block inserter)
                 if (url.scheme == "data") {
+                    Log.d(TAG, "shouldOverrideUrlLoading: allowing data: URL")
                     return false
                 }
 
                 // Allow about:blank URLs
                 if (url.scheme == "about") {
+                    Log.d(TAG, "shouldOverrideUrlLoading: allowing about: URL")
                     return false
                 }
 
                 // Allow asset URLs
                 if (url.host == Uri.parse(ASSET_URL).host) {
+                    Log.d(TAG, "shouldOverrideUrlLoading: allowing asset URL")
                     return false
                 }
 
                 // Allow WordPress.com REST API
                 if (url.host == "public-api.wordpress.com") {
+                    Log.d(TAG, "shouldOverrideUrlLoading: allowing public-api.wordpress.com")
                     return false
                 }
 
                 // Allow WordPress REST API
                 if (url.host == configuration.siteApiRoot.removePrefix("https://").removePrefix("http://")) {
                     if (url.path?.contains("/wp-json/") == true || url.query?.contains("rest_route=") == true) {
+                        Log.d(TAG, "shouldOverrideUrlLoading: allowing site API request – $url")
                         return false
                     }
                 }
@@ -405,11 +442,13 @@ class GutenbergView : FrameLayout {
                 if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
                     val editorUrl = Uri.parse(BuildConfig.GUTENBERG_EDITOR_URL)
                     if (url.host == editorUrl.host) {
+                        Log.d(TAG, "shouldOverrideUrlLoading: allowing dev server URL")
                         return false
                     }
                 }
 
                 // For all other URLs, open in external browser
+                Log.d(TAG, "shouldOverrideUrlLoading: opening in external browser – $url")
                 val intent = Intent(Intent.ACTION_VIEW, url)
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 view?.context?.startActivity(intent)
@@ -420,9 +459,9 @@ class GutenbergView : FrameLayout {
         webView.webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
                 if (consoleMessage != null) {
-                    Log.i("GutenbergView", consoleMessage.message())
+                    Log.i(TAG, consoleMessage.message())
                 } else {
-                    Log.i("GutenbergView", "null message")
+                    Log.i(TAG, "null message")
                 }
                 return super.onConsoleMessage(consoleMessage)
             }
@@ -464,30 +503,32 @@ class GutenbergView : FrameLayout {
      * This method is the entry point for the async flow when no dependencies were provided.
      */
     private fun prepareAndLoadEditor() {
-        Log.i("GutenbergView", "Fetching dependencies...")
+        val prepareStartTime = System.currentTimeMillis()
+        Log.d(TAG, "prepareAndLoadEditor: starting async dependency fetch")
 
         coroutineScope.launch {
-            Log.i("GutenbergView", "In coroutine scope")
-            Log.i("GutenbergView", "Fetching dependencies in IO context")
             try {
+                Log.d(TAG, "prepareAndLoadEditor: creating EditorService")
                 val editorService = EditorService.create(
                     context = context,
                     configuration = configuration,
                     coroutineScope = coroutineScope
                 )
-                Log.i("GutenbergView", "Created editor service")
+                Log.d(TAG, "prepareAndLoadEditor: EditorService created")
+
+                Log.d(TAG, "prepareAndLoadEditor: calling EditorService.prepare()")
                 val fetchedDependencies = editorService.prepare { progress ->
                     progressView.setProgress(progress)
-
-                    Log.i("GutenbergView", "Progress: $progress")
+                    Log.d(TAG, "prepareAndLoadEditor: progress ${progress.completed}/${progress.total}")
                 }
 
-                Log.i("GutenbergView", "Finished fetching dependencies")
+                val elapsed = System.currentTimeMillis() - prepareStartTime
+                Log.d(TAG, "prepareAndLoadEditor: dependencies fetched in ${elapsed}ms")
 
-                // Store dependencies and load the editor
                 loadEditor(fetchedDependencies)
             } catch (e: Exception) {
-                Log.e("GutenbergView", "Failed to load dependencies", e)
+                val elapsed = System.currentTimeMillis() - prepareStartTime
+                Log.e(TAG, "prepareAndLoadEditor: failed after ${elapsed}ms", e)
                 showErrorPhase(e)
             }
         }
@@ -499,9 +540,14 @@ class GutenbergView : FrameLayout {
      * This is the shared loading path used by both flows after dependencies are available.
      */
     private fun loadEditor(dependencies: EditorDependencies) {
+        val loadStartTime = System.currentTimeMillis()
+        Log.d(TAG, "loadEditor: starting")
+
         this.dependencies = dependencies
 
         // Set up asset caching
+        Log.d(TAG, "loadEditor: configuring CachedAssetRequestInterceptor" +
+            " (cachedAssetHosts=${configuration.cachedAssetHosts})")
         requestInterceptor = CachedAssetRequestInterceptor(
             dependencies.assetBundle,
             configuration.cachedAssetHosts
@@ -510,32 +556,41 @@ class GutenbergView : FrameLayout {
         // Transition to spinner phase (WebView initialization)
         showSpinnerPhase()
 
+        Log.d(TAG, "loadEditor: initializing WebView")
         initializeWebView()
+        Log.d(TAG, "loadEditor: WebView initialized")
 
         val editorUrl = BuildConfig.GUTENBERG_EDITOR_URL.ifEmpty {
             ASSET_URL
         }
+        Log.d(TAG, "loadEditor: editor URL = $editorUrl")
 
+        Log.d(TAG, "loadEditor: clearing WebStorage and cache")
         WebStorage.getInstance().deleteAllData()
         webView.clearCache(true)
+
         // All cookies are third-party cookies because the root of this document
         // lives under `https://appassets.androidplatform.net`
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
 
         // Erase all local cookies before loading the URL – we don't want to persist
         // anything between uses – otherwise we might send the wrong cookies
+        Log.d(TAG, "loadEditor: clearing cookies and setting ${configuration.cookies.size}" +
+            " cookie(s) from configuration")
         CookieManager.getInstance().removeAllCookies {
             CookieManager.getInstance().flush()
             for (cookie in configuration.cookies) {
                 CookieManager.getInstance().setCookie(cookie.key, cookie.value)
             }
-            webView.loadUrl(editorUrl)
 
-            Log.i("GutenbergView", "Startup Complete")
+            val elapsed = System.currentTimeMillis() - loadStartTime
+            Log.d(TAG, "loadEditor: loading URL (setup took ${elapsed}ms)")
+            webView.loadUrl(editorUrl)
         }
     }
 
     private fun setGlobalJavaScriptVariables() {
+        Log.d(TAG, "setGlobalJavaScriptVariables: injecting GBKit configuration into WebView")
         val gbKit = GBKitGlobal.fromConfiguration(configuration, dependencies)
         val gbKitJson = gbKit.toJsonString()
         val gbKitConfig = """
@@ -558,7 +613,7 @@ class GutenbergView : FrameLayout {
 
     fun setContent(newContent: String) {
         if (!isEditorLoaded) {
-            Log.e("GutenbergView", "You can't change the editor content until it has loaded")
+            Log.e(TAG, "You can't change the editor content until it has loaded")
             return
         }
         val encodedContent = newContent.encodeForEditor()
@@ -567,7 +622,7 @@ class GutenbergView : FrameLayout {
 
     fun setTitle(newTitle: String) {
         if (!isEditorLoaded) {
-            Log.e("GutenbergView", "You can't change the editor content until it has loaded")
+            Log.e(TAG, "You can't change the editor content until it has loaded")
             return
         }
         val encodedTitle = newTitle.encodeForEditor()
@@ -656,7 +711,7 @@ class GutenbergView : FrameLayout {
 
     fun getTitleAndContent(originalContent: CharSequence, callback: TitleAndContentCallback, completeComposition: Boolean = false) {
         if (!isEditorLoaded) {
-            Log.e("GutenbergView", "You can't change the editor content until it has loaded")
+            Log.e(TAG, "You can't change the editor content until it has loaded")
             return
         }
         handler.post {
@@ -670,7 +725,7 @@ class GutenbergView : FrameLayout {
                     lastUpdatedContent = jsonObject.getString("content")
                     changed = jsonObject.getBoolean("changed")
                 } catch (e: JSONException) {
-                    Log.e("GutenbergView", "Received invalid JSON from editor.getTitleAndContent")
+                    Log.e(TAG, "Received invalid JSON from editor.getTitleAndContent")
                 }
 
                 val title = lastUpdatedTitle ?: ""
@@ -704,7 +759,7 @@ class GutenbergView : FrameLayout {
 
     fun appendTextAtCursor(text: String) {
         if (!isEditorLoaded) {
-            Log.e("GutenbergView", "You can't append text until the editor has loaded")
+            Log.e(TAG, "You can't append text until the editor has loaded")
             return
         }
         val encodedText = text.encodeForEditor()
@@ -715,10 +770,11 @@ class GutenbergView : FrameLayout {
 
     @JavascriptInterface
     fun onEditorLoaded() {
-        Log.i("GutenbergView", "EditorLoaded received in native code")
+        Log.d(TAG, "onEditorLoaded: received from JavaScript (didFireEditorLoaded=$didFireEditorLoaded)")
         isEditorLoaded = true
         handler.post {
             if(!didFireEditorLoaded) {
+                Log.d(TAG, "onEditorLoaded: notifying EditorAvailableListener and transitioning to ready")
                 editorDidBecomeAvailableListener?.onEditorAvailable(this)
                 this.didFireEditorLoaded = true
                 showReadyPhase()
@@ -756,9 +812,9 @@ class GutenbergView : FrameLayout {
     @JavascriptInterface
     fun onBlocksChanged(isEmpty: Boolean) {
         if(isEmpty) {
-            Log.i("GutenbergView", "BlocksChanged (empty)")
+            Log.i(TAG, "BlocksChanged (empty)")
         } else {
-            Log.i("GutenbergView", "BlocksChanged (not empty)")
+            Log.i(TAG, "BlocksChanged (not empty)")
         }
     }
 
@@ -807,13 +863,13 @@ class GutenbergView : FrameLayout {
 
     fun setMediaUploadAttachment(media: String) {
         if (!isEditorLoaded) {
-            Log.e("GutenbergView", "You can't change the editor content until it has loaded")
+            Log.e(TAG, "You can't change the editor content until it has loaded")
             return
         }
 
         val contextId = currentMediaContextId
         if (contextId == null) {
-            Log.e("GutenbergView", "setMediaUploadAttachment called without contextId")
+            Log.e(TAG, "setMediaUploadAttachment called without contextId")
             return
         }
 
@@ -831,7 +887,7 @@ class GutenbergView : FrameLayout {
 
     @JavascriptInterface
     fun showBlockPicker() {
-        Log.i("GutenbergView", "BlockPickerShouldShow")
+        Log.i(TAG, "BlockPickerShouldShow")
     }
 
     @JavascriptInterface
@@ -863,7 +919,7 @@ class GutenbergView : FrameLayout {
                 val request = RecordedNetworkRequest.fromJson(json)
                 networkRequestListener?.onNetworkRequest(request)
             } catch (e: Exception) {
-                Log.e("GutenbergView", "Error parsing network request: ${e.message}")
+                Log.e(TAG, "Error parsing network request: ${e.message}")
             }
         }
     }
@@ -885,7 +941,7 @@ class GutenbergView : FrameLayout {
                 put("content", content.content)
             }.toString()
         } catch (e: JSONException) {
-            Log.e("GutenbergView", "Failed to serialize latest content", e)
+            Log.e(TAG, "Failed to serialize latest content", e)
             null
         }
     }
@@ -938,15 +994,15 @@ class GutenbergView : FrameLayout {
 
                 if (uri.scheme == "content") {
                     if (FileCache.isKnownSafeLocalProvider(uri)) {
-                        Log.i("GutenbergView", "Using local provider URI directly: $uri")
+                        Log.i(TAG, "Using local provider URI directly: $uri")
                         uri
                     } else {
                         val cachedUri = FileCache.copyToCache(context, uri)
                         if (cachedUri != null) {
-                            Log.i("GutenbergView", "Copied content URI to cache: $uri -> $cachedUri")
+                            Log.i(TAG, "Copied content URI to cache: $uri -> $cachedUri")
                             cachedUri
                         } else {
-                            Log.w("GutenbergView", "Failed to copy content URI to cache, using original: $uri")
+                            Log.w(TAG, "Failed to copy content URI to cache, using original: $uri")
                             uri
                         }
                     }
@@ -978,6 +1034,7 @@ class GutenbergView : FrameLayout {
     }
 
     companion object {
+        private const val TAG = "GutenbergView"
         private const val ASSET_LOADING_TIMEOUT_MS = 5000L
 
         // Warmup state management
