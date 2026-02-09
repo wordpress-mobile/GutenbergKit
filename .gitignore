@@ -189,9 +189,15 @@ local.properties
 /android/Gutenberg/src/main/assets/assets
 /android/Gutenberg/src/main/assets/index.html
 
-# Disabled removing these files until this is published like Android in CI.
-# /ios/Sources/GutenbergKit/Gutenberg/assets
-# /ios/Sources/GutenbergKit/Gutenberg/index.html
+/ios/Sources/GutenbergKit/Gutenberg/assets
+/ios/Sources/GutenbergKit/Gutenberg/index.html
+/ios/Sources/GutenbergKitResources/Resources/assets
+/ios/Sources/GutenbergKitResources/Resources/index.html
+
+# XCFramework build output
+*.xcframework
+*.xcframework.zip
+*.xcframework.zip.checksum.txt
 
 # Translation files
 src/translations/

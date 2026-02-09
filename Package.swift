@@ -44,8 +44,7 @@ let package = Package(
             name: "GutenbergKit",
             dependencies: ["SwiftSoup", "SVGView", "GutenbergKitResources"],
             path: "ios/Sources/GutenbergKit",
-            exclude: [],
-            resources: [.copy("Gutenberg")],
+            exclude: ["Gutenberg"],
             packageAccess: false
         ),
         gutenbergKitResources,
