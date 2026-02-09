@@ -119,14 +119,21 @@ public actor EditorService {
         self.progress = EditorProgress(completed: 1, total: 100)
         self.progressCallback = progress
 
+        // Automatically clean up old asset bundles.
+        // Cleanup errors are intentionally ignored so that the download process
+        // continues uninterrupted. Failures are expected when running for the
+        // first time, since the storage directories may not yet exist.
+        await onceEvery(.seconds(86_400)) {
+            do {
+                try await self.cleanup()
+            } catch {
+                log(.warn, "Failed to cleanup old asset bundles: \(error)")
+            }
+        }
+
         async let settings = try prepareEditorSettings()
         async let assetBundle = try self.prepareAssetBundle()
         async let preloadList = try preparePreloadList()
-
-        // Automatically clean up old asset bundles
-        try await onceEvery(.seconds(86_400)) {
-            try await self.cleanup()
-        }
 
         return try await EditorDependencies(
             editorSettings: settings,
