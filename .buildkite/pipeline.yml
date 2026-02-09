@@ -54,7 +54,14 @@ steps:
       plugins: *plugins
 
     - label: ':swift: Test Swift Package'
-      command: swift test
+      command: make build REFRESH_L10N=1 REFRESH_JS_BUILD=1 && make test-swift-package
+      plugins: *plugins
+
+    - label: ':package: Build XCFramework'
+      command: make build-resources-xcframework
+      artifact_paths:
+          - 'GutenbergKitResources-*.xcframework.zip'
+          - 'GutenbergKitResources-*.xcframework.zip.checksum.txt'
       plugins: *plugins
 
     - label: ':ios: Test iOS E2E'
