@@ -12,6 +12,8 @@ help: ## Display this help menu
 	sort
 	@echo ""
 
+export GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES := 1
+
 define XCODEBUILD_CMD
 	@set -o pipefail && \
 		xcodebuild $(1) \
@@ -99,8 +101,10 @@ build: npm-dependencies prep-translations ## Build the project for all platforms
 		echo "--- :node: Building Gutenberg"; \
 		npm run build; \
 		echo "--- :open_file_folder: Copying Build Products into place"; \
-		rm -rf ./ios/Sources/GutenbergKit/Gutenberg/ ./android/Gutenberg/src/main/assets/; \
+		rm -rf ./ios/Sources/GutenbergKit/Gutenberg/ ./ios/Sources/GutenbergKitResources/Resources/ ./android/Gutenberg/src/main/assets/; \
+		mkdir -p ./ios/Sources/GutenbergKitResources/Resources; \
 		cp -r ./dist/. ./ios/Sources/GutenbergKit/Gutenberg/; \
+		cp -r ./dist/. ./ios/Sources/GutenbergKitResources/Resources/; \
 		cp -r ./dist/. ./android/Gutenberg/src/main/assets; \
 	else \
 		echo "--- :white_check_mark: Skipping JS build (dist already exists). Use REFRESH_JS_BUILD=1 to force refresh."; \
@@ -109,6 +113,11 @@ build: npm-dependencies prep-translations ## Build the project for all platforms
 .PHONY: build-swift-package
 build-swift-package: build ## Build the Swift package for iOS
 	$(call XCODEBUILD_CMD, build)
+
+.PHONY: build-resources-xcframework
+build-resources-xcframework: build ## Build GutenbergKitResources XCFramework
+	@echo "--- :swift: Building GutenbergKitResources XCFramework"
+	./build_xcframework.sh
 
 .PHONY: local-android-library
 local-android-library: build ## Build the Android library to local Maven
