@@ -8,7 +8,7 @@ import Foundation
 /// and returned on subsequent requests to improve loading performance.
 public struct RESTAPIRepository: Sendable {
 
-    package let httpClient: EditorHTTPClientProtocol
+    let httpClient: EditorHTTPClientProtocol
     private let configuration: EditorConfiguration
     private let cache: EditorURLCache
 
@@ -142,11 +142,11 @@ public struct RESTAPIRepository: Sendable {
 
     // MARK: GET Post Type
     @discardableResult
-    package func fetchPostType(for type: String) async throws -> EditorURLResponse {
+    func fetchPostType(for type: String) async throws -> EditorURLResponse {
         try await self.perform(method: .GET, url: self.buildPostTypeUrl(type: type))
     }
 
-    package func readPostType(for type: String) throws -> EditorURLResponse? {
+    func readPostType(for type: String) throws -> EditorURLResponse? {
         try self.cache.response(for: buildPostTypeUrl(type: type), httpMethod: .GET)
     }
 
@@ -162,31 +162,31 @@ public struct RESTAPIRepository: Sendable {
 
     // MARK: GET Active Theme
     @discardableResult
-    package func fetchActiveTheme() async throws -> EditorURLResponse {
+    func fetchActiveTheme() async throws -> EditorURLResponse {
         try await self.perform(method: .GET, url: self.activeThemeUrl)
     }
 
-    package func readActiveTheme() throws -> EditorURLResponse? {
+    func readActiveTheme() throws -> EditorURLResponse? {
         try self.cache.response(for: self.activeThemeUrl, httpMethod: .GET)
     }
 
     // MARK: OPTIONS Settings
     @discardableResult
-    package func fetchSettingsOptions() async throws -> EditorURLResponse {
+    func fetchSettingsOptions() async throws -> EditorURLResponse {
         try await self.perform(method: .OPTIONS, url: self.siteSettingsUrl)
     }
 
-    package func readSettingsOptions() throws -> EditorURLResponse? {
+    func readSettingsOptions() throws -> EditorURLResponse? {
         try self.cache.response(for: self.siteSettingsUrl, httpMethod: .OPTIONS)
     }
 
     // MARK: Post Types
     @discardableResult
-    package func fetchPostTypes() async throws -> EditorURLResponse {
+    func fetchPostTypes() async throws -> EditorURLResponse {
         try await self.perform(method: .GET, url: self.postTypesUrl)
     }
 
-    package func readPostTypes() throws -> EditorURLResponse? {
+    func readPostTypes() throws -> EditorURLResponse? {
         try self.cache.response(for: self.postTypesUrl, httpMethod: .GET)
     }
 
