@@ -38,6 +38,9 @@ import org.wordpress.gutenberg.model.GBKitGlobal
 import org.wordpress.gutenberg.services.EditorService
 import org.wordpress.gutenberg.views.EditorErrorView
 import org.wordpress.gutenberg.views.EditorProgressView
+import java.io.ByteArrayInputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.Locale
 
 const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
@@ -379,16 +382,31 @@ class GutenbergView : FrameLayout {
                 if (request.url == null) {
                     Log.d(TAG, "shouldInterceptRequest: null URL – passing to super")
                     return super.shouldInterceptRequest(view, request)
-                } else if (request.url.host?.contains("appassets.androidplatform.net") == true) {
-                    Log.d(TAG, "shouldInterceptRequest: asset URL – delegating to assetLoader: ${request.url}")
-                    return assetLoader.shouldInterceptRequest(request.url)
-                } else if (requestInterceptor.canIntercept(request)) {
-                    Log.d(TAG, "shouldInterceptRequest: interceptor handling: ${request.url}")
-                    return requestInterceptor.handleRequest(request)
                 }
 
-                Log.d(TAG, "shouldInterceptRequest: passing through to WebView: ${request.url}")
-                return super.shouldInterceptRequest(view, request)
+                // Serve bundled assets from the app package
+                if (request.url.host?.contains("appassets.androidplatform.net") == true) {
+                    Log.d(TAG, "shouldInterceptRequest: asset URL – delegating to assetLoader: ${request.url}")
+                    return assetLoader.shouldInterceptRequest(request.url)
+                }
+
+                // Try serving from the asset cache
+                if (requestInterceptor.canIntercept(request)) {
+                    val cached = requestInterceptor.handleRequest(request)
+                    if (cached != null) {
+                        Log.d(TAG, "shouldInterceptRequest: served from cache: ${request.url}")
+                        return cached
+                    }
+                    // Cache miss – fall through to proxy below
+                }
+
+                // Proxy all other requests natively so they bypass CORS
+                // (the editor page is served from appassets.androidplatform.net,
+                // making every API call cross-origin). This doesn't use `EditorHTTPClient` because
+                // it's not actually a native call – the editor is building the request so we don't
+                // want to modify it in any way.
+                Log.d(TAG, "shouldInterceptRequest: proxying request: ${request.url}")
+                return proxyRequest(request)
             }
 
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest): Boolean {
@@ -495,6 +513,104 @@ class GutenbergView : FrameLayout {
                 return true
             }
         }
+    }
+
+    /**
+     * Proxies an HTTP request natively to bypass CORS restrictions.
+     *
+     * The editor page is served from `https://appassets.androidplatform.net`, so every
+     * `fetch()` call the JavaScript makes to the WordPress REST API is cross-origin.
+     * Rather than requiring the server to whitelist the synthetic WebView origin, this
+     * method intercepts the request in [shouldInterceptRequest] and performs it with
+     * [HttpURLConnection], which is not subject to CORS.
+     */
+    private fun proxyRequest(request: WebResourceRequest): WebResourceResponse? {
+        // Handle CORS preflight – return permissive headers immediately
+        // without forwarding the OPTIONS request to the server.
+        if (request.method.equals("OPTIONS", ignoreCase = true)) {
+            Log.d(TAG, "proxyRequest: CORS preflight for ${request.url}")
+            val requestedHeaders = request.requestHeaders?.get("Access-Control-Request-Headers")
+            return createCorsPreflightResponse(requestedHeaders)
+        }
+
+        try {
+            val connection = URL(request.url.toString()).openConnection() as HttpURLConnection
+            connection.requestMethod = request.method ?: "GET"
+            connection.connectTimeout = 30_000
+            connection.readTimeout = 30_000
+
+            // Forward headers set by the JavaScript fetch() call (e.g. Authorization)
+            request.requestHeaders?.forEach { (key, value) ->
+                connection.setRequestProperty(key, value)
+            }
+
+            // Include cookies from CookieManager (set during loadEditor)
+            val cookies = CookieManager.getInstance().getCookie(request.url.toString())
+            if (cookies != null) {
+                connection.setRequestProperty("Cookie", cookies)
+            }
+
+            val statusCode = connection.responseCode
+            val reasonPhrase = connection.responseMessage ?: "OK"
+
+            // Parse Content-Type for the MIME type and charset
+            val contentTypeHeader = connection.contentType ?: "application/octet-stream"
+            val mimeType = contentTypeHeader.split(";").first().trim()
+            val charset = contentTypeHeader
+                .split(";")
+                .map { it.trim() }
+                .find { it.startsWith("charset=", ignoreCase = true) }
+                ?.substringAfter("=")
+                ?.trim()
+                ?: "UTF-8"
+
+            val responseHeaders = mutableMapOf<String, String>()
+            connection.headerFields?.forEach { (key, values) ->
+                if (key != null && values.isNotEmpty()) {
+                    responseHeaders[key] = values.last()
+                }
+            }
+
+            // Add CORS headers so the WebView allows the JavaScript to read the response
+            addCorsHeaders(responseHeaders)
+
+            val inputStream = if (statusCode >= 400) {
+                connection.errorStream ?: ByteArrayInputStream(ByteArray(0))
+            } else {
+                connection.inputStream
+            }
+
+            Log.d(TAG, "proxyRequest: $statusCode ${request.method ?: "GET"} ${request.url}")
+            return WebResourceResponse(mimeType, charset, statusCode, reasonPhrase, responseHeaders, inputStream)
+        } catch (e: Exception) {
+            Log.e(TAG, "proxyRequest: failed to proxy ${request.url}", e)
+            return null
+        }
+    }
+
+    /**
+     * Returns a synthetic 204 response for CORS preflight (OPTIONS) requests,
+     * echoing back whatever headers the JavaScript intends to send.
+     */
+    private fun createCorsPreflightResponse(requestedHeaders: String?): WebResourceResponse {
+        val headers = mutableMapOf<String, String>()
+        addCorsHeaders(headers)
+        headers["Access-Control-Max-Age"] = "86400"
+        if (!requestedHeaders.isNullOrEmpty()) {
+            headers["Access-Control-Allow-Headers"] = requestedHeaders
+        }
+
+        return WebResourceResponse(
+            "text/plain", "UTF-8", 204, "No Content",
+            headers, ByteArrayInputStream(ByteArray(0))
+        )
+    }
+
+    private fun addCorsHeaders(headers: MutableMap<String, String>) {
+        headers["Access-Control-Allow-Origin"] = "https://appassets.androidplatform.net"
+        headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD"
+        headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, Accept, X-WP-Nonce"
+        headers["Access-Control-Allow-Credentials"] = "true"
     }
 
     /**
