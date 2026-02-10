@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Builds a GutenbergKitResources XCFramework from the local source target.
 #
