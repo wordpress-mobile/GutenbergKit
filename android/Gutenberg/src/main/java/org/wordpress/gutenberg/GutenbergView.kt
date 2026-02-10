@@ -607,7 +607,13 @@ class GutenbergView : FrameLayout {
     }
 
     private fun addCorsHeaders(headers: MutableMap<String, String>) {
-        headers["Access-Control-Allow-Origin"] = "https://appassets.androidplatform.net"
+        val origin = if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
+            val uri = Uri.parse(BuildConfig.GUTENBERG_EDITOR_URL)
+            "${uri.scheme}://${uri.host}${if (uri.port != -1) ":${uri.port}" else ""}"
+        } else {
+            "https://appassets.androidplatform.net"
+        }
+        headers["Access-Control-Allow-Origin"] = origin
         headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD"
         headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, Accept, X-WP-Nonce"
         headers["Access-Control-Allow-Credentials"] = "true"
