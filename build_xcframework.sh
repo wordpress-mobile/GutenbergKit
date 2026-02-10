@@ -28,7 +28,7 @@ trap cleanup EXIT
 echo "--- Building ${SCHEME} for iphoneos"
 xcodebuild archive \
     -scheme "${SCHEME}" \
-    -sdk iphoneos \
+    -destination 'generic/platform=iOS' \
     -archivePath "${BUILD_DIR}/iphoneos.xcarchive" \
     SKIP_INSTALL=NO \
     BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
@@ -37,7 +37,7 @@ xcodebuild archive \
 echo "--- Building ${SCHEME} for iphonesimulator"
 xcodebuild archive \
     -scheme "${SCHEME}" \
-    -sdk iphonesimulator \
+    -destination 'generic/platform=iOS Simulator' \
     -archivePath "${BUILD_DIR}/iphonesimulator.xcarchive" \
     SKIP_INSTALL=NO \
     BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
