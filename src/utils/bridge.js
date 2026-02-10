@@ -299,7 +299,7 @@ export async function getPost() {
 	if ( hostContent ) {
 		debug( 'Using content from native host' );
 		return {
-			id: post?.id ?? -1,
+			id: post?.id || -1,
 			type: post?.type || 'post',
 			status: post?.status || 'draft',
 			title: { raw: hostContent.title },
@@ -310,7 +310,7 @@ export async function getPost() {
 	if ( post ) {
 		debug( 'Native bridge unavailable, using GBKit initial content' );
 		return {
-			id: post.id,
+			id: post.id || -1,
 			type: post.type || 'post',
 			status: post.status || 'draft',
 			title: { raw: decodeURIComponent( post.title ) },
