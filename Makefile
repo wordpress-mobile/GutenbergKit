@@ -20,6 +20,7 @@ define XCODEBUILD_CMD
 		-scheme GutenbergKit \
 		-sdk iphonesimulator \
 		-destination '${SIMULATOR_DESTINATION}' \
+		CODE_SIGNING_ALLOWED=NO \
 		| xcbeautify
 endef
 

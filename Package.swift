@@ -33,7 +33,8 @@ let package = Package(
     name: "GutenbergKit",
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
-        .library(name: "GutenbergKit", targets: ["GutenbergKit"])
+        .library(name: "GutenbergKit", targets: ["GutenbergKit"]),
+        .library(name: "GutenbergKitResources", targets: ["GutenbergKitResources"]),
     ],
     dependencies: [
         .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.5"),
