@@ -1006,6 +1006,8 @@ class GutenbergView : FrameLayout {
         contentChangeListener = null
         historyChangeListener = null
         featuredImageChangeListener = null
+        openMediaLibraryListener = null
+        logJsExceptionListener = null
         editorDidBecomeAvailableListener = null
         filePathCallback = null
         onFileChooserRequested = null
