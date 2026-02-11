@@ -225,13 +225,7 @@ test-js-watch: npm-dependencies ## Run JavaScript tests in watch mode
 
 .PHONY: test-swift-package
 test-swift-package: build ## Run Swift package tests
-	@set -o pipefail && \
-		xcodebuild test \
-		-scheme GutenbergKitTests \
-		-sdk iphonesimulator \
-		-destination '${SIMULATOR_DESTINATION}' \
-		CODE_SIGNING_ALLOWED=NO \
-		| xcbeautify
+	$(call XCODEBUILD_CMD, test)
 
 .PHONY: test-ios-e2e
 test-ios-e2e: ## Run iOS E2E tests against the production build
