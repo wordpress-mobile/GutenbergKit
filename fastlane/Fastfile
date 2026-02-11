@@ -84,7 +84,7 @@ lane :publish_release_to_github do
   version = lane_context[LANE_VALUE_VERSION] || UI.user_error!('Missing version lane context')
   github_token = lane_context[LANE_VALUE_GITHUB_TOKEN] || UI.user_error!('Missing github token lane context')
 
-  sh "git checkout -b release/#{version}"
+  sh 'git', 'checkout', '-b', "release/#{version}"
   git_commit(
     path: File.expand_path('./Package.swift', PROJECT_ROOT),
     message: "Update Package.swift to use version #{version}"
