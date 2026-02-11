@@ -27,10 +27,6 @@ before_all do
   setup_ci
 end
 
-# --------------------------------------------------------------------------
-# Release lane
-# --------------------------------------------------------------------------
-
 lane :release do |options|
   version = options[:version] || UI.user_error!('version is required')
   lane_context[LANE_VALUE_VERSION] = version
@@ -43,10 +39,6 @@ lane :release do |options|
   publish_release_to_github
   publish_to_s3
 end
-
-# --------------------------------------------------------------------------
-# Individual lanes
-# --------------------------------------------------------------------------
 
 lane :validate do
   version = lane_context[LANE_VALUE_VERSION] || UI.user_error!('Missing version lane context')
@@ -151,10 +143,6 @@ lane :set_up_signing_release do |readonly: true|
     platform: 'macos'
   )
 end
-
-# --------------------------------------------------------------------------
-# Helpers
-# --------------------------------------------------------------------------
 
 def xcframework_checksum
   File.read(xcframework_checksum_file_path).strip
