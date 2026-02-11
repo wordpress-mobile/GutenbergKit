@@ -35,7 +35,7 @@ lane :release do |options|
   version = options[:version] || UI.user_error!('version is required')
   lane_context[LANE_VALUE_VERSION] = version
 
-  github_token = options[:github_token] || ENV['GITHUB_TOKEN'] || UI.user_error!('github_token is required')
+  github_token = ENV['GITHUB_TOKEN'] || UI.user_error!('GITHUB_TOKEN env var is required')
   lane_context.set_sensitive(LANE_VALUE_GITHUB_TOKEN, github_token)
 
   validate
