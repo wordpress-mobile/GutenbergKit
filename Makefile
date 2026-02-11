@@ -227,7 +227,7 @@ test-js-watch: npm-dependencies ## Run JavaScript tests in watch mode
 test-swift-package: build ## Run Swift package tests
 	@set -o pipefail && \
 		xcodebuild test \
-		-scheme GutenbergKitTests \
+		-scheme GutenbergKit-Package \
 		-sdk iphonesimulator \
 		-destination '${SIMULATOR_DESTINATION}' \
 		CODE_SIGNING_ALLOWED=NO \
