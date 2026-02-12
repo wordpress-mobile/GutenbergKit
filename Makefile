@@ -17,7 +17,7 @@ export GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES := 1
 define XCODEBUILD_CMD
 	@set -o pipefail && \
 		xcodebuild $(1) \
-		-scheme GutenbergKit \
+		-scheme $(2) \
 		-sdk iphonesimulator \
 		-destination '${SIMULATOR_DESTINATION}' \
 		CODE_SIGNING_ALLOWED=NO \
@@ -114,7 +114,7 @@ build: npm-dependencies prep-translations ## Build the project for all platforms
 
 .PHONY: build-swift-package
 build-swift-package: build ## Build the Swift package for iOS
-	$(call XCODEBUILD_CMD, build)
+	$(call XCODEBUILD_CMD, build, GutenbergKit)
 
 .PHONY: build-resources-xcframework
 build-resources-xcframework: build ## Build GutenbergKitResources XCFramework
@@ -226,13 +226,7 @@ test-js-watch: npm-dependencies ## Run JavaScript tests in watch mode
 
 .PHONY: test-swift-package
 test-swift-package: build ## Run Swift package tests
-	@set -o pipefail && \
-		xcodebuild test \
-		-scheme GutenbergKit-Package \
-		-sdk iphonesimulator \
-		-destination '${SIMULATOR_DESTINATION}' \
-		CODE_SIGNING_ALLOWED=NO \
-		| xcbeautify
+	$(call XCODEBUILD_CMD, test, GutenbergKit-Package)
 
 .PHONY: test-ios-e2e
 test-ios-e2e: ## Run iOS E2E tests against the production build
