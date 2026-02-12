@@ -161,7 +161,7 @@ public struct EditorURLCache: Sendable {
     /// - Throws: An error if the cache cannot be cleared.
     public func clear() throws {
         self.cache.removeAllCachedResponses()
-        Thread.sleep(forTimeInterval: 0.05)  // Hack to make `URLCache` work
+        Thread.sleep(forTimeInterval: 0.2)  // Hack to make `URLCache` work (needs longer than store)
     }
 
     /// Encodes data to work around a `URLCache` bug with empty data.
