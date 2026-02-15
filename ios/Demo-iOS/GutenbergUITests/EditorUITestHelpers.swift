@@ -105,49 +105,9 @@ enum EditorUITestHelpers {
 
     // MARK: - Content Assertion Helpers
 
-    /// Switches to Code Editor mode, reads the title, then switches back to Visual Editor.
-    /// Asserts the title equals the expected string.
-    @discardableResult
-    static func assertTitle(
-        equals expected: String,
-        webView: XCUIElement,
-        app: XCUIApplication,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) -> String? {
-        switchToCodeEditor(app: app)
-        let title = readTitle(webView: webView)
-        switchToVisualEditor(app: app)
-        XCTAssertEqual(title, expected, "Title mismatch", file: file, line: line)
-        return title
-    }
-
-    /// Switches to Code Editor, reads content, then switches back.
-    /// Asserts the HTML content contains the expected substring.
-    @discardableResult
-    static func assertContentContains(
-        _ expected: String,
-        webView: XCUIElement,
-        app: XCUIApplication,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) -> String? {
-        switchToCodeEditor(app: app)
-        let content = readContent(webView: webView)
-        switchToVisualEditor(app: app)
-        if let content {
-            XCTAssertTrue(
-                content.contains(expected),
-                "Expected content to contain \"\(expected)\" but got \"\(content)\"",
-                file: file,
-                line: line
-            )
-        }
-        return content
-    }
-
     /// Switches to Code Editor, reads both title and content, then switches back.
     /// Returns (title, content) tuple for custom assertions.
+    @discardableResult
     static func readTitleAndContent(
         webView: XCUIElement,
         app: XCUIApplication
@@ -158,6 +118,34 @@ enum EditorUITestHelpers {
         switchToVisualEditor(app: app)
         guard let title, let content else { return nil }
         return (title: title, content: content)
+    }
+
+    /// Switches to Code Editor, reads both title and content, then switches back.
+    /// Optionally asserts the title equals `expectedTitle` and/or the content
+    /// contains `expectedContentSubstring`. Uses a single mode toggle regardless
+    /// of how many assertions are requested.
+    @discardableResult
+    static func assertContent(
+        expectedTitle: String? = nil,
+        expectedContentSubstring: String? = nil,
+        webView: XCUIElement,
+        app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> (title: String, content: String)? {
+        let result = readTitleAndContent(webView: webView, app: app)
+        if let expectedTitle {
+            XCTAssertEqual(result?.title, expectedTitle, "Title mismatch", file: file, line: line)
+        }
+        if let expectedContentSubstring, let content = result?.content {
+            XCTAssertTrue(
+                content.contains(expectedContentSubstring),
+                "Expected content to contain \"\(expectedContentSubstring)\" but got \"\(content)\"",
+                file: file,
+                line: line
+            )
+        }
+        return result
     }
 }
 

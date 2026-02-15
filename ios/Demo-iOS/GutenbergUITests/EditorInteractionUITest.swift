@@ -71,8 +71,7 @@ final class EditorInteractionUITest: XCTestCase {
         XCTAssertTrue(undoButton.isEnabled, "Undo should remain enabled after typing in content")
 
         // Verify content before undo.
-        EditorUITestHelpers.assertTitle(equals: "Hello", webView: webView, app: app)
-        EditorUITestHelpers.assertContentContains("World", webView: webView, app: app)
+        EditorUITestHelpers.assertContent(expectedTitle: "Hello", expectedContentSubstring: "World", webView: webView, app: app)
 
         // Tap undo — redo should become enabled.
         undoButton.tap()
@@ -83,8 +82,7 @@ final class EditorInteractionUITest: XCTestCase {
         XCTAssertTrue(undoButton.waitForEnabled(timeout: 10), "Undo should be enabled after redoing")
 
         // Verify content is restored after redo.
-        EditorUITestHelpers.assertTitle(equals: "Hello", webView: webView, app: app)
-        EditorUITestHelpers.assertContentContains("World", webView: webView, app: app)
+        EditorUITestHelpers.assertContent(expectedTitle: "Hello", expectedContentSubstring: "World", webView: webView, app: app)
     }
 
     // MARK: - Editor Mode
@@ -103,33 +101,21 @@ final class EditorInteractionUITest: XCTestCase {
         EditorUITestHelpers.insertBlock("Paragraph", webView: webView, app: app)
         EditorUITestHelpers.typeInContent("Test content", webView: webView)
 
-        // Switch to Code Editor and verify content is visible in the textareas.
-        EditorUITestHelpers.switchToCodeEditor(app: app)
-        XCTAssertTrue(webView.waitForExistence(timeout: 10), "WebView disappeared after switching to Code Editor")
+        // Switch to Code Editor, verify content, then switch back (single toggle).
+        EditorUITestHelpers.assertContent(
+            expectedTitle: "Test Title",
+            expectedContentSubstring: "Test content",
+            webView: webView,
+            app: app
+        )
 
-        let title = EditorUITestHelpers.readTitle(webView: webView)
-        XCTAssertEqual(title, "Test Title", "Title should be visible in Code Editor mode")
-
-        let content = EditorUITestHelpers.readContent(webView: webView)
-        XCTAssertNotNil(content, "Content should be readable in Code Editor mode")
-        XCTAssertTrue(content?.contains("Test content") == true, "Content should contain typed text")
-
-        // Switch back to Visual Editor.
-        EditorUITestHelpers.switchToVisualEditor(app: app)
-        XCTAssertTrue(webView.waitForExistence(timeout: 10), "WebView disappeared after switching to Visual Editor")
-
-        // Switch to Code Editor again to verify content survives the round-trip.
-        EditorUITestHelpers.switchToCodeEditor(app: app)
-
-        let titleAfterRoundTrip = EditorUITestHelpers.readTitle(webView: webView)
-        XCTAssertEqual(titleAfterRoundTrip, "Test Title", "Title should survive Code Editor round-trip")
-
-        let contentAfterRoundTrip = EditorUITestHelpers.readContent(webView: webView)
-        XCTAssertTrue(contentAfterRoundTrip?.contains("Test content") == true, "Content should survive Code Editor round-trip")
-
-        // Switch back to Visual Editor to leave in a clean state.
-        EditorUITestHelpers.switchToVisualEditor(app: app)
-        XCTAssertTrue(webView.waitForExistence(timeout: 10), "WebView disappeared after final switch to Visual Editor")
+        // Switch again to verify content survives a second round-trip.
+        EditorUITestHelpers.assertContent(
+            expectedTitle: "Test Title",
+            expectedContentSubstring: "Test content",
+            webView: webView,
+            app: app
+        )
     }
 
     // MARK: - Block Inserter
