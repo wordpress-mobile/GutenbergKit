@@ -32,11 +32,7 @@ make test-android
 
 E2E tests use Playwright to load the editor in a headless Chromium browser and verify Gutenberg editor logic — block operations, text formatting, split/merge, and data store state. They run against the Vite dev server with no native layer involved.
 
-Test files live in `e2e/*.spec.js`. Before running for the first time, install the browser binary:
-
-```bash
-npx playwright install chromium
-```
+Test files live in `e2e/*.spec.js`.
 
 Run tests:
 

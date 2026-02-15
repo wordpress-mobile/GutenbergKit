@@ -24,9 +24,7 @@ steps:
       plugins: *plugins
 
     - label: ':performing_arts: Test E2E'
-      command: |
-          npx playwright install chromium
-          make test-e2e
+      command: make test-e2e
       plugins: *plugins
 
     - label: ':android: Publish Android Library'
