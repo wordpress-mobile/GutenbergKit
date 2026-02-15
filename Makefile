@@ -58,6 +58,29 @@ prep-translations: ## Fetch and cache locale string files
 		echo "--- :white_check_mark: Skipping translations fetch (src/translations already exists). Use REFRESH_L10N=1 to force refresh."; \
 	fi
 
+.PHONY: e2e-dependencies
+e2e-dependencies: npm-dependencies ## Install E2E test dependencies
+	@CHROMIUM_PATH=$$(npx playwright install --dry-run chromium 2>&1 | grep "Install location" | head -1 | sed 's/.*: *//'); \
+	if [ -d "$$CHROMIUM_PATH" ]; then \
+		echo "--- :white_check_mark: Playwright Chromium is already installed."; \
+	elif [ -n "$$CI" ]; then \
+		echo "--- :chromium: Installing Playwright Chromium"; \
+		npx playwright install chromium; \
+	else \
+		echo ""; \
+		echo "Playwright Chromium browser is not installed."; \
+		echo "It is required to run E2E tests."; \
+		echo ""; \
+		printf "Install it now? [Y/n] "; \
+		read -r answer; \
+		if [ "$$answer" != "n" ] && [ "$$answer" != "N" ]; then \
+			npx playwright install chromium; \
+		else \
+			echo "Skipping install. Run 'npx playwright install chromium' manually to install."; \
+			exit 1; \
+		fi; \
+	fi
+
 .PHONY: clean
 clean: ## Remove build artifacts and translation string files
 	npm run clean
@@ -137,11 +160,11 @@ lint-swift: ## Lint Swift code
 ################################################################################
 
 .PHONY: test-e2e
-test-e2e: npm-dependencies ## Run end-to-end tests
+test-e2e: e2e-dependencies ## Run end-to-end tests
 	npm run test:e2e
 
 .PHONY: test-e2e-ui
-test-e2e-ui: npm-dependencies ## Run end-to-end tests in UI mode
+test-e2e-ui: e2e-dependencies ## Run end-to-end tests in UI mode
 	npm run test:e2e:ui
 
 .PHONY: test-js
