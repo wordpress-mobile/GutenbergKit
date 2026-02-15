@@ -105,6 +105,77 @@ final class EditorInteractionUITest: XCTestCase {
         let redoEnabled = redoButton.waitForEnabled(timeout: 10)
         XCTAssertTrue(redoEnabled, "Redo should be enabled after undoing")
     }
+
+    // MARK: - Editor Mode
+
+    /// Type content, switch to code editor, then switch back to visual.
+    ///
+    /// Exercises the native→JS bridge: toggling `isCodeEditorEnabled`
+    /// calls `editor.switchEditorMode()` in the WebView. The test
+    /// verifies the round-trip doesn't crash and the WebView survives
+    /// both transitions.
+    func testCodeEditorToggleWithContent() throws {
+        let webView = try navigateToEditor()
+
+        // Type some content into the title so the editor has state.
+        let titleField = webView.textViews["Add title"]
+        XCTAssertTrue(titleField.waitForExistence(timeout: 10), "Title field not found in WebView")
+        titleField.tap()
+        titleField.typeText("Test Title")
+
+        // Open the overflow menu and switch to Code Editor.
+        let moreButton = app.buttons["More"]
+        XCTAssertTrue(moreButton.waitForExistence(timeout: 5), "More button not found")
+        moreButton.tap()
+
+        let codeEditorButton = app.buttons["Code Editor"]
+        XCTAssertTrue(codeEditorButton.waitForExistence(timeout: 5), "Code Editor button not found in menu")
+        codeEditorButton.tap()
+
+        // WebView should still exist after switching to code editor.
+        XCTAssertTrue(webView.waitForExistence(timeout: 10), "WebView disappeared after switching to Code Editor")
+
+        // Switch back to Visual Editor.
+        moreButton.tap()
+
+        let visualEditorButton = app.buttons["Visual Editor"]
+        XCTAssertTrue(visualEditorButton.waitForExistence(timeout: 5), "Visual Editor button not found in menu")
+        visualEditorButton.tap()
+
+        // WebView should still exist after switching back.
+        XCTAssertTrue(webView.waitForExistence(timeout: 10), "WebView disappeared after switching to Visual Editor")
+    }
+
+    // MARK: - Block Inserter
+
+    /// Open the block inserter and insert an Image block.
+    ///
+    /// Exercises the full inserter bridge flow:
+    /// 1. Tap "Add block" in the WebView toolbar → JS sends `showBlockInserter` to native
+    /// 2. Native presents `BlockInserterView` as a sheet
+    /// 3. Tap "Image" block → native calls `window.blockInserter.insertBlock()` in JS
+    /// 4. Sheet dismisses and block appears in editor
+    func testInsertImageBlock() throws {
+        let webView = try navigateToEditor()
+
+        // Tap the "Add block" button in the WebView's editor toolbar.
+        let addBlockButton = webView.buttons["Add block"]
+        XCTAssertTrue(addBlockButton.waitForExistence(timeout: 10), "Add block button not found in WebView toolbar")
+        addBlockButton.tap()
+
+        // The native block inserter sheet should appear with block options.
+        let imageBlock = app.buttons["Image"]
+        XCTAssertTrue(imageBlock.waitForExistence(timeout: 10), "Image block not found in block inserter")
+        imageBlock.tap()
+
+        // After selection, the inserter should dismiss and an Image block
+        // should appear in the editor. Look for the block's placeholder.
+        let imageBlockInEditor = webView.buttons["Upload"]
+        XCTAssertTrue(
+            imageBlockInEditor.waitForExistence(timeout: 10),
+            "Image block placeholder not found in editor after insertion"
+        )
+    }
 }
 
 extension XCUIElement {
