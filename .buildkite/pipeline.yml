@@ -8,7 +8,7 @@ steps:
     - label: ':react: Build React App'
       key: build-react
       command: |
-          make build REFRESH_L10N=1 REFRESH_JS_BUILD=1
+          make build REFRESH_L10N=1 REFRESH_JS_BUILD=1 STRICT_L10N=1
           tar -czf dist.tar.gz dist/
           buildkite-agent artifact upload dist.tar.gz
       plugins: &plugins
