@@ -47,32 +47,53 @@ final class EditorInteractionUITest: XCTestCase {
         return webView
     }
 
-    // MARK: - Editor History
-
-    /// Undo button state reflects editor history.
-    ///
-    /// On a fresh empty editor, undo should be disabled. After typing,
-    /// the native undo button should become enabled (the bridge sends
-    /// `onEditorHistoryChanged` with `hasUndo: true`).
-    func testUndoButtonReflectsEditorState() throws {
-        try navigateToEditor()
-
-        let undoButton = app.buttons["Undo"]
-        guard undoButton.waitForExistence(timeout: 5) else {
-            XCTFail("Undo button not found")
-            return
-        }
-
-        // On a fresh editor, undo should be disabled.
-        XCTAssertFalse(undoButton.isEnabled, "Undo should be disabled on a fresh editor")
+    /// Types text into the title field and returns the field element.
+    @discardableResult
+    private func typeInTitle(_ text: String, webView: XCUIElement) -> XCUIElement {
+        let titleField = webView.textViews["Add title"]
+        XCTAssertTrue(titleField.waitForExistence(timeout: 10), "Title field not found in WebView")
+        titleField.tap()
+        titleField.typeText(text)
+        return titleField
     }
 
-    /// Typing in the editor enables undo; tapping undo enables redo.
+    /// Inserts a Paragraph block via the block inserter, then types text
+    /// into it.
+    private func typeInContent(_ text: String, webView: XCUIElement) {
+        // Open the block inserter from the WebView toolbar.
+        let addBlockButton = webView.buttons["Add block"]
+        XCTAssertTrue(addBlockButton.waitForExistence(timeout: 10), "Add block button not found in WebView toolbar")
+        addBlockButton.tap()
+
+        // Select the Paragraph block from the native inserter sheet.
+        let paragraphOption = app.buttons["Paragraph"]
+        XCTAssertTrue(paragraphOption.waitForExistence(timeout: 10), "Paragraph block not found in block inserter")
+        paragraphOption.tap()
+
+        // The new paragraph block should appear as an editable text view.
+        let paragraphBlock = webView.textViews["Empty block; start writing or type forward slash to choose a block"]
+        XCTAssertTrue(paragraphBlock.waitForExistence(timeout: 10), "Paragraph block not found after insertion")
+        paragraphBlock.typeText(text)
+    }
+
+    // MARK: - Editor Loading
+
+    /// A WebView becomes visible after the editor finishes loading.
+    func testEditorWebViewBecomesVisible() throws {
+        try navigateToEditor()
+    }
+
+    // MARK: - Editor History
+
+    /// Typing in the title and content enables undo; tapping undo enables redo.
     ///
     /// Exercises the full bridge round-trip:
-    /// 1. Type text → Gutenberg JS sends `onEditorHistoryChanged` with `hasUndo: true`
-    /// 2. Tap Undo  → native calls `undo()` on EditorViewController
-    /// 3. Gutenberg JS sends `onEditorHistoryChanged` with `hasRedo: true`
+    /// 1. Verify undo/redo are disabled on a fresh editor
+    /// 2. Type text in title → bridge sends `onEditorHistoryChanged` with `hasUndo: true`
+    /// 3. Type text in content → undo remains enabled
+    /// 4. Tap Undo → native calls `undo()` on EditorViewController
+    /// 5. Gutenberg JS sends `onEditorHistoryChanged` with `hasRedo: true`
+    /// 6. Tap Redo → redo disables, undo re-enables
     func testUndoRedoAfterTyping() throws {
         let webView = try navigateToEditor()
 
@@ -84,31 +105,34 @@ final class EditorInteractionUITest: XCTestCase {
             return
         }
 
-        // Precondition: both buttons are disabled on a fresh editor.
-        XCTAssertFalse(undoButton.isEnabled, "Undo should be disabled before typing")
-        XCTAssertFalse(redoButton.isEnabled, "Redo should be disabled before typing")
+        // On a fresh editor, both buttons should be disabled.
+        XCTAssertFalse(undoButton.isEnabled, "Undo should be disabled on a fresh editor")
+        XCTAssertFalse(redoButton.isEnabled, "Redo should be disabled on a fresh editor")
 
-        // Tap the title field inside the WebView to gain keyboard focus,
-        // then type some text.
-        let titleField = webView.textViews["Add title"]
-        XCTAssertTrue(titleField.waitForExistence(timeout: 10), "Title field not found in WebView")
-        titleField.tap()
-        titleField.typeText("Hello")
+        // Type in the title field.
+        typeInTitle("Hello", webView: webView)
 
-        // After typing, the bridge should report undo history available.
-        let undoEnabled = undoButton.waitForEnabled(timeout: 10)
-        XCTAssertTrue(undoEnabled, "Undo should be enabled after typing")
+        // After typing in the title, undo should become enabled.
+        XCTAssertTrue(undoButton.waitForEnabled(timeout: 10), "Undo should be enabled after typing in title")
 
-        // Tap undo — the bridge should now report redo history available.
+        // Type in the content paragraph block.
+        typeInContent("World", webView: webView)
+
+        // Undo should still be enabled after typing in content.
+        XCTAssertTrue(undoButton.isEnabled, "Undo should remain enabled after typing in content")
+
+        // Tap undo — redo should become enabled.
         undoButton.tap()
+        XCTAssertTrue(redoButton.waitForEnabled(timeout: 10), "Redo should be enabled after undoing")
 
-        let redoEnabled = redoButton.waitForEnabled(timeout: 10)
-        XCTAssertTrue(redoEnabled, "Redo should be enabled after undoing")
+        // Tap redo — redo should become disabled and undo should remain enabled.
+        redoButton.tap()
+        XCTAssertTrue(undoButton.waitForEnabled(timeout: 10), "Undo should be enabled after redoing")
     }
 
     // MARK: - Editor Mode
 
-    /// Type content, switch to code editor, then switch back to visual.
+    /// Type content in title and body, switch to code editor, then switch back.
     ///
     /// Exercises the native→JS bridge: toggling `isCodeEditorEnabled`
     /// calls `editor.switchEditorMode()` in the WebView. The test
@@ -117,11 +141,9 @@ final class EditorInteractionUITest: XCTestCase {
     func testCodeEditorToggleWithContent() throws {
         let webView = try navigateToEditor()
 
-        // Type some content into the title so the editor has state.
-        let titleField = webView.textViews["Add title"]
-        XCTAssertTrue(titleField.waitForExistence(timeout: 10), "Title field not found in WebView")
-        titleField.tap()
-        titleField.typeText("Test Title")
+        // Type content into both the title and the paragraph block.
+        typeInTitle("Test Title", webView: webView)
+        typeInContent("Test content", webView: webView)
 
         // Open the overflow menu and switch to Code Editor.
         let moreButton = app.buttons["More"]
