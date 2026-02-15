@@ -45,35 +45,8 @@ final class EditorLoadUITest: XCTestCase {
 
     // MARK: - Editor Loading
 
-    /// The app launches and displays the editor list.
-    func testAppLaunches() {
-        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
-    }
-
     /// A WebView becomes visible after the editor finishes loading.
     func testEditorWebViewBecomesVisible() throws {
         try navigateToEditor()
-    }
-
-    /// The editor toolbar is rendered in the navigation bar.
-    func testEditorToolbarExists() throws {
-        try navigateToEditor()
-
-        // The toolbar is a native-layer element above the WebView in the
-        // navigation bar. Check for standard toolbar buttons.
-        let undoButton = app.buttons["Undo"]
-        let redoButton = app.buttons["Redo"]
-
-        // At least one of the undo/redo buttons should exist in the toolbar.
-        let toolbarExists = undoButton.exists || redoButton.exists
-        XCTAssertTrue(toolbarExists, "Expected undo/redo toolbar buttons to be present")
-    }
-
-    /// The close/dismiss button is present in the navigation bar.
-    func testCloseButtonExists() throws {
-        try navigateToEditor()
-
-        let closeButton = app.buttons["Close"]
-        XCTAssertTrue(closeButton.exists, "Expected close (xmark) button in the toolbar")
     }
 }

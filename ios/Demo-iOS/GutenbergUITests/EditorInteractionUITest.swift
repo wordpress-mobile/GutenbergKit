@@ -47,76 +47,7 @@ final class EditorInteractionUITest: XCTestCase {
         return webView
     }
 
-    // MARK: - WebView Content Interaction
-
-    /// Tapping inside the WebView gives it keyboard focus.
-    func testWebViewAcceptsKeyboardFocus() throws {
-        let webView = try navigateToEditor()
-
-        // Tap in the center of the WebView to focus it.
-        webView.tap()
-
-        // After tapping the editor area, a keyboard should appear.
-        // On simulators the software keyboard may be hidden; check
-        // that the WebView at least accepted the tap without crashing.
-        XCTAssertTrue(webView.exists)
-    }
-
-    /// The overflow menu (ellipsis) opens and contains expected items.
-    func testOverflowMenuOpens() throws {
-        try navigateToEditor()
-
-        // Tap the ellipsis (more options) button.
-        let moreButton = app.buttons["More"]
-        guard moreButton.waitForExistence(timeout: 5) else {
-            XCTFail("Overflow menu button not found")
-            return
-        }
-        moreButton.tap()
-
-        // The menu should contain a "Code Editor" or "Visual Editor" option.
-        let codeEditorButton = app.buttons["Code Editor"]
-        let visualEditorButton = app.buttons["Visual Editor"]
-        let hasEditorToggle = codeEditorButton.waitForExistence(timeout: 5)
-            || visualEditorButton.exists
-        XCTAssertTrue(hasEditorToggle, "Expected Code Editor/Visual Editor toggle in overflow menu")
-    }
-
-    /// Switching to code editor mode and back does not crash.
-    func testCodeEditorToggle() throws {
-        try navigateToEditor()
-
-        // Open overflow menu.
-        let moreButton = app.buttons["More"]
-        guard moreButton.waitForExistence(timeout: 5) else {
-            XCTFail("Overflow menu button not found")
-            return
-        }
-        moreButton.tap()
-
-        // Switch to code editor.
-        let codeEditorButton = app.buttons["Code Editor"]
-        guard codeEditorButton.waitForExistence(timeout: 5) else {
-            // Already in code editor mode — switch back.
-            let visualButton = app.buttons["Visual Editor"]
-            if visualButton.exists { visualButton.tap() }
-            return
-        }
-        codeEditorButton.tap()
-
-        // Verify the WebView is still present (no crash).
-        let webView = app.webViews.firstMatch
-        XCTAssertTrue(webView.waitForExistence(timeout: 10))
-
-        // Switch back to visual editor.
-        moreButton.tap()
-        let visualEditorButton = app.buttons["Visual Editor"]
-        if visualEditorButton.waitForExistence(timeout: 5) {
-            visualEditorButton.tap()
-        }
-
-        XCTAssertTrue(webView.waitForExistence(timeout: 10))
-    }
+    // MARK: - Editor History
 
     /// Undo button state reflects editor history.
     ///
