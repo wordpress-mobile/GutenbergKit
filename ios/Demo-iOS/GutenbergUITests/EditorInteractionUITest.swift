@@ -77,6 +77,13 @@ final class EditorInteractionUITest: XCTestCase {
         undoButton.tap()
         XCTAssertTrue(redoButton.waitForEnabled(timeout: 10), "Redo should be enabled after undoing")
 
+        // Verify the last typed text was undone.
+        let afterUndo = EditorUITestHelpers.readTitleAndContent(webView: webView, app: app)
+        XCTAssertNotNil(afterUndo, "Should be able to read content after undo")
+        if let content = afterUndo?.content {
+            XCTAssertFalse(content.contains("World"), "Content should not contain undone text")
+        }
+
         // Tap redo — redo should become disabled and undo should remain enabled.
         redoButton.tap()
         XCTAssertTrue(undoButton.waitForEnabled(timeout: 10), "Undo should be enabled after redoing")
