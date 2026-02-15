@@ -24,12 +24,34 @@ final class EditorInteractionUITest: XCTestCase {
         app = nil
     }
 
+    // MARK: - Helpers
+
+    /// Navigates from the editor list through the configuration screen
+    /// and into the full-screen editor. Returns the WebView element once
+    /// the editor has loaded.
+    @discardableResult
+    private func navigateToEditor() throws -> XCUIElement {
+        // Tap the "Default Editor" row in the list.
+        let defaultEditor = app.staticTexts["Default Editor"]
+        XCTAssertTrue(defaultEditor.waitForExistence(timeout: 10), "Default Editor row not found")
+        defaultEditor.tap()
+
+        // Tap the "Start" button on the configuration screen.
+        let startButton = app.buttons["Start"]
+        XCTAssertTrue(startButton.waitForExistence(timeout: 10), "Start button not found")
+        startButton.tap()
+
+        // Wait for the WebView to appear in the full-screen editor.
+        let webView = app.webViews.firstMatch
+        XCTAssertTrue(webView.waitForExistence(timeout: 30), "Expected a WKWebView to appear after editor loads")
+        return webView
+    }
+
     // MARK: - WebView Content Interaction
 
     /// Tapping inside the WebView gives it keyboard focus.
     func testWebViewAcceptsKeyboardFocus() throws {
-        let webView = app.webViews.firstMatch
-        XCTAssertTrue(webView.waitForExistence(timeout: 30))
+        let webView = try navigateToEditor()
 
         // Tap in the center of the WebView to focus it.
         webView.tap()
@@ -42,11 +64,10 @@ final class EditorInteractionUITest: XCTestCase {
 
     /// The overflow menu (ellipsis) opens and contains expected items.
     func testOverflowMenuOpens() throws {
-        let webView = app.webViews.firstMatch
-        XCTAssertTrue(webView.waitForExistence(timeout: 30))
+        try navigateToEditor()
 
         // Tap the ellipsis (more options) button.
-        let moreButton = app.buttons["ellipsis"]
+        let moreButton = app.buttons["More"]
         guard moreButton.waitForExistence(timeout: 5) else {
             XCTFail("Overflow menu button not found")
             return
@@ -63,11 +84,10 @@ final class EditorInteractionUITest: XCTestCase {
 
     /// Switching to code editor mode and back does not crash.
     func testCodeEditorToggle() throws {
-        let webView = app.webViews.firstMatch
-        XCTAssertTrue(webView.waitForExistence(timeout: 30))
+        try navigateToEditor()
 
         // Open overflow menu.
-        let moreButton = app.buttons["ellipsis"]
+        let moreButton = app.buttons["More"]
         guard moreButton.waitForExistence(timeout: 5) else {
             XCTFail("Overflow menu button not found")
             return
@@ -85,6 +105,7 @@ final class EditorInteractionUITest: XCTestCase {
         codeEditorButton.tap()
 
         // Verify the WebView is still present (no crash).
+        let webView = app.webViews.firstMatch
         XCTAssertTrue(webView.waitForExistence(timeout: 10))
 
         // Switch back to visual editor.
@@ -103,11 +124,10 @@ final class EditorInteractionUITest: XCTestCase {
     /// the native undo button should become enabled (the bridge sends
     /// `onEditorHistoryChanged` with `hasUndo: true`).
     func testUndoButtonReflectsEditorState() throws {
-        let webView = app.webViews.firstMatch
-        XCTAssertTrue(webView.waitForExistence(timeout: 30))
+        try navigateToEditor()
 
-        let undoButton = app.buttons["arrow.uturn.backward"]
-        guard undoButton.exists else {
+        let undoButton = app.buttons["Undo"]
+        guard undoButton.waitForExistence(timeout: 5) else {
             XCTFail("Undo button not found")
             return
         }

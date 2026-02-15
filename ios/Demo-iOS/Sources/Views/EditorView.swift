@@ -31,6 +31,7 @@ struct EditorView: View {
             } label: {
                 Image(systemName: "xmark")
             }
+            .accessibilityLabel("Close")
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
             Group {
@@ -40,6 +41,7 @@ struct EditorView: View {
                     Image(systemName: "arrow.uturn.backward")
                 }
                 .disabled(!viewModel.hasUndo)
+                .accessibilityLabel("Undo")
 
                 Button {
                     viewModel.perform(.redo)
@@ -47,6 +49,7 @@ struct EditorView: View {
                     Image(systemName: "arrow.uturn.forward")
                 }
                 .disabled(!viewModel.hasRedo)
+                .accessibilityLabel("Redo")
             }
             .disabled(viewModel.isModalDialogOpen)
         }
@@ -89,6 +92,7 @@ struct EditorView: View {
         } label: {
             Image(systemName: "ellipsis")
         }
+        .accessibilityLabel("More")
     }
 }
 
