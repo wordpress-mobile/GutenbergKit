@@ -189,6 +189,17 @@ test-js-watch: npm-dependencies ## Run JavaScript tests in watch mode
 test-swift-package: build ## Run Swift package tests
 	$(call XCODEBUILD_CMD, test)
 
+.PHONY: test-ios-e2e
+test-ios-e2e: build ## Run iOS E2E tests (requires Xcode and a simulator)
+	@echo "--- :ios: Running iOS E2E Tests"
+	@set -o pipefail && \
+		xcodebuild test \
+		-project ./ios/Demo-iOS/Gutenberg.xcodeproj \
+		-scheme GutenbergUITests \
+		-sdk iphonesimulator \
+		-destination '${SIMULATOR_DESTINATION}' \
+		| xcbeautify
+
 .PHONY: test-android
 test-android: ## Run Android tests
 	@echo "--- :android: Running Android Tests"

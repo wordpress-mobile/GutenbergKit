@@ -46,6 +46,23 @@ Run in interactive UI mode:
 make test-e2e-ui
 ```
 
+### iOS E2E Tests
+
+-   Framework: XCUITest
+-   Test files: `ios/Demo-iOS/GutenbergUITests/`
+-   Requires: Xcode and an iOS Simulator
+
+These tests launch the Demo iOS app via `XCUIApplication` and verify native shell behavior — toolbar rendering, menu interactions, WebView lifecycle, and native-to-JS bridge state synchronization.
+
+To run the iOS E2E tests:
+
+```bash
+make test-ios-e2e
+```
+
+> **Note:** The web editor must be built first (`make build`). The E2E
+> target depends on `build` and will handle this automatically.
+
 ## Code Quality
 
 Before submitting a pull request, ensure your code passes formatting and linting checks.
