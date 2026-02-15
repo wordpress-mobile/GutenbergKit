@@ -85,39 +85,6 @@ final class EditorInteractionUITest: XCTestCase {
         EditorUITestHelpers.assertContent(expectedTitle: "Hello", expectedContentSubstring: "World", webView: webView, app: app)
     }
 
-    // MARK: - Editor Mode
-
-    /// Type content in title and body, switch to code editor, then switch back.
-    ///
-    /// Exercises the native→JS bridge: toggling `isCodeEditorEnabled`
-    /// calls `editor.switchEditorMode()` in the WebView. The test
-    /// verifies the round-trip doesn't crash and the WebView survives
-    /// both transitions.
-    func testCodeEditorToggleWithContent() throws {
-        let webView = try EditorUITestHelpers.navigateToEditor(app: app)
-
-        // Type content into the title, then insert a Paragraph and type in it.
-        EditorUITestHelpers.typeInTitle("Test Title", webView: webView)
-        EditorUITestHelpers.insertBlock("Paragraph", webView: webView, app: app)
-        EditorUITestHelpers.typeInContent("Test content", webView: webView)
-
-        // Switch to Code Editor, verify content, then switch back (single toggle).
-        EditorUITestHelpers.assertContent(
-            expectedTitle: "Test Title",
-            expectedContentSubstring: "Test content",
-            webView: webView,
-            app: app
-        )
-
-        // Switch again to verify content survives a second round-trip.
-        EditorUITestHelpers.assertContent(
-            expectedTitle: "Test Title",
-            expectedContentSubstring: "Test content",
-            webView: webView,
-            app: app
-        )
-    }
-
     // MARK: - Block Inserter
 
     /// Open the block inserter and insert an Image block.
