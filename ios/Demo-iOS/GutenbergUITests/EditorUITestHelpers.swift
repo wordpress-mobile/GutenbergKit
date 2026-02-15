@@ -54,6 +54,111 @@ enum EditorUITestHelpers {
         XCTAssertTrue(block.waitForExistence(timeout: 10), "Editable block not found in WebView")
         block.typeText(text)
     }
+
+    // MARK: - Mode Switching
+
+    /// Switches the editor to Code Editor mode via the More menu.
+    static func switchToCodeEditor(app: XCUIApplication) {
+        let moreButton = app.buttons["More"]
+        XCTAssertTrue(moreButton.waitForExistence(timeout: 5), "More button not found")
+        moreButton.tap()
+
+        let codeEditorButton = app.buttons["Code Editor"]
+        XCTAssertTrue(codeEditorButton.waitForExistence(timeout: 5), "Code Editor button not found in menu")
+        codeEditorButton.tap()
+    }
+
+    /// Switches the editor back to Visual Editor mode via the More menu.
+    static func switchToVisualEditor(app: XCUIApplication) {
+        let moreButton = app.buttons["More"]
+        XCTAssertTrue(moreButton.waitForExistence(timeout: 5), "More button not found")
+        moreButton.tap()
+
+        let visualEditorButton = app.buttons["Visual Editor"]
+        XCTAssertTrue(visualEditorButton.waitForExistence(timeout: 5), "Visual Editor button not found in menu")
+        visualEditorButton.tap()
+    }
+
+    // MARK: - Content Reading (Code Editor Mode)
+
+    /// Reads the current title from the code editor's title textarea.
+    /// The editor must already be in Code Editor mode.
+    static func readTitle(webView: XCUIElement) -> String? {
+        let titleField = webView.textViews["Add title"]
+        guard titleField.waitForExistence(timeout: 10) else {
+            XCTFail("Title textarea not found in Code Editor mode")
+            return nil
+        }
+        return titleField.value as? String
+    }
+
+    /// Reads the current raw HTML content from the code editor's content textarea.
+    /// The editor must already be in Code Editor mode.
+    static func readContent(webView: XCUIElement) -> String? {
+        let contentField = webView.textViews["Start writing with text or HTML"]
+        guard contentField.waitForExistence(timeout: 10) else {
+            XCTFail("Content textarea not found in Code Editor mode")
+            return nil
+        }
+        return contentField.value as? String
+    }
+
+    // MARK: - Content Assertion Helpers
+
+    /// Switches to Code Editor mode, reads the title, then switches back to Visual Editor.
+    /// Asserts the title equals the expected string.
+    @discardableResult
+    static func assertTitle(
+        equals expected: String,
+        webView: XCUIElement,
+        app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> String? {
+        switchToCodeEditor(app: app)
+        let title = readTitle(webView: webView)
+        switchToVisualEditor(app: app)
+        XCTAssertEqual(title, expected, "Title mismatch", file: file, line: line)
+        return title
+    }
+
+    /// Switches to Code Editor, reads content, then switches back.
+    /// Asserts the HTML content contains the expected substring.
+    @discardableResult
+    static func assertContentContains(
+        _ expected: String,
+        webView: XCUIElement,
+        app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> String? {
+        switchToCodeEditor(app: app)
+        let content = readContent(webView: webView)
+        switchToVisualEditor(app: app)
+        if let content {
+            XCTAssertTrue(
+                content.contains(expected),
+                "Expected content to contain \"\(expected)\" but got \"\(content)\"",
+                file: file,
+                line: line
+            )
+        }
+        return content
+    }
+
+    /// Switches to Code Editor, reads both title and content, then switches back.
+    /// Returns (title, content) tuple for custom assertions.
+    static func readTitleAndContent(
+        webView: XCUIElement,
+        app: XCUIApplication
+    ) -> (title: String, content: String)? {
+        switchToCodeEditor(app: app)
+        let title = readTitle(webView: webView)
+        let content = readContent(webView: webView)
+        switchToVisualEditor(app: app)
+        guard let title, let content else { return nil }
+        return (title: title, content: content)
+    }
 }
 
 extension XCUIElement {
