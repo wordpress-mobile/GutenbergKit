@@ -17,6 +17,16 @@
 		2468526C2EAACCA100ED1F09 /* ConfigurationStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246852692EAACCA100ED1F09 /* ConfigurationStorage.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		AA0000012F00000000000007 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0C4F59832BEFF4970028BD96 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0C4F598A2BEFF4970028BD96;
+			remoteInfo = Gutenberg;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		0C4F598B2BEFF4970028BD96 /* Gutenberg.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Gutenberg.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0C4F59A72BEFF4980028BD96 /* ConfigurationItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationItem.swift; sourceTree = "<group>"; };
@@ -26,10 +36,12 @@
 		0CE8E7922C339B1B00B9DC67 /* GutenbergKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = GutenbergKit; path = ../..; sourceTree = "<group>"; };
 		246852682EAACCA100ED1F09 /* AuthenticationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationManager.swift; sourceTree = "<group>"; };
 		246852692EAACCA100ED1F09 /* ConfigurationStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationStorage.swift; sourceTree = "<group>"; };
+		AA0000012F00000000000001 /* GutenbergUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GutenbergUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		2468525B2EAAC62B00ED1F09 /* Views */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Views; sourceTree = "<group>"; };
+		AA0000012F0000000000000B /* GutenbergUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = GutenbergUITests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -39,6 +51,13 @@
 			files = (
 				246852562EAABB7800ED1F09 /* WordPressAPI in Frameworks */,
 				0CF6E04C2BEFF60E00EDEE8A /* GutenbergKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000012F00000000000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -52,6 +71,7 @@
 				0CE8E7882C339B0600B9DC67 /* Sources */,
 				0C83424D2C339B7F00CAA762 /* Resources */,
 				0CE8E78A2C339B0600B9DC67 /* PreviewContent */,
+				AA0000012F0000000000000B /* GutenbergUITests */,
 				0C4F598C2BEFF4970028BD96 /* Products */,
 				0CF6E04A2BEFF60E00EDEE8A /* Frameworks */,
 			);
@@ -61,6 +81,7 @@
 			isa = PBXGroup;
 			children = (
 				0C4F598B2BEFF4970028BD96 /* Gutenberg.app */,
+				AA0000012F00000000000001 /* GutenbergUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -136,6 +157,27 @@
 			productReference = 0C4F598B2BEFF4970028BD96 /* Gutenberg.app */;
 			productType = "com.apple.product-type.application";
 		};
+		AA0000012F00000000000002 /* GutenbergUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000012F00000000000008 /* Build configuration list for PBXNativeTarget "GutenbergUITests" */;
+			buildPhases = (
+				AA0000012F00000000000003 /* Sources */,
+				AA0000012F00000000000004 /* Frameworks */,
+				AA0000012F00000000000005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA0000012F00000000000006 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				AA0000012F0000000000000B /* GutenbergUITests */,
+			);
+			name = GutenbergUITests;
+			productName = GutenbergUITests;
+			productReference = AA0000012F00000000000001 /* GutenbergUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -148,6 +190,10 @@
 				TargetAttributes = {
 					0C4F598A2BEFF4970028BD96 = {
 						CreatedOnToolsVersion = 15.1;
+					};
+					AA0000012F00000000000002 = {
+						CreatedOnToolsVersion = 16.2;
+						TestTargetID = 0C4F598A2BEFF4970028BD96;
 					};
 				};
 			};
@@ -168,6 +214,7 @@
 			projectRoot = "";
 			targets = (
 				0C4F598A2BEFF4970028BD96 /* Gutenberg */,
+				AA0000012F00000000000002 /* GutenbergUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -179,6 +226,13 @@
 			files = (
 				0CE8E78F2C339B0600B9DC67 /* Preview Assets.xcassets in Resources */,
 				0CE8E78B2C339B0600B9DC67 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000012F00000000000005 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -196,12 +250,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA0000012F00000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
 		245D6BE42EDFCD640076D741 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			productRef = 245D6BE32EDFCD640076D741 /* GutenbergKit */;
+		};
+		AA0000012F00000000000006 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0C4F598A2BEFF4970028BD96 /* Gutenberg */;
+			targetProxy = AA0000012F00000000000007 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -395,6 +461,42 @@
 			};
 			name = Release;
 		};
+		AA0000012F00000000000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.wordpress.gutenberg.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Gutenberg;
+			};
+			name = Debug;
+		};
+		AA0000012F0000000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.wordpress.gutenberg.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Gutenberg;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -412,6 +514,15 @@
 			buildConfigurations = (
 				0C4F599A2BEFF4980028BD96 /* Debug */,
 				0C4F599B2BEFF4980028BD96 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000012F00000000000008 /* Build configuration list for PBXNativeTarget "GutenbergUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000012F00000000000009 /* Debug */,
+				AA0000012F0000000000000A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
