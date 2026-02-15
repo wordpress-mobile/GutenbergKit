@@ -57,23 +57,22 @@ final class EditorInteractionUITest: XCTestCase {
         return titleField
     }
 
-    /// Inserts a Paragraph block via the block inserter, then types text
-    /// into it.
-    private func typeInContent(_ text: String, webView: XCUIElement) {
-        // Open the block inserter from the WebView toolbar.
+    /// Opens the block inserter and inserts a block by name.
+    private func insertBlock(_ name: String, webView: XCUIElement) {
         let addBlockButton = webView.buttons["Add block"]
         XCTAssertTrue(addBlockButton.waitForExistence(timeout: 10), "Add block button not found in WebView toolbar")
         addBlockButton.tap()
 
-        // Select the Paragraph block from the native inserter sheet.
-        let paragraphOption = app.buttons["Paragraph"]
-        XCTAssertTrue(paragraphOption.waitForExistence(timeout: 10), "Paragraph block not found in block inserter")
-        paragraphOption.tap()
+        let blockOption = app.buttons[name]
+        XCTAssertTrue(blockOption.waitForExistence(timeout: 10), "\(name) block not found in block inserter")
+        blockOption.tap()
+    }
 
-        // The new paragraph block should appear as an editable text view.
-        let paragraphBlock = webView.textViews["Empty block; start writing or type forward slash to choose a block"]
-        XCTAssertTrue(paragraphBlock.waitForExistence(timeout: 10), "Paragraph block not found after insertion")
-        paragraphBlock.typeText(text)
+    /// Types text into the currently focused content block.
+    private func typeInContent(_ text: String, webView: XCUIElement) {
+        let block = webView.textViews["Empty block; start writing or type forward slash to choose a block"]
+        XCTAssertTrue(block.waitForExistence(timeout: 10), "Editable block not found in WebView")
+        block.typeText(text)
     }
 
     // MARK: - Editor Loading
@@ -115,7 +114,8 @@ final class EditorInteractionUITest: XCTestCase {
         // After typing in the title, undo should become enabled.
         XCTAssertTrue(undoButton.waitForEnabled(timeout: 10), "Undo should be enabled after typing in title")
 
-        // Type in the content paragraph block.
+        // Insert a Paragraph block and type in it.
+        insertBlock("Paragraph", webView: webView)
         typeInContent("World", webView: webView)
 
         // Undo should still be enabled after typing in content.
@@ -141,8 +141,9 @@ final class EditorInteractionUITest: XCTestCase {
     func testCodeEditorToggleWithContent() throws {
         let webView = try navigateToEditor()
 
-        // Type content into both the title and the paragraph block.
+        // Type content into the title, then insert a Paragraph and type in it.
         typeInTitle("Test Title", webView: webView)
+        insertBlock("Paragraph", webView: webView)
         typeInContent("Test content", webView: webView)
 
         // Open the overflow menu and switch to Code Editor.
@@ -180,18 +181,9 @@ final class EditorInteractionUITest: XCTestCase {
     func testInsertImageBlock() throws {
         let webView = try navigateToEditor()
 
-        // Tap the "Add block" button in the WebView's editor toolbar.
-        let addBlockButton = webView.buttons["Add block"]
-        XCTAssertTrue(addBlockButton.waitForExistence(timeout: 10), "Add block button not found in WebView toolbar")
-        addBlockButton.tap()
+        insertBlock("Image", webView: webView)
 
-        // The native block inserter sheet should appear with block options.
-        let imageBlock = app.buttons["Image"]
-        XCTAssertTrue(imageBlock.waitForExistence(timeout: 10), "Image block not found in block inserter")
-        imageBlock.tap()
-
-        // After selection, the inserter should dismiss and an Image block
-        // should appear in the editor. Look for the block's placeholder.
+        // After insertion, an Image block should appear in the editor.
         let imageBlockInEditor = webView.buttons["Upload"]
         XCTAssertTrue(
             imageBlockInEditor.waitForExistence(timeout: 10),
