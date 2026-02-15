@@ -66,4 +66,53 @@ final class EditorInteractionUITest: XCTestCase {
         // On a fresh editor, undo should be disabled.
         XCTAssertFalse(undoButton.isEnabled, "Undo should be disabled on a fresh editor")
     }
+
+    /// Typing in the editor enables undo; tapping undo enables redo.
+    ///
+    /// Exercises the full bridge round-trip:
+    /// 1. Type text → Gutenberg JS sends `onEditorHistoryChanged` with `hasUndo: true`
+    /// 2. Tap Undo  → native calls `undo()` on EditorViewController
+    /// 3. Gutenberg JS sends `onEditorHistoryChanged` with `hasRedo: true`
+    func testUndoRedoAfterTyping() throws {
+        let webView = try navigateToEditor()
+
+        let undoButton = app.buttons["Undo"]
+        let redoButton = app.buttons["Redo"]
+        guard undoButton.waitForExistence(timeout: 5),
+              redoButton.waitForExistence(timeout: 5) else {
+            XCTFail("Undo/Redo buttons not found")
+            return
+        }
+
+        // Precondition: both buttons are disabled on a fresh editor.
+        XCTAssertFalse(undoButton.isEnabled, "Undo should be disabled before typing")
+        XCTAssertFalse(redoButton.isEnabled, "Redo should be disabled before typing")
+
+        // Tap the title field inside the WebView to gain keyboard focus,
+        // then type some text.
+        let titleField = webView.textViews["Add title"]
+        XCTAssertTrue(titleField.waitForExistence(timeout: 10), "Title field not found in WebView")
+        titleField.tap()
+        titleField.typeText("Hello")
+
+        // After typing, the bridge should report undo history available.
+        let undoEnabled = undoButton.waitForEnabled(timeout: 10)
+        XCTAssertTrue(undoEnabled, "Undo should be enabled after typing")
+
+        // Tap undo — the bridge should now report redo history available.
+        undoButton.tap()
+
+        let redoEnabled = redoButton.waitForEnabled(timeout: 10)
+        XCTAssertTrue(redoEnabled, "Redo should be enabled after undoing")
+    }
+}
+
+extension XCUIElement {
+    /// Polls until `isEnabled` becomes `true` or the timeout expires.
+    func waitForEnabled(timeout: TimeInterval) -> Bool {
+        let predicate = NSPredicate(format: "isEnabled == true")
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: self)
+        let result = XCTWaiter.wait(for: [expectation], timeout: timeout)
+        return result == .completed
+    }
 }
