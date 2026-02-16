@@ -1,10 +1,10 @@
 diff --git a/node_modules/@wordpress/editor/package.json b/node_modules/@wordpress/editor/package.json
-index 3a66d82..43a3e7d 100644
+index 2a0fc01..b1a3b9b 100644
 --- a/node_modules/@wordpress/editor/package.json
 +++ b/node_modules/@wordpress/editor/package.json
-@@ -30,7 +30,8 @@
- 			"import": "./build-module/index.js",
- 			"require": "./build/index.js"
+@@ -38,7 +38,8 @@
+ 			"import": "./build-module/index.mjs",
+ 			"require": "./build/index.cjs"
  		},
 -		"./package.json": "./package.json"
 +		"./package.json": "./package.json",
