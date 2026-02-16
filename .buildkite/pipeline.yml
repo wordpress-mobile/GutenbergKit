@@ -7,9 +7,6 @@ env:
 steps:
     - label: ':react: Build React App'
       key: build-react
-      env:
-          L10N_BATCH_SIZE: '2'
-          L10N_BATCH_DELAY_MS: '5000'
       command: |
           make build REFRESH_L10N=1 REFRESH_JS_BUILD=1 STRICT_L10N=1
           tar -czf dist.tar.gz dist/
