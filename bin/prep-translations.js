@@ -63,6 +63,13 @@ const SUPPORTED_LOCALES = [
 	'zh-tw', // Chinese (Taiwan)
 ];
 
+const CONCURRENCY_LIMIT = parseInt( process.env.L10N_BATCH_SIZE, 10 ) || 5;
+const INTER_BATCH_DELAY_MS =
+	parseInt( process.env.L10N_BATCH_DELAY_MS, 10 ) || 2000;
+const MAX_RETRY_ATTEMPTS = parseInt( process.env.L10N_MAX_RETRIES, 10 ) || 5;
+const MAX_429_BACKOFF_MS =
+	parseInt( process.env.L10N_MAX_BACKOFF_MS, 10 ) || 60000;
+
 /**
  * Prepare translations for all supported locales.
  *
@@ -77,11 +84,20 @@ async function prepareTranslations( force = false ) {
 		info( 'Verifying translations...' );
 	}
 
-	// Download translations in batches to balance speed with server load
-	const CONCURRENCY_LIMIT = 10;
+	info(
+		`Translation config: batch=${ CONCURRENCY_LIMIT }, delay=${ INTER_BATCH_DELAY_MS }ms, retries=${ MAX_RETRY_ATTEMPTS }, maxBackoff=${ MAX_429_BACKOFF_MS }ms`
+	);
 
-	// Process locales in batches, fail early on first error
+	// Process locales in batches with delay between them
 	for ( let i = 0; i < SUPPORTED_LOCALES.length; i += CONCURRENCY_LIMIT ) {
+		// Delay between batches (not before the first)
+		if ( i > 0 ) {
+			debug( `Waiting ${ INTER_BATCH_DELAY_MS }ms before next batch...` );
+			await new Promise( ( resolve ) =>
+				setTimeout( resolve, INTER_BATCH_DELAY_MS )
+			);
+		}
+
 		const batch = SUPPORTED_LOCALES.slice( i, i + CONCURRENCY_LIMIT );
 		await Promise.all(
 			batch.map( ( locale ) => downloadWithRetry( locale, force ) )
@@ -92,31 +108,84 @@ async function prepareTranslations( force = false ) {
 }
 
 /**
- * Downloads translations with retry logic.
+ * Custom error for HTTP 429 responses, carrying the parsed Retry-After value.
+ */
+class RateLimitError extends Error {
+	/**
+	 * @param {string}      message    Error message.
+	 * @param {number|null} retryAfter Parsed Retry-After value in seconds, or null.
+	 */
+	constructor( message, retryAfter = null ) {
+		super( message );
+		this.name = 'RateLimitError';
+		this.retryAfter = retryAfter;
+	}
+}
+
+/**
+ * Parses the Retry-After header value.
  *
- * @param {string}  locale      The locale to download translations for.
- * @param {boolean} force       Whether to force download even if cache exists.
- * @param {number}  maxAttempts Maximum number of attempts (default: 3).
+ * Supports both delta-seconds ("120") and HTTP-date formats.
+ *
+ * @param {string|null} headerValue The Retry-After header value.
+ *
+ * @return {number|null} The delay in seconds, or null if missing/unparseable.
+ */
+function parseRetryAfter( headerValue ) {
+	if ( ! headerValue ) {
+		return null;
+	}
+
+	// Try delta-seconds first (e.g., "120")
+	const seconds = Number( headerValue );
+	if ( Number.isFinite( seconds ) && seconds >= 0 ) {
+		return seconds;
+	}
+
+	// Try HTTP-date format (e.g., "Wed, 21 Oct 2015 07:28:00 GMT")
+	const date = new Date( headerValue );
+	if ( ! isNaN( date.getTime() ) ) {
+		const delayMs = date.getTime() - Date.now();
+		return delayMs > 0 ? Math.ceil( delayMs / 1000 ) : 0;
+	}
+
+	return null;
+}
+
+/**
+ * Downloads translations with retry logic, including 429-aware backoff.
+ *
+ * @param {string}  locale The locale to download translations for.
+ * @param {boolean} force  Whether to force download even if cache exists.
  *
  * @return {Promise<void>} A promise that resolves when translations are downloaded.
  */
-async function downloadWithRetry( locale, force = false, maxAttempts = 3 ) {
+async function downloadWithRetry( locale, force = false ) {
 	let lastError;
 
-	for ( let attempt = 1; attempt <= maxAttempts; attempt++ ) {
+	for ( let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++ ) {
 		try {
 			await downloadTranslations( locale, force );
-			return; // Success - exit retry loop
+			return;
 		} catch ( err ) {
 			lastError = err;
 
-			if ( attempt < maxAttempts ) {
-				// Calculate backoff: 1s for first retry, 2s for second retry
-				const backoffMs = attempt * 1000;
+			if ( attempt < MAX_RETRY_ATTEMPTS ) {
+				const backoffMs = calculateBackoff( err, attempt );
+
+				if ( backoffMs === null ) {
+					error(
+						`Giving up on '${ locale }': 429 backoff would exceed ${ MAX_429_BACKOFF_MS }ms`
+					);
+					break;
+				}
+
 				info(
-					`Retrying download for '${ locale }' (attempt ${
+					`Retrying '${ locale }' (attempt ${
 						attempt + 1
-					}/${ maxAttempts }) in ${ backoffMs }ms...`
+					}/${ MAX_RETRY_ATTEMPTS }) in ${ Math.round(
+						backoffMs / 1000
+					) }s...`
 				);
 				await new Promise( ( resolve ) =>
 					setTimeout( resolve, backoffMs )
@@ -125,9 +194,46 @@ async function downloadWithRetry( locale, force = false, maxAttempts = 3 ) {
 		}
 	}
 
-	// All attempts failed
-	error( `Failed to download '${ locale }' after ${ maxAttempts } attempts` );
+	error(
+		`Failed to download '${ locale }' after ${ MAX_RETRY_ATTEMPTS } attempts`
+	);
 	throw lastError;
+}
+
+/**
+ * Calculates the backoff delay for a retry attempt.
+ *
+ * For 429 errors with Retry-After: uses the server-specified duration + jitter (0-1s).
+ * For 429 errors without Retry-After: exponential backoff (5s, 10s, 20s, 40s) + jitter (0-2s).
+ * For other errors: linear backoff (1s, 2s, 3s...).
+ *
+ * @param {Error}  err     The error from the previous attempt.
+ * @param {number} attempt The attempt number (1-based) that just failed.
+ *
+ * @return {number|null} Delay in milliseconds, or null if backoff would exceed the max.
+ */
+function calculateBackoff( err, attempt ) {
+	if ( err instanceof RateLimitError ) {
+		let backoffMs;
+
+		if ( err.retryAfter !== null ) {
+			// Server told us how long to wait — add small jitter
+			backoffMs = err.retryAfter * 1000 + Math.random() * 1000;
+		} else {
+			// No Retry-After: exponential backoff starting at 5s
+			backoffMs =
+				5000 * Math.pow( 2, attempt - 1 ) + Math.random() * 2000;
+		}
+
+		if ( backoffMs > MAX_429_BACKOFF_MS ) {
+			return null;
+		}
+
+		return backoffMs;
+	}
+
+	// Non-429 errors: linear backoff (1s, 2s, 3s...)
+	return attempt * 1000;
 }
 
 /**
@@ -151,6 +257,16 @@ async function downloadTranslations( locale, force = false ) {
 		const response = await fetch( url );
 
 		if ( ! response.ok ) {
+			if ( response.status === 429 ) {
+				const retryAfter = parseRetryAfter(
+					response.headers.get( 'retry-after' )
+				);
+				throw new RateLimitError(
+					`HTTP 429 Too Many Requests - ${ url }`,
+					retryAfter
+				);
+			}
+
 			throw new Error(
 				`HTTP ${ response.status } ${ response.statusText } - ${ url }`
 			);
@@ -176,6 +292,10 @@ async function downloadTranslations( locale, force = false ) {
 		fs.writeFileSync( outputPath, JSON.stringify( translations, null, 2 ) );
 		debug( `✓ Downloaded translations for ${ locale }` );
 	} catch ( err ) {
+		if ( err instanceof RateLimitError ) {
+			throw err;
+		}
+
 		// Re-throw with more context
 		throw new Error(
 			`Failed to download translations for ${ locale }: ${ err.message }`
