@@ -12,6 +12,8 @@ Existing patches should be described and justified here.
 -   Disable `stripExperimentalSettings` in the `BlockEditorProvider` component so that the Patterns and Media inserter tabs function.
 -   Allow setting popover props for the `Inserter` component, so we can improve the mobile screen reader experience by marking it as a modal dialog.
 -   Prevent the insertion point popover from appearing on touch devices in `InserterListItem`. The popover (triggered by `onMouseEnter`) disrupts tap/click events, requiring users to tap inserter items twice before they are inserted.
+-   Fix `PlainText` component crash caused by esbuild's `.mjs` CJS interop wrapping `react-autosize-textarea`'s default export as a module object instead of the actual React component. WordPress packages switched their build output from `.js` to `.mjs` starting in v15.11, which triggers Node-style interop in Vite's dependency pre-bundling.
+-   Add `./build-module/components/inserter/media-tab/*` and `./build-module/components/inserter/hooks/*` to the package's `exports` field to allow importing internal inserter modules used by the native inserter component. Note: Creating this patch required using `--exclude='^$'` due to a [patch-package limitation](https://github.com/ds300/patch-package/issues/250).
 
 ### `@wordpress/block-library`
 
