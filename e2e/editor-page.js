@@ -82,6 +82,66 @@ export default class EditorPage {
 	}
 
 	/**
+	 * Select all content in the currently focused block.
+	 */
+	async selectAll() {
+		await this.#page.keyboard.press( 'ControlOrMeta+a' );
+	}
+
+	/**
+	 * Open the link popover with Ctrl+K, type a URL, and submit.
+	 *
+	 * @param {string} url The URL to insert.
+	 */
+	async insertLink( url ) {
+		await this.#page.keyboard.press( 'ControlOrMeta+k' );
+
+		const urlInput = this.#page.getByRole( 'combobox', {
+			name: 'Search or type URL',
+		} );
+		await urlInput.waitFor( { state: 'visible' } );
+		await urlInput.fill( url );
+		await this.#page.keyboard.press( 'Enter' );
+	}
+
+	/**
+	 * Insert a block via the data store.
+	 *
+	 * @param {string} name  Block name (e.g. 'core/paragraph').
+	 * @param {Object} attrs Optional block attributes.
+	 */
+	async insertBlock( name, attrs = {} ) {
+		await this.#page.evaluate(
+			( { blockName, blockAttrs } ) => {
+				const block = window.wp.blocks.createBlock(
+					blockName,
+					blockAttrs
+				);
+				window.wp.data
+					.dispatch( 'core/block-editor' )
+					.insertBlock( block );
+			},
+			{ blockName: name, blockAttrs: attrs }
+		);
+	}
+
+	/**
+	 * Select a block by its index in the root block list.
+	 *
+	 * @param {number} index Zero-based block index.
+	 */
+	async selectBlock( index ) {
+		await this.#page.evaluate( ( idx ) => {
+			const blocks = window.wp.data
+				.select( 'core/block-editor' )
+				.getBlocks();
+			window.wp.data
+				.dispatch( 'core/block-editor' )
+				.selectBlock( blocks[ idx ].clientId );
+		}, index );
+	}
+
+	/**
 	 * Retrieve all blocks from the editor via the WP data store.
 	 *
 	 * @return {Promise<Array>} Array of block objects.
