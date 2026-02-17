@@ -89,12 +89,26 @@ export default class EditorPage {
 	}
 
 	/**
-	 * Open the link popover with Ctrl+K, type a URL, and submit.
+	 * Click the Bold toolbar button to toggle bold formatting.
+	 */
+	async clickBold() {
+		await this.#page.getByRole( 'button', { name: 'Bold' } ).click();
+	}
+
+	/**
+	 * Click the Italic toolbar button to toggle italic formatting.
+	 */
+	async clickItalic() {
+		await this.#page.getByRole( 'button', { name: 'Italic' } ).click();
+	}
+
+	/**
+	 * Open the link popover via the toolbar button, type a URL, and submit.
 	 *
 	 * @param {string} url The URL to insert.
 	 */
 	async insertLink( url ) {
-		await this.#page.keyboard.press( 'ControlOrMeta+k' );
+		await this.#page.getByRole( 'button', { name: 'Link' } ).click();
 
 		const urlInput = this.#page.getByRole( 'combobox', {
 			name: 'Search or type URL',

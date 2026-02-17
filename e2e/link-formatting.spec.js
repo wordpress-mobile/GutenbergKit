@@ -9,9 +9,7 @@ import { test, expect } from '@playwright/test';
 import EditorPage from './editor-page';
 
 test.describe( 'Link Formatting', () => {
-	test( 'should add a link to selected text via Ctrl+K', async ( {
-		page,
-	} ) => {
+	test( 'should add a link to selected text', async ( { page } ) => {
 		const editor = new EditorPage( page );
 		await editor.setup();
 
@@ -56,7 +54,7 @@ test.describe( 'Link Formatting', () => {
 		await editor.clickBlockAppender();
 		await page.keyboard.type( 'Test' );
 		await editor.selectAll();
-		await page.keyboard.press( 'ControlOrMeta+k' );
+		await page.getByRole( 'button', { name: 'Link' } ).click();
 
 		await expect(
 			page.getByRole( 'combobox', { name: 'Search or type URL' } )

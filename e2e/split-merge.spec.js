@@ -87,9 +87,9 @@ test.describe( 'Split and Merge Blocks', () => {
 
 		// Type "Hello " then bold "World".
 		await page.keyboard.type( 'Hello ' );
-		await page.keyboard.press( 'ControlOrMeta+b' );
+		await editor.clickBold();
 		await page.keyboard.type( 'World' );
-		await page.keyboard.press( 'ControlOrMeta+b' );
+		await editor.clickBold();
 
 		// Split between "Hello " and "World".
 		await editor.moveCaretTo( 6 );

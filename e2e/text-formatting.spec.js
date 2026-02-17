@@ -27,8 +27,8 @@ test.describe( 'Text Formatting', () => {
 
 		await editor.clickBlockAppender();
 		await page.keyboard.type( 'Bold text' );
-		await page.keyboard.press( 'ControlOrMeta+a' );
-		await page.keyboard.press( 'ControlOrMeta+b' );
+		await editor.selectAll();
+		await editor.clickBold();
 
 		const blocks = await editor.getBlocks();
 		expect( blocks[ 0 ].attributes.content ).toBe(
@@ -42,8 +42,8 @@ test.describe( 'Text Formatting', () => {
 
 		await editor.clickBlockAppender();
 		await page.keyboard.type( 'Italic text' );
-		await page.keyboard.press( 'ControlOrMeta+a' );
-		await page.keyboard.press( 'ControlOrMeta+i' );
+		await editor.selectAll();
+		await editor.clickItalic();
 
 		const blocks = await editor.getBlocks();
 		expect( blocks[ 0 ].attributes.content ).toBe( '<em>Italic text</em>' );
@@ -57,9 +57,9 @@ test.describe( 'Text Formatting', () => {
 
 		await editor.clickBlockAppender();
 		await page.keyboard.type( 'Styled text' );
-		await page.keyboard.press( 'ControlOrMeta+a' );
-		await page.keyboard.press( 'ControlOrMeta+b' );
-		await page.keyboard.press( 'ControlOrMeta+i' );
+		await editor.selectAll();
+		await editor.clickBold();
+		await editor.clickItalic();
 
 		const blocks = await editor.getBlocks();
 		expect( blocks[ 0 ].attributes.content ).toBe(
