@@ -12,7 +12,7 @@ export default defineConfig( {
 	timeout: 60_000,
 	reporter: process.env.CI ? 'list' : 'html',
 	use: {
-		baseURL: 'http://localhost:5173',
+		baseURL: 'http://localhost:4173',
 		actionTimeout: 10_000,
 		trace: 'on-first-retry',
 	},
@@ -23,8 +23,8 @@ export default defineConfig( {
 		},
 	],
 	webServer: {
-		command: 'npm run dev',
-		url: 'http://localhost:5173',
+		command: 'npm run preview',
+		url: 'http://localhost:4173',
 		reuseExistingServer: true,
 		timeout: 30_000,
 	},

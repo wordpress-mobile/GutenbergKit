@@ -24,7 +24,11 @@ steps:
       plugins: *plugins
 
     - label: ':performing_arts: Test E2E'
-      command: make test-e2e
+      depends_on: build-react
+      command: |
+          buildkite-agent artifact download dist.tar.gz .
+          tar -xzf dist.tar.gz
+          make test-e2e
       plugins: *plugins
 
     - label: ':android: Publish Android Library'
