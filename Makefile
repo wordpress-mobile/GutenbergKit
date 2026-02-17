@@ -160,11 +160,21 @@ lint-swift: ## Lint Swift code
 ################################################################################
 
 .PHONY: test-e2e
-test-e2e: e2e-dependencies build ## Run end-to-end tests
+test-e2e: e2e-dependencies ## Run end-to-end tests
+	@if [ ! -d "dist" ]; then \
+		$(MAKE) build; \
+	else \
+		echo "--- :white_check_mark: Using existing build. Use 'make build REFRESH_JS_BUILD=1' to rebuild."; \
+	fi
 	npm run test:e2e
 
 .PHONY: test-e2e-ui
-test-e2e-ui: e2e-dependencies build ## Run end-to-end tests in UI mode
+test-e2e-ui: e2e-dependencies ## Run end-to-end tests in UI mode
+	@if [ ! -d "dist" ]; then \
+		$(MAKE) build; \
+	else \
+		echo "--- :white_check_mark: Using existing build. Use 'make build REFRESH_JS_BUILD=1' to rebuild."; \
+	fi
 	npm run test:e2e:ui
 
 .PHONY: test-js
