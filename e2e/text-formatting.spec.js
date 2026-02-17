@@ -6,15 +6,13 @@ import { test, expect } from '@playwright/test';
 /**
  * Internal dependencies
  */
-import { setupEditor, getBlocks } from './editor-setup';
+import { setupEditor, getBlocks, clickBlockAppender } from './editor-setup';
 
 test.describe( 'Text Formatting', () => {
 	test( 'should type text into a new paragraph block', async ( { page } ) => {
 		await setupEditor( page );
 
-		await page
-			.locator( 'button.gutenberg-kit-default-block-appender' )
-			.click();
+		await clickBlockAppender( page );
 		await page.keyboard.type( 'Hello World' );
 
 		const blocks = await getBlocks( page );
@@ -25,9 +23,7 @@ test.describe( 'Text Formatting', () => {
 	test( 'should apply bold formatting', async ( { page } ) => {
 		await setupEditor( page );
 
-		await page
-			.locator( 'button.gutenberg-kit-default-block-appender' )
-			.click();
+		await clickBlockAppender( page );
 		await page.keyboard.type( 'Bold text' );
 		await page.keyboard.press( 'ControlOrMeta+a' );
 		await page.keyboard.press( 'ControlOrMeta+b' );
@@ -41,9 +37,7 @@ test.describe( 'Text Formatting', () => {
 	test( 'should apply italic formatting', async ( { page } ) => {
 		await setupEditor( page );
 
-		await page
-			.locator( 'button.gutenberg-kit-default-block-appender' )
-			.click();
+		await clickBlockAppender( page );
 		await page.keyboard.type( 'Italic text' );
 		await page.keyboard.press( 'ControlOrMeta+a' );
 		await page.keyboard.press( 'ControlOrMeta+i' );
@@ -57,18 +51,15 @@ test.describe( 'Text Formatting', () => {
 	} ) => {
 		await setupEditor( page );
 
-		await page
-			.locator( 'button.gutenberg-kit-default-block-appender' )
-			.click();
+		await clickBlockAppender( page );
 		await page.keyboard.type( 'Styled text' );
 		await page.keyboard.press( 'ControlOrMeta+a' );
 		await page.keyboard.press( 'ControlOrMeta+b' );
 		await page.keyboard.press( 'ControlOrMeta+i' );
 
 		const blocks = await getBlocks( page );
-		const content = blocks[ 0 ].attributes.content;
-		expect( content ).toContain( '<strong>' );
-		expect( content ).toContain( '<em>' );
-		expect( content ).toContain( 'Styled text' );
+		expect( blocks[ 0 ].attributes.content ).toBe(
+			'<strong><em>Styled text</em></strong>'
+		);
 	} );
 } );
