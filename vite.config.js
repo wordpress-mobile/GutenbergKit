@@ -53,6 +53,15 @@ function wordPressExternals() {
 				return null;
 			}
 
+			// Skip files that set up WordPress globals — they must import
+			// the actual modules from node_modules, not read from window.wp.
+			if (
+				id.includes( 'wordpress-globals' ) ||
+				id.includes( 'wordpress-i18n' )
+			) {
+				return null;
+			}
+
 			const magicString = new MagicString( code );
 			let hasReplacements = false;
 
