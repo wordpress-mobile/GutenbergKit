@@ -6,13 +6,14 @@ import { test, expect } from '@playwright/test';
 /**
  * Internal dependencies
  */
-import { setupEditor, getBlocks } from './editor-setup';
+import EditorPage from './editor-page';
 
 test.describe( 'Shortcode Block', () => {
 	test( 'should insert a shortcode block and type a shortcode string', async ( {
 		page,
 	} ) => {
-		await setupEditor( page );
+		const editor = new EditorPage( page );
+		await editor.setup();
 
 		// Insert a Shortcode block via the data store.
 		await page.evaluate( () => {
@@ -30,7 +31,7 @@ test.describe( 'Shortcode Block', () => {
 		await shortcodeInput.fill( '[display-posts orderby="date"]' );
 
 		// Verify the block data in the store.
-		const blocks = await getBlocks( page );
+		const blocks = await editor.getBlocks();
 		expect( blocks ).toHaveLength( 1 );
 		expect( blocks[ 0 ].name ).toBe( 'core/shortcode' );
 		expect( blocks[ 0 ].attributes.text ).toBe(

@@ -6,7 +6,7 @@ import { test, expect } from '@playwright/test';
 /**
  * Internal dependencies
  */
-import { setupEditor, getBlocks } from './editor-setup';
+import EditorPage from './editor-page';
 
 test.describe( 'Editor Error Handling', () => {
 	test( 'should handle raw HTML without block delimiters gracefully', async ( {
@@ -15,7 +15,8 @@ test.describe( 'Editor Error Handling', () => {
 		// Raw HTML without Gutenberg block comment delimiters maps to the
 		// Classic Editor (core/freeform) block. GutenbergKit does not register
 		// that block, so Gutenberg shows it as core/missing instead.
-		await setupEditor( page, {
+		const editor = new EditorPage( page );
+		await editor.setup( {
 			post: {
 				id: 1,
 				type: 'post',
@@ -25,7 +26,7 @@ test.describe( 'Editor Error Handling', () => {
 			},
 		} );
 
-		const blocks = await getBlocks( page );
+		const blocks = await editor.getBlocks();
 		expect( blocks ).toHaveLength( 1 );
 		expect( blocks[ 0 ].name ).toBe( 'core/missing' );
 	} );
@@ -52,7 +53,8 @@ test.describe( 'Editor Error Handling', () => {
 	test( 'should convert unregistered block types to missing blocks', async ( {
 		page,
 	} ) => {
-		await setupEditor( page, {
+		const editor = new EditorPage( page );
+		await editor.setup( {
 			post: {
 				id: 1,
 				type: 'post',
@@ -63,7 +65,7 @@ test.describe( 'Editor Error Handling', () => {
 			},
 		} );
 
-		const blocks = await getBlocks( page );
+		const blocks = await editor.getBlocks();
 		expect( blocks ).toHaveLength( 1 );
 		expect( blocks[ 0 ].name ).toBe( 'core/missing' );
 		expect( blocks[ 0 ].attributes.originalName ).toBe(
@@ -80,7 +82,8 @@ test.describe( 'Editor Error Handling', () => {
 	} ) => {
 		// Enable plugins without providing API endpoints. This causes
 		// fetchEditorAssets to fail, resulting in the plugin load notice.
-		await setupEditor( page, {
+		const editor = new EditorPage( page );
+		await editor.setup( {
 			post: {
 				id: 1,
 				type: 'post',

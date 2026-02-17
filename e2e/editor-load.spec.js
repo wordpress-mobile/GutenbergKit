@@ -6,13 +6,14 @@ import { test, expect } from '@playwright/test';
 /**
  * Internal dependencies
  */
-import { setupEditor, getBlocks } from './editor-setup';
+import EditorPage from './editor-page';
 
 test.describe( 'Editor Load', () => {
 	test( 'should load the editor and reach ready state', async ( {
 		page,
 	} ) => {
-		await setupEditor( page );
+		const editor = new EditorPage( page );
+		await editor.setup();
 
 		await expect(
 			page.locator( '.gutenberg-kit-visual-editor' )
@@ -38,9 +39,10 @@ test.describe( 'Editor Load', () => {
 	test( 'should display an empty editor with no initial content', async ( {
 		page,
 	} ) => {
-		await setupEditor( page );
+		const editor = new EditorPage( page );
+		await editor.setup();
 
-		const blocks = await getBlocks( page );
+		const blocks = await editor.getBlocks();
 		expect( blocks ).toHaveLength( 0 );
 	} );
 
@@ -48,7 +50,8 @@ test.describe( 'Editor Load', () => {
 		const contentHtml =
 			'<!-- wp:paragraph -->\n<p>Hello from E2E</p>\n<!-- /wp:paragraph -->';
 
-		await setupEditor( page, {
+		const editor = new EditorPage( page );
+		await editor.setup( {
 			post: {
 				id: 1,
 				type: 'post',
@@ -58,7 +61,7 @@ test.describe( 'Editor Load', () => {
 			},
 		} );
 
-		const blocks = await getBlocks( page );
+		const blocks = await editor.getBlocks();
 		expect( blocks ).toHaveLength( 1 );
 		expect( blocks[ 0 ].name ).toBe( 'core/paragraph' );
 
