@@ -57,7 +57,7 @@ export async function setupEditor( page, gbkit = DEFAULT_GBKIT ) {
  * @param {import('@playwright/test').Page} page Playwright page object.
  */
 export async function clickBlockAppender( page ) {
-	await page.locator( 'button.gutenberg-kit-default-block-appender' ).click();
+	await page.getByRole( 'button', { name: 'Add paragraph block' } ).click();
 }
 
 /**

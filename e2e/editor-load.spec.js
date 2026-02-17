@@ -31,7 +31,7 @@ test.describe( 'Editor Load', () => {
 		).toBeVisible();
 
 		await expect(
-			page.locator( 'button.gutenberg-kit-default-block-appender' )
+			page.getByRole( 'button', { name: 'Add paragraph block' } )
 		).toBeAttached();
 	} );
 
