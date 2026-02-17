@@ -9,7 +9,7 @@ struct EditorAssetLibraryTests {
 
     static var testConfiguration: EditorConfiguration {
         EditorConfigurationBuilder(
-            postType: "post",
+            postType: .post,
             siteURL: URL(string: "https://example.com")!,
             siteApiRoot: URL(string: "https://example.com/wp-json")!,
         )
@@ -20,7 +20,7 @@ struct EditorAssetLibraryTests {
 
     static var minimalConfiguration: EditorConfiguration {
         EditorConfigurationBuilder(
-            postType: "post",
+            postType: .post,
             siteURL: URL(string: "https://example.com")!,
             siteApiRoot: URL(string: "https://example.com/wp-json")!
         )

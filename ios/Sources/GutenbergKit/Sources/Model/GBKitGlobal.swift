@@ -15,6 +15,12 @@ public struct GBKitGlobal: Sendable, Codable {
         /// The post type (e.g., "post", "page").
         let type: String
 
+        /// The REST API base path for this post type (e.g., "posts", "pages", "products").
+        let restBase: String
+
+        /// The REST API namespace for this post type (e.g., "wp/v2").
+        let restNamespace: String
+
         /// The post status (e.g., "draft", "publish", "pending").
         let status: String
 
@@ -99,7 +105,9 @@ public struct GBKitGlobal: Sendable, Codable {
         self.locale = configuration.locale
         self.post = Post(
             id: configuration.postID ?? -1,
-            type: configuration.postType,
+            type: configuration.postType.postType,
+            restBase: configuration.postType.restBase,
+            restNamespace: configuration.postType.restNamespace,
             status: configuration.postStatus,
             title: configuration.escapedTitle,
             content: configuration.escapedContent

@@ -237,12 +237,14 @@ export function getGBKit() {
 
 /**
  * @typedef {Object} Post
- * @property {string} [title]   The title of the post.
- * @property {string} [content] The content of the post.
- * @property {string} type      The type of the post.
- * @property {number} id        The ID of the post.
- * @property {number} [author]  The author ID of the post.
- * @property {string} [status]  The status of the post.
+ * @property {string} [title]       The title of the post.
+ * @property {string} [content]     The content of the post.
+ * @property {string} type          The type of the post.
+ * @property {string} restBase      The REST API base path for this post type.
+ * @property {string} restNamespace The REST API namespace for this post type.
+ * @property {number} id            The ID of the post.
+ * @property {number} [author]      The author ID of the post.
+ * @property {string} [status]      The status of the post.
  */
 
 /**
@@ -301,6 +303,8 @@ export async function getPost() {
 		return {
 			id: post?.id ?? -1,
 			type: post?.type || 'post',
+			restBase: post?.restBase || 'posts',
+			restNamespace: post?.restNamespace || 'wp/v2',
 			status: post?.status || 'draft',
 			title: { raw: hostContent.title },
 			content: { raw: hostContent.content },
@@ -312,6 +316,8 @@ export async function getPost() {
 		return {
 			id: post.id,
 			type: post.type || 'post',
+			restBase: post.restBase || 'posts',
+			restNamespace: post.restNamespace || 'wp/v2',
 			status: post.status || 'draft',
 			title: { raw: decodeURIComponent( post.title ) },
 			content: { raw: decodeURIComponent( post.content ) },
@@ -322,6 +328,8 @@ export async function getPost() {
 	return {
 		id: -1,
 		type: 'post',
+		restBase: 'posts',
+		restNamespace: 'wp/v2',
 		status: 'draft',
 		title: { raw: '' },
 		content: { raw: '' },

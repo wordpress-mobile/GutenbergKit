@@ -27,7 +27,7 @@ struct EditorPreloadListTests {
     let preloadList = EditorPreloadList(
       postID: 42,
       postData: postData,
-      postType: "post",
+      postType: .post,
       postTypeData: makeResponse(),
       postTypesData: makeResponse(),
       activeThemeData: makeResponse(),
@@ -41,13 +41,13 @@ struct EditorPreloadListTests {
   @Test("initializes with custom post type")
   func initializesWithCustomPostType() {
     let preloadList = EditorPreloadList(
-      postType: "page",
+      postType: .page,
       postTypeData: makeResponse(),
       postTypesData: makeResponse(),
       activeThemeData: makeResponse(),
       settingsOptionsData: makeResponse()
     )
-    #expect(preloadList.postType == "page")
+    #expect(preloadList.postType == .page)
   }
 
   // MARK: - build(formatted:) Exact Output Tests
@@ -55,7 +55,7 @@ struct EditorPreloadListTests {
   @Test("build produces exact JSON for post type")
   func buildProducesExactJsonForPostType() throws {
     let preloadList = EditorPreloadList(
-      postType: "post",
+      postType: .post,
       postTypeData: makeResponse(data: #"{"slug":"post"}"#),
       postTypesData: makeResponse(data: "{}"),
       activeThemeData: makeResponse(data: "[]"),
@@ -70,7 +70,7 @@ struct EditorPreloadListTests {
   @Test("build produces exact JSON for page type")
   func buildProducesExactJsonForPageType() throws {
     let preloadList = EditorPreloadList(
-      postType: "page",
+      postType: .page,
       postTypeData: makeResponse(data: #"{"slug":"page"}"#),
       postTypesData: makeResponse(data: "{}"),
       activeThemeData: makeResponse(data: "[]"),
@@ -87,7 +87,7 @@ struct EditorPreloadListTests {
     let preloadList = EditorPreloadList(
       postID: 123,
       postData: makeResponse(data: #"{"id":123,"title":"Test"}"#),
-      postType: "post",
+      postType: .post,
       postTypeData: makeResponse(data: "{}"),
       postTypesData: makeResponse(data: "{}"),
       activeThemeData: makeResponse(data: "[]"),
@@ -103,7 +103,7 @@ struct EditorPreloadListTests {
   func buildProducesExactJsonWithAcceptHeader() throws {
     let headers: EditorHTTPHeaders = ["Accept": "application/json"]
     let preloadList = EditorPreloadList(
-      postType: "post",
+      postType: .post,
       postTypeData: makeResponse(data: "{}", headers: headers),
       postTypesData: makeResponse(data: "{}"),
       activeThemeData: makeResponse(data: "[]"),
@@ -119,7 +119,7 @@ struct EditorPreloadListTests {
   func buildProducesExactJsonWithLinkHeader() throws {
     let headers: EditorHTTPHeaders = ["Link": #"<https://example.com>; rel="next""#]
     let preloadList = EditorPreloadList(
-      postType: "post",
+      postType: .post,
       postTypeData: makeResponse(data: "{}", headers: headers),
       postTypesData: makeResponse(data: "{}"),
       activeThemeData: makeResponse(data: "[]"),
@@ -137,7 +137,7 @@ struct EditorPreloadListTests {
       "Link": "<https://example.com>", "Accept": "application/json"
     ]
     let preloadList = EditorPreloadList(
-      postType: "post",
+      postType: .post,
       postTypeData: makeResponse(data: "{}", headers: headers),
       postTypesData: makeResponse(data: "{}"),
       activeThemeData: makeResponse(data: "[]"),
@@ -154,7 +154,7 @@ struct EditorPreloadListTests {
     let preloadList = EditorPreloadList(
       postID: nil,
       postData: nil,
-      postType: "post",
+      postType: .post,
       postTypeData: makeResponse(),
       postTypesData: makeResponse(),
       activeThemeData: makeResponse(),
@@ -171,7 +171,7 @@ struct EditorPreloadListTests {
     let preloadList = EditorPreloadList(
       postID: 42,
       postData: nil,
-      postType: "post",
+      postType: .post,
       postTypeData: makeResponse(),
       postTypesData: makeResponse(),
       activeThemeData: makeResponse(),
@@ -185,8 +185,9 @@ struct EditorPreloadListTests {
 
   @Test("build produces exact JSON for custom_post_type")
   func buildProducesExactJsonForCustomPostType() throws {
+    let customPostType = PostTypeDetails(postType: "custom_post_type", restBase: "custom_post_type")
     let preloadList = EditorPreloadList(
-      postType: "custom_post_type",
+      postType: customPostType,
       postTypeData: makeResponse(),
       postTypesData: makeResponse(),
       activeThemeData: makeResponse(),
@@ -203,7 +204,7 @@ struct EditorPreloadListTests {
   @Test("build(formatted: false) returns valid JSON string")
   func buildUnformattedReturnsValidJSON() throws {
     let preloadList = EditorPreloadList(
-      postType: "post",
+      postType: .post,
       postTypeData: makeResponse(data: #"{"slug":"post"}"#),
       postTypesData: makeResponse(data: "{}"),
       activeThemeData: makeResponse(data: "[]"),
@@ -218,7 +219,7 @@ struct EditorPreloadListTests {
   @Test("build(formatted: true) returns valid JSON string")
   func buildFormattedReturnsValidJSON() throws {
     let preloadList = EditorPreloadList(
-      postType: "post",
+      postType: .post,
       postTypeData: makeResponse(data: #"{"slug":"post"}"#),
       postTypesData: makeResponse(data: "{}"),
       activeThemeData: makeResponse(data: "[]"),
@@ -233,7 +234,7 @@ struct EditorPreloadListTests {
   @Test("build(formatted: true) produces pretty-printed JSON")
   func buildFormattedProducesPrettyPrintedJSON() throws {
     let preloadList = EditorPreloadList(
-      postType: "post",
+      postType: .post,
       postTypeData: makeResponse(data: "{}"),
       postTypesData: makeResponse(data: "{}"),
       activeThemeData: makeResponse(data: "[]"),
@@ -287,7 +288,7 @@ struct EditorPreloadListTests {
     let preloadList = EditorPreloadList(
       postID: 123,
       postData: makeResponse(data: #"{"id":123,"title":"Test"}"#),
-      postType: "post",
+      postType: .post,
       postTypeData: makeResponse(data: #"{"slug":"post"}"#),
       postTypesData: makeResponse(data: "{}"),
       activeThemeData: makeResponse(data: "[]"),
@@ -308,7 +309,7 @@ struct EditorPreloadListTests {
     let preloadList = EditorPreloadList(
       postID: 123,
       postData: makeResponse(data: #"{"id":123,"title":"Test"}"#),
-      postType: "post",
+      postType: .post,
       postTypeData: makeResponse(data: #"{"slug":"post"}"#),
       postTypesData: makeResponse(data: "{}"),
       activeThemeData: makeResponse(data: "[]"),
@@ -330,7 +331,7 @@ struct EditorPreloadListTests {
       "Accept": "application/json", "Content-Type": "application/json"
     ]
     let preloadList = EditorPreloadList(
-      postType: "post",
+      postType: .post,
       postTypeData: makeResponse(headers: headers),
       postTypesData: makeResponse(),
       activeThemeData: makeResponse(),
@@ -345,7 +346,7 @@ struct EditorPreloadListTests {
   func filtersOutCustomHeader() {
     let headers: EditorHTTPHeaders = ["Accept": "application/json", "X-Custom": "value"]
     let preloadList = EditorPreloadList(
-      postType: "post",
+      postType: .post,
       postTypeData: makeResponse(headers: headers),
       postTypesData: makeResponse(),
       activeThemeData: makeResponse(),
@@ -364,7 +365,7 @@ struct EditorPreloadListTests {
     let preloadList = EditorPreloadList(
       postID: 1,
       postData: makeResponse(headers: headers),
-      postType: "post",
+      postType: .post,
       postTypeData: makeResponse(),
       postTypesData: makeResponse(),
       activeThemeData: makeResponse(),
@@ -380,14 +381,14 @@ struct EditorPreloadListTests {
   func equalPreloadListsAreEqual() {
     let response = makeResponse(data: #"{"test":true}"#)
     let preloadList1 = EditorPreloadList(
-      postType: "post",
+      postType: .post,
       postTypeData: response,
       postTypesData: response,
       activeThemeData: response,
       settingsOptionsData: response
     )
     let preloadList2 = EditorPreloadList(
-      postType: "post",
+      postType: .post,
       postTypeData: response,
       postTypesData: response,
       activeThemeData: response,
@@ -401,14 +402,14 @@ struct EditorPreloadListTests {
   func differentPostTypesAreNotEqual() {
     let response = makeResponse()
     let preloadList1 = EditorPreloadList(
-      postType: "post",
+      postType: .post,
       postTypeData: response,
       postTypesData: response,
       activeThemeData: response,
       settingsOptionsData: response
     )
     let preloadList2 = EditorPreloadList(
-      postType: "page",
+      postType: .page,
       postTypeData: response,
       postTypesData: response,
       activeThemeData: response,
@@ -424,7 +425,7 @@ struct EditorPreloadListTests {
     let preloadList1 = EditorPreloadList(
       postID: 1,
       postData: response,
-      postType: "post",
+      postType: .post,
       postTypeData: response,
       postTypesData: response,
       activeThemeData: response,
@@ -433,7 +434,7 @@ struct EditorPreloadListTests {
     let preloadList2 = EditorPreloadList(
       postID: 2,
       postData: response,
-      postType: "post",
+      postType: .post,
       postTypeData: response,
       postTypesData: response,
       activeThemeData: response,

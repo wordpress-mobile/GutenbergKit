@@ -12,8 +12,8 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
   public let content: String
   /// ID of the post being edited
   public let postID: Int?
-  /// Type of the post being edited (e.g., "post", "page")
-  public let postType: String
+  /// Details about the post type being edited, including REST API configuration
+  public let postType: PostTypeDetails
   /// Status of the post being edited (e.g., "draft", "publish", "pending")
   public let postStatus: String
   /// Toggles application of theme styles
@@ -56,7 +56,7 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
     title: String,
     content: String,
     postID: Int?,
-    postType: String,
+    postType: PostTypeDetails,
     postStatus: String,
     shouldUseThemeStyles: Bool,
     shouldUsePlugins: Bool,
@@ -144,7 +144,7 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
 /// This builder provides a fluent API for setting configuration options:
 ///
 /// ```swift
-/// let config = EditorConfigurationBuilder(postType: "post", siteURL: siteURL, siteApiRoot: apiRoot)
+/// let config = EditorConfigurationBuilder(postType: .post, siteURL: siteURL, siteApiRoot: apiRoot)
 ///     .setTitle("Hello World")
 ///     .setContent("<!-- wp:paragraph --><p>Content</p><!-- /wp:paragraph -->")
 ///     .setShouldUseThemeStyles(true)
@@ -154,7 +154,7 @@ public struct EditorConfigurationBuilder {
   private var title: String
   private var content: String
   private var postID: Int?
-  private var postType: String
+  private var postType: PostTypeDetails
   private var postStatus: String
   private var shouldUseThemeStyles: Bool
   private var shouldUsePlugins: Bool
@@ -177,7 +177,7 @@ public struct EditorConfigurationBuilder {
     title: String = "",
     content: String = "",
     postID: Int? = nil,
-    postType: String,
+    postType: PostTypeDetails,
     postStatus: String = "draft",
     shouldUseThemeStyles: Bool = false,
     shouldUsePlugins: Bool = false,
@@ -267,7 +267,7 @@ public struct EditorConfigurationBuilder {
     return copy
   }
 
-  public func setPostType(_ type: String) -> EditorConfigurationBuilder {
+  public func setPostType(_ type: PostTypeDetails) -> EditorConfigurationBuilder {
     var copy = self
     copy.postType = type
     return copy

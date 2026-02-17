@@ -18,6 +18,8 @@ struct SitePreparationView: View {
         Group {
             if let configuration = self.viewModel.editorConfiguration {
                 loadedView(configuration: configuration)
+            } else if let error = viewModel.error {
+                Text(error.localizedDescription)
             } else {
                 ProgressView("Loading Site Configuration")
             }
@@ -51,10 +53,32 @@ struct SitePreparationView: View {
                 Toggle("Enable Native Inserter", isOn: $viewModel.enableNativeInserter)
                 Toggle("Enable Network Logging", isOn: $viewModel.enableNetworkLogging)
 
-                // TODO: Loading this from the server would allow us to validate Custom Post Type support
-                Picker("Post Type", selection: $viewModel.postType) {
-                    Text("Post").tag("post")
-                    Text("Page").tag("page")
+                if viewModel.postTypes.isEmpty {
+                    HStack {
+                        Text("Post Type")
+                        Spacer()
+                        ProgressView()
+                    }
+                } else {
+                    Picker("Post Type", selection: $viewModel.selectedPostTypeDetails) {
+                        ForEach(viewModel.postTypes, id: \.self) { postType in
+                            Text(postType.name).tag(postType)
+                        }
+                    }
+
+                    NavigationLink {
+                        if let client = viewModel.client,
+                           let configuration = viewModel.editorConfiguration {
+                            PostsListView(
+                                client: client,
+                                postTypeDetails: viewModel.selectedPostTypeDetails,
+                                editorConfiguration: configuration,
+                                editorDependencies: viewModel.editorDependencies
+                            )
+                        }
+                    } label: {
+                        Text("Browse")
+                    }
                 }
             }
 
@@ -111,17 +135,41 @@ struct SitePreparationView: View {
 @Observable
 class SitePreparationViewModel {
 
-    var enableNativeInserter: Bool = true
+    var enableNativeInserter: Bool {
+        get { editorConfiguration?.isNativeInserterEnabled ?? true }
+        set {
+            guard let config = editorConfiguration else { return }
+            editorConfiguration = config.toBuilder()
+                .setNativeInserterEnabled(newValue)
+                .build()
+        }
+    }
 
-    var enableNetworkLogging: Bool = false
+    var enableNetworkLogging: Bool {
+        get { editorConfiguration?.enableNetworkLogging ?? false }
+        set {
+            guard let config = editorConfiguration else { return }
+            editorConfiguration = config.toBuilder()
+                .setEnableNetworkLogging(newValue)
+                .build()
+        }
+    }
 
-    var postType: String = "post"
+    var postTypes: [PostTypeDetails] = []
+
+    var selectedPostTypeDetails: PostTypeDetails {
+        get { editorConfiguration?.postType ?? .post }
+        set {
+            guard let config = editorConfiguration else { return }
+            editorConfiguration = config.toBuilder()
+                .setPostType(newValue)
+                .build()
+            editorDependencies = nil
+        }
+    }
 
     var cacheBundleCount: Int?
 
-    var isPreparing: Bool = false
-
-    var isPrepared: Bool = false
 
     var error: Error?
 
@@ -135,6 +183,8 @@ class SitePreparationViewModel {
 
     var editorDependencies: EditorDependencies?
 
+    var client: WordPressAPI?
+
     private var taskHandle: Task<Void, Never>?
 
     init(configurationItem: ConfigurationItem) {
@@ -147,15 +197,33 @@ class SitePreparationViewModel {
             do {
                 switch configurationItem {
                 case .bundledEditor:
-                    self.editorConfiguration = .bundled
+                    self.editorConfiguration = Self.applyDemoAppDefaults(to: .bundled)
+                    self.postTypes = [.post, .page]
                 case .editorConfiguration(let siteDetails):
+                    let parsedApiRoot = try ParsedUrl.parse(input: siteDetails.siteApiRoot)
+                    let configuration = URLSessionConfiguration.ephemeral
+                    configuration.httpAdditionalHeaders = ["Authorization": siteDetails.authHeader]
+                    let client = WordPressAPI(
+                        urlSession: .init(configuration: configuration),
+                        apiRootUrl: parsedApiRoot,
+                        authentication: .none,
+                    )
+                    self.client = client
+
+                    try await self.loadPostTypes()
                     let newConfiguration = try await self.loadConfiguration(for: siteDetails)
-                    self.editorConfiguration = newConfiguration
+                    self.editorConfiguration = Self.applyDemoAppDefaults(to: newConfiguration)
                 }
             } catch {
                 self.error = error
             }
         }
+    }
+
+    private static func applyDemoAppDefaults(to configuration: EditorConfiguration) -> EditorConfiguration {
+        configuration.toBuilder()
+            .setNativeInserterEnabled(true)
+            .build()
     }
 
     /// Prepares the editor by caching all resources and preparing an `EditorDependencies` object to inject into the editor.
@@ -166,7 +234,7 @@ class SitePreparationViewModel {
             preconditionFailure("Unable to prepare editor without editor configuration – the UI should prevent this")
         }
 
-        let cacheInterval: TimeInterval = 86_400  // Cache for one day
+        let cacheInterval: TimeInterval = 86_400 // Cache for one day
         self.prepareEditor(with: EditorService(configuration: configuration, cachePolicy: .maxAge(cacheInterval)))
     }
 
@@ -243,22 +311,16 @@ class SitePreparationViewModel {
 
     @MainActor
     private func loadConfiguration(for config: ConfiguredEditor) async throws -> EditorConfiguration {
-        let parsedApiRoot = try ParsedUrl.parse(input: config.siteApiRoot)
-        let client = WordPressAPI(
-            urlSession: .shared,
-            apiRootUrl: parsedApiRoot,
-            authentication: .authorizationHeader(token: config.authHeader)
-        )
 
-        let apiRoot = try await client.apiRoot.get().data
+        let apiRoot = try await client!.apiRoot.get().data
 
         let canUsePlugins = apiRoot.hasRoute(route: "/wpcom/v2/editor-assets")
         let canUseEditorStyles = apiRoot.hasRoute(route: "/wp-block-editor/v1/settings")
 
         return EditorConfigurationBuilder(
-            postType: "post",
+            postType: selectedPostTypeDetails,
             siteURL: URL(string: apiRoot.siteUrlString())!,
-            siteApiRoot: parsedApiRoot.asURL()
+            siteApiRoot: URL(string: config.siteApiRoot)!
         )
         .setShouldUseThemeStyles(canUseEditorStyles)
         .setShouldUsePlugins(canUsePlugins)
@@ -267,21 +329,52 @@ class SitePreparationViewModel {
         .build()
     }
 
-    private func buildConfiguration() -> EditorConfiguration {
-        guard let editorConfiguration = self.editorConfiguration else {
-            preconditionFailure("Cannot build configuration as it is not loaded yet")
+    @MainActor
+    private func loadPostTypes() async throws {
+        guard let client = self.client else {
+            self.postTypes = [.post, .page]
+            return
         }
 
-        return editorConfiguration.toBuilder()
-            .setEnableNetworkLogging(self.enableNetworkLogging)
-            .setNativeInserterEnabled(self.enableNativeInserter)
-            .setPostType(self.postType)
-            .build()
+        guard self.postTypes.isEmpty else { return }
+
+        let response = try await client.postTypes.listWithEditContext().data
+
+        self.postTypes = response.postTypes
+            .filter { (type, details) in
+                switch type {
+                case .post, .page:
+                    return true
+                case .custom:
+                    break
+                default:
+                    return false
+                }
+
+                return details.viewable && details.visibility.showUi
+            }
+            .values
+            .map { postType in
+                PostTypeDetails(
+                    postType: postType.slug,
+                    restBase: postType.restBase,
+                    restNamespace: postType.restNamespace
+                )
+            }
+            .sorted(using: KeyPathComparator(\.postType))
+
+        if let firstType = postTypes.first {
+            self.selectedPostTypeDetails = firstType
+        }
     }
 
     func buildAndLoadConfiguration(navigation: Navigation) {
+        guard let configuration = self.editorConfiguration else {
+            preconditionFailure("Unable to build configuration without editor configuration – the UI should prevent this")
+        }
+
         let editor = RunnableEditor(
-            configuration: buildConfiguration(),
+            configuration: configuration,
             dependencies: self.editorDependencies
         )
 
@@ -324,6 +417,12 @@ struct KeyValueRow: View {
                     .foregroundStyle(bool ? Color.green : Color.red)
             }
         }
+    }
+}
+
+extension PostTypeDetails {
+    var name: String {
+        postType.capitalized
     }
 }
 

@@ -188,7 +188,7 @@ public actor EditorService {
     private func preparePreloadList() async throws -> EditorPreloadList {
         async let activeTheme = try self.prepareActiveTheme()
         async let settingsOptions = try self.prepareSettingsOptions()
-        async let postTypeData = try self.preparePost(type: configuration.postType)
+        async let postTypeData = try self.preparePost(type: configuration.postType.postType)
         async let postTypesData = try self.preparePostTypes()
 
         if let postID = self.configuration.postID, postID > 0 {

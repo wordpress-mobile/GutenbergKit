@@ -16,10 +16,10 @@ protocol MakesTestFixtures {
     static var testApiRoot: URL { get }
 
     func makeConfiguration(
-        postID: Int?, title: String?, content: String?, siteURL: URL, postType: String,
+        postID: Int?, title: String?, content: String?, siteURL: URL, postType: PostTypeDetails,
         shouldUsePlugins: Bool, shouldUseThemeStyles: Bool
     ) -> EditorConfiguration
-    func makeConfigurationBuilder(postType: String) -> EditorConfigurationBuilder
+    func makeConfigurationBuilder(postType: PostTypeDetails) -> EditorConfigurationBuilder
     func makeService(for configuration: EditorConfiguration?) -> EditorService
     func makeRepository(configuration: EditorConfiguration?, httpClient: EditorHTTPClientProtocol?)
     -> RESTAPIRepository
@@ -38,7 +38,7 @@ extension MakesTestFixtures {
         title: String? = nil,
         content: String? = nil,
         siteURL: URL = Self.testSiteURL,
-        postType: String = "post",
+        postType: PostTypeDetails = .post,
         shouldUsePlugins: Bool = true,
         shouldUseThemeStyles: Bool = true
     ) -> EditorConfiguration {
@@ -60,7 +60,7 @@ extension MakesTestFixtures {
         return builder.build()
     }
 
-    func makeConfigurationBuilder(postType: String = "post") -> EditorConfigurationBuilder {
+    func makeConfigurationBuilder(postType: PostTypeDetails = .post) -> EditorConfigurationBuilder {
         EditorConfigurationBuilder(
             postType: postType,
             siteURL: Self.testSiteURL,

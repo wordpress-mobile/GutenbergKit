@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-SIMULATOR_DESTINATION := OS=26.0,name=iPhone 17
+SIMULATOR_DESTINATION := platform=iOS Simulator,name=iPhone 17
 
 .PHONY: help
 help: ## Display this help menu

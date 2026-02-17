@@ -106,9 +106,11 @@ public struct RESTAPIRepository: Sendable {
     }
 
     private func buildPostUrl(id: Int) -> URL {
-        Self.buildNamespacedURL(
+        let restNamespace = configuration.postType.restNamespace
+        let restBase = configuration.postType.restBase
+        return Self.buildNamespacedURL(
             apiRoot: configuration.siteApiRoot,
-            path: "/wp/v2/posts/\(id)",
+            path: "/\(restNamespace)/\(restBase)/\(id)",
             namespace: configuration.siteApiNamespace.first
         ).appending(queryItems: [
             URLQueryItem(name: "context", value: "edit")

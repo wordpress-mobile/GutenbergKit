@@ -16,8 +16,8 @@ public struct EditorPreloadList: Sendable, Equatable, Hashable {
     /// The pre-fetched post data for the post being edited.
     let postData: EditorURLResponse?
 
-    /// The post type identifier (e.g., "post", "page").
-    let postType: String
+    /// Details about the post type being edited, including REST API configuration.
+    let postType: PostTypeDetails
 
     /// Pre-fetched data for the current post type's schema.
     let postTypeData: EditorURLResponse
@@ -38,7 +38,7 @@ public struct EditorPreloadList: Sendable, Equatable, Hashable {
     /// - Parameters:
     ///   - postID: The ID of the post being edited, or `nil` for new posts.
     ///   - postData: The pre-fetched post data, or `nil` for new posts.
-    ///   - postType: The post type identifier.
+    ///   - postType: Details about the post type, including REST API configuration.
     ///   - postTypeData: Pre-fetched post type schema.
     ///   - postTypesData: Pre-fetched list of all post types.
     ///   - activeThemeData: Pre-fetched active theme data, or `nil` if not available.
@@ -46,7 +46,7 @@ public struct EditorPreloadList: Sendable, Equatable, Hashable {
     public init(
         postID: Int? = nil,
         postData: EditorURLResponse? = nil,
-        postType: String,
+        postType: PostTypeDetails,
         postTypeData: EditorURLResponse,
         postTypesData: EditorURLResponse,
         activeThemeData: EditorURLResponse?,
@@ -64,7 +64,7 @@ public struct EditorPreloadList: Sendable, Equatable, Hashable {
     func build() throws -> JSON {
         return try logExecutionTime("Build Editor Preload List") {
             var getRequests = [
-                buildPostTypePath(type: self.postType): try self.postTypeData.toJSON(),
+                buildPostTypePath(): try self.postTypeData.toJSON(),
                 Constants.API.postTypesPath: try self.postTypesData.toJSON()
             ]
 
@@ -113,12 +113,12 @@ public struct EditorPreloadList: Sendable, Equatable, Hashable {
 
     /// Builds the API path for fetching a specific post.
     private func buildPostPath(id: Int) -> String {
-        "/wp/v2/posts/\(id)?context=edit"
+        "/\(self.postType.restNamespace)/\(self.postType.restBase)/\(id)?context=edit"
     }
 
     /// Builds the API path for fetching a post type's schema.
-    private func buildPostTypePath(type: String) -> String {
-        "/wp/v2/types/\(type)?context=edit"
+    private func buildPostTypePath() -> String {
+        "/wp/v2/types/\(self.postType.postType)?context=edit"
     }
 }
 

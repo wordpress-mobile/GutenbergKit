@@ -107,15 +107,19 @@ function tokenAuthMiddleware( options, next ) {
  * @type {APIFetchMiddleware}
  */
 function filterEndpointsMiddleware( options, next ) {
-	const disabledEndpoints = [
-		/^\/wp\/v2\/posts\/-?\d+/, // Matches /wp/v2/posts/{ID}
-		/^\/wp\/v2\/pages\/-?\d+/, // Matches /wp/v2/pages/{ID}
-	];
-	const isDisabled = disabledEndpoints.some( ( pattern ) =>
-		pattern.test( options.path )
-	);
+	const { post } = getGBKit();
+	const { id, restNamespace, restBase } = post ?? {};
 
-	if ( isDisabled ) {
+	if ( id === undefined || ! restNamespace || ! restBase ) {
+		return next( options );
+	}
+
+	const disabledPath = `/${ restNamespace }/${ restBase }/${ id }`;
+
+	if (
+		options.path === disabledPath ||
+		options.path?.startsWith( `${ disabledPath }?` )
+	) {
 		return Promise.resolve( [] );
 	}
 	return next( options );
