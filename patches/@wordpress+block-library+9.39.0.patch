@@ -1,11 +1,11 @@
-diff --git a/node_modules/@wordpress/block-library/build-module/image/image.js b/node_modules/@wordpress/block-library/build-module/image/image.js
-index 14d14ab..6bab7fc 100644
---- a/node_modules/@wordpress/block-library/build-module/image/image.js
-+++ b/node_modules/@wordpress/block-library/build-module/image/image.js
-@@ -311,7 +311,7 @@ function Image({
-   const [hasImageErrored, setHasImageErrored] = useState(false);
+diff --git a/node_modules/@wordpress/block-library/build-module/image/image.mjs b/node_modules/@wordpress/block-library/build-module/image/image.mjs
+index 4b78108..bbc4160 100644
+--- a/node_modules/@wordpress/block-library/build-module/image/image.mjs
++++ b/node_modules/@wordpress/block-library/build-module/image/image.mjs
+@@ -332,7 +332,7 @@ function Image({
    const hasNonContentControls = blockEditingMode === "default";
    const isContentOnlyMode = blockEditingMode === "contentOnly";
+   const showDimensionsControls = allowResize && hasNonContentControls;
 -  const isResizable = allowResize && hasNonContentControls && !isWideAligned && isLargeViewport;
 +  const isResizable = allowResize && hasNonContentControls && !isWideAligned;
    const imageSizeOptions = imageSizes.filter(
