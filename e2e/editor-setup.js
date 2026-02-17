@@ -52,6 +52,31 @@ export async function setupEditor( page, gbkit = DEFAULT_GBKIT ) {
 }
 
 /**
+ * Click the default block appender to create a new paragraph block.
+ *
+ * @param {import('@playwright/test').Page} page Playwright page object.
+ */
+export async function clickBlockAppender( page ) {
+	await page.locator( 'button.gutenberg-kit-default-block-appender' ).click();
+}
+
+/**
+ * Move the caret to the given character position in the current block.
+ *
+ * Uses Home to jump to the start, then ArrowRight to advance. This avoids
+ * off-by-one issues that ArrowLeft loops can hit at format boundaries.
+ *
+ * @param {import('@playwright/test').Page} page     Playwright page object.
+ * @param {number}                          position Zero-based character offset.
+ */
+export async function moveCaretTo( page, position ) {
+	await page.keyboard.press( 'Home' );
+	for ( let i = 0; i < position; i++ ) {
+		await page.keyboard.press( 'ArrowRight' );
+	}
+}
+
+/**
  * Retrieve all blocks from the editor via the WP data store.
  *
  * @param {import('@playwright/test').Page} page Playwright page object.
