@@ -6,23 +6,32 @@ import { test, expect } from '@playwright/test';
 /**
  * Internal dependencies
  */
-import { setupEditor, getBlocks } from './editor-setup';
+import {
+	setupEditor,
+	getBlocks,
+	clickBlockAppender,
+	moveCaretTo,
+} from './editor-setup';
+
+/**
+ * Type text into a new paragraph block and split it at the given position.
+ *
+ * @param {import('@playwright/test').Page} page          Playwright page object.
+ * @param {string}                          text          Text to type.
+ * @param {number}                          splitPosition Character offset where Enter is pressed.
+ */
+async function typeAndSplit( page, text, splitPosition ) {
+	await clickBlockAppender( page );
+	await page.keyboard.type( text );
+	await moveCaretTo( page, splitPosition );
+	await page.keyboard.press( 'Enter' );
+}
 
 test.describe( 'Split and Merge Blocks', () => {
 	test( 'should split a paragraph block with Enter', async ( { page } ) => {
 		await setupEditor( page );
 
-		await page
-			.locator( 'button.gutenberg-kit-default-block-appender' )
-			.click();
-		await page.keyboard.type( 'FirstSecond' );
-
-		// Move caret between "First" and "Second".
-		for ( let i = 0; i < 6; i++ ) {
-			await page.keyboard.press( 'ArrowLeft' );
-		}
-
-		await page.keyboard.press( 'Enter' );
+		await typeAndSplit( page, 'FirstSecond', 5 );
 
 		const blocks = await getBlocks( page );
 		expect( blocks ).toHaveLength( 2 );
@@ -36,14 +45,7 @@ test.describe( 'Split and Merge Blocks', () => {
 		await setupEditor( page );
 
 		// Create two blocks by typing and splitting.
-		await page
-			.locator( 'button.gutenberg-kit-default-block-appender' )
-			.click();
-		await page.keyboard.type( 'FirstSecond' );
-		for ( let i = 0; i < 6; i++ ) {
-			await page.keyboard.press( 'ArrowLeft' );
-		}
-		await page.keyboard.press( 'Enter' );
+		await typeAndSplit( page, 'FirstSecond', 5 );
 
 		// Cursor is now at the start of the second block. Press Backspace to merge.
 		await page.keyboard.press( 'Home' );
@@ -61,16 +63,8 @@ test.describe( 'Split and Merge Blocks', () => {
 
 		const originalText = 'The quick brown fox';
 
-		await page
-			.locator( 'button.gutenberg-kit-default-block-appender' )
-			.click();
-		await page.keyboard.type( originalText );
-
-		// Split in the middle ("The quick" | " brown fox").
-		for ( let i = 0; i < 10; i++ ) {
-			await page.keyboard.press( 'ArrowLeft' );
-		}
-		await page.keyboard.press( 'Enter' );
+		// Split after "The quick" (position 9).
+		await typeAndSplit( page, originalText, 9 );
 
 		let blocks = await getBlocks( page );
 		expect( blocks ).toHaveLength( 2 );
@@ -89,9 +83,7 @@ test.describe( 'Split and Merge Blocks', () => {
 	} ) => {
 		await setupEditor( page );
 
-		await page
-			.locator( 'button.gutenberg-kit-default-block-appender' )
-			.click();
+		await clickBlockAppender( page );
 
 		// Type "Hello " then bold "World".
 		await page.keyboard.type( 'Hello ' );
@@ -100,10 +92,7 @@ test.describe( 'Split and Merge Blocks', () => {
 		await page.keyboard.press( 'ControlOrMeta+b' );
 
 		// Split between "Hello " and "World".
-		await page.keyboard.press( 'Home' );
-		for ( let i = 0; i < 6; i++ ) {
-			await page.keyboard.press( 'ArrowRight' );
-		}
+		await moveCaretTo( page, 6 );
 		await page.keyboard.press( 'Enter' );
 
 		let blocks = await getBlocks( page );
