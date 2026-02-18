@@ -192,6 +192,15 @@ class GutenbergView : FrameLayout {
         editorDidBecomeAvailableListener = listener
     }
 
+    constructor(context: Context) : this(
+        configuration = EditorConfiguration.bundled(),
+        dependencies = null,
+        coroutineScope = CoroutineScope(Dispatchers.IO),
+        context = context
+    ) {
+        Log.e("GutenbergView", "Using the default constructor for `GutenbergView` – this is probably not what you want.")
+    }
+
     /**
      * Creates a new GutenbergView with the specified configuration.
      *
