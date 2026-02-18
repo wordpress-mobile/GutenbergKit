@@ -7,7 +7,7 @@ help: ## Display this help menu
 	@echo "Usage: make [target]"
 	@echo ""
 	@echo "Available targets:"
-	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | \
 	awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-25s\033[0m %s\n", $$1, $$2}' | \
 	sort
 	@echo ""
@@ -56,6 +56,29 @@ prep-translations: ## Fetch and cache locale string files
 		fi; \
 	else \
 		echo "--- :white_check_mark: Skipping translations fetch (src/translations already exists). Use REFRESH_L10N=1 to force refresh."; \
+	fi
+
+.PHONY: e2e-dependencies
+e2e-dependencies: npm-dependencies ## Install E2E test dependencies
+	@CHROMIUM_PATH=$$(npx playwright install --dry-run chromium 2>&1 | grep "Install location" | head -1 | sed 's/.*: *//'); \
+	if [ -d "$$CHROMIUM_PATH" ]; then \
+		echo "--- :white_check_mark: Playwright Chromium is already installed."; \
+	elif [ -n "$$CI" ]; then \
+		echo "--- :chromium: Installing Playwright Chromium"; \
+		npx playwright install chromium; \
+	else \
+		echo ""; \
+		echo "Playwright Chromium browser is not installed."; \
+		echo "It is required to run E2E tests."; \
+		echo ""; \
+		printf "Install it now? [Y/n] "; \
+		read -r answer; \
+		if [ "$$answer" != "n" ] && [ "$$answer" != "N" ]; then \
+			npx playwright install chromium; \
+		else \
+			echo "Skipping install. Run 'npx playwright install chromium' manually to install."; \
+			exit 1; \
+		fi; \
 	fi
 
 .PHONY: clean
@@ -135,6 +158,24 @@ lint-swift: ## Lint Swift code
 ################################################################################
 # Testing Targets
 ################################################################################
+
+.PHONY: test-e2e
+test-e2e: e2e-dependencies ## Run end-to-end tests
+	@if [ ! -d "dist" ]; then \
+		$(MAKE) build; \
+	else \
+		echo "--- :white_check_mark: Using existing build. Use 'make build REFRESH_JS_BUILD=1' to rebuild."; \
+	fi
+	npm run test:e2e
+
+.PHONY: test-e2e-ui
+test-e2e-ui: e2e-dependencies ## Run end-to-end tests in UI mode
+	@if [ ! -d "dist" ]; then \
+		$(MAKE) build; \
+	else \
+		echo "--- :white_check_mark: Using existing build. Use 'make build REFRESH_JS_BUILD=1' to rebuild."; \
+	fi
+	npm run test:e2e:ui
 
 .PHONY: test-js
 test-js: npm-dependencies ## Run JavaScript tests

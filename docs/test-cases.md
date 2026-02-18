@@ -4,60 +4,28 @@
 
 **Purpose:** Verify the editor's core functionality: writing/formatting text, uploading media, saving/publishing, and basic block manipulation.
 
-### S.1. Write and format text
-
--   **Steps:**
-    -   Add a Paragraph, List, or Heading block.
-    -   Type some text.
-    -   Apply bold, italic, and strikethrough formatting using the toolbar.
--   **Expected Outcome:** Text is entered and formatting is applied as expected.
-
-### S.2. Add a link to a paragraph
-
--   **Steps:**
-    -   Add a Paragraph, List, or Heading block.
-    -   Type some text.
-    -   Apply a link to the text.
--   **Expected Outcome:** Link is applied to the text as expected.
-
-### S.3. Merge and split blocks
-
--   **Steps:**
-    -   Write a long paragraph or list of multiple items.
-    -   Place the cursor somwewhere in the middle and split the block into two blocks using Enter.
-    -   Merge them back by deleting content at the start of the second block.
--   **Expected Outcome:** Blocks split and merge as expected; content remains intact.
-
-### S.4. Undo/Redo Actions
+### S.1. Undo/Redo Actions
 
 -   **Steps:**
     -   Add, remove, and edit blocks and text.
     -   Use Undo and Redo buttons.
 -   **Expected Outcome:** Editor correctly undoes and redoes actions, restoring previous states.
 
-### S.5. Upload an image
+### S.2. Upload an image
 
 -   **Steps:**
     -   Add an Image block.
     -   Tap "Choose from device" and select an image.
 -   **Expected Outcome:** Image uploads and displays in the block. An activity indicator is shown while the image is uploading.
 
-### S.6. Upload an video
+### S.3. Upload an video
 
 -   **Steps:**
     -   Add a Video block.
     -   Tap "Choose from device" and select a video.
 -   **Expected Outcome:** Video uploads and displays in the block. An activity indicator is shown while the video is uploading.
 
-### S.7. Reorder blocks
-
--   **Steps:**
-    -   Add several content blocks to a post.
-    -   Select a block.
-    -   Use the up/down arrows in the block toolbar to relocate the block.
--   **Expected Outcome:** The block ordering is updated as expected.
-
-### S.8. Save and publish a post
+### S.4. Save and publish a post
 
 -   **Steps:**
     -   Create a new post with text and media.
@@ -83,35 +51,27 @@
     -   Preview the post.
 -   **Expected Outcome:** Embedded content (e.g., YouTube video) displays correctly in preview.
 
-### F.3. Buttons block: add, remove, and style buttons
-
--   **Steps:**
-    -   Add a Buttons block.
-    -   Add multiple buttons, remove one, and verify focus.
-    -   Apply alignment, background, and text color changes.
--   **Expected Outcome:** Buttons can be added/removed; styles and alignment update as expected.
-
-### F.4. Color and gradient customization
+### F.3. Color and gradient customization
 
 -   **Steps:**
     -   Add a block supporting color (e.g., Buttons, Cover).
     -   Open color settings, switch between solid and gradient, pick custom colors, and apply.
 -   **Expected Outcome:** Selected colors/gradients are applied; UI updates accordingly.
 
-### F.5. Gallery block: image uploads and captions
+### F.4. Gallery block: image uploads and captions
 
 -   **Steps:**
     -   Add a Gallery block, upload multiple images.
     -   Add captions to gallery and individual images, apply formatting.
 -   **Expected Outcome:** An activity indicator is shown while the images are uploading. Captions and formatting display as expected.
 
-### F.6. Pattern insertion
+### F.5. Pattern insertion
 
 -   **Steps:**
     -   Insert a pattern from the inserter.
 -   **Expected Outcome:** Pattern content appears.
 
-### F.7. Upload an audio file
+### F.6. Upload an audio file
 
 Known issue: [Audio block unable to upload expected file formats](https://github.com/wordpress-mobile/GutenbergKit/issues/123)
 
@@ -120,7 +80,7 @@ Known issue: [Audio block unable to upload expected file formats](https://github
     -   Tap "Choose from device" and select an audio file.
 -   **Expected Outcome:** Audio uploads and displays in the block. An activity indicator is shown while the audio is uploading.
 
-### F.8. Upload a file
+### F.7. Upload a file
 
 Known issue: [File block unable to upload expected file formats](https://github.com/wordpress-mobile/GutenbergKit/issues/124)
 

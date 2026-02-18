@@ -1,55 +1,60 @@
 # Testing
 
-This guide covers automated testing and code quality tools in GutenbergKit.
+This guide covers testing and code quality tools in GutenbergKit.
 
-## Automated Tests
+## Manual Tests
 
-Important, high-level test cases are [documented](../test-cases.md) for manual testing guidance. Additionally, automated tests are included in the project to ensure code quality and functionality.
+Important, high-level test cases are [documented](../test-cases.md) for manual testing on native platforms. These cover scenarios that require the native shell — toolbar state, bridge round-trips, media uploads, WebView lifecycle, and block inserter via native sheet.
 
-### JavaScript Tests
+## Unit Tests
 
--   Framework: Vitest
--   Test files: `*.test.{js,jsx}`
+### JavaScript (Vitest)
 
-To run the JavaScript tests:
+Test files follow the `*.test.{js,jsx}` naming convention.
 
 ```bash
 make test-js
 ```
 
-### Swift Tests
-
--   Framework: Swift Testing
-
-To run the Swift tests:
+### Swift (Swift Testing)
 
 ```bash
 make test-swift-package
 ```
 
-### Android Tests
-
--   Framework: JUnit
-
-To run the Android tests:
+### Android (JUnit)
 
 ```bash
 make test-android
+```
+
+## E2E Tests
+
+E2E tests use Playwright to load the editor in a headless Chromium browser and verify Gutenberg editor logic — block operations, text formatting, split/merge, and data store state. They run against the Vite dev server with no native layer involved.
+
+Test files live in `e2e/*.spec.js`.
+
+Run tests:
+
+```bash
+make test-e2e
+```
+
+Run in interactive UI mode:
+
+```bash
+make test-e2e-ui
 ```
 
 ## Code Quality
 
 Before submitting a pull request, ensure your code passes formatting and linting checks.
 
-### Formatting
-
 Format code using Prettier:
 
 ```bash
 make format
 ```
-
-### Linting
 
 Lint JavaScript code using ESLint:
 

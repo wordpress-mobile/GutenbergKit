@@ -213,3 +213,14 @@ When creating pull requests:
 
 1. **Use the PR template**: Read `.github/PULL_REQUEST_TEMPLATE.md` to get the current template structure and follow it when writing the PR body.
 2. **Assign a label**: Use `gh label list` to retrieve available labels and select the most relevant one for the PR.
+
+### E2E Test Interaction Guidelines
+
+Since GutenbergKit targets touch devices (iOS/Android), E2E tests should prefer interacting with visible UI elements over keyboard shortcuts where possible. This better reflects how real users interact with the editor on mobile.
+
+-   **Use toolbar buttons** for formatting (Bold, Italic) and link insertion — click the button by accessible name via `editor.clickBold()`, `editor.clickItalic()`, or `editor.insertLink(url)`
+-   **Use keyboard** for interactions that have no UI equivalent or that simulate the software keyboard:
+    -   Text input: `keyboard.type()` (simulates software keyboard key events)
+    -   Caret positioning: `Home`, `ArrowRight` (no toolbar equivalent)
+    -   Text selection: `Shift+ArrowRight`, `editor.selectAll()` (no toolbar equivalent)
+    -   Block split/merge: `Enter` and `Backspace` (structural editing via software keyboard)
