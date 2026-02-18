@@ -37,25 +37,6 @@ index ecc4131..be3da24 100644
          expandOnMobile: true,
          headerTitle: __("Add a block"),
          renderToggle: this.renderToggle,
-diff --git a/node_modules/@wordpress/block-editor/build-module/components/plain-text/index.mjs b/node_modules/@wordpress/block-editor/build-module/components/plain-text/index.mjs
-index 99d6d28..ad0a568 100644
---- a/node_modules/@wordpress/block-editor/build-module/components/plain-text/index.mjs
-+++ b/node_modules/@wordpress/block-editor/build-module/components/plain-text/index.mjs
-@@ -1,9 +1,13 @@
- // packages/block-editor/src/components/plain-text/index.js
--import TextareaAutosize from "react-autosize-textarea";
-+import _TextareaAutosize from "react-autosize-textarea";
- import clsx from "clsx";
- import { forwardRef } from "@wordpress/element";
- import EditableText from "../editable-text/index.mjs";
- import { jsx } from "react/jsx-runtime";
-+// Workaround: esbuild's `.mjs` CJS interop wraps `__esModule` modules so that
-+// the default import resolves to the entire module object instead of the actual
-+// default export. Unwrap if needed.
-+var TextareaAutosize = typeof _TextareaAutosize === "function" || (_TextareaAutosize && _TextareaAutosize.$$typeof) ? _TextareaAutosize : _TextareaAutosize && _TextareaAutosize.default || _TextareaAutosize;
- var PlainText = forwardRef(({ __experimentalVersion, ...props }, ref) => {
-   if (__experimentalVersion === 2) {
-     return /* @__PURE__ */ jsx(EditableText, { ref, ...props });
 diff --git a/node_modules/@wordpress/block-editor/build-module/components/provider/index.mjs b/node_modules/@wordpress/block-editor/build-module/components/provider/index.mjs
 index a46a5d2..4a7d6e5 100644
 --- a/node_modules/@wordpress/block-editor/build-module/components/provider/index.mjs
