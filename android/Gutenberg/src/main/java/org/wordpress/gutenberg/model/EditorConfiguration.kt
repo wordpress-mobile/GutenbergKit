@@ -10,7 +10,7 @@ import java.util.UUID
 data class EditorConfiguration(
     val title: String,
     val content: String,
-    val postId: Int?,
+    val postId: UInt?,
     val postType: String,
     val postStatus: String,
     val themeStyles: Boolean,
@@ -57,7 +57,7 @@ data class EditorConfiguration(
     class Builder(private var siteURL: String, private var siteApiRoot: String, private var postType: String) {
         private var title: String = ""
         private var content: String = ""
-        private var postId: Int? = null
+        private var postId: UInt? = null
         private var postStatus: String = "draft"
         private var themeStyles: Boolean = false
         private var plugins: Boolean = false
@@ -76,7 +76,7 @@ data class EditorConfiguration(
 
         fun setTitle(title: String) = apply { this.title = title }
         fun setContent(content: String) = apply { this.content = content }
-        fun setPostId(postId: Int?) = apply { this.postId = postId }
+        fun setPostId(postId: UInt?) = apply { this.postId = postId }
         fun setPostType(postType: String) = apply { this.postType = postType }
         fun setPostStatus(postStatus: String) = apply { this.postStatus = postStatus }
         fun setThemeStyles(themeStyles: Boolean) = apply { this.themeStyles = themeStyles }
@@ -181,7 +181,7 @@ data class EditorConfiguration(
     override fun hashCode(): Int {
         var result = title.hashCode()
         result = 31 * result + content.hashCode()
-        result = 31 * result + (postId ?: 0)
+        result = 31 * result + (postId?.toInt() ?: 0)
         result = 31 * result + postType.hashCode()
         result = 31 * result + postStatus.hashCode()
         result = 31 * result + themeStyles.hashCode()
