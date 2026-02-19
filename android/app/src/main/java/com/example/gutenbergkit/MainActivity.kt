@@ -23,7 +23,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Computer
-import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -211,7 +211,7 @@ fun MainScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
-                    contentDescription = stringResource(R.string.add_editor_configuration_description)
+                    contentDescription = stringResource(R.string.add_wordpress_site_description)
                 )
             }
         }
@@ -239,7 +239,7 @@ fun MainScreen(
                 )
             }
 
-            // Bundled editor
+            // Standalone editor
             item {
                 ConfigurationCard(
                     configuration = ConfigurationItem.BundledEditor,
@@ -248,16 +248,7 @@ fun MainScreen(
                 )
             }
 
-            // Local WordPress
-            item {
-                ConfigurationCard(
-                    configuration = ConfigurationItem.LocalWordPress,
-                    onClick = { onConfigurationClick(ConfigurationItem.LocalWordPress) },
-                    onLongClick = { }
-                )
-            }
-
-            // Editor configurations section
+            // WordPress Sites section
             val configuredEditors = configurations.filterIsInstance<ConfigurationItem.ConfiguredEditor>()
 
             item {
@@ -268,18 +259,27 @@ fun MainScreen(
                 ) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = stringResource(R.string.editor_configurations_section).uppercase(),
+                        text = stringResource(R.string.wordpress_sites_section).uppercase(),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(vertical = 8.dp)
                     )
                     Text(
-                        text = stringResource(R.string.editor_configurations_section_description),
+                        text = stringResource(R.string.wordpress_sites_section_description),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
+            }
+
+            // Local WordPress
+            item {
+                ConfigurationCard(
+                    configuration = ConfigurationItem.LocalWordPress,
+                    onClick = { onConfigurationClick(ConfigurationItem.LocalWordPress) },
+                    onLongClick = { }
+                )
             }
 
             items(configuredEditors) { config ->
@@ -381,7 +381,7 @@ fun ConfigurationCard(
             leadingContent = {
                 Icon(
                     imageVector = when (configuration) {
-                        is ConfigurationItem.BundledEditor -> Icons.Outlined.Inventory2
+                        is ConfigurationItem.BundledEditor -> Icons.Outlined.Article
                         is ConfigurationItem.LocalWordPress -> Icons.Outlined.Computer
                         is ConfigurationItem.ConfiguredEditor -> Icons.Default.Language
                     },
@@ -404,7 +404,7 @@ fun AddNewConfigurationCard(
     ) {
         ListItem(
             headlineContent = {
-                Text(stringResource(R.string.add_editor_configuration))
+                Text(stringResource(R.string.add_wordpress_site))
             },
             leadingContent = {
                 Icon(

@@ -5,23 +5,23 @@
     <string name="demo_title">GutenbergKit</string>
     <string name="editor_source_dev_server">Note: Editors are using the dev server started with `make dev-server`.</string>
     <string name="editor_source_built">Note: Editors are using the compiled web app built with `make build`.</string>
-    <string name="bundled_editor">Default editor</string>
-    <string name="bundled_editor_subtitle">Default editor without site configuration</string>
-    <string name="local_wordpress">Local WordPress</string>
+    <string name="bundled_editor">Standalone editor</string>
+    <string name="bundled_editor_subtitle">Editor without a WordPress site. No theme styles, media uploads, or plugins.</string>
+    <string name="local_wordpress">Local WordPress (wp-env)</string>
     <string name="local_wordpress_subtitle">WordPress running via wp-env at localhost:8888</string>
     <string name="local_wordpress_subtitle_not_configured">Not configured. Run `make wp-env-start`, then rebuild.</string>
-    <string name="editor_configurations_section">Editor configurations</string>
-    <string name="editor_configurations_section_description">Editors with site configuration; enabling media uploads, plugin support, etc.</string>
-    <string name="add_editor_configuration_description">Add editor configuration</string>
+    <string name="wordpress_sites_section">WordPress sites</string>
+    <string name="wordpress_sites_section_description">Editors connected to a WordPress site, enabling theme styles, media uploads, plugin support, etc.</string>
+    <string name="add_wordpress_site_description">Add WordPress site</string>
 
     <!-- Dialog strings -->
-    <string name="add_editor_configuration">Add editor configuration</string>
+    <string name="add_wordpress_site">Add WordPress site</string>
     <string name="site_url_hint">Site URL</string>
     <string name="site_url">Site URL</string>
     <string name="add">Add</string>
     <string name="cancel">Cancel</string>
     <string name="delete">Delete</string>
-    <string name="delete_site_title">Delete editor configuration?</string>
+    <string name="delete_site_title">Delete WordPress site?</string>
     <string name="delete_site_message">This will remove the site from the configuration list.</string>
 
     <!-- Authentication -->

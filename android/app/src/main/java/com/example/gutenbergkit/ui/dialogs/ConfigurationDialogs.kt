@@ -29,7 +29,7 @@ fun AddConfigurationDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.add_editor_configuration)) },
+        title = { Text(stringResource(R.string.add_wordpress_site)) },
         text = {
             OutlinedTextField(
                 value = siteUrlInput,
