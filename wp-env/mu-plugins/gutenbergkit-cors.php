@@ -12,15 +12,17 @@ add_action( 'rest_api_init', function () {
 		$origin = get_http_origin();
 
 		$allowed_origins = array(
-			'http://localhost:5173',  // Vite dev server
-			'http://localhost:4173',  // Vite preview server
+			'http://localhost:5173',   // Vite dev server
+			'http://localhost:4173',   // Vite preview server
+			'http://10.0.2.2:5173',   // Vite dev server (Android emulator)
+			'http://10.0.2.2:4173',   // Vite preview server (Android emulator)
 		);
 
 		if ( in_array( $origin, $allowed_origins, true ) ) {
 			header( 'Access-Control-Allow-Origin: ' . $origin );
 			header( 'Access-Control-Allow-Credentials: true' );
 		} elseif ( empty( $origin ) ) {
-			// Allow requests with no Origin header (native WebViews, Android emulator).
+			// Allow requests with no Origin header (native WebViews).
 			header( 'Access-Control-Allow-Origin: *' );
 		}
 
@@ -39,6 +41,8 @@ add_action( 'init', function () {
 		$allowed_origins = array(
 			'http://localhost:5173',
 			'http://localhost:4173',
+			'http://10.0.2.2:5173',
+			'http://10.0.2.2:4173',
 		);
 
 		if ( in_array( $origin, $allowed_origins, true ) ) {
