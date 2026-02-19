@@ -25,7 +25,7 @@ APP_NAME="GutenbergKit"
 
 RESET="${RESET:-}"
 
-if [ "$RESET" = "true" ] || [ "$RESET" = "1" ] && [ -f "$CREDENTIALS_FILE" ]; then
+if { [ "$RESET" = "true" ] || [ "$RESET" = "1" ]; } && [ -f "$CREDENTIALS_FILE" ]; then
     echo "Removing existing credentials file..."
     rm -f "$CREDENTIALS_FILE"
 fi
