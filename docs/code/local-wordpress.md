@@ -118,7 +118,7 @@ Access the WordPress admin dashboard at **http://localhost:8888/wp-admin/**:
 Error: Cannot connect to the Docker daemon
 ```
 
-Make sure Docker Desktop is running before executing `make wp-env-start`.
+Make sure Docker is running before executing `make wp-env-start`.
 
 ### Port 8888 is already in use
 
