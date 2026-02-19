@@ -11,9 +11,11 @@ GutenbergKit is an experimental Gutenberg block editor for native iOS and Androi
 -   Kotlin library for Android integration
 -   Native-to-web bridge for communication between platforms
 
+The primary branch is `trunk` (not `main`).
+
 ## Common Development Commands
 
-**IMPORTANT**: Prefer `make` commands over `npm` commands when they exist. The Makefile provides convenient wrappers that handle dependencies and configuration automatically.
+**CRITICAL**: Always use `make` commands over underlying tool commands (`npm`, `swift`, `gradle`, etc.) when they exist. The Makefile provides convenient wrappers that handle dependencies and configuration automatically. However, when you need to pass specific arguments that a `make` target does not support — such as running Prettier on a single file, linting only changed files, or running a single test file — use the underlying tool directly.
 
 To see all available make commands, run:
 
@@ -33,43 +35,27 @@ npm ci
 
 # Start development server (use this for active development)
 make dev-server
-# or
-npm run dev
 
 # Start standalone React DevTools server
 make dev-tools
-# or
-npm run dev:tools
 
 # Preview production build locally
 make preview
-# or
-npm run preview
 
 # Run JavaScript tests (one-time run)
 make test-js
-# or
-npm run test:unit
 
 # Run JavaScript tests in watch mode (for active development)
 make test-js-watch
-# or
-npm run test:unit:watch
 
 # Lint JavaScript code
 make lint-js
-# or
-npm run lint:js
 
 # Lint and auto-fix JavaScript code
 make lint-fix-js
-# or
-npm run lint:js:fix
 
 # Format JavaScript code
 make format
-# or
-npm run format
 ```
 
 ### Building
@@ -87,11 +73,7 @@ make build
 make build REFRESH_DEPS=1 REFRESH_L10N=1 REFRESH_JS_BUILD=1
 
 # Clean build artifacts
-make clean            # Clean both dist and translations
-# or
-npm run clean         # Clean both dist and translations
-npm run clean:dist    # Clean only dist directory
-npm run clean:l10n    # Clean only translations directory
+make clean
 ```
 
 ### iOS Development
@@ -99,9 +81,6 @@ npm run clean:l10n    # Clean only translations directory
 ```bash
 # Build Swift package
 make build-swift-package
-
-# Build Swift package (force refresh of npm deps/translations/build if needed)
-make build-swift-package REFRESH_DEPS=1 REFRESH_L10N=1 REFRESH_JS_BUILD=1
 
 # Run Swift tests
 make test-swift-package
@@ -113,12 +92,11 @@ make test-swift-package
 # Build Android library to local Maven
 make local-android-library
 
-# Build Android library (force refresh of npm deps/translations if needed)
-make local-android-library REFRESH_DEPS=1 REFRESH_L10N=1
-
 # Run Android tests
 make test-android
 ```
+
+> **Note:** Most `make` targets have equivalent `npm` scripts in `package.json`. Build targets accept `REFRESH_DEPS=1`, `REFRESH_L10N=1`, and `REFRESH_JS_BUILD=1` flags to force refresh of dependencies, translations, and JavaScript builds respectively. Run `make help` for full details.
 
 ## Architecture
 
@@ -166,6 +144,8 @@ The editor uses a bidirectional bridge pattern:
 -   **Translations**: Automated translation preparation from WordPress packages
 -   **Asset Distribution**: Built assets are copied to platform-specific directories
 
+> For deeper architectural context on specific subsystems, see the docs under `docs/code/` — including `architecture.md`, `plugins.md`, `preloading.md`, and others.
+
 ## Code Quality Standards
 
 The project follows WordPress coding standards for JavaScript:
@@ -187,7 +167,7 @@ This ordering makes code easier to read top-to-bottom, as you encounter function
 
 The project uses a custom logger utility (`src/utils/logger.js`) instead of direct `console` methods:
 
--   **Required**: Always use the logger utility functions (`error`, `warn`, `info`, `debug`) instead of `console.*` methods
+-   **MUST**: Always use the logger utility functions (`error`, `warn`, `info`, `debug`) instead of `console.*` methods
 -   **Error Logging**: Use `error()` for actual errors and exceptions
 -   **Warning Logging**: Use `warn()` for important warnings that should be addressed
 -   **Info Logging**: Use `info()` for general informational messages
@@ -198,7 +178,7 @@ Note: Console logs should be used sparingly. For verbose or development-specific
 
 ### Pre-Commit Checklist
 
-**IMPORTANT**: Always run these commands after making code changes and before presenting work for review/commit:
+**CRITICAL**: Always run these commands after making code changes and before presenting work for review/commit:
 
 ```bash
 # Auto-fix linting errors & verify linting passes
@@ -224,3 +204,11 @@ Since GutenbergKit targets touch devices (iOS/Android), E2E tests should prefer 
     -   Caret positioning: `Home`, `ArrowRight` (no toolbar equivalent)
     -   Text selection: `Shift+ArrowRight`, `editor.selectAll()` (no toolbar equivalent)
     -   Block split/merge: `Enter` and `Backspace` (structural editing via software keyboard)
+
+## Common Pitfalls
+
+-   **Do not edit build output directories.** The files under `ios/Sources/GutenbergKit/Gutenberg/` and `android/Gutenberg/src/main/assets/` are generated by `make build`. Never modify them directly — run `make build` to regenerate them instead.
+-   **Do not use `console.*` directly.** Always use the logger utility (`src/utils/logger.js`). See the Logging Guidelines section above.
+-   **Always run `make lint-fix-js` before committing.** Lint errors will block commits via pre-commit hooks.
+-   **Patching dependencies: modify `node_modules`, then run `npx patch-package <package-name>`.** Do not edit the `.patch` files under `patches/` by hand. The workflow is: make changes in `node_modules/<package>`, verify they work, then run `npx patch-package <package-name>` to create or update the patch file. Document the patch and its justification in `patches/README.md`.
+-   **Do not edit the `dist/` directory.** It is a build artifact generated by Vite. Run `make build` or `make dev-server` instead.
