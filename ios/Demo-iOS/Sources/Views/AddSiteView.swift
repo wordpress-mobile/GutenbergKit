@@ -42,7 +42,7 @@ struct AddSiteView: View {
                     }
                 }
             }
-            .navigationTitle("Add Editor Configuration")
+            .navigationTitle("Add WordPress Site")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

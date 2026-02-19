@@ -21,7 +21,7 @@ enum ConfigurationItem: Codable, Identifiable, Equatable, Hashable {
     var displayName: String {
         switch self {
         case .bundledEditor:
-            return "Bundled Editor"
+            return "Standalone Editor"
         case .localWordPress:
             return "Local WordPress"
         case .editorConfiguration(let config):
