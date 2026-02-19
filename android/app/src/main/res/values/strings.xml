@@ -7,6 +7,8 @@
     <string name="editor_source_built">Note: Editors are using the compiled web app built with `make build`.</string>
     <string name="bundled_editor">Default editor</string>
     <string name="bundled_editor_subtitle">Default editor without site configuration</string>
+    <string name="local_wordpress">Local WordPress</string>
+    <string name="local_wordpress_subtitle">WordPress running via wp-env at localhost:8888</string>
     <string name="editor_configurations_section">Editor configurations</string>
     <string name="editor_configurations_section_description">Editors with site configuration; enabling media uploads, plugin support, etc.</string>
     <string name="add_editor_configuration_description">Add editor configuration</string>

@@ -66,6 +66,7 @@ class SitePreparationActivity : ComponentActivity() {
         private const val KEY_SITE_API_ROOT = "siteApiRoot"
         private const val KEY_AUTH_HEADER = "authHeader"
         private const val TYPE_BUNDLED = "bundled"
+        private const val TYPE_LOCAL_WORDPRESS = "local_wordpress"
         private const val TYPE_CONFIGURED = "configured"
 
         fun createIntent(context: Context, configurationItem: ConfigurationItem): Intent {
@@ -79,6 +80,11 @@ class SitePreparationActivity : ComponentActivity() {
                 is ConfigurationItem.BundledEditor -> {
                     JSONObject().apply {
                         put(KEY_TYPE, TYPE_BUNDLED)
+                    }.toString()
+                }
+                is ConfigurationItem.LocalWordPress -> {
+                    JSONObject().apply {
+                        put(KEY_TYPE, TYPE_LOCAL_WORDPRESS)
                     }.toString()
                 }
                 is ConfigurationItem.ConfiguredEditor -> {
@@ -101,6 +107,7 @@ class SitePreparationActivity : ComponentActivity() {
             return try {
                 val json = JSONObject(extra)
                 when (json.optString(KEY_TYPE)) {
+                    TYPE_LOCAL_WORDPRESS -> ConfigurationItem.LocalWordPress
                     TYPE_CONFIGURED -> {
                         ConfigurationItem.ConfiguredEditor(
                             name = json.getString(KEY_NAME),

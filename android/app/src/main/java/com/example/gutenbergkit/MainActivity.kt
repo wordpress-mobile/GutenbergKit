@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -71,6 +72,9 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
         // Add default bundled editor configuration
         configurations.add(ConfigurationItem.BundledEditor)
 
+        // Add local WordPress option
+        configurations.add(ConfigurationItem.LocalWordPress)
+
         // Load saved configurations
         configurations.addAll(configurationStorage.loadConfigurations())
 
@@ -81,12 +85,14 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
                     onConfigurationClick = { config ->
                         when (config) {
                             is ConfigurationItem.BundledEditor -> launchSitePreparation(config)
+                            is ConfigurationItem.LocalWordPress -> launchSitePreparation(config)
                             is ConfigurationItem.ConfiguredEditor -> loadConfiguredEditor(config)
                         }
                     },
                     onConfigurationLongClick = { config ->
                         when (config) {
                             is ConfigurationItem.BundledEditor -> false
+                            is ConfigurationItem.LocalWordPress -> false
                             is ConfigurationItem.ConfiguredEditor -> true
                         }
                     },
@@ -343,6 +349,7 @@ fun ConfigurationCard(
                 Text(
                     when (configuration) {
                         is ConfigurationItem.BundledEditor -> stringResource(R.string.bundled_editor)
+                        is ConfigurationItem.LocalWordPress -> stringResource(R.string.local_wordpress)
                         is ConfigurationItem.ConfiguredEditor -> configuration.name
                     }
                 )
@@ -351,12 +358,16 @@ fun ConfigurationCard(
                 is ConfigurationItem.BundledEditor -> {
                     { Text(stringResource(R.string.bundled_editor_subtitle)) }
                 }
+                is ConfigurationItem.LocalWordPress -> {
+                    { Text(stringResource(R.string.local_wordpress_subtitle)) }
+                }
                 is ConfigurationItem.ConfiguredEditor -> null
             },
             leadingContent = {
                 Icon(
                     imageVector = when (configuration) {
                         is ConfigurationItem.BundledEditor -> Icons.Outlined.Inventory2
+                        is ConfigurationItem.LocalWordPress -> Icons.Outlined.Computer
                         is ConfigurationItem.ConfiguredEditor -> Icons.Default.Language
                     },
                     contentDescription = null,

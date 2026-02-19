@@ -42,6 +42,20 @@ class SitePreparationViewModel(
             try {
                 val configuration = when (configurationItem) {
                     is ConfigurationItem.BundledEditor -> createBundledConfiguration()
+                    is ConfigurationItem.LocalWordPress -> {
+                        val credentials = LocalWordPressCredentials.load()
+                            ?: throw IllegalStateException(
+                                "Local WordPress not available.\n\nRun 'make wp-env-start' from the project root to start a local WordPress environment."
+                            )
+                        loadConfiguration(
+                            ConfigurationItem.ConfiguredEditor(
+                                name = "Local WordPress",
+                                siteUrl = credentials.siteUrl,
+                                siteApiRoot = credentials.siteApiRoot,
+                                authHeader = credentials.authHeader
+                            )
+                        )
+                    }
                     is ConfigurationItem.ConfiguredEditor -> loadConfiguration(configurationItem)
                 }
                 _uiState.update { it.copy(editorConfiguration = configuration) }
