@@ -391,14 +391,14 @@ class GutenbergView : WebView {
             configuration.cachedAssetHosts
         )
 
-        // Build the asset loader. When the site uses HTTP, serve assets over HTTP
-        // too so that Android WebView doesn't block site resources as mixed content.
-        // Note: allowing HTTP means asset traffic is unencrypted. This is acceptable
-        // for local development (localhost / 10.0.2.2) but should not be used for
-        // production sites.
-        val siteUsesHttp = configuration.siteURL.startsWith("http://")
+        // Build the asset loader. When the site is a local dev server over HTTP,
+        // serve assets over HTTP too so that Android WebView doesn't block site
+        // resources as mixed content. Only allow this for known local hosts to
+        // avoid accidentally downgrading asset traffic for production sites.
+        val siteUri = Uri.parse(configuration.siteURL)
+        val isLocalHttpSite = siteUri.scheme == "http" && siteUri.host in LOCAL_HOSTS
         assetLoader = WebViewAssetLoader.Builder()
-            .setHttpAllowed(siteUsesHttp)
+            .setHttpAllowed(isLocalHttpSite)
             .addPathHandler("/assets/", AssetsPathHandler(this.context))
             .build()
 
@@ -407,7 +407,7 @@ class GutenbergView : WebView {
 
         initializeWebView()
 
-        val assetUrl = if (siteUsesHttp) ASSET_URL_HTTP else ASSET_URL
+        val assetUrl = if (isLocalHttpSite) ASSET_URL_HTTP else ASSET_URL
         val editorUrl = BuildConfig.GUTENBERG_EDITOR_URL.ifEmpty {
             assetUrl
         }
@@ -881,6 +881,9 @@ class GutenbergView : WebView {
     }
 
     companion object {
+        /** Hosts that are safe to serve assets over HTTP (local development only). */
+        private val LOCAL_HOSTS = setOf("localhost", "127.0.0.1", "10.0.2.2")
+
         private const val ASSET_LOADING_TIMEOUT_MS = 5000L
 
         // Warmup state management
