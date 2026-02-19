@@ -7,7 +7,7 @@
 #
 # Usage:
 #   bash bin/wp-env-setup.sh           # Create credentials (skips if file exists)
-#   bash bin/wp-env-setup.sh --reset   # Recreate credentials from scratch
+#   RESET=1 bash bin/wp-env-setup.sh   # Recreate credentials from scratch
 
 set -euo pipefail
 
@@ -23,21 +23,16 @@ APP_NAME="GutenbergKit"
 # Parse flags
 # ---------------------------------------------------------------------------
 
-RESET=false
-for arg in "$@"; do
-    case "$arg" in
-        --reset) RESET=true ;;
-    esac
-done
+RESET="${RESET:-}"
 
-if [ "$RESET" = true ] && [ -f "$CREDENTIALS_FILE" ]; then
+if [ "$RESET" = "true" ] || [ "$RESET" = "1" ] && [ -f "$CREDENTIALS_FILE" ]; then
     echo "Removing existing credentials file..."
     rm -f "$CREDENTIALS_FILE"
 fi
 
 if [ -f "$CREDENTIALS_FILE" ]; then
     echo "Credentials file already exists at $CREDENTIALS_FILE — skipping setup."
-    echo "Use --reset to regenerate credentials."
+    echo "Use RESET=1 to regenerate credentials."
     exit 0
 fi
 

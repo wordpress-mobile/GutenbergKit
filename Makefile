@@ -140,9 +140,9 @@ preview: npm-dependencies ## Preview the production build locally
 ################################################################################
 
 .PHONY: wp-env-start
-wp-env-start: npm-dependencies ## Start the local WordPress environment (requires Docker)
+wp-env-start: npm-dependencies ## Start the local WordPress environment (requires Docker; RESET=1 to regenerate credentials)
 	npm run wp-env start
-	@bash bin/wp-env-setup.sh
+	@RESET=$(RESET) bash bin/wp-env-setup.sh
 
 .PHONY: wp-env-stop
 wp-env-stop: ## Stop the local WordPress environment
