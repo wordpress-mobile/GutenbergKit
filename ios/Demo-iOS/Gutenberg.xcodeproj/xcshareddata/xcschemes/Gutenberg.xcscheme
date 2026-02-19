@@ -56,6 +56,11 @@
             value = "http://localhost:5173/"
             isEnabled = "YES">
          </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "WP_ENV_CREDENTIALS_PATH"
+            value = "$(SRCROOT)/../../.wp-env.credentials.json"
+            isEnabled = "YES">
+         </EnvironmentVariable>
       </EnvironmentVariables>
    </LaunchAction>
    <ProfileAction

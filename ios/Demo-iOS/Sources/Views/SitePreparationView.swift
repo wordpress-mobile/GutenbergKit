@@ -199,6 +199,29 @@ class SitePreparationViewModel {
                 case .bundledEditor:
                     self.editorConfiguration = Self.applyDemoAppDefaults(to: .bundled)
                     self.postTypes = [.post, .page]
+                case .localWordPress:
+                    guard let credentials = LocalWordPressCredentials.load() else {
+                        throw AppError(errorDescription: "Local WordPress not available.\n\nRun 'make wp-env-start' from the project root to start a local WordPress environment.")
+                    }
+                    let siteDetails = ConfiguredEditor(
+                        name: "Local WordPress",
+                        siteUrl: credentials.siteUrl,
+                        siteApiRoot: credentials.siteApiRoot,
+                        authHeader: credentials.authHeader
+                    )
+                    let parsedApiRoot = try ParsedUrl.parse(input: siteDetails.siteApiRoot)
+                    let configuration = URLSessionConfiguration.ephemeral
+                    configuration.httpAdditionalHeaders = ["Authorization": siteDetails.authHeader]
+                    let client = WordPressAPI(
+                        urlSession: .init(configuration: configuration),
+                        apiRootUrl: parsedApiRoot,
+                        authentication: .none,
+                    )
+                    self.client = client
+
+                    try await self.loadPostTypes()
+                    let newConfiguration = try await self.loadConfiguration(for: siteDetails)
+                    self.editorConfiguration = Self.applyDemoAppDefaults(to: newConfiguration)
                 case .editorConfiguration(let siteDetails):
                     let parsedApiRoot = try ParsedUrl.parse(input: siteDetails.siteApiRoot)
                     let configuration = URLSessionConfiguration.ephemeral

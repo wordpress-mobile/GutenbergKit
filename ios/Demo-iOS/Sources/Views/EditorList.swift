@@ -35,6 +35,16 @@ struct EditorList: View {
             }
 
             Section {
+                NavigationLink("Local WordPress") {
+                    SitePreparationView(site: .localWordPress)
+                }
+            } header: {
+                Text("Local Development")
+            } footer: {
+                Text("WordPress running via wp-env at localhost:8888.")
+            }
+
+            Section {
                 configuredEditors
 
                 Button("Add Editor Configuration") {
