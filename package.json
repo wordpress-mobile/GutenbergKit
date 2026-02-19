@@ -22,7 +22,8 @@
 		"test:e2e": "playwright test",
 		"test:e2e:ui": "playwright test --ui",
 		"test:unit": "vitest run",
-		"test:unit:watch": "vitest"
+		"test:unit:watch": "vitest",
+		"wp-env": "wp-env"
 	},
 	"dependencies": {
 		"@wordpress/a11y": "^4.36.0",

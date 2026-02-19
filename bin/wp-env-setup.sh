@@ -70,7 +70,7 @@ done
 
 echo "Creating application password for '$USERNAME'..."
 
-APP_PASSWORD=$(npx wp-env run cli -- wp user application-password create "$USERNAME" "$APP_NAME" --porcelain 2>/dev/null)
+APP_PASSWORD=$(npm run wp-env run cli -- wp user application-password create "$USERNAME" "$APP_NAME" --porcelain 2>/dev/null)
 
 if [ -z "$APP_PASSWORD" ]; then
     echo "Error: Failed to create application password."
