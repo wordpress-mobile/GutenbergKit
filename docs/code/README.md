@@ -14,6 +14,7 @@ This guide is for developers who want to contribute code to GutenbergKit.
 -   [Architecture](./architecture.md) - Project structure and communication patterns
 -   [Plugins](./plugins.md) - Plugin loading and custom blocks
 -   [Preloading](./preloading.md) - Asset preloading
+-   [Local WordPress](./local-wordpress.md) - Local WordPress environment for testing
 -   [Physical Device Setup](./physical-device-setup.md) - Running on physical devices
 
 ## Get Involved
