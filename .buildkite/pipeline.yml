@@ -75,5 +75,5 @@ steps:
       if: build.tag =~ /^v/
       command: |
           make build-resources-xcframework REFRESH_L10N=1 REFRESH_JS_BUILD=1
-          bundle exec fastlane publish_to_s3 version:${BUILDKITE_TAG#v}
+          bundle exec fastlane publish_to_s3 version:$${BUILDKITE_TAG#v}
       plugins: *plugins
