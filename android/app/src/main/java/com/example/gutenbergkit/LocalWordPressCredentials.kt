@@ -23,6 +23,6 @@ data class LocalWordPressCredentials(
         }
 
         private fun remapLocalhost(url: String): String =
-            url.replace("localhost", "10.0.2.2")
+            url.replace("://localhost", "://10.0.2.2")
     }
 }
