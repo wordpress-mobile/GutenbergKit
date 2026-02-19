@@ -11,6 +11,8 @@ GutenbergKit is an experimental Gutenberg block editor for native iOS and Androi
 -   Kotlin library for Android integration
 -   Native-to-web bridge for communication between platforms
 
+The primary branch is `trunk` (not `main`).
+
 ## Common Development Commands
 
 **CRITICAL**: Always use `make` commands over underlying tool commands (`npm`, `swift`, `gradle`, etc.) when they exist. The Makefile provides convenient wrappers that handle dependencies and configuration automatically. However, when you need to pass specific arguments that a `make` target does not support — such as running Prettier on a single file, linting only changed files, or running a single test file — use the underlying tool directly.
