@@ -248,6 +248,15 @@ fun MainScreen(
                 )
             }
 
+            // Local WordPress
+            item {
+                ConfigurationCard(
+                    configuration = ConfigurationItem.LocalWordPress,
+                    onClick = { onConfigurationClick(ConfigurationItem.LocalWordPress) },
+                    onLongClick = { }
+                )
+            }
+
             // Editor configurations section
             val configuredEditors = configurations.filterIsInstance<ConfigurationItem.ConfiguredEditor>()
 
