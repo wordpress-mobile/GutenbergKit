@@ -1,7 +1,5 @@
 {
-	"plugins": [
-		"https://downloads.wordpress.org/plugin/gutenberg.latest-stable.zip"
-	],
+	"plugins": [ "https://downloads.wordpress.org/plugin/gutenberg.zip" ],
 	"mappings": {
 		"wp-content/mu-plugins": "./wp-env/mu-plugins"
 	},
