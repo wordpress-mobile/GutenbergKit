@@ -39,7 +39,8 @@ Once started, the **"Local WordPress"** option in both the iOS and Android demo 
 
 The `.wp-env.json` file at the project root configures the environment:
 
--   **Gutenberg plugin** is installed for `/wpcom/v2/editor-assets` and `/wp-block-editor/v1/settings` endpoints.
+-   **Gutenberg plugin** is installed for the `/wp-block-editor/v1/settings` editor settings REST API endpoint.
+-   **Jetpack plugin** is installed with the blocks module enabled, providing the `/wpcom/v2/editor-assets` endpoint and additional editor blocks.
 -   A **CORS mu-plugin** (`wp-env/mu-plugins/gutenbergkit-cors.php`) adds CORS headers to REST API responses, allowing requests from the Vite dev server, preview server, and native WebViews.
 -   **WP_DEBUG** and **WP_DEBUG_LOG** are enabled for development.
 

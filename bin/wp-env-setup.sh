@@ -68,6 +68,13 @@ echo "Flushing rewrite rules..."
 npm run --silent wp-env run cli -- wp rewrite structure '/%postname%/' --hard 2>/dev/null
 
 # ---------------------------------------------------------------------------
+# Enable Jetpack blocks module
+# ---------------------------------------------------------------------------
+
+echo "Enabling Jetpack blocks module..."
+npm run --silent wp-env run cli -- wp jetpack module activate blocks 2>/dev/null
+
+# ---------------------------------------------------------------------------
 # Create application password
 # ---------------------------------------------------------------------------
 
