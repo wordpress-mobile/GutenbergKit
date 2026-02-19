@@ -227,7 +227,7 @@ class SitePreparationViewModel {
                         try await self.loadPostTypes()
                         let newConfiguration = try await self.loadConfiguration(for: siteDetails)
                         self.editorConfiguration = Self.applyDemoAppDefaults(to: newConfiguration)
-                    } catch let urlError as URLError where urlError.code == .cannotConnectToHost || urlError.code == .networkConnectionLost || urlError.code == .timedOut {
+                    } catch is URLError {
                         throw AppError(errorDescription: "Could not connect to Local WordPress at localhost:8888.\n\nThe wp-env server may not be running. Start it with 'make wp-env-start'.")
                     }
                 case .editorConfiguration(let siteDetails):

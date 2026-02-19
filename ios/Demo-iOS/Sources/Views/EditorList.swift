@@ -41,11 +41,7 @@ struct EditorList: View {
             } header: {
                 Text("Local Development")
             } footer: {
-                if LocalWordPressCredentials.load() != nil {
-                    Text("WordPress running via wp-env at localhost:8888.")
-                } else {
-                    Text("Not configured. Run `make wp-env-start` to set up a local WordPress environment.")
-                }
+                Text("Requires wp-env at localhost:8888. Run `make wp-env-start` to set up.")
             }
 
             Section {
