@@ -52,7 +52,7 @@ The `bin/wp-env-setup.sh` script runs automatically after `wp-env start`:
 3. Generates a Base64-encoded Basic Auth header.
 4. Writes credentials to `.wp-env.credentials.json`.
 
-The script is idempotent — it skips if the credentials file already exists. Use `--reset` (or `make wp-env-clean`) to regenerate.
+The script is idempotent — it skips if the credentials file already exists. Use `make wp-env-start RESET=1` (or `make wp-env-clean`) to regenerate.
 
 ### Demo App Integration
 
@@ -72,13 +72,27 @@ The Xcode scheme includes a `WP_ENV_CREDENTIALS_PATH` environment variable point
 
 ### Android Emulator
 
-The Android emulator cannot reach `localhost` on the host machine directly. The credentials loader automatically remaps `localhost` to `10.0.2.2` (the emulator's alias for the host).
+The Android emulator cannot reach `localhost` on the host machine directly. The credentials loader automatically remaps `localhost` to `10.0.2.2` (the emulator's alias for the host). Credentials are read at build time and baked into `BuildConfig` fields, since the emulator cannot access the host filesystem at runtime.
 
-The credentials file path is configured via `wp.env.credentials.path` in `android/local.properties`:
+#### Image URLs in the Android Emulator
 
-```properties
-wp.env.credentials.path=/absolute/path/to/GutenbergKit/.wp-env.credentials.json
+WordPress generates image URLs (e.g., for uploaded media) using its configured site URL, which defaults to `http://localhost:8888`. These URLs don't resolve inside the Android emulator because `localhost` points to the emulator itself.
+
+To fix this, update WordPress's site URL constants to use `10.0.2.2` before testing media uploads:
+
+```bash
+make wp-env-cli CMD="config set WP_SITEURL http://10.0.2.2:8888"
+make wp-env-cli CMD="config set WP_HOME http://10.0.2.2:8888"
 ```
+
+To revert (for browser access or iOS testing):
+
+```bash
+make wp-env-cli CMD="config set WP_SITEURL http://localhost:8888"
+make wp-env-cli CMD="config set WP_HOME http://localhost:8888"
+```
+
+Note: wp-env defines `WP_SITEURL` and `WP_HOME` as constants in `wp-config.php`, so `wp option update` will not work — use `wp config set` instead. Changing the site URL to `10.0.2.2` will cause the WordPress admin dashboard (`http://localhost:8888/wp-admin/`) to redirect to `10.0.2.2`, which doesn't resolve in a desktop browser.
 
 ### Physical Devices
 
@@ -134,4 +148,4 @@ If the demo apps show "Local WordPress not available", verify:
 
 1. wp-env is running: `make wp-env-logs`
 2. The credentials file exists: `cat .wp-env.credentials.json`
-3. For Android, check that `local.properties` has the correct `wp.env.credentials.path`.
+3. For Android, rebuild the app after `make wp-env-start` so credentials are baked into `BuildConfig`.
