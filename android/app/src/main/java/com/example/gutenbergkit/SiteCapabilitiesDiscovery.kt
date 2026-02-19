@@ -63,7 +63,7 @@ class SiteCapabilitiesDiscovery {
                     )
                 }
                 else -> {
-                    Log.w(TAG, "API discovery via WpLoginClient failed, trying direct HTTP fetch")
+                    Log.w(TAG, "API discovery via WpLoginClient failed: $apiDiscoveryResult, trying direct HTTP fetch")
                     discoverCapabilitiesViaHttp(siteApiRoot)
                 }
             }
