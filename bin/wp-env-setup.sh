@@ -51,7 +51,8 @@ MAX_RETRIES=30
 RETRY_INTERVAL=2
 
 for i in $(seq 1 $MAX_RETRIES); do
-    if curl -s -o /dev/null -w "%{http_code}" "$SITE_URL/wp-json/" | grep -q "200"; then
+    # Use ?rest_route=/ because pretty permalinks may not be active yet.
+    if curl -s -o /dev/null -w "%{http_code}" "$SITE_URL/?rest_route=/" | grep -q "200"; then
         echo "WordPress is ready."
         break
     fi
@@ -65,12 +66,19 @@ for i in $(seq 1 $MAX_RETRIES); do
 done
 
 # ---------------------------------------------------------------------------
+# Ensure pretty permalinks are active so /wp-json/ works
+# ---------------------------------------------------------------------------
+
+echo "Flushing rewrite rules..."
+npm run --silent wp-env run cli -- wp rewrite structure '/%postname%/' --hard 2>/dev/null
+
+# ---------------------------------------------------------------------------
 # Create application password
 # ---------------------------------------------------------------------------
 
 echo "Creating application password for '$USERNAME'..."
 
-APP_PASSWORD=$(npm run wp-env run cli -- wp user application-password create "$USERNAME" "$APP_NAME" --porcelain 2>/dev/null)
+APP_PASSWORD=$(npm run --silent wp-env run cli -- wp user application-password create "$USERNAME" "$APP_NAME" --porcelain 2>/dev/null)
 
 if [ -z "$APP_PASSWORD" ]; then
     echo "Error: Failed to create application password."
