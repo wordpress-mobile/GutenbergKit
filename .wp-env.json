@@ -1,0 +1,12 @@
+{
+	"plugins": [
+		"https://downloads.wordpress.org/plugin/gutenberg.latest-stable.zip"
+	],
+	"mappings": {
+		"wp-content/mu-plugins": "./wp-env/mu-plugins"
+	},
+	"config": {
+		"WP_DEBUG": true,
+		"WP_DEBUG_LOG": true
+	}
+}

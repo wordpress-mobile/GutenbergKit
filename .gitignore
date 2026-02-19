@@ -200,5 +200,8 @@ src/translations/
 e2e/test-results/
 playwright-report/
 
+# wp-env
+.wp-env.credentials.json
+
 # Claude
 .claude/settings.local.json
