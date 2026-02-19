@@ -393,6 +393,9 @@ class GutenbergView : WebView {
 
         // Build the asset loader. When the site uses HTTP, serve assets over HTTP
         // too so that Android WebView doesn't block site resources as mixed content.
+        // Note: allowing HTTP means asset traffic is unencrypted. This is acceptable
+        // for local development (localhost / 10.0.2.2) but should not be used for
+        // production sites.
         val siteUsesHttp = configuration.siteURL.startsWith("http://")
         assetLoader = WebViewAssetLoader.Builder()
             .setHttpAllowed(siteUsesHttp)
