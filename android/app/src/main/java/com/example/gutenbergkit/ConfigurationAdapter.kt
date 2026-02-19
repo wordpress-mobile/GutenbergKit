@@ -27,6 +27,13 @@ class ConfigurationAdapter(
                 holder.subtitleText.visibility = View.VISIBLE
             }
 
+            is ConfigurationItem.LocalWordPress -> {
+                holder.titleText.text = holder.itemView.context.getString(R.string.local_wordpress)
+                holder.subtitleText.text =
+                    holder.itemView.context.getString(R.string.local_wordpress_subtitle)
+                holder.subtitleText.visibility = View.VISIBLE
+            }
+
             is ConfigurationItem.ConfiguredEditor -> {
                 holder.titleText.text = item.name
                 holder.subtitleText.text = item.siteUrl
