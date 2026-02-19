@@ -42,7 +42,8 @@ import org.wordpress.gutenberg.model.GBKitGlobal
 import org.wordpress.gutenberg.services.EditorService
 import java.util.Locale
 
-const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
+private const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
+private const val ASSET_URL_HTTP = "http://appassets.androidplatform.net/assets/index.html"
 
 /**
  * A WebView-based Gutenberg block editor for Android.
@@ -85,9 +86,7 @@ const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
 class GutenbergView : WebView {
     private var isEditorLoaded = false
     private var didFireEditorLoaded = false
-    private var assetLoader = WebViewAssetLoader.Builder()
-        .addPathHandler("/assets/", AssetsPathHandler(this.context))
-        .build()
+    private lateinit var assetLoader: WebViewAssetLoader
     private val configuration: EditorConfiguration
     private lateinit var dependencies: EditorDependencies
 
@@ -268,7 +267,7 @@ class GutenbergView : WebView {
                 }
 
                 // Allow asset URLs
-                if (url.host == Uri.parse(ASSET_URL).host) {
+                if (url.host == "appassets.androidplatform.net") {
                     return false
                 }
 
@@ -392,19 +391,28 @@ class GutenbergView : WebView {
             configuration.cachedAssetHosts
         )
 
+        // Build the asset loader. When the site uses HTTP, serve assets over HTTP
+        // too so that Android WebView doesn't block site resources as mixed content.
+        val siteUsesHttp = configuration.siteURL.startsWith("http://")
+        assetLoader = WebViewAssetLoader.Builder()
+            .setHttpAllowed(siteUsesHttp)
+            .addPathHandler("/assets/", AssetsPathHandler(this.context))
+            .build()
+
         // Notify that dependency loading is complete (spinner phase begins)
         loadingListener?.onDependencyLoadingFinished()
 
         initializeWebView()
 
+        val assetUrl = if (siteUsesHttp) ASSET_URL_HTTP else ASSET_URL
         val editorUrl = BuildConfig.GUTENBERG_EDITOR_URL.ifEmpty {
-            ASSET_URL
+            assetUrl
         }
 
         WebStorage.getInstance().deleteAllData()
         this.clearCache(true)
         // All cookies are third-party cookies because the root of this document
-        // lives under `https://appassets.androidplatform.net`
+        // lives under `appassets.androidplatform.net`
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
 
         // Erase all local cookies before loading the URL – we don't want to persist

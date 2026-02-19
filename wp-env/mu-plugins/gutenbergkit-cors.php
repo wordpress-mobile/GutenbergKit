@@ -12,10 +12,12 @@ add_action( 'rest_api_init', function () {
 		$origin = get_http_origin();
 
 		$allowed_origins = array(
-			'http://localhost:5173',   // Vite dev server
-			'http://localhost:4173',   // Vite preview server
-			'http://10.0.2.2:5173',   // Vite dev server (Android emulator)
-			'http://10.0.2.2:4173',   // Vite preview server (Android emulator)
+			'http://localhost:5173',                    // Vite dev server
+			'http://localhost:4173',                    // Vite preview server
+			'http://10.0.2.2:5173',                    // Vite dev server (Android emulator)
+			'http://10.0.2.2:4173',                    // Vite preview server (Android emulator)
+			'https://appassets.androidplatform.net',   // Android production build (HTTPS site)
+			'http://appassets.androidplatform.net',    // Android production build (HTTP site)
 		);
 
 		if ( in_array( $origin, $allowed_origins, true ) ) {
@@ -43,6 +45,8 @@ add_action( 'init', function () {
 			'http://localhost:4173',
 			'http://10.0.2.2:5173',
 			'http://10.0.2.2:4173',
+			'https://appassets.androidplatform.net',
+			'http://appassets.androidplatform.net',
 		);
 
 		if ( in_array( $origin, $allowed_origins, true ) ) {
