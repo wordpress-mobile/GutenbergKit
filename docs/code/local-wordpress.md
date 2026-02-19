@@ -4,7 +4,7 @@ GutenbergKit includes a local WordPress environment powered by [`@wordpress/env`
 
 ## Prerequisites
 
--   [Docker Desktop](https://www.docker.com/products/docker-desktop/) must be installed and running.
+-   [Docker](https://www.docker.com/) must be installed and running.
 -   Node.js and npm (already required for GutenbergKit development).
 
 ## Quick Start
