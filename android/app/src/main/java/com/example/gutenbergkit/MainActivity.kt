@@ -15,13 +15,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material3.Card
@@ -44,11 +42,8 @@ import com.example.gutenbergkit.ui.dialogs.AddConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DeleteConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DiscoveringSiteDialog
 import com.example.gutenbergkit.ui.theme.AppTheme
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
 import org.wordpress.gutenberg.BuildConfig
 import org.wordpress.gutenberg.model.EditorConfiguration
-import uniffi.wp_api.PostType
 
 class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCallback {
     private val configurations = mutableStateListOf<ConfigurationItem>()
