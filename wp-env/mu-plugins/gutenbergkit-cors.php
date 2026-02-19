@@ -52,7 +52,8 @@ add_action( 'init', function () {
 		if ( in_array( $origin, $allowed_origins, true ) ) {
 			header( 'Access-Control-Allow-Origin: ' . $origin );
 			header( 'Access-Control-Allow-Credentials: true' );
-		} else {
+		} elseif ( empty( $origin ) ) {
+			// Allow requests with no Origin header (native WebViews).
 			header( 'Access-Control-Allow-Origin: *' );
 		}
 
