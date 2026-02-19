@@ -359,7 +359,13 @@ fun ConfigurationCard(
                     { Text(stringResource(R.string.bundled_editor_subtitle)) }
                 }
                 is ConfigurationItem.LocalWordPress -> {
-                    { Text(stringResource(R.string.local_wordpress_subtitle)) }
+                    {
+                        val isConfigured = LocalWordPressCredentials.load() != null
+                        Text(
+                            if (isConfigured) stringResource(R.string.local_wordpress_subtitle)
+                            else stringResource(R.string.local_wordpress_subtitle_not_configured)
+                        )
+                    }
                 }
                 is ConfigurationItem.ConfiguredEditor -> null
             },

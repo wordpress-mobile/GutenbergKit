@@ -45,16 +45,22 @@ class SitePreparationViewModel(
                     is ConfigurationItem.LocalWordPress -> {
                         val credentials = LocalWordPressCredentials.load()
                             ?: throw IllegalStateException(
-                                "Local WordPress not available.\n\nRun 'make wp-env-start' from the project root to start a local WordPress environment."
+                                "Local WordPress not configured.\n\nRun 'make wp-env-start' from the project root to set up a local WordPress environment."
                             )
-                        loadConfiguration(
-                            ConfigurationItem.ConfiguredEditor(
-                                name = "Local WordPress",
-                                siteUrl = credentials.siteUrl,
-                                siteApiRoot = credentials.siteApiRoot,
-                                authHeader = credentials.authHeader
+                        try {
+                            loadConfiguration(
+                                ConfigurationItem.ConfiguredEditor(
+                                    name = "Local WordPress",
+                                    siteUrl = credentials.siteUrl,
+                                    siteApiRoot = credentials.siteApiRoot,
+                                    authHeader = credentials.authHeader
+                                )
                             )
-                        )
+                        } catch (e: java.net.ConnectException) {
+                            throw IllegalStateException(
+                                "Could not connect to Local WordPress at ${credentials.siteUrl}.\n\nThe wp-env server may not be running. Start it with 'make wp-env-start'."
+                            )
+                        }
                     }
                     is ConfigurationItem.ConfiguredEditor -> loadConfiguration(configurationItem)
                 }
