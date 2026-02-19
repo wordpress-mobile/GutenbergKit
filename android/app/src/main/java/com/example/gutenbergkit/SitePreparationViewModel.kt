@@ -45,7 +45,7 @@ class SitePreparationViewModel(
                     is ConfigurationItem.LocalWordPress -> {
                         val credentials = LocalWordPressCredentials.load()
                             ?: throw IllegalStateException(
-                                "Local WordPress not configured.\n\nRun 'make wp-env-start' from the project root to set up a local WordPress environment."
+                                "Local WordPress not configured.\n\nRun 'make wp-env-start' from the project root, then rebuild the app."
                             )
                         try {
                             loadConfiguration(

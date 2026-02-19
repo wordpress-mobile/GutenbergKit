@@ -9,7 +9,7 @@
     <string name="bundled_editor_subtitle">Default editor without site configuration</string>
     <string name="local_wordpress">Local WordPress</string>
     <string name="local_wordpress_subtitle">WordPress running via wp-env at localhost:8888</string>
-    <string name="local_wordpress_subtitle_not_configured">Not configured. Run `make wp-env-start` to set up.</string>
+    <string name="local_wordpress_subtitle_not_configured">Not configured. Run `make wp-env-start`, then rebuild.</string>
     <string name="editor_configurations_section">Editor configurations</string>
     <string name="editor_configurations_section_description">Editors with site configuration; enabling media uploads, plugin support, etc.</string>
     <string name="add_editor_configuration_description">Add editor configuration</string>

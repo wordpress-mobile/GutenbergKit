@@ -1,4 +1,4 @@
-import java.util.Properties
+import org.json.JSONObject
 
 plugins {
     alias(libs.plugins.android.application)
@@ -6,9 +6,15 @@ plugins {
     alias(libs.plugins.jetbrains.kotlin.compose)
 }
 
-val localProperties = Properties().apply {
-    val file = rootProject.file("local.properties")
-    if (file.exists()) load(file.inputStream())
+// Read wp-env credentials at build time. The emulator cannot access host
+// filesystem paths at runtime, so we bake the values into BuildConfig.
+val wpEnvCredentials: JSONObject? = run {
+    val file = rootProject.file("../.wp-env.credentials.json")
+    if (file.exists()) {
+        try { JSONObject(file.readText()) } catch (_: Exception) { null }
+    } else {
+        null
+    }
 }
 
 android {
@@ -24,11 +30,9 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField(
-            "String",
-            "WP_ENV_CREDENTIALS_PATH",
-            "\"${localProperties.getProperty("wp.env.credentials.path", "")}\""
-        )
+        buildConfigField("String", "WP_ENV_SITE_URL", "\"${wpEnvCredentials?.optString("siteUrl", "") ?: ""}\"")
+        buildConfigField("String", "WP_ENV_SITE_API_ROOT", "\"${wpEnvCredentials?.optString("siteApiRoot", "") ?: ""}\"")
+        buildConfigField("String", "WP_ENV_AUTH_HEADER", "\"${wpEnvCredentials?.optString("authHeader", "") ?: ""}\"")
     }
 
     buildTypes {
