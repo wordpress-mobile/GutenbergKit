@@ -18,7 +18,7 @@ const TEST_IMAGE_2 = path.resolve(
 	'assets/test-image-2.png'
 );
 
-test.describe( 'Gallery Block (F.4)', () => {
+test.describe( 'Gallery Block', () => {
 	test( 'should upload multiple images to a gallery', async ( { page } ) => {
 		const editor = new EditorPage( page );
 		await editor.setup();

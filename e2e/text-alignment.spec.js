@@ -8,7 +8,7 @@ import { test, expect } from '@playwright/test';
  */
 import EditorPage from './editor-page';
 
-test.describe( 'Text Alignment (F.1)', () => {
+test.describe( 'Text Alignment', () => {
 	test( 'should align a paragraph block to center', async ( { page } ) => {
 		const editor = new EditorPage( page );
 		await editor.setup();

@@ -8,7 +8,7 @@ import { test, expect } from '@playwright/test';
  */
 import EditorPage from './editor-page';
 
-test.describe( 'Embedded Content (F.2)', () => {
+test.describe( 'Embedded Content', () => {
 	test( 'should insert an embed block with a YouTube URL', async ( {
 		page,
 	} ) => {

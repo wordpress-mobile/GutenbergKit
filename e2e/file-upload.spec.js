@@ -11,7 +11,7 @@ import EditorPage from './editor-page';
 
 const TEST_FILE = path.resolve( import.meta.dirname, 'assets/test-file.pdf' );
 
-test.describe( 'File Upload (F.7)', () => {
+test.describe( 'File Upload', () => {
 	test( 'should upload a file via the File block', async ( { page } ) => {
 		const editor = new EditorPage( page );
 		await editor.setup();
