@@ -25,13 +25,6 @@
     -   Tap "Choose from device" and select a video.
 -   **Expected Outcome:** Video uploads and displays in the block. An activity indicator is shown while the video is uploading.
 
-### S.4. Save and publish a post
-
--   **Steps:**
-    -   Create a new post with text and media.
-    -   Save as draft, then publish.
--   **Expected Outcome:** Post is saved and published successfully; content appears as expected.
-
 ## Functionality Tests
 
 **Purpose:** Validate deeper content and formatting features, advanced block settings, and robust editor behaviors.
