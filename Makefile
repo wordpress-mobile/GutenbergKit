@@ -65,7 +65,7 @@ e2e-dependencies: npm-dependencies ## Install E2E test dependencies
 		echo "--- :white_check_mark: Playwright Chromium is already installed."; \
 	elif [ -n "$$CI" ]; then \
 		echo "--- :chromium: Installing Playwright Chromium"; \
-		npx playwright install --with-deps chromium; \
+		npx playwright install chromium; \
 	else \
 		echo ""; \
 		echo "Playwright Chromium browser is not installed."; \
