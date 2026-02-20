@@ -33,6 +33,8 @@ steps:
           echo "--- :performing_arts: Running E2E tests"
           make test-e2e
       plugins: *plugins
+      agents:
+          queue: mac-metal
 
     - label: ':android: Publish Android Library'
       depends_on: build-react
