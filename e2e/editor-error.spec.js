@@ -80,10 +80,12 @@ test.describe( 'Editor Error Handling', () => {
 	test( 'should show plugin load failure notice and keep editor functional', async ( {
 		page,
 	} ) => {
-		// Enable plugins without providing API endpoints. This causes
+		// Enable plugins with an unreachable API root. This causes
 		// fetchEditorAssets to fail, resulting in the plugin load notice.
 		const editor = new EditorPage( page );
 		await editor.setup( {
+			siteApiRoot: 'http://localhost:1/',
+			authHeader: '',
 			post: {
 				id: 1,
 				type: 'post',
