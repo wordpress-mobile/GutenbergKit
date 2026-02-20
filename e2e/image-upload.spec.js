@@ -11,7 +11,7 @@ import EditorPage from './editor-page';
 
 const TEST_IMAGE = path.resolve( import.meta.dirname, 'assets/test-image.png' );
 
-test.describe( 'Image Upload (S.2)', () => {
+test.describe( 'Image Upload', () => {
 	test( 'should upload an image via the Image block', async ( { page } ) => {
 		const editor = new EditorPage( page );
 		await editor.setup();

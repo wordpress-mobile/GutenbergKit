@@ -11,7 +11,7 @@ import EditorPage from './editor-page';
 
 const TEST_AUDIO = path.resolve( import.meta.dirname, 'assets/test-audio.mp3' );
 
-test.describe( 'Audio Upload (F.6)', () => {
+test.describe( 'Audio Upload', () => {
 	test( 'should upload an audio file via the Audio block', async ( {
 		page,
 	} ) => {

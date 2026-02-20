@@ -11,7 +11,7 @@ import EditorPage from './editor-page';
 
 const TEST_VIDEO = path.resolve( import.meta.dirname, 'assets/test-video.mp4' );
 
-test.describe( 'Video Upload (S.3)', () => {
+test.describe( 'Video Upload', () => {
 	test( 'should upload a video via the Video block', async ( { page } ) => {
 		const editor = new EditorPage( page );
 		await editor.setup();

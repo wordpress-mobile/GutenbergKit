@@ -9,7 +9,7 @@ import { test, expect } from '@playwright/test';
 import EditorPage from './editor-page';
 import { credentials } from './wp-env-fixtures';
 
-test.describe( 'Pattern Insertion (F.5)', () => {
+test.describe( 'Pattern Insertion', () => {
 	test( 'should fetch patterns from the WP REST API', async () => {
 		// Verify that patterns are available from the wp-env backend,
 		// even though GBK delivers them through the native inserter bridge

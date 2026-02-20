@@ -8,7 +8,7 @@ import { test, expect } from '@playwright/test';
  */
 import EditorPage from './editor-page';
 
-test.describe( 'Color and Gradient (F.3)', () => {
+test.describe( 'Color and Gradient', () => {
 	test( 'should apply a background color to a button via settings', async ( {
 		page,
 	} ) => {
