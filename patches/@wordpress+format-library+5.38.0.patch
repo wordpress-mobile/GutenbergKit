@@ -1,10 +1,10 @@
 diff --git a/node_modules/@wordpress/format-library/package.json b/node_modules/@wordpress/format-library/package.json
-index b678801..bb4adbc 100644
+index 6dd5262..8dd5383 100644
 --- a/node_modules/@wordpress/format-library/package.json
 +++ b/node_modules/@wordpress/format-library/package.json
-@@ -29,7 +29,8 @@
- 			"import": "./build-module/index.js",
- 			"require": "./build/index.js"
+@@ -37,7 +37,8 @@
+ 			"import": "./build-module/index.mjs",
+ 			"require": "./build/index.cjs"
  		},
 -		"./package.json": "./package.json"
 +		"./package.json": "./package.json",
