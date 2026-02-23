@@ -70,7 +70,7 @@
 		"@wordpress/server-side-render": "^6.14.0",
 		"@wordpress/shortcode": "^4.36.0",
 		"@wordpress/style-engine": "^2.36.0",
-		"@wordpress/token-list": "^3.36.0",
+		"@wordpress/token-list": "^3.40.0",
 		"@wordpress/url": "^4.36.0",
 		"@wordpress/viewport": "^6.36.0",
 		"@wordpress/warning": "^3.36.0",
