@@ -45,15 +45,22 @@ class BlockInserterViewModel: ObservableObject {
         if searchText.isEmpty {
             sections = browsableSections
         } else {
-            // Search across all sections including search-only blocks.
-            sections = allSections.compactMap { section in
-                let filtered = SearchEngine<BlockType>()
-                    .search(query: searchText, in: section.blocks)
-                return filtered.isEmpty ? nil : BlockInserterSection(
-                    category: section.category,
-                    name: section.name,
-                    blocks: filtered
-                )
+            // Flatten all blocks (including search-only) into a single
+            // ranked list so search results aren't split across sections.
+            // Deduplicate by ID first since the same block can appear in
+            // multiple sections (e.g. most-used and its category section).
+            var seenIDs = Set<String>()
+            let allBlocks = allSections.flatMap { $0.blocks }.filter { seenIDs.insert($0.id).inserted }
+            let results = SearchEngine<BlockType>()
+                .search(query: searchText, in: allBlocks)
+            if results.isEmpty {
+                sections = []
+            } else {
+                sections = [BlockInserterSection(
+                    category: "gbk-search-results",
+                    name: nil,
+                    blocks: results
+                )]
             }
         }
     }
