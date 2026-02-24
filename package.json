@@ -105,7 +105,7 @@
 		"prettier": "npm:wp-prettier@^3.0.3",
 		"react-devtools": "^7.0.1",
 		"react-devtools-core": "^7.0.1",
-		"sass-embedded": "^1.97.2",
+		"sass-embedded": "^1.97.3",
 		"vite": "^7.3.1",
 		"vite-plugin-node-polyfills": "^0.24.0",
 		"vitest": "^4.0.17"
