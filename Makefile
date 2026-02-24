@@ -210,7 +210,7 @@ test-ios-e2e: ## Run iOS E2E tests against the production build
 		| xcbeautify
 
 .PHONY: test-ios-e2e-dev
-test-ios-e2e-dev: npm-dependencies ## Run iOS E2E tests against the Vite dev server (must be running)
+test-ios-e2e-dev: ## Run iOS E2E tests against the Vite dev server (must be running)
 	@if ! curl -sf http://localhost:5173 > /dev/null 2>&1; then \
 		echo "Error: Dev server is not running at http://localhost:5173"; \
 		echo "Start it first with: make dev-server"; \
