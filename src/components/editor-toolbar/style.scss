@@ -105,7 +105,7 @@ $scroll-indicator-elevation: 32;
 }
 
 .gutenberg-kit-editor-toolbar.gutenberg-kit-editor-toolbar
-	.components-button.has-icon.has-icon {
+	.components-button.components-button {
 	min-width: $min-touch-target-size;
 	max-height: $min-touch-target-size;
 }
