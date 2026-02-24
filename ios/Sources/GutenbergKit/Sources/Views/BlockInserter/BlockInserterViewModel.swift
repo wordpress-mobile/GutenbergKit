@@ -22,7 +22,7 @@ class BlockInserterViewModel: ObservableObject {
 
     init(sections: [BlockInserterSection]) {
         self.allSections = sections
-        self.sections = sections
+        self.sections = sections.filter { $0.category != "gbk-search-only" }
 
         setupSearchObserver()
     }
@@ -36,10 +36,16 @@ class BlockInserterViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
+    /// Sections visible when browsing (excludes search-only sections).
+    private var browsableSections: [BlockInserterSection] {
+        allSections.filter { $0.category != "gbk-search-only" }
+    }
+
     private func updateFilteredSections(searchText: String) {
         if searchText.isEmpty {
-            sections = allSections
+            sections = browsableSections
         } else {
+            // Search across all sections including search-only blocks.
             sections = allSections.compactMap { section in
                 let filtered = SearchEngine<BlockType>()
                     .search(query: searchText, in: section.blocks)

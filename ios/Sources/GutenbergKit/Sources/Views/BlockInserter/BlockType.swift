@@ -14,6 +14,7 @@ struct BlockType: Decodable, Identifiable {
     var icon: String?
     var frecency: Double = 0.0
     var isDisabled = false
+    var isSearchOnly = false
     var parents: [String] = []
 }
 
