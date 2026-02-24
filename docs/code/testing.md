@@ -30,9 +30,13 @@ make test-android
 
 ## E2E Tests
 
-E2E tests use Playwright to load the editor in a headless Chromium browser and verify Gutenberg editor logic — block operations, text formatting, split/merge, and data store state. They run against the Vite dev server with no native layer involved.
+### Web E2E Tests (Playwright)
+
+These tests use Playwright to load the editor in a headless Chromium browser and verify Gutenberg editor logic — block operations, text formatting, split/merge, and data store state. No native layer is involved.
 
 Test files live in `e2e/*.spec.js`.
+
+Locally, Playwright starts the Vite dev server (`npm run dev` on `:5173`) and reuses an existing one if already running. On CI, it uses a production preview build (`npm run preview` on `:4173`) with serial workers and retries. This is configured in `playwright.config.js`.
 
 Run tests:
 
@@ -46,7 +50,7 @@ Run in interactive UI mode:
 make test-e2e-ui
 ```
 
-### iOS E2E Tests
+### iOS E2E Tests (XCUITest)
 
 -   Framework: XCUITest
 -   Test files: `ios/Demo-iOS/GutenbergUITests/`
