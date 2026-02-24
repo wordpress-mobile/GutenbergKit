@@ -23,7 +23,7 @@ steps:
       command: make test-js
       plugins: *plugins
 
-    - label: ':performing_arts: Test E2E'
+    - label: ':performing_arts: Test Web E2E'
       depends_on: build-react
       command: |
           buildkite-agent artifact download dist.tar.gz .
