@@ -30,9 +30,13 @@ make test-android
 
 ## E2E Tests
 
-E2E tests use Playwright to load the editor in a headless Chromium browser and verify Gutenberg editor logic — block operations, text formatting, split/merge, and data store state. They run against the Vite dev server with no native layer involved.
+### Web E2E Tests (Playwright)
+
+These tests use Playwright to load the editor in a headless Chromium browser and verify Gutenberg editor logic — block operations, text formatting, split/merge, and data store state. No native layer is involved.
 
 Test files live in `e2e/*.spec.js`.
+
+Locally, Playwright starts the Vite dev server (`npm run dev` on `:5173`) and reuses an existing one if already running. On CI, it uses a production preview build (`npm run preview` on `:4173`) with serial workers and retries. This is configured in `playwright.config.js`.
 
 Run tests:
 
@@ -45,6 +49,59 @@ Run in interactive UI mode:
 ```bash
 make test-e2e-ui
 ```
+
+### iOS E2E Tests (XCUITest)
+
+-   Framework: XCUITest
+-   Test files: `ios/Demo-iOS/GutenbergUITests/`
+-   Requires: Xcode and an iOS Simulator
+
+These tests launch the Demo iOS app via `XCUIApplication` and verify native shell behavior — toolbar rendering, menu interactions, WebView lifecycle, and native-to-JS bridge state synchronization.
+
+There are two ways to run the tests, depending on how the editor JS is served.
+
+#### Dev server (local development)
+
+Uses the Vite dev server for faster iteration — no production build required. Start the dev server in one terminal, then run the tests in another:
+
+```bash
+# Terminal 1
+make dev-server
+
+# Terminal 2
+make test-ios-e2e-dev
+```
+
+This sets `TEST_RUNNER_GUTENBERG_EDITOR_URL`, which `xcodebuild` forwards to the test runner process (with the `TEST_RUNNER_` prefix stripped). The test setup then passes `GUTENBERG_EDITOR_URL` to the app under test via `launchEnvironment`, so the WebView loads from `http://localhost:5173` instead of the bundled assets.
+
+#### Production build (CI)
+
+Uses the production JS bundle built by Vite. This is what CI runs and is the default `make test-ios-e2e` target:
+
+```bash
+make test-ios-e2e
+```
+
+The target depends on `build` and will handle it automatically.
+
+#### Switching between modes
+
+The mode is controlled by the `GUTENBERG_EDITOR_URL` environment variable. When set, `EditorViewController` loads from that URL; otherwise it loads from the bundled `index.html`.
+
+-   `make test-ios-e2e-dev` — sets `TEST_RUNNER_GUTENBERG_EDITOR_URL=http://localhost:5173` and checks that the dev server is running before starting.
+-   `make test-ios-e2e` — does not set the variable; runs a production build first.
+
+You can also pass the variable directly if you need a custom URL:
+
+```bash
+TEST_RUNNER_GUTENBERG_EDITOR_URL=http://localhost:5173 xcodebuild test \
+    -project ./ios/Demo-iOS/Gutenberg.xcodeproj \
+    -scheme GutenbergUITests \
+    -sdk iphonesimulator \
+    -destination 'platform=iOS Simulator,name=iPhone 17'
+```
+
+> **Note:** The `TEST_RUNNER_` prefix is an `xcodebuild` convention — variables with this prefix are forwarded to test runner processes with the prefix removed.
 
 ## Code Quality
 

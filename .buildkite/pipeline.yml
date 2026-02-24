@@ -23,7 +23,7 @@ steps:
       command: make test-js
       plugins: *plugins
 
-    - label: ':performing_arts: Test E2E'
+    - label: ':performing_arts: Test Web E2E'
       depends_on: build-react
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -52,4 +52,12 @@ steps:
 
     - label: ':swift: Test Swift Package'
       command: swift test
+      plugins: *plugins
+
+    - label: ':ios: Test iOS E2E'
+      depends_on: build-react
+      command: |
+          buildkite-agent artifact download dist.tar.gz .
+          tar -xzf dist.tar.gz
+          make test-ios-e2e
       plugins: *plugins
