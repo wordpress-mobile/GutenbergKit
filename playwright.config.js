@@ -3,16 +3,21 @@
  */
 import { defineConfig, devices } from '@playwright/test';
 
+const isCI = process.env.CI === 'true';
+
+// CI uses production build, local development uses dev server
+const url = isCI ? 'http://localhost:4173' : 'http://localhost:5173';
+
 export default defineConfig( {
 	testDir: './e2e',
 	outputDir: './e2e/test-results',
 	fullyParallel: true,
-	workers: process.env.CI ? 1 : undefined,
-	retries: process.env.CI ? 2 : 0,
+	workers: isCI ? 1 : undefined,
+	retries: isCI ? 2 : 0,
 	timeout: 60_000,
-	reporter: process.env.CI ? 'list' : 'html',
+	reporter: isCI ? 'list' : 'html',
 	use: {
-		baseURL: 'http://localhost:4173',
+		baseURL: url,
 		actionTimeout: 10_000,
 		trace: 'on-first-retry',
 	},
@@ -23,9 +28,10 @@ export default defineConfig( {
 		},
 	],
 	webServer: {
-		command: 'npm run preview',
-		url: 'http://localhost:4173',
-		reuseExistingServer: true,
+		// CI uses production build, local development uses dev server
+		command: isCI ? 'npm run preview' : 'npm run dev',
+		url,
+		reuseExistingServer: ! isCI,
 		timeout: 30_000,
 	},
 } );
