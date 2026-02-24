@@ -190,9 +190,26 @@ test-swift-package: build ## Run Swift package tests
 	$(call XCODEBUILD_CMD, test)
 
 .PHONY: test-ios-e2e
-test-ios-e2e: build ## Run iOS E2E tests (requires Xcode and a simulator)
-	@echo "--- :ios: Running iOS E2E Tests"
+test-ios-e2e: build ## Run iOS E2E tests against the production build
+	@echo "--- :ios: Running iOS E2E Tests (production build)"
 	@set -o pipefail && \
+		xcodebuild test \
+		-project ./ios/Demo-iOS/Gutenberg.xcodeproj \
+		-scheme GutenbergUITests \
+		-sdk iphonesimulator \
+		-destination '${SIMULATOR_DESTINATION}' \
+		| xcbeautify
+
+.PHONY: test-ios-e2e-dev
+test-ios-e2e-dev: npm-dependencies ## Run iOS E2E tests against the Vite dev server (must be running)
+	@if ! curl -sf http://localhost:5173 > /dev/null 2>&1; then \
+		echo "Error: Dev server is not running at http://localhost:5173"; \
+		echo "Start it first with: make dev-server"; \
+		exit 1; \
+	fi
+	@echo "--- :ios: Running iOS E2E Tests (dev server)"
+	@set -o pipefail && \
+		TEST_RUNNER_GUTENBERG_EDITOR_URL=http://localhost:5173 \
 		xcodebuild test \
 		-project ./ios/Demo-iOS/Gutenberg.xcodeproj \
 		-scheme GutenbergUITests \

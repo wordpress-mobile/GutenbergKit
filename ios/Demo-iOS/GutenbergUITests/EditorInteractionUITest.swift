@@ -17,6 +17,14 @@ final class EditorInteractionUITest: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
+
+        // Forward the dev server URL to the app under test when set.
+        // This lets `EditorViewController` load from the Vite dev server
+        // instead of the bundled production build.
+        if let devServerURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"] {
+            app.launchEnvironment["GUTENBERG_EDITOR_URL"] = devServerURL
+        }
+
         app.launch()
     }
 
