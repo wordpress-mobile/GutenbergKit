@@ -20,7 +20,6 @@ import '@wordpress/format-library';
 import componentStyles from '@wordpress/components/build-style/style.css?inline';
 import blockEditorContentStyles from '@wordpress/block-editor/build-style/content.css?inline';
 import blocksStyles from '@wordpress/block-library/build-style/style.css?inline';
-import blocksEditorStyles from '@wordpress/block-library/build-style/editor.css?inline';
 
 /**
  * Internal dependencies
@@ -94,8 +93,7 @@ function VisualEditor( { hideTitle } ) {
 		hasThemeStyles ? '' : defaultThemeStyles,
 		componentStyles,
 		blockEditorContentStyles,
-		blocksStyles,
-		blocksEditorStyles
+		blocksStyles
 	);
 
 	const editorClasses = clsx( 'gutenberg-kit-visual-editor', {
