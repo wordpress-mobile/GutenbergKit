@@ -239,8 +239,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             }
         } else {
             // ASYNC FLOW: No dependencies - fetch them asynchronously
-            self.dependencyTaskHandle = Task(priority: .userInitiated) {
-                await self.prepareEditor()
+            self.dependencyTaskHandle = Task(priority: .userInitiated) { [weak self] in
+                await self?.prepareEditor()
             }
         }
     }
@@ -270,8 +270,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         do {
             // EditorService.prepare() fetches dependencies concurrently with progress reporting
-            let dependencies = try await self.editorService.prepare { @MainActor progress in
-                self.progressView.setProgress(progress, animated: true)
+            let dependencies = try await self.editorService.prepare { @MainActor [weak self] progress in
+                self?.progressView.setProgress(progress, animated: true)
             }
 
             // Store dependencies for later use (e.g., HTMLPreviewManager)

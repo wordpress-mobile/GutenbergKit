@@ -118,6 +118,10 @@ public actor EditorService {
 
         self.progress = EditorProgress(completed: 1, total: 100)
         self.progressCallback = progress
+        defer {
+            self.progressCallback = nil
+            self.progress = nil
+        }
 
         async let settings = try prepareEditorSettings()
         async let assetBundle = try self.prepareAssetBundle()
