@@ -32,6 +32,7 @@ steps:
           make wp-env-start
           echo "--- :performing_arts: Running E2E tests in Playwright container"
           docker run --rm \
+            --userns=host \
             --network host \
             -v "$(pwd):/work" \
             -w /work \
