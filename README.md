@@ -12,9 +12,16 @@ The architecture consists of three main layers:
 
 ## Getting Started
 
+### Contributing
+
+We welcome contributions! To get started:
+
+-   **[Getting Started](./docs/code/getting-started.md)** - Set up your local development environment
+-   **[Contributing Guide](./CONTRIBUTING.md)** - Development workflow, guidelines, and how to submit changes
+
 ### Using GutenbergKit
 
-To integrate GutenbergKit into your iOS or Android app, include the package as a dependency:
+To integrate GutenbergKit into your own iOS or Android app, include the package as a dependency:
 
 -   **iOS**: Add the Swift package from the repository root
 -   **Android**: Add the Kotlin library as a Maven dependency or include the `android/Gutenberg/` module
@@ -22,10 +29,6 @@ To integrate GutenbergKit into your iOS or Android app, include the package as a
 See the [Integration Guide](./docs/integration.md) for detailed setup instructions and code examples for integrating GutenbergKit into your app.
 
 For integrating GutenbergKit into the WordPress mobile apps specifically, see the [WordPress App Integration](./docs/wordpress-app-integration.md) guide.
-
-### Contributing
-
-We welcome contributions! See the [Contributing Guide](./CONTRIBUTING.md) for setup instructions, development workflow, and how to submit changes.
 
 ## Get Involved
 
