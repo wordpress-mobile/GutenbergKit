@@ -27,7 +27,7 @@ steps:
       depends_on: build-react
       command: |
           echo "--- :chromium: Installing Playwright system dependencies"
-          sudo npx playwright install-deps chromium
+          sudo DEBIAN_FRONTEND=noninteractive npx playwright install-deps chromium
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
           echo "--- :docker: Starting wp-env"
