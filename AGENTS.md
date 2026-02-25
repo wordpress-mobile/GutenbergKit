@@ -4,170 +4,36 @@ This file provides guidance to AI agents when working with code in this reposito
 
 ## Overview
 
-GutenbergKit is an experimental Gutenberg block editor for native iOS and Android apps built with web technologies. It consists of:
+GutenbergKit is a Gutenberg block editor for native iOS and Android apps built with web technologies. It consists of:
 
 -   A React-based web editor using WordPress Gutenberg packages
 -   Swift package for iOS integration
 -   Kotlin library for Android integration
 -   Native-to-web bridge for communication between platforms
 
-The primary branch is `trunk` (not `main`).
+For deeper architectural context on specific subsystems, see the docs under `docs/code/` — including `architecture.md`, `plugins.md`, `preloading.md`, and others.
 
 ## Common Development Commands
 
 **CRITICAL**: Always use `make` commands over underlying tool commands (`npm`, `swift`, `gradle`, etc.) when they exist. The Makefile provides convenient wrappers that handle dependencies and configuration automatically. However, when you need to pass specific arguments that a `make` target does not support — such as running Prettier on a single file, linting only changed files, or running a single test file — use the underlying tool directly.
 
-To see all available make commands, run:
+To see all available make commands with descriptions, run:
 
 ```bash
 make help
-# or simply
-make
 ```
 
-This will display a list of all available targets with descriptions.
+By default, dependencies, translations, and JS build are skipped if output directories already exist. Environment variables be used to force refresh of these steps when needed.
 
-### Web Development
+-   `REFRESH_DEPS=1` - Force refresh of dependencies (e.g. re-install npm packages)
+-   `REFRESH_L10N=1` - Force refresh of translations (e.g. re-run translation extraction)
+-   `REFRESH_JS_BUILD=1` - Force refresh of JavaScript build (e.g. clear Vite cache)
 
-```bash
-# Install dependencies
-npm ci
+## Local WordPress Environment (wp-env)
 
-# Start development server (use this for active development)
-make dev-server
-
-# Start standalone React DevTools server
-make dev-tools
-
-# Preview production build locally
-make preview
-
-# Run JavaScript tests (one-time run)
-make test-js
-
-# Run JavaScript tests in watch mode (for active development)
-make test-js-watch
-
-# Lint JavaScript code
-make lint-js
-
-# Lint and auto-fix JavaScript code
-make lint-fix-js
-
-# Format JavaScript code
-make format
-```
-
-### Building
-
-```bash
-# Build everything (web, iOS, Android)
-make build
-
-# This builds the web app and copies assets to:
-# - ios/Sources/GutenbergKit/Gutenberg/
-# - android/Gutenberg/src/main/assets/
-
-# By default, the build is skipped if output directories already exist
-# Force refresh of dependencies, translations, and JS build
-make build REFRESH_DEPS=1 REFRESH_L10N=1 REFRESH_JS_BUILD=1
-
-# Clean build artifacts
-make clean
-```
-
-### iOS Development
-
-```bash
-# Build Swift package
-make build-swift-package
-
-# Run Swift tests
-make test-swift-package
-```
-
-### Android Development
-
-```bash
-# Build Android library to local Maven
-make local-android-library
-
-# Run Android tests
-make test-android
-```
-
-### Local WordPress Environment (wp-env)
-
-A local WordPress environment powered by `@wordpress/env` for testing the full editor experience with theme styles, media uploads, and plugin block assets.
-
-```bash
-# Start the local WordPress environment (requires Docker)
-make wp-env-start
-
-# Stop the environment (preserves data)
-make wp-env-stop
-
-# Destroy the environment and remove all data
-make wp-env-clean
-
-# View WordPress logs
-make wp-env-logs
-
-# Run a WP-CLI command
-make wp-env-cli CMD="post list"
-```
+A local WordPress environment powered by `@wordpress/env` is available for verifying/testing changes against a full editor experience with theme styles, media uploads, and plugin block assets. Relevant commands are available via `make help`.
 
 See `docs/code/local-wordpress.md` for detailed setup instructions and troubleshooting.
-
-> **Note:** Most `make` targets have equivalent `npm` scripts in `package.json`. Build targets accept `REFRESH_DEPS=1`, `REFRESH_L10N=1`, and `REFRESH_JS_BUILD=1` flags to force refresh of dependencies, translations, and JavaScript builds respectively. Run `make help` for full details.
-
-## Architecture
-
-### Web Editor Structure
-
-The web editor is built with React and WordPress packages:
-
--   **Entry Points**:
-    -   `src/index.js` - Main editor entry point (supports plugins via bundled code)
--   **Core Components**:
-    -   `src/components/editor/` - Main editor component with host bridge integration
-    -   `src/components/visual-editor/` - Visual editing interface
-    -   `src/components/text-editor/` - HTML text editing interface
--   **Native Bridge**: `src/utils/bridge.js` - Handles communication between web and native platforms
-
-### Native Integration
-
-#### iOS (Swift)
-
--   **Main Classes**:
-    -   `EditorViewController` - WebView container and bridge
-    -   `EditorConfiguration` - Editor settings and capabilities
-    -   `EditorService` - API communication layer
-    -   `GBWebView` - Custom WebView with editor-specific features
-
-#### Android (Kotlin)
-
--   **Main Classes**:
-    -   `GutenbergView` - WebView container and bridge
-    -   `EditorConfiguration` - Editor settings and capabilities
-    -   `GutenbergRequestInterceptor` - Handles API routing
-    -   `CachedAssetRequestInterceptor` - Asset caching layer
-
-### Communication Pattern
-
-The editor uses a bidirectional bridge pattern:
-
-1. **Web → Native**: JavaScript calls methods on `window.editorDelegate` (Android) or `window.webkit.messageHandlers` (iOS)
-2. **Native → Web**: Native code evaluates JavaScript in the WebView
-3. **Message Types**: Editor loaded, content changed, media upload, block management, etc.
-
-### Build System
-
--   **Vite**: Handles web bundling and development server
--   **Translations**: Automated translation preparation from WordPress packages
--   **Asset Distribution**: Built assets are copied to platform-specific directories
-
-> For deeper architectural context on specific subsystems, see the docs under `docs/code/` — including `architecture.md`, `plugins.md`, `preloading.md`, and others.
 
 ## Code Quality Standards
 
@@ -210,12 +76,13 @@ make lint-js-fix
 
 These commands ensure code quality and prevent lint errors from blocking commits.
 
-### Pull Request Guidelines
+### Commit and Pull Request Guidelines
 
 When creating pull requests:
 
 1. **Use the PR template**: Read `.github/PULL_REQUEST_TEMPLATE.md` to get the current template structure and follow it when writing the PR body.
 2. **Assign a label**: Use `gh label list` to retrieve available labels and select the most relevant one for the PR.
+3. **Use Conventional Commits**: Follow the Conventional Commits specification for commit messages (e.g. `feat: add new block type`, `fix: resolve toolbar bug`).
 
 ### E2E Test Interaction Guidelines
 
@@ -230,8 +97,6 @@ Since GutenbergKit targets touch devices (iOS/Android), E2E tests should prefer 
 
 ## Common Pitfalls
 
--   **Do not edit build output directories.** The files under `ios/Sources/GutenbergKit/Gutenberg/` and `android/Gutenberg/src/main/assets/` are generated by `make build`. Never modify them directly — run `make build` to regenerate them instead.
--   **Do not use `console.*` directly.** Always use the logger utility (`src/utils/logger.js`). See the Logging Guidelines section above.
--   **Always run `make lint-fix-js` before committing.** Lint errors will block commits via pre-commit hooks.
+-   **The primary branch is `trunk` (not `main`).** Always ensure you are working on the `trunk` branch for development and pull requests. The `main` branch is not used in this repository.
+-   **Do not edit build output directories.** The files under `dist/`, `ios/Sources/GutenbergKit/Gutenberg/`, and `android/Gutenberg/src/main/assets/` are generated by `make build`. Never modify them directly — run `make build` to regenerate them instead.
 -   **Patching dependencies: modify `node_modules`, then run `npx patch-package <package-name>`.** Do not edit the `.patch` files under `patches/` by hand. The workflow is: make changes in `node_modules/<package>`, verify they work, then run `npx patch-package <package-name>` to create or update the patch file. Document the patch and its justification in `patches/README.md`.
--   **Do not edit the `dist/` directory.** It is a build artifact generated by Vite. Run `make build` or `make dev-server` instead.
