@@ -24,28 +24,20 @@ steps:
       plugins: *plugins
 
     - label: ':performing_arts: Test Web E2E'
+      depends_on: build-react
       command: |
-          echo "--- :mag: Agent diagnostics"
-          echo "User: $(whoami) (uid=$(id -u), gid=$(id -g))"
-          echo "Groups: $(groups)"
-          id
-          echo ""
-          echo "--- :lock: sudo check"
-          sudo -n true 2>&1 && echo "Passwordless sudo: YES" || echo "Passwordless sudo: NO"
-          echo ""
-          echo "--- :docker: Docker check"
-          which docker 2>&1 || echo "which docker: not found"
-          docker --version 2>&1 || echo "docker --version: failed"
-          docker info 2>&1 | head -20 || echo "docker info: failed"
-          docker ps 2>&1 || echo "docker ps: failed"
-          echo ""
-          echo "--- :package: Package manager check"
-          which apt-get 2>&1 || echo "apt-get: not found"
-          apt-get --version 2>&1 | head -1 || echo "apt-get --version: failed"
-          dpkg -l libatk1.0-0 2>&1 || echo "libatk1.0-0: not installed"
-          echo ""
-          echo "--- :chromium: Playwright check"
-          npx playwright install --dry-run chromium 2>&1 || echo "playwright dry-run: failed"
+          buildkite-agent artifact download dist.tar.gz .
+          tar -xzf dist.tar.gz
+          echo "--- :docker: Starting wp-env"
+          make wp-env-start
+          echo "--- :performing_arts: Running E2E tests in Playwright container"
+          docker run --rm \
+            --network host \
+            -v "$(pwd):/work" \
+            -w /work \
+            -e CI=true \
+            mcr.microsoft.com/playwright:v1.58.2-noble \
+            bash -c "npm ci && npx playwright install chromium && npx playwright test"
       agents:
           queue: default
       plugins: *plugins
