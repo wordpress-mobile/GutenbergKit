@@ -222,10 +222,9 @@ test-ios-e2e: ## Run iOS E2E tests against the production build
 	else \
 		echo "--- :white_check_mark: Using existing build. Use 'make build REFRESH_JS_BUILD=1' to rebuild."; \
 	fi
-	@if [ ! -d "./ios/Sources/GutenbergKit/Gutenberg" ]; then \
-		echo "--- :open_file_folder: Copying build into iOS bundle"; \
-		cp -r ./dist/. ./ios/Sources/GutenbergKit/Gutenberg/; \
-	fi
+	@echo "--- :open_file_folder: Copying build into iOS bundle"
+	@rm -rf ./ios/Sources/GutenbergKit/Gutenberg/
+	@cp -r ./dist/. ./ios/Sources/GutenbergKit/Gutenberg/
 	@echo "--- :ios: Running iOS E2E Tests (production build)"
 	@set -o pipefail && \
 		xcodebuild test \
