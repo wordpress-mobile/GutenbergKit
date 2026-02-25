@@ -227,6 +227,7 @@ export function preprocessBlockTypesForNativeInserter(
 			icon: getBlockIcon( item ),
 			frecency: item.frecency || 0,
 			isDisabled: item.isDisabled || false,
+			isSearchOnly: item.isSearchOnly || false,
 			parents: item.parent || [],
 		};
 	} );
@@ -242,10 +243,20 @@ export function preprocessBlockTypesForNativeInserter(
 		);
 	} );
 
+	// Separate browsable blocks from search-only blocks (e.g. heading
+	// level variations with scope 'block' that should appear in search
+	// results but not in the browse view).
+	const browsableBlocks = serializedBlocks.filter(
+		( block ) => ! block.isSearchOnly
+	);
+	const searchOnlyBlocks = serializedBlocks.filter(
+		( block ) => block.isSearchOnly
+	);
+
 	// Build most-used blocks in the order specified by MOST_USED_BLOCKS
 	const mostUsedBlocks = [];
 	for ( const blockName of MOST_USED_BLOCKS ) {
-		const block = serializedBlocks.find( ( b ) => b.name === blockName );
+		const block = browsableBlocks.find( ( b ) => b.name === blockName );
 		if ( block ) {
 			mostUsedBlocks.push( block );
 		}
@@ -253,7 +264,7 @@ export function preprocessBlockTypesForNativeInserter(
 
 	// Group regular blocks by category
 	const blocksByCategory = {};
-	for ( const block of serializedBlocks ) {
+	for ( const block of browsableBlocks ) {
 		const category = block.category?.toLowerCase() || 'common';
 		if ( ! blocksByCategory[ category ] ) {
 			blocksByCategory[ category ] = [];
@@ -307,6 +318,16 @@ export function preprocessBlockTypesForNativeInserter(
 				blocks,
 			} );
 		}
+	}
+
+	// Add search-only blocks as a hidden section. These blocks are excluded
+	// from the browse view but should appear when the user searches.
+	if ( searchOnlyBlocks.length > 0 ) {
+		sections.push( {
+			category: 'gbk-search-only',
+			name: null,
+			blocks: searchOnlyBlocks,
+		} );
 	}
 
 	return sections;
