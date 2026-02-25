@@ -96,6 +96,29 @@ make local-android-library
 make test-android
 ```
 
+### Local WordPress Environment (wp-env)
+
+A local WordPress environment powered by `@wordpress/env` for testing the full editor experience with theme styles, media uploads, and plugin block assets.
+
+```bash
+# Start the local WordPress environment (requires Docker)
+make wp-env-start
+
+# Stop the environment (preserves data)
+make wp-env-stop
+
+# Destroy the environment and remove all data
+make wp-env-clean
+
+# View WordPress logs
+make wp-env-logs
+
+# Run a WP-CLI command
+make wp-env-cli CMD="post list"
+```
+
+See `docs/code/local-wordpress.md` for detailed setup instructions and troubleshooting.
+
 > **Note:** Most `make` targets have equivalent `npm` scripts in `package.json`. Build targets accept `REFRESH_DEPS=1`, `REFRESH_L10N=1`, and `REFRESH_JS_BUILD=1` flags to force refresh of dependencies, translations, and JavaScript builds respectively. Run `make help` for full details.
 
 ## Architecture

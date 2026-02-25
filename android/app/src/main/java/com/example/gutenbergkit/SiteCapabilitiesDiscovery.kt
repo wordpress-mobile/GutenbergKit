@@ -3,8 +3,11 @@ package com.example.gutenbergkit
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import rs.wordpress.api.kotlin.ApiDiscoveryResult
 import rs.wordpress.api.kotlin.WpLoginClient
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * Data class representing the capabilities discovered from a WordPress site.
@@ -60,13 +63,56 @@ class SiteCapabilitiesDiscovery {
                     )
                 }
                 else -> {
-                    Log.w(TAG, "API discovery failed: $apiDiscoveryResult")
-                    getDefaultCapabilities()
+                    Log.w(TAG, "API discovery via WpLoginClient failed: $apiDiscoveryResult, trying direct HTTP fetch")
+                    discoverCapabilitiesViaHttp(siteApiRoot)
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error discovering site capabilities", e)
-            getDefaultCapabilities()
+            Log.w(TAG, "API discovery via WpLoginClient threw, trying direct HTTP fetch", e)
+            try {
+                discoverCapabilitiesViaHttp(siteApiRoot)
+            } catch (httpError: Exception) {
+                Log.e(TAG, "Direct HTTP discovery also failed", httpError)
+                getDefaultCapabilities()
+            }
+        }
+    }
+
+    /**
+     * Discovers capabilities by directly fetching the REST API root and inspecting
+     * the `routes` object. This works over plain HTTP, unlike WpLoginClient which
+     * may require HTTPS.
+     */
+    private fun discoverCapabilitiesViaHttp(siteApiRoot: String): SiteCapabilities {
+        val url = URL(siteApiRoot.trimEnd('/') + "/")
+        val connection = url.openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 10_000
+            connection.readTimeout = 10_000
+            connection.setRequestProperty("Accept", "application/json")
+
+            val responseCode = connection.responseCode
+            if (responseCode != HttpURLConnection.HTTP_OK) {
+                Log.w(TAG, "HTTP discovery got status $responseCode")
+                return getDefaultCapabilities()
+            }
+
+            val body = connection.inputStream.bufferedReader().use { it.readText() }
+            val json = JSONObject(body)
+            val routes = json.optJSONObject("routes") ?: return getDefaultCapabilities()
+
+            val supportsPlugins = routes.has(ROUTE_EDITOR_ASSETS)
+            val supportsThemeStyles = routes.has(ROUTE_EDITOR_SETTINGS)
+
+            Log.d(TAG, "HTTP discovery - Plugins: $supportsPlugins, Theme Styles: $supportsThemeStyles")
+
+            return SiteCapabilities(
+                supportsPlugins = supportsPlugins,
+                supportsThemeStyles = supportsThemeStyles
+            )
+        } finally {
+            connection.disconnect()
         }
     }
 

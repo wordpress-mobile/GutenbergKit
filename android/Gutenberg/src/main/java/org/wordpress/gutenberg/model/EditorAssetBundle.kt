@@ -117,6 +117,10 @@ data class EditorAssetBundle(
      * @return `true` if the asset has been cached locally.
      */
     fun hasAssetData(url: String): Boolean {
+        if(this == empty) {
+            return false
+        }
+
         return assetDataPath(url).exists()
     }
 

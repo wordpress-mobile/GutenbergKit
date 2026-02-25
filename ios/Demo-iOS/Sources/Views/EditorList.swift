@@ -13,9 +13,8 @@ struct EditorList: View {
     var body: some View {
         List {
             Section {
-                NavigationLink("Default Editor") {
+                NavigationLink("Standalone Editor") {
                     SitePreparationView(site: .bundledEditor)
-
                 }
             } header: {
                 if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"] != nil
@@ -31,23 +30,27 @@ struct EditorList: View {
                         .foregroundStyle(.secondary)
                 }
             } footer: {
-            Text("Default editor without site configuration.")
+                Text("Editor without a WordPress site. No theme styles, media uploads, or plugins.")
             }
 
             Section {
+                NavigationLink("Local WordPress (wp-env)") {
+                    SitePreparationView(site: .localWordPress)
+                }
+
                 configuredEditors
 
-                Button("Add Editor Configuration") {
+                Button("Add WordPress Site") {
                     showAddDialog = true
                 }
             } header: {
-                Text("Editor Configurations")
+                Text("WordPress Sites")
             } footer: {
-                Text("Editors with site configuration; enabling media uploads, plugin support, etc.")
+                Text("Editors connected to a WordPress site, enabling theme styles, media uploads, plugin support, etc.")
             }
         }
         .alert(
-            "Delete Editor Configuration?",
+            "Delete WordPress Site?",
             isPresented: Binding(
                 get: { configurationToDelete != nil },
                 set: { if !$0 { configurationToDelete = nil } }

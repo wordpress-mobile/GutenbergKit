@@ -19,7 +19,11 @@ struct SitePreparationView: View {
             if let configuration = self.viewModel.editorConfiguration {
                 loadedView(configuration: configuration)
             } else if let error = viewModel.error {
-                Text(error.localizedDescription)
+                ContentUnavailableView {
+                    Label("Error", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(error.localizedDescription)
+                }
             } else {
                 ProgressView("Loading Site Configuration")
             }
@@ -199,6 +203,33 @@ class SitePreparationViewModel {
                 case .bundledEditor:
                     self.editorConfiguration = Self.applyDemoAppDefaults(to: .bundled)
                     self.postTypes = [.post, .page]
+                case .localWordPress:
+                    guard let credentials = LocalWordPressCredentials.load() else {
+                        throw AppError(errorDescription: "Local WordPress not configured.\n\nRun 'make wp-env-start' from the project root to set up a local WordPress environment.")
+                    }
+                    let siteDetails = ConfiguredEditor(
+                        name: "Local WordPress",
+                        siteUrl: credentials.siteUrl,
+                        siteApiRoot: credentials.siteApiRoot,
+                        authHeader: credentials.authHeader
+                    )
+                    do {
+                        let parsedApiRoot = try ParsedUrl.parse(input: siteDetails.siteApiRoot)
+                        let configuration = URLSessionConfiguration.ephemeral
+                        configuration.httpAdditionalHeaders = ["Authorization": siteDetails.authHeader]
+                        let client = WordPressAPI(
+                            urlSession: .init(configuration: configuration),
+                            apiRootUrl: parsedApiRoot,
+                            authentication: .none,
+                        )
+                        self.client = client
+
+                        try await self.loadPostTypes()
+                        let newConfiguration = try await self.loadConfiguration(for: siteDetails)
+                        self.editorConfiguration = Self.applyDemoAppDefaults(to: newConfiguration)
+                    } catch is URLError {
+                        throw AppError(errorDescription: "Could not connect to Local WordPress at localhost:8888.\n\nThe wp-env server may not be running. Start it with 'make wp-env-start'.")
+                    }
                 case .editorConfiguration(let siteDetails):
                     let parsedApiRoot = try ParsedUrl.parse(input: siteDetails.siteApiRoot)
                     let configuration = URLSessionConfiguration.ephemeral

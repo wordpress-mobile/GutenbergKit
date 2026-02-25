@@ -15,14 +15,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.Computer
+import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -43,11 +42,8 @@ import com.example.gutenbergkit.ui.dialogs.AddConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DeleteConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DiscoveringSiteDialog
 import com.example.gutenbergkit.ui.theme.AppTheme
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
 import org.wordpress.gutenberg.BuildConfig
 import org.wordpress.gutenberg.model.EditorConfiguration
-import uniffi.wp_api.PostType
 
 class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCallback {
     private val configurations = mutableStateListOf<ConfigurationItem>()
@@ -71,6 +67,9 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
         // Add default bundled editor configuration
         configurations.add(ConfigurationItem.BundledEditor)
 
+        // Add local WordPress option
+        configurations.add(ConfigurationItem.LocalWordPress)
+
         // Load saved configurations
         configurations.addAll(configurationStorage.loadConfigurations())
 
@@ -81,12 +80,14 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
                     onConfigurationClick = { config ->
                         when (config) {
                             is ConfigurationItem.BundledEditor -> launchSitePreparation(config)
+                            is ConfigurationItem.LocalWordPress -> launchSitePreparation(config)
                             is ConfigurationItem.ConfiguredEditor -> loadConfiguredEditor(config)
                         }
                     },
                     onConfigurationLongClick = { config ->
                         when (config) {
                             is ConfigurationItem.BundledEditor -> false
+                            is ConfigurationItem.LocalWordPress -> false
                             is ConfigurationItem.ConfiguredEditor -> true
                         }
                     },
@@ -205,7 +206,7 @@ fun MainScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
-                    contentDescription = stringResource(R.string.add_editor_configuration_description)
+                    contentDescription = stringResource(R.string.add_wordpress_site_description)
                 )
             }
         }
@@ -233,7 +234,7 @@ fun MainScreen(
                 )
             }
 
-            // Bundled editor
+            // Standalone editor
             item {
                 ConfigurationCard(
                     configuration = ConfigurationItem.BundledEditor,
@@ -242,7 +243,7 @@ fun MainScreen(
                 )
             }
 
-            // Editor configurations section
+            // WordPress Sites section
             val configuredEditors = configurations.filterIsInstance<ConfigurationItem.ConfiguredEditor>()
 
             item {
@@ -253,18 +254,27 @@ fun MainScreen(
                 ) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = stringResource(R.string.editor_configurations_section).uppercase(),
+                        text = stringResource(R.string.wordpress_sites_section).uppercase(),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(vertical = 8.dp)
                     )
                     Text(
-                        text = stringResource(R.string.editor_configurations_section_description),
+                        text = stringResource(R.string.wordpress_sites_section_description),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
+            }
+
+            // Local WordPress
+            item {
+                ConfigurationCard(
+                    configuration = ConfigurationItem.LocalWordPress,
+                    onClick = { onConfigurationClick(ConfigurationItem.LocalWordPress) },
+                    onLongClick = { }
+                )
             }
 
             items(configuredEditors) { config ->
@@ -343,6 +353,7 @@ fun ConfigurationCard(
                 Text(
                     when (configuration) {
                         is ConfigurationItem.BundledEditor -> stringResource(R.string.bundled_editor)
+                        is ConfigurationItem.LocalWordPress -> stringResource(R.string.local_wordpress)
                         is ConfigurationItem.ConfiguredEditor -> configuration.name
                     }
                 )
@@ -351,12 +362,22 @@ fun ConfigurationCard(
                 is ConfigurationItem.BundledEditor -> {
                     { Text(stringResource(R.string.bundled_editor_subtitle)) }
                 }
+                is ConfigurationItem.LocalWordPress -> {
+                    {
+                        val isConfigured = LocalWordPressCredentials.load() != null
+                        Text(
+                            if (isConfigured) stringResource(R.string.local_wordpress_subtitle)
+                            else stringResource(R.string.local_wordpress_subtitle_not_configured)
+                        )
+                    }
+                }
                 is ConfigurationItem.ConfiguredEditor -> null
             },
             leadingContent = {
                 Icon(
                     imageVector = when (configuration) {
-                        is ConfigurationItem.BundledEditor -> Icons.Outlined.Inventory2
+                        is ConfigurationItem.BundledEditor -> Icons.Outlined.Article
+                        is ConfigurationItem.LocalWordPress -> Icons.Outlined.Computer
                         is ConfigurationItem.ConfiguredEditor -> Icons.Default.Language
                     },
                     contentDescription = null,
@@ -378,7 +399,7 @@ fun AddNewConfigurationCard(
     ) {
         ListItem(
             headlineContent = {
-                Text(stringResource(R.string.add_editor_configuration))
+                Text(stringResource(R.string.add_wordpress_site))
             },
             leadingContent = {
                 Icon(

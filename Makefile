@@ -136,6 +136,32 @@ preview: npm-dependencies ## Preview the production build locally
 	npm run preview
 
 ################################################################################
+# Local WordPress Environment Targets (wp-env)
+################################################################################
+
+.PHONY: wp-env-start
+wp-env-start: npm-dependencies ## Start the local WordPress environment (requires Docker; RESET=1 to regenerate credentials)
+	npm run wp-env start
+	@RESET=$(RESET) bash bin/wp-env-setup.sh
+
+.PHONY: wp-env-stop
+wp-env-stop: ## Stop the local WordPress environment
+	npm run wp-env stop
+
+.PHONY: wp-env-clean
+wp-env-clean: ## Stop wp-env and remove all data (fresh start)
+	npm run wp-env destroy
+	@rm -f .wp-env.credentials.json
+
+.PHONY: wp-env-logs
+wp-env-logs: ## Show wp-env WordPress logs
+	npm run wp-env logs
+
+.PHONY: wp-env-cli
+wp-env-cli: ## Run a WP-CLI command in wp-env (usage: make wp-env-cli CMD="post list")
+	npm run wp-env run cli wp $(CMD)
+
+################################################################################
 # Code Quality Targets
 ################################################################################
 

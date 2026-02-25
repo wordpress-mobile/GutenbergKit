@@ -43,7 +43,7 @@ struct AppRootView: View {
 }
 
 struct AppError: LocalizedError {
-    let errorDescription: String
+    let errorDescription: String?
 }
 
 #Preview {

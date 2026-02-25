@@ -42,7 +42,8 @@ import org.wordpress.gutenberg.model.GBKitGlobal
 import org.wordpress.gutenberg.services.EditorService
 import java.util.Locale
 
-const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
+private const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
+private const val ASSET_URL_HTTP = "http://appassets.androidplatform.net/assets/index.html"
 
 /**
  * A WebView-based Gutenberg block editor for Android.
@@ -85,9 +86,7 @@ const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
 class GutenbergView : WebView {
     private var isEditorLoaded = false
     private var didFireEditorLoaded = false
-    private var assetLoader = WebViewAssetLoader.Builder()
-        .addPathHandler("/assets/", AssetsPathHandler(this.context))
-        .build()
+    private lateinit var assetLoader: WebViewAssetLoader
     private val configuration: EditorConfiguration
     private lateinit var dependencies: EditorDependencies
 
@@ -268,7 +267,7 @@ class GutenbergView : WebView {
                 }
 
                 // Allow asset URLs
-                if (url.host == Uri.parse(ASSET_URL).host) {
+                if (url.host == "appassets.androidplatform.net") {
                     return false
                 }
 
@@ -392,19 +391,31 @@ class GutenbergView : WebView {
             configuration.cachedAssetHosts
         )
 
+        // Build the asset loader. When the site is a local dev server over HTTP,
+        // serve assets over HTTP too so that Android WebView doesn't block site
+        // resources as mixed content. Only allow this for known local hosts to
+        // avoid accidentally downgrading asset traffic for production sites.
+        val siteUri = Uri.parse(configuration.siteURL)
+        val isLocalHttpSite = siteUri.scheme == "http" && siteUri.host in LOCAL_HOSTS
+        assetLoader = WebViewAssetLoader.Builder()
+            .setHttpAllowed(isLocalHttpSite)
+            .addPathHandler("/assets/", AssetsPathHandler(this.context))
+            .build()
+
         // Notify that dependency loading is complete (spinner phase begins)
         loadingListener?.onDependencyLoadingFinished()
 
         initializeWebView()
 
+        val assetUrl = if (isLocalHttpSite) ASSET_URL_HTTP else ASSET_URL
         val editorUrl = BuildConfig.GUTENBERG_EDITOR_URL.ifEmpty {
-            ASSET_URL
+            assetUrl
         }
 
         WebStorage.getInstance().deleteAllData()
         this.clearCache(true)
         // All cookies are third-party cookies because the root of this document
-        // lives under `https://appassets.androidplatform.net`
+        // lives under `appassets.androidplatform.net`
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
 
         // Erase all local cookies before loading the URL – we don't want to persist
@@ -870,6 +881,9 @@ class GutenbergView : WebView {
     }
 
     companion object {
+        /** Hosts that are safe to serve assets over HTTP (local development only). */
+        private val LOCAL_HOSTS = setOf("localhost", "127.0.0.1", "10.0.2.2")
+
         private const val ASSET_LOADING_TIMEOUT_MS = 5000L
 
         // Warmup state management

@@ -4,6 +4,22 @@ plugins {
     alias(libs.plugins.jetbrains.kotlin.compose)
 }
 
+// Read wp-env credentials at build time. The emulator cannot access host
+// filesystem paths at runtime, so we bake the values into BuildConfig.
+@Suppress("UNCHECKED_CAST")
+val wpEnvCredentials: Map<String, String> = run {
+    val file = rootProject.file("../.wp-env.credentials.json")
+    if (file.exists()) {
+        try {
+            groovy.json.JsonSlurper().parseText(file.readText()) as Map<String, String>
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    } else {
+        emptyMap()
+    }
+}
+
 android {
     namespace = "com.example.gutenbergkit"
     compileSdk = 34
@@ -16,6 +32,10 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "WP_ENV_SITE_URL", "\"${wpEnvCredentials["siteUrl"] ?: ""}\"")
+        buildConfigField("String", "WP_ENV_SITE_API_ROOT", "\"${wpEnvCredentials["siteApiRoot"] ?: ""}\"")
+        buildConfigField("String", "WP_ENV_AUTH_HEADER", "\"${wpEnvCredentials["authHeader"] ?: ""}\"")
     }
 
     buildTypes {
@@ -36,6 +56,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

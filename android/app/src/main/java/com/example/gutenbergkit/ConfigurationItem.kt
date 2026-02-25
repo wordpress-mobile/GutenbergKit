@@ -2,6 +2,7 @@ package com.example.gutenbergkit
 
 sealed class ConfigurationItem {
     object BundledEditor : ConfigurationItem()
+    object LocalWordPress : ConfigurationItem()
     data class ConfiguredEditor(
         val name: String,
         val siteUrl: String,
