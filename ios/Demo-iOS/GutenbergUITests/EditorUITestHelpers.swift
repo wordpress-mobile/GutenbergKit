@@ -11,10 +11,10 @@ enum EditorUITestHelpers {
     /// the editor has loaded.
     @discardableResult
     static func navigateToEditor(app: XCUIApplication) throws -> XCUIElement {
-        // Tap the "Default Editor" row in the list.
-        let defaultEditor = app.staticTexts["Default Editor"]
-        XCTAssertTrue(defaultEditor.waitForExistence(timeout: 10), "Default Editor row not found")
-        defaultEditor.tap()
+        // Tap the "Standalone Editor" row in the list.
+        let standaloneEditor = app.staticTexts["Standalone Editor"]
+        XCTAssertTrue(standaloneEditor.waitForExistence(timeout: 10), "Standalone Editor row not found")
+        standaloneEditor.tap()
 
         // Tap the "Start" button on the configuration screen.
         let startButton = app.buttons["Start"]
