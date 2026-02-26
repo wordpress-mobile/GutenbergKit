@@ -30,6 +30,19 @@ steps:
           tar -xzf dist.tar.gz
           echo "--- :docker: Starting wp-env"
           make wp-env-start
+          echo "--- :mag: Verifying wp-env state"
+          make wp-env-cli CMD="plugin list"
+          echo "Checking REST API routes..."
+          curl -s http://localhost:8888/wp-json/ | node -e "
+            const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+            const routes = Object.keys(data.routes || {}).filter(r => r.includes('block-editor'));
+            if (routes.length) { console.log('wp-block-editor routes found:', routes); }
+            else { console.log('WARNING: No wp-block-editor routes found!'); }
+          "
+          CREDS_FILE=".wp-env.credentials.json"
+          AUTH_HEADER=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$CREDS_FILE','utf8')).authHeader)")
+          echo "Testing editor settings endpoint..."
+          curl -v -H "Authorization: $AUTH_HEADER" http://localhost:8888/wp-json/wp-block-editor/v1/settings 2>&1 | head -30
           echo "--- :performing_arts: Running E2E tests in Playwright container"
           docker run --rm \
             --userns=host \
