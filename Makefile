@@ -273,7 +273,13 @@ define ENSURE_ANDROID_DEVICE
 		"$$ANDROID_HOME/emulator/emulator" -avd "$$AVD" -no-snapshot-load -no-audio -no-window &>/dev/null & \
 		echo "--- :hourglass: Waiting for emulator to boot..."; \
 		adb wait-for-device; \
+		BOOT_WAIT=0; \
 		while [ "$$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != "1" ]; do \
+			BOOT_WAIT=$$((BOOT_WAIT + 1)); \
+			if [ $$BOOT_WAIT -gt 60 ]; then \
+				echo "Error: Emulator boot timed out after 120 seconds."; \
+				exit 1; \
+			fi; \
 			sleep 2; \
 		done; \
 		echo "--- :white_check_mark: Emulator booted."; \
