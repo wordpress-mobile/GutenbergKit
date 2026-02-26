@@ -39,6 +39,17 @@ steps:
             -e CI=true \
             mcr.microsoft.com/playwright:v1.58.2-noble \
             bash -c "npm ci && npx playwright install chromium && npx playwright test"
+          E2E_EXIT=$?
+          echo "--- :wordpress: WordPress debug log"
+          WP_CONTAINER=$(docker ps -qf "publish=8888" | head -1)
+          if [ -n "$WP_CONTAINER" ]; then
+            docker exec "$WP_CONTAINER" cat /var/www/html/wp-content/debug.log 2>/dev/null || echo "(no debug.log found)"
+            echo "--- :file_folder: Uploads directory permissions"
+            docker exec "$WP_CONTAINER" ls -la /var/www/html/wp-content/uploads/ 2>/dev/null || echo "(no uploads directory)"
+          else
+            echo "(WordPress container not found)"
+          fi
+          exit $E2E_EXIT
       agents:
           queue: default
       plugins: *plugins
