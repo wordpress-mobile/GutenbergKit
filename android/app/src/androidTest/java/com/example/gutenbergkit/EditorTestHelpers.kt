@@ -15,6 +15,8 @@ import androidx.test.espresso.web.webdriver.DriverAtoms.webClick
 import androidx.test.espresso.web.webdriver.Locator
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import org.hamcrest.Matchers.notNullValue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 
 /**
  * Reusable helpers for Android E2E tests that interact with the Gutenberg editor.
@@ -213,14 +215,13 @@ object EditorTestHelpers {
     ): TitleAndContent {
         val result = readTitleAndContent(rule)
         if (expectedTitle != null) {
-            assert(result.title == expectedTitle) {
-                "Title mismatch: expected \"$expectedTitle\" but got \"${result.title}\""
-            }
+            assertEquals("Title mismatch", expectedTitle, result.title)
         }
         if (expectedContentSubstring != null) {
-            assert(result.content.contains(expectedContentSubstring)) {
-                "Expected content to contain \"$expectedContentSubstring\" but got \"${result.content}\""
-            }
+            assertTrue(
+                "Expected content to contain \"$expectedContentSubstring\" but got \"${result.content}\"",
+                result.content.contains(expectedContentSubstring)
+            )
         }
         return result
     }

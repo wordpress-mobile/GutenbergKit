@@ -4,6 +4,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -86,9 +87,10 @@ class EditorInteractionTest {
 
         // Verify the last typed text was undone.
         val afterUndo = EditorTestHelpers.readTitleAndContent(composeTestRule)
-        assert(!afterUndo.content.contains("World")) {
-            "Content should not contain undone text but got \"${afterUndo.content}\""
-        }
+        assertFalse(
+            "Content should not contain undone text but got \"${afterUndo.content}\"",
+            afterUndo.content.contains("World")
+        )
 
         // Tap redo — undo should remain enabled.
         composeTestRule.onNodeWithContentDescription("Redo").performClick()
