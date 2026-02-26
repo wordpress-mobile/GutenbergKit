@@ -13,6 +13,59 @@ const TEST_IMAGE = path.resolve( import.meta.dirname, 'assets/test-image.png' );
 
 test.describe( 'Image Upload', () => {
 	test( 'should upload an image via the Image block', async ( { page } ) => {
+		// Log all network requests to wp-env for debugging upload issues in CI.
+		page.on( 'request', ( request ) => {
+			const url = request.url();
+			if ( url.includes( 'localhost:8888' ) ) {
+				// eslint-disable-next-line no-console
+				console.log(
+					`[REQ] ${ request.method() } ${ url } headers=${ JSON.stringify(
+						Object.fromEntries(
+							Object.entries( request.headers() ).filter(
+								( [ k ] ) =>
+									[
+										'content-type',
+										'authorization',
+										'origin',
+									].includes( k )
+							)
+						)
+					) }`
+				);
+			}
+		} );
+		page.on( 'response', ( response ) => {
+			const url = response.url();
+			if ( url.includes( 'localhost:8888' ) ) {
+				// eslint-disable-next-line no-console
+				console.log(
+					`[RES] ${ response.status() } ${ url } headers=${ JSON.stringify(
+						Object.fromEntries(
+							Object.entries( response.headers() ).filter(
+								( [ k ] ) =>
+									[
+										'access-control-allow-origin',
+										'access-control-allow-headers',
+										'access-control-allow-methods',
+									].includes( k )
+							)
+						)
+					) }`
+				);
+			}
+		} );
+		page.on( 'requestfailed', ( request ) => {
+			const url = request.url();
+			if ( url.includes( 'localhost:8888' ) ) {
+				// eslint-disable-next-line no-console
+				console.log(
+					`[FAIL] ${ request.method() } ${ url } failure=${
+						request.failure()?.errorText
+					}`
+				);
+			}
+		} );
+
 		const editor = new EditorPage( page );
 		await editor.setup();
 
