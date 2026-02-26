@@ -225,6 +225,18 @@ object EditorTestHelpers {
     // -- Internal Helpers --
 
     /**
+     * Executes a JavaScript snippet in the WebView and returns the result as a string.
+     * Centralizes the Espresso Web boilerplate shared by all JS helpers.
+     */
+    private fun runJs(js: String): String {
+        val result = onWebView()
+            .forceJavascriptEnabled()
+            .perform(script(js))
+            .get()
+        return result.value?.toString() ?: ""
+    }
+
+    /**
      * Returns an XPath that matches a block option by [name] inside
      * the inserter dialog (role="dialog", aria-modal="true").
      */
@@ -245,11 +257,7 @@ object EditorTestHelpers {
             "el.scrollIntoView();" +
             "el.click();" +
             "return 'clicked';"
-        val result = onWebView()
-            .forceJavascriptEnabled()
-            .perform(script(js))
-            .get()
-        val value = result.value?.toString() ?: "null"
+        val value = runJs(js)
         if (value.contains("not found")) {
             throw AssertionError("clickViaJs failed: $value")
         }
@@ -268,9 +276,7 @@ object EditorTestHelpers {
         val escapedText = text.replace("\\", "\\\\").replace("'", "\\'")
         val js = "document.execCommand('insertText', false, '" + escapedText + "');" +
             "return 'ok';"
-        onWebView()
-            .forceJavascriptEnabled()
-            .perform(script(js))
+        runJs(js)
     }
 
     /**
@@ -284,11 +290,7 @@ object EditorTestHelpers {
             "if (!el) return '';" +
             "if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') return el.value || '';" +
             "return el.innerText || el.textContent || '';"
-        val result = onWebView()
-            .forceJavascriptEnabled()
-            .perform(script(js))
-            .get()
-        return result.value?.toString() ?: ""
+        return runJs(js)
     }
 
     /**
@@ -313,12 +315,7 @@ object EditorTestHelpers {
 
         while (System.currentTimeMillis() < deadline) {
             try {
-                val evaluation = onWebView()
-                    .forceJavascriptEnabled()
-                    .perform(script(js))
-                    .get()
-                val value = evaluation.value
-                lastResult = value?.toString() ?: "null"
+                lastResult = runJs(js)
                 if (lastResult.contains(expectedResult)) return
             } catch (_: Throwable) {
                 // Ignore and retry
