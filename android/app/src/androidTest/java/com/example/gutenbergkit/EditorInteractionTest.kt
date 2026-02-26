@@ -28,6 +28,9 @@ class EditorInteractionTest {
     @get:Rule
     val composeTestRule = createAndroidComposeRule<MainActivity>()
 
+    @get:Rule
+    val disableAnimationsRule = DisableAnimationsRule()
+
     // -- Editor Loading --
 
     /**
