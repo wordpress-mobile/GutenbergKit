@@ -65,7 +65,23 @@ done
 # ---------------------------------------------------------------------------
 
 echo "Flushing rewrite rules..."
-npm run --silent wp-env run cli -- wp rewrite structure '/%postname%/' --hard 2>/dev/null
+npm run --silent wp-env run cli -- wp rewrite structure '/%postname%/' 2>/dev/null
+
+echo "Writing .htaccess for pretty permalinks..."
+npm run --silent wp-env run wordpress -- sh -c 'cat > /var/www/html/.htaccess << "HTACCESS"
+# BEGIN WordPress
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteBase /
+RewriteRule ^index\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.php [L]
+</IfModule>
+# END WordPress
+HTACCESS
+' 2>/dev/null
 
 # ---------------------------------------------------------------------------
 # Enable Jetpack blocks module

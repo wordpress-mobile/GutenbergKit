@@ -30,18 +30,6 @@ steps:
           tar -xzf dist.tar.gz
           echo "--- :docker: Starting wp-env"
           make wp-env-start
-          echo "--- :mag: Verifying wp-env state"
-          make wp-env-cli CMD="plugin list"
-          echo "Testing pretty permalink REST API..."
-          curl -sv http://localhost:8888/wp-json/ 2>&1 | head -20
-          echo ""
-          echo "Testing query param REST API..."
-          curl -s "http://localhost:8888/?rest_route=/" | head -200
-          echo ""
-          echo "Testing editor settings via query param..."
-          AUTH_HEADER=$(node -e "console.log(JSON.parse(require('fs').readFileSync('.wp-env.credentials.json','utf8')).authHeader)")
-          echo "Auth header: ${AUTH_HEADER:0:20}..."
-          curl -sv -H "Authorization: $AUTH_HEADER" "http://localhost:8888/?rest_route=/wp-block-editor/v1/settings" 2>&1 | head -40
           echo "--- :performing_arts: Running E2E tests in Playwright container"
           docker run --rm \
             --userns=host \
