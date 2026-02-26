@@ -263,14 +263,14 @@ define ENSURE_ANDROID_DEVICE
 	@if adb devices 2>/dev/null | tail -n +2 | grep -q 'device$$'; then \
 		echo "--- :white_check_mark: Android device already connected."; \
 	else \
-		AVD=$$($$ANDROID_HOME/emulator/emulator -list-avds 2>/dev/null | head -n 1); \
+		AVD=$$("$$ANDROID_HOME/emulator/emulator" -list-avds 2>/dev/null | head -n 1); \
 		if [ -z "$$AVD" ]; then \
 			echo "Error: No Android device connected and no AVDs found."; \
 			echo "Connect a device, start an emulator, or create an AVD with Android Studio."; \
 			exit 1; \
 		fi; \
 		echo "--- :rocket: Booting Android emulator ($$AVD)..."; \
-		$$ANDROID_HOME/emulator/emulator -avd "$$AVD" -no-snapshot-load -no-audio -no-window &>/dev/null & \
+		"$$ANDROID_HOME/emulator/emulator" -avd "$$AVD" -no-snapshot-load -no-audio -no-window &>/dev/null & \
 		echo "--- :hourglass: Waiting for emulator to boot..."; \
 		adb wait-for-device; \
 		while [ "$$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != "1" ]; do \
