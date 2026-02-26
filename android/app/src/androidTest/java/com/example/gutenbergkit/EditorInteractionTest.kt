@@ -70,12 +70,32 @@ class EditorInteractionTest {
         // Undo should still be enabled after typing content.
         EditorTestHelpers.waitForEnabled(composeTestRule, "Undo")
 
+        // Verify content before undo.
+        EditorTestHelpers.assertContent(
+            expectedTitle = "Hello",
+            expectedContentSubstring = "World",
+            rule = composeTestRule
+        )
+
         // Tap undo — redo should become enabled.
         composeTestRule.onNodeWithContentDescription("Undo").performClick()
         EditorTestHelpers.waitForEnabled(composeTestRule, "Redo")
 
+        // Verify the last typed text was undone.
+        val afterUndo = EditorTestHelpers.readTitleAndContent(composeTestRule)
+        assert(!afterUndo.content.contains("World")) {
+            "Content should not contain undone text but got \"${afterUndo.content}\""
+        }
+
         // Tap redo — undo should remain enabled.
         composeTestRule.onNodeWithContentDescription("Redo").performClick()
         EditorTestHelpers.waitForEnabled(composeTestRule, "Undo")
+
+        // Verify content is restored after redo.
+        EditorTestHelpers.assertContent(
+            expectedTitle = "Hello",
+            expectedContentSubstring = "World",
+            rule = composeTestRule
+        )
     }
 }

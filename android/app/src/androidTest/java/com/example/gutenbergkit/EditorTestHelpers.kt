@@ -35,9 +35,10 @@ object EditorTestHelpers {
     private const val ADD_BLOCK_SELECTOR = "[aria-label='Add block']"
     private const val EMPTY_BLOCK_SELECTOR =
         "[aria-label='Empty block; start writing or type forward slash to choose a block']"
-    private const val CODE_EDITOR_TITLE_SELECTOR = "[aria-label='Add title']"
+    private const val CODE_EDITOR_TITLE_SELECTOR =
+        "textarea[placeholder='Add title']"
     private const val CODE_EDITOR_CONTENT_SELECTOR =
-        "[aria-label='Start writing with text or HTML']"
+        "textarea.editor-post-text-editor"
 
     /**
      * Navigates from the main list through the configuration screen
@@ -166,27 +167,19 @@ object EditorTestHelpers {
     // -- Content Reading (Code Editor Mode) --
 
     /**
-     * Reads the current title from the code editor's title field.
+     * Reads the current title from the code editor's title field via JS.
      * The editor must already be in Code Editor mode.
      */
     fun readTitle(): String {
-        return onWebView()
-            .forceJavascriptEnabled()
-            .withElement(findElement(Locator.CSS_SELECTOR, CODE_EDITOR_TITLE_SELECTOR))
-            .perform(getText())
-            .get()
+        return readTextViaJs(CODE_EDITOR_TITLE_SELECTOR)
     }
 
     /**
-     * Reads the current raw HTML content from the code editor's content textarea.
+     * Reads the current raw HTML content from the code editor's content textarea via JS.
      * The editor must already be in Code Editor mode.
      */
     fun readContent(): String {
-        return onWebView()
-            .forceJavascriptEnabled()
-            .withElement(findElement(Locator.CSS_SELECTOR, CODE_EDITOR_CONTENT_SELECTOR))
-            .perform(getText())
-            .get()
+        return readTextViaJs(CODE_EDITOR_CONTENT_SELECTOR)
     }
 
     /**
@@ -197,8 +190,8 @@ object EditorTestHelpers {
         rule: AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
     ): TitleAndContent {
         switchToCodeEditor(rule)
-        // Allow the code editor to render
-        waitForWebViewElement(CODE_EDITOR_CONTENT_SELECTOR, ELEMENT_TIMEOUT_MS)
+        // Wait for the code editor content textarea to appear in the DOM.
+        waitForWebViewElementViaJs(CODE_EDITOR_CONTENT_SELECTOR, ELEMENT_TIMEOUT_MS)
         val title = readTitle()
         val content = readContent()
         switchToVisualEditor(rule)
@@ -306,6 +299,36 @@ object EditorTestHelpers {
         onWebView()
             .forceJavascriptEnabled()
             .perform(script(js))
+    }
+
+    /**
+     * Reads the text content of an element by CSS selector via JS.
+     * Uses `textContent` for contenteditable elements and `value` for
+     * textarea/input elements, matching how Code Editor fields render.
+     */
+    private fun readTextViaJs(cssSelector: String): String {
+        val escapedSelector = cssSelector.replace("'", "\\'")
+        val js = "var el = document.querySelector('" + escapedSelector + "');" +
+            "if (!el) return '';" +
+            "if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') return el.value || '';" +
+            "return el.innerText || el.textContent || '';"
+        val result = onWebView()
+            .forceJavascriptEnabled()
+            .perform(script(js))
+            .get()
+        return result.value?.toString() ?: ""
+    }
+
+    /**
+     * Polls until a WebView element matching the CSS selector exists via JS.
+     * Unlike [waitForWebViewElement], this avoids Espresso Web's findElement
+     * which can fail on elements that don't pass visibility checks.
+     */
+    private fun waitForWebViewElementViaJs(cssSelector: String, timeoutMs: Long) {
+        val escapedSelector = cssSelector.replace("'", "\\'")
+        val js = "var el = document.querySelector('" + escapedSelector + "');" +
+            "return el ? 'found' : 'not found';"
+        waitForConditionViaJs(js, "found", timeoutMs)
     }
 
     /**
