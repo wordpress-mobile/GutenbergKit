@@ -30,15 +30,19 @@ object EditorTestHelpers {
     private const val ELEMENT_TIMEOUT_MS = 10_000L
     private const val POLL_INTERVAL_MS = 500L
 
-    // CSS selectors matching the Gutenberg DOM
+    // CSS selectors matching the Gutenberg DOM — prefer aria attributes and
+    // placeholders over class names so tests are resilient to CSS refactors.
     private const val TITLE_SELECTOR = "[aria-label='Add title']"
-    private const val ADD_BLOCK_SELECTOR = "[aria-label='Add block']"
+    // Scope to the Editor toolbar to avoid matching the inline block appender,
+    // which also renders an identical "Add block" button.
+    private const val ADD_BLOCK_SELECTOR =
+        "[aria-label='Editor toolbar'] [aria-label='Add block']"
     private const val EMPTY_BLOCK_SELECTOR =
         "[aria-label='Empty block; start writing or type forward slash to choose a block']"
     private const val CODE_EDITOR_TITLE_SELECTOR =
         "textarea[placeholder='Add title']"
     private const val CODE_EDITOR_CONTENT_SELECTOR =
-        "textarea.editor-post-text-editor"
+        "textarea[placeholder='Start writing with text or HTML']"
 
     /**
      * Navigates from the main list through the configuration screen
@@ -97,21 +101,21 @@ object EditorTestHelpers {
         // We use JS click because the toolbar button may not pass Espresso's
         // visibility check even though it is functionally present.
         clickViaJs(ADD_BLOCK_SELECTOR)
-        // Wait for the inserter popover to render, then find and click the block
-        // by its title text. The WordPress Inserter component renders block items
-        // as buttons — we search by role and accessible name for resilience.
+        // Wait for the inserter dialog to render, then find and click the block
+        // by matching its text content within role="option" elements. Block items
+        // don't have an explicit aria-label — their accessible name comes from
+        // inner text content. We scope the search to the inserter dialog
+        // (role="dialog") to avoid matching elements in other parts of the DOM.
         val escapedName = name.replace("'", "\\'")
-        val js = "var btn = document.querySelector(\"[role='option'][aria-label='" + escapedName + "']\");" +
-            "if (btn) { btn.click(); return 'clicked'; }" +
-            "var items = document.querySelectorAll('.block-editor-block-types-list__item');" +
-            "for (var i = 0; i < items.length; i++) {" +
-            "if (items[i].textContent.trim() === '" + escapedName + "' || " +
-            "(items[i].getAttribute('aria-label') || '').indexOf('" + escapedName + "') >= 0) {" +
-            "items[i].click();" +
-            "return 'clicked';" +
+        val js = "var dialog = document.querySelector(\"[role='dialog'][aria-modal='true']\");" +
+            "if (!dialog) { return 'dialog not found'; }" +
+            "var options = dialog.querySelectorAll(\"[role='option']\");" +
+            "for (var i = 0; i < options.length; i++) {" +
+            "  if (options[i].textContent.trim() === '" + escapedName + "') {" +
+            "    options[i].click(); return 'clicked';" +
+            "  }" +
             "}" +
-            "}" +
-            "return 'not found: ' + items.length + ' items';"
+            "return 'not found: ' + options.length + ' options checked';"
         waitForConditionViaJs(js, "clicked", ELEMENT_TIMEOUT_MS)
     }
 
