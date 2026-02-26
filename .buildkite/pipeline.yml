@@ -31,6 +31,7 @@ steps:
           echo "--- :docker: Starting wp-env"
           make wp-env-start
           echo "--- :performing_arts: Running E2E tests in Playwright container"
+          E2E_EXIT=0
           docker run --rm \
             --userns=host \
             --network host \
@@ -38,8 +39,8 @@ steps:
             -w /work \
             -e CI=true \
             mcr.microsoft.com/playwright:v1.58.2-noble \
-            bash -c "npm ci && npx playwright install chromium && npx playwright test"
-          E2E_EXIT=$?
+            bash -c "npm ci && npx playwright install chromium && npx playwright test" \
+            || E2E_EXIT=$?
           echo "--- :wordpress: WordPress debug log"
           WP_CONTAINER=$(docker ps -qf "publish=8888" | head -1)
           if [ -n "$WP_CONTAINER" ]; then
