@@ -90,22 +90,15 @@ object EditorTestHelpers {
         // We use JS click because the toolbar button may not pass Espresso's
         // visibility check even though it is functionally present.
         clickViaJs(ADD_BLOCK_SELECTOR)
-        // Wait for the inserter dialog to render, then find and click the block
-        // by matching its text content within role="option" elements. Block items
-        // don't have an explicit aria-label — their accessible name comes from
-        // inner text content. We scope the search to the inserter dialog
-        // (role="dialog") to avoid matching elements in other parts of the DOM.
-        val escapedName = name.replace("'", "\\'")
-        val js = "var dialog = document.querySelector(\"[role='dialog'][aria-modal='true']\");" +
-            "if (!dialog) { return 'dialog not found'; }" +
-            "var options = dialog.querySelectorAll(\"[role='option']\");" +
-            "for (var i = 0; i < options.length; i++) {" +
-            "  if (options[i].textContent.trim() === '" + escapedName + "') {" +
-            "    options[i].click(); return 'clicked';" +
-            "  }" +
-            "}" +
-            "return 'not found: ' + options.length + ' options checked';"
-        waitForConditionViaJs(js, "clicked", ELEMENT_TIMEOUT_MS)
+        // Wait for the inserter dialog to appear, then find and click the block
+        // option by name. Block items use role="option" with their accessible
+        // name from inner text — we match via XPath within the modal dialog.
+        waitForWebViewElement("[role='dialog'][aria-modal='true']", ELEMENT_TIMEOUT_MS)
+        val xpath = "//*[@role='dialog'][@aria-modal='true']//*[@role='option'][normalize-space()='$name']"
+        onWebView()
+            .forceJavascriptEnabled()
+            .withElement(findElement(Locator.XPATH, xpath))
+            .perform(webClick())
     }
 
     /**
