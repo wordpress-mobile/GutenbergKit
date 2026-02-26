@@ -15,6 +15,8 @@ import androidx.test.ext.junit.rules.ActivityScenarioRule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 
+typealias EditorTestRule = AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
+
 /**
  * Reusable helpers for Android E2E tests that interact with the Gutenberg editor.
  *
@@ -51,7 +53,7 @@ object EditorTestHelpers {
      * in the WebView to confirm the editor has loaded.
      */
     fun navigateToEditor(
-        rule: AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
+        rule: EditorTestRule
     ) {
         // Tap the "Standalone editor" card in the main list.
         rule.waitForNodeWithText("Standalone editor")
@@ -123,7 +125,7 @@ object EditorTestHelpers {
      * Switches the editor to Code Editor mode via the More options menu.
      */
     fun switchToCodeEditor(
-        rule: AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
+        rule: EditorTestRule
     ) {
         rule.onNodeWithContentDescription("More options").performClick()
         rule.waitForNodeWithText("Code editor")
@@ -134,7 +136,7 @@ object EditorTestHelpers {
      * Switches the editor back to Visual Editor mode via the More options menu.
      */
     fun switchToVisualEditor(
-        rule: AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
+        rule: EditorTestRule
     ) {
         rule.onNodeWithContentDescription("More options").performClick()
         rule.waitForNodeWithText("Visual editor")
@@ -164,7 +166,7 @@ object EditorTestHelpers {
      * Returns a [TitleAndContent] data class.
      */
     fun readTitleAndContent(
-        rule: AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
+        rule: EditorTestRule
     ): TitleAndContent {
         switchToCodeEditor(rule)
         // Wait for the code editor content textarea to appear in the DOM.
@@ -182,7 +184,7 @@ object EditorTestHelpers {
     fun assertContent(
         expectedTitle: String? = null,
         expectedContentSubstring: String? = null,
-        rule: AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
+        rule: EditorTestRule
     ): TitleAndContent {
         val result = readTitleAndContent(rule)
         if (expectedTitle != null) {
@@ -203,7 +205,7 @@ object EditorTestHelpers {
      * Waits until a Compose node with the given content description becomes enabled.
      */
     fun waitForEnabled(
-        rule: AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>,
+        rule: EditorTestRule,
         contentDescription: String,
         timeoutMs: Long = ELEMENT_TIMEOUT_MS
     ) {
@@ -216,7 +218,7 @@ object EditorTestHelpers {
      * Asserts a Compose node with the given content description is not enabled.
      */
     fun assertDisabled(
-        rule: AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>,
+        rule: EditorTestRule,
         contentDescription: String
     ) {
         rule.onNodeWithContentDescription(contentDescription).assertIsNotEnabled()
