@@ -287,10 +287,9 @@ test-android-e2e: ## Run Android E2E tests against the production build
 	else \
 		echo "--- :white_check_mark: Using existing build. Use 'make build REFRESH_JS_BUILD=1' to rebuild."; \
 	fi
-	@if [ ! -d "./android/Gutenberg/src/main/assets" ]; then \
-		echo "--- :open_file_folder: Copying build into Android bundle"; \
-		cp -r ./dist/. ./android/Gutenberg/src/main/assets; \
-	fi
+	@echo "--- :open_file_folder: Copying build into Android bundle"
+	@rm -rf ./android/Gutenberg/src/main/assets/
+	@cp -r ./dist/. ./android/Gutenberg/src/main/assets
 	$(ENSURE_ANDROID_DEVICE)
 	@echo "--- :android: Running Android E2E Tests (production build)"
 	./android/gradlew -p ./android :app:connectedDebugAndroidTest
