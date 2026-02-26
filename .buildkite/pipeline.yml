@@ -41,6 +41,13 @@ steps:
             mcr.microsoft.com/playwright:v1.58.2-noble \
             bash -c "npm ci && npx playwright install chromium && npx playwright test" \
             || E2E_EXIT=$?
+          echo "--- :broom: Fixing ownership of root-owned files"
+          docker run --rm \
+            --userns=host \
+            -v "$(pwd):/work" \
+            -w /work \
+            mcr.microsoft.com/playwright:v1.58.2-noble \
+            chown -R "$(id -u):$(id -g)" /work
           echo "--- :wordpress: WordPress debug log"
           WP_CONTAINER=$(docker ps -qf "publish=8888" | head -1)
           if [ -n "$WP_CONTAINER" ]; then
