@@ -42,6 +42,8 @@ object EditorTestHelpers {
         "textarea[placeholder='Add title']"
     private const val CODE_EDITOR_CONTENT_SELECTOR =
         "textarea[placeholder='Start writing with text or HTML']"
+    private const val INSERTER_DIALOG_SELECTOR =
+        "[role='dialog'][aria-modal='true']"
 
     /**
      * Navigates from the main list through the configuration screen
@@ -93,11 +95,10 @@ object EditorTestHelpers {
         // Wait for the inserter dialog to appear, then find and click the block
         // option by name. Block items use role="option" with their accessible
         // name from inner text — we match via XPath within the modal dialog.
-        waitForWebViewElement("[role='dialog'][aria-modal='true']", ELEMENT_TIMEOUT_MS)
-        val xpath = "//*[@role='dialog'][@aria-modal='true']//*[@role='option'][normalize-space()='$name']"
+        waitForWebViewElement(INSERTER_DIALOG_SELECTOR, ELEMENT_TIMEOUT_MS)
         onWebView()
             .forceJavascriptEnabled()
-            .withElement(findElement(Locator.XPATH, xpath))
+            .withElement(findElement(Locator.XPATH, inserterOptionXpath(name)))
             .perform(webClick())
     }
 
@@ -222,6 +223,13 @@ object EditorTestHelpers {
     }
 
     // -- Internal Helpers --
+
+    /**
+     * Returns an XPath that matches a block option by [name] inside
+     * the inserter dialog (role="dialog", aria-modal="true").
+     */
+    private fun inserterOptionXpath(name: String) =
+        "//*[@role='dialog'][@aria-modal='true']//*[@role='option'][normalize-space()='$name']"
 
     /**
      * Clicks an element by CSS selector via JavaScript.
