@@ -271,6 +271,7 @@ define ENSURE_ANDROID_DEVICE
 		fi; \
 		echo "--- :rocket: Booting Android emulator ($$AVD)..."; \
 		"$$ANDROID_HOME/emulator/emulator" -avd "$$AVD" -no-snapshot-load -no-audio -no-window &>/dev/null & \
+		EMULATOR_PID=$$!; \
 		echo "--- :hourglass: Waiting for emulator to boot..."; \
 		adb wait-for-device; \
 		BOOT_WAIT=0; \
@@ -278,6 +279,7 @@ define ENSURE_ANDROID_DEVICE
 			BOOT_WAIT=$$((BOOT_WAIT + 1)); \
 			if [ $$BOOT_WAIT -gt 60 ]; then \
 				echo "Error: Emulator boot timed out after 120 seconds."; \
+				kill $$EMULATOR_PID 2>/dev/null; \
 				exit 1; \
 			fi; \
 			sleep 2; \
