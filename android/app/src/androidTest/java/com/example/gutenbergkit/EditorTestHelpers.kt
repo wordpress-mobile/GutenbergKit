@@ -1,0 +1,364 @@
+package com.example.gutenbergkit
+
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.junit4.AndroidComposeTestRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.test.espresso.web.assertion.WebViewAssertions.webMatches
+import androidx.test.espresso.web.model.Atoms.script
+import androidx.test.espresso.web.sugar.Web.onWebView
+import androidx.test.espresso.web.webdriver.DriverAtoms.findElement
+import androidx.test.espresso.web.webdriver.DriverAtoms.getText
+import androidx.test.espresso.web.webdriver.DriverAtoms.webClick
+import androidx.test.espresso.web.webdriver.Locator
+import androidx.test.ext.junit.rules.ActivityScenarioRule
+import org.hamcrest.Matchers.notNullValue
+
+/**
+ * Reusable helpers for Android E2E tests that interact with the Gutenberg editor.
+ *
+ * All methods are on a companion-style object so they can be called from any
+ * test file — e.g. `EditorTestHelpers.navigateToEditor(rule)`.
+ *
+ * Mirrors `EditorUITestHelpers` on iOS.
+ */
+object EditorTestHelpers {
+
+    private const val NAVIGATE_TIMEOUT_MS = 30_000L
+    private const val ELEMENT_TIMEOUT_MS = 10_000L
+    private const val POLL_INTERVAL_MS = 500L
+
+    // CSS selectors matching the Gutenberg DOM
+    private const val TITLE_SELECTOR = "[aria-label='Add title']"
+    private const val ADD_BLOCK_SELECTOR = "[aria-label='Add block']"
+    private const val EMPTY_BLOCK_SELECTOR =
+        "[aria-label='Empty block; start writing or type forward slash to choose a block']"
+    private const val CODE_EDITOR_TITLE_SELECTOR = "[aria-label='Add title']"
+    private const val CODE_EDITOR_CONTENT_SELECTOR =
+        "[aria-label='Start writing with text or HTML']"
+
+    /**
+     * Navigates from the main list through the configuration screen
+     * and into the full-screen editor. Waits for the "Add title" element
+     * in the WebView to confirm the editor has loaded.
+     */
+    fun navigateToEditor(
+        rule: AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
+    ) {
+        // Tap the "Standalone editor" card in the main list.
+        rule.waitUntil(ELEMENT_TIMEOUT_MS) {
+            runCatching {
+                rule.onNodeWithText("Standalone editor").assertExists()
+                true
+            }.getOrDefault(false)
+        }
+        rule.onNodeWithText("Standalone editor").performClick()
+
+        // Wait for and tap the "Start" button on the configuration screen.
+        rule.waitUntil(ELEMENT_TIMEOUT_MS) {
+            runCatching {
+                rule.onNodeWithText("Start").assertExists()
+                true
+            }.getOrDefault(false)
+        }
+        rule.onNodeWithText("Start").performClick()
+
+        // Wait for the WebView to load: poll until the title element appears.
+        waitForWebViewElement(TITLE_SELECTOR, NAVIGATE_TIMEOUT_MS)
+    }
+
+    /**
+     * Types text into the title field in the WebView.
+     *
+     * Uses JavaScript keyboard event dispatch because Espresso Web's
+     * `webKeys()` fails on Gutenberg's contenteditable rich text blocks
+     * with "Cannot set the selection end".
+     */
+    fun typeInTitle(text: String) {
+        onWebView()
+            .forceJavascriptEnabled()
+            .withElement(findElement(Locator.CSS_SELECTOR, TITLE_SELECTOR))
+            .perform(webClick())
+        typeViaExecCommand(text)
+    }
+
+    /**
+     * Opens the web block inserter and inserts a block by name.
+     *
+     * Taps the "Add block" toggle in the editor toolbar, then clicks
+     * the block option matching [name] inside the inserter popover.
+     * Mirrors `EditorUITestHelpers.insertBlock(_:webView:app:)` on iOS.
+     */
+    fun insertBlock(name: String) {
+        // Tap the "Add block" toggle button in the WebView toolbar via JS click.
+        // We use JS click because the toolbar button may not pass Espresso's
+        // visibility check even though it is functionally present.
+        clickViaJs(ADD_BLOCK_SELECTOR)
+        // Wait for the inserter popover to render, then find and click the block
+        // by its title text. The WordPress Inserter component renders block items
+        // as buttons — we search by role and accessible name for resilience.
+        val escapedName = name.replace("'", "\\'")
+        val js = "var btn = document.querySelector(\"[role='option'][aria-label='" + escapedName + "']\");" +
+            "if (btn) { btn.click(); return 'clicked'; }" +
+            "var items = document.querySelectorAll('.block-editor-block-types-list__item');" +
+            "for (var i = 0; i < items.length; i++) {" +
+            "if (items[i].textContent.trim() === '" + escapedName + "' || " +
+            "(items[i].getAttribute('aria-label') || '').indexOf('" + escapedName + "') >= 0) {" +
+            "items[i].click();" +
+            "return 'clicked';" +
+            "}" +
+            "}" +
+            "return 'not found: ' + items.length + ' items';"
+        waitForConditionViaJs(js, "clicked", ELEMENT_TIMEOUT_MS)
+    }
+
+    /**
+     * Inserts a Paragraph block via the web block inserter then types
+     * text into the empty block placeholder.
+     */
+    fun typeInContent(text: String) {
+        insertBlock("Paragraph")
+        // Wait for the empty block to appear after insertion.
+        waitForWebViewElement(EMPTY_BLOCK_SELECTOR, ELEMENT_TIMEOUT_MS)
+        onWebView()
+            .forceJavascriptEnabled()
+            .withElement(findElement(Locator.CSS_SELECTOR, EMPTY_BLOCK_SELECTOR))
+            .perform(webClick())
+        typeViaExecCommand(text)
+    }
+
+    // -- Mode Switching --
+
+    /**
+     * Switches the editor to Code Editor mode via the More options menu.
+     */
+    fun switchToCodeEditor(
+        rule: AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
+    ) {
+        rule.onNodeWithContentDescription("More options").performClick()
+        rule.waitUntil(ELEMENT_TIMEOUT_MS) {
+            runCatching {
+                rule.onNodeWithText("Code editor").assertExists()
+                true
+            }.getOrDefault(false)
+        }
+        rule.onNodeWithText("Code editor").performClick()
+    }
+
+    /**
+     * Switches the editor back to Visual Editor mode via the More options menu.
+     */
+    fun switchToVisualEditor(
+        rule: AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
+    ) {
+        rule.onNodeWithContentDescription("More options").performClick()
+        rule.waitUntil(ELEMENT_TIMEOUT_MS) {
+            runCatching {
+                rule.onNodeWithText("Visual editor").assertExists()
+                true
+            }.getOrDefault(false)
+        }
+        rule.onNodeWithText("Visual editor").performClick()
+    }
+
+    // -- Content Reading (Code Editor Mode) --
+
+    /**
+     * Reads the current title from the code editor's title field.
+     * The editor must already be in Code Editor mode.
+     */
+    fun readTitle(): String {
+        return onWebView()
+            .forceJavascriptEnabled()
+            .withElement(findElement(Locator.CSS_SELECTOR, CODE_EDITOR_TITLE_SELECTOR))
+            .perform(getText())
+            .get()
+    }
+
+    /**
+     * Reads the current raw HTML content from the code editor's content textarea.
+     * The editor must already be in Code Editor mode.
+     */
+    fun readContent(): String {
+        return onWebView()
+            .forceJavascriptEnabled()
+            .withElement(findElement(Locator.CSS_SELECTOR, CODE_EDITOR_CONTENT_SELECTOR))
+            .perform(getText())
+            .get()
+    }
+
+    /**
+     * Switches to Code Editor, reads both title and content, then switches back.
+     * Returns a [TitleAndContent] data class.
+     */
+    fun readTitleAndContent(
+        rule: AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
+    ): TitleAndContent {
+        switchToCodeEditor(rule)
+        // Allow the code editor to render
+        waitForWebViewElement(CODE_EDITOR_CONTENT_SELECTOR, ELEMENT_TIMEOUT_MS)
+        val title = readTitle()
+        val content = readContent()
+        switchToVisualEditor(rule)
+        return TitleAndContent(title = title, content = content)
+    }
+
+    /**
+     * Convenience assertion: switches to Code Editor, reads title and content,
+     * switches back, and asserts expected values.
+     */
+    fun assertContent(
+        expectedTitle: String? = null,
+        expectedContentSubstring: String? = null,
+        rule: AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
+    ): TitleAndContent {
+        val result = readTitleAndContent(rule)
+        if (expectedTitle != null) {
+            assert(result.title == expectedTitle) {
+                "Title mismatch: expected \"$expectedTitle\" but got \"${result.title}\""
+            }
+        }
+        if (expectedContentSubstring != null) {
+            assert(result.content.contains(expectedContentSubstring)) {
+                "Expected content to contain \"$expectedContentSubstring\" but got \"${result.content}\""
+            }
+        }
+        return result
+    }
+
+    // -- Waiting Helpers --
+
+    /**
+     * Waits until a Compose node with the given content description becomes enabled.
+     */
+    fun waitForEnabled(
+        rule: AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>,
+        contentDescription: String,
+        timeoutMs: Long = ELEMENT_TIMEOUT_MS
+    ) {
+        rule.waitUntil(timeoutMs) {
+            runCatching {
+                rule.onNodeWithContentDescription(contentDescription).assertIsEnabled()
+                true
+            }.getOrDefault(false)
+        }
+    }
+
+    /**
+     * Asserts a Compose node with the given content description is not enabled.
+     */
+    fun assertDisabled(
+        rule: AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>,
+        contentDescription: String
+    ) {
+        rule.onNodeWithContentDescription(contentDescription).assertIsNotEnabled()
+    }
+
+    // -- Internal Helpers --
+
+    /**
+     * Clicks an element by CSS selector via JavaScript.
+     *
+     * Espresso Web's `webClick()` requires the element to pass a visibility
+     * check, which can fail for elements in the Gutenberg toolbar. Using
+     * `element.click()` in JS bypasses that restriction.
+     */
+    private fun clickViaJs(cssSelector: String) {
+        val escapedSelector = cssSelector.replace("'", "\\'")
+        // Dispatch a full mousedown→mouseup→click sequence so React's
+        // synthetic event system picks it up (React listens at the root
+        // for bubbled native events, not just .click()).
+        val js = "var el = document.querySelector('" + escapedSelector + "');" +
+            "if (!el) { return 'element not found: " + escapedSelector + "'; }" +
+            "el.scrollIntoView();" +
+            "var opts = {bubbles: true, cancelable: true, view: window};" +
+            "el.dispatchEvent(new PointerEvent('pointerdown', opts));" +
+            "el.dispatchEvent(new MouseEvent('mousedown', opts));" +
+            "el.dispatchEvent(new PointerEvent('pointerup', opts));" +
+            "el.dispatchEvent(new MouseEvent('mouseup', opts));" +
+            "el.dispatchEvent(new MouseEvent('click', opts));" +
+            "return 'clicked';"
+        val result = onWebView()
+            .forceJavascriptEnabled()
+            .perform(script(js))
+            .get()
+        val value = result.value?.toString() ?: "null"
+        if (value.contains("not found")) {
+            throw AssertionError("clickViaJs failed: $value")
+        }
+    }
+
+    /**
+     * Types text into the currently focused element via
+     * `document.execCommand('insertText')`, which is what mobile browsers
+     * use for software keyboard input. Gutenberg's rich text listens for
+     * the resulting `input` event at the contenteditable level.
+     *
+     * This bypasses Espresso Web's `webKeys()`, which fails on Gutenberg's
+     * contenteditable rich text blocks with "Cannot set the selection end".
+     */
+    private fun typeViaExecCommand(text: String) {
+        val escapedText = text.replace("\\", "\\\\").replace("'", "\\'")
+        val js = "document.execCommand('insertText', false, '" + escapedText + "');" +
+            "return 'ok';"
+        onWebView()
+            .forceJavascriptEnabled()
+            .perform(script(js))
+    }
+
+    /**
+     * Polls a JS script until its return value matches [expectedResult].
+     */
+    private fun waitForConditionViaJs(js: String, expectedResult: String, timeoutMs: Long) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        var lastResult = ""
+
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                // script() returns an Evaluation; .getValue() gets the JS return value
+                val evaluation = onWebView()
+                    .forceJavascriptEnabled()
+                    .perform(script(js))
+                    .get()
+                val value = evaluation.value
+                lastResult = value?.toString() ?: "null"
+                if (lastResult.contains(expectedResult)) return
+            } catch (_: Throwable) {
+                // Ignore and retry
+            }
+            Thread.sleep(POLL_INTERVAL_MS)
+        }
+        throw AssertionError(
+            "Timed out waiting for JS condition. Last result: $lastResult"
+        )
+    }
+
+    /**
+     * Polls until a WebView element matching the given CSS selector exists.
+     */
+    private fun waitForWebViewElement(cssSelector: String, timeoutMs: Long) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        var lastError: Throwable? = null
+
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                onWebView()
+                    .forceJavascriptEnabled()
+                    .withElement(findElement(Locator.CSS_SELECTOR, cssSelector))
+                    .check(webMatches(getText(), notNullValue(String::class.java)))
+                return
+            } catch (e: Throwable) {
+                lastError = e
+                Thread.sleep(POLL_INTERVAL_MS)
+            }
+        }
+        throw AssertionError(
+            "Timed out waiting for WebView element: $cssSelector",
+            lastError
+        )
+    }
+
+    data class TitleAndContent(val title: String, val content: String)
+}
