@@ -242,18 +242,10 @@ object EditorTestHelpers {
      */
     private fun clickViaJs(cssSelector: String) {
         val escapedSelector = cssSelector.replace("'", "\\'")
-        // Dispatch a full mousedown→mouseup→click sequence so React's
-        // synthetic event system picks it up (React listens at the root
-        // for bubbled native events, not just .click()).
         val js = "var el = document.querySelector('" + escapedSelector + "');" +
             "if (!el) { return 'element not found: " + escapedSelector + "'; }" +
             "el.scrollIntoView();" +
-            "var opts = {bubbles: true, cancelable: true, view: window};" +
-            "el.dispatchEvent(new PointerEvent('pointerdown', opts));" +
-            "el.dispatchEvent(new MouseEvent('mousedown', opts));" +
-            "el.dispatchEvent(new PointerEvent('pointerup', opts));" +
-            "el.dispatchEvent(new MouseEvent('mouseup', opts));" +
-            "el.dispatchEvent(new MouseEvent('click', opts));" +
+            "el.click();" +
             "return 'clicked';"
         val result = onWebView()
             .forceJavascriptEnabled()
