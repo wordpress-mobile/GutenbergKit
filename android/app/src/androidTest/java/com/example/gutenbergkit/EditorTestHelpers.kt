@@ -277,10 +277,13 @@ object EditorTestHelpers {
     private fun typeViaExecCommand(text: String) {
         val escapedText = text.replace("\\", "\\\\").replace("'", "\\'")
         val js = """
-            document.execCommand('insertText', false, '$escapedText');
-            return 'ok';
+            var result = document.execCommand('insertText', false, '$escapedText');
+            return result ? 'ok' : 'execCommand failed';
         """.trimIndent()
-        runJs(js)
+        val value = runJs(js)
+        if (value.contains("failed")) {
+            throw AssertionError("typeViaExecCommand failed: execCommand returned false")
+        }
     }
 
     /**
