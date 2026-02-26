@@ -68,11 +68,14 @@ echo "Flushing rewrite rules..."
 npm run --silent wp-env run cli -- wp rewrite structure '/%postname%/' 2>/dev/null
 
 echo "Writing .htaccess for pretty permalinks..."
-WP_CONTAINER=$(docker ps -qf "name=wordpress" -f "ancestor=wordpress" | head -1)
+WP_CONTAINER=$(docker ps -qf "publish=8888" | head -1)
 if [ -z "$WP_CONTAINER" ]; then
-    echo "Error: Could not find WordPress container."
+    echo "Error: Could not find WordPress container on port 8888."
+    echo "Running containers:"
+    docker ps --format "{{.ID}} {{.Image}} {{.Ports}} {{.Names}}"
     exit 1
 fi
+echo "Found WordPress container: $WP_CONTAINER"
 docker exec -u 0 "$WP_CONTAINER" sh -c 'cat > /var/www/html/.htaccess << "HTACCESS"
 # BEGIN WordPress
 <IfModule mod_rewrite.c>
