@@ -287,17 +287,15 @@ object EditorTestHelpers {
     }
 
     /**
-     * Reads the text content of an element by CSS selector via JS.
-     * Uses `textContent` for contenteditable elements and `value` for
-     * textarea/input elements, matching how Code Editor fields render.
+     * Reads the value of a textarea/input element by CSS selector via JS.
+     * Used to read Code Editor fields which render as `<textarea>` elements.
      */
     private fun readTextViaJs(cssSelector: String): String {
         val escapedSelector = cssSelector.replace("'", "\\'")
         val js = """
             var el = document.querySelector('$escapedSelector');
             if (!el) return '';
-            if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') return el.value || '';
-            return el.innerText || el.textContent || '';
+            return el.value || '';
         """.trimIndent()
         return runJs(js)
     }
