@@ -55,21 +55,11 @@ object EditorTestHelpers {
         rule: AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
     ) {
         // Tap the "Standalone editor" card in the main list.
-        rule.waitUntil(ELEMENT_TIMEOUT_MS) {
-            runCatching {
-                rule.onNodeWithText("Standalone editor").assertExists()
-                true
-            }.getOrDefault(false)
-        }
+        rule.waitForNodeWithText("Standalone editor")
         rule.onNodeWithText("Standalone editor").performClick()
 
         // Wait for and tap the "Start" button on the configuration screen.
-        rule.waitUntil(ELEMENT_TIMEOUT_MS) {
-            runCatching {
-                rule.onNodeWithText("Start").assertExists()
-                true
-            }.getOrDefault(false)
-        }
+        rule.waitForNodeWithText("Start")
         rule.onNodeWithText("Start").performClick()
 
         // Wait for the WebView to load: poll until the title element appears.
@@ -145,12 +135,7 @@ object EditorTestHelpers {
         rule: AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
     ) {
         rule.onNodeWithContentDescription("More options").performClick()
-        rule.waitUntil(ELEMENT_TIMEOUT_MS) {
-            runCatching {
-                rule.onNodeWithText("Code editor").assertExists()
-                true
-            }.getOrDefault(false)
-        }
+        rule.waitForNodeWithText("Code editor")
         rule.onNodeWithText("Code editor").performClick()
     }
 
@@ -161,12 +146,7 @@ object EditorTestHelpers {
         rule: AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>
     ) {
         rule.onNodeWithContentDescription("More options").performClick()
-        rule.waitUntil(ELEMENT_TIMEOUT_MS) {
-            runCatching {
-                rule.onNodeWithText("Visual editor").assertExists()
-                true
-            }.getOrDefault(false)
-        }
+        rule.waitForNodeWithText("Visual editor")
         rule.onNodeWithText("Visual editor").performClick()
     }
 
@@ -236,11 +216,8 @@ object EditorTestHelpers {
         contentDescription: String,
         timeoutMs: Long = ELEMENT_TIMEOUT_MS
     ) {
-        rule.waitUntil(timeoutMs) {
-            runCatching {
-                rule.onNodeWithContentDescription(contentDescription).assertIsEnabled()
-                true
-            }.getOrDefault(false)
+        rule.waitUntilAsserts(timeoutMs) {
+            onNodeWithContentDescription(contentDescription).assertIsEnabled()
         }
     }
 
@@ -389,4 +366,29 @@ object EditorTestHelpers {
     }
 
     data class TitleAndContent(val title: String, val content: String)
+}
+
+/**
+ * Polls until [block] completes without throwing, or times out.
+ * Useful for waiting on Compose assertions that throw when unsatisfied.
+ */
+private fun AndroidComposeTestRule<*, *>.waitUntilAsserts(
+    timeoutMs: Long = 10_000L,
+    block: AndroidComposeTestRule<*, *>.() -> Unit
+) {
+    waitUntil(timeoutMs) {
+        runCatching { block(); true }.getOrDefault(false)
+    }
+}
+
+/**
+ * Waits until a Compose node with the given [text] exists.
+ */
+private fun AndroidComposeTestRule<*, *>.waitForNodeWithText(
+    text: String,
+    timeoutMs: Long = 10_000L
+) {
+    waitUntilAsserts(timeoutMs) {
+        onNodeWithText(text).assertExists()
+    }
 }
