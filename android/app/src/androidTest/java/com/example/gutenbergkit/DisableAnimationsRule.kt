@@ -32,7 +32,10 @@ class DisableAnimationsRule : TestRule {
                     .uiAutomation
 
                 val originalValues = ANIMATION_SETTINGS.map { setting ->
-                    setting to executeShellCommand(uiAutomation, "settings get global $setting")
+                    val value = executeShellCommand(uiAutomation, "settings get global $setting")
+                    // Default to 1.0 when the setting doesn't exist on the device
+                    // (adb returns the string "null" for missing settings).
+                    setting to if (value == "null") "1.0" else value
                 }
 
                 try {
