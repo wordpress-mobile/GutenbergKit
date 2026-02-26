@@ -317,7 +317,7 @@ object EditorTestHelpers {
             try {
                 lastResult = runJs(js)
                 if (lastResult.contains(expectedResult)) return
-            } catch (_: Throwable) {
+            } catch (_: Exception) {
                 // Ignore and retry
             }
             Thread.sleep(POLL_INTERVAL_MS)
