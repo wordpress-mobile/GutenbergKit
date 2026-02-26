@@ -6,15 +6,12 @@ import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.test.espresso.web.assertion.WebViewAssertions.webMatches
 import androidx.test.espresso.web.model.Atoms.script
 import androidx.test.espresso.web.sugar.Web.onWebView
 import androidx.test.espresso.web.webdriver.DriverAtoms.findElement
-import androidx.test.espresso.web.webdriver.DriverAtoms.getText
 import androidx.test.espresso.web.webdriver.DriverAtoms.webClick
 import androidx.test.espresso.web.webdriver.Locator
 import androidx.test.ext.junit.rules.ActivityScenarioRule
-import org.hamcrest.Matchers.notNullValue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 
@@ -177,7 +174,7 @@ object EditorTestHelpers {
     ): TitleAndContent {
         switchToCodeEditor(rule)
         // Wait for the code editor content textarea to appear in the DOM.
-        waitForWebViewElementViaJs(CODE_EDITOR_CONTENT_SELECTOR, ELEMENT_TIMEOUT_MS)
+        waitForWebViewElement(CODE_EDITOR_CONTENT_SELECTOR, ELEMENT_TIMEOUT_MS)
         val title = readTitle()
         val content = readContent()
         switchToVisualEditor(rule)
@@ -294,11 +291,12 @@ object EditorTestHelpers {
     }
 
     /**
-     * Polls until a WebView element matching the CSS selector exists via JS.
-     * Unlike [waitForWebViewElement], this avoids Espresso Web's findElement
-     * which can fail on elements that don't pass visibility checks.
+     * Polls until a WebView element matching the CSS selector exists.
+     * Uses `document.querySelector` in JS rather than Espresso Web's
+     * `findElement`, which can fail on elements that don't pass its
+     * built-in visibility check.
      */
-    private fun waitForWebViewElementViaJs(cssSelector: String, timeoutMs: Long) {
+    private fun waitForWebViewElement(cssSelector: String, timeoutMs: Long) {
         val escapedSelector = cssSelector.replace("'", "\\'")
         val js = "var el = document.querySelector('" + escapedSelector + "');" +
             "return el ? 'found' : 'not found';"
@@ -314,7 +312,6 @@ object EditorTestHelpers {
 
         while (System.currentTimeMillis() < deadline) {
             try {
-                // script() returns an Evaluation; .getValue() gets the JS return value
                 val evaluation = onWebView()
                     .forceJavascriptEnabled()
                     .perform(script(js))
@@ -329,31 +326,6 @@ object EditorTestHelpers {
         }
         throw AssertionError(
             "Timed out waiting for JS condition. Last result: $lastResult"
-        )
-    }
-
-    /**
-     * Polls until a WebView element matching the given CSS selector exists.
-     */
-    private fun waitForWebViewElement(cssSelector: String, timeoutMs: Long) {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        var lastError: Throwable? = null
-
-        while (System.currentTimeMillis() < deadline) {
-            try {
-                onWebView()
-                    .forceJavascriptEnabled()
-                    .withElement(findElement(Locator.CSS_SELECTOR, cssSelector))
-                    .check(webMatches(getText(), notNullValue(String::class.java)))
-                return
-            } catch (e: Throwable) {
-                lastError = e
-                Thread.sleep(POLL_INTERVAL_MS)
-            }
-        }
-        throw AssertionError(
-            "Timed out waiting for WebView element: $cssSelector",
-            lastError
         )
     }
 
