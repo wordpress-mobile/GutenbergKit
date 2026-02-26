@@ -29,7 +29,6 @@ object EditorTestHelpers {
 
     private const val NAVIGATE_TIMEOUT_MS = 30_000L
     private const val ELEMENT_TIMEOUT_MS = 10_000L
-    private const val POLL_INTERVAL_MS = 500L
 
     // CSS selectors matching the Gutenberg DOM — prefer aria attributes and
     // placeholders over class names so tests are resilient to CSS refactors.
@@ -90,10 +89,11 @@ object EditorTestHelpers {
      * Mirrors `EditorUITestHelpers.insertBlock(_:webView:app:)` on iOS.
      */
     fun insertBlock(name: String) {
-        // Tap the "Add block" toggle button in the WebView toolbar via JS click.
-        // We use JS click because the toolbar button may not pass Espresso's
-        // visibility check even though it is functionally present.
-        clickViaJs(ADD_BLOCK_SELECTOR)
+        // Tap the "Add block" toggle button in the WebView toolbar.
+        onWebView()
+            .forceJavascriptEnabled()
+            .withElement(findElement(Locator.CSS_SELECTOR, ADD_BLOCK_SELECTOR))
+            .perform(webClick())
         // Wait for the inserter dialog to appear, then find and click the block
         // option by name. Block items use role="option" with their accessible
         // name from inner text — we match via XPath within the modal dialog.
@@ -246,28 +246,6 @@ object EditorTestHelpers {
         "//*[@role='dialog'][@aria-modal='true']//*[@role='option'][normalize-space()='$name']"
 
     /**
-     * Clicks an element by CSS selector via JavaScript.
-     *
-     * Espresso Web's `webClick()` requires the element to pass a visibility
-     * check, which can fail for elements in the Gutenberg toolbar. Using
-     * `element.click()` in JS bypasses that restriction.
-     */
-    private fun clickViaJs(cssSelector: String) {
-        val escapedSelector = cssSelector.replace("'", "\\'")
-        val js = """
-            var el = document.querySelector('$escapedSelector');
-            if (!el) return 'element not found: $escapedSelector';
-            el.scrollIntoView();
-            el.click();
-            return 'clicked';
-        """.trimIndent()
-        val value = runJs(js)
-        if (value.contains("not found")) {
-            throw AssertionError("clickViaJs failed: $value")
-        }
-    }
-
-    /**
      * Types text into the currently focused element via
      * `document.execCommand('insertText')`, which is what mobile browsers
      * use for software keyboard input. Gutenberg's rich text listens for
@@ -304,38 +282,27 @@ object EditorTestHelpers {
 
     /**
      * Polls until a WebView element matching the CSS selector exists.
-     * Uses `document.querySelector` in JS rather than Espresso Web's
-     * `findElement`, which can fail on elements that don't pass its
-     * built-in visibility check.
+     * Uses Espresso Web's `findElement` which throws when the element
+     * is not yet present, retrying until the timeout is reached.
      */
     private fun waitForWebViewElement(cssSelector: String, timeoutMs: Long) {
-        val escapedSelector = cssSelector.replace("'", "\\'")
-        val js = """
-            var el = document.querySelector('$escapedSelector');
-            return el ? 'found' : 'not found';
-        """.trimIndent()
-        waitForConditionViaJs(js, "found", timeoutMs)
-    }
-
-    /**
-     * Polls a JS script until its return value matches [expectedResult].
-     */
-    private fun waitForConditionViaJs(js: String, expectedResult: String, timeoutMs: Long) {
         val deadline = System.currentTimeMillis() + timeoutMs
-        var lastResult = ""
 
-        while (System.currentTimeMillis() < deadline) {
+        while (true) {
             try {
-                lastResult = runJs(js)
-                if (lastResult.contains(expectedResult)) return
-            } catch (_: Exception) {
-                // Ignore and retry
+                onWebView()
+                    .forceJavascriptEnabled()
+                    .withElement(findElement(Locator.CSS_SELECTOR, cssSelector))
+                return
+            } catch (e: Exception) {
+                if (System.currentTimeMillis() >= deadline) {
+                    throw AssertionError(
+                        "Timed out waiting for WebView element: $cssSelector", e
+                    )
+                }
+                Thread.sleep(500)
             }
-            Thread.sleep(POLL_INTERVAL_MS)
         }
-        throw AssertionError(
-            "Timed out waiting for JS condition. Last result: $lastResult"
-        )
     }
 
     data class TitleAndContent(val title: String, val content: String)
