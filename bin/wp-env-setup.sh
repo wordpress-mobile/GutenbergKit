@@ -68,8 +68,12 @@ echo "Flushing rewrite rules..."
 npm run --silent wp-env run cli -- wp rewrite structure '/%postname%/' 2>/dev/null
 
 echo "Writing .htaccess for pretty permalinks..."
-npm run --silent wp-env run cli -- wp eval '
-$htaccess = <<<HTACCESS
+WP_CONTAINER=$(docker ps -qf "name=wordpress" -f "ancestor=wordpress" | head -1)
+if [ -z "$WP_CONTAINER" ]; then
+    echo "Error: Could not find WordPress container."
+    exit 1
+fi
+docker exec -u 0 "$WP_CONTAINER" sh -c 'cat > /var/www/html/.htaccess << "HTACCESS"
 # BEGIN WordPress
 <IfModule mod_rewrite.c>
 RewriteEngine On
@@ -81,10 +85,8 @@ RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule . /index.php [L]
 </IfModule>
 # END WordPress
-HTACCESS;
-file_put_contents( ABSPATH . ".htaccess", $htaccess );
-echo ".htaccess written to " . ABSPATH;
-' 2>/dev/null
+HTACCESS
+'
 
 # ---------------------------------------------------------------------------
 # Enable Jetpack blocks module
