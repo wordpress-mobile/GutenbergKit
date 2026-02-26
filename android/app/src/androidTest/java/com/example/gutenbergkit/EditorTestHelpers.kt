@@ -252,11 +252,13 @@ object EditorTestHelpers {
      */
     private fun clickViaJs(cssSelector: String) {
         val escapedSelector = cssSelector.replace("'", "\\'")
-        val js = "var el = document.querySelector('" + escapedSelector + "');" +
-            "if (!el) { return 'element not found: " + escapedSelector + "'; }" +
-            "el.scrollIntoView();" +
-            "el.click();" +
-            "return 'clicked';"
+        val js = """
+            var el = document.querySelector('$escapedSelector');
+            if (!el) return 'element not found: $escapedSelector';
+            el.scrollIntoView();
+            el.click();
+            return 'clicked';
+        """.trimIndent()
         val value = runJs(js)
         if (value.contains("not found")) {
             throw AssertionError("clickViaJs failed: $value")
@@ -274,8 +276,10 @@ object EditorTestHelpers {
      */
     private fun typeViaExecCommand(text: String) {
         val escapedText = text.replace("\\", "\\\\").replace("'", "\\'")
-        val js = "document.execCommand('insertText', false, '" + escapedText + "');" +
-            "return 'ok';"
+        val js = """
+            document.execCommand('insertText', false, '$escapedText');
+            return 'ok';
+        """.trimIndent()
         runJs(js)
     }
 
@@ -286,10 +290,12 @@ object EditorTestHelpers {
      */
     private fun readTextViaJs(cssSelector: String): String {
         val escapedSelector = cssSelector.replace("'", "\\'")
-        val js = "var el = document.querySelector('" + escapedSelector + "');" +
-            "if (!el) return '';" +
-            "if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') return el.value || '';" +
-            "return el.innerText || el.textContent || '';"
+        val js = """
+            var el = document.querySelector('$escapedSelector');
+            if (!el) return '';
+            if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') return el.value || '';
+            return el.innerText || el.textContent || '';
+        """.trimIndent()
         return runJs(js)
     }
 
@@ -301,8 +307,10 @@ object EditorTestHelpers {
      */
     private fun waitForWebViewElement(cssSelector: String, timeoutMs: Long) {
         val escapedSelector = cssSelector.replace("'", "\\'")
-        val js = "var el = document.querySelector('" + escapedSelector + "');" +
-            "return el ? 'found' : 'not found';"
+        val js = """
+            var el = document.querySelector('$escapedSelector');
+            return el ? 'found' : 'not found';
+        """.trimIndent()
         waitForConditionViaJs(js, "found", timeoutMs)
     }
 
