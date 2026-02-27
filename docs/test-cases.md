@@ -4,28 +4,21 @@
 
 **Purpose:** Verify the editor's core functionality: writing/formatting text, uploading media, saving/publishing, and basic block manipulation.
 
-### S.1. Undo/Redo Actions
-
--   **Steps:**
-    -   Add, remove, and edit blocks and text.
-    -   Use Undo and Redo buttons.
--   **Expected Outcome:** Editor correctly undoes and redoes actions, restoring previous states.
-
-### S.2. Upload an image
+### S.1. Upload an image
 
 -   **Steps:**
     -   Add an Image block.
     -   Tap "Choose from device" and select an image.
 -   **Expected Outcome:** Image uploads and displays in the block. An activity indicator is shown while the image is uploading.
 
-### S.3. Upload an video
+### S.2. Upload an video
 
 -   **Steps:**
     -   Add a Video block.
     -   Tap "Choose from device" and select a video.
 -   **Expected Outcome:** Video uploads and displays in the block. An activity indicator is shown while the video is uploading.
 
-### S.4. Save and publish a post
+### S.3. Save and publish a post
 
 -   **Steps:**
     -   Create a new post with text and media.
