@@ -30,6 +30,7 @@ steps:
           tar -xzf dist.tar.gz
           echo "--- :docker: Starting wp-env"
           make wp-env-start
+          WP_CONTAINER=$(docker ps -qf "publish=8888" | head -1)
           echo "--- :performing_arts: Running E2E tests in Playwright container"
           E2E_EXIT=0
           docker run --rm \
@@ -49,13 +50,14 @@ steps:
             mcr.microsoft.com/playwright:v1.58.2-noble \
             chown -R "$(id -u):$(id -g)" /work
           echo "--- :wordpress: WordPress debug log"
-          WP_CONTAINER=$(docker ps -qf "publish=8888" | head -1)
           if [ -n "$WP_CONTAINER" ]; then
             docker exec "$WP_CONTAINER" cat /var/www/html/wp-content/debug.log 2>/dev/null || echo "(no debug.log found)"
             echo "--- :file_folder: Uploads directory permissions"
             docker exec "$WP_CONTAINER" ls -la /var/www/html/wp-content/uploads/ 2>/dev/null || echo "(no uploads directory)"
+            echo "--- :whale: WordPress container status"
+            docker inspect --format='{{.State.Status}}' "$WP_CONTAINER" 2>/dev/null || echo "(container gone)"
           else
-            echo "(WordPress container not found)"
+            echo "(WordPress container not found before tests)"
           fi
           exit $E2E_EXIT
       agents:
