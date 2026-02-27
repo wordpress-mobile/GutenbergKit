@@ -257,6 +257,62 @@ test-android: ## Run Android tests
 	@echo "--- :android: Running Android Tests"
 	./android/gradlew -p ./android :gutenberg:test
 
+# Ensure an Android device or emulator is available for instrumented tests.
+# Checks for any connected device; if none found, boots the first available AVD.
+define ENSURE_ANDROID_DEVICE
+	@if adb devices 2>/dev/null | tail -n +2 | grep -q 'device$$'; then \
+		echo "--- :white_check_mark: Android device already connected."; \
+	else \
+		AVD=$$("$$ANDROID_HOME/emulator/emulator" -list-avds 2>/dev/null | head -n 1); \
+		if [ -z "$$AVD" ]; then \
+			echo "Error: No Android device connected and no AVDs found."; \
+			echo "Connect a device, start an emulator, or create an AVD with Android Studio."; \
+			exit 1; \
+		fi; \
+		echo "--- :rocket: Booting Android emulator ($$AVD)..."; \
+		"$$ANDROID_HOME/emulator/emulator" -avd "$$AVD" -no-snapshot-load -no-audio -no-window &>/dev/null & \
+		EMULATOR_PID=$$!; \
+		echo "--- :hourglass: Waiting for emulator to boot..."; \
+		adb wait-for-device; \
+		BOOT_WAIT=0; \
+		while [ "$$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != "1" ]; do \
+			BOOT_WAIT=$$((BOOT_WAIT + 1)); \
+			if [ $$BOOT_WAIT -gt 60 ]; then \
+				echo "Error: Emulator boot timed out after 120 seconds."; \
+				kill $$EMULATOR_PID 2>/dev/null; \
+				exit 1; \
+			fi; \
+			sleep 2; \
+		done; \
+		echo "--- :white_check_mark: Emulator booted."; \
+	fi
+endef
+
+.PHONY: test-android-e2e
+test-android-e2e: ## Run Android E2E tests against the production build
+	@if [ ! -d "dist" ]; then \
+		$(MAKE) build; \
+	else \
+		echo "--- :white_check_mark: Using existing build. Use 'make build REFRESH_JS_BUILD=1' to rebuild."; \
+	fi
+	@echo "--- :open_file_folder: Copying build into Android bundle"
+	@rm -rf ./android/Gutenberg/src/main/assets/
+	@cp -r ./dist/. ./android/Gutenberg/src/main/assets
+	$(ENSURE_ANDROID_DEVICE)
+	@echo "--- :android: Running Android E2E Tests (production build)"
+	./android/gradlew -p ./android :app:connectedDebugAndroidTest
+
+.PHONY: test-android-e2e-dev
+test-android-e2e-dev: ## Run Android E2E tests against the Vite dev server (must be running)
+	@if ! curl -sf http://localhost:5173 > /dev/null 2>&1; then \
+		echo "Error: Dev server is not running at http://localhost:5173"; \
+		echo "Start it first with: make dev-server"; \
+		exit 1; \
+	fi
+	$(ENSURE_ANDROID_DEVICE)
+	@echo "--- :android: Running Android E2E Tests (dev server)"
+	./android/gradlew -p ./android :app:connectedDebugAndroidTest
+
 ################################################################################
 # Release Target
 ################################################################################
