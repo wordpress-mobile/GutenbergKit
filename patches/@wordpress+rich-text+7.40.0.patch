@@ -1,7 +1,7 @@
-diff --git a/node_modules/@wordpress/rich-text/build-module/component/event-listeners/prevent-focus-capture.mjs b/node_modules/@wordpress/rich-text/build-module/component/event-listeners/prevent-focus-capture.mjs
-index 7005804..a52d98c 100644
---- a/node_modules/@wordpress/rich-text/build-module/component/event-listeners/prevent-focus-capture.mjs
-+++ b/node_modules/@wordpress/rich-text/build-module/component/event-listeners/prevent-focus-capture.mjs
+diff --git a/node_modules/@wordpress/rich-text/build-module/hook/event-listeners/prevent-focus-capture.mjs b/node_modules/@wordpress/rich-text/build-module/hook/event-listeners/prevent-focus-capture.mjs
+index c225264..8699aa7 100644
+--- a/node_modules/@wordpress/rich-text/build-module/hook/event-listeners/prevent-focus-capture.mjs
++++ b/node_modules/@wordpress/rich-text/build-module/hook/event-listeners/prevent-focus-capture.mjs
 @@ -26,9 +26,11 @@ function preventFocusCapture() {
      }
      defaultView.addEventListener("pointerdown", onPointerDown);

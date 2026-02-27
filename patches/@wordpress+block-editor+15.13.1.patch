@@ -23,10 +23,10 @@ index ea5da25..19cdf5e 100644
                  }
                  onHover(item);
 diff --git a/node_modules/@wordpress/block-editor/build-module/components/inserter/index.mjs b/node_modules/@wordpress/block-editor/build-module/components/inserter/index.mjs
-index 4ac3e92..ee77de2 100644
+index 291df03..5b8ef8e 100644
 --- a/node_modules/@wordpress/block-editor/build-module/components/inserter/index.mjs
 +++ b/node_modules/@wordpress/block-editor/build-module/components/inserter/index.mjs
-@@ -175,8 +175,9 @@ var Inserter = class extends Component {
+@@ -179,8 +179,9 @@ var Inserter = class extends Component {
          contentClassName: clsx("block-editor-inserter__popover", {
            "is-quick": isQuick
          }),
@@ -38,10 +38,10 @@ index 4ac3e92..ee77de2 100644
          headerTitle: __("Add a block"),
          renderToggle: this.renderToggle,
 diff --git a/node_modules/@wordpress/block-editor/build-module/components/provider/index.mjs b/node_modules/@wordpress/block-editor/build-module/components/provider/index.mjs
-index 86af13f..2bcd4f1 100644
+index 8dc59a7..dd2a761 100644
 --- a/node_modules/@wordpress/block-editor/build-module/components/provider/index.mjs
 +++ b/node_modules/@wordpress/block-editor/build-module/components/provider/index.mjs
-@@ -90,7 +90,7 @@ var ExperimentalBlockEditorProvider = withRegistryProvider(
+@@ -147,7 +147,7 @@ var ExperimentalBlockEditorProvider = withRegistryProvider(
    }
  );
  var BlockEditorProvider = (props) => {
@@ -51,7 +51,7 @@ index 86af13f..2bcd4f1 100644
  var provider_default = BlockEditorProvider;
  export {
 diff --git a/node_modules/@wordpress/block-editor/package.json b/node_modules/@wordpress/block-editor/package.json
-index 92de2c3..ca466b5 100644
+index 27d6afa..87252a5 100644
 --- a/node_modules/@wordpress/block-editor/package.json
 +++ b/node_modules/@wordpress/block-editor/package.json
 @@ -39,7 +39,9 @@

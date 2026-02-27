@@ -37,7 +37,7 @@
 		"@wordpress/commands": "^1.38.0",
 		"@wordpress/components": "^32.0.0",
 		"@wordpress/compose": "^7.38.0",
-		"@wordpress/core-data": "^7.38.0",
+		"@wordpress/core-data": "^7.40.1",
 		"@wordpress/data": "^10.38.0",
 		"@wordpress/data-controls": "^4.38.0",
 		"@wordpress/date": "^5.38.0",
@@ -94,6 +94,7 @@
 		"@types/react-dom": "^19.2.3",
 		"@vitejs/plugin-react": "^5.1.2",
 		"@wordpress/dependency-extraction-webpack-plugin": "^6.36.0",
+		"@wordpress/env": "^10.18.0",
 		"@wordpress/eslint-plugin": "^24.0.0",
 		"@wordpress/prettier-config": "^4.38.0",
 		"eslint": "^8.57",
@@ -109,7 +110,6 @@
 		"sass-embedded": "^1.97.3",
 		"vite": "^7.3.1",
 		"vite-plugin-node-polyfills": "^0.24.0",
-		"vitest": "^4.0.17",
-		"@wordpress/env": "^10.18.0"
+		"vitest": "^4.0.17"
 	}
 }
