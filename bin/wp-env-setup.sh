@@ -71,6 +71,11 @@ done
 # 1. Log in via wp-login.php to obtain a session cookie.
 # 2. Fetch a REST nonce from admin-ajax.php.
 # 3. POST to the application-passwords endpoint with the cookie + nonce.
+#
+# The Playground runtime may still be processing Blueprint steps (installing
+# plugins, rewriting wp-config.php) when the server starts accepting requests.
+# This means application passwords may not be available yet. We retry the
+# entire flow until it succeeds or we exceed the retry limit.
 # ---------------------------------------------------------------------------
 
 echo "Creating application password for '$USERNAME'..."
@@ -78,53 +83,68 @@ echo "Creating application password for '$USERNAME'..."
 COOKIE_JAR=$(mktemp)
 trap 'rm -f "$COOKIE_JAR"' EXIT
 
-# Step 1: Log in to get a session cookie.
-# WordPress requires the test cookie to be present in the login request.
-# Seed the cookie jar with it, then POST the credentials.
-printf "localhost\tFALSE\t/\tFALSE\t0\twordpress_test_cookie\tWP%%20Cookie%%20check\n" > "$COOKIE_JAR"
+APP_PASSWORD=""
+CREATE_MAX_RETRIES=15
+CREATE_RETRY_INTERVAL=2
 
-HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-    -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
-    -d "log=$USERNAME&pwd=$PASSWORD&wp-submit=Log+In&redirect_to=%2Fwp-admin%2F&testcookie=1" \
-    "$SITE_URL/wp-login.php")
+for attempt in $(seq 1 $CREATE_MAX_RETRIES); do
+    # Reset cookie jar for each attempt.
+    # WordPress requires the test cookie to be present in the login request.
+    printf "localhost\tFALSE\t/\tFALSE\t0\twordpress_test_cookie\tWP%%20Cookie%%20check\n" > "$COOKIE_JAR"
 
-if [ "$HTTP_STATUS" != "302" ]; then
-    echo "Error: WordPress login failed (HTTP $HTTP_STATUS)."
-    exit 1
-fi
+    # Step 1: Log in to get a session cookie.
+    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+        -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
+        -d "log=$USERNAME&pwd=$PASSWORD&wp-submit=Log+In&redirect_to=%2Fwp-admin%2F&testcookie=1" \
+        "$SITE_URL/wp-login.php")
 
-# Step 2: Fetch a REST nonce.
-REST_NONCE=$(curl -s -b "$COOKIE_JAR" "$SITE_URL/wp-admin/admin-ajax.php?action=rest-nonce")
+    if [ "$HTTP_STATUS" != "302" ]; then
+        echo "  Attempt $attempt/$CREATE_MAX_RETRIES: Login returned HTTP $HTTP_STATUS (expected 302), retrying..."
+        sleep $CREATE_RETRY_INTERVAL
+        continue
+    fi
 
-if [ -z "$REST_NONCE" ] || [ "$REST_NONCE" = "0" ]; then
-    echo "Error: Failed to obtain REST nonce."
-    exit 1
-fi
+    # Step 2: Fetch a REST nonce.
+    REST_NONCE=$(curl -s -b "$COOKIE_JAR" "$SITE_URL/wp-admin/admin-ajax.php?action=rest-nonce")
 
-# Step 3: Create the application password.
-# Use ?rest_route= format so this works regardless of permalink structure.
-RESPONSE=$(curl -s \
-    -b "$COOKIE_JAR" \
-    -H "X-WP-Nonce: $REST_NONCE" \
-    -H "Content-Type: application/json" \
-    -d "{\"name\":\"$APP_NAME\"}" \
-    "$SITE_URL/?rest_route=/wp/v2/users/me/application-passwords")
+    if [ -z "$REST_NONCE" ] || [ "$REST_NONCE" = "0" ]; then
+        echo "  Attempt $attempt/$CREATE_MAX_RETRIES: Failed to obtain REST nonce, retrying..."
+        sleep $CREATE_RETRY_INTERVAL
+        continue
+    fi
 
-# Extract the password from the JSON response.
-# The password field is only returned at creation time.
-# Use Node.js for JSON parsing since it's guaranteed to be available (wp-env requires it).
-APP_PASSWORD=$(echo "$RESPONSE" | node -e "
-    let data = '';
-    process.stdin.on('data', chunk => data += chunk);
-    process.stdin.on('end', () => {
-        try { process.stdout.write(JSON.parse(data).password); }
-        catch { process.exit(1); }
-    });
-") || true
+    # Step 3: Create the application password.
+    # Use ?rest_route= format so this works regardless of permalink structure.
+    RESPONSE=$(curl -s \
+        -b "$COOKIE_JAR" \
+        -H "X-WP-Nonce: $REST_NONCE" \
+        -H "Content-Type: application/json" \
+        -d "{\"name\":\"$APP_NAME\"}" \
+        "$SITE_URL/?rest_route=/wp/v2/users/me/application-passwords")
+
+    # Extract the password from the JSON response.
+    # The password field is only returned at creation time.
+    # Use Node.js for JSON parsing since it's guaranteed to be available (wp-env requires it).
+    APP_PASSWORD=$(echo "$RESPONSE" | node -e "
+        let data = '';
+        process.stdin.on('data', chunk => data += chunk);
+        process.stdin.on('end', () => {
+            try { process.stdout.write(JSON.parse(data).password); }
+            catch { process.exit(1); }
+        });
+    ") || true
+
+    if [ -n "$APP_PASSWORD" ]; then
+        break
+    fi
+
+    echo "  Attempt $attempt/$CREATE_MAX_RETRIES: Application password not available yet, retrying..."
+    sleep $CREATE_RETRY_INTERVAL
+done
 
 if [ -z "$APP_PASSWORD" ]; then
-    echo "Error: Failed to create application password."
-    echo "Response: $RESPONSE"
+    echo "Error: Failed to create application password after $CREATE_MAX_RETRIES attempts."
+    echo "Last response: $RESPONSE"
     exit 1
 fi
 
