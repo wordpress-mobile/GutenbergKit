@@ -2,9 +2,10 @@
 
 GutenbergKit includes a local WordPress environment powered by [`@wordpress/env`](https://developer.wordpress.org/block-editor/reference-guides/packages/packages-env/) (wp-env). This gives developers a zero-config way to run the full editor experience locally, including theme styles, media uploads, and plugin block assets.
 
+The environment uses the [WordPress Playground](https://wordpress.github.io/wordpress-playground/) runtime, which runs WordPress entirely in WebAssembly — no Docker required.
+
 ## Prerequisites
 
--   [Docker](https://www.docker.com/) must be installed and running.
 -   Node.js and npm (already required for GutenbergKit development).
 
 ## Quick Start
@@ -17,7 +18,7 @@ make wp-env-start
 This command:
 
 1. Installs npm dependencies (if needed).
-2. Starts Docker containers running WordPress at **http://localhost:8888**.
+2. Starts a WordPress Playground instance at **http://localhost:8888**.
 3. Creates an application password for the `admin` user.
 4. Writes credentials to `.wp-env.credentials.json` (gitignored).
 
@@ -25,13 +26,11 @@ Once started, the **"Local WordPress"** option in both the iOS and Android demo 
 
 ## Available Commands
 
-| Command                     | Description                                                    |
-| --------------------------- | -------------------------------------------------------------- |
-| `make wp-env-start`         | Start the environment and provision credentials                |
-| `make wp-env-stop`          | Stop the environment (preserves data)                          |
-| `make wp-env-clean`         | Destroy the environment and remove all data                    |
-| `make wp-env-logs`          | View WordPress debug logs                                      |
-| `make wp-env-cli CMD="..."` | Run a WP-CLI command (e.g., `make wp-env-cli CMD="post list"`) |
+| Command             | Description                                     |
+| ------------------- | ----------------------------------------------- |
+| `make wp-env-start` | Start the environment and provision credentials |
+| `make wp-env-stop`  | Stop the environment (preserves data)           |
+| `make wp-env-clean` | Destroy the environment and remove all data     |
 
 ## How It Works
 
@@ -40,7 +39,7 @@ Once started, the **"Local WordPress"** option in both the iOS and Android demo 
 The `.wp-env.json` file at the project root configures the environment:
 
 -   **Gutenberg plugin** is installed for the `/wp-block-editor/v1/settings` editor settings REST API endpoint.
--   **Jetpack plugin** is installed with the blocks module enabled, providing the `/wpcom/v2/editor-assets` endpoint and additional editor blocks.
+-   **Jetpack plugin** is installed with the blocks module auto-activated via a mu-plugin (`wp-env/mu-plugins/gutenbergkit-jetpack-blocks.php`), providing the `/wpcom/v2/editor-assets` endpoint and additional editor blocks.
 -   A **CORS mu-plugin** (`wp-env/mu-plugins/gutenbergkit-cors.php`) adds CORS headers to REST API responses, allowing requests from the Vite dev server, preview server, and native WebViews.
 -   **WP_DEBUG** and **WP_DEBUG_LOG** are enabled for development.
 
@@ -49,7 +48,7 @@ The `.wp-env.json` file at the project root configures the environment:
 The `bin/wp-env-setup.sh` script runs automatically after `wp-env start`:
 
 1. Waits for WordPress to be ready (health check with retries).
-2. Creates an application password for the `admin` user via WP-CLI.
+2. Creates an application password for the `admin` user via the REST API.
 3. Generates a Base64-encoded Basic Auth header.
 4. Writes credentials to `.wp-env.credentials.json`.
 
@@ -75,26 +74,6 @@ The Xcode scheme includes a `WP_ENV_CREDENTIALS_PATH` environment variable point
 
 The Android emulator cannot reach `localhost` on the host machine directly. The credentials loader automatically remaps `localhost` to `10.0.2.2` (the emulator's alias for the host). Credentials are read at build time and baked into `BuildConfig` fields, since the emulator cannot access the host filesystem at runtime.
 
-#### Image URLs in the Android Emulator
-
-WordPress generates image URLs (e.g., for uploaded media) using its configured site URL, which defaults to `http://localhost:8888`. These URLs don't resolve inside the Android emulator because `localhost` points to the emulator itself.
-
-To fix this, update WordPress's site URL constants to use `10.0.2.2` before testing media uploads:
-
-```bash
-make wp-env-cli CMD="config set WP_SITEURL http://10.0.2.2:8888"
-make wp-env-cli CMD="config set WP_HOME http://10.0.2.2:8888"
-```
-
-To revert (for browser access or iOS testing):
-
-```bash
-make wp-env-cli CMD="config set WP_SITEURL http://localhost:8888"
-make wp-env-cli CMD="config set WP_HOME http://localhost:8888"
-```
-
-Note: wp-env defines `WP_SITEURL` and `WP_HOME` as constants in `wp-config.php`, so `wp option update` will not work — use `wp config set` instead. Changing the site URL to `10.0.2.2` will cause the WordPress admin dashboard (`http://localhost:8888/wp-admin/`) to redirect to `10.0.2.2`, which doesn't resolve in a desktop browser.
-
 ### Physical Devices
 
 Physical devices cannot reach `localhost`. You'll need to:
@@ -111,14 +90,6 @@ Access the WordPress admin dashboard at **http://localhost:8888/wp-admin/**:
 -   **Password:** `password`
 
 ## Troubleshooting
-
-### Docker is not running
-
-```
-Error: Cannot connect to the Docker daemon
-```
-
-Make sure Docker is running before executing `make wp-env-start`.
 
 ### Port 8888 is already in use
 
@@ -147,6 +118,6 @@ make wp-env-start
 
 If the demo apps show "Local WordPress not available", verify:
 
-1. wp-env is running: `make wp-env-logs`
+1. wp-env is running (`make wp-env-start`).
 2. The credentials file exists: `cat .wp-env.credentials.json`
 3. For Android, rebuild the app after `make wp-env-start` so credentials are baked into `BuildConfig`.
