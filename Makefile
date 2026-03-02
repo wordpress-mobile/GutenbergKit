@@ -201,15 +201,24 @@ test-e2e-docker: npm-dependencies ## Run end-to-end tests in Docker (for CI with
 	else \
 		echo "--- :white_check_mark: Using existing build. Use 'make build REFRESH_JS_BUILD=1' to rebuild."; \
 	fi
-	@echo "--- :playwright: Running Playwright tests in Docker"
+	@echo "--- :vite: Starting preview server"
+	@npm run preview > /dev/null 2>&1 & \
+	PREVIEW_PID=$$!; \
+	sleep 3; \
+	echo "--- :playwright: Running Playwright tests in Docker"; \
 	docker run --rm \
-		--network=host \
+		--add-host=host.docker.internal:host-gateway \
 		--ipc=host \
 		-v "$(PWD):/work" \
 		-w /work \
 		-e CI=true \
+		-e BASE_URL=http://host.docker.internal:4173 \
+		-e WP_BASE_URL=http://host.docker.internal:8888 \
 		mcr.microsoft.com/playwright:v1.58.0-noble \
-		npx playwright test
+		npx playwright test --config=playwright.docker.config.js; \
+	EXIT_CODE=$$?; \
+	kill $$PREVIEW_PID 2>/dev/null || true; \
+	exit $$EXIT_CODE
 
 .PHONY: test-e2e-ui
 test-e2e-ui: e2e-dependencies ## Run end-to-end tests in UI mode

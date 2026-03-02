@@ -12,6 +12,10 @@ const CREDENTIALS_PATH = path.resolve(
 /**
  * Read wp-env credentials from the JSON file written by bin/wp-env-setup.sh.
  *
+ * Supports WP_BASE_URL environment variable to override the site URL, which is
+ * useful when running Playwright in Docker where localhost refers to the
+ * container rather than the host machine.
+ *
  * @return {Object} Credentials object with siteUrl, siteApiRoot, authHeader, etc.
  */
 function readCredentials() {
@@ -21,7 +25,15 @@ function readCredentials() {
 				'Run "make wp-env-start" to provision the local WordPress environment.'
 		);
 	}
-	return JSON.parse( fs.readFileSync( CREDENTIALS_PATH, 'utf-8' ) );
+	const creds = JSON.parse( fs.readFileSync( CREDENTIALS_PATH, 'utf-8' ) );
+
+	// Allow overriding the base URL for Docker environments
+	if ( process.env.WP_BASE_URL ) {
+		creds.siteUrl = process.env.WP_BASE_URL;
+		creds.siteApiRoot = `${ process.env.WP_BASE_URL }/wp-json/`;
+	}
+
+	return creds;
 }
 
 /** Cached editor settings — fetched once and reused across all tests. */

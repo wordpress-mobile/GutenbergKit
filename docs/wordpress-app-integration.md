@@ -31,9 +31,9 @@ Make sure the path points to your local GutenbergKit clone relative to your Word
 
 1. Copy `local-builds.gradle-example` to `local-builds.gradle`
 2. Uncomment the `localGutenbergKitPath` line and set it to your local GutenbergKit path:
-   ```groovy
-   localGutenbergKitPath = "../GutenbergKit"
-   ```
+    ```groovy
+    localGutenbergKitPath = "../GutenbergKit"
+    ```
 3. Run Gradle sync — this substitutes the Maven dependency with the local project
 
 ### Git Revision
@@ -147,12 +147,12 @@ gutenberg-kit = '0.13.3'
 
 ## Workflow Recommendations
 
-| Scenario                          | Recommended Method |
-| --------------------------------- | ------------------ |
-| Active feature development        | Local Development  |
-| PR review / testing               | Git Revision       |
-| Merging to WordPress app trunk    | Pre-release        |
-| WordPress app release             | Formal Release     |
+| Scenario                       | Recommended Method |
+| ------------------------------ | ------------------ |
+| Active feature development     | Local Development  |
+| PR review / testing            | Git Revision       |
+| Merging to WordPress app trunk | Pre-release        |
+| WordPress app release          | Formal Release     |
 
 ## Platform-Specific Notes
 
