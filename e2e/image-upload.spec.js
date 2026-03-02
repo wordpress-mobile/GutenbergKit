@@ -29,7 +29,7 @@ test.describe( 'Image Upload', () => {
 		// Wait for the upload to complete (block gets a numeric media ID).
 		const attrs = await editor.waitForMediaUpload( 0 );
 		expect( attrs.id ).toBeGreaterThan( 0 );
-		expect( attrs.url ).toContain( 'localhost:8888' );
+		expect( attrs.url ).toContain( ':8888/wp-content/uploads/' );
 
 		// Verify the image element is rendered.
 		await expect( page.locator( '.wp-block-image img' ) ).toBeVisible();
