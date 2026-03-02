@@ -65,7 +65,7 @@ e2e-dependencies: npm-dependencies ## Install E2E test dependencies
 		echo "--- :white_check_mark: Playwright Chromium is already installed."; \
 	elif [ -n "$$CI" ]; then \
 		echo "--- :chromium: Installing Playwright Chromium"; \
-		npx playwright install chromium; \
+		npx playwright install --with-deps chromium; \
 	else \
 		echo ""; \
 		echo "Playwright Chromium browser is not installed."; \
@@ -193,6 +193,23 @@ test-e2e: e2e-dependencies ## Run end-to-end tests
 		echo "--- :white_check_mark: Using existing build. Use 'make build REFRESH_JS_BUILD=1' to rebuild."; \
 	fi
 	npm run test:e2e
+
+.PHONY: test-e2e-docker
+test-e2e-docker: npm-dependencies ## Run end-to-end tests in Docker (for CI without root access)
+	@if [ ! -d "dist" ]; then \
+		$(MAKE) build; \
+	else \
+		echo "--- :white_check_mark: Using existing build. Use 'make build REFRESH_JS_BUILD=1' to rebuild."; \
+	fi
+	@echo "--- :playwright: Running Playwright tests in Docker"
+	docker run --rm \
+		--network=host \
+		--ipc=host \
+		-v "$(PWD):/work" \
+		-w /work \
+		-e CI=true \
+		mcr.microsoft.com/playwright:v1.58.0-noble \
+		npx playwright test
 
 .PHONY: test-e2e-ui
 test-e2e-ui: e2e-dependencies ## Run end-to-end tests in UI mode
