@@ -112,7 +112,15 @@ RESPONSE=$(curl -s \
 
 # Extract the password from the JSON response.
 # The password field is only returned at creation time.
-APP_PASSWORD=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['password'])" 2>/dev/null)
+# Use Node.js for JSON parsing since it's guaranteed to be available (wp-env requires it).
+APP_PASSWORD=$(echo "$RESPONSE" | node -e "
+    let data = '';
+    process.stdin.on('data', chunk => data += chunk);
+    process.stdin.on('end', () => {
+        try { process.stdout.write(JSON.parse(data).password); }
+        catch { process.exit(1); }
+    });
+") || true
 
 if [ -z "$APP_PASSWORD" ]; then
     echo "Error: Failed to create application password."
