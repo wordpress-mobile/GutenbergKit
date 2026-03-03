@@ -57,7 +57,7 @@ steps:
       command: make test-swift-package REFRESH_L10N=1 REFRESH_JS_BUILD=1
       plugins: *plugins
 
-    - label: ':package: Build XCFramework'
+    - label: ':xcode: Build XCFramework'
       command: make build-resources-xcframework
       artifact_paths:
           - '*.xcframework.zip*'
