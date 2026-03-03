@@ -48,15 +48,9 @@ test.describe( 'Text Alignment', () => {
 		await verseInput.click();
 		await page.keyboard.type( 'A verse line' );
 
-		// Ensure the verse block is selected in the data store before
-		// interacting with its toolbar. On slower CI machines, the DOM
-		// click above may not have fully synchronized Gutenberg's block
-		// selection state, causing the alignment toolbar interaction to
-		// silently fail.
-		await editor.selectBlock( 0 );
 		await editor.setTextAlignment( 'Align text center' );
 
-		const textAlign = await editor.getBlockAttribute( 0, 'textAlign' );
-		expect( textAlign ).toBe( 'center' );
+		const blocks = await editor.getBlocks();
+		expect( blocks[ 0 ].attributes.textAlign ).toBe( 'center' );
 	} );
 } );
