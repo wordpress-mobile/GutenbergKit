@@ -89,8 +89,8 @@ test.describe( 'Gallery Block', () => {
 			{ timeout: 30_000 }
 		);
 
-		// Click the uploaded image to select the inner Image block.
-		await page.locator( '.wp-block-image img' ).click();
+		// Click the inner Image block wrapper to select it.
+		await page.locator( '[data-type="core/image"]' ).click();
 
 		// Click the "Add caption" toolbar button to reveal the caption field.
 		await page.getByRole( 'button', { name: 'Add caption' } ).click();
