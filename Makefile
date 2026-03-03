@@ -153,6 +153,16 @@ wp-env-clean: ## Stop wp-env and remove all data (fresh start)
 	npm run wp-env destroy
 	@rm -f .wp-env.credentials.json
 
+.PHONY: wp-env-android
+wp-env-android: ## Remap wp-env site URLs for the Android emulator and restart
+	@cp wp-env/android-url-override.php wp-env/mu-plugins/gutenbergkit-android-urls.php
+	@RESET=1 $(MAKE) wp-env-start
+
+.PHONY: wp-env-android-reset
+wp-env-android-reset: ## Remove the Android emulator URL remap and restart
+	@rm -f wp-env/mu-plugins/gutenbergkit-android-urls.php
+	@RESET=1 $(MAKE) wp-env-start
+
 ################################################################################
 # Code Quality Targets
 ################################################################################
