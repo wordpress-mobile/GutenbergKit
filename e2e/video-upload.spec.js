@@ -29,7 +29,7 @@ test.describe( 'Video Upload', () => {
 		// Wait for the upload to complete (block gets a numeric media ID).
 		const attrs = await editor.waitForMediaUpload( 0 );
 		expect( attrs.id ).toBeGreaterThan( 0 );
-		expect( attrs.src ).toContain( 'localhost:8888' );
+		expect( attrs.src ).toContain( ':8888/wp-content/uploads/' );
 
 		// Verify the video element is rendered.
 		await expect( page.locator( '.wp-block-video video' ) ).toBeVisible();

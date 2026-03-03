@@ -29,7 +29,7 @@ test.describe( 'File Upload', () => {
 		// Wait for the upload to complete (block gets a numeric media ID).
 		const attrs = await editor.waitForMediaUpload( 0 );
 		expect( attrs.id ).toBeGreaterThan( 0 );
-		expect( attrs.href ).toContain( 'localhost:8888' );
+		expect( attrs.href ).toContain( ':8888/wp-content/uploads/' );
 
 		// Verify the filename and download link are rendered.
 		await expect(

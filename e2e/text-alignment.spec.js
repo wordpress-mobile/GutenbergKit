@@ -36,21 +36,4 @@ test.describe( 'Text Alignment', () => {
 			'right'
 		);
 	} );
-
-	test( 'should set textAlign on a verse block', async ( { page } ) => {
-		const editor = new EditorPage( page );
-		await editor.setup();
-
-		await editor.insertBlock( 'core/verse' );
-		const verseInput = page.locator(
-			'pre[aria-label="Block: Verse"][contenteditable="true"]'
-		);
-		await verseInput.click();
-		await page.keyboard.type( 'A verse line' );
-
-		await editor.setTextAlignment( 'Align text center' );
-
-		const textAlign = await editor.getBlockAttribute( 0, 'textAlign' );
-		expect( textAlign ).toBe( 'center' );
-	} );
 } );

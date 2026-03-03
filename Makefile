@@ -140,8 +140,8 @@ preview: npm-dependencies ## Preview the production build locally
 ################################################################################
 
 .PHONY: wp-env-start
-wp-env-start: npm-dependencies ## Start the local WordPress environment (requires Docker; RESET=1 to regenerate credentials)
-	npm run wp-env start
+wp-env-start: npm-dependencies ## Start the local WordPress environment (RESET=1 to regenerate credentials)
+	npm run wp-env start -- --runtime=playground
 	@RESET=$(RESET) bash bin/wp-env-setup.sh
 
 .PHONY: wp-env-stop
@@ -153,13 +153,15 @@ wp-env-clean: ## Stop wp-env and remove all data (fresh start)
 	npm run wp-env destroy
 	@rm -f .wp-env.credentials.json
 
-.PHONY: wp-env-logs
-wp-env-logs: ## Show wp-env WordPress logs
-	npm run wp-env logs
+.PHONY: wp-env-android
+wp-env-android: ## Remap wp-env site URLs for the Android emulator and restart
+	@cp wp-env/android-url-override.php wp-env/mu-plugins/gutenbergkit-android-urls.php
+	@RESET=1 $(MAKE) wp-env-start
 
-.PHONY: wp-env-cli
-wp-env-cli: ## Run a WP-CLI command in wp-env (usage: make wp-env-cli CMD="post list")
-	npm run wp-env run cli wp $(CMD)
+.PHONY: wp-env-android-reset
+wp-env-android-reset: ## Remove the Android emulator URL remap and restart
+	@rm -f wp-env/mu-plugins/gutenbergkit-android-urls.php
+	@RESET=1 $(MAKE) wp-env-start
 
 ################################################################################
 # Code Quality Targets

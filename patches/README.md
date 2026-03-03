@@ -14,6 +14,11 @@ Existing patches should be described and justified here.
 -   Prevent the insertion point popover from appearing on touch devices in `InserterListItem`. The popover (triggered by `onMouseEnter`) disrupts tap/click events, requiring users to tap inserter items twice before they are inserted.
 -   Add `./build-module/components/inserter/media-tab/*` and `./build-module/components/inserter/hooks/*` to the package's `exports` field to allow importing internal inserter modules used by the native inserter component. Note: Creating this patch required using `--exclude='^$'` due to a [patch-package limitation](https://github.com/ds300/patch-package/issues/250).
 
+### `@wordpress/env`
+
+-   Remove the `--login` CLI flag and Blueprint `login` step from the Playground runtime. Playground's auto-login behavior causes 302 redirects on every first request and interferes with application password authentication by injecting WordPress session cookies that conflict with the `Authorization` header ([wordpress-playground#1611](https://github.com/WordPress/wordpress-playground/issues/1611)). Without this patch, all REST API requests via Basic Auth (application passwords) fail with `rest_not_logged_in`. WordPress admin login remains available via `wp-login.php` with the default `admin`/`password` credentials.
+-   Use the `rewrite-wp-config` method for the Blueprint `defineWpConfigConsts` step instead of the default `define-before-run`. The default method defines PHP constants only during Blueprint execution and does not persist them to `wp-config.php`, so subsequent HTTP requests (e.g., REST API calls for credential provisioning) do not see them. This causes WordPress to disable application passwords on non-HTTPS sites because `WP_ENVIRONMENT_TYPE` is not set to `local`.
+
 ### `@wordpress/block-library`
 
 -   Enable image resizing on mobile devices by removing the `isLargeViewport` check from the `isResizable` condition in the `Image` component. The resizing feature appears to work well enough now, in contrast to the description in https://github.com/WordPress/gutenberg/issues/2675.
