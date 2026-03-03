@@ -89,22 +89,16 @@ test.describe( 'Gallery Block', () => {
 			{ timeout: 30_000 }
 		);
 
-		// Set a caption on the inner Image block via the data store.
-		await page.evaluate( () => {
-			const blocks = window.wp.data
-				.select( 'core/block-editor' )
-				.getBlocks();
-			const innerImage = blocks[ 0 ]?.innerBlocks?.[ 0 ];
-			if ( innerImage ) {
-				window.wp.data
-					.dispatch( 'core/block-editor' )
-					.updateBlockAttributes( innerImage.clientId, {
-						caption: 'Test caption',
-					} );
-			}
-		} );
+		// Click the uploaded image to select the inner Image block.
+		await page.locator( '.wp-block-image img' ).click();
 
-		// Verify the caption was applied.
+		// Click the "Add caption" toolbar button to reveal the caption field.
+		await page.getByRole( 'button', { name: 'Add caption' } ).click();
+
+		// Type a caption into the figcaption area.
+		await page.keyboard.type( 'Test caption' );
+
+		// Verify the caption was applied to the inner Image block.
 		const blocks = await editor.getBlocks();
 		const innerImage = blocks[ 0 ].innerBlocks[ 0 ];
 		expect( innerImage.attributes.caption ).toBe( 'Test caption' );
