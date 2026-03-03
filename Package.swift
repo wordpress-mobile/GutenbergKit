@@ -19,7 +19,10 @@ let gutenbergKitResources: Target = useLocalResources
     ? .target(
         name: "GutenbergKitResources",
         path: "ios/Sources/GutenbergKitResources",
-        resources: [.copy("Resources")]
+        // The directory is named "Gutenberg" instead of "Resources" because
+        // a directory named "Resources" inside a flat .bundle confuses codesign:
+        // it can't distinguish iOS flat layout from macOS deep layout.
+        resources: [.copy("Gutenberg")]
     )
     : .binaryTarget(
         name: "GutenbergKitResources",

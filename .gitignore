@@ -192,8 +192,8 @@ local.properties
 
 /ios/Sources/GutenbergKit/Gutenberg/assets
 /ios/Sources/GutenbergKit/Gutenberg/index.html
-/ios/Sources/GutenbergKitResources/Resources/assets
-/ios/Sources/GutenbergKitResources/Resources/index.html
+/ios/Sources/GutenbergKitResources/Gutenberg/assets
+/ios/Sources/GutenbergKitResources/Gutenberg/index.html
 
 # XCFramework build output
 *.xcframework

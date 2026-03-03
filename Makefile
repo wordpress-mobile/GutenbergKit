@@ -102,11 +102,11 @@ build: npm-dependencies prep-translations ## Build the project for all platforms
 		echo "--- :node: Building Gutenberg"; \
 		npm run build; \
 		echo "--- :open_file_folder: Copying Build Products into place"; \
-		rm -rf ./ios/Sources/GutenbergKit/Gutenberg/ ./ios/Sources/GutenbergKitResources/Resources/ ./android/Gutenberg/src/main/assets/; \
-		mkdir -p ./ios/Sources/GutenbergKitResources/Resources; \
+		rm -rf ./ios/Sources/GutenbergKit/Gutenberg/ ./ios/Sources/GutenbergKitResources/Gutenberg/ ./android/Gutenberg/src/main/assets/; \
+		mkdir -p ./ios/Sources/GutenbergKitResources/Gutenberg; \
 		cp -r ./dist/. ./ios/Sources/GutenbergKit/Gutenberg/; \
-		cp -r ./dist/. ./ios/Sources/GutenbergKitResources/Resources/; \
-		touch ./ios/Sources/GutenbergKitResources/Resources/.gitkeep; \
+		cp -r ./dist/. ./ios/Sources/GutenbergKitResources/Gutenberg/; \
+		touch ./ios/Sources/GutenbergKitResources/Gutenberg/.gitkeep; \
 		cp -r ./dist/. ./android/Gutenberg/src/main/assets; \
 	else \
 		echo "--- :white_check_mark: Skipping JS build (dist already exists). Use REFRESH_JS_BUILD=1 to force refresh."; \

@@ -3,13 +3,13 @@ import Foundation
 /// Provides access to the bundled Gutenberg editor resources (HTML, CSS, JS).
 ///
 /// In local development builds (`GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES=1`),
-/// resources are loaded from the source target's `Resources/` directory.
+/// resources are loaded from the source target's `Gutenberg/` directory.
 /// In release builds, they come from the pre-built `GutenbergKitResources` XCFramework.
 public enum GutenbergKitResources {
 
     /// URL to the editor's `index.html` entry point.
     public static var editorIndexURL: URL {
-        guard let url = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Resources") else {
+        guard let url = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg") else {
             fatalError("GutenbergKitResources: index.html not found in bundle")
         }
         return url
@@ -21,21 +21,21 @@ public enum GutenbergKitResources {
     /// the editor HTML into a WKWebView, so the web view can access
     /// sibling assets (JS, CSS) on the local filesystem.
     public static var resourcesDirectoryURL: URL {
-        guard let url = Bundle.module.url(forResource: "Resources", withExtension: nil) else {
-            fatalError("GutenbergKitResources: Resources directory not found in bundle")
+        guard let url = Bundle.module.url(forResource: "Gutenberg", withExtension: nil) else {
+            fatalError("GutenbergKitResources: Gutenberg directory not found in bundle")
         }
         return url
     }
 
     /// Loads the Gutenberg CSS from the bundled assets.
     ///
-    /// Scans the `Resources/assets/` directory for the Vite-generated
+    /// Scans the `Gutenberg/assets/` directory for the Vite-generated
     /// CSS file (`index-<hash>.css`) and returns its contents.
     ///
     /// - Returns: The CSS string, or `nil` if the file could not be loaded.
     public static func loadGutenbergCSS() -> String? {
-        guard let assetsURL = Bundle.module.url(forResource: "Resources", withExtension: nil) else {
-            assertionFailure("GutenbergKitResources: Resources directory not found in bundle")
+        guard let assetsURL = Bundle.module.url(forResource: "Gutenberg", withExtension: nil) else {
+            assertionFailure("GutenbergKitResources: Gutenberg directory not found in bundle")
             return nil
         }
 
