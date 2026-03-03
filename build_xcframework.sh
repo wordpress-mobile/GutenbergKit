@@ -21,7 +21,7 @@ BUILD_DIR="$(pwd)/build"
 OUTPUT_DIR="${1:-$(pwd)}"
 DERIVED_DATA_PATH="${BUILD_DIR}/DerivedData"
 
-GIT_SHA="$(git rev-parse --short HEAD)"
+GIT_SHA="$(git rev-parse HEAD)"
 XCFRAMEWORK_NAME="${SCHEME}-${GIT_SHA}.xcframework"
 ZIP_NAME="${XCFRAMEWORK_NAME}.zip"
 
