@@ -61,6 +61,18 @@ async function fetchEditorSettings( creds ) {
 export const credentials = readCredentials();
 
 /**
+ * Hostname-agnostic pattern for matching wp-env upload URLs.
+ *
+ * The Playground runtime may resolve localhost to 127.0.0.1 in WordPress's
+ * WP_SITEURL, so we can't assert a specific hostname. Instead we derive
+ * the port from the credentials and match against the uploads path.
+ *
+ * @type {string}
+ */
+const port = new URL( credentials.siteUrl ).port;
+export const uploadsPathPattern = `:${ port }/wp-content/uploads/`;
+
+/**
  * Get editor settings, fetching from wp-env on first call.
  *
  * @return {Promise<Object>} Editor settings object.

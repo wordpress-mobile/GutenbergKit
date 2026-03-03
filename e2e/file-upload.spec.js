@@ -8,6 +8,7 @@ import { test, expect } from '@playwright/test';
  * Internal dependencies
  */
 import EditorPage from './editor-page';
+import { uploadsPathPattern } from './wp-env-fixtures';
 
 const TEST_FILE = path.resolve( import.meta.dirname, 'assets/test-file.pdf' );
 
@@ -29,7 +30,7 @@ test.describe( 'File Upload', () => {
 		// Wait for the upload to complete (block gets a numeric media ID).
 		const attrs = await editor.waitForMediaUpload( 0 );
 		expect( attrs.id ).toBeGreaterThan( 0 );
-		expect( attrs.href ).toContain( ':8888/wp-content/uploads/' );
+		expect( attrs.href ).toContain( uploadsPathPattern );
 
 		// Verify the filename and download link are rendered.
 		await expect(

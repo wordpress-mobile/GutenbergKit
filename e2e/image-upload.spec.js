@@ -8,6 +8,7 @@ import { test, expect } from '@playwright/test';
  * Internal dependencies
  */
 import EditorPage from './editor-page';
+import { uploadsPathPattern } from './wp-env-fixtures';
 
 const TEST_IMAGE = path.resolve( import.meta.dirname, 'assets/test-image.png' );
 
@@ -29,7 +30,7 @@ test.describe( 'Image Upload', () => {
 		// Wait for the upload to complete (block gets a numeric media ID).
 		const attrs = await editor.waitForMediaUpload( 0 );
 		expect( attrs.id ).toBeGreaterThan( 0 );
-		expect( attrs.url ).toContain( ':8888/wp-content/uploads/' );
+		expect( attrs.url ).toContain( uploadsPathPattern );
 
 		// Verify the image element is rendered.
 		await expect( page.locator( '.wp-block-image img' ) ).toBeVisible();
