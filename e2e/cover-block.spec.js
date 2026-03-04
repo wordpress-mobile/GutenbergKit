@@ -26,7 +26,7 @@ test.describe( 'Cover Block', () => {
 			name: 'Overlay color',
 		} );
 		await expect( colorPalette ).toBeVisible();
-		await colorPalette.getByRole( 'button', { name: 'Black' } ).click();
+		await colorPalette.getByRole( 'button', { name: 'Contrast' } ).click();
 
 		// After selecting a color, the Cover block transitions from its
 		// placeholder state to a full block with an inner paragraph.
@@ -39,7 +39,7 @@ test.describe( 'Cover Block', () => {
 		const blocks = await editor.getBlocks();
 		expect( blocks ).toHaveLength( 1 );
 		expect( blocks[ 0 ].name ).toBe( 'core/cover' );
-		expect( blocks[ 0 ].attributes.overlayColor ).toBe( 'black' );
+		expect( blocks[ 0 ].attributes.overlayColor ).toBe( 'contrast' );
 
 		const innerBlocks = blocks[ 0 ].innerBlocks;
 		expect( innerBlocks ).toHaveLength( 1 );
