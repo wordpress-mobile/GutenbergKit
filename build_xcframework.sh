@@ -76,6 +76,8 @@ build_framework() {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>CFBundleExecutable</key>
+    <string>${SCHEME}</string>
     <key>CFBundleIdentifier</key>
     <string>org.wordpress.GutenbergKitResources</string>
     <key>CFBundleName</key>
