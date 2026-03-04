@@ -26,7 +26,8 @@ before_all do
 end
 
 lane :release do |options|
-  version = options[:version] || UI.user_error!('version is required')
+  version = options[:version].to_s
+  UI.user_error!('version is required') if version.empty?
   tag = "v#{version}"
 
   github_token = ENV['GITHUB_TOKEN'] || UI.user_error!('GITHUB_TOKEN env var is required')
@@ -39,7 +40,8 @@ lane :release do |options|
 end
 
 lane :validate do |options|
-  version = options[:version] || UI.user_error!('version is required')
+  version = options[:version].to_s
+  UI.user_error!('version is required') if version.empty?
   tag = options[:tag] || "v#{version}"
   github_token = lane_context[LANE_VALUE_GITHUB_TOKEN] || UI.user_error!('Missing github token lane context')
 
@@ -56,7 +58,8 @@ lane :validate do |options|
 end
 
 lane :update_swift_package do |options|
-  version = options[:version] || UI.user_error!('version is required')
+  version = options[:version].to_s
+  UI.user_error!('version is required') if version.empty?
 
   file_path = File.expand_path('./Package.swift', PROJECT_ROOT)
   lines = File.readlines(file_path).map do |line|
@@ -72,7 +75,8 @@ lane :update_swift_package do |options|
 end
 
 lane :publish_release_to_github do |options|
-  version = options[:version] || UI.user_error!('version is required')
+  version = options[:version].to_s
+  UI.user_error!('version is required') if version.empty?
   tag = options[:tag] || "v#{version}"
   github_token = lane_context[LANE_VALUE_GITHUB_TOKEN] || UI.user_error!('Missing github token lane context')
 
@@ -95,7 +99,8 @@ lane :publish_release_to_github do |options|
 end
 
 lane :publish_to_s3 do |options|
-  version = options[:version] || UI.user_error!('version is required')
+  version = options[:version].to_s
+  UI.user_error!('version is required') if version.empty?
 
   upload_to_s3(
     bucket: 'a8c-apps-public-artifacts',
