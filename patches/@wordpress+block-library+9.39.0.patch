@@ -1,8 +1,8 @@
 diff --git a/node_modules/@wordpress/block-library/build-module/image/image.mjs b/node_modules/@wordpress/block-library/build-module/image/image.mjs
-index ffe2563..e16c099 100644
+index 4b78108..bbc4160 100644
 --- a/node_modules/@wordpress/block-library/build-module/image/image.mjs
 +++ b/node_modules/@wordpress/block-library/build-module/image/image.mjs
-@@ -339,7 +339,7 @@ function Image({
+@@ -332,7 +332,7 @@ function Image({
    const hasNonContentControls = blockEditingMode === "default";
    const isContentOnlyMode = blockEditingMode === "contentOnly";
    const showDimensionsControls = allowResize && hasNonContentControls;
