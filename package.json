@@ -39,7 +39,7 @@
 		"@wordpress/compose": "^7.38.0",
 		"@wordpress/core-data": "^7.40.1",
 		"@wordpress/data": "^10.38.0",
-		"@wordpress/data-controls": "^4.38.0",
+		"@wordpress/data-controls": "^4.41.0",
 		"@wordpress/date": "^5.38.0",
 		"@wordpress/deprecated": "^4.38.0",
 		"@wordpress/dom": "^4.38.0",
