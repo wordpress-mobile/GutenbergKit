@@ -95,7 +95,7 @@
 		"@vitejs/plugin-react": "^5.1.2",
 		"@wordpress/dependency-extraction-webpack-plugin": "^6.36.0",
 		"@wordpress/env": "^10.18.0",
-		"@wordpress/eslint-plugin": "^24.0.0",
+		"@wordpress/eslint-plugin": "^24.3.0",
 		"@wordpress/prettier-config": "^4.38.0",
 		"eslint": "^8.57",
 		"eslint-import-resolver-typescript": "^4.4.4",
