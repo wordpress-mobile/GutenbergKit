@@ -99,7 +99,7 @@ lane :publish_to_s3 do |options|
 
   upload_to_s3(
     bucket: 'a8c-apps-public-artifacts',
-    key: File.join('gutenbergkit', version, File.basename(xcframework_file_path)),
+    key: File.join('gutenbergkit', version, 'GutenbergKitResources.xcframework.zip'),
     file: xcframework_file_path,
     auto_prefix: false,
     if_exists: :fail
@@ -107,7 +107,7 @@ lane :publish_to_s3 do |options|
 
   upload_to_s3(
     bucket: 'a8c-apps-public-artifacts',
-    key: File.join('gutenbergkit', version, File.basename(xcframework_checksum_file_path)),
+    key: File.join('gutenbergkit', version, 'GutenbergKitResources.xcframework.zip.checksum.txt'),
     file: xcframework_checksum_file_path,
     auto_prefix: false,
     if_exists: :fail
