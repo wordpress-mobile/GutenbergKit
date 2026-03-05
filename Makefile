@@ -238,6 +238,9 @@ test-ios-e2e: ## Run iOS E2E tests against the production build
 	@echo "--- :open_file_folder: Copying build into iOS bundle"
 	@rm -rf ./ios/Sources/GutenbergKit/Gutenberg/
 	@cp -r ./dist/. ./ios/Sources/GutenbergKit/Gutenberg/
+	@mkdir -p ./ios/Sources/GutenbergKitResources/Gutenberg
+	@cp -r ./dist/. ./ios/Sources/GutenbergKitResources/Gutenberg/
+	@touch ./ios/Sources/GutenbergKitResources/Gutenberg/.gitkeep
 	@echo "--- :ios: Running iOS E2E Tests (production build)"
 	@set -o pipefail && \
 		xcodebuild test \
