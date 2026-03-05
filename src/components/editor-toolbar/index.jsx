@@ -36,7 +36,7 @@ import { useScrollIndicators } from './use-scroll-indicators';
  *
  * @param {Object} props           Component props.
  * @param {string} props.className Component classes.
- * @return {JSX.Element} The rendered editor toolbar component.
+ * @return {Element} The rendered editor toolbar component.
  */
 const EditorToolbar = ( { className } ) => {
 	const { enableNativeBlockInserter } = getGBKit();

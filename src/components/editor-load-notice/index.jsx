@@ -17,7 +17,7 @@ const pluginLoadFailedNotice = __(
  * @param {string}  props.className        Additional class names to apply.
  * @param {boolean} props.pluginLoadFailed Whether plugin loading failed.
  *
- * @return {?JSX.Element} The rendered component or null if no notice is present.
+ * @return {?Element} The rendered component or null if no notice is present.
  */
 export default function EditorLoadNotice( { className, pluginLoadFailed } ) {
 	const { notice, clearNotice } = useEditorLoadNotice(

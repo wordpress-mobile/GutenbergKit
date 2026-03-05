@@ -14,7 +14,7 @@ import './style.scss';
  * @param {Object}  props           Component props.
  * @param {boolean} props.hideTitle Whether to hide the title input.
  *
- * @return {JSX.Element} The rendered text editor component.
+ * @return {Element} The rendered text editor component.
  */
 export default function TextEditor( { hideTitle } ) {
 	return (
