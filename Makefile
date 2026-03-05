@@ -102,9 +102,8 @@ build: npm-dependencies prep-translations ## Build the project for all platforms
 		echo "--- :node: Building Gutenberg"; \
 		npm run build; \
 		echo "--- :open_file_folder: Copying Build Products into place"; \
-		rm -rf ./ios/Sources/GutenbergKit/Gutenberg/ ./ios/Sources/GutenbergKitResources/Gutenberg/ ./android/Gutenberg/src/main/assets/; \
+		rm -rf ./ios/Sources/GutenbergKitResources/Gutenberg/ ./android/Gutenberg/src/main/assets/; \
 		mkdir -p ./ios/Sources/GutenbergKitResources/Gutenberg; \
-		cp -r ./dist/. ./ios/Sources/GutenbergKit/Gutenberg/; \
 		cp -r ./dist/. ./ios/Sources/GutenbergKitResources/Gutenberg/; \
 		touch ./ios/Sources/GutenbergKitResources/Gutenberg/.gitkeep; \
 		cp -r ./dist/. ./android/Gutenberg/src/main/assets; \
@@ -236,8 +235,6 @@ test-ios-e2e: ## Run iOS E2E tests against the production build
 		echo "--- :white_check_mark: Using existing build. Use 'make build REFRESH_JS_BUILD=1' to rebuild."; \
 	fi
 	@echo "--- :open_file_folder: Copying build into iOS bundle"
-	@rm -rf ./ios/Sources/GutenbergKit/Gutenberg/
-	@cp -r ./dist/. ./ios/Sources/GutenbergKit/Gutenberg/
 	@mkdir -p ./ios/Sources/GutenbergKitResources/Gutenberg
 	@cp -r ./dist/. ./ios/Sources/GutenbergKitResources/Gutenberg/
 	@touch ./ios/Sources/GutenbergKitResources/Gutenberg/.gitkeep
