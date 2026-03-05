@@ -86,7 +86,7 @@ class RESTAPIRepository(
      * @return The parsed editor settings.
      */
     suspend fun fetchEditorSettings(): EditorSettings {
-        if (!configuration.plugins && !configuration.themeStyles) {
+        if (!configuration.themeStyles) {
             return EditorSettings.undefined
         }
 
