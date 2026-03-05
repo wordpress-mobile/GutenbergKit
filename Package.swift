@@ -12,8 +12,8 @@ let useLocalResources = Context.environment["GUTENBERGKIT_SWIFT_USE_LOCAL_RESOUR
 
 /// Pre-built XCFramework version for tagged releases.
 /// Updated by the Fastlane `release` lane.
-let resourcesVersion = "test-s3-xcframework-008"
-let resourcesChecksum = "7397e700129326fb8c2ab228ac711fb15d1f046212e3f5b37c8708c5bf431166"
+let resourcesVersion = "test-s3-xcframework-009"
+let resourcesChecksum = "c6a339ec3d8f78b24cf3294f98b9e74ab5322149d771f5179eb35ae20bd6dc5f"
 
 let gutenbergKitResources: Target = useLocalResources
     ? .target(
