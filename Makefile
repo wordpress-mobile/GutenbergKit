@@ -102,14 +102,23 @@ build: npm-dependencies prep-translations ## Build the project for all platforms
 		echo "--- :node: Building Gutenberg"; \
 		npm run build; \
 		echo "--- :open_file_folder: Copying Build Products into place"; \
-		rm -rf ./ios/Sources/GutenbergKitResources/Gutenberg/ ./android/Gutenberg/src/main/assets/; \
-		mkdir -p ./ios/Sources/GutenbergKitResources/Gutenberg; \
-		cp -r ./dist/. ./ios/Sources/GutenbergKitResources/Gutenberg/; \
-		touch ./ios/Sources/GutenbergKitResources/Gutenberg/.gitkeep; \
-		cp -r ./dist/. ./android/Gutenberg/src/main/assets; \
+		$(MAKE) copy-dist-ios; \
+		$(MAKE) copy-dist-android; \
 	else \
 		echo "--- :white_check_mark: Skipping JS build (dist already exists). Use REFRESH_JS_BUILD=1 to force refresh."; \
 	fi
+
+.PHONY: copy-dist-ios
+copy-dist-ios:
+	@rm -rf ./ios/Sources/GutenbergKitResources/Gutenberg/
+	@mkdir -p ./ios/Sources/GutenbergKitResources/Gutenberg
+	@cp -r ./dist/. ./ios/Sources/GutenbergKitResources/Gutenberg/
+	@touch ./ios/Sources/GutenbergKitResources/Gutenberg/.gitkeep
+
+.PHONY: copy-dist-android
+copy-dist-android:
+	@rm -rf ./android/Gutenberg/src/main/assets/
+	@cp -r ./dist/. ./android/Gutenberg/src/main/assets
 
 .PHONY: build-swift-package
 build-swift-package: build ## Build the Swift package for iOS
@@ -235,9 +244,7 @@ test-ios-e2e: ## Run iOS E2E tests against the production build
 		echo "--- :white_check_mark: Using existing build. Use 'make build REFRESH_JS_BUILD=1' to rebuild."; \
 	fi
 	@echo "--- :open_file_folder: Copying build into iOS bundle"
-	@mkdir -p ./ios/Sources/GutenbergKitResources/Gutenberg
-	@cp -r ./dist/. ./ios/Sources/GutenbergKitResources/Gutenberg/
-	@touch ./ios/Sources/GutenbergKitResources/Gutenberg/.gitkeep
+	@$(MAKE) copy-dist-ios
 	@echo "--- :ios: Running iOS E2E Tests (production build)"
 	@set -o pipefail && \
 		xcodebuild test \
