@@ -17,6 +17,7 @@
 set -euo pipefail
 
 SCHEME="GutenbergKitResources"
+MINIMUM_IOS_VERSION="17.0"
 BUILD_DIR="$(pwd)/build"
 OUTPUT_DIR="${1:-$(pwd)}"
 DERIVED_DATA_PATH="${BUILD_DIR}/DerivedData"
@@ -24,6 +25,55 @@ DERIVED_DATA_PATH="${BUILD_DIR}/DerivedData"
 GIT_SHA="$(git rev-parse HEAD)"
 XCFRAMEWORK_NAME="${SCHEME}-${GIT_SHA}.xcframework"
 ZIP_NAME="${XCFRAMEWORK_NAME}.zip"
+
+link_dylib() {
+    local object_file="$1"
+    local output="$2"
+    local sdk="$3"
+
+    local sdk_path
+    sdk_path="$(xcrun --sdk "${sdk}" --show-sdk-path)"
+    local install_name="@rpath/${SCHEME}.framework/${SCHEME}"
+
+    local archs
+    archs=$(xcrun lipo -archs "${object_file}")
+
+    local arch_count
+    arch_count=$(echo "${archs}" | wc -w | tr -d ' ')
+
+    local dylibs=()
+    for arch in ${archs}; do
+        local thin_o="${BUILD_DIR}/${SCHEME}-${sdk}-${arch}.o"
+        local thin_dylib="${BUILD_DIR}/${SCHEME}-${sdk}-${arch}.dylib"
+
+        if [[ "${arch_count}" -eq 1 ]]; then
+            thin_o="${object_file}"
+        else
+            xcrun lipo "${object_file}" -thin "${arch}" -output "${thin_o}"
+        fi
+
+        local target="${arch}-apple-ios${MINIMUM_IOS_VERSION}"
+        if [[ "${sdk}" == "iphonesimulator" ]]; then
+            target="${target}-simulator"
+        fi
+
+        xcrun clang -target "${target}" -dynamiclib \
+            -install_name "${install_name}" \
+            -o "${thin_dylib}" \
+            "${thin_o}" \
+            -isysroot "${sdk_path}" \
+            -L "${sdk_path}/usr/lib/swift" \
+            -L "${sdk_path}/usr/lib"
+
+        dylibs+=("${thin_dylib}")
+    done
+
+    if [[ ${#dylibs[@]} -eq 1 ]]; then
+        cp "${dylibs[0]}" "${output}"
+    else
+        xcrun lipo -create "${dylibs[@]}" -output "${output}"
+    fi
+}
 
 build_framework() {
     local sdk="$1"
@@ -58,8 +108,11 @@ build_framework() {
     mkdir -p "${framework_path}/Modules"
     mkdir -p "${framework_path}/Headers"
 
-    # Binary (SPM produces a .o object file — rename to framework name)
-    cp "${build_products}/${SCHEME}.o" "${framework_path}/${SCHEME}"
+    # Binary: SPM produces a .o object file — link it into a dylib so that
+    # the resource_bundle_accessor's BundleFinder class stays inside the
+    # framework at runtime (otherwise it gets statically linked into the
+    # consuming app binary and Bundle(for:) resolves to the wrong bundle).
+    link_dylib "${build_products}/${SCHEME}.o" "${framework_path}/${SCHEME}" "${sdk}"
 
     # Swift module
     cp -r "${build_products}/${SCHEME}.swiftmodule" "${framework_path}/Modules/${SCHEME}.swiftmodule"
