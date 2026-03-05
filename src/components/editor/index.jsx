@@ -34,7 +34,7 @@ import { usePlusAutocompleter } from './use-plus-autocompleter';
  * @param {boolean}                              props.hideTitle Whether to hide the title input.
  * @param {import('@wordpress/element').Element} props.children  The children to render in the editor.
  *
- * @return {JSX.Element} The rendered App component.
+ * @return {Element} The rendered App component.
  */
 export default function Editor( { post, children, hideTitle } ) {
 	const editorRef = useRef( null );

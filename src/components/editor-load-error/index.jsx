@@ -17,7 +17,7 @@ import './style.scss';
  * @param {Object} props       Component props
  * @param {string} props.error Error message displayed in the notice
  *
- * @return {JSX.Element} Editor load error component
+ * @return {Element} Editor load error component
  */
 const EditorLoadError = ( { error } ) => {
 	const errorMessage = error.message || error;
