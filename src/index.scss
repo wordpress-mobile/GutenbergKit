@@ -238,6 +238,15 @@ $baseline-interactive-font-size: 17px;
 	}
 }
 
+// Manually copy styles required by Gutenberg that are provided by the WP Admin
+// environment in the form of the `load-styles.php` utility.
+// https://github.com/WordPress/wordpress-develop/blob/a82874058f58575dbba64ce09b6dcbd43ccf5fdc/src/wp-admin/css/common.css#L2617-L2621
+.gutenberg-kit :where(fieldset) {
+	border: 0;
+	padding: 0;
+	margin: 0;
+}
+
 // iOS-specific styling for block settings menu
 .gutenberg-kit.is-ios .block-settings-menu {
 	background-color: rgba(0, 0, 0, 0.3);

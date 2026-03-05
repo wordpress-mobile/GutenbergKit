@@ -24,9 +24,8 @@ test.describe( 'Color and Gradient', () => {
 		await buttonText.click();
 		await page.keyboard.type( 'Colored' );
 
-		// Open block settings and navigate to the Styles tab.
+		// Open block settings.
 		await editor.openBlockSettings();
-		await page.getByRole( 'tab', { name: 'Styles' } ).click();
 
 		// Click the Background color control.
 		await page
