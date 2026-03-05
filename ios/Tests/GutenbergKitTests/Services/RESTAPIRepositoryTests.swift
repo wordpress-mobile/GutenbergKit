@@ -25,9 +25,21 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
 
     // MARK: - fetchEditorSettings Tests
 
-    @Test("fetchEditorSettings returns empty when plugins and theme styles disabled")
-    func fetchEditorSettingsReturnsEmptyWhenDisabled() async throws {
+    @Test("fetchEditorSettings returns undefined when theme styles disabled")
+    func fetchEditorSettingsReturnsUndefinedWhenThemeStylesDisabled() async throws {
         let configuration = makeConfiguration(shouldUsePlugins: false, shouldUseThemeStyles: false)
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        let repository = makeRepository(configuration: configuration, httpClient: mockClient)
+
+        let settings = try await repository.fetchEditorSettings()
+
+        #expect(settings == .undefined)
+        #expect(mockClient.getCallCount == 0)
+    }
+
+    @Test("fetchEditorSettings returns undefined when plugins enabled but theme styles disabled")
+    func fetchEditorSettingsReturnsUndefinedWhenOnlyPluginsEnabled() async throws {
+        let configuration = makeConfiguration(shouldUsePlugins: true, shouldUseThemeStyles: false)
         let mockClient = EditorAssetLibraryMockHTTPClient()
         let repository = makeRepository(configuration: configuration, httpClient: mockClient)
 

@@ -120,7 +120,7 @@ public struct RESTAPIRepository: Sendable {
     // MARK: Editor Settings
     @discardableResult
     public func fetchEditorSettings() async throws -> EditorSettings {
-        if !self.configuration.shouldUsePlugins && !self.configuration.shouldUseThemeStyles {
+        if !self.configuration.shouldUseThemeStyles {
             return .undefined
         }
 
