@@ -16,7 +16,7 @@
 		"generate-version": "node bin/generate-version.js",
 		"lint:js": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
 		"lint:js:fix": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0 --fix",
-		"postinstall": "patch-package && npm run generate-version",
+		"postinstall": "patch-package --error-on-warn && npm run generate-version",
 		"prep-translations": "node bin/prep-translations.js",
 		"preview": "vite preview --host",
 		"test:e2e": "playwright test",
