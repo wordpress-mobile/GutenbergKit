@@ -62,15 +62,16 @@ final class MediaUploadServer: Sendable {
       case .cancelled:
         semaphore.signal()
       case .waiting(let error):
-        Logger.uploadServer.warning("Listener waiting: \(error)")
-        semaphore.signal()
+        // Transient state — the listener may still transition to .ready.
+        Logger.uploadServer.info("Listener waiting for network path: \(error)")
       default:
         break
       }
     }
 
     listener.start(queue: queue)
-    _ = semaphore.wait(timeout: .now() + 5)
+    // Allow up to 3 seconds for the listener to become ready.
+    _ = semaphore.wait(timeout: .now() + 3)
 
     guard assignedPort != 0 else {
       throw ServerError.failedToStart
