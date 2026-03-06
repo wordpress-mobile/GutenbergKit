@@ -50,8 +50,11 @@ async function mockOembedProxy( page ) {
 	await page.route( `${ apiBase }oembed/1.0/proxy**`, ( route ) => {
 		const url = new URL( route.request().url() );
 		const embedUrl = url.searchParams.get( 'url' ) || '';
+		const embedHostname = URL.canParse( embedUrl )
+			? new URL( embedUrl ).hostname
+			: '';
 
-		if ( embedUrl.includes( 'youtube.com' ) ) {
+		if ( /^(www\.)?youtube\.com$/.test( embedHostname ) ) {
 			return route.fulfill( {
 				status: 200,
 				contentType: 'application/json',
