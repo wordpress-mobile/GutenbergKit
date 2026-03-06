@@ -54,10 +54,12 @@ import kotlinx.coroutines.launch
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.GutenbergView
 import org.wordpress.gutenberg.EditorLoadingListener
+import org.wordpress.gutenberg.MediaUploadDelegate
 import org.wordpress.gutenberg.RecordedNetworkRequest
 import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.model.EditorDependenciesSerializer
 import org.wordpress.gutenberg.model.EditorProgress
+import java.io.File
 
 class EditorActivity : ComponentActivity() {
 
@@ -351,6 +353,7 @@ fun EditorScreen(
                             return null
                         }
                     })
+                    mediaUploadDelegate = DemoMediaUploadDelegate(context)
                     onGutenbergViewCreated(this)
                 }
             },
@@ -416,5 +419,58 @@ fun EditorScreen(
                 // Editor is ready, no overlay needed
             }
         }
+    }
+}
+
+/**
+ * Demo media upload delegate that resizes images to a maximum dimension of 2000px.
+ *
+ * Only overrides [processFile] — [uploadFile] returns null so the default uploader is used.
+ */
+private class DemoMediaUploadDelegate(private val context: android.content.Context) : MediaUploadDelegate {
+    override suspend fun processFile(file: File, mimeType: String): File {
+        if (!mimeType.startsWith("image/") || mimeType == "image/gif") {
+            return file
+        }
+
+        val maxDimension = 2000
+
+        val options = android.graphics.BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        android.graphics.BitmapFactory.decodeFile(file.absolutePath, options)
+
+        val width = options.outWidth
+        val height = options.outHeight
+        if (width <= 0 || height <= 0) return file
+
+        val longestSide = maxOf(width, height)
+        if (longestSide <= maxDimension) return file
+
+        // Calculate sample size for memory-efficient decoding
+        val sampleSize = Integer.highestOneBit(longestSide / maxDimension)
+        val decodeOptions = android.graphics.BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+        }
+        val sampled = android.graphics.BitmapFactory.decodeFile(file.absolutePath, decodeOptions) ?: return file
+
+        // Scale to exact target dimensions
+        val scale = maxDimension.toFloat() / longestSide.toFloat()
+        val targetWidth = (width * scale).toInt()
+        val targetHeight = (height * scale).toInt()
+        val scaled = android.graphics.Bitmap.createScaledBitmap(sampled, targetWidth, targetHeight, true)
+        if (scaled !== sampled) sampled.recycle()
+
+        val outputFile = File(file.parent, "resized-${file.name}")
+        val format = if (mimeType == "image/png") android.graphics.Bitmap.CompressFormat.PNG
+                     else android.graphics.Bitmap.CompressFormat.JPEG
+
+        outputFile.outputStream().use { out ->
+            scaled.compress(format, 85, out)
+        }
+        scaled.recycle()
+
+        Log.d("DemoMediaUploadDelegate", "Resized image from ${width}×${height} to ${targetWidth}×${targetHeight}")
+        return outputFile
     }
 }

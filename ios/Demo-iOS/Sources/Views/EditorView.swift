@@ -1,4 +1,6 @@
 import SwiftUI
+import ImageIO
+import UniformTypeIdentifiers
 import GutenbergKit
 
 struct EditorView: View {
@@ -118,6 +120,7 @@ private struct _EditorView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> EditorViewController {
         let viewController = EditorViewController(configuration: configuration, dependencies: dependencies)
         viewController.delegate = context.coordinator
+        viewController.mediaUploadDelegate = context.coordinator
         viewController.webView.isInspectable = true
 
         viewModel.perform = { [weak viewController] in
@@ -135,7 +138,7 @@ private struct _EditorView: UIViewControllerRepresentable {
     }
 
     @MainActor
-    class Coordinator: NSObject, EditorViewControllerDelegate {
+    class Coordinator: NSObject, EditorViewControllerDelegate, MediaUploadDelegate {
         let viewModel: EditorViewModel
 
         init(viewModel: EditorViewModel) {
@@ -223,6 +226,61 @@ private struct _EditorView: UIViewControllerRepresentable {
             // In a real app, return the persisted title and content from autosave.
             return nil
         }
+
+        // MARK: - MediaUploadDelegate
+
+        /// Resizes images to a maximum dimension of 2000px before upload.
+        nonisolated func processFile(at url: URL, mimeType: String) async throws -> URL {
+            guard mimeType.hasPrefix("image/"), mimeType != "image/gif" else {
+                return url
+            }
+
+            let maxDimension: CGFloat = 2000
+
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                  let width = properties[kCGImagePropertyPixelWidth] as? CGFloat,
+                  let height = properties[kCGImagePropertyPixelHeight] as? CGFloat else {
+                return url
+            }
+
+            let longestSide = max(width, height)
+            guard longestSide > maxDimension else {
+                return url
+            }
+
+            let options: [CFString: Any] = [
+                kCGImageSourceThumbnailMaxPixelSize: maxDimension,
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true
+            ]
+
+            guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+                return url
+            }
+
+            let outputURL = url.deletingLastPathComponent()
+                .appending(component: "resized-\(url.lastPathComponent)")
+
+            let sourceType = CGImageSourceGetType(source) ?? (UTType.png.identifier as CFString)
+            guard let destination = CGImageDestinationCreateWithURL(
+                outputURL as CFURL,
+                sourceType,
+                1,
+                nil
+            ) else {
+                return url
+            }
+
+            CGImageDestinationAddImage(destination, thumbnail, nil)
+            guard CGImageDestinationFinalize(destination) else {
+                return url
+            }
+
+            print("📐 Resized image from \(Int(width))×\(Int(height)) to fit \(Int(maxDimension))px")
+            return outputURL
+        }
+
     }
 }
 
