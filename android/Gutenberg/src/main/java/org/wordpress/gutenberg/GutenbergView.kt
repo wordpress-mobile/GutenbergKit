@@ -96,6 +96,11 @@ class GutenbergView : WebView {
 
     var requestInterceptor: GutenbergRequestInterceptor = DefaultGutenbergRequestInterceptor()
 
+    /** Optional delegate for customizing media upload behavior (resize, transcode, custom upload). */
+    var mediaUploadDelegate: MediaUploadDelegate? = null
+
+    private var uploadServer: MediaUploadServer? = null
+
     private var onFileChooserRequested: ((Intent, Int) -> Unit)? = null
     private var contentChangeListener: ContentChangeListener? = null
     private var historyChangeListener: HistoryChangeListener? = null
@@ -405,6 +410,7 @@ class GutenbergView : WebView {
         // Notify that dependency loading is complete (spinner phase begins)
         loadingListener?.onDependencyLoadingFinished()
 
+        startUploadServer()
         initializeWebView()
 
         val assetUrl = if (isLocalHttpSite) ASSET_URL_HTTP else ASSET_URL
@@ -432,7 +438,12 @@ class GutenbergView : WebView {
     }
 
     private fun setGlobalJavaScriptVariables() {
-        val gbKit = GBKitGlobal.fromConfiguration(configuration, dependencies)
+        val gbKit = GBKitGlobal.fromConfiguration(
+            configuration,
+            dependencies,
+            nativeUploadPort = uploadServer?.port,
+            nativeUploadToken = uploadServer?.token
+        )
         val gbKitJson = gbKit.toJsonString()
         val gbKitConfig = """
             window.GBKit = $gbKitJson;
@@ -442,6 +453,24 @@ class GutenbergView : WebView {
         this.evaluateJavascript(gbKitConfig, null)
     }
 
+
+    private fun startUploadServer() {
+        if (configuration.siteApiRoot.isEmpty() || configuration.authHeader.isEmpty()) return
+
+        try {
+            val defaultUploader = DefaultMediaUploader(
+                httpClient = okhttp3.OkHttpClient(),
+                siteApiRoot = configuration.siteApiRoot,
+                authHeader = configuration.authHeader
+            )
+            uploadServer = MediaUploadServer(
+                uploadDelegate = mediaUploadDelegate,
+                defaultUploader = defaultUploader
+            )
+        } catch (e: Exception) {
+            Log.w("GutenbergView", "Failed to start upload server", e)
+        }
+    }
 
     fun clearConfig() {
         val jsCode = """
@@ -861,6 +890,8 @@ class GutenbergView : WebView {
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        uploadServer?.stop()
+        uploadServer = null
         clearConfig()
         this.stopLoading()
         FileCache.clearCache(context)
