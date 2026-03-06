@@ -50,16 +50,27 @@ final class MediaUploadServer: Sendable {
     nonisolated(unsafe) var assignedPort: UInt16 = 0
 
     listener.stateUpdateHandler = { state in
-      if case .ready = state, let port = listener.port {
-        assignedPort = port.rawValue
+      switch state {
+      case .ready:
+        if let port = listener.port {
+          assignedPort = port.rawValue
+        }
         semaphore.signal()
-      } else if case .failed = state {
+      case .failed(let error):
+        Logger.uploadServer.error("Listener failed: \(error)")
         semaphore.signal()
+      case .cancelled:
+        semaphore.signal()
+      case .waiting(let error):
+        Logger.uploadServer.warning("Listener waiting: \(error)")
+        semaphore.signal()
+      default:
+        break
       }
     }
 
     listener.start(queue: queue)
-    semaphore.wait()
+    _ = semaphore.wait(timeout: .now() + 5)
 
     guard assignedPort != 0 else {
       throw ServerError.failedToStart
@@ -236,8 +247,9 @@ final class MediaUploadServer: Sendable {
     }
 
     // Step 2: Upload to remote WordPress
-    if let delegate = uploadDelegate {
-      return try await delegate.uploadFile(at: processedURL, mimeType: mimeType, filename: filename)
+    if let delegate = uploadDelegate,
+       let result = try await delegate.uploadFile(at: processedURL, mimeType: mimeType, filename: filename) {
+      return result
     } else if let defaultUploader {
       return try await defaultUploader.upload(fileURL: processedURL, mimeType: mimeType, filename: filename)
     } else {
@@ -423,7 +435,7 @@ private struct HTTPRequest {
 // MARK: - Default Media Uploader
 
 /// Uploads files to the WordPress REST API using site credentials from EditorConfiguration.
-final class DefaultMediaUploader: Sendable {
+class DefaultMediaUploader: @unchecked Sendable {
   private let httpClient: EditorHTTPClientProtocol
   private let siteApiRoot: URL
 

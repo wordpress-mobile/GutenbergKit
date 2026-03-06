@@ -45,9 +45,9 @@ interface MediaUploadDelegate {
 
     /**
      * Upload a processed file to the remote WordPress site.
-     * Return the Gutenberg-compatible media result.
+     * Return the Gutenberg-compatible media result, or null to use the default uploader.
      */
-    suspend fun uploadFile(file: File, mimeType: String, filename: String): MediaUploadResult
+    suspend fun uploadFile(file: File, mimeType: String, filename: String): MediaUploadResult? = null
 }
 
 /**

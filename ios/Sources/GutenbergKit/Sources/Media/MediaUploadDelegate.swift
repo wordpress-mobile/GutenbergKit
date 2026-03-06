@@ -34,13 +34,17 @@ public protocol MediaUploadDelegate: AnyObject, Sendable {
   func processFile(at url: URL, mimeType: String) async throws -> URL
 
   /// Upload a processed file to the remote WordPress site.
-  /// Return the Gutenberg-compatible media result.
-  func uploadFile(at url: URL, mimeType: String, filename: String) async throws -> MediaUploadResult
+  /// Return the Gutenberg-compatible media result, or `nil` to use the default uploader.
+  func uploadFile(at url: URL, mimeType: String, filename: String) async throws -> MediaUploadResult?
 }
 
-/// Default implementation that passes files through unchanged.
+/// Default implementations.
 extension MediaUploadDelegate {
   public func processFile(at url: URL, mimeType: String) async throws -> URL {
     url
+  }
+
+  public func uploadFile(at url: URL, mimeType: String, filename: String) async throws -> MediaUploadResult? {
+    nil
   }
 }
