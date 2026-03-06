@@ -152,23 +152,39 @@ final class MediaUploadServer: Sendable {
 
   /// Checks whether the accumulated buffer contains a complete HTTP request.
   private func isRequestComplete(_ data: Data) -> Bool {
-    guard let string = String(data: data, encoding: .utf8),
-          let headerEnd = string.range(of: "\r\n\r\n") else {
+    guard let headerEndRange = data.range(of: Data("\r\n\r\n".utf8)) else {
       return false
     }
 
-    // For requests without a body (e.g., OPTIONS), headers alone are sufficient.
-    let headers = String(string[..<headerEnd.lowerBound])
-    guard let contentLengthLine = headers.split(separator: "\r\n")
-      .first(where: { $0.lowercased().hasPrefix("content-length:") }) else {
-      return true
+    guard let headers = String(data: data[data.startIndex..<headerEndRange.lowerBound], encoding: .utf8) else {
+      return false
     }
 
-    let contentLength = Int(contentLengthLine.split(separator: ":").last?.trimmingCharacters(in: .whitespaces) ?? "0") ?? 0
-    let bodyStart = data.count - (data.count - string.distance(from: string.startIndex, to: headerEnd.upperBound))
-    let bodyLength = data.count - bodyStart
+    let headerLines = headers.split(separator: "\r\n")
 
-    return bodyLength >= contentLength
+    // Check for Content-Length header
+    if let contentLengthLine = headerLines.first(where: { $0.lowercased().hasPrefix("content-length:") }) {
+      let contentLength = Int(contentLengthLine.split(separator: ":").last?.trimmingCharacters(in: .whitespaces) ?? "0") ?? 0
+      let bodyLength = data.count - headerEndRange.upperBound
+      return bodyLength >= contentLength
+    }
+
+    // Chunked transfer encoding: the last chunk is "0\r\n\r\n" (or "0\r\n" + trailers + "\r\n").
+    // Check if the data ends with the final chunk terminator.
+    if headerLines.contains(where: { $0.lowercased().contains("transfer-encoding:") && $0.lowercased().contains("chunked") }) {
+      let finalChunk = Data("\r\n0\r\n\r\n".utf8)
+      return data.hasSuffix(finalChunk)
+    }
+
+    // No Content-Length and not chunked — for methods that shouldn't have a body
+    // (OPTIONS, GET), headers alone are sufficient. For POST, we can't determine
+    // completeness without Content-Length, so rely on connection close.
+    let requestLine = headerLines.first ?? ""
+    if requestLine.hasPrefix("POST") || requestLine.hasPrefix("PUT") {
+      return false
+    }
+
+    return true
   }
 
   // MARK: - Request Handling
@@ -205,6 +221,7 @@ final class MediaUploadServer: Sendable {
     }
 
     guard let file = parseMultipartFile(data: request.body, boundary: boundary) else {
+      Logger.uploadServer.error("Multipart parse failed. Body size: \(request.body.count), boundary: \(boundary)")
       return makeResponse(status: 400, statusText: "Bad Request", body: "No file found in request")
     }
 
@@ -319,46 +336,49 @@ final class MediaUploadServer: Sendable {
 
   private func parseMultipartFile(data: Data, boundary: String) -> UploadedFile? {
     let boundaryData = "--\(boundary)".data(using: .utf8)!
-    let crlf = "\r\n".data(using: .utf8)!
     let doubleCRLF = "\r\n\r\n".data(using: .utf8)!
 
-    // Find parts separated by boundary
-    var searchRange = data.startIndex..<data.endIndex
-    var parts: [Range<Data.Index>] = []
+    // Find all boundary start positions (where each `--boundary` begins)
+    var boundaryStarts: [Data.Index] = []
+    var searchStart = data.startIndex
+    while searchStart < data.endIndex,
+          let range = data.range(of: boundaryData, in: searchStart..<data.endIndex) {
+      boundaryStarts.append(range.lowerBound)
+      searchStart = range.upperBound
+    }
 
-    while let range = data.range(of: boundaryData, in: searchRange) {
-      if !parts.isEmpty {
-        parts.append(searchRange.lowerBound..<range.lowerBound)
+    guard boundaryStarts.count >= 2 else { return nil }
+
+    // Each part is between consecutive boundaries.
+    // Part content starts after `--boundary\r\n` and ends before `\r\n--boundary`.
+    for i in 0..<boundaryStarts.count - 1 {
+      let partStart = data.index(boundaryStarts[i], offsetBy: boundaryData.count)
+      let partEnd = boundaryStarts[i + 1]
+
+      guard partStart < partEnd else { continue }
+      var part = data[partStart..<partEnd]
+
+      // Strip leading \r\n after boundary line
+      let crlf = Data("\r\n".utf8)
+      if part.prefix(crlf.count) == crlf {
+        part = part.dropFirst(crlf.count)
       }
-      searchRange = range.upperBound..<data.endIndex
-    }
+      // Strip trailing \r\n before next boundary
+      if part.suffix(crlf.count) == crlf {
+        part = part.dropLast(crlf.count)
+      }
 
-    // Also capture the last part (before the closing boundary)
-    if !searchRange.isEmpty {
-      parts.append(searchRange.lowerBound..<searchRange.upperBound)
-    }
-
-    for partRange in parts {
-      let part = data[partRange]
-
-      // Skip the leading CRLF after boundary
       guard let headerEnd = part.range(of: doubleCRLF) else { continue }
 
       let headerData = part[part.startIndex..<headerEnd.lowerBound]
       guard let headers = String(data: headerData, encoding: .utf8) else { continue }
 
-      // Look for Content-Disposition with filename
       guard headers.contains("filename=") else { continue }
 
       let filename = extractHeaderValue(from: headers, key: "filename") ?? "upload"
       let mimeType = extractContentType(from: headers) ?? "application/octet-stream"
 
-      // Body starts after double CRLF, remove trailing CRLF before next boundary
-      var bodyData = part[headerEnd.upperBound...]
-      if bodyData.hasSuffix(crlf) {
-        bodyData = bodyData.dropLast(crlf.count)
-      }
-
+      let bodyData = part[headerEnd.upperBound...]
       return UploadedFile(filename: filename, mimeType: mimeType, data: Data(bodyData))
     }
 
@@ -431,11 +451,49 @@ private struct HTTPRequest {
     self.headers = headers
 
     let bodyStartIndex = string.distance(from: string.startIndex, to: headerEnd.upperBound)
+    let rawBody: Data
     if bodyStartIndex < data.count {
-      self.body = data[data.index(data.startIndex, offsetBy: bodyStartIndex)...]
+      rawBody = Data(data[data.index(data.startIndex, offsetBy: bodyStartIndex)...])
     } else {
-      self.body = Data()
+      rawBody = Data()
     }
+
+    // Decode chunked transfer encoding if present
+    let isChunked = headers.values.contains(where: { $0.lowercased().contains("chunked") })
+    if isChunked && !rawBody.isEmpty {
+      self.body = HTTPRequest.decodeChunkedBody(rawBody)
+    } else {
+      self.body = rawBody
+    }
+  }
+
+  /// Decodes an HTTP chunked transfer-encoded body into a flat Data buffer.
+  private static func decodeChunkedBody(_ data: Data) -> Data {
+    var result = Data()
+    var offset = data.startIndex
+    let crlf = Data("\r\n".utf8)
+
+    while offset < data.endIndex {
+      // Find the end of the chunk size line
+      guard let crlfRange = data.range(of: crlf, in: offset..<data.endIndex) else { break }
+
+      // Parse chunk size (hex)
+      let sizeData = data[offset..<crlfRange.lowerBound]
+      guard let sizeString = String(data: sizeData, encoding: .ascii),
+            let chunkSize = UInt(sizeString.trimmingCharacters(in: .whitespaces), radix: 16) else { break }
+
+      // Chunk size 0 means end of body
+      if chunkSize == 0 { break }
+
+      let chunkStart = crlfRange.upperBound
+      let chunkEnd = data.index(chunkStart, offsetBy: Int(chunkSize), limitedBy: data.endIndex) ?? data.endIndex
+      result.append(data[chunkStart..<chunkEnd])
+
+      // Skip past the chunk data and trailing CRLF
+      offset = min(data.index(chunkEnd, offsetBy: crlf.count, limitedBy: data.endIndex) ?? data.endIndex, data.endIndex)
+    }
+
+    return result
   }
 }
 

@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 @testable import GutenbergKit
@@ -96,16 +97,12 @@ struct MediaUploadServerTests {
     let fileData = "fake image data".data(using: .utf8)!
     let body = buildMultipartBody(boundary: boundary, filename: "photo.jpg", mimeType: "image/jpeg", data: fileData)
 
-    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
-    var request = URLRequest(url: url)
-    request.httpMethod = "POST"
-    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Authorization")
-    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-    request.httpBody = body
-
-    let (data, response) = try await URLSession.shared.data(for: request)
-    let httpResponse = try #require(response as? HTTPURLResponse)
-    #expect(httpResponse.statusCode == 200)
+    // Send via raw TCP socket to bypass URLSession's resumable upload protocol
+    // framing (draft-ietf-httpbis-resumable-upload), which prepends extra bytes
+    // that break multipart parsing. Production uses WebView fetch(), unaffected.
+    let data = try await sendRawUpload(
+      port: server.port, token: server.token, boundary: boundary, body: body
+    )
 
     #expect(delegate.processFileCalled)
     #expect(delegate.uploadFileCalled)
@@ -129,16 +126,9 @@ struct MediaUploadServerTests {
     let fileData = "fake data".data(using: .utf8)!
     let body = buildMultipartBody(boundary: boundary, filename: "doc.pdf", mimeType: "application/pdf", data: fileData)
 
-    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
-    var request = URLRequest(url: url)
-    request.httpMethod = "POST"
-    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Authorization")
-    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-    request.httpBody = body
-
-    let (data, response) = try await URLSession.shared.data(for: request)
-    let httpResponse = try #require(response as? HTTPURLResponse)
-    #expect(httpResponse.statusCode == 200)
+    let data = try await sendRawUpload(
+      port: server.port, token: server.token, boundary: boundary, body: body
+    )
 
     #expect(delegate.processFileCalled)
     #expect(mockUploader.uploadCalled)
@@ -155,6 +145,85 @@ struct MediaUploadServerTests {
     body.append(data)
     body.append("\r\n--\(boundary)--\r\n")
     return body
+  }
+
+  /// Sends a multipart upload via a raw TCP socket, bypassing URLSession.
+  ///
+  /// URLSession on iOS 26+ uses the resumable upload protocol
+  /// (draft-ietf-httpbis-resumable-upload) which prepends framing bytes to the
+  /// request body, breaking multipart parsing on our NWListener-based server.
+  /// Production traffic comes from the WebView's `fetch()` API which sends
+  /// standard HTTP, so this only affects tests.
+  private func sendRawUpload(port: UInt16, token: String, boundary: String, body: Data) async throws -> Data {
+    try await withCheckedThrowingContinuation { continuation in
+      let fd = socket(AF_INET, SOCK_STREAM, 0)
+      guard fd >= 0 else {
+        continuation.resume(throwing: POSIXError(.init(rawValue: errno)!))
+        return
+      }
+
+      var addr = sockaddr_in()
+      addr.sin_family = sa_family_t(AF_INET)
+      addr.sin_port = UInt16(port).bigEndian
+      addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+
+      let connectResult = withUnsafePointer(to: &addr) {
+        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+          connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+        }
+      }
+
+      guard connectResult == 0 else {
+        close(fd)
+        continuation.resume(throwing: POSIXError(.init(rawValue: errno)!))
+        return
+      }
+
+      // Build raw HTTP request
+      var request = Data()
+      request.append("POST /upload HTTP/1.1\r\n")
+      request.append("Host: 127.0.0.1:\(port)\r\n")
+      request.append("Authorization: Bearer \(token)\r\n")
+      request.append("Content-Type: multipart/form-data; boundary=\(boundary)\r\n")
+      request.append("Content-Length: \(body.count)\r\n")
+      request.append("Connection: close\r\n")
+      request.append("\r\n")
+      request.append(body)
+
+      request.withUnsafeBytes { ptr in
+        _ = send(fd, ptr.baseAddress!, ptr.count, 0)
+      }
+
+      // Read response
+      var responseData = Data()
+      let bufferSize = 65536
+      let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+      defer { buffer.deallocate() }
+
+      while true {
+        let bytesRead = recv(fd, buffer, bufferSize, 0)
+        if bytesRead <= 0 { break }
+        responseData.append(buffer, count: bytesRead)
+      }
+      close(fd)
+
+      // Extract HTTP body (after \r\n\r\n)
+      guard let headerEnd = responseData.range(of: Data("\r\n\r\n".utf8)) else {
+        continuation.resume(throwing: POSIXError(.EBADMSG))
+        return
+      }
+
+      // Verify we got HTTP 200
+      let headerString = String(data: responseData[responseData.startIndex..<headerEnd.lowerBound], encoding: .utf8) ?? ""
+      guard headerString.contains("200") else {
+        let bodyStr = String(data: responseData[headerEnd.upperBound...], encoding: .utf8) ?? ""
+        continuation.resume(throwing: TestUploadError.httpError(header: headerString, body: bodyStr))
+        return
+      }
+
+      let responseBody = Data(responseData[headerEnd.upperBound...])
+      continuation.resume(returning: responseBody)
+    }
   }
 }
 
@@ -226,6 +295,18 @@ struct MediaUploadResultTests {
     #expect(decoded.title == original.title)
     #expect(decoded.mime == original.mime)
     #expect(decoded.type == original.type)
+  }
+}
+
+// MARK: - Errors
+
+private enum TestUploadError: Error, CustomStringConvertible {
+  case httpError(header: String, body: String)
+
+  var description: String {
+    switch self {
+    case .httpError(let header, let body): "HTTP error: \(header)\n\(body)"
+    }
   }
 }
 
