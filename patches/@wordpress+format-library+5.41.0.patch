@@ -1,5 +1,5 @@
 diff --git a/node_modules/@wordpress/format-library/package.json b/node_modules/@wordpress/format-library/package.json
-index 6dd5262..8dd5383 100644
+index c3e0858..af94f12 100644
 --- a/node_modules/@wordpress/format-library/package.json
 +++ b/node_modules/@wordpress/format-library/package.json
 @@ -37,7 +37,8 @@
