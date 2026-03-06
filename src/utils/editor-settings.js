@@ -35,6 +35,39 @@ export function getDefaultEditorSettings() {
 			 */
 			blocks: {},
 			/**
+			 * Enable the typography controls that WordPress core enables by
+			 * default in its theme.json. This ensures blocks like Paragraph
+			 * have text alignment in the toolbar and typography options in
+			 * the block settings sidebar, even without editor settings from
+			 * the site.
+			 *
+			 * @see https://github.com/WordPress/gutenberg/blob/d97807b50f756126798a04a5ae94745aee19356d/lib/theme.json
+			 */
+			typography: {
+				customFontSize: true,
+				defaultFontSizes: true,
+				dropCap: true,
+				fontSizes: {
+					default: [
+						{ name: 'Small', slug: 'small', size: '13px' },
+						{ name: 'Medium', slug: 'medium', size: '20px' },
+						{ name: 'Large', slug: 'large', size: '36px' },
+						{
+							name: 'Extra Large',
+							slug: 'x-large',
+							size: '42px',
+						},
+					],
+				},
+				fontStyle: true,
+				fontWeight: true,
+				letterSpacing: true,
+				textAlign: true,
+				textDecoration: true,
+				textIndent: 'subsequent',
+				textTransform: true,
+			},
+			/**
 			 * Ensure themes lacking their own theme styles can customize blocks using
 			 * the default editor colors and gradients. Mirrors the approach taken by
 			 * the Gutenberg Mobile editor.
