@@ -1,0 +1,323 @@
+import Foundation
+import Testing
+@testable import GutenbergKit
+
+/// Check if NWListener can bind in this environment (fails in some test sandboxes).
+private let _canStartUploadServer: Bool = {
+  do {
+    let server = try MediaUploadServer()
+    server.stop()
+    return true
+  } catch {
+    return false
+  }
+}()
+
+// MARK: - Integration Tests (require network)
+
+@Suite("MediaUploadServer Integration", .enabled(if: _canStartUploadServer))
+struct MediaUploadServerTests {
+
+  @Test("starts and provides a port and token")
+  func startAndStop() throws {
+    let server = try MediaUploadServer()
+    #expect(server.port > 0)
+    #expect(!server.token.isEmpty)
+    server.stop()
+  }
+
+  @Test("rejects requests without auth token")
+  func rejectsUnauthenticated() async throws {
+    let server = try MediaUploadServer()
+    defer { server.stop() }
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+
+    let (_, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+    #expect(httpResponse.statusCode == 401)
+  }
+
+  @Test("rejects requests with wrong token")
+  func rejectsWrongToken() async throws {
+    let server = try MediaUploadServer()
+    defer { server.stop() }
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer wrong-token", forHTTPHeaderField: "Authorization")
+
+    let (_, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+    #expect(httpResponse.statusCode == 401)
+  }
+
+  @Test("responds to OPTIONS preflight with CORS headers")
+  func corsPreflightResponse() async throws {
+    let server = try MediaUploadServer()
+    defer { server.stop() }
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "OPTIONS"
+
+    let (_, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+    #expect(httpResponse.statusCode == 204)
+    #expect(httpResponse.value(forHTTPHeaderField: "Access-Control-Allow-Origin") == "*")
+    #expect(httpResponse.value(forHTTPHeaderField: "Access-Control-Allow-Methods")?.contains("POST") == true)
+  }
+
+  @Test("returns 404 for unknown paths")
+  func unknownPath() async throws {
+    let server = try MediaUploadServer()
+    defer { server.stop() }
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/unknown")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Authorization")
+
+    let (_, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+    #expect(httpResponse.statusCode == 404)
+  }
+
+  @Test("calls delegate and returns upload result")
+  func delegateProcessAndUpload() async throws {
+    let delegate = MockUploadDelegate()
+    let server = try MediaUploadServer(uploadDelegate: delegate)
+    defer { server.stop() }
+
+    let boundary = UUID().uuidString
+    let fileData = "fake image data".data(using: .utf8)!
+    let body = buildMultipartBody(boundary: boundary, filename: "photo.jpg", mimeType: "image/jpeg", data: fileData)
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Authorization")
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    request.httpBody = body
+
+    let (data, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+    #expect(httpResponse.statusCode == 200)
+
+    #expect(delegate.processFileCalled)
+    #expect(delegate.uploadFileCalled)
+    #expect(delegate.lastMimeType == "image/jpeg")
+    #expect(delegate.lastFilename == "photo.jpg")
+
+    let result = try JSONDecoder().decode(MediaUploadResult.self, from: data)
+    #expect(result.id == 42)
+    #expect(result.url == "https://example.com/photo.jpg")
+    #expect(result.type == "image")
+  }
+
+  @Test("falls back to default uploader when delegate returns nil")
+  func delegateFallbackToDefault() async throws {
+    let delegate = ProcessOnlyDelegate()
+    let mockUploader = MockDefaultUploader()
+    let server = try MediaUploadServer(uploadDelegate: delegate, defaultUploader: mockUploader)
+    defer { server.stop() }
+
+    let boundary = UUID().uuidString
+    let fileData = "fake data".data(using: .utf8)!
+    let body = buildMultipartBody(boundary: boundary, filename: "doc.pdf", mimeType: "application/pdf", data: fileData)
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Authorization")
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    request.httpBody = body
+
+    let (data, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+    #expect(httpResponse.statusCode == 200)
+
+    #expect(delegate.processFileCalled)
+    #expect(mockUploader.uploadCalled)
+
+    let result = try JSONDecoder().decode(MediaUploadResult.self, from: data)
+    #expect(result.id == 99)
+  }
+
+  private func buildMultipartBody(boundary: String, filename: String, mimeType: String, data: Data) -> Data {
+    var body = Data()
+    body.append("--\(boundary)\r\n")
+    body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n")
+    body.append("Content-Type: \(mimeType)\r\n\r\n")
+    body.append(data)
+    body.append("\r\n--\(boundary)--\r\n")
+    return body
+  }
+}
+
+// MARK: - Unit Tests (no network required)
+
+@Suite("MediaUploadDelegate defaults")
+struct MediaUploadDelegateDefaultsTests {
+
+  @Test("default processFile returns original URL")
+  func defaultProcessFile() async throws {
+    let delegate = MinimalDelegate()
+    let url = URL(fileURLWithPath: "/tmp/test.jpg")
+    let result = try await delegate.processFile(at: url, mimeType: "image/jpeg")
+    #expect(result == url)
+  }
+
+  @Test("default uploadFile returns nil")
+  func defaultUploadFile() async throws {
+    let delegate = MinimalDelegate()
+    let url = URL(fileURLWithPath: "/tmp/test.jpg")
+    let result = try await delegate.uploadFile(at: url, mimeType: "image/jpeg", filename: "test.jpg")
+    #expect(result == nil)
+  }
+}
+
+@Suite("MediaUploadResult encoding")
+struct MediaUploadResultTests {
+
+  @Test("encodes to JSON with all fields")
+  func encodesToJSON() throws {
+    let result = MediaUploadResult(
+      id: 123,
+      url: "https://example.com/photo.jpg",
+      alt: "A photo",
+      caption: "My caption",
+      title: "photo",
+      mime: "image/jpeg",
+      type: "image"
+    )
+
+    let data = try JSONEncoder().encode(result)
+    let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+    #expect(json["id"] as? Int == 123)
+    #expect(json["url"] as? String == "https://example.com/photo.jpg")
+    #expect(json["alt"] as? String == "A photo")
+    #expect(json["caption"] as? String == "My caption")
+    #expect(json["title"] as? String == "photo")
+    #expect(json["mime"] as? String == "image/jpeg")
+    #expect(json["type"] as? String == "image")
+  }
+
+  @Test("round-trips through JSON")
+  func roundTrips() throws {
+    let original = MediaUploadResult(
+      id: 42,
+      url: "https://example.com/file.pdf",
+      title: "file",
+      mime: "application/pdf",
+      type: "file"
+    )
+
+    let data = try JSONEncoder().encode(original)
+    let decoded = try JSONDecoder().decode(MediaUploadResult.self, from: data)
+
+    #expect(decoded.id == original.id)
+    #expect(decoded.url == original.url)
+    #expect(decoded.alt == original.alt)
+    #expect(decoded.title == original.title)
+    #expect(decoded.mime == original.mime)
+    #expect(decoded.type == original.type)
+  }
+}
+
+// MARK: - Mocks
+
+private final class MockUploadDelegate: MediaUploadDelegate, @unchecked Sendable {
+  private let lock = NSLock()
+  private var _processFileCalled = false
+  private var _uploadFileCalled = false
+  private var _lastMimeType: String?
+  private var _lastFilename: String?
+
+  var processFileCalled: Bool { lock.withLock { _processFileCalled } }
+  var uploadFileCalled: Bool { lock.withLock { _uploadFileCalled } }
+  var lastMimeType: String? { lock.withLock { _lastMimeType } }
+  var lastFilename: String? { lock.withLock { _lastFilename } }
+
+  func processFile(at url: URL, mimeType: String) async throws -> URL {
+    lock.withLock {
+      _processFileCalled = true
+      _lastMimeType = mimeType
+    }
+    return url
+  }
+
+  func uploadFile(at url: URL, mimeType: String, filename: String) async throws -> MediaUploadResult? {
+    lock.withLock {
+      _uploadFileCalled = true
+      _lastFilename = filename
+    }
+    return MediaUploadResult(
+      id: 42,
+      url: "https://example.com/photo.jpg",
+      title: "photo",
+      mime: "image/jpeg",
+      type: "image"
+    )
+  }
+}
+
+private final class ProcessOnlyDelegate: MediaUploadDelegate, @unchecked Sendable {
+  private let lock = NSLock()
+  private var _processFileCalled = false
+
+  var processFileCalled: Bool { lock.withLock { _processFileCalled } }
+
+  func processFile(at url: URL, mimeType: String) async throws -> URL {
+    lock.withLock { _processFileCalled = true }
+    return url
+  }
+}
+
+private final class MinimalDelegate: MediaUploadDelegate {
+  // Uses all default implementations
+}
+
+private final class MockDefaultUploader: DefaultMediaUploader, @unchecked Sendable {
+  private let lock = NSLock()
+  private var _uploadCalled = false
+
+  var uploadCalled: Bool { lock.withLock { _uploadCalled } }
+
+  init() {
+    super.init(httpClient: MockHTTPClient(), siteApiRoot: URL(string: "https://example.com/wp-json/")!)
+  }
+
+  override func upload(fileURL: URL, mimeType: String, filename: String) async throws -> MediaUploadResult {
+    lock.withLock { _uploadCalled = true }
+    return MediaUploadResult(
+      id: 99,
+      url: "https://example.com/doc.pdf",
+      title: "doc",
+      mime: "application/pdf",
+      type: "file"
+    )
+  }
+}
+
+private struct MockHTTPClient: EditorHTTPClientProtocol {
+  func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
+    let response = HTTPURLResponse(url: urlRequest.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+    return (Data(), response)
+  }
+
+  func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse) {
+    let response = HTTPURLResponse(url: urlRequest.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+    return (FileManager.default.temporaryDirectory, response)
+  }
+}
+
+private extension Data {
+  mutating func append(_ string: String) {
+    append(string.data(using: .utf8)!)
+  }
+}
