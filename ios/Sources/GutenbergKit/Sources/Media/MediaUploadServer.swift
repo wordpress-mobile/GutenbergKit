@@ -425,12 +425,18 @@ private struct HTTPRequest {
   let body: Data
 
   init?(data: Data) {
-    guard let string = String(data: data, encoding: .utf8),
-          let headerEnd = string.range(of: "\r\n\r\n") else {
+    // Search for the header/body separator in raw bytes so that binary body
+    // content (e.g. JPEG data) doesn't cause a UTF-8 decode failure.
+    let separator = Data("\r\n\r\n".utf8)
+    guard let separatorRange = data.range(of: separator) else {
       return nil
     }
 
-    let headerSection = String(string[..<headerEnd.lowerBound])
+    let headerData = data[data.startIndex..<separatorRange.lowerBound]
+    guard let headerSection = String(data: headerData, encoding: .utf8) else {
+      return nil
+    }
+
     let lines = headerSection.split(separator: "\r\n", omittingEmptySubsequences: false)
 
     guard let requestLine = lines.first else { return nil }
@@ -450,10 +456,9 @@ private struct HTTPRequest {
     }
     self.headers = headers
 
-    let bodyStartIndex = string.distance(from: string.startIndex, to: headerEnd.upperBound)
     let rawBody: Data
-    if bodyStartIndex < data.count {
-      rawBody = Data(data[data.index(data.startIndex, offsetBy: bodyStartIndex)...])
+    if separatorRange.upperBound < data.endIndex {
+      rawBody = Data(data[separatorRange.upperBound...])
     } else {
       rawBody = Data()
     }

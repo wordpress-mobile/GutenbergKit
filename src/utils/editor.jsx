@@ -5,13 +5,11 @@ import Layout from '../components/layout';
 import { createRoot, StrictMode } from '@wordpress/element';
 import { dispatch } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
-import { store as blockEditorStore } from '@wordpress/block-editor';
 import { store as preferencesStore } from '@wordpress/preferences';
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { unregisterDisallowedBlocks } from './blocks';
 import { getGBKit, getPost } from './bridge';
 import { getDefaultEditorSettings } from './editor-settings';
-import { createNativeMediaUpload } from './native-upload';
 
 /**
  * Configure editor settings and styles, and render the editor.
@@ -44,11 +42,6 @@ export async function initializeEditor( {
 
 	registerCoreBlocks();
 	unregisterDisallowedBlocks( allowedBlockTypes );
-
-	const mediaUpload = createNativeMediaUpload();
-	if ( mediaUpload ) {
-		dispatch( blockEditorStore ).updateSettings( { mediaUpload } );
-	}
 
 	const post = await getPost();
 

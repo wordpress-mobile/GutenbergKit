@@ -9,7 +9,7 @@ import { store as editorStore } from '@wordpress/editor';
  * Internal dependencies
  */
 import { getGBKit } from './bridge';
-import { error as logError, debug } from './logger';
+import { error as logError, info } from './logger';
 
 /**
  * Unique lock name for post saving during native uploads.
@@ -27,8 +27,11 @@ export function createNativeMediaUpload() {
 	const { nativeUploadPort, nativeUploadToken } = getGBKit();
 
 	if ( ! nativeUploadPort ) {
+		info( 'Native upload not configured (no nativeUploadPort)' );
 		return null;
 	}
+
+	info( `Native upload configured on port ${ nativeUploadPort }` );
 
 	return ( { filesList, onFileChange, onError, allowedTypes } ) => {
 		nativeMediaUpload( {
@@ -125,7 +128,7 @@ async function uploadFile( file, port, token ) {
 	const formData = new FormData();
 	formData.append( 'file', file, file.name );
 
-	debug( `Uploading ${ file.name } to native server on port ${ port }` );
+	info( `Uploading ${ file.name } to native server on port ${ port }` );
 
 	const response = await fetch( `http://localhost:${ port }/upload`, {
 		method: 'POST',

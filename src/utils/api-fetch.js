@@ -8,6 +8,7 @@ import { getQueryArg } from '@wordpress/url';
  * Internal dependencies
  */
 import { getGBKit } from './bridge';
+import { info, error as logError } from './logger';
 
 /**
  * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
@@ -26,6 +27,7 @@ export function configureApiFetch() {
 	apiFetch.use( apiPathModifierMiddleware );
 	apiFetch.use( tokenAuthMiddleware );
 	apiFetch.use( filterEndpointsMiddleware );
+	apiFetch.use( nativeMediaUploadMiddleware );
 	apiFetch.use( mediaUploadMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
 	apiFetch.use(
@@ -123,6 +125,93 @@ function filterEndpointsMiddleware( options, next ) {
 		return Promise.resolve( [] );
 	}
 	return next( options );
+}
+
+/**
+ * Middleware that routes media uploads through the native host's local HTTP
+ * server for processing (e.g. image resizing) before uploading to WordPress.
+ *
+ * When `nativeUploadPort` is configured in GBKit, this middleware intercepts
+ * `POST /wp/v2/media` requests, forwards the file to the native server, and
+ * returns the response in WordPress REST API attachment format so the existing
+ * Gutenberg upload pipeline (blob previews, save locking, entity caching)
+ * works unchanged.
+ *
+ * When the native server is not configured, requests pass through unmodified.
+ *
+ * @type {APIFetchMiddleware}
+ */
+function nativeMediaUploadMiddleware( options, next ) {
+	const { nativeUploadPort, nativeUploadToken } = getGBKit();
+
+	if (
+		! nativeUploadPort ||
+		! options.method ||
+		options.method.toUpperCase() !== 'POST' ||
+		! options.path ||
+		! options.path.startsWith( '/wp/v2/media' ) ||
+		! ( options.body instanceof FormData )
+	) {
+		return next( options );
+	}
+
+	const file = options.body.get( 'file' );
+	if ( ! file ) {
+		return next( options );
+	}
+
+	info(
+		`Routing upload of ${ file.name } through native server on port ${ nativeUploadPort }`
+	);
+
+	const formData = new FormData();
+	formData.append( 'file', file, file.name );
+
+	return fetch( `http://127.0.0.1:${ nativeUploadPort }/upload`, {
+		method: 'POST',
+		headers: {
+			Authorization: `Bearer ${ nativeUploadToken }`,
+		},
+		body: formData,
+		signal: options.signal,
+	} )
+		.then( ( response ) => {
+			if ( ! response.ok ) {
+				return response.text().then( ( body ) => {
+					throw {
+						code: 'upload_failed',
+						message: `Native upload failed (${
+							response.status
+						}): ${ body || response.statusText }`,
+					};
+				} );
+			}
+			return response.json();
+		} )
+		.then( ( result ) => {
+			// Transform native server response into WordPress REST API
+			// attachment shape expected by @wordpress/media-utils.
+			return {
+				id: result.id,
+				source_url: result.url,
+				alt_text: result.alt || '',
+				caption: {
+					raw: result.caption || '',
+					rendered: result.caption || '',
+				},
+				title: {
+					raw: result.title || '',
+					rendered: result.title || '',
+				},
+				mime_type: result.mime,
+				media_type: result.type,
+				link: result.url,
+			};
+		} )
+		.catch( ( err ) => {
+			logError( 'Native upload failed', err );
+			throw err;
+		} );
 }
 
 /**
