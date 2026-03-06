@@ -49,6 +49,15 @@ final class MediaUploadServer: Sendable {
     let semaphore = DispatchSemaphore(value: 0)
     nonisolated(unsafe) var assignedPort: UInt16 = 0
 
+    // newConnectionHandler must be set before start(). Since we can't
+    // reference `self` yet (port isn't assigned), use a box that we fill
+    // once init completes.
+    nonisolated(unsafe) var serverRef: MediaUploadServer?
+
+    listener.newConnectionHandler = { connection in
+      serverRef?.handleConnection(connection)
+    }
+
     listener.stateUpdateHandler = { state in
       switch state {
       case .ready:
@@ -78,10 +87,7 @@ final class MediaUploadServer: Sendable {
     }
 
     self.port = assignedPort
-
-    listener.newConnectionHandler = { [weak self] connection in
-      self?.handleConnection(connection)
-    }
+    serverRef = self
 
     Logger.uploadServer.info("Upload server started on port \(assignedPort)")
   }
