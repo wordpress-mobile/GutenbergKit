@@ -103,11 +103,16 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Used by `EditorViewController.warmup()` to reduce first-render latency.
     private let isWarmupMode: Bool
 
+    /// Delegate for customizing media file processing and upload behavior.
+    public weak var mediaUploadDelegate: (any MediaUploadDelegate)?
+
     // MARK: - Private Properties (Services)
     private let editorService: EditorService
+    private let httpClient: any EditorHTTPClientProtocol
     private let mediaPicker: MediaPickerController?
     private let controller: GutenbergEditorController
     private let bundleProvider: EditorAssetBundleProvider
+    private var uploadServer: MediaUploadServer?
 
     // MARK: - Private Properties (UI)
 
@@ -163,6 +168,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         self.configuration = configuration
         self.dependencies = dependencies
+        self.httpClient = httpClient
         self.editorService = EditorService(
             configuration: configuration,
             httpClient: httpClient
@@ -258,6 +264,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     public override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         self.dependencyTaskHandle?.cancel()
+        self.uploadServer?.stop()
     }
 
     /// Fetches all required dependencies and then loads the editor.
@@ -301,6 +308,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // Set asset bundle for the URL scheme handler to serve cached plugin/theme assets
         self.bundleProvider.set(bundle: dependencies.assetBundle)
 
+        // Start the local upload server for native media processing
+        startUploadServer()
+
         // Build and inject editor configuration as window.GBKit
         let editorConfig = try buildEditorConfiguration(dependencies: dependencies)
         webView.configuration.userContentController.addUserScript(editorConfig)
@@ -333,7 +343,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// when it initializes.
     ///
     private func buildEditorConfiguration(dependencies: EditorDependencies) throws -> WKUserScript {
-        let gbkitGlobal = try GBKitGlobal(configuration: self.configuration, dependencies: dependencies)
+        let gbkitGlobal = try GBKitGlobal(
+            configuration: self.configuration,
+            dependencies: dependencies,
+            nativeUploadPort: uploadServer.map { Int($0.port) },
+            nativeUploadToken: uploadServer?.token
+        )
         let stringValue = try gbkitGlobal.toString()
 
         let jsCode = """
@@ -343,6 +358,27 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         """
 
         return WKUserScript(source: jsCode, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+    }
+
+    /// Starts the local HTTP server for routing file uploads through native processing.
+    ///
+    /// The server binds to localhost on a random port. If it fails to start, the editor
+    /// falls back to Gutenberg's default upload behavior (the JS override won't activate
+    /// because `nativeUploadPort` will be nil in GBKit).
+    private func startUploadServer() {
+        let defaultUploader = DefaultMediaUploader(
+            httpClient: httpClient,
+            siteApiRoot: configuration.siteApiRoot
+        )
+
+        do {
+            self.uploadServer = try MediaUploadServer(
+                uploadDelegate: mediaUploadDelegate,
+                defaultUploader: defaultUploader
+            )
+        } catch {
+            NSLog("⚠️ GutenbergKit: Failed to start upload server: \(error). Falling back to default upload behavior.")
+        }
     }
 
     /// Deletes all cached editor data for all sites
