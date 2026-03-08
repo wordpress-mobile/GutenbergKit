@@ -366,6 +366,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// falls back to Gutenberg's default upload behavior (the JS override won't activate
     /// because `nativeUploadPort` will be nil in GBKit).
     private func startUploadServer() {
+        guard mediaUploadDelegate != nil else {
+            return
+        }
+
         let defaultUploader = DefaultMediaUploader(
             httpClient: httpClient,
             siteApiRoot: configuration.siteApiRoot
