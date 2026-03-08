@@ -349,6 +349,7 @@ internal class MediaUploadServer(
             append("Access-Control-Allow-Origin: *\r\n")
             append("Access-Control-Allow-Methods: POST, OPTIONS\r\n")
             append("Access-Control-Allow-Headers: Authorization, Content-Type\r\n")
+            append("Access-Control-Allow-Private-Network: true\r\n")
             append("Access-Control-Max-Age: 86400\r\n")
             append("Content-Length: 0\r\n")
             append("\r\n")

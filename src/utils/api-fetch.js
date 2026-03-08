@@ -167,7 +167,7 @@ function nativeMediaUploadMiddleware( options, next ) {
 	const formData = new FormData();
 	formData.append( 'file', file, file.name );
 
-	return fetch( `http://127.0.0.1:${ nativeUploadPort }/upload`, {
+	return fetch( `http://localhost:${ nativeUploadPort }/upload`, {
 		method: 'POST',
 		headers: {
 			Authorization: `Bearer ${ nativeUploadToken }`,

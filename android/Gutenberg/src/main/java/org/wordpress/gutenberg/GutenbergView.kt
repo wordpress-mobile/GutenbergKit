@@ -98,6 +98,15 @@ class GutenbergView : WebView {
 
     /** Optional delegate for customizing media upload behavior (resize, transcode, custom upload). */
     var mediaUploadDelegate: MediaUploadDelegate? = null
+        set(value) {
+            field = value
+            // (Re)start the upload server so it captures the delegate.
+            // This handles the common case where the delegate is set after
+            // construction but before the editor finishes loading.
+            if (value != null) {
+                startUploadServer()
+            }
+        }
 
     private var uploadServer: MediaUploadServer? = null
 
@@ -410,7 +419,6 @@ class GutenbergView : WebView {
         // Notify that dependency loading is complete (spinner phase begins)
         loadingListener?.onDependencyLoadingFinished()
 
-        startUploadServer()
         initializeWebView()
 
         val assetUrl = if (isLocalHttpSite) ASSET_URL_HTTP else ASSET_URL
