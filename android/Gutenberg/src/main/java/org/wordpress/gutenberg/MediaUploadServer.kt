@@ -384,12 +384,12 @@ internal class MediaUploadServer(
 /**
  * Uploads files to the WordPress REST API using OkHttp.
  */
-internal class DefaultMediaUploader(
+internal open class DefaultMediaUploader(
     private val httpClient: okhttp3.OkHttpClient,
     private val siteApiRoot: String,
     private val authHeader: String
 ) {
-    suspend fun upload(file: File, mimeType: String, filename: String): MediaUploadResult {
+    open suspend fun upload(file: File, mimeType: String, filename: String): MediaUploadResult {
         val mediaType = mimeType.toMediaType()
         val requestBody = okhttp3.MultipartBody.Builder()
             .setType(okhttp3.MultipartBody.FORM)
