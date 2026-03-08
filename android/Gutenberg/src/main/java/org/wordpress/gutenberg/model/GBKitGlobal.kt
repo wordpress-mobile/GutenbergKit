@@ -54,7 +54,7 @@ data class GBKitGlobal(
     /** The post being edited. */
     val post: Post,
     /** The logging level for JavaScript console output. */
-    val logLevel: String = "warn",
+    val logLevel: String = "debug",
     /** Whether to log network requests in the JavaScript console. */
     val enableNetworkLogging: Boolean,
     /** Port the local HTTP server is listening on for native media uploads. */
