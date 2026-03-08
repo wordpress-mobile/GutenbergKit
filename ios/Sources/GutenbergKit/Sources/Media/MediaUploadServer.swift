@@ -288,7 +288,6 @@ final class MediaUploadServer: Sendable {
       "Access-Control-Allow-Origin: *",
       "Access-Control-Allow-Methods: POST, OPTIONS",
       "Access-Control-Allow-Headers: Authorization, Content-Type",
-      "Access-Control-Allow-Private-Network: true",
       "Access-Control-Max-Age: 86400",
       "Content-Length: 0",
     ].joined(separator: "\r\n")
