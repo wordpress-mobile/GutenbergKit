@@ -17,6 +17,7 @@ import org.wordpress.gutenberg.services.EditorService
 
 data class SitePreparationUiState(
     val enableNativeInserter: Boolean = true,
+    val enableNativeMediaUpload: Boolean = true,
     val enableNetworkLogging: Boolean = false,
     val postType: String = "post",
     val cacheBundleCount: Int? = null,
@@ -74,6 +75,10 @@ class SitePreparationViewModel(
 
     fun setEnableNativeInserter(enabled: Boolean) {
         _uiState.update { it.copy(enableNativeInserter = enabled) }
+    }
+
+    fun setEnableNativeMediaUpload(enabled: Boolean) {
+        _uiState.update { it.copy(enableNativeMediaUpload = enabled) }
     }
 
     fun setEnableNetworkLogging(enabled: Boolean) {

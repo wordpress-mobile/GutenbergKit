@@ -6,20 +6,23 @@ import GutenbergKit
 struct EditorView: View {
     private let configuration: EditorConfiguration
     private let dependencies: EditorDependencies?
+    private let enableNativeMediaUpload: Bool
 
     @State private var viewModel = EditorViewModel()
 
     @Environment(\.dismiss) var dismiss
 
-    init(configuration: EditorConfiguration, dependencies: EditorDependencies? = nil) {
+    init(configuration: EditorConfiguration, dependencies: EditorDependencies? = nil, enableNativeMediaUpload: Bool = true) {
         self.configuration = configuration
         self.dependencies = dependencies
+        self.enableNativeMediaUpload = enableNativeMediaUpload
     }
 
     var body: some View {
         _EditorView(
             configuration: configuration,
             dependencies: dependencies,
+            enableNativeMediaUpload: enableNativeMediaUpload,
             viewModel: viewModel
         )
             .toolbar { toolbar }
@@ -101,15 +104,18 @@ struct EditorView: View {
 private struct _EditorView: UIViewControllerRepresentable {
     private let configuration: EditorConfiguration
     private let dependencies: EditorDependencies?
+    private let enableNativeMediaUpload: Bool
     private let viewModel: EditorViewModel
 
     init(
         configuration: EditorConfiguration,
         dependencies: EditorDependencies? = nil,
+        enableNativeMediaUpload: Bool = true,
         viewModel: EditorViewModel
     ) {
         self.configuration = configuration
         self.dependencies = dependencies
+        self.enableNativeMediaUpload = enableNativeMediaUpload
         self.viewModel = viewModel
     }
 
@@ -120,7 +126,9 @@ private struct _EditorView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> EditorViewController {
         let viewController = EditorViewController(configuration: configuration, dependencies: dependencies)
         viewController.delegate = context.coordinator
-        viewController.mediaUploadDelegate = context.coordinator
+        if enableNativeMediaUpload {
+            viewController.mediaUploadDelegate = context.coordinator
+        }
         viewController.webView.isInspectable = true
 
         viewModel.perform = { [weak viewController] in

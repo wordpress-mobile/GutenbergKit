@@ -65,6 +65,7 @@ class EditorActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_DEPENDENCIES_PATH = "dependencies_path"
+        const val EXTRA_ENABLE_NATIVE_MEDIA_UPLOAD = "enable_native_media_upload"
     }
 
     private var gutenbergView: GutenbergView? = null
@@ -105,11 +106,14 @@ class EditorActivity : ComponentActivity() {
         val dependenciesPath = intent.getStringExtra(EXTRA_DEPENDENCIES_PATH)
         val dependencies = dependenciesPath?.let { EditorDependenciesSerializer.readFromDisk(it) }
 
+        val enableNativeMediaUpload = intent.getBooleanExtra(EXTRA_ENABLE_NATIVE_MEDIA_UPLOAD, true)
+
         setContent {
             AppTheme {
                 EditorScreen(
                     configuration = configuration,
                     dependencies = dependencies,
+                    enableNativeMediaUpload = enableNativeMediaUpload,
                     coroutineScope =  this.lifecycleScope,
                     onClose = { finish() },
                     onGutenbergViewCreated = { view ->
@@ -147,6 +151,7 @@ enum class EditorLoadingState {
 fun EditorScreen(
     configuration: EditorConfiguration,
     dependencies: EditorDependencies? = null,
+    enableNativeMediaUpload: Boolean = true,
     coroutineScope: CoroutineScope,
     onClose: () -> Unit,
     onGutenbergViewCreated: (GutenbergView) -> Unit = {}
@@ -353,7 +358,9 @@ fun EditorScreen(
                             return null
                         }
                     })
-                    mediaUploadDelegate = DemoMediaUploadDelegate(context)
+                    if (enableNativeMediaUpload) {
+                        mediaUploadDelegate = DemoMediaUploadDelegate(context)
+                    }
                     onGutenbergViewCreated(this)
                 }
             },
