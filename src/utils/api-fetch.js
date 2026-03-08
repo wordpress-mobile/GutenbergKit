@@ -131,6 +131,8 @@ function filterEndpointsMiddleware( options, next ) {
  * Middleware that routes media uploads through the native host's local HTTP
  * server for processing (e.g. image resizing) before uploading to WordPress.
  *
+ * Exported for testing only.
+ *
  * When `nativeUploadPort` is configured in GBKit, this middleware intercepts
  * `POST /wp/v2/media` requests, forwards the file to the native server, and
  * returns the response in WordPress REST API attachment format so the existing
@@ -141,7 +143,7 @@ function filterEndpointsMiddleware( options, next ) {
  *
  * @type {APIFetchMiddleware}
  */
-function nativeMediaUploadMiddleware( options, next ) {
+export function nativeMediaUploadMiddleware( options, next ) {
 	const { nativeUploadPort, nativeUploadToken } = getGBKit();
 
 	if (
