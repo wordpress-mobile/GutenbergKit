@@ -235,6 +235,7 @@ describe( 'nativeMediaUploadMiddleware', () => {
 			title: { raw: 'image', rendered: 'image' },
 			mime_type: 'image/jpeg',
 			media_type: 'image',
+			media_details: { width: 0, height: 0 },
 			link: 'https://example.com/image.jpg',
 		} );
 	} );

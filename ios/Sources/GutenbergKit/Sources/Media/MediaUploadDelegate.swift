@@ -11,8 +11,10 @@ public struct MediaUploadResult: Codable, Sendable {
   public let title: String
   public let mime: String
   public let type: String
+  public let width: Int?
+  public let height: Int?
 
-  public init(id: Int, url: String, alt: String = "", caption: String = "", title: String, mime: String, type: String) {
+  public init(id: Int, url: String, alt: String = "", caption: String = "", title: String, mime: String, type: String, width: Int? = nil, height: Int? = nil) {
     self.id = id
     self.url = url
     self.alt = alt
@@ -20,6 +22,8 @@ public struct MediaUploadResult: Codable, Sendable {
     self.title = title
     self.mime = mime
     self.type = type
+    self.width = width
+    self.height = height
   }
 }
 

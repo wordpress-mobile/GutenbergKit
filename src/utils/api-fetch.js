@@ -228,6 +228,10 @@ export function nativeMediaUploadMiddleware( options, next ) {
 				},
 				mime_type: result.mime,
 				media_type: result.type,
+				media_details: {
+					width: result.width || 0,
+					height: result.height || 0,
+				},
 				link: result.url,
 			};
 		} )

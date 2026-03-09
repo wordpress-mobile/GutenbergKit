@@ -592,7 +592,9 @@ class DefaultMediaUploader: @unchecked Sendable {
       caption: wpMedia.caption?.rendered ?? "",
       title: wpMedia.title.rendered,
       mime: wpMedia.mime_type,
-      type: wpMedia.media_type
+      type: wpMedia.media_type,
+      width: wpMedia.media_details?.width,
+      height: wpMedia.media_details?.height
     )
   }
 }
@@ -606,9 +608,15 @@ private struct WPMediaResponse: Decodable {
   let title: RenderedField
   let mime_type: String
   let media_type: String
+  let media_details: MediaDetails?
 
   struct RenderedField: Decodable {
     let rendered: String
+  }
+
+  struct MediaDetails: Decodable {
+    let width: Int?
+    let height: Int?
   }
 }
 

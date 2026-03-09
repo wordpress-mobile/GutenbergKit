@@ -27,7 +27,9 @@ data class MediaUploadResult(
     val caption: String = "",
     val title: String,
     val mime: String,
-    val type: String
+    val type: String,
+    val width: Int? = null,
+    val height: Int? = null
 )
 
 /**
@@ -203,6 +205,8 @@ internal class MediaUploadServer(
                 put("title", result.title)
                 put("mime", result.mime)
                 put("type", result.type)
+                result.width?.let { put("width", it) }
+                result.height?.let { put("height", it) }
             }.toString()
             sendResponse(socket, 200, "OK", json, "application/json")
         } catch (e: Exception) {
@@ -455,6 +459,7 @@ internal open class DefaultMediaUploader(
         } catch (e: org.json.JSONException) {
             throw RuntimeException("WordPress returned unexpected response: ${responseBody.take(500)}", e)
         }
+        val mediaDetails = json.optJSONObject("media_details")
         return MediaUploadResult(
             id = json.getInt("id"),
             url = json.getString("source_url"),
@@ -462,7 +467,9 @@ internal open class DefaultMediaUploader(
             caption = json.optJSONObject("caption")?.optString("rendered", "") ?: "",
             title = json.getJSONObject("title").getString("rendered"),
             mime = json.getString("mime_type"),
-            type = json.getString("media_type")
+            type = json.getString("media_type"),
+            width = mediaDetails?.optInt("width"),
+            height = mediaDetails?.optInt("height")
         )
     }
 }
