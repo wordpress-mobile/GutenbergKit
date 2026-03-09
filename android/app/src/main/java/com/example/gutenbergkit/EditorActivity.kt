@@ -58,6 +58,7 @@ import org.wordpress.gutenberg.RecordedNetworkRequest
 import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.model.EditorDependenciesSerializer
 import org.wordpress.gutenberg.model.EditorProgress
+
 class EditorActivity : ComponentActivity() {
 
     companion object {
