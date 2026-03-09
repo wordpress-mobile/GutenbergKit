@@ -137,6 +137,8 @@ final class MediaUploadServer: Sendable {
     // Buffer is only accessed serially on the NWConnection's queue callback chain,
     // but Swift concurrency can't prove this statically.
     nonisolated(unsafe) var buffer = Data()
+    // Cached header parse result to avoid re-parsing on every chunk.
+    nonisolated(unsafe) var headerInfo: ParsedHeaderInfo?
 
     @Sendable func receiveChunk() {
       connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { content, _, isComplete, error in
@@ -148,7 +150,7 @@ final class MediaUploadServer: Sendable {
           completion(buffer.isEmpty ? nil : buffer)
         } else {
           // Check if we have a complete HTTP request (Content-Length based).
-          if self.isRequestComplete(buffer) {
+          if self.isRequestComplete(buffer, headerInfo: &headerInfo) {
             completion(buffer)
           } else {
             receiveChunk()
@@ -160,32 +162,70 @@ final class MediaUploadServer: Sendable {
     receiveChunk()
   }
 
-  /// Checks whether the accumulated buffer contains a complete HTTP request.
-  private func isRequestComplete(_ data: Data) -> Bool {
+  /// Cached result of parsing HTTP headers from the receive buffer.
+  private struct ParsedHeaderInfo {
+    let bodyOffset: Int
+    let contentLength: Int?
+    let isChunked: Bool
+    let isBodylessMethod: Bool
+  }
+
+  /// Parses HTTP headers once and caches the result in `headerInfo`.
+  private func parseHeaderInfo(from data: Data) -> ParsedHeaderInfo? {
     guard let headerEndRange = data.range(of: Data("\r\n\r\n".utf8)) else {
-      return false
+      return nil
     }
 
     guard let headers = String(data: data[data.startIndex..<headerEndRange.lowerBound], encoding: .utf8) else {
-      return false
+      return nil
     }
 
     let headerLines = headers.split(separator: "\r\n")
+    let bodyOffset = headerEndRange.upperBound
+
+    var contentLength: Int?
+    if let contentLengthLine = headerLines.first(where: { $0.lowercased().hasPrefix("content-length:") }) {
+      contentLength = Int(contentLengthLine.split(separator: ":").last?.trimmingCharacters(in: .whitespaces) ?? "0") ?? 0
+    }
+
+    let isChunked = headerLines.contains(where: {
+      $0.lowercased().contains("transfer-encoding:") && $0.lowercased().contains("chunked")
+    })
+
+    let requestLine = headerLines.first ?? ""
+    let isBodylessMethod = !requestLine.hasPrefix("POST") && !requestLine.hasPrefix("PUT")
+
+    return ParsedHeaderInfo(
+      bodyOffset: bodyOffset,
+      contentLength: contentLength,
+      isChunked: isChunked,
+      isBodylessMethod: isBodylessMethod
+    )
+  }
+
+  /// Checks whether the accumulated buffer contains a complete HTTP request.
+  private func isRequestComplete(_ data: Data, headerInfo: inout ParsedHeaderInfo?) -> Bool {
+    // Parse headers once and cache for subsequent calls.
+    if headerInfo == nil {
+      headerInfo = parseHeaderInfo(from: data)
+    }
+
+    guard let info = headerInfo else {
+      return false
+    }
 
     // Check for Content-Length header
-    if let contentLengthLine = headerLines.first(where: { $0.lowercased().hasPrefix("content-length:") }) {
-      let contentLength = Int(contentLengthLine.split(separator: ":").last?.trimmingCharacters(in: .whitespaces) ?? "0") ?? 0
+    if let contentLength = info.contentLength {
       // Reject oversized uploads early to avoid buffering into memory.
       if contentLength > Self.maxUploadSize {
         return true  // Signal completion so handleRequest can reject it.
       }
-      let bodyLength = data.count - headerEndRange.upperBound
+      let bodyLength = data.count - info.bodyOffset
       return bodyLength >= contentLength
     }
 
-    // Chunked transfer encoding: the last chunk is "0\r\n\r\n" (or "0\r\n" + trailers + "\r\n").
-    // Check if the data ends with the final chunk terminator.
-    if headerLines.contains(where: { $0.lowercased().contains("transfer-encoding:") && $0.lowercased().contains("chunked") }) {
+    // Chunked transfer encoding: check if the data ends with the final chunk terminator.
+    if info.isChunked {
       let finalChunk = Data("\r\n0\r\n\r\n".utf8)
       return data.hasSuffix(finalChunk)
     }
@@ -193,12 +233,11 @@ final class MediaUploadServer: Sendable {
     // No Content-Length and not chunked — for methods that shouldn't have a body
     // (OPTIONS, GET), headers alone are sufficient. For POST, we can't determine
     // completeness without Content-Length, so rely on connection close.
-    let requestLine = headerLines.first ?? ""
-    if requestLine.hasPrefix("POST") || requestLine.hasPrefix("PUT") {
-      return false
+    if info.isBodylessMethod {
+      return true
     }
 
-    return true
+    return false
   }
 
   // MARK: - Request Handling
