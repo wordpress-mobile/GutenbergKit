@@ -180,12 +180,13 @@ export function nativeMediaUploadMiddleware( options, next ) {
 		.then( ( response ) => {
 			if ( ! response.ok ) {
 				return response.text().then( ( body ) => {
-					throw {
-						code: 'upload_failed',
-						message: `Native upload failed (${
-							response.status
-						}): ${ body || response.statusText }`,
-					};
+					const error = new Error(
+						`Native upload failed (${ response.status }): ${
+							body || response.statusText
+						}`
+					);
+					error.code = 'upload_failed';
+					throw error;
 				} );
 			}
 			return response.json();
