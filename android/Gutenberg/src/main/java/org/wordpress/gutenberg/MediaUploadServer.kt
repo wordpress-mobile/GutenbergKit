@@ -174,7 +174,15 @@ internal class MediaUploadServer(
                 processAndUpload(tempFile, file.mimeType, file.filename)
             }
 
-            val json = """{"id":${result.id},"url":"${result.url.escapeJson()}","alt":"${result.alt.escapeJson()}","caption":"${result.caption.escapeJson()}","title":"${result.title.escapeJson()}","mime":"${result.mime.escapeJson()}","type":"${result.type.escapeJson()}"}"""
+            val json = org.json.JSONObject().apply {
+                put("id", result.id)
+                put("url", result.url)
+                put("alt", result.alt)
+                put("caption", result.caption)
+                put("title", result.title)
+                put("mime", result.mime)
+                put("type", result.type)
+            }.toString()
             sendResponse(socket, 200, "OK", json, "application/json")
         } catch (e: Exception) {
             Log.e(TAG, "Upload processing failed", e)
@@ -372,9 +380,6 @@ internal class MediaUploadServer(
         output.write(bodyBytes)
         output.flush()
     }
-
-    private fun String.escapeJson(): String =
-        replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")
 
     companion object {
         private const val TAG = "MediaUploadServer"
