@@ -624,6 +624,6 @@ enum MediaUploadError: Error, LocalizedError {
 
 private extension Data {
   mutating func append(_ string: String) {
-    append(string.data(using: .utf8)!)
+    append(Data(string.utf8))
   }
 }
