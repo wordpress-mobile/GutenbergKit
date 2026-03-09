@@ -407,7 +407,12 @@ internal open class DefaultMediaUploader(
             throw RuntimeException("Upload failed (${response.code}): ${response.body?.string() ?: response.message}")
         }
 
-        val json = org.json.JSONObject(response.body!!.string())
+        val responseBody = response.body!!.string()
+        val json = try {
+            org.json.JSONObject(responseBody)
+        } catch (e: org.json.JSONException) {
+            throw RuntimeException("WordPress returned unexpected response: ${responseBody.take(500)}", e)
+        }
         return MediaUploadResult(
             id = json.getInt("id"),
             url = json.getString("source_url"),

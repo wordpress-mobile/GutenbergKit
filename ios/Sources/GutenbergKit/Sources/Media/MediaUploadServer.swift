@@ -534,7 +534,13 @@ class DefaultMediaUploader: @unchecked Sendable {
     let (data, _) = try await httpClient.perform(request)
 
     // Parse the WordPress media response into our result type
-    let wpMedia = try JSONDecoder().decode(WPMediaResponse.self, from: data)
+    let wpMedia: WPMediaResponse
+    do {
+      wpMedia = try JSONDecoder().decode(WPMediaResponse.self, from: data)
+    } catch {
+      let preview = String(data: data.prefix(500), encoding: .utf8) ?? "<binary>"
+      throw MediaUploadError.unexpectedResponse(preview: preview, underlyingError: error)
+    }
 
     return MediaUploadResult(
       id: wpMedia.id,
@@ -560,6 +566,19 @@ private struct WPMediaResponse: Decodable {
 
   struct RenderedField: Decodable {
     let rendered: String
+  }
+}
+
+/// Errors specific to the native media upload pipeline.
+enum MediaUploadError: Error, LocalizedError {
+  /// The WordPress REST API returned a non-JSON response (e.g. HTML error page).
+  case unexpectedResponse(preview: String, underlyingError: Error)
+
+  var errorDescription: String? {
+    switch self {
+    case .unexpectedResponse(let preview, _):
+      return "WordPress returned an unexpected response: \(preview)"
+    }
   }
 }
 
