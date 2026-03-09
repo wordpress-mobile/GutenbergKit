@@ -252,11 +252,19 @@ final class MediaUploadServer: Sendable {
 
     // Process the file and upload to the remote WordPress server.
     let result: Result<MediaUploadResult, Error>
+    var processedURL: URL?
     do {
-      let media = try await processAndUpload(fileURL: fileURL, mimeType: file.mimeType, filename: file.filename)
+      let (media, processed) = try await processAndUpload(fileURL: fileURL, mimeType: file.mimeType, filename: file.filename)
+      processedURL = processed
       result = .success(media)
     } catch {
       result = .failure(error)
+    }
+
+    // Clean up temp files after processing completes (success or failure).
+    try? FileManager.default.removeItem(at: fileURL)
+    if let processedURL, processedURL != fileURL {
+      try? FileManager.default.removeItem(at: processedURL)
     }
 
     switch result {
@@ -273,7 +281,7 @@ final class MediaUploadServer: Sendable {
     }
   }
 
-  private func processAndUpload(fileURL: URL, mimeType: String, filename: String) async throws -> MediaUploadResult {
+  private func processAndUpload(fileURL: URL, mimeType: String, filename: String) async throws -> (MediaUploadResult, URL) {
     // Step 1: Process (resize, transcode, etc.)
     let processedURL: URL
     if let delegate = uploadDelegate {
@@ -285,9 +293,9 @@ final class MediaUploadServer: Sendable {
     // Step 2: Upload to remote WordPress
     if let delegate = uploadDelegate,
        let result = try await delegate.uploadFile(at: processedURL, mimeType: mimeType, filename: filename) {
-      return result
+      return (result, processedURL)
     } else if let defaultUploader {
-      return try await defaultUploader.upload(fileURL: processedURL, mimeType: mimeType, filename: filename)
+      return (try await defaultUploader.upload(fileURL: processedURL, mimeType: mimeType, filename: filename), processedURL)
     } else {
       throw ServerError.noUploader
     }

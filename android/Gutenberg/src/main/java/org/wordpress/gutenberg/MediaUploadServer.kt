@@ -174,9 +174,15 @@ internal class MediaUploadServer(
         }
 
         // Process and upload
+        var processedFile: File? = null
         try {
             val result = runBlocking(Dispatchers.IO) {
-                processAndUpload(tempFile, file.mimeType, file.filename)
+                val processed = uploadDelegate?.processFile(tempFile, file.mimeType) ?: tempFile
+                processedFile = processed
+                val uploader = uploadDelegate?.uploadFile(processed, file.mimeType, file.filename)
+                    ?: defaultUploader?.upload(processed, file.mimeType, file.filename)
+                    ?: throw IllegalStateException("No upload delegate or default uploader configured")
+                uploader
             }
 
             val json = org.json.JSONObject().apply {
@@ -192,14 +198,10 @@ internal class MediaUploadServer(
         } catch (e: Exception) {
             Log.e(TAG, "Upload processing failed", e)
             sendResponse(socket, 500, "Internal Server Error", e.message ?: "Upload failed")
+        } finally {
+            tempFile.delete()
+            processedFile?.let { if (it != tempFile) it.delete() }
         }
-    }
-
-    private suspend fun processAndUpload(file: File, mimeType: String, filename: String): MediaUploadResult {
-        val processedFile = uploadDelegate?.processFile(file, mimeType) ?: file
-        return uploadDelegate?.uploadFile(processedFile, mimeType, filename)
-            ?: defaultUploader?.upload(processedFile, mimeType, filename)
-            ?: throw IllegalStateException("No upload delegate or default uploader configured")
     }
 
     // MARK: - HTTP Parsing
