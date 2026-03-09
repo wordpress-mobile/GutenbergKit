@@ -12,22 +12,13 @@ import { initializeEditor } from './editor';
 import { getGBKit, getPost } from './bridge';
 import { getDefaultEditorSettings } from './editor-settings';
 import { unregisterDisallowedBlocks } from './blocks';
+
 vi.mock( '@wordpress/blocks', () => ( {} ) );
-vi.mock( '@wordpress/block-editor', () => ( {
-	store: { name: 'core/block-editor' },
-} ) );
-vi.mock( '@wordpress/core-data', () => ( {
-	store: { name: 'core' },
-} ) );
-vi.mock( '@wordpress/data', () => ( {
-	dispatch: vi.fn(),
-} ) );
 vi.mock( '@wordpress/editor', () => ( {
 	store: { name: 'core/editor' },
 } ) );
-vi.mock( '@wordpress/preferences', () => ( {
-	store: { name: 'core/preferences' },
-} ) );
+vi.mock( import( '@wordpress/data' ), { spy: true } );
+vi.mock( '@wordpress/preferences' );
 vi.mock( '@wordpress/block-library', () => ( {
 	registerCoreBlocks: vi.fn(),
 } ) );
@@ -42,7 +33,6 @@ describe( 'initializeEditor', () => {
 	let mockDispatch;
 	let mockPreferenceDispatch;
 	let mockEditorDispatch;
-	let mockBlockEditorDispatch;
 
 	beforeEach( () => {
 		vi.clearAllMocks();
@@ -56,19 +46,12 @@ describe( 'initializeEditor', () => {
 			updateEditorSettings: vi.fn(),
 		};
 
-		mockBlockEditorDispatch = {
-			updateSettings: vi.fn(),
-		};
-
 		mockDispatch = vi.fn( ( store ) => {
 			if ( store.name === 'core/preferences' ) {
 				return mockPreferenceDispatch;
 			}
 			if ( store.name === 'core/editor' ) {
 				return mockEditorDispatch;
-			}
-			if ( store.name === 'core/block-editor' ) {
-				return mockBlockEditorDispatch;
 			}
 			return {};
 		} );
