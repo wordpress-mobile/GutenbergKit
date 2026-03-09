@@ -443,13 +443,11 @@ final class MediaUploadServer: Sendable {
   enum ServerError: Error, LocalizedError {
     case failedToStart
     case noUploader
-    case payloadTooLarge
 
     var errorDescription: String? {
       switch self {
       case .failedToStart: "Failed to start upload server"
       case .noUploader: "No upload delegate or default uploader configured"
-      case .payloadTooLarge: "Upload exceeds maximum allowed size"
       }
     }
   }
@@ -635,5 +633,5 @@ private extension Data {
 }
 
 extension Logger {
-  static let uploadServer = Logger(subsystem: "com.gutenbergkit", category: "upload-server")
+  static let uploadServer = Logger(subsystem: "GutenbergKit", category: "upload-server")
 }
