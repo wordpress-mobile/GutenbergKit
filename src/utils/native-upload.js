@@ -145,7 +145,26 @@ async function uploadFile( file, port, token ) {
 		);
 	}
 
-	return await response.json();
+	const result = await response.json();
+
+	// Transform native server response into WordPress REST API
+	// attachment shape expected by Gutenberg blocks.
+	return {
+		id: result.id,
+		source_url: result.url,
+		alt_text: result.alt || '',
+		caption: {
+			raw: result.caption || '',
+			rendered: result.caption || '',
+		},
+		title: {
+			raw: result.title || '',
+			rendered: result.title || '',
+		},
+		mime_type: result.mime,
+		media_type: result.type,
+		link: result.url,
+	};
 }
 
 /**

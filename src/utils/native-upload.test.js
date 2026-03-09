@@ -179,7 +179,7 @@ describe( 'nativeMediaUpload', () => {
 	} );
 
 	it( 'should deliver final media, revoke blobs, unlock saving, and update entity cache on success', async () => {
-		const mediaObject = {
+		const nativeResponse = {
 			id: 123,
 			url: 'https://example.com/photo.jpg',
 			alt: '',
@@ -188,7 +188,18 @@ describe( 'nativeMediaUpload', () => {
 			mime: 'image/jpeg',
 			type: 'image',
 		};
-		mockFetchSuccess( mediaObject );
+		mockFetchSuccess( nativeResponse );
+
+		const expectedWpMedia = {
+			id: 123,
+			source_url: 'https://example.com/photo.jpg',
+			alt_text: '',
+			caption: { raw: '', rendered: '' },
+			title: { raw: 'photo', rendered: 'photo' },
+			mime_type: 'image/jpeg',
+			media_type: 'image',
+			link: 'https://example.com/photo.jpg',
+		};
 
 		const file = createFile( 'photo.jpg', 'image/jpeg' );
 		mediaUpload( {
@@ -202,8 +213,8 @@ describe( 'nativeMediaUpload', () => {
 			expect( onFileChange ).toHaveBeenCalledTimes( 2 );
 		} );
 
-		// Second call delivers the final media
-		expect( onFileChange ).toHaveBeenLastCalledWith( [ mediaObject ] );
+		// Second call delivers the final media in WP REST API shape
+		expect( onFileChange ).toHaveBeenLastCalledWith( [ expectedWpMedia ] );
 
 		// Blob URLs revoked
 		expect( URL.revokeObjectURL ).toHaveBeenCalledWith(
@@ -217,7 +228,7 @@ describe( 'nativeMediaUpload', () => {
 		expect( mockReceiveEntityRecords ).toHaveBeenCalledWith(
 			'root',
 			'media',
-			mediaObject
+			expectedWpMedia
 		);
 	} );
 
