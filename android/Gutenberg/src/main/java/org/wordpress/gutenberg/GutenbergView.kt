@@ -100,6 +100,9 @@ class GutenbergView : WebView {
     var mediaUploadDelegate: MediaUploadDelegate? = null
         set(value) {
             field = value
+            // Stop any previously running server before starting a new one.
+            uploadServer?.stop()
+            uploadServer = null
             // (Re)start the upload server so it captures the delegate.
             // This handles the common case where the delegate is set after
             // construction but before the editor finishes loading.
