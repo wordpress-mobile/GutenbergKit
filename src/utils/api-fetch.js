@@ -240,7 +240,7 @@ export function nativeMediaUploadMiddleware( options, next ) {
 function mediaUploadMiddleware( options, next ) {
 	if (
 		options.path &&
-		options.path.startsWith( '/wp/v2/media' ) &&
+		/^\/wp\/v2\/media(\?|$)/.test( options.path ) &&
 		options.method === 'POST' &&
 		options.body instanceof FormData &&
 		options.body.get( 'post' ) === '-1'

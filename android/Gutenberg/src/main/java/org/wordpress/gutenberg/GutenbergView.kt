@@ -480,7 +480,7 @@ class GutenbergView : WebView {
                 defaultUploader = defaultUploader
             )
         } catch (e: Exception) {
-            Log.w("GutenbergView", "Failed to start upload server", e)
+            Log.w(TAG, "Failed to start upload server", e)
         }
     }
 
@@ -924,6 +924,8 @@ class GutenbergView : WebView {
     }
 
     companion object {
+        private const val TAG = "GutenbergView"
+
         /** Hosts that are safe to serve assets over HTTP (local development only). */
         private val LOCAL_HOSTS = setOf("localhost", "127.0.0.1", "10.0.2.2")
 
