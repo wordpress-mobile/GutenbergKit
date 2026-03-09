@@ -14,6 +14,9 @@ import { info, error as logError } from './logger';
  * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
  */
 
+/** Matches `POST /wp/v2/media` but not sub-paths like `/wp/v2/media/123`. */
+const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
+
 /**
  * Initializes the API fetch configuration and middleware.
  *
@@ -163,7 +166,7 @@ export function nativeMediaUploadMiddleware( options, next ) {
 		! options.method ||
 		options.method.toUpperCase() !== 'POST' ||
 		! options.path ||
-		! /^\/wp\/v2\/media(\?|$)/.test( options.path ) ||
+		! MEDIA_UPLOAD_PATH.test( options.path ) ||
 		! ( options.body instanceof FormData )
 	) {
 		return next( options );
@@ -245,7 +248,7 @@ export function nativeMediaUploadMiddleware( options, next ) {
 function mediaUploadMiddleware( options, next ) {
 	if (
 		options.path &&
-		/^\/wp\/v2\/media(\?|$)/.test( options.path ) &&
+		MEDIA_UPLOAD_PATH.test( options.path ) &&
 		options.method === 'POST' &&
 		options.body instanceof FormData &&
 		options.body.get( 'post' ) === '-1'
