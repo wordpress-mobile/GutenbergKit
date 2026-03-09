@@ -109,6 +109,7 @@ class GutenbergView : WebView {
         }
 
     private var uploadServer: MediaUploadServer? = null
+    private val uploadHttpClient: okhttp3.OkHttpClient by lazy { okhttp3.OkHttpClient() }
 
     private var onFileChooserRequested: ((Intent, Int) -> Unit)? = null
     private var contentChangeListener: ContentChangeListener? = null
@@ -467,7 +468,7 @@ class GutenbergView : WebView {
 
         try {
             val defaultUploader = DefaultMediaUploader(
-                httpClient = okhttp3.OkHttpClient(),
+                httpClient = uploadHttpClient,
                 siteApiRoot = configuration.siteApiRoot,
                 authHeader = configuration.authHeader
             )
