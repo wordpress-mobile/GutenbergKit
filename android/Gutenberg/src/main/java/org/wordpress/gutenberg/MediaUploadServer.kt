@@ -141,7 +141,7 @@ internal class MediaUploadServer(
     // reduce peak memory but significantly complicate multipart parsing. The server's
     // MAX_UPLOAD_SIZE cap acts as a safety valve for this trade-off.
     private fun handleUpload(socket: Socket, request: HttpRequestData) {
-        if (request.body.size > MAX_UPLOAD_SIZE) {
+        if (request.declaredContentLength > MAX_UPLOAD_SIZE) {
             sendResponse(socket, 413, "Payload Too Large", "Upload exceeds maximum allowed size")
             return
         }
@@ -218,7 +218,9 @@ internal class MediaUploadServer(
         val method: String,
         val path: String,
         val headers: Map<String, String>,
-        val body: ByteArray
+        val body: ByteArray,
+        /** Declared Content-Length, used to detect oversized uploads rejected before body read. */
+        val declaredContentLength: Long = body.size.toLong()
     )
 
     private fun readHttpRequest(input: InputStream): HttpRequestData? {
@@ -263,7 +265,12 @@ internal class MediaUploadServer(
 
         // Read body based on Content-Length
         val contentLength = headers["content-length"]?.toIntOrNull() ?: 0
-        if (contentLength > MAX_UPLOAD_SIZE) return null
+        // Reject oversized uploads early (before buffering the body into memory)
+        // by returning a valid HttpRequestData with an empty body. The size check
+        // in handleUpload will then produce the proper 413 response.
+        if (contentLength > MAX_UPLOAD_SIZE) {
+            return HttpRequestData(method, path, headers, ByteArray(0), contentLength.toLong())
+        }
         val body = if (contentLength > 0) {
             val bodyBytes = ByteArray(contentLength)
             var totalRead = 0
