@@ -422,7 +422,8 @@ internal open class DefaultMediaUploader(
             throw RuntimeException("Upload failed (${response.code}): ${response.body?.string() ?: response.message}")
         }
 
-        val responseBody = response.body!!.string()
+        val responseBody = response.body?.string()
+            ?: throw RuntimeException("Empty response body from WordPress")
         val json = try {
             org.json.JSONObject(responseBody)
         } catch (e: org.json.JSONException) {
