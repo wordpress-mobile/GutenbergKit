@@ -47,6 +47,7 @@ final class MediaUploadServer: Sendable {
 
     // Determine the assigned port by starting synchronously enough to read it.
     let semaphore = DispatchSemaphore(value: 0)
+    // Safe: written before semaphore.signal(), read after semaphore.wait().
     nonisolated(unsafe) var assignedPort: UInt16 = 0
 
     // newConnectionHandler must be set before start(). Since we can't
@@ -426,6 +427,10 @@ final class MediaUploadServer: Sendable {
   // MARK: - Constants
 
   /// Maximum allowed upload size (250 MB).
+  ///
+  /// This limit applies to the local server only. The WordPress server may
+  /// enforce a separate, potentially smaller, limit. Consider making this
+  /// configurable via EditorConfiguration if host apps need different limits.
   private static let maxUploadSize = 250 * 1024 * 1024
 
   // MARK: - Errors

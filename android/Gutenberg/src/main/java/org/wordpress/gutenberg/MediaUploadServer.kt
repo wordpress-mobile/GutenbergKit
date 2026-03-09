@@ -393,7 +393,14 @@ internal class MediaUploadServer(
 
     companion object {
         private const val TAG = "MediaUploadServer"
-        /** Maximum allowed upload size (250 MB). */
+
+        /**
+         * Maximum allowed upload size (250 MB).
+         *
+         * This limit applies to the local server only. The WordPress server may
+         * enforce a separate, potentially smaller, limit. Consider making this
+         * configurable via EditorConfiguration if host apps need different limits.
+         */
         private const val MAX_UPLOAD_SIZE = 250 * 1024 * 1024
     }
 }

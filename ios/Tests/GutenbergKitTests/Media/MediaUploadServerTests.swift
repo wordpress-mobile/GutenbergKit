@@ -154,6 +154,10 @@ struct MediaUploadServerTests {
   /// request body, breaking multipart parsing on our NWListener-based server.
   /// Production traffic comes from the WebView's `fetch()` API which sends
   /// standard HTTP, so this only affects tests.
+  ///
+  /// This workaround can be removed once URLSession stops using the resumable
+  /// upload protocol for localhost connections, or if we switch to a different
+  /// HTTP server implementation that handles it.
   private func sendRawUpload(port: UInt16, token: String, boundary: String, body: Data) async throws -> Data {
     try await withCheckedThrowingContinuation { continuation in
       let fd = socket(AF_INET, SOCK_STREAM, 0)
