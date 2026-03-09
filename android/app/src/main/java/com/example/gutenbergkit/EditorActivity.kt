@@ -435,6 +435,10 @@ fun EditorScreen(
  * Only overrides [processFile] — [uploadFile] returns null so the default uploader is used.
  */
 private class DemoMediaUploadDelegate(private val context: android.content.Context) : MediaUploadDelegate {
+    companion object {
+        private const val TAG = "DemoMediaUploadDelegate"
+    }
+
     override suspend fun processFile(file: File, mimeType: String): File {
         if (!mimeType.startsWith("image/") || mimeType == "image/gif") {
             return file
@@ -477,7 +481,7 @@ private class DemoMediaUploadDelegate(private val context: android.content.Conte
         }
         scaled.recycle()
 
-        Log.d("DemoMediaUploadDelegate", "Resized image from ${width}×${height} to ${targetWidth}×${targetHeight}")
+        Log.d(TAG, "Resized image from ${width}×${height} to ${targetWidth}×${targetHeight}")
         return outputFile
     }
 }

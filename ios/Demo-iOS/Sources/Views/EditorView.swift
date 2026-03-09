@@ -1,7 +1,12 @@
 import SwiftUI
 import ImageIO
+import OSLog
 import UniformTypeIdentifiers
 import GutenbergKit
+
+private extension Logger {
+    static let demo = Logger(subsystem: "GutenbergKit-Demo", category: "media-upload")
+}
 
 struct EditorView: View {
     private let configuration: EditorConfiguration
@@ -285,7 +290,7 @@ private struct _EditorView: UIViewControllerRepresentable {
                 return url
             }
 
-            print("Resized image from \(Int(width))x\(Int(height)) to fit \(Int(maxDimension))px")
+            Logger.demo.info("Resized image from \(Int(width))x\(Int(height)) to fit \(Int(maxDimension))px")
             return outputURL
         }
 
