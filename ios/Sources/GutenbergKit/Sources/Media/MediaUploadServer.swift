@@ -128,6 +128,11 @@ final class MediaUploadServer: Sendable {
   }
 
   /// Accumulates all data from a connection until the request is complete.
+  ///
+  /// Note: The full request body is buffered in memory, so a 250 MB upload will
+  /// temporarily require ~500 MB of heap. Streaming would reduce peak memory but
+  /// significantly complicate multipart parsing. The server's size limit acts as
+  /// a safety valve for this trade-off.
   private func receiveAllData(on connection: NWConnection, completion: @escaping @Sendable (Data?) -> Void) {
     // Buffer is only accessed serially on the NWConnection's queue callback chain,
     // but Swift concurrency can't prove this statically.

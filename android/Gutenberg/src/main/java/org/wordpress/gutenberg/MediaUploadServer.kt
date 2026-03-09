@@ -136,6 +136,10 @@ internal class MediaUploadServer(
         }
     }
 
+    // Note: The full request body is buffered in memory before writing to disk,
+    // so a 250 MB upload will temporarily require ~500 MB of heap. Streaming would
+    // reduce peak memory but significantly complicate multipart parsing. The server's
+    // MAX_UPLOAD_SIZE cap acts as a safety valve for this trade-off.
     private fun handleUpload(socket: Socket, request: HttpRequestData) {
         if (request.body.size > MAX_UPLOAD_SIZE) {
             sendResponse(socket, 413, "Payload Too Large", "Upload exceeds maximum allowed size")
@@ -176,6 +180,10 @@ internal class MediaUploadServer(
         // Process and upload
         var processedFile: File? = null
         try {
+            // runBlocking blocks this executor thread while coroutines run on Dispatchers.IO.
+            // Since the executor is a CachedThreadPool (creates threads on demand), this won't
+            // deadlock — each concurrent upload uses one executor thread + one IO thread, which
+            // is acceptable for the expected concurrency level (1-2 uploads from a single WebView).
             val result = runBlocking(Dispatchers.IO) {
                 val processed = uploadDelegate?.processFile(tempFile, file.mimeType) ?: tempFile
                 processedFile = processed
