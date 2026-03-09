@@ -192,12 +192,17 @@ export function nativeMediaUploadMiddleware( options, next ) {
 		.then( ( response ) => {
 			if ( ! response.ok ) {
 				return response.text().then( ( body ) => {
-					const error = new Error(
-						`Native upload failed (${ response.status }): ${
-							body || response.statusText
-						}`
-					);
-					error.code = 'upload_failed';
+					const message =
+						response.status === 413
+							? `The file is too large to upload. Please choose a smaller file.`
+							: `Native upload failed (${ response.status }): ${
+									body || response.statusText
+							  }`;
+					const error = new Error( message );
+					error.code =
+						response.status === 413
+							? 'upload_file_too_large'
+							: 'upload_failed';
 					throw error;
 				} );
 			}
