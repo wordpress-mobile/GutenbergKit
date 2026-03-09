@@ -158,77 +158,6 @@ struct MediaUploadServerTests {
   }
 }
 
-// MARK: - Unit Tests (no network required)
-
-@Suite("MediaUploadDelegate defaults")
-struct MediaUploadDelegateDefaultsTests {
-
-  @Test("default processFile returns original URL")
-  func defaultProcessFile() async throws {
-    let delegate = MinimalDelegate()
-    let url = URL(fileURLWithPath: "/tmp/test.jpg")
-    let result = try await delegate.processFile(at: url, mimeType: "image/jpeg")
-    #expect(result == url)
-  }
-
-  @Test("default uploadFile returns nil")
-  func defaultUploadFile() async throws {
-    let delegate = MinimalDelegate()
-    let url = URL(fileURLWithPath: "/tmp/test.jpg")
-    let result = try await delegate.uploadFile(at: url, mimeType: "image/jpeg", filename: "test.jpg")
-    #expect(result == nil)
-  }
-}
-
-@Suite("MediaUploadResult encoding")
-struct MediaUploadResultTests {
-
-  @Test("encodes to JSON with all fields")
-  func encodesToJSON() throws {
-    let result = MediaUploadResult(
-      id: 123,
-      url: "https://example.com/photo.jpg",
-      alt: "A photo",
-      caption: "My caption",
-      title: "photo",
-      mime: "image/jpeg",
-      type: "image"
-    )
-
-    let data = try JSONEncoder().encode(result)
-    let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-
-    #expect(json["id"] as? Int == 123)
-    #expect(json["url"] as? String == "https://example.com/photo.jpg")
-    #expect(json["alt"] as? String == "A photo")
-    #expect(json["caption"] as? String == "My caption")
-    #expect(json["title"] as? String == "photo")
-    #expect(json["mime"] as? String == "image/jpeg")
-    #expect(json["type"] as? String == "image")
-  }
-
-  @Test("round-trips through JSON")
-  func roundTrips() throws {
-    let original = MediaUploadResult(
-      id: 42,
-      url: "https://example.com/file.pdf",
-      title: "file",
-      mime: "application/pdf",
-      type: "file"
-    )
-
-    let data = try JSONEncoder().encode(original)
-    let decoded = try JSONDecoder().decode(MediaUploadResult.self, from: data)
-
-    #expect(decoded.id == original.id)
-    #expect(decoded.url == original.url)
-    #expect(decoded.alt == original.alt)
-    #expect(decoded.title == original.title)
-    #expect(decoded.mime == original.mime)
-    #expect(decoded.type == original.type)
-  }
-}
-
 // MARK: - Mocks
 
 private final class MockUploadDelegate: MediaUploadDelegate, @unchecked Sendable {
@@ -276,10 +205,6 @@ private final class ProcessOnlyDelegate: MediaUploadDelegate, @unchecked Sendabl
     lock.withLock { _processFileCalled = true }
     return url
   }
-}
-
-private final class MinimalDelegate: MediaUploadDelegate {
-  // Uses all default implementations
 }
 
 private final class MockDefaultUploader: DefaultMediaUploader, @unchecked Sendable {

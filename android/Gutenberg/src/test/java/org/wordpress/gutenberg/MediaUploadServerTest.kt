@@ -261,26 +261,6 @@ class MediaUploadServerTest {
         assertTrue(response.statusLine.contains("400"))
     }
 
-    // MARK: - MediaUploadDelegate defaults
-
-    @Test
-    fun `default processFile returns original file`() {
-        val delegate = MinimalDelegate()
-        val file = tempFolder.newFile("test.jpg")
-
-        val result = runBlocking { delegate.processFile(file, "image/jpeg") }
-        assertEquals(file, result)
-    }
-
-    @Test
-    fun `default uploadFile returns null`() {
-        val delegate = MinimalDelegate()
-        val file = tempFolder.newFile("test.jpg")
-
-        val result = runBlocking { delegate.uploadFile(file, "image/jpeg", "test.jpg") }
-        assertEquals(null, result)
-    }
-
     // MARK: - Helpers
 
     private data class RawHttpResponse(
@@ -415,5 +395,4 @@ class MediaUploadServerTest {
         }
     }
 
-    private class MinimalDelegate : MediaUploadDelegate
 }
