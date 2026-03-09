@@ -51,7 +51,11 @@ final class MediaUploadServer: Sendable {
 
     // newConnectionHandler must be set before start(). Since we can't
     // reference `self` yet (port isn't assigned), use a box that we fill
-    // once init completes.
+    // once init completes. There is a brief window between listener.start()
+    // and `serverRef = self` where incoming connections would be silently
+    // dropped (serverRef is nil). In practice this is negligible because
+    // the JS layer only sends requests after the editor loads, well after
+    // init returns.
     nonisolated(unsafe) var serverRef: MediaUploadServer?
 
     listener.newConnectionHandler = { connection in
