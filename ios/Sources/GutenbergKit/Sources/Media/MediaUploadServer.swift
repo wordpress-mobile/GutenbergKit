@@ -267,7 +267,10 @@ final class MediaUploadServer: Sendable {
   }
 
   private func handleUpload(_ request: HTTPRequest) async -> Data {
-    if request.body.count > Self.maxUploadSize {
+    // Check the declared Content-Length (not body.count) because isRequestComplete
+    // short-circuits the read for oversized uploads, leaving the body truncated.
+    let declaredLength = request.headers["content-length"].flatMap(Int.init) ?? request.body.count
+    if declaredLength > Self.maxUploadSize {
       return makeResponse(status: 413, statusText: "Payload Too Large", body: "Upload exceeds maximum allowed size")
     }
 
