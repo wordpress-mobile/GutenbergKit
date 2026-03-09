@@ -157,9 +157,9 @@ internal class MediaUploadServer(
             return
         }
 
-        // Write to temp file
+        // Write to temp file (UUID prefix prevents collisions from concurrent uploads)
         val tempDir = File(System.getProperty("java.io.tmpdir"), "gutenbergkit-uploads").apply { mkdirs() }
-        val tempFile = File(tempDir, file.filename)
+        val tempFile = File(tempDir, "${UUID.randomUUID()}-${file.filename}")
         try {
             tempFile.writeBytes(file.data)
         } catch (e: Exception) {

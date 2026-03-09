@@ -230,7 +230,7 @@ final class MediaUploadServer: Sendable {
       .appending(component: "GutenbergKit-uploads", directoryHint: .isDirectory)
     try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
-    let fileURL = tempDir.appending(component: file.filename)
+    let fileURL = tempDir.appending(component: "\(UUID().uuidString)-\(file.filename)")
     do {
       try file.data.write(to: fileURL)
     } catch {
