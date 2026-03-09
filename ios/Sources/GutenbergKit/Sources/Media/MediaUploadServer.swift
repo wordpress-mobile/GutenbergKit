@@ -670,7 +670,3 @@ private extension Data {
     return self[(endIndex - other.count)...] == other
   }
 }
-
-extension Logger {
-  static let uploadServer = Logger(subsystem: "GutenbergKit", category: "upload-server")
-}
