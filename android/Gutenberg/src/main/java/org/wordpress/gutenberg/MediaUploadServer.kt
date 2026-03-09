@@ -166,9 +166,11 @@ internal class MediaUploadServer(
             return
         }
 
-        // Write to temp file (UUID prefix prevents collisions from concurrent uploads)
+        // Write to temp file (UUID prefix prevents collisions from concurrent uploads).
+        // Sanitize the filename to prevent path traversal from malicious Content-Disposition values.
+        val safeFilename = File(file.filename).name.replace(Regex("[/\\\\]"), "").ifEmpty { "upload" }
         val tempDir = File(System.getProperty("java.io.tmpdir"), "gutenbergkit-uploads").apply { mkdirs() }
-        val tempFile = File(tempDir, "${UUID.randomUUID()}-${file.filename}")
+        val tempFile = File(tempDir, "${UUID.randomUUID()}-$safeFilename")
         try {
             tempFile.writeBytes(file.data)
         } catch (e: Exception) {

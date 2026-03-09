@@ -285,12 +285,18 @@ final class MediaUploadServer: Sendable {
       return makeResponse(status: 400, statusText: "Bad Request", body: "No file found in request")
     }
 
-    // Write file to temp directory
+    // Write file to temp directory.
+    // Sanitize the filename to prevent path traversal from malicious Content-Disposition values.
+    let safeFilename = (file.filename as NSString).lastPathComponent
+      .replacingOccurrences(of: "/", with: "")
+      .replacingOccurrences(of: "\\", with: "")
+    let sanitizedFilename = safeFilename.isEmpty ? "upload" : safeFilename
+
     let tempDir = FileManager.default.temporaryDirectory
       .appending(component: "GutenbergKit-uploads", directoryHint: .isDirectory)
     try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
-    let fileURL = tempDir.appending(component: "\(UUID().uuidString)-\(file.filename)")
+    let fileURL = tempDir.appending(component: "\(UUID().uuidString)-\(sanitizedFilename)")
     do {
       try file.data.write(to: fileURL)
     } catch {
