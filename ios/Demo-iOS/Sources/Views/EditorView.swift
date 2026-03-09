@@ -285,7 +285,7 @@ private struct _EditorView: UIViewControllerRepresentable {
                 return url
             }
 
-            print("📐 Resized image from \(Int(width))×\(Int(height)) to fit \(Int(maxDimension))px")
+            print("Resized image from \(Int(width))x\(Int(height)) to fit \(Int(maxDimension))px")
             return outputURL
         }
 
