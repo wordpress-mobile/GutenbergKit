@@ -367,6 +367,7 @@ internal class MediaUploadServer(
             append("Access-Control-Allow-Headers: Authorization, Content-Type\r\n")
             append("Access-Control-Max-Age: 86400\r\n")
             append("Content-Length: 0\r\n")
+            append("Connection: close\r\n")
             append("\r\n")
         }
         socket.getOutputStream().write(response.toByteArray())
@@ -381,6 +382,7 @@ internal class MediaUploadServer(
             append("Access-Control-Allow-Headers: Authorization, Content-Type\r\n")
             append("Content-Type: $contentType\r\n")
             append("Content-Length: ${bodyBytes.size}\r\n")
+            append("Connection: close\r\n")
             append("\r\n")
         }
         val output = socket.getOutputStream()

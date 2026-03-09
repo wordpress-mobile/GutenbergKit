@@ -310,6 +310,7 @@ final class MediaUploadServer: Sendable {
       "Access-Control-Allow-Headers: Authorization, Content-Type",
       "Access-Control-Max-Age: 86400",
       "Content-Length: 0",
+      "Connection: close",
     ].joined(separator: "\r\n")
 
     return "HTTP/1.1 204 No Content\r\n\(headers)\r\n\r\n".data(using: .utf8)!
@@ -325,6 +326,7 @@ final class MediaUploadServer: Sendable {
       "Access-Control-Allow-Headers: Authorization, Content-Type",
       "Content-Type: \(contentType)",
       "Content-Length: \(body.count)",
+      "Connection: close",
     ].joined(separator: "\r\n")
 
     var response = "HTTP/1.1 \(status) \(statusText)\r\n\(headers)\r\n\r\n".data(using: .utf8)!
