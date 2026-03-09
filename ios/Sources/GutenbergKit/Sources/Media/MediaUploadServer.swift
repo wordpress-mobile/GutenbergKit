@@ -569,7 +569,12 @@ class DefaultMediaUploader: @unchecked Sendable {
     request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
     request.httpBody = body
 
-    let (data, _) = try await httpClient.perform(request)
+    let (data, response) = try await httpClient.perform(request)
+
+    guard (200...299).contains(response.statusCode) else {
+      let preview = String(data: data.prefix(500), encoding: .utf8) ?? "<binary>"
+      throw MediaUploadError.uploadFailed(statusCode: response.statusCode, preview: preview)
+    }
 
     // Parse the WordPress media response into our result type
     let wpMedia: WPMediaResponse
@@ -609,11 +614,16 @@ private struct WPMediaResponse: Decodable {
 
 /// Errors specific to the native media upload pipeline.
 enum MediaUploadError: Error, LocalizedError {
+  /// The WordPress REST API returned a non-success HTTP status code.
+  case uploadFailed(statusCode: Int, preview: String)
+
   /// The WordPress REST API returned a non-JSON response (e.g. HTML error page).
   case unexpectedResponse(preview: String, underlyingError: Error)
 
   var errorDescription: String? {
     switch self {
+    case .uploadFailed(let statusCode, let preview):
+      return "Upload failed (\(statusCode)): \(preview)"
     case .unexpectedResponse(let preview, _):
       return "WordPress returned an unexpected response: \(preview)"
     }
