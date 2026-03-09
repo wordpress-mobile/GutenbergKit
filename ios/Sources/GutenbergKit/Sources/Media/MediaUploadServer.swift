@@ -169,6 +169,10 @@ final class MediaUploadServer: Sendable {
     // Check for Content-Length header
     if let contentLengthLine = headerLines.first(where: { $0.lowercased().hasPrefix("content-length:") }) {
       let contentLength = Int(contentLengthLine.split(separator: ":").last?.trimmingCharacters(in: .whitespaces) ?? "0") ?? 0
+      // Reject oversized uploads early to avoid buffering into memory.
+      if contentLength > Self.maxUploadSize {
+        return true  // Signal completion so handleRequest can reject it.
+      }
       let bodyLength = data.count - headerEndRange.upperBound
       return bodyLength >= contentLength
     }
@@ -218,6 +222,10 @@ final class MediaUploadServer: Sendable {
   }
 
   private func handleUpload(_ request: HTTPRequest) async -> Data {
+    if request.body.count > Self.maxUploadSize {
+      return makeResponse(status: 413, statusText: "Payload Too Large", body: "Upload exceeds maximum allowed size")
+    }
+
     guard let contentType = request.headers["content-type"],
           contentType.contains("multipart/form-data"),
           let boundary = extractBoundary(from: contentType) else {
@@ -405,16 +413,23 @@ final class MediaUploadServer: Sendable {
     return nil
   }
 
+  // MARK: - Constants
+
+  /// Maximum allowed upload size (250 MB).
+  private static let maxUploadSize = 250 * 1024 * 1024
+
   // MARK: - Errors
 
   enum ServerError: Error, LocalizedError {
     case failedToStart
     case noUploader
+    case payloadTooLarge
 
     var errorDescription: String? {
       switch self {
       case .failedToStart: "Failed to start upload server"
       case .noUploader: "No upload delegate or default uploader configured"
+      case .payloadTooLarge: "Upload exceeds maximum allowed size"
       }
     }
   }

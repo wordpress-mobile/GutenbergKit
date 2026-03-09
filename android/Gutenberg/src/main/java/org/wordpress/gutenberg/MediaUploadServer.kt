@@ -137,6 +137,11 @@ internal class MediaUploadServer(
     }
 
     private fun handleUpload(socket: Socket, request: HttpRequestData) {
+        if (request.body.size > MAX_UPLOAD_SIZE) {
+            sendResponse(socket, 413, "Payload Too Large", "Upload exceeds maximum allowed size")
+            return
+        }
+
         val contentType = request.headers["content-type"] ?: run {
             sendResponse(socket, 400, "Bad Request", "Expected multipart/form-data")
             return
@@ -248,6 +253,7 @@ internal class MediaUploadServer(
 
         // Read body based on Content-Length
         val contentLength = headers["content-length"]?.toIntOrNull() ?: 0
+        if (contentLength > MAX_UPLOAD_SIZE) return null
         val body = if (contentLength > 0) {
             val bodyBytes = ByteArray(contentLength)
             var totalRead = 0
@@ -383,6 +389,8 @@ internal class MediaUploadServer(
 
     companion object {
         private const val TAG = "MediaUploadServer"
+        /** Maximum allowed upload size (250 MB). */
+        private const val MAX_UPLOAD_SIZE = 250 * 1024 * 1024
     }
 }
 
