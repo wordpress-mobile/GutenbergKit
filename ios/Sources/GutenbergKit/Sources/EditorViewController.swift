@@ -381,7 +381,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 defaultUploader: defaultUploader
             )
         } catch {
-            NSLog("GutenbergKit: Failed to start upload server: \(error). Falling back to default upload behavior.")
+            Logger.uploadServer.error("Failed to start upload server: \(error). Falling back to default upload behavior.")
         }
     }
 
