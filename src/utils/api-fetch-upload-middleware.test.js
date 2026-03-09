@@ -90,6 +90,42 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		expect( global.fetch ).not.toHaveBeenCalled();
 	} );
 
+	it( 'passes through for media sub-paths like /wp/v2/media/123', () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'token',
+		} );
+		const next = makeNext();
+		const body = new FormData();
+		body.append( 'file', makeFile(), 'photo.jpg' );
+
+		nativeMediaUploadMiddleware(
+			{ method: 'POST', path: '/wp/v2/media/123', body },
+			next
+		);
+
+		expect( next ).toHaveBeenCalled();
+		expect( global.fetch ).not.toHaveBeenCalled();
+	} );
+
+	it( 'passes through for similarly-prefixed paths like /wp/v2/media-categories', () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'token',
+		} );
+		const next = makeNext();
+		const body = new FormData();
+		body.append( 'file', makeFile(), 'photo.jpg' );
+
+		nativeMediaUploadMiddleware(
+			{ method: 'POST', path: '/wp/v2/media-categories', body },
+			next
+		);
+
+		expect( next ).toHaveBeenCalled();
+		expect( global.fetch ).not.toHaveBeenCalled();
+	} );
+
 	it( 'passes through when body is not FormData', () => {
 		getGBKit.mockReturnValue( {
 			nativeUploadPort: 8080,
