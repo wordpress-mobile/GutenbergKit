@@ -141,6 +141,18 @@ function filterEndpointsMiddleware( options, next ) {
  *
  * When the native server is not configured, requests pass through unmodified.
  *
+ * Note: Ideally, media uploads would be handled via the `mediaUpload` editor
+ * setting (see the Gutenberg Framework guides), but GutenbergKit uses
+ * Gutenberg's `EditorProvider` which overwrites that setting internally:
+ * https://github.com/WordPress/gutenberg/blob/29914e1d09a344edce58d938fa4992e1ec248e41/packages/editor/src/components/provider/use-block-editor-settings.js#L340
+ *
+ * Until GutenbergKit is refactored to use `BlockEditorProvider` and aligns
+ * with the Gutenberg Framework guides (https://wordpress.org/gutenberg-framework/docs/intro/),
+ * this api-fetch middleware approach is necessary. For context, see:
+ * - https://github.com/wordpress-mobile/GutenbergKit/pull/24
+ * - https://github.com/wordpress-mobile/GutenbergKit/pull/50
+ * - https://github.com/wordpress-mobile/GutenbergKit/pull/108
+ *
  * @type {APIFetchMiddleware}
  */
 export function nativeMediaUploadMiddleware( options, next ) {

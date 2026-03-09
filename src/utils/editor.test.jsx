@@ -12,8 +12,6 @@ import { initializeEditor } from './editor';
 import { getGBKit, getPost } from './bridge';
 import { getDefaultEditorSettings } from './editor-settings';
 import { unregisterDisallowedBlocks } from './blocks';
-import { createNativeMediaUpload } from './native-upload';
-
 vi.mock( '@wordpress/blocks', () => ( {} ) );
 vi.mock( '@wordpress/block-editor', () => ( {
 	store: { name: 'core/block-editor' },
@@ -36,7 +34,6 @@ vi.mock( '@wordpress/block-library', () => ( {
 vi.mock( './blocks' );
 vi.mock( './bridge' );
 vi.mock( './editor-settings' );
-vi.mock( './native-upload' );
 vi.mock( '../components/layout', () => ( {
 	default: () => null,
 } ) );
@@ -77,8 +74,6 @@ describe( 'initializeEditor', () => {
 		} );
 
 		dispatch.mockImplementation( mockDispatch );
-
-		createNativeMediaUpload.mockReturnValue( null );
 
 		getGBKit.mockReturnValue( {
 			themeStyles: true,
