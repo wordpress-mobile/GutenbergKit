@@ -77,6 +77,7 @@ dependencies {
     implementation(libs.jsoup)
     implementation(libs.okhttp)
 
+    testImplementation(libs.json)
     testImplementation(libs.junit)
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
