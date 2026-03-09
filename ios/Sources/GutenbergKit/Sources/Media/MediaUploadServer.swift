@@ -166,7 +166,6 @@ final class MediaUploadServer: Sendable {
   private struct ParsedHeaderInfo {
     let bodyOffset: Int
     let contentLength: Int?
-    let isChunked: Bool
     let isBodylessMethod: Bool
   }
 
@@ -188,17 +187,12 @@ final class MediaUploadServer: Sendable {
       contentLength = Int(contentLengthLine.split(separator: ":").last?.trimmingCharacters(in: .whitespaces) ?? "0") ?? 0
     }
 
-    let isChunked = headerLines.contains(where: {
-      $0.lowercased().contains("transfer-encoding:") && $0.lowercased().contains("chunked")
-    })
-
     let requestLine = headerLines.first ?? ""
     let isBodylessMethod = !requestLine.hasPrefix("POST") && !requestLine.hasPrefix("PUT")
 
     return ParsedHeaderInfo(
       bodyOffset: bodyOffset,
       contentLength: contentLength,
-      isChunked: isChunked,
       isBodylessMethod: isBodylessMethod
     )
   }
@@ -224,15 +218,9 @@ final class MediaUploadServer: Sendable {
       return bodyLength >= contentLength
     }
 
-    // Chunked transfer encoding: check if the data ends with the final chunk terminator.
-    if info.isChunked {
-      let finalChunk = Data("\r\n0\r\n\r\n".utf8)
-      return data.hasSuffix(finalChunk)
-    }
-
-    // No Content-Length and not chunked — for methods that shouldn't have a body
-    // (OPTIONS, GET), headers alone are sufficient. For POST, we can't determine
-    // completeness without Content-Length, so rely on connection close.
+    // No Content-Length — for methods that shouldn't have a body (OPTIONS, GET),
+    // headers alone are sufficient. For POST, we can't determine completeness
+    // without Content-Length, so rely on connection close.
     if info.isBodylessMethod {
       return true
     }
@@ -548,42 +536,7 @@ private struct HTTPRequest {
       rawBody = Data()
     }
 
-    // Decode chunked transfer encoding if present
-    let isChunked = headers.values.contains(where: { $0.lowercased().contains("chunked") })
-    if isChunked && !rawBody.isEmpty {
-      self.body = HTTPRequest.decodeChunkedBody(rawBody)
-    } else {
-      self.body = rawBody
-    }
-  }
-
-  /// Decodes an HTTP chunked transfer-encoded body into a flat Data buffer.
-  private static func decodeChunkedBody(_ data: Data) -> Data {
-    var result = Data()
-    var offset = data.startIndex
-    let crlf = Data("\r\n".utf8)
-
-    while offset < data.endIndex {
-      // Find the end of the chunk size line
-      guard let crlfRange = data.range(of: crlf, in: offset..<data.endIndex) else { break }
-
-      // Parse chunk size (hex)
-      let sizeData = data[offset..<crlfRange.lowerBound]
-      guard let sizeString = String(data: sizeData, encoding: .ascii),
-            let chunkSize = UInt(sizeString.trimmingCharacters(in: .whitespaces), radix: 16) else { break }
-
-      // Chunk size 0 means end of body
-      if chunkSize == 0 { break }
-
-      let chunkStart = crlfRange.upperBound
-      let chunkEnd = data.index(chunkStart, offsetBy: Int(chunkSize), limitedBy: data.endIndex) ?? data.endIndex
-      result.append(data[chunkStart..<chunkEnd])
-
-      // Skip past the chunk data and trailing CRLF
-      offset = min(data.index(chunkEnd, offsetBy: crlf.count, limitedBy: data.endIndex) ?? data.endIndex, data.endIndex)
-    }
-
-    return result
+    self.body = rawBody
   }
 }
 
@@ -672,10 +625,5 @@ enum MediaUploadError: Error, LocalizedError {
 private extension Data {
   mutating func append(_ string: String) {
     append(string.data(using: .utf8)!)
-  }
-
-  func hasSuffix(_ other: Data) -> Bool {
-    guard count >= other.count else { return false }
-    return self[(endIndex - other.count)...] == other
   }
 }
