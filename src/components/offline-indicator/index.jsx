@@ -27,7 +27,7 @@ export default function OfflineIndicator() {
 	}
 
 	return (
-		<div className="offline-indicator">
+		<div className="gutenberg-kit-offline-indicator">
 			<Icon icon={ offline } size={ 18 } />
 			{ __( 'Working Offline', 'gutenberg-kit' ) }
 		</div>
