@@ -12,8 +12,6 @@ help: ## Display this help menu
 	sort
 	@echo ""
 
-export GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES := 1
-
 define XCODEBUILD_CMD
 	@set -o pipefail && \
 		xcodebuild $(1) \
@@ -336,8 +334,19 @@ test-android-e2e-dev: ## Run Android E2E tests against the Vite dev server (must
 # Release Target
 ################################################################################
 
+.PHONY: release-on-ci
+release-on-ci: ## Trigger a release build on Buildkite (requires BUILDKITE_API_TOKEN and NEW_VERSION)
+	@[ -n "$(BUILDKITE_API_TOKEN)" ] || (echo "Error: BUILDKITE_API_TOKEN is not set" && exit 1)
+	@[ -n "$(NEW_VERSION)" ] || (echo "Error: NEW_VERSION is not set. Usage: make release-on-ci NEW_VERSION=1.2.3" && exit 1)
+	@echo "Triggering release build for version $(NEW_VERSION)..."
+	@curl -sX POST "https://api.buildkite.com/v2/organizations/automattic/pipelines/gutenbergkit/builds" \
+		-H "Authorization: Bearer $(BUILDKITE_API_TOKEN)" \
+		-H "Content-Type: application/json" \
+		-d '{"commit":"HEAD","branch":"trunk","message":"Release $(NEW_VERSION)","env":{"NEW_VERSION":"$(NEW_VERSION)"}}' \
+		| jq -r '"Build triggered: https://buildkite.com/automattic/gutenbergkit/builds/\(.number)"'
+
 .PHONY: release
-release: ## Create and publish a new release
+release: ## Create and publish a new release (local)
 	@echo "--- :rocket: Starting GutenbergKit Release Process"
 	@echo "Usage: make release VERSION_TYPE=[<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease | from-git] [DRY_RUN=true]"
 	@echo ""

@@ -4,7 +4,7 @@
 #
 # Prerequisites:
 #   - Built web assets in ios/Sources/GutenbergKitResources/Gutenberg/
-#   - GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES=1 must be set
+#   - Package.swift must have `resourcesMode` set to `.local`
 #
 # Output:
 #   - GutenbergKitResources-<git-sha>.xcframework.zip

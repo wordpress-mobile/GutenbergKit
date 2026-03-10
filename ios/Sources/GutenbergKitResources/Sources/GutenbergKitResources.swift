@@ -2,9 +2,9 @@ import Foundation
 
 /// Provides access to the bundled Gutenberg editor resources (HTML, CSS, JS).
 ///
-/// In local development builds (`GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES=1`),
-/// resources are loaded from the source target's `Gutenberg/` directory.
-/// In release builds, they come from the pre-built `GutenbergKitResources` XCFramework.
+/// In local development (`DependencyMode.local`), resources are loaded from
+/// the source target's `Gutenberg/` directory.
+/// In release builds (`DependencyMode.release`), they come from the pre-built XCFramework.
 public enum GutenbergKitResources {
 
     /// URL to the editor's `index.html` entry point.

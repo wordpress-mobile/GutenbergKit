@@ -1,11 +1,22 @@
 // swift-tools-version: 6.2
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
-import Foundation
 import PackageDescription
 
-/// Updated by the Fastlane `release` lane.
-let resourcesMode: DependencyMode = .release(version: "test-s3-xcframework-009", checksum: "c6a339ec3d8f78b24cf3294f98b9e74ab5322149d771f5179eb35ae20bd6dc5f")
+// How releases work:
+//
+// On trunk, this is always `.local` — developers build from source.
+// To cut a release, run `make release-on-ci NEW_VERSION=X.Y.Z`.
+// That triggers a Buildkite build which:
+//   1. Builds the XCFramework and computes its checksum
+//   2. Runs `fastlane update_swift_package`, which rewrites this line to
+//      `.release(version: "X.Y.Z", checksum: "<sha256>")`
+//   3. Commits the rewritten Package.swift, tags the commit, and pushes the tag
+//   4. Uploads the XCFramework to S3
+//
+// Consumers pulling a tagged version get the `.release` binary target.
+// The tag is an *output* of the release — never a trigger.
+let resourcesMode: DependencyMode = .local
 
 let gutenbergKitResources: Target = resourcesMode.target
 
