@@ -71,7 +71,11 @@ steps:
           make test-ios-e2e
       plugins: *plugins
 
-    - label: ':rocket: Publish XCFramework to S3'
-      if: build.tag =~ /^v/
-      command: .buildkite/publish-xcframework.sh
+    - label: ':rocket: Release $NEW_VERSION'
+      if: build.env("NEW_VERSION") != null
+      depends_on: build-react
+      command: |
+          buildkite-agent artifact download dist.tar.gz .
+          tar -xzf dist.tar.gz
+          .buildkite/release.sh $NEW_VERSION
       plugins: *plugins
