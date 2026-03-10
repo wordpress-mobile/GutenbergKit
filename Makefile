@@ -342,7 +342,7 @@ release-on-ci: ## Trigger a release build on Buildkite (requires BUILDKITE_API_T
 	@curl -sX POST "https://api.buildkite.com/v2/organizations/automattic/pipelines/gutenbergkit/builds" \
 		-H "Authorization: Bearer $(BUILDKITE_API_TOKEN)" \
 		-H "Content-Type: application/json" \
-		-d '{"commit":"HEAD","branch":"trunk","message":"Release $(NEW_VERSION)","env":{"NEW_VERSION":"$(NEW_VERSION)"}}' \
+		-d '{"commit":"HEAD","branch":"ainfra-1967-implement-gutenbergkitresources-binary-dependency-build","message":"Release $(NEW_VERSION)","env":{"NEW_VERSION":"$(NEW_VERSION)"}}' \
 		| jq -r '"Build triggered: https://buildkite.com/automattic/gutenbergkit/builds/\(.number)"'
 
 .PHONY: release
