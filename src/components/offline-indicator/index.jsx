@@ -27,7 +27,14 @@ export default function OfflineIndicator() {
 	}
 
 	return (
-		<div className="gutenberg-kit-offline-indicator">
+		<div
+			className="gutenberg-kit-offline-indicator"
+			role="status"
+			aria-label={ __(
+				'Network connection lost, working offline',
+				'gutenberg-kit'
+			) }
+		>
 			<Icon icon={ offline } size={ 18 } />
 			{ __( 'Working Offline', 'gutenberg-kit' ) }
 		</div>
