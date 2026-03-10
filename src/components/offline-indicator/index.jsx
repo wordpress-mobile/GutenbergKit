@@ -3,7 +3,7 @@
  */
 import { speak } from '@wordpress/a11y';
 import { Icon } from '@wordpress/components';
-import { useState, useEffect, useRef } from '@wordpress/element';
+import { useState, useEffect } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { offline } from '@wordpress/icons';
 
@@ -22,6 +22,18 @@ import './style.scss';
  */
 export default function OfflineIndicator() {
 	const { isConnected } = useNetworkConnectivity();
+
+	useEffect( () => {
+		if ( ! isConnected ) {
+			speak(
+				__(
+					'Network connection lost, working offline',
+					'gutenberg-kit'
+				),
+				'assertive'
+			);
+		}
+	}, [ isConnected ] );
 
 	if ( isConnected ) {
 		return null;
@@ -42,24 +54,10 @@ export default function OfflineIndicator() {
  */
 function useNetworkConnectivity() {
 	const [ isConnected, setIsConnected ] = useState( navigator.onLine );
-	const hasInitialized = useRef( false );
 
 	useEffect( () => {
 		const handleOnline = () => setIsConnected( true );
-		const handleOffline = () => {
-			setIsConnected( false );
-			speak(
-				__( 'Network connection lost', 'gutenberg-kit' ),
-				'assertive'
-			);
-		};
-
-		if ( ! hasInitialized.current ) {
-			hasInitialized.current = true;
-			if ( ! navigator.onLine ) {
-				handleOffline();
-			}
-		}
+		const handleOffline = () => setIsConnected( false );
 
 		window.addEventListener( 'online', handleOnline );
 		window.addEventListener( 'offline', handleOffline );
