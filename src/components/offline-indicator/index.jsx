@@ -1,8 +1,9 @@
 /**
  * WordPress dependencies
  */
+import { speak } from '@wordpress/a11y';
 import { Icon } from '@wordpress/components';
-import { useState, useEffect } from '@wordpress/element';
+import { useState, useEffect, useRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { offline } from '@wordpress/icons';
 
@@ -27,14 +28,7 @@ export default function OfflineIndicator() {
 	}
 
 	return (
-		<div
-			className="gutenberg-kit-offline-indicator"
-			role="status"
-			aria-label={ __(
-				'Network connection lost, working offline',
-				'gutenberg-kit'
-			) }
-		>
+		<div className="gutenberg-kit-offline-indicator">
 			<Icon icon={ offline } size={ 18 } />
 			{ __( 'Working Offline', 'gutenberg-kit' ) }
 		</div>
@@ -48,10 +42,24 @@ export default function OfflineIndicator() {
  */
 function useNetworkConnectivity() {
 	const [ isConnected, setIsConnected ] = useState( navigator.onLine );
+	const hasInitialized = useRef( false );
 
 	useEffect( () => {
 		const handleOnline = () => setIsConnected( true );
-		const handleOffline = () => setIsConnected( false );
+		const handleOffline = () => {
+			setIsConnected( false );
+			speak(
+				__( 'Network connection lost', 'gutenberg-kit' ),
+				'assertive'
+			);
+		};
+
+		if ( ! hasInitialized.current ) {
+			hasInitialized.current = true;
+			if ( ! navigator.onLine ) {
+				handleOffline();
+			}
+		}
 
 		window.addEventListener( 'online', handleOnline );
 		window.addEventListener( 'offline', handleOffline );
