@@ -256,9 +256,15 @@ class SitePreparationViewModel {
                     )
                     self.client = client
 
-                    try await self.loadPostTypes()
-                    let newConfiguration = try await self.loadConfiguration(for: siteDetails)
-                    self.editorConfiguration = Self.applyDemoAppDefaults(to: newConfiguration)
+                    do {
+                        try await self.loadPostTypes()
+                        let newConfiguration = try await self.loadConfiguration(for: siteDetails)
+                        self.editorConfiguration = Self.applyDemoAppDefaults(to: newConfiguration)
+                    } catch let error where Self.isNetworkError(error) {
+                        self.postTypes = [.post, .page]
+                        let fallback = Self.buildOfflineConfiguration(for: siteDetails)
+                        self.editorConfiguration = Self.applyDemoAppDefaults(to: fallback)
+                    }
                 }
             } catch {
                 self.error = error
@@ -270,6 +276,27 @@ class SitePreparationViewModel {
         configuration.toBuilder()
             .setNativeInserterEnabled(true)
             .build()
+    }
+
+    private static func isNetworkError(_ error: Error) -> Bool {
+        if let wpError = error as? WpApiError,
+           case .RequestExecutionFailed(statusCode: _, redirects: _, reason: .deviceIsOfflineError) = wpError {
+            return true
+        }
+        return error is URLError
+    }
+
+    private static func buildOfflineConfiguration(for config: ConfiguredEditor) -> EditorConfiguration {
+        EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: URL(string: config.siteUrl)!,
+            siteApiRoot: URL(string: config.siteApiRoot)!
+        )
+        .setShouldUseThemeStyles(false)
+        .setShouldUsePlugins(false)
+        .setAuthHeader(config.authHeader)
+        .setLogLevel(.debug)
+        .build()
     }
 
     /// Prepares the editor by caching all resources and preparing an `EditorDependencies` object to inject into the editor.
