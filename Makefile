@@ -335,12 +335,12 @@ test-android-e2e-dev: ## Run Android E2E tests against the Vite dev server (must
 ################################################################################
 
 .PHONY: release-on-ci
-release-on-ci: ## Trigger a release build on Buildkite (requires BUILDKITE_API_TOKEN and NEW_VERSION)
-	@[ -n "$(BUILDKITE_API_TOKEN)" ] || (echo "Error: BUILDKITE_API_TOKEN is not set" && exit 1)
+release-on-ci: ## Trigger a release build on Buildkite (requires BUILDKITE_API_ACCESS_TOKEN and NEW_VERSION)
+	@[ -n "$(BUILDKITE_API_ACCESS_TOKEN)" ] || (echo "Error: BUILDKITE_API_ACCESS_TOKEN is not set" && exit 1)
 	@[ -n "$(NEW_VERSION)" ] || (echo "Error: NEW_VERSION is not set. Usage: make release-on-ci NEW_VERSION=1.2.3" && exit 1)
 	@echo "Triggering release build for version $(NEW_VERSION)..."
 	@curl -sX POST "https://api.buildkite.com/v2/organizations/automattic/pipelines/gutenbergkit/builds" \
-		-H "Authorization: Bearer $(BUILDKITE_API_TOKEN)" \
+		-H "Authorization: Bearer $(BUILDKITE_API_ACCESS_TOKEN)" \
 		-H "Content-Type: application/json" \
 		-d '{"commit":"HEAD","branch":"ainfra-1967-implement-gutenbergkitresources-binary-dependency-build","message":"Release $(NEW_VERSION)","env":{"NEW_VERSION":"$(NEW_VERSION)"}}' \
 		| jq -r '"Build triggered: https://buildkite.com/automattic/gutenbergkit/builds/\(.number)"'
