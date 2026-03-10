@@ -4,31 +4,10 @@
 import Foundation
 import PackageDescription
 
-/// When set, `GutenbergKitResources` is built from local source + resources.
-/// When unset, it resolves to a pre-built XCFramework fetched from CDN.
-let useLocalResources = Context.environment["GUTENBERGKIT_SWIFT_USE_LOCAL_RESOURCES"] != nil
-
-// MARK: - Resources target
-
-/// Pre-built XCFramework version for tagged releases.
 /// Updated by the Fastlane `release` lane.
-let resourcesVersion = "test-s3-xcframework-009"
-let resourcesChecksum = "c6a339ec3d8f78b24cf3294f98b9e74ab5322149d771f5179eb35ae20bd6dc5f"
+let resourcesMode: DependencyMode = .release(version: "test-s3-xcframework-009", checksum: "c6a339ec3d8f78b24cf3294f98b9e74ab5322149d771f5179eb35ae20bd6dc5f")
 
-let gutenbergKitResources: Target = useLocalResources
-    ? .target(
-        name: "GutenbergKitResources",
-        path: "ios/Sources/GutenbergKitResources",
-        // The directory is named "Gutenberg" instead of "Resources" because
-        // a directory named "Resources" inside a flat .bundle confuses codesign:
-        // it can't distinguish iOS flat layout from macOS deep layout.
-        resources: [.copy("Gutenberg")]
-    )
-    : .binaryTarget(
-        name: "GutenbergKitResources",
-        url: "https://cdn.a8c-ci.services/gutenbergkit/\(resourcesVersion)/GutenbergKitResources.xcframework.zip",
-        checksum: resourcesChecksum
-    )
+let gutenbergKitResources: Target = resourcesMode.target
 
 // MARK: - Package
 
@@ -63,3 +42,36 @@ let package = Package(
         )
     ]
 )
+
+// MARK: - Helpers
+
+/// Controls whether `GutenbergKitResources` resolves to a local source target
+/// or a pre-built XCFramework fetched from CDN.
+///
+/// - `.local`: Builds from local source and resources. Use during development.
+/// - `.release(version:checksum:)`: Fetches a pre-built XCFramework from CDN.
+///   The version and checksum are updated by CI during the release process.
+enum DependencyMode {
+    case local
+    case release(version: String, checksum: String)
+
+    var target: Target {
+        switch self {
+        case .local:
+            return .target(
+                name: "GutenbergKitResources",
+                path: "ios/Sources/GutenbergKitResources",
+                // The directory is named "Gutenberg" instead of "Resources" because
+                // a directory named "Resources" inside a flat .bundle confuses codesign:
+                // it can't distinguish iOS flat layout from macOS deep layout.
+                resources: [.copy("Gutenberg")]
+            )
+        case let .release(version, checksum):
+            return .binaryTarget(
+                name: "GutenbergKitResources",
+                url: "https://cdn.a8c-ci.services/gutenbergkit/\(version)/GutenbergKitResources.xcframework.zip",
+                checksum: checksum
+            )
+        }
+    }
+}

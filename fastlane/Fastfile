@@ -60,10 +60,8 @@ lane :update_swift_package do |options|
 
   file_path = File.expand_path('./Package.swift', PROJECT_ROOT)
   lines = File.readlines(file_path).map do |line|
-    if line.start_with?('let resourcesVersion =')
-      "let resourcesVersion = \"#{version}\"\n"
-    elsif line.start_with?('let resourcesChecksum =')
-      "let resourcesChecksum = \"#{xcframework_checksum}\"\n"
+    if line.start_with?('let resourcesMode: DependencyMode =')
+      "let resourcesMode: DependencyMode = .release(version: \"#{version}\", checksum: \"#{xcframework_checksum}\")\n"
     else
       line
     end
