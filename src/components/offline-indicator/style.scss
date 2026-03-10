@@ -1,8 +1,11 @@
 .offline-indicator {
+	align-items: center;
 	background-color: #dcdcde;
 	color: #1e1e1e;
+	display: flex;
 	font-size: 13px;
+	gap: 4px;
+	justify-content: center;
 	line-height: 1;
 	padding: 8px 16px;
-	text-align: center;
 }

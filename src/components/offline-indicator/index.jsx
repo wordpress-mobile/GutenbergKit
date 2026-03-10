@@ -1,8 +1,10 @@
 /**
  * WordPress dependencies
  */
+import { Icon } from '@wordpress/components';
 import { useState, useEffect } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
+import { offline } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -26,6 +28,7 @@ export default function OfflineIndicator() {
 
 	return (
 		<div className="offline-indicator">
+			<Icon icon={ offline } size={ 18 } />
 			{ __( 'Working Offline', 'gutenberg-kit' ) }
 		</div>
 	);
