@@ -57,6 +57,11 @@ struct SitePreparationView: View {
                 Toggle("Enable Native Inserter", isOn: $viewModel.enableNativeInserter)
                 Toggle("Enable Network Logging", isOn: $viewModel.enableNetworkLogging)
 
+                Picker("Network Fallback", selection: $viewModel.networkFallbackMode) {
+                    Text("Disabled").tag(NetworkFallbackMode.disabled)
+                    Text("Automatic").tag(NetworkFallbackMode.automatic)
+                }
+
                 if viewModel.postTypes.isEmpty {
                     HStack {
                         Text("Post Type")
@@ -155,6 +160,16 @@ class SitePreparationViewModel {
             guard let config = editorConfiguration else { return }
             editorConfiguration = config.toBuilder()
                 .setEnableNetworkLogging(newValue)
+                .build()
+        }
+    }
+
+    var networkFallbackMode: NetworkFallbackMode {
+        get { editorConfiguration?.networkFallbackMode ?? .disabled }
+        set {
+            guard let config = editorConfiguration else { return }
+            editorConfiguration = config.toBuilder()
+                .setNetworkFallbackMode(newValue)
                 .build()
         }
     }
