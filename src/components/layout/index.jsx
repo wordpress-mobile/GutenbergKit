@@ -13,6 +13,7 @@ import {
 import Editor from '../editor';
 import { onEditorContentChanged } from '../../utils/bridge';
 import EditorLoadNotice from '../editor-load-notice';
+import OfflineIndicator from '../offline-indicator';
 import './style.scss';
 
 /**
@@ -28,6 +29,7 @@ export default function Layout( props ) {
 
 	return (
 		<ErrorBoundary canCopyContent>
+			<OfflineIndicator />
 			<AutosaveMonitor autosave={ onEditorContentChanged } />
 			<Editor { ...editorProps }>
 				<EditorSnackbars />
