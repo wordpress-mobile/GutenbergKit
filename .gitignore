@@ -194,7 +194,8 @@ local.properties
 # /ios/Sources/GutenbergKit/Gutenberg/index.html
 
 # Translation files
-src/translations/
+src/translations/*
+!src/translations/.gitkeep
 
 # Playwright
 e2e/test-results/
