@@ -9,6 +9,9 @@ if [[ -z "$version" ]]; then
   exit 1
 fi
 
+echo "--- :robot_face: Use bot for Git operations"
+source use-bot-for-git
+
 echo "--- :rubygems: Installing gems"
 install_gems
 
