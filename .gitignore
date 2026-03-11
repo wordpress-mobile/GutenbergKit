@@ -190,8 +190,6 @@ local.properties
 /android/Gutenberg/src/main/assets/assets
 /android/Gutenberg/src/main/assets/index.html
 
-/ios/Sources/GutenbergKit/Gutenberg/assets
-/ios/Sources/GutenbergKit/Gutenberg/index.html
 /ios/Sources/GutenbergKitResources/Gutenberg/assets
 /ios/Sources/GutenbergKitResources/Gutenberg/index.html
 
