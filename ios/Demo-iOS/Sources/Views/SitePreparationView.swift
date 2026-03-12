@@ -292,8 +292,15 @@ class SitePreparationViewModel {
             siteURL: URL(string: config.siteUrl)!,
             siteApiRoot: URL(string: config.siteApiRoot)!
         )
-        .setShouldUseThemeStyles(false)
-        .setShouldUsePlugins(false)
+        // Optimistically enable theme styles and plugins so that
+        // previously-cached assets from an earlier online session can still be
+        // used. For sites that don't support these features, this is safe
+        // because EditorService won't be able to fetch the remote manifests
+        // while offline and the automatic network fallback will gracefully
+        // degrade to an empty asset bundle.
+        .setShouldUseThemeStyles(true)
+        .setShouldUsePlugins(true)
+        .setNetworkFallbackMode(.automatic)
         .setAuthHeader(config.authHeader)
         .setLogLevel(.debug)
         .build()
