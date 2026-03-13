@@ -1,3 +1,5 @@
+export const Icon = () => null;
+
 export const Notice = ( { children, onRemove } ) => (
 	<div data-testid="mock-notice">
 		<span>{ children }</span>
