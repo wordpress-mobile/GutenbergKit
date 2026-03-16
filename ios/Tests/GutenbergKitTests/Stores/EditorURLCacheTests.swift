@@ -144,22 +144,33 @@ struct EditorURLCacheTests {
 
     @Test("clear removes all entries")
     func clearRemovesAll() throws {
+        let cacheRoot = URL.randomTemporaryDirectory
+        let cache = EditorURLCache(cacheRoot: cacheRoot, cachePolicy: .always)
+
         try cache.store(makeResponse(), for: testURL, httpMethod: .GET)
         let otherURL = URL(string: "https://example.com/other")!
         try cache.store(makeResponse(), for: otherURL, httpMethod: .GET)
         try cache.clear()
 
-        #expect(try cache.response(for: testURL, httpMethod: .GET) == nil)
-        #expect(try cache.response(for: otherURL, httpMethod: .GET) == nil)
+        // Verify through a fresh instance to avoid URLCache in-memory staleness
+        let freshCache = EditorURLCache(cacheRoot: cacheRoot, cachePolicy: .always)
+        #expect(try freshCache.response(for: testURL, httpMethod: .GET) == nil)
+        #expect(try freshCache.response(for: otherURL, httpMethod: .GET) == nil)
     }
 
     @Test("store succeeds after clear")
     func storeAfterClear() throws {
+        let cacheRoot = URL.randomTemporaryDirectory
+        let cache = EditorURLCache(cacheRoot: cacheRoot, cachePolicy: .always)
+
         try cache.store(makeResponse(), for: testURL, httpMethod: .GET)
         try cache.clear()
+
+        // Use a fresh instance to avoid URLCache in-memory staleness after clear
+        let freshCache = EditorURLCache(cacheRoot: cacheRoot, cachePolicy: .always)
         let newResponse = makeResponse(data: Data("after clear"))
-        try cache.store(newResponse, for: testURL, httpMethod: .GET)
-        #expect(try cache.response(for: testURL, httpMethod: .GET) == newResponse)
+        try freshCache.store(newResponse, for: testURL, httpMethod: .GET)
+        #expect(try freshCache.response(for: testURL, httpMethod: .GET) == newResponse)
     }
 
     // MARK: - URLs with query parameters
