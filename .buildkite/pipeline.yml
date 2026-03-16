@@ -55,6 +55,7 @@ steps:
 
     - label: ':swift: Test Swift Package'
       command: swift test
+      parallelism: 50
       plugins: *plugins
 
     - label: ':ios: Test iOS E2E'
