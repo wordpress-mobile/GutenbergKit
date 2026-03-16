@@ -144,35 +144,45 @@ struct EditorURLCacheTests {
 
     @Test("clear removes all entries")
     func clearRemovesAll() throws {
-        let cacheRoot = URL.randomTemporaryDirectory
-        let cache = EditorURLCache(cacheRoot: cacheRoot, cachePolicy: .always)
-
         try cache.store(makeResponse(), for: testURL, httpMethod: .GET)
         let otherURL = URL(string: "https://example.com/other")!
         try cache.store(makeResponse(), for: otherURL, httpMethod: .GET)
         try cache.clear()
 
-        // Verify through a fresh instance to avoid URLCache in-memory staleness
-        let freshCache = EditorURLCache(cacheRoot: cacheRoot, cachePolicy: .always)
-        #expect(try freshCache.response(for: testURL, httpMethod: .GET) == nil)
-        #expect(try freshCache.response(for: otherURL, httpMethod: .GET) == nil)
+        try waitForClearToTakeEffect(cache: cache, url: testURL)
+
+        #expect(try cache.response(for: testURL, httpMethod: .GET) == nil)
+        #expect(try cache.response(for: otherURL, httpMethod: .GET) == nil)
     }
 
     @Test("store succeeds after clear")
     func storeAfterClear() throws {
-        let cacheRoot = URL.randomTemporaryDirectory
-        let cache = EditorURLCache(cacheRoot: cacheRoot, cachePolicy: .always)
-
         try cache.store(makeResponse(), for: testURL, httpMethod: .GET)
         try cache.clear()
 
-        // Use a fresh cacheRoot to avoid the old URLCache's async removal racing
-        // with the new instance's writes on the same directory.
-        let freshCacheRoot = URL.randomTemporaryDirectory
-        let freshCache = EditorURLCache(cacheRoot: freshCacheRoot, cachePolicy: .always)
+        try waitForClearToTakeEffect(cache: cache, url: testURL)
+
         let newResponse = makeResponse(data: Data("after clear"))
-        try freshCache.store(newResponse, for: testURL, httpMethod: .GET)
-        #expect(try freshCache.response(for: testURL, httpMethod: .GET) == newResponse)
+        try cache.store(newResponse, for: testURL, httpMethod: .GET)
+        #expect(try cache.response(for: testURL, httpMethod: .GET) == newResponse)
+    }
+
+    /// Polls until `URLCache.removeAllCachedResponses()` has taken effect.
+    ///
+    /// Uses exponential backoff (0.05s, 0.1s, 0.2s, 0.4s, ...) with a 1s total timeout.
+    /// `URLCache` clears asynchronously, so the in-memory layer may still serve
+    /// stale entries for a short window after `clear()` returns.
+    private func waitForClearToTakeEffect(cache: EditorURLCache, url: URL) throws {
+        var delay: TimeInterval = 0.05
+        var elapsed: TimeInterval = 0
+        while elapsed < 1.0 {
+            if try cache.response(for: url, httpMethod: .GET) == nil {
+                return
+            }
+            Thread.sleep(forTimeInterval: delay)
+            elapsed += delay
+            delay *= 2
+        }
     }
 
     // MARK: - URLs with query parameters
