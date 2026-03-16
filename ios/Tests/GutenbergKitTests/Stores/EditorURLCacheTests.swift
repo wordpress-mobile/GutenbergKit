@@ -166,8 +166,10 @@ struct EditorURLCacheTests {
         try cache.store(makeResponse(), for: testURL, httpMethod: .GET)
         try cache.clear()
 
-        // Use a fresh instance to avoid URLCache in-memory staleness after clear
-        let freshCache = EditorURLCache(cacheRoot: cacheRoot, cachePolicy: .always)
+        // Use a fresh cacheRoot to avoid the old URLCache's async removal racing
+        // with the new instance's writes on the same directory.
+        let freshCacheRoot = URL.randomTemporaryDirectory
+        let freshCache = EditorURLCache(cacheRoot: freshCacheRoot, cachePolicy: .always)
         let newResponse = makeResponse(data: Data("after clear"))
         try freshCache.store(newResponse, for: testURL, httpMethod: .GET)
         #expect(try freshCache.response(for: testURL, httpMethod: .GET) == newResponse)
