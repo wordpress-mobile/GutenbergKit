@@ -176,9 +176,7 @@ struct EditorURLCacheTests {
         var delay: TimeInterval = 0.05
         var elapsed: TimeInterval = 0
         while elapsed < 1.0 {
-            if try cache.response(for: url, httpMethod: .GET) == nil {
-                return
-            }
+            guard try cache.response(for: url, httpMethod: .GET) != nil else { return }
             Thread.sleep(forTimeInterval: delay)
             elapsed += delay
             delay *= 2
