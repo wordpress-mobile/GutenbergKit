@@ -1,6 +1,7 @@
 @preconcurrency import WebKit
 import SwiftUI
 import OSLog
+import GutenbergKitResources
 
 #if canImport(UIKit)
 import UIKit
@@ -309,8 +310,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         if let editorURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) {
             webView.load(URLRequest(url: editorURL))
         } else {
-            let indexURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
-            webView.loadFileURL(indexURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+            let indexURL = GutenbergKitResources.editorIndexURL
+            webView.loadFileURL(indexURL, allowingReadAccessTo: GutenbergKitResources.resourcesDirectoryURL)
         }
     }
 
@@ -322,8 +323,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     /// - Note: Only called when `isWarmupMode` is true.
     private func loadEditorWithoutDependencies() {
-        let indexURL = Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Gutenberg")!
-        webView.loadFileURL(indexURL, allowingReadAccessTo: Bundle.module.resourceURL!)
+        let indexURL = GutenbergKitResources.editorIndexURL
+        webView.loadFileURL(indexURL, allowingReadAccessTo: GutenbergKitResources.resourcesDirectoryURL)
     }
 
     /// Builds a `WKUserScript` that injects the editor configuration into the page.

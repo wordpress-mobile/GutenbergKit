@@ -54,7 +54,7 @@ steps:
       plugins: *plugins
 
     - label: ':swift: Test Swift Package'
-      command: swift test
+      command: make test-swift-package REFRESH_L10N=1 REFRESH_JS_BUILD=1
       plugins: *plugins
 
     - label: ':ios: Test iOS E2E'
