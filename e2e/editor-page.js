@@ -76,6 +76,7 @@ export default class EditorPage {
 				window.wp?.data
 					?.select( 'core/editor' )
 					?.__unstableIsEditorReady?.(),
+			null,
 			{ timeout: 30_000 }
 		);
 	}
