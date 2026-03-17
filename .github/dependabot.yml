@@ -11,3 +11,5 @@ updates:
             update-types: ['version-update:semver-major']
           - dependency-name: 'react-dom' # react@>=19.x.x blocked by https://github.com/WordPress/gutenberg/issues/71336
             update-types: ['version-update:semver-major']
+          - dependency-name: 'jquery' # jquery@>=4.x.x blocked by https://core.trac.wordpress.org/ticket/60478
+            update-types: ['version-update:semver-major']
