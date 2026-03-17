@@ -149,6 +149,8 @@ struct EditorURLCacheTests {
         try cache.store(makeResponse(), for: otherURL, httpMethod: .GET)
         try cache.clear()
 
+        try waitForClearToTakeEffect(cache: cache, url: testURL)
+
         #expect(try cache.response(for: testURL, httpMethod: .GET) == nil)
         #expect(try cache.response(for: otherURL, httpMethod: .GET) == nil)
     }
@@ -157,9 +159,28 @@ struct EditorURLCacheTests {
     func storeAfterClear() throws {
         try cache.store(makeResponse(), for: testURL, httpMethod: .GET)
         try cache.clear()
+
+        try waitForClearToTakeEffect(cache: cache, url: testURL)
+
         let newResponse = makeResponse(data: Data("after clear"))
         try cache.store(newResponse, for: testURL, httpMethod: .GET)
         #expect(try cache.response(for: testURL, httpMethod: .GET) == newResponse)
+    }
+
+    /// Polls until `URLCache.removeAllCachedResponses()` has taken effect.
+    ///
+    /// Uses exponential backoff (0.05s, 0.1s, 0.2s, 0.4s, ...) with a 1s total timeout.
+    /// `URLCache` clears asynchronously, so the in-memory layer may still serve
+    /// stale entries for a short window after `clear()` returns.
+    private func waitForClearToTakeEffect(cache: EditorURLCache, url: URL) throws {
+        var delay: TimeInterval = 0.05
+        var elapsed: TimeInterval = 0
+        while elapsed < 1.0 {
+            guard try cache.response(for: url, httpMethod: .GET) != nil else { return }
+            Thread.sleep(forTimeInterval: delay)
+            elapsed += delay
+            delay *= 2
+        }
     }
 
     // MARK: - URLs with query parameters
