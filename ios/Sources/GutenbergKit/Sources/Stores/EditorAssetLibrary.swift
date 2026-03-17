@@ -36,7 +36,7 @@ public actor EditorAssetLibrary {
     ///
     /// Applications should periodically check for a new editor manifest. This can be very expensive, so this method defaults to returning an existing one on-disk.
     ///
-    package func fetchManifest() async throws -> LocalEditorAssetManifest {
+    func fetchManifest() async throws -> LocalEditorAssetManifest {
         guard configuration.shouldUsePlugins else { return .empty }
         let data = try await httpClient.perform(
             URLRequest(method: .GET, url: self.editorAssetsUrl(for: self.configuration))
@@ -84,7 +84,7 @@ public actor EditorAssetLibrary {
     /// Checks whether a complete bundle with the given manifest checksum exists on disk.
     ///
     /// A bundle is considered complete only if both `manifest.json` and `editor-representation.json` exist.
-    package func hasBundle(forManifestChecksum checksum: String) -> Bool {
+    func hasBundle(forManifestChecksum checksum: String) -> Bool {
         let bundleRoot = self.bundleRoot(for: checksum)
         let manifestExists = FileManager.default.fileExists(atPath: bundleRoot.appending(path: "manifest.json").path)
         let editorRepExists = FileManager.default.fileExists(atPath: bundleRoot.appending(path: "editor-representation.json").path)
@@ -93,7 +93,7 @@ public actor EditorAssetLibrary {
 
     /// Retrieves an existing bundle from disk if one exists for the given manifest checksum.
     ///
-    package func existingBundle(forManifestChecksum checksum: String) -> EditorAssetBundle? {
+    func existingBundle(forManifestChecksum checksum: String) -> EditorAssetBundle? {
         guard self.hasBundle(forManifestChecksum: checksum) else {
             return nil
         }
@@ -107,7 +107,7 @@ public actor EditorAssetLibrary {
     ///
     /// Assets are downloaded concurrently and stored in a temporary directory. Once all downloads
     /// complete successfully, the bundle is atomically moved to its final location.
-    package func buildBundle(
+    func buildBundle(
         for manifest: LocalEditorAssetManifest,
         progress: EditorProgressCallback? = nil
     ) async throws -> EditorAssetBundle {
