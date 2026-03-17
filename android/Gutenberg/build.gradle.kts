@@ -44,9 +44,23 @@ android {
         jvmTarget = "1.8"
     }
 
+    sourceSets {
+        getByName("androidTest") {
+            // Make shared test fixtures available as assets for instrumented tests.
+            assets.srcDir(rootProject.file("../test-fixtures"))
+        }
+    }
+
     testOptions {
         unitTests {
             isReturnDefaultValues = true
+            all {
+                // Make the shared test fixtures available to fixture-driven tests.
+                val fixturesDir = rootProject.file("../test-fixtures/http")
+                it.systemProperty("test.fixtures.dir", fixturesDir.absolutePath)
+                // Track fixture files as task inputs so changes trigger re-runs.
+                it.inputs.dir(fixturesDir)
+            }
         }
     }
 }
@@ -64,6 +78,7 @@ dependencies {
     implementation(libs.okhttp)
 
     testImplementation(libs.junit)
+    testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.kotlin)

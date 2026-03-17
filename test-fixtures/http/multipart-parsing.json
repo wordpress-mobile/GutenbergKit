@@ -1,0 +1,504 @@
+{
+  "description": "Multipart/form-data parsing tests (RFC 7578). Given a multipart request body, parse into individual parts with name, filename, contentType, and body.",
+  "tests": [
+    {
+      "description": "RFC 7578 §4.1: Content-Type with boundary parameter is preserved",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"field1\"\r\n\r\nvalue1\r\n--AaB03x--\r\n",
+      "expected": {
+        "contentType": "multipart/form-data; boundary=AaB03x",
+        "parts": [
+          {
+            "name": "field1"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578 §4.1: Content-Type with quoted boundary extracts correctly",
+      "boundary": "----WebKitFormBoundary7MA4YWxk",
+      "quotedBoundary": true,
+      "rawBody": "------WebKitFormBoundary7MA4YWxk\r\nContent-Disposition: form-data; name=\"field1\"\r\n\r\nvalue1\r\n------WebKitFormBoundary7MA4YWxk--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "field1"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578 §4.2: single text field parsed correctly",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\nMy Blog Post\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "title",
+            "filename": null,
+            "contentType": "text/plain",
+            "body": "My Blog Post"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578 §4.2: field with empty value",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"excerpt\"\r\n\r\n\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "excerpt",
+            "body": ""
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578 §4.2: multiple text fields in order",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\nMy Post\r\n--AaB03x\r\nContent-Disposition: form-data; name=\"status\"\r\n\r\npublish\r\n--AaB03x\r\nContent-Disposition: form-data; name=\"content\"\r\n\r\n<p>Hello world</p>\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "title",
+            "body": "My Post"
+          },
+          {
+            "name": "status",
+            "body": "publish"
+          },
+          {
+            "name": "content",
+            "body": "<p>Hello world</p>"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578 §4.2: file upload with filename and content-type",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"file\"; filename=\"test.txt\"\r\nContent-Type: text/plain\r\n\r\nHello, this is a test file.\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "file",
+            "filename": "test.txt",
+            "contentType": "text/plain",
+            "body": "Hello, this is a test file."
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578 §4.2: file upload with application/octet-stream",
+      "boundary": "boundary42",
+      "rawBody": "--boundary42\r\nContent-Disposition: form-data; name=\"upload\"; filename=\"data.bin\"\r\nContent-Type: application/octet-stream\r\n\r\nbinary-content\r\n--boundary42--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "upload",
+            "filename": "data.bin",
+            "contentType": "application/octet-stream"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578 §4.4: part without Content-Type defaults to text/plain",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"field\"\r\n\r\nvalue\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "field",
+            "contentType": "text/plain"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578 §4.2: form with text fields and file upload",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\nMy Image Post\r\n--AaB03x\r\nContent-Disposition: form-data; name=\"file\"; filename=\"image.jpg\"\r\nContent-Type: image/jpeg\r\n\r\nJFIF-binary-data\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "title",
+            "filename": null
+          },
+          {
+            "name": "file",
+            "filename": "image.jpg",
+            "contentType": "image/jpeg"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578 §5.1: multiple files with same field name in separate parts",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"documents\"; filename=\"file1.txt\"\r\nContent-Type: text/plain\r\n\r\nFirst file\r\n--AaB03x\r\nContent-Disposition: form-data; name=\"documents\"; filename=\"file2.txt\"\r\nContent-Type: text/plain\r\n\r\nSecond file\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "documents",
+            "filename": "file1.txt",
+            "body": "First file"
+          },
+          {
+            "name": "documents",
+            "filename": "file2.txt",
+            "body": "Second file"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578 §5.1.2: filename with spaces",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"file\"; filename=\"my document.pdf\"\r\nContent-Type: application/pdf\r\n\r\npdf-data\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "file",
+            "filename": "my document.pdf"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578 §5.1.2: filename with percent-encoded UTF-8 is preserved",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"file\"; filename=\"caf%C3%A9.txt\"\r\nContent-Type: text/plain\r\n\r\ndata\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "file",
+            "filename": "caf%C3%A9.txt"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578 §5.1.2: filename with direct UTF-8 encoding",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"file\"; filename=\"café.txt\"\r\nContent-Type: text/plain\r\n\r\ndata\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "file",
+            "filename": "café.txt"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578 §5.1.3: _charset_ field is parsed as a normal field",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"_charset_\"\r\n\r\nUTF-8\r\n--AaB03x\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\nMy Post\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "_charset_",
+            "body": "UTF-8"
+          },
+          {
+            "name": "title",
+            "body": "My Post"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578: boundary with hyphens (common browser format)",
+      "boundary": "----WebKitFormBoundary7MA4YWxkTrZu0gW",
+      "rawBody": "------WebKitFormBoundary7MA4YWxkTrZu0gW\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\ntest\r\n------WebKitFormBoundary7MA4YWxkTrZu0gW--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "title"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578: long boundary (70 characters)",
+      "boundary": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "rawBody": "--xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\r\nContent-Disposition: form-data; name=\"f\"\r\n\r\nv\r\n--xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "f"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578: boundary with special characters (plus, equals, slash)",
+      "boundary": "abc+def/ghi=123",
+      "rawBody": "--abc+def/ghi=123\r\nContent-Disposition: form-data; name=\"field\"\r\n\r\nvalue\r\n--abc+def/ghi=123--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "field"
+          }
+        ]
+      }
+    },
+    {
+      "description": "WordPress: file upload with zero-byte body (empty file)",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"file\"; filename=\"empty.txt\"\r\nContent-Type: text/plain\r\n\r\n\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "file",
+            "filename": "empty.txt",
+            "body": ""
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578: body content resembling boundary is not split",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"data\"\r\n\r\n--AaB03 not a boundary\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "data",
+            "body": "--AaB03 not a boundary"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578 §4.4: part with charset parameter in Content-Type",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"bio\"\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\nHello world\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "bio",
+            "contentType": "text/plain; charset=UTF-8"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578: Content-Disposition with extra whitespace around parameters",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data;  name=\"field1\"\r\n\r\nvalue1\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "field1"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578: Content-Disposition name with escaped quotes",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"field\\\"name\"\r\n\r\nvalue\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "field\"name"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578: additional part headers beyond Content-Disposition and Content-Type are ignored",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"file\"; filename=\"test.txt\"\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: binary\r\nX-Custom-Header: custom-value\r\n\r\nfile content\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "file",
+            "contentType": "text/plain",
+            "body": "file content"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578: case-insensitive Content-Disposition header name",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\ncontent-disposition: form-data; name=\"field1\"\r\n\r\nvalue1\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "field1"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578: case-insensitive form-data token in Content-Disposition",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: FORM-DATA; name=\"field1\"\r\n\r\nvalue1\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "field1"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578: part body containing CRLF sequences",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"content\"\r\n\r\nline1\r\nline2\r\nline3\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "content",
+            "body": "line1\r\nline2\r\nline3"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578: part body containing text resembling a different closing delimiter",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"data\"\r\n\r\nsome --other-- text\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "data",
+            "body": "some --other-- text"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 2046: preamble before first boundary is ignored",
+      "boundary": "AaB03x",
+      "rawBody": "This is the preamble. It should be ignored.\r\n--AaB03x\r\nContent-Disposition: form-data; name=\"field1\"\r\n\r\nvalue1\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "field1",
+            "body": "value1"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 2046: epilogue after closing boundary is ignored",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; name=\"field1\"\r\n\r\nvalue1\r\n--AaB03x--\r\nThis is the epilogue. It should be ignored.\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "field1",
+            "body": "value1"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 2046 §5.1.1: transport padding between parts does not corrupt body data",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x  \r\nContent-Disposition: form-data; name=\"field1\"\r\n\r\nvalue1\r\n--AaB03x  \r\nContent-Disposition: form-data; name=\"field2\"\r\n\r\nvalue2\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "field1",
+            "body": "value1"
+          },
+          {
+            "name": "field2",
+            "body": "value2"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 2046 §5.1.1: transport padding (tabs) after boundary does not corrupt headers",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\t\t\r\nContent-Disposition: form-data; name=\"field1\"\r\n\r\nvalue1\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "field1",
+            "body": "value1"
+          }
+        ]
+      }
+    },
+    {
+      "description": "RFC 7578 §4.2: name= inside another parameter's quoted value is not matched",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data; dummy=\"name=evil\"; name=\"real\"\r\n\r\nvalue\r\n--AaB03x--\r\n",
+      "expected": {
+        "parts": [
+          {
+            "name": "real"
+          }
+        ]
+      }
+    }
+  ],
+  "errorTests": [
+    {
+      "description": "RFC 7578 §4.1: non-multipart Content-Type throws notMultipartFormData",
+      "contentType": "application/json",
+      "body": "{\"title\":\"Test\"}",
+      "expected": {
+        "error": "notMultipartFormData"
+      }
+    },
+    {
+      "description": "RFC 7578 §4.1: missing boundary parameter throws notMultipartFormData",
+      "contentType": "multipart/form-data",
+      "body": "some data",
+      "expected": {
+        "error": "notMultipartFormData"
+      }
+    },
+    {
+      "description": "RFC 7578: part missing Content-Disposition throws error",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Type: text/plain\r\n\r\nvalue\r\n--AaB03x--\r\n",
+      "expected": {
+        "error": "missingContentDisposition"
+      }
+    },
+    {
+      "description": "RFC 7578: part missing name parameter throws error",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x\r\nContent-Disposition: form-data\r\n\r\nvalue\r\n--AaB03x--\r\n",
+      "expected": {
+        "error": "missingNameParameter"
+      }
+    },
+    {
+      "description": "RFC 7578: malformed body throws error",
+      "boundary": "AaB03x",
+      "rawBody": "this is not multipart at all",
+      "expected": {
+        "error": "malformedBody"
+      }
+    },
+    {
+      "description": "RFC 2046: empty multipart body with only close delimiter throws malformedBody",
+      "boundary": "AaB03x",
+      "rawBody": "--AaB03x--\r\n",
+      "expected": {
+        "error": "malformedBody"
+      }
+    },
+    {
+      "description": "RFC 7578: multipart request with no body throws missingBody",
+      "expected": {
+        "contentType": "multipart/form-data; boundary=AaB03x",
+        "error": "missingBody"
+      }
+    }
+  ]
+}

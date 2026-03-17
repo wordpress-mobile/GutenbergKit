@@ -1,0 +1,923 @@
+{
+	"description": "HTTP request parsing tests. Given a raw HTTP request string, parse into method, target, headers, and body.",
+	"tests": [
+		{
+			"description": "Parses a simple GET request",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nHost: localhost:8080\r\n\r\n",
+			"expected": {
+				"method": "GET",
+				"target": "/wp/v2/posts",
+				"headers": {
+					"Host": "localhost:8080"
+				},
+				"body": null,
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Parses request target with query string",
+			"input": "GET /wp/v2/posts?per_page=10&status=publish HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"method": "GET",
+				"target": "/wp/v2/posts?per_page=10&status=publish",
+				"body": null,
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Parses POST request with JSON body",
+			"input": "POST /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 35\r\n\r\n{\"title\":\"Hello\",\"content\":\"World\"}",
+			"expected": {
+				"method": "POST",
+				"target": "/wp/v2/posts",
+				"headers": {
+					"Host": "localhost",
+					"Content-Type": "application/json",
+					"Content-Length": "35"
+				},
+				"body": "{\"title\":\"Hello\",\"content\":\"World\"}",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Parses DELETE request",
+			"input": "DELETE /wp/v2/posts/42 HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"method": "DELETE",
+				"target": "/wp/v2/posts/42",
+				"body": null,
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Parses PUT request with body",
+			"input": "PUT /wp/v2/posts/42 HTTP/1.1\r\nHost: localhost\r\nContent-Length: 19\r\n\r\n{\"title\":\"Updated\"}",
+			"expected": {
+				"method": "PUT",
+				"target": "/wp/v2/posts/42",
+				"body": "{\"title\":\"Updated\"}",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Parses multiple headers",
+			"input": "GET / HTTP/1.1\r\nHost: localhost\r\nAccept: application/json\r\nAuthorization: Bearer token123\r\n\r\n",
+			"expected": {
+				"method": "GET",
+				"target": "/",
+				"headers": {
+					"Host": "localhost",
+					"Accept": "application/json",
+					"Authorization": "Bearer token123"
+				},
+				"body": null,
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Header lookup is case-insensitive",
+			"input": "GET / HTTP/1.1\r\nHost: localhost\r\nContent-Type: text/html\r\n\r\n",
+			"expected": {
+				"method": "GET",
+				"target": "/",
+				"isComplete": true,
+				"headers": {
+					"content-type": "text/html",
+					"CONTENT-TYPE": "text/html",
+					"Content-Type": "text/html"
+				}
+			}
+		},
+		{
+			"description": "Parses header values containing colons",
+			"input": "GET / HTTP/1.1\r\nHost: localhost\r\nAuthorization: Basic dXNlcjpwYXNz\r\n\r\n",
+			"expected": {
+				"method": "GET",
+				"target": "/",
+				"isComplete": true,
+				"headers": {
+					"Authorization": "Basic dXNlcjpwYXNz"
+				}
+			}
+		},
+		{
+			"description": "Content-Length with non-standard casing",
+			"input": "POST /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\ncontent-length: 4\r\n\r\ndata",
+			"expected": {
+				"method": "POST",
+				"body": "data",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Parses PATCH request",
+			"input": "PATCH /wp/v2/posts/1 HTTP/1.1\r\nHost: localhost\r\nContent-Length: 19\r\n\r\n{\"title\":\"Patched\"}",
+			"expected": {
+				"method": "PATCH",
+				"target": "/wp/v2/posts/1",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Parses OPTIONS request",
+			"input": "OPTIONS /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"method": "OPTIONS",
+				"body": null,
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Preserves semicolon path parameters in target",
+			"input": "GET /wp/v2/posts;embed?per_page=5 HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"target": "/wp/v2/posts;embed?per_page=5",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Preserves percent-encoded characters in target",
+			"input": "GET /wp/v2/posts?search=%E4%BD%A0%E5%A5%BD HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"target": "/wp/v2/posts?search=%E4%BD%A0%E5%A5%BD",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Preserves multiple consecutive slashes in target",
+			"input": "GET //wp//v2//posts HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"target": "//wp//v2//posts",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Preserves double question marks in target",
+			"input": "GET /wp/v2/posts?search=what??&per_page=10 HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"target": "/wp/v2/posts?search=what??&per_page=10",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Preserves at-sign and brackets in target",
+			"input": "GET /wp/v2/users/@admin/[meta] HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"target": "/wp/v2/users/@admin/[meta]",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Preserves dot segments in target",
+			"input": "GET /wp/v2/media/..uploads/...pending HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"target": "/wp/v2/media/..uploads/...pending",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Preserves absolute-form URI as target",
+			"input": "GET https://example.com:443/wp/v2/posts HTTP/1.1\r\nHost: example.com\r\n\r\n",
+			"expected": {
+				"target": "https://example.com:443/wp/v2/posts",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Preserves fragment in target",
+			"input": "GET /wp/v2/posts?page=1&per_page=10#post-17408 HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"target": "/wp/v2/posts?page=1&per_page=10#post-17408",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Preserves quotes in target",
+			"input": "GET /wp/v2/posts?search=\"hello+world\" HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"target": "/wp/v2/posts?search=\"hello+world\"",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Parses HEAD request",
+			"input": "HEAD /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"method": "HEAD",
+				"body": null,
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Parses CONNECT request with authority-form target",
+			"input": "CONNECT wordpress.org:443 HTTP/1.1\r\nHost: wordpress.org:443\r\n\r\n",
+			"expected": {
+				"method": "CONNECT",
+				"target": "wordpress.org:443",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Parses OPTIONS request with asterisk-form target",
+			"input": "OPTIONS * HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"method": "OPTIONS",
+				"target": "*",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Parses header value with no space after colon",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\nX-WP-Nonce:abc123\r\n\r\n",
+			"expected": {
+				"method": "GET",
+				"isComplete": true,
+				"headers": {
+					"X-WP-Nonce": "abc123"
+				}
+			}
+		},
+		{
+			"description": "Bare CRLF returns needsMoreData after leading CRLF stripping",
+			"input": "\r\n\r\n",
+			"expected": {
+				"isComplete": false,
+				"hasHeaders": false,
+				"parseResult": null
+			}
+		},
+		{
+			"description": "Handles HTTP/1.0 request with no headers",
+			"input": "GET / HTTP/1.0\r\n\r\n",
+			"expected": {
+				"method": "GET",
+				"target": "/",
+				"headers": {},
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Handles zero Content-Length",
+			"input": "POST /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n\r\n",
+			"expected": {
+				"method": "POST",
+				"body": null,
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Append after complete is a no-op",
+			"input": "GET /wp/v2/settings HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"appendAfterComplete": "extra garbage",
+			"expected": {
+				"method": "GET",
+				"target": "/wp/v2/settings",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "No Content-Length is allowed regardless of maxBodySize",
+			"input": "GET /posts HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"maxBodySize": 0,
+			"expected": {
+				"method": "GET",
+				"body": null,
+				"isComplete": true
+			}
+		},
+		{
+			"description": "RFC 9110 §5.1: field names with dot, underscore, tilde are valid tokens",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nX-My.Header: dotted\r\nX_Under_Score: underscore\r\nX~Tilde: tilde\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"method": "GET",
+				"isComplete": true,
+				"headers": {
+					"X-My.Header": "dotted",
+					"X_Under_Score": "underscore",
+					"X~Tilde": "tilde"
+				}
+			}
+		},
+		{
+			"description": "RFC 9110 §5.2: multiple field lines with same name combined with comma",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nAccept: text/html\r\nAccept: application/json\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"method": "GET",
+				"isComplete": true,
+				"headers": {
+					"Accept": "text/html, application/json"
+				}
+			}
+		},
+		{
+			"description": "RFC 9110 §5.2: single field line with comma-separated values",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nAccept: text/html, application/json\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"isComplete": true,
+				"headers": {
+					"Accept": "text/html, application/json"
+				}
+			}
+		},
+		{
+			"description": "RFC 9110 §5.3: header field order is preserved",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nX-First: 1\r\nX-Second: 2\r\nX-Third: 3\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"isComplete": true,
+				"headers": {
+					"X-First": "1",
+					"X-Second": "2",
+					"X-Third": "3"
+				}
+			}
+		},
+		{
+			"description": "RFC 9110 §5.3: three duplicate Cache-Control headers combined in order",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nCache-Control: no-cache\r\nCache-Control: no-store\r\nCache-Control: must-revalidate\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"isComplete": true,
+				"headers": {
+					"Cache-Control": "no-cache, no-store, must-revalidate"
+				}
+			}
+		},
+		{
+			"description": "RFC 9110 §5.3: duplicate headers with different casing are combined",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nAccept: text/html\r\naccept: application/json\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"isComplete": true,
+				"headers": {
+					"Accept": "text/html, application/json"
+				}
+			}
+		},
+		{
+			"description": "RFC 9110 §5.3: duplicate header where one value is empty",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nX-Foo: bar\r\nX-Foo:\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"isComplete": true,
+				"headers": {
+					"X-Foo": "bar, "
+				}
+			}
+		},
+		{
+			"description": "RFC 9110 §5.3: duplicate Content-Length with identical values still parses",
+			"input": "POST /wp/v2/posts HTTP/1.1\r\nContent-Length: 8\r\nContent-Length: 8\r\nHost: localhost\r\n\r\n{\"id\":1}",
+			"expected": {
+				"isComplete": true,
+				"body": "{\"id\":1}"
+			}
+		},
+		{
+			"description": "RFC 9110 §5.3: combined value order matches field line order",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nVia: 1.0 proxy-a\r\nVia: 1.1 proxy-b\r\nVia: 1.0 proxy-c\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"isComplete": true,
+				"headers": {
+					"Via": "1.0 proxy-a, 1.1 proxy-b, 1.0 proxy-c"
+				}
+			}
+		},
+		{
+			"description": "RFC 9110 §5.5: field value with VCHAR, SP, and HTAB",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nX-WP-Test: hello\tworld 123!@#\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"isComplete": true,
+				"headers": {
+					"X-WP-Test": "hello\tworld 123!@#"
+				}
+			}
+		},
+		{
+			"description": "RFC 9110 §5.5: field value with obs-text bytes is permitted",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nX-WP-Custom: café\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"isComplete": true,
+				"headers": {
+					"X-WP-Custom": "café"
+				}
+			}
+		},
+		{
+			"description": "RFC 9110 §7.2: Host header not required in HTTP/1.0",
+			"input": "GET /wp/v2/posts HTTP/1.0\r\nAccept: text/html\r\n\r\n",
+			"expected": {
+				"method": "GET",
+				"isComplete": true,
+				"headers": {
+					"Accept": "text/html"
+				}
+			}
+		},
+		{
+			"description": "RFC 9110 §7.2: Host header with IPv6 address",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nHost: [::1]:8080\r\n\r\n",
+			"expected": {
+				"isComplete": true,
+				"headers": {
+					"Host": "[::1]:8080"
+				}
+			}
+		},
+		{
+			"description": "RFC 9110 §7.2: Host header with internationalized domain",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nHost: xn--nxasmq6b.example\r\n\r\n",
+			"expected": {
+				"isComplete": true,
+				"headers": {
+					"Host": "xn--nxasmq6b.example"
+				}
+			}
+		},
+		{
+			"description": "RFC 9110 §8.6: Content-Length comma-separated identical values accepted",
+			"input": "POST /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5, 5\r\n\r\nhello",
+			"expected": {
+				"isComplete": true,
+				"headers": {
+					"Content-Length": "5"
+				},
+				"body": "hello"
+			}
+		},
+		{
+			"description": "RFC 9110 §8.6: Content-Length with leading zeros compared as integers",
+			"input": "POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5, 05\r\n\r\nhello",
+			"expected": {
+				"isComplete": true,
+				"body": "hello"
+			}
+		},
+		{
+			"description": "RFC 9110 §9.1: method token is case-sensitive — lowercase preserved",
+			"input": "get /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"method": "get",
+				"isComplete": true,
+				"body": null
+			}
+		},
+		{
+			"description": "RFC 9110 §9.3.8: TRACE request",
+			"input": "TRACE /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"method": "TRACE",
+				"target": "/wp/v2/posts",
+				"body": null,
+				"isComplete": true
+			}
+		},
+		{
+			"description": "RFC 9110 §9.1: extension method (custom token) is accepted",
+			"input": "PURGE /wp/v2/cache HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"method": "PURGE",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "RFC 9110 §7.1: absolute-form target with http scheme and port",
+			"input": "GET http://localhost:3000/wp/v2/posts HTTP/1.1\r\nHost: localhost:3000\r\n\r\n",
+			"expected": {
+				"target": "http://localhost:3000/wp/v2/posts",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "RFC 9110 §7.1: request target with multiple query parameters",
+			"input": "GET /wp/v2/posts?per_page=10&page=2&status=publish&orderby=date HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"target": "/wp/v2/posts?per_page=10&page=2&status=publish&orderby=date",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "RFC 9110 §10.1.2: Referer header preserves full URI",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\nReferer: https://example.com/editor?post=42&action=edit\r\n\r\n",
+			"expected": {
+				"isComplete": true,
+				"headers": {
+					"Referer": "https://example.com/editor?post=42&action=edit"
+				}
+			}
+		},
+		{
+			"description": "RFC 9110 §10.1.5: User-Agent header with product and comment",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\nUser-Agent: GutenbergKit/1.0 (iOS 17.0; iPhone)\r\n\r\n",
+			"expected": {
+				"isComplete": true,
+				"headers": {
+					"User-Agent": "GutenbergKit/1.0 (iOS 17.0; iPhone)"
+				}
+			}
+		},
+		{
+			"description": "RFC 9110 §12.5.1: Accept header with quality values",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\nAccept: text/html;q=0.9, application/json;q=1.0, */*;q=0.1\r\n\r\n",
+			"expected": {
+				"isComplete": true,
+				"headers": {
+					"Accept": "text/html;q=0.9, application/json;q=1.0, */*;q=0.1"
+				}
+			}
+		},
+		{
+			"description": "RFC 9110 §12.5.3: Accept-Encoding with multiple encodings",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\nAccept-Encoding: gzip, deflate, br\r\n\r\n",
+			"expected": {
+				"isComplete": true,
+				"headers": {
+					"Accept-Encoding": "gzip, deflate, br"
+				}
+			}
+		},
+		{
+			"description": "RFC 9110 §12.5.4: Accept-Language with quality values",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\nAccept-Language: en-US,en;q=0.9,fr;q=0.5\r\n\r\n",
+			"expected": {
+				"isComplete": true,
+				"headers": {
+					"Accept-Language": "en-US,en;q=0.9,fr;q=0.5"
+				}
+			}
+		},
+		{
+			"description": "RFC 9110 §8.3: Content-Type with charset parameter",
+			"input": "POST /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: 16\r\n\r\n{\"title\":\"Test\"}",
+			"expected": {
+				"isComplete": true,
+				"headers": {
+					"Content-Type": "application/json; charset=utf-8"
+				},
+				"body": "{\"title\":\"Test\"}"
+			}
+		},
+		{
+			"description": "RFC 9110 §11.6.2: Authorization header with Bearer token",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature\r\n\r\n",
+			"expected": {
+				"isComplete": true,
+				"headers": {
+					"Authorization": "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature"
+				}
+			}
+		},
+		{
+			"description": "RFC 9110 §11.6.2: case-insensitive Authorization header lookup",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\nauthorization: Bearer tok123\r\n\r\n",
+			"expected": {
+				"isComplete": true,
+				"headers": {
+					"Authorization": "Bearer tok123",
+					"authorization": "Bearer tok123",
+					"AUTHORIZATION": "Bearer tok123"
+				}
+			}
+		}
+	],
+	"errorTests": [
+		{
+			"description": "Rejects non-UTF-8 header bytes (0xFF 0xFE BOM-like)",
+			"inputBase64": "//4NCg0K",
+			"expected": {
+				"error": "invalidEncoding"
+			}
+		},
+		{
+			"description": "Rejects truncated 2-byte UTF-8 sequence (0xC0 alone) in header value",
+			"inputBase64": "R0VUIC8gSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdA0KWC1UZXN0OiDADQoNCg==",
+			"expected": {
+				"error": "invalidEncoding"
+			}
+		},
+		{
+			"description": "Rejects overlong UTF-8 encoding (0xC0 0xAF for U+002F) in header value",
+			"inputBase64": "R0VUIC8gSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdA0KWC1UZXN0OiDArw0KDQo=",
+			"expected": {
+				"error": "invalidEncoding"
+			}
+		},
+		{
+			"description": "Rejects lone continuation byte (0x80) in header value",
+			"inputBase64": "R0VUIC8gSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdA0KWC1UZXN0OiCADQoNCg==",
+			"expected": {
+				"error": "invalidEncoding"
+			}
+		},
+		{
+			"description": "Rejects code point above U+10FFFF (0xF4 0x90 0x80 0x80) in header value",
+			"inputBase64": "R0VUIC8gSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdA0KWC1UZXN0OiD0kICADQoNCg==",
+			"expected": {
+				"error": "invalidEncoding"
+			}
+		},
+		{
+			"description": "Rejects truncated 3-byte UTF-8 sequence in header value",
+			"inputBase64": "R0VUIC8gSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdA0KWC1UZXN0OiDggA0KDQo=",
+			"expected": {
+				"error": "invalidEncoding"
+			}
+		},
+		{
+			"description": "Rejects 0xFE byte (never valid in UTF-8) in header value",
+			"inputBase64": "R0VUIC8gSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdA0KWC1UZXN0OiD+DQoNCg==",
+			"expected": {
+				"error": "invalidEncoding"
+			}
+		},
+		{
+			"description": "Rejects lone surrogate half (U+D800 as CESU-8) in header value",
+			"inputBase64": "R0VUIC8gSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdA0KWC1UZXN0OiDtoIANCg0K",
+			"expected": {
+				"error": "invalidEncoding"
+			}
+		},
+		{
+			"description": "Rejects header with space before colon (request smuggling vector)",
+			"input": "GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length : 0\r\n\r\n",
+			"expected": {
+				"error": "whitespaceBeforeColon"
+			}
+		},
+		{
+			"description": "Rejects header with tab before colon",
+			"input": "GET / HTTP/1.1\r\nHost: localhost\r\nX-Custom\t: value\r\n\r\n",
+			"expected": {
+				"error": "whitespaceBeforeColon"
+			}
+		},
+		{
+			"description": "Rejects request when Content-Length exceeds maxBodySize",
+			"input": "POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Length: 101\r\n\r\n",
+			"maxBodySize": 100,
+			"expected": {
+				"error": "payloadTooLarge"
+			}
+		},
+		{
+			"description": "Rejects oversized Content-Length even when body data hasn't arrived",
+			"input": "POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Length: 999999\r\n\r\n",
+			"maxBodySize": 50,
+			"expected": {
+				"error": "payloadTooLarge"
+			}
+		},
+		{
+			"description": "RFC 9110 §7.2: rejects Transfer-Encoding (not supported by this parser)",
+			"input": "POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n",
+			"expected": {
+				"error": "unsupportedTransferEncoding"
+			}
+		},
+		{
+			"description": "RFC 9110 §8.6: rejects Transfer-Encoding even with identity encoding",
+			"input": "GET / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: identity\r\n\r\n",
+			"expected": {
+				"error": "unsupportedTransferEncoding"
+			}
+		},
+		{
+			"description": "RFC 9110 §8.6: rejects conflicting Content-Length values (request smuggling vector)",
+			"input": "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\nContent-Length: 10\r\n\r\nhello",
+			"expected": {
+				"error": "conflictingContentLength"
+			}
+		},
+		{
+			"description": "RFC 9110 §8.6: rejects Content-Length with different values via comma-separated list",
+			"input": "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5, 10\r\n\r\nhello",
+			"expected": {
+				"error": "conflictingContentLength"
+			}
+		},
+		{
+			"description": "RFC 9110 §8.6: rejects Content-Length with trailing comma (empty segment)",
+			"input": "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5,\r\n\r\nhello",
+			"expected": {
+				"error": "conflictingContentLength"
+			}
+		},
+		{
+			"description": "RFC 9110 §8.6: rejects Content-Length with leading comma (empty segment)",
+			"input": "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: ,5\r\n\r\nhello",
+			"expected": {
+				"error": "invalidContentLength"
+			}
+		},
+		{
+			"description": "RFC 9110 §8.6: rejects Content-Length with consecutive commas (empty segment)",
+			"input": "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5,,5\r\n\r\nhello",
+			"expected": {
+				"error": "conflictingContentLength"
+			}
+		},
+		{
+			"description": "RFC 9112 §3: rejects request line with double space between method and target",
+			"input": "GET  /path HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"error": "invalidHTTPVersion"
+			}
+		},
+		{
+			"description": "RFC 9112 §7.1: rejects request with missing Host header",
+			"input": "GET / HTTP/1.1\r\nAccept: */*\r\n\r\n",
+			"expected": {
+				"error": "missingHostHeader"
+			}
+		},
+		{
+			"description": "RFC 9112 §7.1: rejects request with multiple Host headers (request smuggling vector)",
+			"input": "GET / HTTP/1.1\r\nHost: example.com\r\nHost: evil.com\r\n\r\n",
+			"expected": {
+				"error": "multipleHostHeaders"
+			}
+		},
+		{
+			"description": "RFC 9112 §5.2: rejects obs-fold (line folding) in header value",
+			"input": "GET / HTTP/1.1\r\nHost: localhost\r\nX-Custom: value\r\n continued\r\n\r\n",
+			"expected": {
+				"error": "obsFoldDetected"
+			}
+		},
+		{
+			"description": "RFC 9112 §5.2: rejects obs-fold with tab continuation",
+			"input": "GET / HTTP/1.1\r\nHost: localhost\r\nX-Custom: value\r\n\tcontinued\r\n\r\n",
+			"expected": {
+				"error": "obsFoldDetected"
+			}
+		},
+		{
+			"description": "RFC 9110 §5.1: empty field name before colon is rejected",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\n: empty-name\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"error": "invalidFieldName"
+			}
+		},
+		{
+			"description": "RFC 9110 §5.5: NUL byte (0x00) in field value is rejected",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nX-Bad: hel\u0000lo\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"error": "invalidFieldValue"
+			}
+		},
+		{
+			"description": "RFC 9110 §5.5: bare CR in field value is rejected",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nX-Bad: hello\rworld\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"error": "invalidFieldValue"
+			}
+		},
+		{
+			"description": "RFC 9110 §5.5: BEL (0x07) in field value is rejected",
+			"input": "GET / HTTP/1.1\r\nX-Test: hel\u0007lo\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"error": "invalidFieldValue"
+			}
+		},
+		{
+			"description": "RFC 9110 §5.5: BS (0x08) in field value is rejected",
+			"input": "GET / HTTP/1.1\r\nX-Test: hel\blo\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"error": "invalidFieldValue"
+			}
+		},
+		{
+			"description": "RFC 9110 §5.5: VT (0x0B) in field value is rejected",
+			"input": "GET / HTTP/1.1\r\nX-Test: hel\u000Blo\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"error": "invalidFieldValue"
+			}
+		},
+		{
+			"description": "RFC 9110 §5.5: FF (0x0C) in field value is rejected",
+			"input": "GET / HTTP/1.1\r\nX-Test: hel\flo\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"error": "invalidFieldValue"
+			}
+		},
+		{
+			"description": "RFC 9110 §5.5: ESC (0x1B) in field value is rejected",
+			"input": "GET / HTTP/1.1\r\nX-Test: hel\u001Blo\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"error": "invalidFieldValue"
+			}
+		},
+		{
+			"description": "RFC 9110 §5.5: DEL (0x7F) in field value is rejected",
+			"input": "GET / HTTP/1.1\r\nX-Test: hel\u007Flo\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"error": "invalidFieldValue"
+			}
+		},
+		{
+			"description": "RFC 9110 §5.5: bare LF in field value is rejected",
+			"input": "GET / HTTP/1.1\r\nX-Test: val\nue\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"error": "invalidFieldValue"
+			}
+		},
+		{
+			"description": "RFC 9110 §8.6: Content-Length rejects floating point",
+			"input": "POST /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5.0\r\n\r\nhello",
+			"expected": {
+				"error": "invalidContentLength"
+			}
+		},
+		{
+			"description": "RFC 9110 §8.6: Content-Length rejects hex",
+			"input": "POST /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0x0A\r\n\r\nhello12345",
+			"expected": {
+				"error": "invalidContentLength"
+			}
+		},
+		{
+			"description": "RFC 9110 §8.6: Content-Length rejects plus sign prefix",
+			"input": "POST /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\nContent-Length: +5\r\n\r\nhello",
+			"expected": {
+				"error": "invalidContentLength"
+			}
+		},
+		{
+			"description": "RFC 9110 §8.6: Content-Length rejects whitespace between digits",
+			"input": "POST /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1 0\r\n\r\nhello12345",
+			"expected": {
+				"error": "invalidContentLength"
+			}
+		},
+		{
+			"description": "RFC 9110 §9.1: method containing parenthesis is rejected",
+			"input": "G(T / HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"error": "malformedRequestLine"
+			}
+		},
+		{
+			"description": "RFC 9110 §9.1: method containing comma is rejected",
+			"input": "GE,T / HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"error": "malformedRequestLine"
+			}
+		},
+		{
+			"description": "RFC 9110 §9.1: method containing slash is rejected",
+			"input": "GE/T / HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"expected": {
+				"error": "malformedRequestLine"
+			}
+		},
+		{
+			"description": "RFC 9110 §5.3: conflicting Content-Length values rejected after header combining",
+			"input": "POST /wp/v2/posts HTTP/1.1\r\nContent-Length: 100\r\nContent-Length: 5\r\nHost: localhost\r\n\r\nhello",
+			"expected": {
+				"error": "conflictingContentLength"
+			}
+		}
+	],
+	"incrementalTests": [
+		{
+			"description": "Handles data arriving byte by byte",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\n\r\n",
+			"chunkSize": 1,
+			"expected": {
+				"method": "GET",
+				"target": "/wp/v2/posts",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Body arriving in multiple small chunks",
+			"headers": "POST /wp/v2/media HTTP/1.1\r\nHost: localhost\r\nContent-Length: 10\r\n\r\n",
+			"bodyChunks": [ "ab", "cd", "ef", "gh", "ij" ],
+			"expected": {
+				"method": "POST",
+				"body": "abcdefghij",
+				"isComplete": true
+			}
+		},
+		{
+			"description": "Returns needsMoreData for incomplete headers",
+			"input": "GET /wp/v2/posts HTTP/1.1\r\nHost: loc",
+			"expected": {
+				"hasHeaders": false,
+				"isComplete": false,
+				"parseResult": null
+			}
+		},
+		{
+			"description": "Transitions to headersComplete then complete as body arrives",
+			"headers": "POST /wp/v2/posts HTTP/1.1\r\nHost: localhost\r\nContent-Length: 11\r\n\r\n",
+			"bodyChunks": [ "hello world" ],
+			"expected": {
+				"body": "hello world",
+				"isComplete": true,
+				"afterHeaders": {
+					"hasHeaders": true,
+					"isComplete": false,
+					"method": "POST",
+					"target": "/wp/v2/posts"
+				}
+			}
+		}
+	]
+}
