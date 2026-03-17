@@ -99,7 +99,7 @@
 		"@wordpress/prettier-config": "^4.38.0",
 		"eslint": "^8.57",
 		"eslint-import-resolver-typescript": "^4.4.4",
-		"eslint-plugin-react-refresh": "^0.4.26",
+		"eslint-plugin-react-refresh": "^0.5.2",
 		"jsdom": "^29.0.0",
 		"magic-string": "^0.30.21",
 		"node-fetch": "^3.3.2",
