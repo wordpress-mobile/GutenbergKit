@@ -105,6 +105,7 @@ test.describe( 'Embedded Content', () => {
 					embed?.attributes?.providerNameSlug
 				);
 			},
+			null,
 			{ timeout: 30_000 }
 		);
 
@@ -138,6 +139,7 @@ test.describe( 'Embedded Content', () => {
 					.getBlocks();
 				return blocks[ 0 ]?.attributes?.url;
 			},
+			null,
 			{ timeout: 30_000 }
 		);
 

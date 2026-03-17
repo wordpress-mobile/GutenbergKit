@@ -47,6 +47,7 @@ test.describe( 'Gallery Block', () => {
 					)
 				);
 			},
+			null,
 			{ timeout: 30_000 }
 		);
 
@@ -86,6 +87,7 @@ test.describe( 'Gallery Block', () => {
 					gallery.innerBlocks[ 0 ].attributes.id > 0
 				);
 			},
+			null,
 			{ timeout: 30_000 }
 		);
 
