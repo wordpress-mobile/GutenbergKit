@@ -7,7 +7,8 @@ let package = Package(
     name: "GutenbergKit",
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
-        .library(name: "GutenbergKit", targets: ["GutenbergKit"])
+        .library(name: "GutenbergKit", targets: ["GutenbergKit"]),
+        .library(name: "GutenbergKitHTTP", targets: ["GutenbergKitHTTP"]),
     ],
     dependencies: [
         .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.5"),
@@ -21,6 +22,17 @@ let package = Package(
             exclude: [],
             resources: [.copy("Gutenberg")]
         ),
+        .target(
+            name: "GutenbergKitHTTP",
+            path: "ios/Sources/GutenbergKitHTTP",
+            exclude: ["README.md"]
+        ),
+        .executableTarget(
+            name: "GutenbergKitDebugServer",
+            dependencies: ["GutenbergKitHTTP"],
+            path: "ios/Sources/GutenbergKitDebugServer",
+            exclude: ["README.md"]
+        ),
         .testTarget(
             name: "GutenbergKitTests",
             dependencies: ["GutenbergKit"],
@@ -29,6 +41,14 @@ let package = Package(
             resources: [
                 .process("Resources")
             ]
-        )
+        ),
+        .testTarget(
+            name: "GutenbergKitHTTPTests",
+            dependencies: ["GutenbergKitHTTP"],
+            path: "ios/Tests/GutenbergKitHTTPTests",
+            resources: [
+                .copy("../../../test-fixtures/http")
+            ]
+        ),
     ]
 )
