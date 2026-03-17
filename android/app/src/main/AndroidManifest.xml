@@ -4,7 +4,7 @@
 
     <application
         android:allowBackup="true"
-        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
@@ -39,6 +39,11 @@
         <activity
             android:name=".SitePreparationActivity"
             android:exported="false" />
+        <!-- exported="true" so the activity can be launched via adb for testing.
+             This is a demo app only — it is never shipped to end users. -->
+        <activity
+            android:name=".MediaProxyServerActivity"
+            android:exported="true" />
     </application>
     <uses-permission android:name="android.permission.INTERNET"/>
 </manifest>

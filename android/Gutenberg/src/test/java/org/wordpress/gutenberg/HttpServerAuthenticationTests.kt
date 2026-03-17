@@ -63,6 +63,28 @@ class HttpServerAuthenticationTests {
     }
 
     @Test
+    fun `request with lowercase 'bearer' scheme returns 200`() {
+        val conn = URL("http://127.0.0.1:${server.port}/test").openConnection() as HttpURLConnection
+        conn.setRequestProperty("Proxy-Authorization", "bearer ${server.token}")
+        try {
+            assertEquals(200, conn.responseCode)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    @Test
+    fun `request with uppercase 'BEARER' scheme returns 200`() {
+        val conn = URL("http://127.0.0.1:${server.port}/test").openConnection() as HttpURLConnection
+        conn.setRequestProperty("Proxy-Authorization", "BEARER ${server.token}")
+        try {
+            assertEquals(200, conn.responseCode)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    @Test
     fun `Authorization header passes through to handler alongside Proxy-Authorization`() {
         var receivedAuth: String? = null
 

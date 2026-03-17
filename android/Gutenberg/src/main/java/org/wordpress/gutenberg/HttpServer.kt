@@ -131,6 +131,7 @@ class HttpServer(
     private val cacheDir: File? = null,
     private val handler: suspend (HttpRequest) -> HttpResponse
 ) {
+    @Volatile
     private var serverSocket: ServerSocket? = null
     private var scope: CoroutineScope? = null
     private val connectionSemaphore = Semaphore(maxConnections)
@@ -146,7 +147,7 @@ class HttpServer(
      * request.  Uses `Proxy-Authorization` (RFC 9110 §11.7.1) rather than
      * `Authorization` so that the client's own `Authorization` header
      * (e.g. HTTP Basic credentials for the upstream server) passes through
-     * to the handler untouched.  Generated randomly on each server start.
+     * to the handler untouched.  Generated randomly on each server instance creation.
      */
     val token: String = generateToken()
 
@@ -191,6 +192,7 @@ class HttpServer(
                         break
                     } catch (e: Exception) {
                         Log.e(TAG, "Accept loop terminated unexpectedly", e)
+                        running = false
                         break
                     }
                 }
@@ -539,7 +541,7 @@ class HttpServer(
         private fun authenticate(proxyAuth: String?, expectedToken: String): Boolean {
             if (proxyAuth == null) return false
             val prefix = "Bearer "
-            if (!proxyAuth.startsWith(prefix)) return false
+            if (!proxyAuth.startsWith(prefix, ignoreCase = true)) return false
             val provided = proxyAuth.substring(prefix.length)
             return constantTimeEqual(provided, expectedToken)
         }
@@ -551,6 +553,14 @@ class HttpServer(
          * length, so timing reveals neither whether lengths match nor how many
          * bytes are correct. When lengths differ, [b] is compared against itself
          * to keep the work constant.
+         *
+         * **Do not replace this with `MessageDigest.isEqual()`.**
+         * On Android API 24–32 (our minSdk through Android 12),
+         * `isEqual()` returns early when array lengths differ — leaking
+         * the expected token length via timing.  The fully constant-time
+         * fix (JDK-8295919) only shipped in Android 13 (API 33).  The
+         * constant-time property is also only an `@implNote`, not a spec
+         * guarantee, so other runtimes are not obligated to honour it.
          *
          * **Do not "simplify" this to an early-return on length mismatch.**
          * An early return would let an attacker measure response time to discover

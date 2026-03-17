@@ -15,6 +15,7 @@
 		246852562EAABB7800ED1F09 /* WordPressAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 0C4F59A12BEFF4980028BD96 /* WordPressAPI */; };
 		2468526B2EAACCA100ED1F09 /* AuthenticationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246852682EAACCA100ED1F09 /* AuthenticationManager.swift */; };
 		2468526C2EAACCA100ED1F09 /* ConfigurationStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246852692EAACCA100ED1F09 /* ConfigurationStorage.swift */; };
+		BB0000012F11000000000001 /* GutenbergKitHTTP in Frameworks */ = {isa = PBXBuildFile; productRef = BB0000012F11000000000002 /* GutenbergKitHTTP */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -51,6 +52,7 @@
 			files = (
 				246852562EAABB7800ED1F09 /* WordPressAPI in Frameworks */,
 				0CF6E04C2BEFF60E00EDEE8A /* GutenbergKit in Frameworks */,
+				BB0000012F11000000000001 /* GutenbergKitHTTP in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -152,6 +154,7 @@
 			packageProductDependencies = (
 				0CF6E04B2BEFF60E00EDEE8A /* GutenbergKit */,
 				0C4F59A12BEFF4980028BD96 /* WordPressAPI */,
+				BB0000012F11000000000002 /* GutenbergKitHTTP */,
 			);
 			productName = Gutenberg;
 			productReference = 0C4F598B2BEFF4970028BD96 /* Gutenberg.app */;
@@ -553,6 +556,10 @@
 		245D6BE32EDFCD640076D741 /* GutenbergKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = GutenbergKit;
+		};
+		BB0000012F11000000000002 /* GutenbergKitHTTP */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = GutenbergKitHTTP;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
