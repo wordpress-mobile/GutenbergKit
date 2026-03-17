@@ -54,7 +54,11 @@ steps:
       plugins: *plugins
 
     - label: ':swift: Test Swift Package'
-      command: make test-swift-package REFRESH_L10N=1 REFRESH_JS_BUILD=1
+      depends_on: build-react
+      command: |
+          buildkite-agent artifact download dist.tar.gz .
+          tar -xzf dist.tar.gz
+          make test-swift-package
       plugins: *plugins
 
     - label: ':ios: Test iOS E2E'
