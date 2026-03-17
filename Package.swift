@@ -3,19 +3,9 @@
 
 import PackageDescription
 
-// How releases work:
+// Always building the resources framework from local source for the time being.
 //
-// On trunk, this is always `.local` — developers build from source.
-// To cut a release, run `make release-on-ci NEW_VERSION=X.Y.Z`.
-// That triggers a Buildkite build which:
-//   1. Builds the XCFramework and computes its checksum
-//   2. Runs `fastlane update_swift_package`, which rewrites this line to
-//      `.release(version: "X.Y.Z", checksum: "<sha256>")`
-//   3. Commits the rewritten Package.swift, tags the commit, and pushes the tag
-//   4. Uploads the XCFramework to S3
-//
-// Consumers pulling a tagged version get the `.release` binary target.
-// The tag is an *output* of the release — never a trigger.
+// We'll follow up with more automation to build and use the binary target option later on.
 let resourcesMode: DependencyMode = .local
 
 let gutenbergKitResources: Target = resourcesMode.target
@@ -62,6 +52,8 @@ let package = Package(
 /// - `.local`: Builds from local source and resources. Use during development.
 /// - `.release(version:checksum:)`: Fetches a pre-built XCFramework from CDN.
 ///   The version and checksum are updated by CI during the release process.
+///
+/// Always `.local` at this point, but useful to have the infrastructure to switch already in place.
 enum DependencyMode {
     case local
     case release(version: String, checksum: String)
