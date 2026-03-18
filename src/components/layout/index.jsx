@@ -1,11 +1,8 @@
 /**
  * WordPress dependencies
  */
-import {
-	EditorSnackbars,
-	ErrorBoundary,
-	AutosaveMonitor,
-} from '@wordpress/editor';
+import { ErrorBoundary, AutosaveMonitor } from '@wordpress/editor';
+import { SnackbarNotices } from '@wordpress/notices';
 
 /**
  * Internal dependencies
@@ -32,7 +29,7 @@ export default function Layout( props ) {
 			<OfflineIndicator />
 			<AutosaveMonitor autosave={ onEditorContentChanged } />
 			<Editor { ...editorProps }>
-				<EditorSnackbars />
+				<SnackbarNotices className="gutenberg-kit-layout__snackbar" />
 			</Editor>
 			<EditorLoadNotice
 				className="gutenberg-kit-layout__load-notice"
