@@ -44,6 +44,7 @@ import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.model.GBKitGlobal
 import org.wordpress.gutenberg.services.EditorService
+import java.util.Collections
 import java.util.Locale
 
 private const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
@@ -97,8 +98,8 @@ class GutenbergView : WebView {
     private val handler = Handler(Looper.getMainLooper())
     private var connectivityManager: ConnectivityManager? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
-    private var lastKnownConnectivity: Boolean? = null
-    private val availableNetworks = mutableSetOf<Network>()
+    @Volatile private var lastKnownConnectivity: Boolean? = null
+    private val availableNetworks = Collections.synchronizedSet(mutableSetOf<Network>())
     var filePathCallback: ValueCallback<Array<Uri?>?>? = null
     val pickImageRequestCode = 1
 
