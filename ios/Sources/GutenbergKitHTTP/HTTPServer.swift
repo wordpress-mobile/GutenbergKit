@@ -29,11 +29,11 @@ import OSLog
 /// are legitimate. The server provides two layers of defence by default:
 ///
 /// 1. Binds to `127.0.0.1` (localhost only) unless `listenOnAllInterfaces` is set.
-/// 2. Requires a randomly-generated bearer token in the `Proxy-Authorization`
-///    header on every request (when `requiresAuthentication` is enabled).
-///    Uses `Proxy-Authorization` per RFC 9110 §11.7.1 so that the client's
-///    `Authorization` header can carry upstream credentials (e.g. HTTP Basic)
-///    independently of the proxy token.
+/// 2. Requires a randomly-generated bearer token on every request (when
+///    `requiresAuthentication` is enabled). Accepts the token in either
+///    `Proxy-Authorization` (RFC 9110 §11.7.1, for native clients) or
+///    `Relay-Authorization` (for browser `fetch()`, where `Proxy-*` headers
+///    are forbidden). Both keep `Authorization` free for upstream credentials.
 ///
 /// ## Connection Model
 ///
@@ -63,11 +63,8 @@ public final class HTTPServer: Sendable {
     /// The port the server is listening on.
     public let port: UInt16
 
-    /// A bearer token required in the `Proxy-Authorization` header of every
-    /// request.  Uses `Proxy-Authorization` (RFC 9110 §11.7.1) rather than
-    /// `Authorization` so that the client's own `Authorization` header
-    /// (e.g. HTTP Basic credentials for the upstream server) passes through
-    /// to the handler untouched.  Generated randomly on each server start.
+    /// A bearer token required on every request (via `Proxy-Authorization`
+    /// or `Relay-Authorization`). Generated randomly on each server start.
     public let token: String
 
     private let listener: NWListener
@@ -447,11 +444,21 @@ public final class HTTPServer: Sendable {
 
     // MARK: - Authentication
 
-    /// Validates the proxy bearer token from the `Proxy-Authorization` header
-    /// (RFC 9110 §11.7.1).  Using `Proxy-Authorization` keeps the client's
-    /// `Authorization` header available for upstream credentials.
+    /// Validates the proxy bearer token from the request.
+    ///
+    /// Accepts the token in either:
+    /// - `Proxy-Authorization` — the standard HTTP header for proxy credentials
+    ///   (RFC 9110 §11.7.1), usable from native HTTP clients.
+    /// - `Relay-Authorization` — a non-forbidden alternative usable from
+    ///   browser `fetch()`, where `Proxy-*` headers are silently stripped
+    ///   (Fetch spec §2.2.2).
+    ///
+    /// Both headers keep the client's `Authorization` header available for
+    /// upstream credentials.
     private static func authenticate(_ request: ParsedHTTPRequest, token: String) -> Bool {
-        guard let proxyAuth = request.header("Proxy-Authorization") else {
+        let proxyAuth = request.header("Proxy-Authorization")
+            ?? request.header("Relay-Authorization")
+        guard let proxyAuth else {
             return false
         }
 

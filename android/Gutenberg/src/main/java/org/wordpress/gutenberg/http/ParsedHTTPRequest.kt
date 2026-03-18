@@ -45,8 +45,8 @@ class ParsedHTTPRequest(
      * Returns the headers suitable for forwarding to an upstream server.
      *
      * Strips RFC 9110 §7.6.1 hop-by-hop headers, any headers listed in the
-     * `Connection` header, and the `Proxy-Authorization` header (which carries
-     * the proxy's own bearer token per RFC 9110 §11.7.1 and must not be
+     * `Connection` header, and the `Proxy-Authorization` / `Relay-Authorization`
+     * headers (which carry the proxy's own bearer token and must not be
      * forwarded upstream).  The `Authorization` header is intentionally kept
      * so that the client's own credentials (e.g. HTTP Basic) pass through.
      */
@@ -54,7 +54,7 @@ class ParsedHTTPRequest(
         val hopByHop = mutableSetOf(
             "host", "connection", "transfer-encoding", "keep-alive",
             "proxy-connection", "te", "upgrade", "trailer",
-            "proxy-authorization",
+            "proxy-authorization", "relay-authorization",
         )
 
         // Headers listed in Connection are also hop-by-hop (RFC 9110 §7.6.1).

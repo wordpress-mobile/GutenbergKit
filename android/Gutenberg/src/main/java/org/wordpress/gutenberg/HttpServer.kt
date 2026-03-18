@@ -83,11 +83,11 @@ data class HttpResponse(
  * are legitimate. The server provides two layers of defence by default:
  *
  * 1. Binds to loopback (localhost only) unless [externallyAccessible] is set.
- * 2. Requires a randomly-generated bearer token in the `Proxy-Authorization`
- *    header on every request (when [requiresAuthentication] is enabled).
- *    Uses `Proxy-Authorization` per RFC 9110 §11.7.1 so that the client's
- *    `Authorization` header can carry upstream credentials (e.g. HTTP Basic)
- *    independently of the proxy token.
+ * 2. Requires a randomly-generated bearer token on every request (when
+ *    [requiresAuthentication] is enabled). Accepts the token in either
+ *    `Proxy-Authorization` (RFC 9110 §11.7.1, for native clients) or
+ *    `Relay-Authorization` (for browser `fetch()`, where `Proxy-*` headers
+ *    are forbidden). Both keep `Authorization` free for upstream credentials.
  *
  * ## Connection Model
  *
@@ -297,6 +297,7 @@ class HttpServer(
             // never include credentials (Fetch spec §3.3.5).
             if (requiresAuthentication && partial.method.uppercase() != "OPTIONS") {
                 val proxyAuth = partial.header("Proxy-Authorization")
+                    ?: partial.header("Relay-Authorization")
                 if (!authenticate(proxyAuth, token)) {
                     sendResponse(socket, HttpResponse(
                         status = 407,
@@ -534,9 +535,17 @@ class HttpServer(
         }
 
         /**
-         * Validates the proxy bearer token from the `Proxy-Authorization`
-         * header (RFC 9110 §11.7.1).  Using `Proxy-Authorization` keeps the
-         * client's `Authorization` header available for upstream credentials.
+         * Validates the proxy bearer token from the request.
+         *
+         * Accepts the token in either:
+         * - `Proxy-Authorization` — the standard HTTP header for proxy credentials
+         *   (RFC 9110 §11.7.1), usable from native HTTP clients.
+         * - `Relay-Authorization` — a non-forbidden alternative usable from
+         *   browser `fetch()`, where `Proxy-*` headers are silently stripped
+         *   (Fetch spec §2.2.2).
+         *
+         * Both headers keep the client's `Authorization` header available for
+         * upstream credentials.
          *
          * Uses constant-time comparison to prevent timing attacks.
          */

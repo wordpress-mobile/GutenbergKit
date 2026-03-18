@@ -192,6 +192,71 @@ struct ParsedHTTPRequestTests {
         #expect(urlRequest.value(forHTTPHeaderField: "Accept") == "application/json")
     }
 
+    @Test("urlRequest strips Relay-Authorization header (fetch()-compatible proxy token)")
+    func urlRequestStripsRelayAuthorizationHeader() {
+        let request = ParsedHTTPRequest.complete(
+            method: "GET",
+            target: "/wp/v2/posts",
+            httpVersion: "HTTP/1.1",
+            headers: [
+                "Relay-Authorization": "Bearer secret-proxy-token",
+                "Authorization": "Basic dXNlcjpwYXNz",
+                "Accept": "application/json",
+            ],
+            body: nil
+        )
+
+        let baseURL = URL(string: "https://example.com")!
+        let urlRequest = request.urlRequest(relativeTo: baseURL)!
+
+        #expect(urlRequest.value(forHTTPHeaderField: "Relay-Authorization") == nil)
+        #expect(urlRequest.value(forHTTPHeaderField: "Authorization") == "Basic dXNlcjpwYXNz")
+        #expect(urlRequest.value(forHTTPHeaderField: "Accept") == "application/json")
+    }
+
+    @Test("urlRequest strips lowercase relay-authorization header")
+    func urlRequestStripsLowercaseRelayAuthorizationHeader() {
+        let request = ParsedHTTPRequest.complete(
+            method: "GET",
+            target: "/wp/v2/posts",
+            httpVersion: "HTTP/1.1",
+            headers: [
+                "relay-authorization": "Bearer secret-proxy-token",
+                "Accept": "application/json",
+            ],
+            body: nil
+        )
+
+        let baseURL = URL(string: "https://example.com")!
+        let urlRequest = request.urlRequest(relativeTo: baseURL)!
+
+        #expect(urlRequest.value(forHTTPHeaderField: "relay-authorization") == nil)
+        #expect(urlRequest.value(forHTTPHeaderField: "Accept") == "application/json")
+    }
+
+    @Test("urlRequest strips both Proxy-Authorization and Relay-Authorization when both present")
+    func urlRequestStripsBothProxyAndRelayAuth() {
+        let request = ParsedHTTPRequest.complete(
+            method: "GET",
+            target: "/wp/v2/posts",
+            httpVersion: "HTTP/1.1",
+            headers: [
+                "Proxy-Authorization": "Bearer token-a",
+                "Relay-Authorization": "Bearer token-b",
+                "Authorization": "Basic dXNlcjpwYXNz",
+                "Accept": "application/json",
+            ],
+            body: nil
+        )
+
+        let baseURL = URL(string: "https://example.com")!
+        let urlRequest = request.urlRequest(relativeTo: baseURL)!
+
+        #expect(urlRequest.value(forHTTPHeaderField: "Proxy-Authorization") == nil)
+        #expect(urlRequest.value(forHTTPHeaderField: "Relay-Authorization") == nil)
+        #expect(urlRequest.value(forHTTPHeaderField: "Authorization") == "Basic dXNlcjpwYXNz")
+    }
+
     // MARK: - Fix #2: Case-insensitive Connection header for hop-by-hop extension
 
     @Test("urlRequest strips headers listed in lowercase connection header")

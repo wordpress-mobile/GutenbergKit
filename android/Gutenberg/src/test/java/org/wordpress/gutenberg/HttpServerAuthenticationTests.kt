@@ -84,6 +84,84 @@ class HttpServerAuthenticationTests {
         }
     }
 
+    // Relay-Authorization (fetch()-compatible alternative)
+
+    @Test
+    fun `Relay-Authorization with valid token returns 200`() {
+        val conn = URL("http://127.0.0.1:${server.port}/test").openConnection() as HttpURLConnection
+        conn.setRequestProperty("Relay-Authorization", "Bearer ${server.token}")
+        try {
+            assertEquals(200, conn.responseCode)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    @Test
+    fun `Relay-Authorization with wrong token returns 407`() {
+        val conn = URL("http://127.0.0.1:${server.port}/test").openConnection() as HttpURLConnection
+        conn.setRequestProperty("Relay-Authorization", "Bearer wrong-token")
+        try {
+            assertEquals(407, conn.responseCode)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    @Test
+    fun `Relay-Authorization with lowercase 'bearer' scheme returns 200`() {
+        val conn = URL("http://127.0.0.1:${server.port}/test").openConnection() as HttpURLConnection
+        conn.setRequestProperty("Relay-Authorization", "bearer ${server.token}")
+        try {
+            assertEquals(200, conn.responseCode)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    @Test
+    fun `Authorization header passes through to handler alongside Relay-Authorization`() {
+        server.stop()
+
+        var receivedAuth: String? = null
+        val authServer = HttpServer(
+            name = "auth-test-relay-passthrough",
+            externallyAccessible = false,
+            requiresAuthentication = true,
+            handler = { request ->
+                receivedAuth = request.header("Authorization")
+                HttpResponse(body = "OK\n".toByteArray())
+            }
+        )
+        authServer.start()
+        try {
+            val conn = URL("http://127.0.0.1:${authServer.port}/test").openConnection() as HttpURLConnection
+            conn.setRequestProperty("Relay-Authorization", "Bearer ${authServer.token}")
+            conn.setRequestProperty("Authorization", "Basic dXNlcjpwYXNz")
+            try {
+                assertEquals(200, conn.responseCode)
+                assertEquals("Basic dXNlcjpwYXNz", receivedAuth)
+            } finally {
+                conn.disconnect()
+            }
+        } finally {
+            authServer.stop()
+        }
+    }
+
+    @Test
+    fun `Proxy-Authorization takes precedence over Relay-Authorization`() {
+        java.net.Socket("127.0.0.1", server.port).use { sock ->
+            val raw = "GET /test HTTP/1.1\r\nHost: 127.0.0.1\r\nProxy-Authorization: Bearer ${server.token}\r\nRelay-Authorization: Bearer wrong\r\n\r\n"
+            sock.getOutputStream().write(raw.toByteArray())
+            sock.getOutputStream().flush()
+            val statusLine = sock.getInputStream().bufferedReader().readLine()
+            assertEquals("HTTP/1.1 200 OK", statusLine)
+        }
+    }
+
+    // Authorization Passthrough
+
     @Test
     fun `Authorization header passes through to handler alongside Proxy-Authorization`() {
         var receivedAuth: String? = null

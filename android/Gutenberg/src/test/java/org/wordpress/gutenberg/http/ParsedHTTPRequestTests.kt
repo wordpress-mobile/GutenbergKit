@@ -127,6 +127,49 @@ class ParsedHTTPRequestTests {
     }
 
     @Test
+    fun `forwardingHeaders strips Relay-Authorization but keeps Authorization`() {
+        val request = ParsedHTTPRequest(
+            method = "GET",
+            target = "/wp/v2/posts",
+            httpVersion = "HTTP/1.1",
+            headers = mapOf(
+                "Relay-Authorization" to "Bearer relay-token",
+                "Authorization" to "Basic dXNlcjpwYXNz",
+                "Accept" to "application/json"
+            ),
+            body = null,
+            isComplete = true
+        )
+
+        val forwarded = request.forwardingHeaders()
+        assertFalse(forwarded.keys.any { it.equals("Relay-Authorization", ignoreCase = true) })
+        assertEquals("Basic dXNlcjpwYXNz", forwarded["Authorization"])
+        assertEquals("application/json", forwarded["Accept"])
+    }
+
+    @Test
+    fun `forwardingHeaders strips both Proxy-Authorization and Relay-Authorization`() {
+        val request = ParsedHTTPRequest(
+            method = "GET",
+            target = "/wp/v2/posts",
+            httpVersion = "HTTP/1.1",
+            headers = mapOf(
+                "Proxy-Authorization" to "Bearer token-a",
+                "Relay-Authorization" to "Bearer token-b",
+                "Authorization" to "Basic dXNlcjpwYXNz",
+                "Accept" to "application/json"
+            ),
+            body = null,
+            isComplete = true
+        )
+
+        val forwarded = request.forwardingHeaders()
+        assertFalse(forwarded.keys.any { it.equals("Proxy-Authorization", ignoreCase = true) })
+        assertFalse(forwarded.keys.any { it.equals("Relay-Authorization", ignoreCase = true) })
+        assertEquals("Basic dXNlcjpwYXNz", forwarded["Authorization"])
+    }
+
+    @Test
     fun `forwardingHeaders strips headers listed in Connection header`() {
         val request = ParsedHTTPRequest(
             method = "GET",

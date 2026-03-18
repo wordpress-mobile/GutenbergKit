@@ -176,14 +176,14 @@ extension ParsedHTTPRequest {
         request.httpMethod = method
 
         // RFC 9110 §7.6.1: hop-by-hop headers must not be forwarded by proxies.
-        // "proxy-authorization" carries the proxy's own bearer token
-        // (RFC 9110 §11.7.1) and must not be forwarded to the upstream server.
+        // "proxy-authorization" and "relay-authorization" carry the proxy's
+        // own bearer token and must not be forwarded to the upstream server.
         // "authorization" is intentionally kept so that the client's own
         // credentials (e.g. HTTP Basic for the upstream server) pass through.
         var hopByHop: Set<String> = [
             "host", "connection", "transfer-encoding", "keep-alive",
             "proxy-connection", "te", "upgrade", "trailer",
-            "proxy-authorization",
+            "proxy-authorization", "relay-authorization",
         ]
 
         // Headers listed in Connection are also hop-by-hop (RFC 9110 §7.6.1).

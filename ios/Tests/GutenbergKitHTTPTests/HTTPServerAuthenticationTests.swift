@@ -108,6 +108,110 @@ struct HTTPServerAuthenticationTests {
         #expect(http.statusCode == 200)
     }
 
+    // MARK: - Relay-Authorization (fetch()-compatible alternative)
+
+    @Test("Relay-Authorization with valid token returns 200")
+    func relayAuthValidTokenReturns200() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let url = URL(string: "http://127.0.0.1:\(server.port)/test")!
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        let http = try #require(response as? HTTPURLResponse)
+
+        #expect(http.statusCode == 200)
+    }
+
+    @Test("Relay-Authorization with wrong token returns 407")
+    func relayAuthWrongTokenReturns407() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let url = URL(string: "http://127.0.0.1:\(server.port)/test")!
+        var request = URLRequest(url: url)
+        request.setValue("Bearer wrong-token", forHTTPHeaderField: "Relay-Authorization")
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        let http = try #require(response as? HTTPURLResponse)
+
+        #expect(http.statusCode == 407)
+    }
+
+    @Test("Relay-Authorization with lowercase 'bearer' scheme returns 200")
+    func relayAuthLowercaseBearerReturns200() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let url = URL(string: "http://127.0.0.1:\(server.port)/test")!
+        var request = URLRequest(url: url)
+        request.setValue("bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        let http = try #require(response as? HTTPURLResponse)
+
+        #expect(http.statusCode == 200)
+    }
+
+    @Test("Authorization header passes through to handler alongside Relay-Authorization")
+    func authorizationPassesThroughWithRelayAuth() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { req in
+            let auth = req.parsed.header("Authorization") ?? ""
+            let relayAuth = req.parsed.header("Relay-Authorization") ?? "absent"
+            return HTTPResponse(
+                status: 200,
+                headers: [("X-Received-Auth", auth), ("X-Received-Relay", relayAuth)],
+                body: Data("OK\n".utf8)
+            )
+        }
+        defer { server.stop() }
+
+        let raw = "GET /test HTTP/1.1\r\nHost: 127.0.0.1\r\nRelay-Authorization: Bearer \(server.token)\r\nAuthorization: Basic dXNlcjpwYXNz\r\n\r\n"
+        let response = try await sendRaw(raw, toPort: server.port)
+
+        #expect(response.contains("HTTP/1.1 200"))
+        #expect(response.contains("X-Received-Auth: Basic dXNlcjpwYXNz"))
+    }
+
+    @Test("Proxy-Authorization takes precedence over Relay-Authorization")
+    func proxyAuthTakesPrecedenceOverRelayAuth() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        // Proxy-Authorization has the correct token, Relay-Authorization has a wrong one.
+        // Server should accept because Proxy-Authorization is checked first.
+        let raw = "GET /test HTTP/1.1\r\nHost: 127.0.0.1\r\nProxy-Authorization: Bearer \(server.token)\r\nRelay-Authorization: Bearer wrong\r\n\r\n"
+        let response = try await sendRaw(raw, toPort: server.port)
+        #expect(response.hasPrefix("HTTP/1.1 200"))
+    }
+
+    // MARK: - Authorization Passthrough
+
     @Test("Authorization header passes through to handler alongside Proxy-Authorization")
     func authorizationPassesThroughToHandler() async throws {
         let server = try await HTTPServer.start(
