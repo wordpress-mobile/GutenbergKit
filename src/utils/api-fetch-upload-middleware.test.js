@@ -196,7 +196,7 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		const [ url, options ] = global.fetch.mock.calls[ 0 ];
 		expect( url ).toBe( 'http://localhost:12345/upload' );
 		expect( options.method ).toBe( 'POST' );
-		expect( options.headers.Authorization ).toBe( 'Bearer test-token' );
+		expect( options.headers[ 'X-Upload-Token' ] ).toBe( 'test-token' );
 		expect( options.body ).toBeInstanceOf( FormData );
 	} );
 

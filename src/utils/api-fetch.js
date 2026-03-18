@@ -187,7 +187,7 @@ export function nativeMediaUploadMiddleware( options, next ) {
 	return fetch( `http://localhost:${ nativeUploadPort }/upload`, {
 		method: 'POST',
 		headers: {
-			Authorization: `Bearer ${ nativeUploadToken }`,
+			'X-Upload-Token': nativeUploadToken,
 		},
 		body: formData,
 		signal: options.signal,
