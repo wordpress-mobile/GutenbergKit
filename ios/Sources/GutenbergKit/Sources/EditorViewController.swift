@@ -238,10 +238,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         if let dependencies {
             // FAST PATH: Dependencies were provided at init() - load immediately
-            do {
-                try self.loadEditor(dependencies: dependencies)
-            } catch {
-                self.error = error
+            self.dependencyTaskHandle = Task(priority: .userInitiated) { [weak self] in
+                guard let self else { return }
+                do {
+                    try await self.loadEditor(dependencies: dependencies)
+                } catch {
+                    await MainActor.run { self.error = error }
+                }
             }
         } else {
             // ASYNC FLOW: No dependencies - fetch them asynchronously
@@ -285,7 +288,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             self.dependencies = dependencies
 
             // Continue to the shared loading path
-            try self.loadEditor(dependencies: dependencies)
+            try await self.loadEditor(dependencies: dependencies)
         } catch {
             // Display error view - this sets self.error which triggers displayError()
             self.error = error
@@ -302,14 +305,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// The editor will eventually emit an `onEditorLoaded` message, triggering `didLoadEditor()`.
     ///
     @MainActor
-    private func loadEditor(dependencies: EditorDependencies) throws {
+    private func loadEditor(dependencies: EditorDependencies) async throws {
         self.displayActivityView()
 
         // Set asset bundle for the URL scheme handler to serve cached plugin/theme assets
         self.bundleProvider.set(bundle: dependencies.assetBundle)
 
         // Start the local upload server for native media processing
-        startUploadServer()
+        await startUploadServer()
 
         // Build and inject editor configuration as window.GBKit
         let editorConfig = try buildEditorConfiguration(dependencies: dependencies)
@@ -365,7 +368,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// The server binds to localhost on a random port. If it fails to start, the editor
     /// falls back to Gutenberg's default upload behavior (the JS override won't activate
     /// because `nativeUploadPort` will be nil in GBKit).
-    private func startUploadServer() {
+    private func startUploadServer() async {
         guard mediaUploadDelegate != nil else {
             return
         }
@@ -376,7 +379,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         )
 
         do {
-            self.uploadServer = try MediaUploadServer(
+            self.uploadServer = try await MediaUploadServer(
                 uploadDelegate: mediaUploadDelegate,
                 defaultUploader: defaultUploader
             )

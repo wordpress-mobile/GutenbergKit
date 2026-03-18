@@ -2,15 +2,20 @@ import Foundation
 import Testing
 @testable import GutenbergKit
 
-/// Check if NWListener can bind in this environment (fails in some test sandboxes).
+/// Check if we can start an upload server in this environment (fails in some test sandboxes).
 private let _canStartUploadServer: Bool = {
-  do {
-    let server = try MediaUploadServer()
-    server.stop()
-    return true
-  } catch {
-    return false
-  }
+    let semaphore = DispatchSemaphore(value: 0)
+    nonisolated(unsafe) var result = false
+    Task {
+        do {
+            let server = try await MediaUploadServer()
+            server.stop()
+            result = true
+        } catch {}
+        semaphore.signal()
+    }
+    semaphore.wait()
+    return result
 }()
 
 // MARK: - Integration Tests (require network)
@@ -19,8 +24,8 @@ private let _canStartUploadServer: Bool = {
 struct MediaUploadServerTests {
 
   @Test("starts and provides a port and token")
-  func startAndStop() throws {
-    let server = try MediaUploadServer()
+  func startAndStop() async throws {
+    let server = try await MediaUploadServer()
     #expect(server.port > 0)
     #expect(!server.token.isEmpty)
     server.stop()
@@ -28,7 +33,7 @@ struct MediaUploadServerTests {
 
   @Test("rejects requests without auth token")
   func rejectsUnauthenticated() async throws {
-    let server = try MediaUploadServer()
+    let server = try await MediaUploadServer()
     defer { server.stop() }
 
     let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
@@ -42,13 +47,13 @@ struct MediaUploadServerTests {
 
   @Test("rejects requests with wrong token")
   func rejectsWrongToken() async throws {
-    let server = try MediaUploadServer()
+    let server = try await MediaUploadServer()
     defer { server.stop() }
 
     let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.setValue("Bearer wrong-token", forHTTPHeaderField: "Authorization")
+    request.setValue("wrong-token", forHTTPHeaderField: "X-Upload-Token")
 
     let (_, response) = try await URLSession.shared.data(for: request)
     let httpResponse = try #require(response as? HTTPURLResponse)
@@ -57,7 +62,7 @@ struct MediaUploadServerTests {
 
   @Test("responds to OPTIONS preflight with CORS headers")
   func corsPreflightResponse() async throws {
-    let server = try MediaUploadServer()
+    let server = try await MediaUploadServer()
     defer { server.stop() }
 
     let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
@@ -73,13 +78,13 @@ struct MediaUploadServerTests {
 
   @Test("returns 404 for unknown paths")
   func unknownPath() async throws {
-    let server = try MediaUploadServer()
+    let server = try await MediaUploadServer()
     defer { server.stop() }
 
     let url = URL(string: "http://127.0.0.1:\(server.port)/unknown")!
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Authorization")
+    request.setValue(server.token, forHTTPHeaderField: "X-Upload-Token")
 
     let (_, response) = try await URLSession.shared.data(for: request)
     let httpResponse = try #require(response as? HTTPURLResponse)
@@ -89,7 +94,7 @@ struct MediaUploadServerTests {
   @Test("calls delegate and returns upload result")
   func delegateProcessAndUpload() async throws {
     let delegate = MockUploadDelegate()
-    let server = try MediaUploadServer(uploadDelegate: delegate)
+    let server = try await MediaUploadServer(uploadDelegate: delegate)
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -99,7 +104,7 @@ struct MediaUploadServerTests {
     let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Authorization")
+    request.setValue(server.token, forHTTPHeaderField: "X-Upload-Token")
     request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
     request.httpBody = body
 
@@ -122,7 +127,7 @@ struct MediaUploadServerTests {
   func delegateFallbackToDefault() async throws {
     let delegate = ProcessOnlyDelegate()
     let mockUploader = MockDefaultUploader()
-    let server = try MediaUploadServer(uploadDelegate: delegate, defaultUploader: mockUploader)
+    let server = try await MediaUploadServer(uploadDelegate: delegate, defaultUploader: mockUploader)
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -132,7 +137,7 @@ struct MediaUploadServerTests {
     let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Authorization")
+    request.setValue(server.token, forHTTPHeaderField: "X-Upload-Token")
     request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
     request.httpBody = body
 

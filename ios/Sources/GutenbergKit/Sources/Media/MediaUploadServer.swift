@@ -1,13 +1,13 @@
 import Foundation
-import Network
 import OSLog
-import UniformTypeIdentifiers
+import GutenbergKitHTTP
 
 /// A lightweight local HTTP server that receives file uploads from the WebView
 /// and routes them through the native media processing pipeline.
 ///
 /// The server binds to `127.0.0.1` on a random available port and validates
-/// all requests using a per-session Bearer token. It handles:
+/// all requests using a per-session Bearer token in the `X-Upload-Token` header.
+/// It handles:
 /// - `OPTIONS` preflight requests (CORS)
 /// - `POST /upload` multipart form-data uploads
 ///
@@ -15,18 +15,15 @@ import UniformTypeIdentifiers
 /// stop on deinit.
 final class MediaUploadServer: Sendable {
 
-    /// The port the server is listening on, available after `start()`.
+    /// The port the server is listening on.
     let port: UInt16
 
     /// Per-session auth token for validating incoming requests.
     let token: String
 
-    private let listener: NWListener
-    private let queue = DispatchQueue(label: "com.gutenbergkit.upload-server")
-    private let uploadDelegate: (any MediaUploadDelegate)?
-    private let defaultUploader: DefaultMediaUploader?
+    private let server: HTTPServer
 
-    /// Creates a new upload server.
+    /// Creates and starts a new upload server.
     ///
     /// - Parameters:
     ///   - uploadDelegate: Optional delegate for customizing file processing and upload.
@@ -34,269 +31,152 @@ final class MediaUploadServer: Sendable {
     init(
         uploadDelegate: (any MediaUploadDelegate)? = nil,
         defaultUploader: DefaultMediaUploader? = nil
-    ) throws {
-        self.token = UUID().uuidString
-        self.uploadDelegate = uploadDelegate
-        self.defaultUploader = defaultUploader
-
-        let parameters = NWParameters.tcp
-        parameters.requiredLocalEndpoint = NWEndpoint.hostPort(host: .ipv4(.loopback), port: .any)
-
-        let listener = try NWListener(using: parameters)
-        self.listener = listener
-
-        // Determine the assigned port by starting synchronously enough to read it.
-        let semaphore = DispatchSemaphore(value: 0)
-        // Safe: written before semaphore.signal(), read after semaphore.wait().
-        nonisolated(unsafe) var assignedPort: UInt16 = 0
-
-        // newConnectionHandler must be set before start(). Since we can't
-        // reference `self` yet (port isn't assigned), use a box that we fill
-        // once init completes. There is a brief window between listener.start()
-        // and `serverRef = self` where incoming connections would be silently
-        // dropped (serverRef is nil). In practice this is negligible because
-        // the JS layer only sends requests after the editor loads, well after
-        // init returns.
-        nonisolated(unsafe) var serverRef: MediaUploadServer?
-
-        listener.newConnectionHandler = { connection in
-            serverRef?.handleConnection(connection)
+    ) async throws {
+        let delegate = uploadDelegate
+        let uploader = defaultUploader
+        // requiresAuthentication: false because HTTPServer checks auth on every request,
+        // including CORS preflight (OPTIONS). We handle auth in the handler ourselves,
+        // skipping it for OPTIONS so the browser's preflight succeeds.
+        //
+        // We use X-Upload-Token rather than Proxy-Authorization because WebKit's fetch()
+        // treats Proxy-Authorization as a forbidden header (per the Fetch spec) and silently
+        // strips it before sending the request.
+        //
+        // TokenBox bridges the token from post-start assignment into the handler closure.
+        // The JS layer only sends requests after the editor is fully loaded (well after init
+        // returns), so the tiny window between server start and token assignment is safe.
+        let tokenBox = TokenBox()
+        let httpServer = try await HTTPServer.start(
+            name: "media-upload",
+            requiresAuthentication: false,
+            maxRequestBodySize: Int64(250 * 1024 * 1024)
+        ) { request in
+            return await Self.handleRequest(
+                request.parsed,
+                token: tokenBox.value,
+                uploadDelegate: delegate,
+                defaultUploader: uploader
+            )
         }
-
-        listener.stateUpdateHandler = { state in
-            switch state {
-            case .ready:
-                if let port = listener.port {
-                    assignedPort = port.rawValue
-                }
-                semaphore.signal()
-            case .failed(let error):
-                Logger.uploadServer.error("Listener failed: \(error)")
-                semaphore.signal()
-            case .cancelled:
-                semaphore.signal()
-            case .waiting(let error):
-                // Transient state — the listener may still transition to .ready.
-                Logger.uploadServer.info("Listener waiting for network path: \(error)")
-            default:
-                break
-            }
-        }
-
-        listener.start(queue: queue)
-        // Allow up to 3 seconds for the listener to become ready.
-        _ = semaphore.wait(timeout: .now() + 3)
-
-        guard assignedPort != 0 else {
-            throw ServerError.failedToStart
-        }
-
-        self.port = assignedPort
-        serverRef = self
-
-        Logger.uploadServer.info("Upload server started on port \(assignedPort)")
+        tokenBox.value = httpServer.token
+        self.port = httpServer.port
+        self.token = httpServer.token
+        self.server = httpServer
+        Logger.uploadServer.info("Upload server started on port \(httpServer.port)")
     }
 
     /// Stops the server and releases resources.
     func stop() {
-        listener.cancel()
+        server.stop()
         Logger.uploadServer.info("Upload server stopped")
     }
 
     deinit {
-        listener.cancel()
-    }
-
-    // MARK: - Connection Handling
-
-    private func handleConnection(_ connection: NWConnection) {
-        connection.start(queue: queue)
-
-        receiveAllData(on: connection) { [weak self] data in
-            guard let self, let data else {
-                connection.cancel()
-                return
-            }
-
-            Task {
-                let response = await self.handleRequest(data)
-                connection.send(content: response, completion: .contentProcessed { _ in
-                    connection.cancel()
-                })
-            }
-        }
-    }
-
-    /// Accumulates all data from a connection until the request is complete.
-    ///
-    /// Note: The full request body is buffered in memory, so a 250 MB upload will
-    /// temporarily require ~500 MB of heap. Streaming would reduce peak memory but
-    /// significantly complicate multipart parsing. The server's size limit acts as
-    /// a safety valve for this trade-off.
-    private func receiveAllData(on connection: NWConnection, completion: @escaping @Sendable (Data?) -> Void) {
-        // Buffer is only accessed serially on the NWConnection's queue callback chain,
-        // but Swift concurrency can't prove this statically.
-        nonisolated(unsafe) var buffer = Data()
-        // Cached header parse result to avoid re-parsing on every chunk.
-        nonisolated(unsafe) var headerInfo: ParsedHeaderInfo?
-
-        @Sendable func receiveChunk() {
-            connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { content, _, isComplete, error in
-                if let content {
-                    buffer.append(content)
-                }
-
-                if isComplete || error != nil {
-                    completion(buffer.isEmpty ? nil : buffer)
-                } else {
-                    // Check if we have a complete HTTP request (Content-Length based).
-                    if self.isRequestComplete(buffer, headerInfo: &headerInfo) {
-                        completion(buffer)
-                    } else {
-                        receiveChunk()
-                    }
-                }
-            }
-        }
-
-        receiveChunk()
-    }
-
-    /// Cached result of parsing HTTP headers from the receive buffer.
-    private struct ParsedHeaderInfo {
-        let bodyOffset: Int
-        let contentLength: Int?
-        let isBodylessMethod: Bool
-    }
-
-    /// Parses HTTP headers once and caches the result in `headerInfo`.
-    private func parseHeaderInfo(from data: Data) -> ParsedHeaderInfo? {
-        guard let headerEndRange = data.range(of: Data("\r\n\r\n".utf8)) else {
-            return nil
-        }
-
-        guard let headers = String(data: data[data.startIndex..<headerEndRange.lowerBound], encoding: .utf8) else {
-            return nil
-        }
-
-        let headerLines = headers.split(separator: "\r\n")
-        let bodyOffset = headerEndRange.upperBound
-
-        var contentLength: Int?
-        if let contentLengthLine = headerLines.first(where: { $0.lowercased().hasPrefix("content-length:") }) {
-            contentLength = Int(contentLengthLine.split(separator: ":").last?.trimmingCharacters(in: .whitespaces) ?? "0") ?? 0
-        }
-
-        let requestLine = headerLines.first ?? ""
-        let isBodylessMethod = !requestLine.hasPrefix("POST") && !requestLine.hasPrefix("PUT")
-
-        return ParsedHeaderInfo(
-            bodyOffset: bodyOffset,
-            contentLength: contentLength,
-            isBodylessMethod: isBodylessMethod
-        )
-    }
-
-    /// Checks whether the accumulated buffer contains a complete HTTP request.
-    private func isRequestComplete(_ data: Data, headerInfo: inout ParsedHeaderInfo?) -> Bool {
-        // Parse headers once and cache for subsequent calls.
-        if headerInfo == nil {
-            headerInfo = parseHeaderInfo(from: data)
-        }
-
-        guard let info = headerInfo else {
-            return false
-        }
-
-        // Check for Content-Length header
-        if let contentLength = info.contentLength {
-            // Reject oversized uploads early to avoid buffering into memory.
-            if contentLength > Self.maxUploadSize {
-                return true  // Signal completion so handleRequest can reject it.
-            }
-            let bodyLength = data.count - info.bodyOffset
-            return bodyLength >= contentLength
-        }
-
-        // No Content-Length — for methods that shouldn't have a body (OPTIONS, GET),
-        // headers alone are sufficient. For POST, we can't determine completeness
-        // without Content-Length, so rely on connection close.
-        if info.isBodylessMethod {
-            return true
-        }
-
-        return false
+        server.stop()
     }
 
     // MARK: - Request Handling
 
-    private func handleRequest(_ data: Data) async -> Data {
-        guard let request = HTTPRequest(data: data) else {
-            return makeResponse(status: 400, statusText: "Bad Request", body: "Malformed HTTP request")
-        }
-
-        // CORS preflight
+    private static func handleRequest(
+        _ request: ParsedHTTPRequest,
+        token: String,
+        uploadDelegate: (any MediaUploadDelegate)?,
+        defaultUploader: DefaultMediaUploader?
+    ) async -> HTTPResponse {
+        // CORS preflight — exempt from auth so the browser's OPTIONS request succeeds.
         if request.method == "OPTIONS" {
-            return makeCORSResponse()
+            return HTTPResponse(
+                status: 204,
+                headers: corsHeaders
+            )
         }
 
-        // Auth validation
-        let expectedAuth = "Bearer \(token)"
-        guard request.headers["authorization"] == expectedAuth else {
-            return makeResponse(status: 401, statusText: "Unauthorized", body: "Invalid or missing token")
+        // Auth check for all non-OPTIONS requests.
+        guard request.header("X-Upload-Token") == token else {
+            return HTTPResponse(
+                status: 401,
+                headers: corsHeaders + [("Content-Type", "text/plain")],
+                body: Data("Unauthorized".utf8)
+            )
         }
 
         // Route
-        guard request.method == "POST", request.path == "/upload" else {
-            return makeResponse(status: 404, statusText: "Not Found", body: "Not found")
+        guard request.method == "POST", request.target == "/upload" else {
+            return HTTPResponse(
+                status: 404,
+                headers: corsHeaders + [("Content-Type", "text/plain")],
+                body: Data("Not found".utf8)
+            )
         }
 
-        return await handleUpload(request)
+        return await handleUpload(request, uploadDelegate: uploadDelegate, defaultUploader: defaultUploader)
     }
 
-    private func handleUpload(_ request: HTTPRequest) async -> Data {
-        // Check the declared Content-Length (not body.count) because isRequestComplete
-        // short-circuits the read for oversized uploads, leaving the body truncated.
-        let declaredLength = request.headers["content-length"].flatMap(Int.init) ?? request.body.count
-        if declaredLength > Self.maxUploadSize {
-            return makeResponse(status: 413, statusText: "Payload Too Large", body: "Upload exceeds maximum allowed size")
+    private static func handleUpload(
+        _ request: ParsedHTTPRequest,
+        uploadDelegate: (any MediaUploadDelegate)?,
+        defaultUploader: DefaultMediaUploader?
+    ) async -> HTTPResponse {
+        // Parse multipart body using GutenbergKitHTTP
+        let parts: [MultipartPart]
+        do {
+            parts = try request.multipartParts()
+        } catch {
+            Logger.uploadServer.error("Multipart parse failed: \(error)")
+            return HTTPResponse(
+                status: 400,
+                headers: corsHeaders + [("Content-Type", "text/plain")],
+                body: Data("Expected multipart/form-data".utf8)
+            )
         }
 
-        guard let contentType = request.headers["content-type"],
-              contentType.contains("multipart/form-data"),
-              let boundary = extractBoundary(from: contentType) else {
-            return makeResponse(status: 400, statusText: "Bad Request", body: "Expected multipart/form-data")
+        guard let filePart = parts.first(where: { $0.filename != nil }) else {
+            Logger.uploadServer.error("No file found in multipart request")
+            return HTTPResponse(
+                status: 400,
+                headers: corsHeaders + [("Content-Type", "text/plain")],
+                body: Data("No file found in request".utf8)
+            )
         }
 
-        guard let file = parseMultipartFile(data: request.body, boundary: boundary) else {
-            Logger.uploadServer.error("Multipart parse failed. Body size: \(request.body.count), boundary: \(boundary)")
-            return makeResponse(status: 400, statusText: "Bad Request", body: "No file found in request")
-        }
+        let filename = filePart.filename!
+        let mimeType = filePart.contentType
 
-        // Write file to temp directory.
         // Sanitize the filename to prevent path traversal from malicious Content-Disposition values.
-        let safeFilename = (file.filename as NSString).lastPathComponent
+        let safeFilename = (filename as NSString).lastPathComponent
             .replacingOccurrences(of: "/", with: "")
             .replacingOccurrences(of: "\\", with: "")
         let sanitizedFilename = safeFilename.isEmpty ? "upload" : safeFilename
 
+        // Write file to temp directory.
         let tempDir = FileManager.default.temporaryDirectory
             .appending(component: "GutenbergKit-uploads", directoryHint: .isDirectory)
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
         let fileURL = tempDir.appending(component: "\(UUID().uuidString)-\(sanitizedFilename)")
         do {
-            try file.data.write(to: fileURL)
+            let fileData = try await filePart.body.data
+            try fileData.write(to: fileURL)
         } catch {
             Logger.uploadServer.error("Failed to write upload to disk: \(error)")
-            return makeResponse(status: 500, statusText: "Internal Server Error", body: "Failed to save file")
+            return HTTPResponse(
+                status: 500,
+                headers: corsHeaders + [("Content-Type", "text/plain")],
+                body: Data("Failed to save file".utf8)
+            )
         }
 
         // Process the file and upload to the remote WordPress server.
         let result: Result<MediaUploadResult, Error>
         var processedURL: URL?
         do {
-            let (media, processed) = try await processAndUpload(fileURL: fileURL, mimeType: file.mimeType, filename: file.filename)
+            let (media, processed) = try await processAndUpload(
+                fileURL: fileURL,
+                mimeType: mimeType,
+                filename: filename,
+                uploadDelegate: uploadDelegate,
+                defaultUploader: defaultUploader
+            )
             processedURL = processed
             result = .success(media)
         } catch {
@@ -313,17 +193,35 @@ final class MediaUploadServer: Sendable {
         case .success(let media):
             do {
                 let json = try JSONEncoder().encode(media)
-                return makeResponse(status: 200, statusText: "OK", body: json, contentType: "application/json")
+                return HTTPResponse(
+                    status: 200,
+                    headers: corsHeaders + [("Content-Type", "application/json")],
+                    body: json
+                )
             } catch {
-                return makeResponse(status: 500, statusText: "Internal Server Error", body: "Failed to encode response")
+                return HTTPResponse(
+                    status: 500,
+                    headers: corsHeaders + [("Content-Type", "text/plain")],
+                    body: Data("Failed to encode response".utf8)
+                )
             }
         case .failure(let error):
             Logger.uploadServer.error("Upload processing failed: \(error)")
-            return makeResponse(status: 500, statusText: "Internal Server Error", body: error.localizedDescription)
+            return HTTPResponse(
+                status: 500,
+                headers: corsHeaders + [("Content-Type", "text/plain")],
+                body: Data(error.localizedDescription.utf8)
+            )
         }
     }
 
-    private func processAndUpload(fileURL: URL, mimeType: String, filename: String) async throws -> (MediaUploadResult, URL) {
+    private static func processAndUpload(
+        fileURL: URL,
+        mimeType: String,
+        filename: String,
+        uploadDelegate: (any MediaUploadDelegate)?,
+        defaultUploader: DefaultMediaUploader?
+    ) async throws -> (MediaUploadResult, URL) {
         // Step 1: Process (resize, transcode, etc.)
         let processedURL: URL
         if let delegate = uploadDelegate {
@@ -343,200 +241,25 @@ final class MediaUploadServer: Sendable {
         }
     }
 
-    // MARK: - HTTP Response Building
-
-    private func makeCORSResponse() -> Data {
-        let headers = [
-            "Access-Control-Allow-Origin: *",
-            "Access-Control-Allow-Methods: POST, OPTIONS",
-            "Access-Control-Allow-Headers: Authorization, Content-Type",
-            "Access-Control-Max-Age: 86400",
-            "Content-Length: 0",
-            "Connection: close",
-        ].joined(separator: "\r\n")
-
-        return "HTTP/1.1 204 No Content\r\n\(headers)\r\n\r\n".data(using: .utf8)!
-    }
-
-    private func makeResponse(status: Int, statusText: String, body: String) -> Data {
-        makeResponse(status: status, statusText: statusText, body: body.data(using: .utf8)!, contentType: "text/plain")
-    }
-
-    private func makeResponse(status: Int, statusText: String, body: Data, contentType: String) -> Data {
-        let headers = [
-            "Access-Control-Allow-Origin: *",
-            "Access-Control-Allow-Headers: Authorization, Content-Type",
-            "Content-Type: \(contentType)",
-            "Content-Length: \(body.count)",
-            "Connection: close",
-        ].joined(separator: "\r\n")
-
-        var response = "HTTP/1.1 \(status) \(statusText)\r\n\(headers)\r\n\r\n".data(using: .utf8)!
-        response.append(body)
-        return response
-    }
-
-    // MARK: - Multipart Parsing
-
-    private func extractBoundary(from contentType: String) -> String? {
-        guard let range = contentType.range(of: "boundary=") else { return nil }
-        var boundary = String(contentType[range.upperBound...])
-        // Remove quotes if present
-        if boundary.hasPrefix("\"") && boundary.hasSuffix("\"") {
-            boundary = String(boundary.dropFirst().dropLast())
-        }
-        // Remove trailing parameters
-        if let semiIndex = boundary.firstIndex(of: ";") {
-            boundary = String(boundary[..<semiIndex])
-        }
-        return boundary
-    }
-
-    private struct UploadedFile {
-        let filename: String
-        let mimeType: String
-        let data: Data
-    }
-
-    private func parseMultipartFile(data: Data, boundary: String) -> UploadedFile? {
-        let boundaryData = "--\(boundary)".data(using: .utf8)!
-        let doubleCRLF = "\r\n\r\n".data(using: .utf8)!
-
-        // Find all boundary start positions (where each `--boundary` begins)
-        var boundaryStarts: [Data.Index] = []
-        var searchStart = data.startIndex
-        while searchStart < data.endIndex,
-              let range = data.range(of: boundaryData, in: searchStart..<data.endIndex) {
-            boundaryStarts.append(range.lowerBound)
-            searchStart = range.upperBound
-        }
-
-        guard boundaryStarts.count >= 2 else { return nil }
-
-        // Each part is between consecutive boundaries.
-        // Part content starts after `--boundary\r\n` and ends before `\r\n--boundary`.
-        for i in 0..<boundaryStarts.count - 1 {
-            let partStart = data.index(boundaryStarts[i], offsetBy: boundaryData.count)
-            let partEnd = boundaryStarts[i + 1]
-
-            guard partStart < partEnd else { continue }
-            var part = data[partStart..<partEnd]
-
-            // Strip leading \r\n after boundary line
-            let crlf = Data("\r\n".utf8)
-            if part.prefix(crlf.count) == crlf {
-                part = part.dropFirst(crlf.count)
-            }
-            // Strip trailing \r\n before next boundary
-            if part.suffix(crlf.count) == crlf {
-                part = part.dropLast(crlf.count)
-            }
-
-            guard let headerEnd = part.range(of: doubleCRLF) else { continue }
-
-            let headerData = part[part.startIndex..<headerEnd.lowerBound]
-            guard let headers = String(data: headerData, encoding: .utf8) else { continue }
-
-            guard headers.contains("filename=") else { continue }
-
-            let filename = extractHeaderValue(from: headers, key: "filename") ?? "upload"
-            let mimeType = extractContentType(from: headers) ?? "application/octet-stream"
-
-            let bodyData = part[headerEnd.upperBound...]
-            return UploadedFile(filename: filename, mimeType: mimeType, data: Data(bodyData))
-        }
-
-        return nil
-    }
-
-    private func extractHeaderValue(from headers: String, key: String) -> String? {
-        guard let range = headers.range(of: "\(key)=\"") else { return nil }
-        let afterKey = headers[range.upperBound...]
-        guard let endQuote = afterKey.firstIndex(of: "\"") else { return nil }
-        return String(afterKey[..<endQuote])
-    }
-
-    private func extractContentType(from headers: String) -> String? {
-        for line in headers.split(separator: "\r\n") {
-            if line.lowercased().hasPrefix("content-type:") {
-                return line.split(separator: ":", maxSplits: 1).last?.trimmingCharacters(in: .whitespaces)
-            }
-        }
-        return nil
-    }
-
     // MARK: - Constants
 
-    /// Maximum allowed upload size (250 MB).
-    ///
-    /// This limit applies to the local server only. The WordPress server may
-    /// enforce a separate, potentially smaller, limit. Consider making this
-    /// configurable via EditorConfiguration if host apps need different limits.
-    private static let maxUploadSize = 250 * 1024 * 1024
+    private static let corsHeaders: [(String, String)] = [
+        ("Access-Control-Allow-Origin", "*"),
+        ("Access-Control-Allow-Methods", "POST, OPTIONS"),
+        ("Access-Control-Allow-Headers", "X-Upload-Token, Authorization, Content-Type"),
+        ("Access-Control-Max-Age", "86400"),
+    ]
 
     // MARK: - Errors
 
     enum ServerError: Error, LocalizedError {
-        case failedToStart
         case noUploader
 
         var errorDescription: String? {
             switch self {
-            case .failedToStart: "Failed to start upload server"
             case .noUploader: "No upload delegate or default uploader configured"
             }
         }
-    }
-}
-
-// MARK: - HTTP Request Parsing
-
-private struct HTTPRequest {
-    let method: String
-    let path: String
-    let headers: [String: String]
-    let body: Data
-
-    init?(data: Data) {
-        // Search for the header/body separator in raw bytes so that binary body
-        // content (e.g. JPEG data) doesn't cause a UTF-8 decode failure.
-        let separator = Data("\r\n\r\n".utf8)
-        guard let separatorRange = data.range(of: separator) else {
-            return nil
-        }
-
-        let headerData = data[data.startIndex..<separatorRange.lowerBound]
-        guard let headerSection = String(data: headerData, encoding: .utf8) else {
-            return nil
-        }
-
-        let lines = headerSection.split(separator: "\r\n", omittingEmptySubsequences: false)
-
-        guard let requestLine = lines.first else { return nil }
-        let parts = requestLine.split(separator: " ")
-        guard parts.count >= 2 else { return nil }
-
-        self.method = String(parts[0])
-        self.path = String(parts[1])
-
-        var headers: [String: String] = [:]
-        for line in lines.dropFirst() {
-            let headerParts = line.split(separator: ":", maxSplits: 1)
-            if headerParts.count == 2 {
-                headers[headerParts[0].trimmingCharacters(in: .whitespaces).lowercased()] =
-                    headerParts[1].trimmingCharacters(in: .whitespaces)
-            }
-        }
-        self.headers = headers
-
-        let rawBody: Data
-        if separatorRange.upperBound < data.endIndex {
-            rawBody = Data(data[separatorRange.upperBound...])
-        } else {
-            rawBody = Data()
-        }
-
-        self.body = rawBody
     }
 }
 
@@ -639,6 +362,14 @@ enum MediaUploadError: Error, LocalizedError {
 }
 
 // MARK: - Helpers
+
+/// A simple reference-type box for bridging a token value into a `@Sendable` closure
+/// before the value is known. The JS layer only sends requests after the editor loads
+/// (well after `MediaUploadServer.init` returns), so the tiny window between server
+/// start and `value` assignment is safe in practice.
+private final class TokenBox: @unchecked Sendable {
+    var value: String = ""
+}
 
 private extension Data {
     mutating func append(_ string: String) {
