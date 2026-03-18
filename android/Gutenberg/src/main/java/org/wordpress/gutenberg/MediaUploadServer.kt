@@ -1,19 +1,11 @@
 package org.wordpress.gutenberg
 
 import android.util.Log
-import kotlinx.coroutines.Dispatchers
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.asRequestBody
-import kotlinx.coroutines.runBlocking
-import java.io.ByteArrayOutputStream
+import org.wordpress.gutenberg.http.ParsedHTTPRequest
 import java.io.File
-import java.io.InputStream
-import java.net.InetAddress
-import java.net.ServerSocket
-import java.net.Socket
 import java.util.UUID
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
 
 /**
  * Result of a successful media upload to the remote WordPress server.
@@ -56,146 +48,128 @@ interface MediaUploadDelegate {
  * A lightweight local HTTP server that receives file uploads from the WebView
  * and routes them through the native media processing pipeline.
  *
- * Binds to `127.0.0.1` on a random available port and validates all requests
- * using a per-session Bearer token.
+ * Wraps [HttpServer] to provide a media-upload-specific API.
  */
 internal class MediaUploadServer(
     private val uploadDelegate: MediaUploadDelegate?,
-    private val defaultUploader: DefaultMediaUploader?
+    private val defaultUploader: DefaultMediaUploader?,
+    private val cacheDir: File? = null
 ) {
+    // requiresAuthentication = false because HttpServer checks auth on every request,
+    // including CORS preflight (OPTIONS). We handle auth in the handler ourselves,
+    // skipping it for OPTIONS so the browser's preflight succeeds.
+    // We use X-Upload-Token rather than Proxy-Authorization because WebKit's fetch()
+    // treats Proxy-Authorization as a forbidden header and silently strips it.
+    private val httpServer = HttpServer(
+        name = "media-upload",
+        externallyAccessible = false,
+        requiresAuthentication = false,
+        maxBodySize = 250L * 1024 * 1024,
+        cacheDir = cacheDir,
+        handler = { request -> handleRequest(request) }
+    )
+
     /** The port the server is listening on. */
-    val port: Int
+    val port: Int get() = httpServer.port
 
     /** Per-session auth token for validating incoming requests. */
-    val token: String = UUID.randomUUID().toString()
-
-    private val serverSocket: ServerSocket
-    private val executor: ExecutorService = Executors.newCachedThreadPool()
-    @Volatile private var running = true
+    val token: String get() = httpServer.token
 
     init {
-        serverSocket = ServerSocket(0, 50, InetAddress.getLoopbackAddress())
-        port = serverSocket.localPort
-
-        executor.submit {
-            while (running) {
-                try {
-                    val socket = serverSocket.accept()
-                    executor.submit { handleConnection(socket) }
-                } catch (e: Exception) {
-                    if (running) {
-                        Log.e(TAG, "Error accepting connection", e)
-                    }
-                }
-            }
-        }
-
+        httpServer.start()
         Log.i(TAG, "Upload server started on port $port")
     }
 
     /** Stops the server and releases resources. */
     fun stop() {
-        running = false
-        try {
-            serverSocket.close()
-        } catch (_: Exception) {}
-        executor.shutdownNow()
+        httpServer.stop()
         Log.i(TAG, "Upload server stopped")
     }
 
-    private fun handleConnection(socket: Socket) {
-        try {
-            socket.use { sock ->
-                val input = sock.getInputStream()
-                val requestData = readHttpRequest(input) ?: run {
-                    sendResponse(sock, 400, "Bad Request", "Malformed HTTP request")
-                    return
-                }
-
-                // CORS preflight
-                if (requestData.method == "OPTIONS") {
-                    sendCORSResponse(sock)
-                    return
-                }
-
-                // Auth validation
-                val expectedAuth = "Bearer $token"
-                if (requestData.headers["authorization"] != expectedAuth) {
-                    sendResponse(sock, 401, "Unauthorized", "Invalid or missing token")
-                    return
-                }
-
-                // Route
-                if (requestData.method != "POST" || requestData.path != "/upload") {
-                    sendResponse(sock, 404, "Not Found", "Not found")
-                    return
-                }
-
-                handleUpload(sock, requestData)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error handling connection", e)
+    private suspend fun handleRequest(request: HttpRequest): HttpResponse {
+        // CORS preflight — exempt from auth so the browser's OPTIONS request succeeds.
+        if (request.method == "OPTIONS") {
+            return HttpResponse(204, corsHeaders, ByteArray(0))
         }
+
+        // Auth check for all non-OPTIONS requests.
+        if (request.header("X-Upload-Token") != httpServer.token) {
+            return HttpResponse(
+                status = 401,
+                headers = corsHeaders + mapOf("Content-Type" to "text/plain"),
+                body = "Unauthorized".toByteArray()
+            )
+        }
+
+        // Route
+        if (request.method != "POST" || request.target != "/upload") {
+            return HttpResponse(
+                status = 404,
+                headers = corsHeaders + mapOf("Content-Type" to "text/plain"),
+                body = "Not found".toByteArray()
+            )
+        }
+
+        return handleUpload(request)
     }
 
-    // Note: The full request body is buffered in memory before writing to disk,
-    // so a 250 MB upload will temporarily require ~500 MB of heap. Streaming would
-    // reduce peak memory but significantly complicate multipart parsing. The server's
-    // MAX_UPLOAD_SIZE cap acts as a safety valve for this trade-off.
-    private fun handleUpload(socket: Socket, request: HttpRequestData) {
-        if (request.declaredContentLength > MAX_UPLOAD_SIZE) {
-            sendResponse(socket, 413, "Payload Too Large", "Upload exceeds maximum allowed size")
-            return
+    private suspend fun handleUpload(request: HttpRequest): HttpResponse {
+        // Parse multipart body using ParsedHTTPRequest.multipartParts()
+        val parsed = ParsedHTTPRequest(
+            method = request.method,
+            target = request.target,
+            httpVersion = "HTTP/1.1",
+            headers = request.headers,
+            body = request.body,
+            isComplete = true
+        )
+
+        val parts = try {
+            parsed.multipartParts()
+        } catch (e: Exception) {
+            Log.e(TAG, "Multipart parse failed", e)
+            return HttpResponse(
+                status = 400,
+                headers = corsHeaders + mapOf("Content-Type" to "text/plain"),
+                body = "Expected multipart/form-data".toByteArray()
+            )
         }
 
-        val contentType = request.headers["content-type"] ?: run {
-            sendResponse(socket, 400, "Bad Request", "Expected multipart/form-data")
-            return
+        val filePart = parts.firstOrNull { it.filename != null } ?: run {
+            Log.e(TAG, "No file found in multipart request")
+            return HttpResponse(
+                status = 400,
+                headers = corsHeaders + mapOf("Content-Type" to "text/plain"),
+                body = "No file found in request".toByteArray()
+            )
         }
 
-        if (!contentType.contains("multipart/form-data")) {
-            sendResponse(socket, 400, "Bad Request", "Expected multipart/form-data")
-            return
-        }
+        val filename = filePart.filename!!
+        val mimeType = filePart.contentType
 
-        val boundary = extractBoundary(contentType) ?: run {
-            sendResponse(socket, 400, "Bad Request", "Missing boundary")
-            return
-        }
-
-        val file = parseMultipartFile(request.body, boundary) ?: run {
-            sendResponse(socket, 400, "Bad Request", "No file found in request")
-            return
-        }
-
-        // Write to temp file (UUID prefix prevents collisions from concurrent uploads).
         // Sanitize the filename to prevent path traversal from malicious Content-Disposition values.
-        val safeFilename = File(file.filename).name.replace(Regex("[/\\\\]"), "").ifEmpty { "upload" }
+        val safeFilename = File(filename).name.replace(Regex("[/\\\\]"), "").ifEmpty { "upload" }
         val tempDir = File(System.getProperty("java.io.tmpdir"), "gutenbergkit-uploads").apply { mkdirs() }
         val tempFile = File(tempDir, "${UUID.randomUUID()}-$safeFilename")
         try {
-            tempFile.writeBytes(file.data)
+            tempFile.writeBytes(filePart.body.readBytes())
         } catch (e: Exception) {
             Log.e(TAG, "Failed to write upload to disk", e)
-            sendResponse(socket, 500, "Internal Server Error", "Failed to save file")
-            return
+            return HttpResponse(
+                status = 500,
+                headers = corsHeaders + mapOf("Content-Type" to "text/plain"),
+                body = "Failed to save file".toByteArray()
+            )
         }
 
         // Process and upload
         var processedFile: File? = null
         try {
-            // runBlocking blocks this executor thread while coroutines run on Dispatchers.IO.
-            // Since the executor is a CachedThreadPool (creates threads on demand), this won't
-            // deadlock — each concurrent upload uses one executor thread + one IO thread, which
-            // is acceptable for the expected concurrency level (1-2 uploads from a single WebView).
-            val result = runBlocking(Dispatchers.IO) {
-                val processed = uploadDelegate?.processFile(tempFile, file.mimeType) ?: tempFile
-                processedFile = processed
-                val uploader = uploadDelegate?.uploadFile(processed, file.mimeType, file.filename)
-                    ?: defaultUploader?.upload(processed, file.mimeType, file.filename)
-                    ?: throw IllegalStateException("No upload delegate or default uploader configured")
-                uploader
-            }
+            val processed = uploadDelegate?.processFile(tempFile, mimeType) ?: tempFile
+            processedFile = processed
+            val result = uploadDelegate?.uploadFile(processed, mimeType, filename)
+                ?: defaultUploader?.upload(processed, mimeType, filename)
+                ?: throw IllegalStateException("No upload delegate or default uploader configured")
 
             val json = org.json.JSONObject().apply {
                 put("id", result.id)
@@ -208,221 +182,34 @@ internal class MediaUploadServer(
                 result.width?.let { put("width", it) }
                 result.height?.let { put("height", it) }
             }.toString()
-            sendResponse(socket, 200, "OK", json, "application/json")
+
+            return HttpResponse(
+                status = 200,
+                headers = corsHeaders + mapOf("Content-Type" to "application/json"),
+                body = json.toByteArray()
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Upload processing failed", e)
-            sendResponse(socket, 500, "Internal Server Error", e.message ?: "Upload failed")
+            return HttpResponse(
+                status = 500,
+                headers = corsHeaders + mapOf("Content-Type" to "text/plain"),
+                body = (e.message ?: "Upload failed").toByteArray()
+            )
         } finally {
             tempFile.delete()
             processedFile?.let { if (it != tempFile) it.delete() }
         }
     }
 
-    // MARK: - HTTP Parsing
-
-    private data class HttpRequestData(
-        val method: String,
-        val path: String,
-        val headers: Map<String, String>,
-        val body: ByteArray,
-        /** Declared Content-Length, used to detect oversized uploads rejected before body read. */
-        val declaredContentLength: Long = body.size.toLong()
-    )
-
-    private fun readHttpRequest(input: InputStream): HttpRequestData? {
-        val headerBytes = ByteArrayOutputStream()
-        var prev = 0
-        var prevPrev = 0
-        var prevPrevPrev = 0
-
-        // Read until we find \r\n\r\n
-        while (true) {
-            val b = input.read()
-            if (b == -1) break
-            headerBytes.write(b)
-
-            if (prevPrevPrev == '\r'.code && prevPrev == '\n'.code && prev == '\r'.code && b == '\n'.code) {
-                break
-            }
-            prevPrevPrev = prevPrev
-            prevPrev = prev
-            prev = b
-        }
-
-        val headerString = headerBytes.toString("UTF-8")
-        val lines = headerString.split("\r\n")
-        if (lines.isEmpty()) return null
-
-        val requestLine = lines[0].split(" ")
-        if (requestLine.size < 2) return null
-
-        val method = requestLine[0]
-        val path = requestLine[1]
-
-        val headers = mutableMapOf<String, String>()
-        for (line in lines.drop(1)) {
-            val colonIndex = line.indexOf(':')
-            if (colonIndex > 0) {
-                val key = line.substring(0, colonIndex).trim().lowercase()
-                val value = line.substring(colonIndex + 1).trim()
-                headers[key] = value
-            }
-        }
-
-        // Read body based on Content-Length
-        val contentLength = headers["content-length"]?.toIntOrNull() ?: 0
-        // Reject oversized uploads early (before buffering the body into memory)
-        // by returning a valid HttpRequestData with an empty body. The size check
-        // in handleUpload will then produce the proper 413 response.
-        if (contentLength > MAX_UPLOAD_SIZE) {
-            return HttpRequestData(method, path, headers, ByteArray(0), contentLength.toLong())
-        }
-        val body = if (contentLength > 0) {
-            val bodyBytes = ByteArray(contentLength)
-            var totalRead = 0
-            while (totalRead < contentLength) {
-                val read = input.read(bodyBytes, totalRead, contentLength - totalRead)
-                if (read == -1) break
-                totalRead += read
-            }
-            bodyBytes
-        } else {
-            ByteArray(0)
-        }
-
-        return HttpRequestData(method, path, headers, body)
-    }
-
-    private data class UploadedFile(
-        val filename: String,
-        val mimeType: String,
-        val data: ByteArray
-    )
-
-    private fun extractBoundary(contentType: String): String? {
-        val idx = contentType.indexOf("boundary=")
-        if (idx < 0) return null
-        var boundary = contentType.substring(idx + 9)
-        if (boundary.startsWith("\"") && boundary.endsWith("\"")) {
-            boundary = boundary.substring(1, boundary.length - 1)
-        }
-        val semiIdx = boundary.indexOf(';')
-        if (semiIdx >= 0) boundary = boundary.substring(0, semiIdx)
-        return boundary
-    }
-
-    private fun parseMultipartFile(data: ByteArray, boundary: String): UploadedFile? {
-        val boundaryBytes = "--$boundary".toByteArray()
-        val crlfCrlf = "\r\n\r\n".toByteArray()
-
-        // Find boundary positions
-        val positions = mutableListOf<Int>()
-        var searchFrom = 0
-        while (searchFrom < data.size) {
-            val pos = indexOf(data, boundaryBytes, searchFrom)
-            if (pos < 0) break
-            positions.add(pos)
-            searchFrom = pos + boundaryBytes.size
-        }
-
-        // Each part is between consecutive boundaries
-        for (i in 0 until positions.size - 1) {
-            val partStart = positions[i] + boundaryBytes.size + 2 // skip boundary + \r\n
-            val partEnd = positions[i + 1] - 2 // before \r\n before next boundary
-
-            if (partStart >= partEnd || partStart >= data.size) continue
-
-            val headerEndPos = indexOf(data, crlfCrlf, partStart)
-            if (headerEndPos < 0 || headerEndPos >= partEnd) continue
-
-            val headerString = String(data, partStart, headerEndPos - partStart, Charsets.UTF_8)
-            if (!headerString.contains("filename=")) continue
-
-            val filename = extractHeaderValue(headerString, "filename") ?: "upload"
-            val mimeType = extractContentType(headerString) ?: "application/octet-stream"
-
-            val bodyStart = headerEndPos + crlfCrlf.size
-            val bodyData = data.copyOfRange(bodyStart, partEnd)
-
-            return UploadedFile(filename, mimeType, bodyData)
-        }
-
-        return null
-    }
-
-    private fun indexOf(data: ByteArray, pattern: ByteArray, from: Int): Int {
-        outer@ for (i in from..data.size - pattern.size) {
-            for (j in pattern.indices) {
-                if (data[i + j] != pattern[j]) continue@outer
-            }
-            return i
-        }
-        return -1
-    }
-
-    private fun extractHeaderValue(headers: String, key: String): String? {
-        val idx = headers.indexOf("$key=\"")
-        if (idx < 0) return null
-        val start = idx + key.length + 2
-        val end = headers.indexOf('"', start)
-        if (end < 0) return null
-        return headers.substring(start, end)
-    }
-
-    private fun extractContentType(headers: String): String? {
-        for (line in headers.split("\r\n")) {
-            if (line.lowercase().startsWith("content-type:")) {
-                return line.substringAfter(':').trim()
-            }
-        }
-        return null
-    }
-
-    // MARK: - HTTP Response Building
-
-    private fun sendCORSResponse(socket: Socket) {
-        val response = buildString {
-            append("HTTP/1.1 204 No Content\r\n")
-            append("Access-Control-Allow-Origin: *\r\n")
-            append("Access-Control-Allow-Methods: POST, OPTIONS\r\n")
-            append("Access-Control-Allow-Headers: Authorization, Content-Type\r\n")
-            append("Access-Control-Max-Age: 86400\r\n")
-            append("Content-Length: 0\r\n")
-            append("Connection: close\r\n")
-            append("\r\n")
-        }
-        socket.getOutputStream().write(response.toByteArray())
-        socket.getOutputStream().flush()
-    }
-
-    private fun sendResponse(socket: Socket, status: Int, statusText: String, body: String, contentType: String = "text/plain") {
-        val bodyBytes = body.toByteArray()
-        val response = buildString {
-            append("HTTP/1.1 $status $statusText\r\n")
-            append("Access-Control-Allow-Origin: *\r\n")
-            append("Access-Control-Allow-Headers: Authorization, Content-Type\r\n")
-            append("Content-Type: $contentType\r\n")
-            append("Content-Length: ${bodyBytes.size}\r\n")
-            append("Connection: close\r\n")
-            append("\r\n")
-        }
-        val output = socket.getOutputStream()
-        output.write(response.toByteArray())
-        output.write(bodyBytes)
-        output.flush()
-    }
-
     companion object {
         private const val TAG = "MediaUploadServer"
 
-        /**
-         * Maximum allowed upload size (250 MB).
-         *
-         * This limit applies to the local server only. The WordPress server may
-         * enforce a separate, potentially smaller, limit. Consider making this
-         * configurable via EditorConfiguration if host apps need different limits.
-         */
-        private const val MAX_UPLOAD_SIZE = 250 * 1024 * 1024
+        private val corsHeaders = mapOf(
+            "Access-Control-Allow-Origin" to "*",
+            "Access-Control-Allow-Methods" to "POST, OPTIONS",
+            "Access-Control-Allow-Headers" to "X-Upload-Token, Authorization, Content-Type",
+            "Access-Control-Max-Age" to "86400"
+        )
     }
 }
 

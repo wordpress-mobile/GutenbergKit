@@ -109,6 +109,11 @@ class GutenbergView : WebView {
             if (value != null) {
                 startUploadServer()
             }
+            // Re-inject window.GBKit so the JS layer sees the updated
+            // nativeUploadPort/nativeUploadToken. This is a no-op before the
+            // WebView has loaded, but ensures the correct values are present
+            // when the delegate is set after construction.
+            setGlobalJavaScriptVariables()
         }
 
     private var uploadServer: MediaUploadServer? = null
@@ -467,21 +472,26 @@ class GutenbergView : WebView {
 
 
     private fun startUploadServer() {
-        if (configuration.siteApiRoot.isEmpty() || configuration.authHeader.isEmpty()) return
-
-        try {
-            val defaultUploader = DefaultMediaUploader(
+        // Only create a DefaultMediaUploader when credentials are available.
+        // If a delegate is set without credentials, the delegate handles uploads directly.
+        val defaultUploader = if (configuration.siteApiRoot.isNotEmpty() && configuration.authHeader.isNotEmpty()) {
+            DefaultMediaUploader(
                 httpClient = uploadHttpClient,
                 siteApiRoot = configuration.siteApiRoot,
                 authHeader = configuration.authHeader
             )
-            uploadServer = MediaUploadServer(
-                uploadDelegate = mediaUploadDelegate,
-                defaultUploader = defaultUploader
-            )
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to start upload server", e)
+        } else {
+            null
         }
+
+        // Don't start the server if there's nothing to handle uploads.
+        if (mediaUploadDelegate == null && defaultUploader == null) return
+
+        uploadServer = MediaUploadServer(
+            uploadDelegate = mediaUploadDelegate,
+            defaultUploader = defaultUploader,
+            cacheDir = context.cacheDir
+        )
     }
 
     fun clearConfig() {
