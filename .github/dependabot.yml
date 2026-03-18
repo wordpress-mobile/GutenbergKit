@@ -13,3 +13,5 @@ updates:
             update-types: ['version-update:semver-major']
           - dependency-name: 'jquery' # jquery@>=4.x.x blocked by https://core.trac.wordpress.org/ticket/60478
             update-types: ['version-update:semver-major']
+          - dependency-name: 'eslint-plugin-react-refresh' # eslint-plugin-react-refresh@>=0.5.x requires eslint@>=9.x.x, blocked by https://github.com/WordPress/gutenberg/issues/64782
+            update-types: ['version-update:semver-minor']
