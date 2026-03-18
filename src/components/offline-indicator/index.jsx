@@ -113,6 +113,7 @@ async function probeConnectivity() {
 	try {
 		await window.fetch( getConnectivityProbeUrl(), {
 			method: 'HEAD',
+			mode: 'no-cors',
 			cache: 'no-store',
 			signal: AbortSignal.timeout( 5000 ),
 		} );
@@ -125,10 +126,9 @@ async function probeConnectivity() {
 /**
  * Returns a URL suitable for probing real internet connectivity.
  *
- * Prefers the site API root (already used by the editor, same origin, no CORS
- * concerns) so that the probe reflects whether the WordPress API specifically
- * is reachable. Falls back to `/favicon.ico` for local dev environments where
- * no GBKit config is available.
+ * Prefers the site API root so the probe reflects whether the WordPress API
+ * specifically is reachable. Falls back to `/favicon.ico` for local dev
+ * environments where no GBKit config is available.
  *
  * @return {string} The probe URL.
  */
