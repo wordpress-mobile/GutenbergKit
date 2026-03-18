@@ -17,7 +17,7 @@ let package = Package(
     targets: [
         .target(
             name: "GutenbergKit",
-            dependencies: ["SwiftSoup", "SVGView"],
+            dependencies: ["SwiftSoup", "SVGView", "GutenbergKitHTTP"],
             path: "ios/Sources/GutenbergKit",
             exclude: [],
             resources: [.copy("Gutenberg")]
