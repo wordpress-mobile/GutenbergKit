@@ -137,6 +137,40 @@ struct HTTPServerAuthenticationTests {
         #expect(http.value(forHTTPHeaderField: "X-Received-Auth") == "Basic dXNlcjpwYXNz")
     }
 
+    // MARK: - CORS Preflight (OPTIONS) Auth Exemption
+
+    @Test("OPTIONS without token returns 200 (CORS preflight exempt from auth)")
+    func optionsWithoutTokenReturns200() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let raw = "OPTIONS /test HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
+        let response = try await sendRaw(raw, toPort: server.port)
+        #expect(response.hasPrefix("HTTP/1.1 200"))
+    }
+
+    @Test("GET without token still returns 407 (only OPTIONS is exempt)")
+    func getWithoutTokenStillReturns407() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let url = URL(string: "http://127.0.0.1:\(server.port)/test")!
+        let (_, response) = try await URLSession.shared.data(for: URLRequest(url: url))
+        let http = try #require(response as? HTTPURLResponse)
+
+        #expect(http.statusCode == 407)
+    }
+
     // MARK: - Content-Length Requirement
 
     @Test("POST without Content-Length returns 411")

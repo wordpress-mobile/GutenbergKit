@@ -114,6 +114,29 @@ class HttpServerAuthenticationTests {
         }
     }
 
+    // CORS Preflight (OPTIONS) Auth Exemption
+
+    @Test
+    fun `OPTIONS without token returns 200 (CORS preflight exempt from auth)`() {
+        java.net.Socket("127.0.0.1", server.port).use { sock ->
+            val raw = "OPTIONS /test HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
+            sock.getOutputStream().write(raw.toByteArray())
+            sock.getOutputStream().flush()
+            val statusLine = sock.getInputStream().bufferedReader().readLine()
+            assertEquals("HTTP/1.1 200 OK", statusLine)
+        }
+    }
+
+    @Test
+    fun `GET without token still returns 407 (only OPTIONS is exempt)`() {
+        val conn = URL("http://127.0.0.1:${server.port}/test").openConnection() as HttpURLConnection
+        try {
+            assertEquals(407, conn.responseCode)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     // Content-Length Requirement
 
     @Test

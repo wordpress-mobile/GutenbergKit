@@ -293,7 +293,9 @@ class HttpServer(
 
             // Check auth before consuming body to avoid buffering up to
             // maxBodySize for unauthenticated clients.
-            if (requiresAuthentication) {
+            // OPTIONS is exempt because CORS preflight requests
+            // never include credentials (Fetch spec §3.3.5).
+            if (requiresAuthentication && partial.method.uppercase() != "OPTIONS") {
                 val proxyAuth = partial.header("Proxy-Authorization")
                 if (!authenticate(proxyAuth, token)) {
                     sendResponse(socket, HttpResponse(

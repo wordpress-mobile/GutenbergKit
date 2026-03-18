@@ -259,7 +259,9 @@ public final class HTTPServer: Sendable {
 
                             // Check auth before consuming body to avoid buffering
                             // up to maxRequestBodySize for unauthenticated clients.
-                            if requiresAuthentication {
+                            // OPTIONS is exempt because CORS preflight requests
+                            // never include credentials (Fetch spec §3.3.5).
+                            if requiresAuthentication && partial.method.uppercased() != "OPTIONS" {
                                 guard authenticate(partial, token: token) else {
                                     throw HTTPServerError.authenticationFailed
                                 }
