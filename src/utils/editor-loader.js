@@ -1,14 +1,8 @@
 /**
  * Internal dependencies
  */
-import { fetchEditorAssets } from './bridge';
+import { getGBKit } from './bridge';
 import { error } from './logger';
-
-/**
- * Cache for editor assets to avoid unnecessary network requests
- * @type {Object|null}
- */
-let editorAssetsCache = null;
 
 /**
  * @typedef {Object} EditorAssetConfig
@@ -17,23 +11,24 @@ let editorAssetsCache = null;
  */
 
 /**
- * Fetch editor assets and return select WordPress dependencies.
+ * Load editor assets injected via the native configuration.
  *
- * @return {EditorAssetConfig} Editor configuration provided by the API.
+ * The native host pre-fetches plugin/theme assets and injects them into
+ * `window.GBKit.editorAssets`. This function reads that data and loads
+ * the assets into the document. If no assets are provided, it returns
+ * an empty configuration without error.
+ *
+ * @return {EditorAssetConfig} Editor configuration provided by the native host.
  */
 export async function loadEditorAssets() {
 	try {
-		// Return cached response if available
-		if ( editorAssetsCache ) {
-			return processEditorAssets( editorAssetsCache );
+		const { editorAssets } = getGBKit();
+
+		if ( ! editorAssets ) {
+			return {};
 		}
 
-		const response = await fetchEditorAssets();
-
-		// Cache the response
-		editorAssetsCache = response;
-
-		return processEditorAssets( response );
+		return processEditorAssets( editorAssets );
 	} catch ( err ) {
 		error( 'Error loading editor assets', err );
 		throw err;
@@ -51,7 +46,11 @@ export async function loadEditorAssets() {
  * @return {EditorAssetConfig} Processed editor configuration
  */
 async function processEditorAssets( assets ) {
-	const { styles, scripts, allowed_block_types: allowedBlockTypes } = assets;
+	const {
+		styles = [],
+		scripts = [],
+		allowed_block_types: allowedBlockTypes,
+	} = assets;
 
 	await loadAssets( [ ...styles, ...scripts ].join( '' ) );
 

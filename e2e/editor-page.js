@@ -8,7 +8,11 @@
 /**
  * Internal dependencies
  */
-import { credentials, getEditorSettings } from './wp-env-fixtures';
+import {
+	credentials,
+	getEditorSettings,
+	getEditorAssets,
+} from './wp-env-fixtures';
 
 /**
  * Default GBKit configuration for wp-env testing.
@@ -49,10 +53,14 @@ export default class EditorPage {
 	 */
 	async setup( gbkit = {} ) {
 		const editorSettings = await getEditorSettings();
+		const editorAssets = gbkit.plugins
+			? await getEditorAssets()
+			: undefined;
 
 		const config = {
 			...DEFAULT_GBKIT,
 			editorSettings,
+			...( editorAssets && { editorAssets } ),
 			...gbkit,
 			post: {
 				...DEFAULT_GBKIT.post,

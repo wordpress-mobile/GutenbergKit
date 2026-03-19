@@ -47,7 +47,9 @@ function corsMiddleware( options, next ) {
 	// 'cors' should prevent this header, incorrect middleware order results in
 	// setting the header.
 	// https://github.com/Automattic/jetpack/blob/7801b7f21e01d8a4a102c44dac69c6ebdd1e549d/projects/plugins/jetpack/extensions/editor.js#L22-L52
-	delete options.headers[ 'x-wp-api-fetch-from-editor' ];
+	if ( options.headers ) {
+		delete options.headers[ 'x-wp-api-fetch-from-editor' ];
+	}
 
 	return next( options );
 }
@@ -66,7 +68,11 @@ function apiPathModifierMiddleware( options, next ) {
 			options.path.startsWith( path )
 		);
 
-	if ( isEligiblePath && ! namespaceRegex.test( options.path ) ) {
+	const alreadyHasSiteNamespace =
+		namespaceRegex.test( options.path ) ||
+		/\/sites\/[^/]+\//.test( options.path );
+
+	if ( isEligiblePath && ! alreadyHasSiteNamespace ) {
 		// Insert the API namespace after the first two path segments.
 		options.path = options.path.replace(
 			/^(?<apiPath>\/?(?:[\w.-]+\/){2})/,

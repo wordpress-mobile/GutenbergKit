@@ -4,7 +4,6 @@
 import parseException from './exception-parser';
 import { debug, error } from './logger';
 import { isDevMode } from './dev-mode';
-import { basicFetch } from './fetch';
 
 /**
  * Generic function to dispatch messages to both Android and iOS bridges.
@@ -414,29 +413,5 @@ export function awaitGBKitGlobal( timeoutMs = 3000 ) {
 		};
 
 		checkGBKit();
-	} );
-}
-
-/**
- * Retrieves the editor assets from the native host.
- *
- * @return {Promise<{scripts: string, styles: string, allowed_block_types: string[]}>} Promise that resolves with the assets object.
- */
-export async function fetchEditorAssets() {
-	if ( window.webkit ) {
-		return await window.webkit.messageHandlers.loadFetchedEditorAssets.postMessage(
-			{ asset: 'manifest' }
-		);
-	}
-
-	const { siteApiRoot, editorAssetsEndpoint, authHeader } = getGBKit();
-	const url = new URL(
-		editorAssetsEndpoint || `${ siteApiRoot }wpcom/v2/editor-assets`
-	);
-	// The GutenbergKit bundle includes the required `@wordpress` modules
-	url.searchParams.set( 'exclude', 'core,gutenberg' );
-	// Use our fetch utility, as we have not yet loaded the `wp.apiFetch` utility
-	return await basicFetch( url.toString(), {
-		headers: { Authorization: authHeader },
 	} );
 }
