@@ -59,7 +59,7 @@ class MediaUploadServerTest {
             method = "POST",
             path = "/upload",
             headers = mapOf(
-                "X-Upload-Token" to "wrong-token",
+                "Relay-Authorization" to "Bearer wrong-token",
                 "Content-Type" to "text/plain"
             ),
             body = "hello".toByteArray()
@@ -82,7 +82,7 @@ class MediaUploadServerTest {
         assertTrue(response.statusLine.contains("204"))
         assertEquals("*", response.headers["access-control-allow-origin"])
         assertTrue(response.headers["access-control-allow-methods"]?.contains("POST") == true)
-        assertTrue(response.headers["access-control-allow-headers"]?.contains("X-Upload-Token") == true)
+        assertTrue(response.headers["access-control-allow-headers"]?.contains("Relay-Authorization") == true)
     }
 
     // MARK: - Routing
@@ -92,7 +92,7 @@ class MediaUploadServerTest {
         val response = sendRawRequest(
             method = "POST",
             path = "/unknown",
-            headers = mapOf("X-Upload-Token" to server.token),
+            headers = mapOf("Relay-Authorization" to "Bearer ${server.token}"),
             body = null
         )
 
@@ -114,7 +114,7 @@ class MediaUploadServerTest {
             method = "POST",
             path = "/upload",
             headers = mapOf(
-                "X-Upload-Token" to server.token,
+                "Relay-Authorization" to "Bearer ${server.token}",
                 "Content-Type" to "multipart/form-data; boundary=$boundary"
             ),
             body = body
@@ -149,7 +149,7 @@ class MediaUploadServerTest {
             method = "POST",
             path = "/upload",
             headers = mapOf(
-                "X-Upload-Token" to server.token,
+                "Relay-Authorization" to "Bearer ${server.token}",
                 "Content-Type" to "multipart/form-data; boundary=$boundary"
             ),
             body = body
@@ -239,7 +239,7 @@ class MediaUploadServerTest {
         val response = sendRawRequest(
             method = "POST",
             path = "/upload",
-            headers = mapOf("X-Upload-Token" to server.token),
+            headers = mapOf("Relay-Authorization" to "Bearer ${server.token}"),
             body = "not multipart".toByteArray()
         )
 
@@ -252,7 +252,7 @@ class MediaUploadServerTest {
             method = "POST",
             path = "/upload",
             headers = mapOf(
-                "X-Upload-Token" to server.token,
+                "Relay-Authorization" to "Bearer ${server.token}",
                 "Content-Type" to "application/json"
             ),
             body = """{"key": "value"}""".toByteArray()

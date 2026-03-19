@@ -55,15 +55,9 @@ internal class MediaUploadServer(
     private val defaultUploader: DefaultMediaUploader?,
     private val cacheDir: File? = null
 ) {
-    // requiresAuthentication = false because HttpServer checks auth on every request,
-    // including CORS preflight (OPTIONS). We handle auth in the handler ourselves,
-    // skipping it for OPTIONS so the browser's preflight succeeds.
-    // We use X-Upload-Token rather than Proxy-Authorization because WebKit's fetch()
-    // treats Proxy-Authorization as a forbidden header and silently strips it.
     private val httpServer = HttpServer(
         name = "media-upload",
         externallyAccessible = false,
-        requiresAuthentication = false,
         maxBodySize = 250L * 1024 * 1024,
         cacheDir = cacheDir,
         handler = { request -> handleRequest(request) }
@@ -87,20 +81,6 @@ internal class MediaUploadServer(
     }
 
     private suspend fun handleRequest(request: HttpRequest): HttpResponse {
-        // CORS preflight — exempt from auth so the browser's OPTIONS request succeeds.
-        if (request.method == "OPTIONS") {
-            return HttpResponse(204, corsHeaders, ByteArray(0))
-        }
-
-        // Auth check for all non-OPTIONS requests.
-        if (request.header("X-Upload-Token") != httpServer.token) {
-            return HttpResponse(
-                status = 401,
-                headers = corsHeaders + mapOf("Content-Type" to "text/plain"),
-                body = "Unauthorized".toByteArray()
-            )
-        }
-
         // Route
         if (request.method != "POST" || request.target != "/upload") {
             return HttpResponse(
@@ -207,7 +187,7 @@ internal class MediaUploadServer(
         private val corsHeaders = mapOf(
             "Access-Control-Allow-Origin" to "*",
             "Access-Control-Allow-Methods" to "POST, OPTIONS",
-            "Access-Control-Allow-Headers" to "X-Upload-Token, Authorization, Content-Type",
+            "Access-Control-Allow-Headers" to "Relay-Authorization, Authorization, Content-Type",
             "Access-Control-Max-Age" to "86400"
         )
     }
