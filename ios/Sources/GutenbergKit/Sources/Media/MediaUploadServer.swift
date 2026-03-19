@@ -67,6 +67,11 @@ final class MediaUploadServer: Sendable {
         uploadDelegate: (any MediaUploadDelegate)?,
         defaultUploader: DefaultMediaUploader?
     ) async -> HTTPResponse {
+        // CORS preflight — auth is already exempted by HTTPServer for OPTIONS.
+        if request.method == "OPTIONS" {
+            return HTTPResponse(status: 204, headers: corsHeaders)
+        }
+
         // Route
         guard request.method == "POST", request.target == "/upload" else {
             return HTTPResponse(

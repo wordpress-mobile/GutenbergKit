@@ -81,6 +81,11 @@ internal class MediaUploadServer(
     }
 
     private suspend fun handleRequest(request: HttpRequest): HttpResponse {
+        // CORS preflight — auth is already exempted by HttpServer for OPTIONS.
+        if (request.method == "OPTIONS") {
+            return HttpResponse(204, corsHeaders, ByteArray(0))
+        }
+
         // Route
         if (request.method != "POST" || request.target != "/upload") {
             return HttpResponse(
