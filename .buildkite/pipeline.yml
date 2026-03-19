@@ -47,6 +47,12 @@ steps:
           queue: android
       plugins: *plugins
 
+    - label: ':android: Lint Android'
+      command: make lint-android
+      agents:
+          queue: android
+      plugins: *plugins
+
     - label: ':android: Test Android Library'
       command: make test-android
       agents:
