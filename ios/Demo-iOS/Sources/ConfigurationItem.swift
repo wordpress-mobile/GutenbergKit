@@ -1,11 +1,12 @@
 import Foundation
 import GutenbergKit
+import WordPressAPI
 
 /// Represents a configuration item for the editor
-enum ConfigurationItem: Codable, Identifiable, Equatable, Hashable {
+enum ConfigurationItem: Identifiable, Equatable, Hashable {
     case bundledEditor
     case localWordPress
-    case editorConfiguration(ConfiguredEditor)
+    case account(Account)
 
     var id: String {
         switch self {
@@ -13,8 +14,8 @@ enum ConfigurationItem: Codable, Identifiable, Equatable, Hashable {
             return "bundled"
         case .localWordPress:
             return "local-wordpress"
-        case .editorConfiguration(let config):
-            return config.id
+        case .account(let account):
+            return "\(account.id())"
         }
     }
 
@@ -24,8 +25,8 @@ enum ConfigurationItem: Codable, Identifiable, Equatable, Hashable {
             return "Standalone Editor"
         case .localWordPress:
             return "Local WordPress"
-        case .editorConfiguration(let config):
-            return config.name
+        case .account(let account):
+            return account.displayName
         }
     }
 }
@@ -57,19 +58,45 @@ struct LocalWordPressCredentials: Codable {
     }
 }
 
-/// Configuration for an editor with site integration
-struct ConfiguredEditor: Codable, Identifiable, Equatable, Hashable {
-    let id: String
-    let name: String
-    let siteUrl: String
-    let siteApiRoot: String
-    let authHeader: String
+// MARK: - Account Helpers
 
-    init(name: String, siteUrl: String, siteApiRoot: String, authHeader: String) {
-        self.id = UUID().uuidString
-        self.name = name
-        self.siteUrl = siteUrl
-        self.siteApiRoot = siteApiRoot
-        self.authHeader = authHeader
+extension Account {
+
+    var displayName: String {
+        switch self {
+        case .selfHostedSite(_, let domain, _, _, _):
+            return URL(string: domain)?.host ?? domain
+        case .wpCom(_, let username, _, _):
+            return username.isEmpty ? "WordPress.com" : username
+        }
+    }
+
+    var authHeader: String {
+        switch self {
+        case .selfHostedSite(_, _, let username, let password, _):
+            let authString = "\(username):\(password)"
+            let authData = authString.data(using: .utf8)!
+            return "Basic \(authData.base64EncodedString())"
+        case .wpCom(_, _, let token, _):
+            return "Bearer \(token)"
+        }
+    }
+
+    var siteApiRoot: String {
+        switch self {
+        case .selfHostedSite(_, _, _, _, let siteApiRoot):
+            return siteApiRoot
+        case .wpCom(_, _, _, let siteApiRoot):
+            return siteApiRoot
+        }
+    }
+
+    var siteUrl: String {
+        switch self {
+        case .selfHostedSite(_, let domain, _, _, _):
+            return domain
+        case .wpCom(_, _, _, let siteApiRoot):
+            return siteApiRoot
+        }
     }
 }

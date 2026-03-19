@@ -9,6 +9,7 @@ struct EditorList: View {
     @State private var showDebugSettings = false
 
     @State var configurationToDelete: ConfigurationItem?
+    @State private var errorMessage: String?
 
     var body: some View {
         List {
@@ -58,7 +59,11 @@ struct EditorList: View {
             presenting: configurationToDelete
         ) { config in
             Button("Delete", role: .destructive) {
-                self.configurationStorage.deleteConfiguration(config)
+                do {
+                    try self.configurationStorage.deleteConfiguration(config)
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
                 configurationToDelete = nil
             }
             Button("Cancel", role: .cancel) {
@@ -66,6 +71,14 @@ struct EditorList: View {
             }
         } message: { config in
             Text("Are you sure you want to delete \"\(config.displayName)\"?")
+        }
+        .alert("Error", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK") { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
         }
         .sheet(isPresented: $showAddDialog) {
             AddSiteView()
@@ -93,13 +106,17 @@ struct EditorList: View {
                 }
             }
         }.onAppear {
-            configurationStorage.loadConfigurations()
+            do {
+                try configurationStorage.loadConfigurations()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
     var configuredEditors: some View {
         ForEach(configurationStorage.editorConfigurations.filter {
-            if case .editorConfiguration = $0 { return true }
+            if case .account = $0 { return true }
             return false
         }) { config in
             NavigationLink(config.displayName, value: config)

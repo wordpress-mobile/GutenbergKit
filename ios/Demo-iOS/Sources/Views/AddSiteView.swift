@@ -1,6 +1,7 @@
 import SwiftUI
 import AuthenticationServices
 import GutenbergKit
+import WordPressAPI
 
 /// View for adding a new editor configuration with site integration
 struct AddSiteView: View {
@@ -8,13 +9,15 @@ struct AddSiteView: View {
     @EnvironmentObject
     private var configurationStorage: ConfigurationStorage
 
-    @EnvironmentObject
-    private var authenticationManager: AuthenticationManager
-
     @Environment(\.dismiss)
     private var dismiss: DismissAction
 
     @State private var siteUrl: String = ""
+    @State private var errorMessage: String?
+    @State private var isAuthenticating = false
+    @State private var authTask: Task<Void, Never>?
+
+    private let authenticationManager = AuthenticationManager()
 
     @State private var presentationContextProvider = WebAuthPresentationContextProvider()
 
@@ -35,7 +38,7 @@ struct AddSiteView: View {
                     Text("Enter the URL of your WordPress site (e.g., https://example.com).")
                 }
 
-                if let errorMessage = authenticationManager.errorMessage {
+                if let errorMessage {
                     Section {
                         Text(errorMessage)
                             .foregroundColor(.red)
@@ -49,11 +52,11 @@ struct AddSiteView: View {
                     Button("Cancel") {
                         onCancel()
                     }
-                    .disabled(authenticationManager.isAuthenticating)
+                    .disabled(isAuthenticating)
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    if authenticationManager.isAuthenticating {
+                    if isAuthenticating {
                         ProgressView()
                     } else {
                         Button("Add") {
@@ -64,27 +67,39 @@ struct AddSiteView: View {
                 }
             }
         }
+        .onDisappear {
+            authTask?.cancel()
+        }
     }
 
     private func startAuthentication() {
         let trimmedUrl = siteUrl.trimmingCharacters(in: .whitespaces)
-        guard !trimmedUrl.isEmpty else { return }
+        guard !trimmedUrl.isEmpty, !isAuthenticating else { return }
 
-        authenticationManager.startAuthentication(
-            siteUrl: trimmedUrl,
-            presentationContext: presentationContextProvider
-        ) { configuration in
-            onAdd(configuration)
+        errorMessage = nil
+        isAuthenticating = true
+        authTask = Task {
+            defer { isAuthenticating = false }
+            do {
+                let account = try await authenticationManager.startAuthentication(
+                    siteUrl: trimmedUrl,
+                    presentationContext: presentationContextProvider
+                )
+                try onAdd(account)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
-    private func onAdd(_ configuration: ConfiguredEditor) {
-        configurationStorage.addConfiguration(.editorConfiguration(configuration))
+    private func onAdd(_ account: Account) throws {
+        try configurationStorage.addAccount(account)
         self.siteUrl = ""
         self.dismiss()
     }
 
     private func onCancel() {
+        authTask?.cancel()
         self.siteUrl = ""
         self.dismiss()
     }

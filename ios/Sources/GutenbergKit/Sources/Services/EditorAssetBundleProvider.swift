@@ -5,9 +5,8 @@ import WebKit
 /// Serves cached plugin and theme assets to the editor WebView.
 ///
 /// `EditorAssetBundleProvider` acts as a bridge between the WKWebView and the on-disk
-/// asset cache. It registers itself as both a script message handler (to provide the
-/// asset manifest to JavaScript) and a URL scheme handler (to serve individual cached
-/// files via the `gbk-cache-https` scheme).
+/// asset cache. It registers itself as a URL scheme handler to serve individual cached
+/// files via the `gbk-cache-https` scheme.
 ///
 /// When an asset is not found in the local cache (e.g., images referenced in CSS that
 /// weren't downloaded), the provider fetches the asset from its original HTTPS URL
@@ -46,54 +45,13 @@ public final class EditorAssetBundleProvider: NSObject {
 
     /// Registers this provider with a WebView configuration.
     ///
-    /// This method registers a script message handler for the editor to request the asset
-    /// manifest, and a URL scheme handler to serve individual cached files.
+    /// This method registers a URL scheme handler to serve individual cached files.
     ///
     /// - Parameter configuration: The WebView configuration to register with.
     @MainActor
     public func bind(to configuration: WKWebViewConfiguration) {
-        // Register the callback that provides the cached asset manifest
-        configuration.userContentController.addScriptMessageHandler(
-            self,
-            contentWorld: .page,
-            name: "loadFetchedEditorAssets"
-        )
-
         // Register the handler for individual cached assets
         configuration.setURLSchemeHandler(self, forURLScheme: "gbk-cache-https")
-    }
-}
-
-extension EditorAssetBundleProvider: WKScriptMessageHandlerWithReply {
-
-    public func userContentController(
-        _ userContentController: WKUserContentController,
-        didReceive message: WKScriptMessage,
-        replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void
-    ) {
-        logExecutionTime("Retrieved Asset Manifest") {
-            Logger.assetLibrary.info("📚 Editor requested asset manifest")
-
-            guard let payload = message.body as? NSDictionary,
-                  let asset = payload.object(forKey: "asset") as? String,
-                  asset == "manifest"
-            else {
-                replyHandler(nil, "Unexpected message")
-                return
-            }
-
-            guard let bundle else {
-                preconditionFailure("Cannot read manifest with no bundle present. This is a programmer error.")
-            }
-
-            do {
-                let reply: Any = try bundle.getEditorRepresentation()
-                replyHandler(reply, nil)
-            } catch {
-                Logger.assetLibrary.error("📚 Failed to fetch asset manifest: \(error.localizedDescription)")
-                replyHandler(nil, error.localizedDescription)
-            }
-        }
     }
 }
 
