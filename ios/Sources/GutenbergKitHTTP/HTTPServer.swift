@@ -35,6 +35,27 @@ import OSLog
 ///    `Relay-Authorization` (for browser `fetch()`, where `Proxy-*` headers
 ///    are forbidden). Both keep `Authorization` free for upstream credentials.
 ///
+/// ## CORS
+///
+/// When `requiresAuthentication` is enabled, `OPTIONS` requests are exempt
+/// from authentication because CORS preflight requests never include
+/// credentials (Fetch spec §3.3.5). However, the server does not generate
+/// CORS response headers — this is the handler's responsibility.
+///
+/// When proxying to a remote server, the upstream response will typically
+/// include the correct CORS headers already — pass it through unaltered.
+/// When serving local content, the handler must return appropriate headers
+/// for `OPTIONS` requests, typically:
+///
+///     Access-Control-Allow-Origin: <origin>
+///     Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+///     Access-Control-Allow-Headers: Authorization, Relay-Authorization, Content-Type
+///     Access-Control-Max-Age: 86400
+///
+/// Without these headers, browsers will reject the preflight and block
+/// the actual request. A handler that returns 404 for unrecognized methods
+/// will silently break CORS for browser clients.
+///
 /// ## Connection Model
 ///
 /// Each connection handles exactly one request (`Connection: close`). HTTP
