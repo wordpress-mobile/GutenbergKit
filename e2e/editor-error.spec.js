@@ -77,15 +77,13 @@ test.describe( 'Editor Error Handling', () => {
 		).toBeVisible();
 	} );
 
-	test( 'should show plugin load failure notice and keep editor functional', async ( {
+	test( 'should load editor without error when plugins enabled but no assets provided', async ( {
 		page,
 	} ) => {
-		// Enable plugins with an unreachable API root. This causes
-		// fetchEditorAssets to fail, resulting in the plugin load notice.
+		// Enable plugins without providing editorAssets in the config.
+		// The editor should load normally without showing an error notice.
 		const editor = new EditorPage( page );
 		await editor.setup( {
-			siteApiRoot: 'http://localhost:1/',
-			authHeader: '',
 			post: {
 				id: 1,
 				type: 'post',
@@ -96,15 +94,15 @@ test.describe( 'Editor Error Handling', () => {
 			plugins: true,
 		} );
 
+		// Editor should be functional — no plugin load failure notice.
+		await expect(
+			page.locator( '.gutenberg-kit-visual-editor' )
+		).toBeVisible();
+
 		await expect(
 			page.getByText(
 				'Loading plugins failed, using default editor configuration.'
 			)
-		).toBeVisible( { timeout: 10_000 } );
-
-		// Editor should still be functional despite the plugin failure.
-		await expect(
-			page.locator( '.gutenberg-kit-visual-editor' )
-		).toBeVisible();
+		).toBeHidden();
 	} );
 } );
