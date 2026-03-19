@@ -53,7 +53,7 @@ struct MediaUploadServerTests {
     let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.setValue("wrong-token", forHTTPHeaderField: "X-Upload-Token")
+    request.setValue("Bearer wrong-token", forHTTPHeaderField: "Relay-Authorization")
 
     let (_, response) = try await URLSession.shared.data(for: request)
     let httpResponse = try #require(response as? HTTPURLResponse)
@@ -84,7 +84,7 @@ struct MediaUploadServerTests {
     let url = URL(string: "http://127.0.0.1:\(server.port)/unknown")!
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.setValue(server.token, forHTTPHeaderField: "X-Upload-Token")
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
 
     let (_, response) = try await URLSession.shared.data(for: request)
     let httpResponse = try #require(response as? HTTPURLResponse)
@@ -104,7 +104,7 @@ struct MediaUploadServerTests {
     let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.setValue(server.token, forHTTPHeaderField: "X-Upload-Token")
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
     request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
     request.httpBody = body
 
@@ -137,7 +137,7 @@ struct MediaUploadServerTests {
     let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.setValue(server.token, forHTTPHeaderField: "X-Upload-Token")
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
     request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
     request.httpBody = body
 

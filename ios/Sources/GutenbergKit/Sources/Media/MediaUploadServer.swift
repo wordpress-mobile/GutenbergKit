@@ -6,8 +6,8 @@ import GutenbergKitHTTP
 /// and routes them through the native media processing pipeline.
 ///
 /// The server binds to `127.0.0.1` on a random available port and validates
-/// all requests using a per-session Bearer token in the `X-Upload-Token` header.
-/// It handles:
+/// all requests using a per-session Bearer token in the `Relay-Authorization`
+/// header. It handles:
 /// - `OPTIONS` preflight requests (CORS)
 /// - `POST /upload` multipart form-data uploads
 ///
@@ -34,31 +34,16 @@ final class MediaUploadServer: Sendable {
     ) async throws {
         let delegate = uploadDelegate
         let uploader = defaultUploader
-        // requiresAuthentication: false because HTTPServer checks auth on every request,
-        // including CORS preflight (OPTIONS). We handle auth in the handler ourselves,
-        // skipping it for OPTIONS so the browser's preflight succeeds.
-        //
-        // We use X-Upload-Token rather than Proxy-Authorization because WebKit's fetch()
-        // treats Proxy-Authorization as a forbidden header (per the Fetch spec) and silently
-        // strips it before sending the request.
-        //
-        // TokenBox bridges the token from post-start assignment into the handler closure.
-        // The JS layer only sends requests after the editor is fully loaded (well after init
-        // returns), so the tiny window between server start and token assignment is safe.
-        let tokenBox = TokenBox()
         let httpServer = try await HTTPServer.start(
             name: "media-upload",
-            requiresAuthentication: false,
             maxRequestBodySize: Int64(250 * 1024 * 1024)
         ) { request in
-            return await Self.handleRequest(
+            await Self.handleRequest(
                 request.parsed,
-                token: tokenBox.value,
                 uploadDelegate: delegate,
                 defaultUploader: uploader
             )
         }
-        tokenBox.value = httpServer.token
         self.port = httpServer.port
         self.token = httpServer.token
         self.server = httpServer
@@ -79,27 +64,9 @@ final class MediaUploadServer: Sendable {
 
     private static func handleRequest(
         _ request: ParsedHTTPRequest,
-        token: String,
         uploadDelegate: (any MediaUploadDelegate)?,
         defaultUploader: DefaultMediaUploader?
     ) async -> HTTPResponse {
-        // CORS preflight — exempt from auth so the browser's OPTIONS request succeeds.
-        if request.method == "OPTIONS" {
-            return HTTPResponse(
-                status: 204,
-                headers: corsHeaders
-            )
-        }
-
-        // Auth check for all non-OPTIONS requests.
-        guard request.header("X-Upload-Token") == token else {
-            return HTTPResponse(
-                status: 401,
-                headers: corsHeaders + [("Content-Type", "text/plain")],
-                body: Data("Unauthorized".utf8)
-            )
-        }
-
         // Route
         guard request.method == "POST", request.target == "/upload" else {
             return HTTPResponse(
@@ -246,7 +213,7 @@ final class MediaUploadServer: Sendable {
     private static let corsHeaders: [(String, String)] = [
         ("Access-Control-Allow-Origin", "*"),
         ("Access-Control-Allow-Methods", "POST, OPTIONS"),
-        ("Access-Control-Allow-Headers", "X-Upload-Token, Authorization, Content-Type"),
+        ("Access-Control-Allow-Headers", "Relay-Authorization, Authorization, Content-Type"),
         ("Access-Control-Max-Age", "86400"),
     ]
 
@@ -359,16 +326,6 @@ enum MediaUploadError: Error, LocalizedError {
             return "WordPress returned an unexpected response: \(preview)"
         }
     }
-}
-
-// MARK: - Helpers
-
-/// A simple reference-type box for bridging a token value into a `@Sendable` closure
-/// before the value is known. The JS layer only sends requests after the editor loads
-/// (well after `MediaUploadServer.init` returns), so the tiny window between server
-/// start and `value` assignment is safe in practice.
-private final class TokenBox: @unchecked Sendable {
-    var value: String = ""
 }
 
 private extension Data {
