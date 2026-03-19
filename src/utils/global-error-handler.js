@@ -10,6 +10,12 @@ import { logException } from './bridge';
 export function setUpGlobalErrorHandlers() {
 	// Catch unhandled errors
 	window.addEventListener( 'error', ( event ) => {
+		// "Script error." with no filename is the browser's sanitized form of a
+		// cross-origin script error. There is no actionable information, so skip it.
+		if ( event.message === 'Script error.' && ! event.filename ) {
+			return;
+		}
+
 		if ( isExternalError( event.filename, event.error ) ) {
 			return;
 		}
