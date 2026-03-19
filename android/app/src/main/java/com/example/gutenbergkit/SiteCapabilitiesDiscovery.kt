@@ -3,11 +3,8 @@ package com.example.gutenbergkit
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import rs.wordpress.api.kotlin.ApiDiscoveryResult
 import rs.wordpress.api.kotlin.WpLoginClient
-import java.net.HttpURLConnection
-import java.net.URL
 
 /**
  * Data class representing the capabilities discovered from a WordPress site.
@@ -18,8 +15,7 @@ data class SiteCapabilities(
 )
 
 /**
- * Discovers WordPress site capabilities by querying the API root endpoint.
- * This mirrors the iOS implementation's capability discovery logic.
+ * Discovers WordPress site capabilities by querying the site via autodiscovery.
  */
 class SiteCapabilitiesDiscovery {
 
@@ -32,28 +28,28 @@ class SiteCapabilitiesDiscovery {
     }
 
     /**
-     * Discovers site capabilities via API discovery.
+     * Discovers site capabilities via API autodiscovery.
      *
-     * @param siteApiRoot The WordPress REST API root URL (e.g., "https://example.com/wp-json")
+     * @param siteUrl The WordPress site URL (e.g., "example.com" or "example.wordpress.com")
      * @return SiteCapabilities indicating which features are supported
      */
     suspend fun discoverCapabilities(
-        siteApiRoot: String,
+        siteUrl: String,
     ): SiteCapabilities = withContext(Dispatchers.IO) {
         try {
-            // Extract the site URL from the API root URL
-            // e.g., "https://example.com/wp-json" -> "https://example.com"
-            val siteUrl = siteApiRoot.removeSuffix("/").substringBeforeLast("/wp-json")
-
-            // Use WpLoginClient to perform API discovery, which includes API details
-            when (val apiDiscoveryResult = WpLoginClient().apiDiscovery(siteUrl)) {
+            when (val apiDiscoveryResult = WpLoginClient(emptyList()).apiDiscovery(siteUrl)) {
                 is ApiDiscoveryResult.Success -> {
-                    val success = apiDiscoveryResult.success
-                    val apiDetails = success.apiDetails
+                    val apiDetails = apiDiscoveryResult.success.apiDetails
+                    val siteSlug = siteUrl
+                        .removePrefix("https://").removePrefix("http://")
+                        .trimEnd('/')
 
-                    // Check if the site has the required routes using hasRoute() method
+                    // Check both the standard route and the WP.com rewritten
+                    // form that includes /sites/{slug}/ after the namespace prefix.
                     val supportsPlugins = apiDetails.hasRoute(ROUTE_EDITOR_ASSETS)
+                        || apiDetails.hasRoute(wpComRoute(ROUTE_EDITOR_ASSETS, siteSlug))
                     val supportsThemeStyles = apiDetails.hasRoute(ROUTE_EDITOR_SETTINGS)
+                        || apiDetails.hasRoute(wpComRoute(ROUTE_EDITOR_SETTINGS, siteSlug))
 
                     Log.d(TAG, "Discovered capabilities - Plugins: $supportsPlugins, Theme Styles: $supportsThemeStyles")
 
@@ -63,57 +59,27 @@ class SiteCapabilitiesDiscovery {
                     )
                 }
                 else -> {
-                    Log.w(TAG, "API discovery via WpLoginClient failed: $apiDiscoveryResult, trying direct HTTP fetch")
-                    discoverCapabilitiesViaHttp(siteApiRoot)
+                    Log.w(TAG, "API discovery failed: $apiDiscoveryResult")
+                    getDefaultCapabilities()
                 }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "API discovery via WpLoginClient threw, trying direct HTTP fetch", e)
-            try {
-                discoverCapabilitiesViaHttp(siteApiRoot)
-            } catch (httpError: Exception) {
-                Log.e(TAG, "Direct HTTP discovery also failed", httpError)
-                getDefaultCapabilities()
-            }
+            Log.e(TAG, "API discovery threw", e)
+            getDefaultCapabilities()
         }
     }
 
     /**
-     * Discovers capabilities by directly fetching the REST API root and inspecting
-     * the `routes` object. This works over plain HTTP, unlike WpLoginClient which
-     * may require HTTPS.
+     * Rewrites a route for WP.com by inserting /sites/{slug}/ after the
+     * namespace/version prefix.
+     *
+     * e.g., "/wpcom/v2/editor-assets" with slug "example.wordpress.com"
+     *     -> "/wpcom/v2/sites/example.wordpress.com/editor-assets"
      */
-    private fun discoverCapabilitiesViaHttp(siteApiRoot: String): SiteCapabilities {
-        val url = URL(siteApiRoot.trimEnd('/') + "/")
-        val connection = url.openConnection() as HttpURLConnection
-        try {
-            connection.requestMethod = "GET"
-            connection.connectTimeout = 10_000
-            connection.readTimeout = 10_000
-            connection.setRequestProperty("Accept", "application/json")
-
-            val responseCode = connection.responseCode
-            if (responseCode != HttpURLConnection.HTTP_OK) {
-                Log.w(TAG, "HTTP discovery got status $responseCode")
-                return getDefaultCapabilities()
-            }
-
-            val body = connection.inputStream.bufferedReader().use { it.readText() }
-            val json = JSONObject(body)
-            val routes = json.optJSONObject("routes") ?: return getDefaultCapabilities()
-
-            val supportsPlugins = routes.has(ROUTE_EDITOR_ASSETS)
-            val supportsThemeStyles = routes.has(ROUTE_EDITOR_SETTINGS)
-
-            Log.d(TAG, "HTTP discovery - Plugins: $supportsPlugins, Theme Styles: $supportsThemeStyles")
-
-            return SiteCapabilities(
-                supportsPlugins = supportsPlugins,
-                supportsThemeStyles = supportsThemeStyles
-            )
-        } finally {
-            connection.disconnect()
-        }
+    private fun wpComRoute(route: String, siteSlug: String): String {
+        val parts = route.removePrefix("/").split("/", limit = 3)
+        if (parts.size < 3) return route
+        return "/${parts[0]}/${parts[1]}/sites/$siteSlug/${parts[2]}"
     }
 
     /**

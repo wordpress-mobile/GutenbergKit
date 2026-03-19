@@ -89,15 +89,15 @@ class RESTAPIRepositoryTest {
     }
 
     @Test
-    fun `fetchEditorSettings returns undefined when plugins enabled but theme styles disabled`() = runBlocking {
+    fun `fetchEditorSettings fetches when plugins enabled but theme styles disabled`() = runBlocking {
         val configuration = makeConfiguration(shouldUsePlugins = true, shouldUseThemeStyles = false)
         val mockClient = MockHTTPClient()
+        mockClient.getResponse = """{"styles":[]}"""
         val repository = makeRepository(configuration = configuration, httpClient = mockClient)
 
         val settings = repository.fetchEditorSettings()
 
-        assertEquals(EditorSettings.undefined, settings)
-        assertEquals(0, mockClient.getCallCount)
+        assertEquals(1, mockClient.getCallCount)
     }
 
     @Test

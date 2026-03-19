@@ -20,9 +20,17 @@ val wpEnvCredentials: Map<String, String> = run {
     }
 }
 
+// Copy shared OAuth credentials into Android assets so they're available at runtime.
+val copyOAuthCredentials by tasks.registering(Copy::class) {
+    from(rootProject.file("../wp_com_oauth_credentials.json"))
+    into(layout.buildDirectory.dir("generated/oauth-assets"))
+}
+
 android {
     namespace = "com.example.gutenbergkit"
     compileSdk = 34
+
+    sourceSets["main"].assets.srcDir(copyOAuthCredentials.map { it.destinationDir })
 
     defaultConfig {
         applicationId = "com.example.gutenbergkit"
@@ -83,8 +91,4 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(libs.androidx.espresso.web)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
