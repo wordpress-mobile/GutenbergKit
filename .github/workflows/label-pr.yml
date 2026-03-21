@@ -15,10 +15,11 @@ jobs:
               with:
                   script: |
                       const title = context.payload.pull_request.title;
-                      const prefixMatch = title.match(/^(\w+)[\(!:]/);
+                      const prefixMatch = title.match(/^(\w+)(?:\([^)]*\))?(!)?:/);
                       if (!prefixMatch) return;
 
                       const prefix = prefixMatch[1].toLowerCase();
+                      const isBreaking = prefixMatch[2] === '!';
                       const labelMap = {
                           feat: '[Type] Enhancement',
                           fix: '[Type] Bug',
@@ -33,8 +34,8 @@ jobs:
                           style: '[Type] Task',
                       };
 
-                      const label = labelMap[prefix];
-                      if (!label) return;
+                      const typeLabel = isBreaking ? '[Type] Breaking Change' : labelMap[prefix];
+                      if (!typeLabel) return;
 
                       const { data: currentLabels } = await github.rest.issues.listLabelsOnIssue({
                           owner: context.repo.owner,
@@ -42,16 +43,19 @@ jobs:
                           issue_number: context.payload.pull_request.number,
                       });
 
-                      const typeLabels = Object.values(labelMap);
+                      const allTypeLabels = [...Object.values(labelMap), '[Type] Breaking Change'];
                       const hasConflictingLabel = currentLabels.some(
-                          (l) => typeLabels.includes(l.name) && l.name !== label
+                          (l) => allTypeLabels.includes(l.name) && l.name !== typeLabel
                       );
 
                       if (hasConflictingLabel) return;
+
+                      const alreadyLabeled = currentLabels.some((l) => l.name === typeLabel);
+                      if (alreadyLabeled) return;
 
                       await github.rest.issues.addLabels({
                           owner: context.repo.owner,
                           repo: context.repo.repo,
                           issue_number: context.payload.pull_request.number,
-                          labels: [label],
+                          labels: [typeLabel],
                       });
