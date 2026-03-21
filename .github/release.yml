@@ -1,0 +1,15 @@
+changelog:
+    exclude:
+        authors:
+            - dependabot
+    categories:
+        - title: Features & Enhancements
+          labels:
+              - '[Type] Enhancement'
+        - title: Bug Fixes
+          labels:
+              - '[Type] Bug'
+              - '[Type] Regression'
+        - title: Other Changes
+          labels:
+              - '*'
