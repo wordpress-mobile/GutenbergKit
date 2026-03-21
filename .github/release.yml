@@ -17,3 +17,10 @@ changelog:
         - title: Other Changes
           labels:
               - '*'
+          exclude:
+              labels:
+                  - '[Type] Automated Testing'
+                  - '[Type] Build Tooling'
+                  - '[Type] Task'
+                  - '[Type] Developer Documentation'
+                  - dependencies # Added by Dependabot
