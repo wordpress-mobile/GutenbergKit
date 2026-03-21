@@ -1,0 +1,57 @@
+name: Label PR
+
+on:
+    pull_request_target:
+        types: [opened, edited]
+
+jobs:
+    label:
+        runs-on: ubuntu-latest
+        permissions:
+            pull-requests: write
+        steps:
+            - name: Apply label based on Conventional Commits prefix
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      const title = context.payload.pull_request.title;
+                      const prefixMatch = title.match(/^(\w+)[\(!:]/);
+                      if (!prefixMatch) return;
+
+                      const prefix = prefixMatch[1].toLowerCase();
+                      const labelMap = {
+                          feat: '[Type] Enhancement',
+                          fix: '[Type] Bug',
+                          perf: '[Type] Performance',
+                          test: '[Type] Automated Testing',
+                          docs: '[Type] Developer Documentation',
+                          build: '[Type] Build Tooling',
+                          ci: '[Type] Build Tooling',
+                          refactor: '[Type] Task',
+                          task: '[Type] Task',
+                          chore: '[Type] Task',
+                          style: '[Type] Task',
+                      };
+
+                      const label = labelMap[prefix];
+                      if (!label) return;
+
+                      const { data: currentLabels } = await github.rest.issues.listLabelsOnIssue({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          issue_number: context.payload.pull_request.number,
+                      });
+
+                      const typeLabels = Object.values(labelMap);
+                      const hasConflictingLabel = currentLabels.some(
+                          (l) => typeLabels.includes(l.name) && l.name !== label
+                      );
+
+                      if (hasConflictingLabel) return;
+
+                      await github.rest.issues.addLabels({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          issue_number: context.payload.pull_request.number,
+                          labels: [label],
+                      });
