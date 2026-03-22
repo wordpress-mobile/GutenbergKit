@@ -258,8 +258,8 @@ commit_changes() {
     fi
 
     git add .
-    git commit -m "$version"
-    print_success "Changes committed with message: $version"
+    git commit -m "chore(release): $version"
+    print_success "Changes committed with message: chore(release): $version"
 }
 
 # Function to create git tag

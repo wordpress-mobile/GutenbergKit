@@ -1,0 +1,26 @@
+changelog:
+    exclude:
+        authors:
+            - dependabot
+            - dependabot[bot]
+    categories:
+        - title: Breaking Changes
+          labels:
+              - '[Type] Breaking Change'
+        - title: Features & Enhancements
+          labels:
+              - '[Type] Enhancement'
+        - title: Bug Fixes
+          labels:
+              - '[Type] Bug'
+              - '[Type] Regression'
+        - title: Other Changes
+          labels:
+              - '*'
+          exclude:
+              labels:
+                  - '[Type] Automated Testing'
+                  - '[Type] Build Tooling'
+                  - '[Type] Task'
+                  - '[Type] Developer Documentation'
+                  - dependencies # Added by Dependabot

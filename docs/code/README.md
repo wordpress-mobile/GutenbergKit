@@ -6,6 +6,7 @@ This guide is for developers who want to contribute code to GutenbergKit.
 
 -   [Getting Started](./getting-started.md) - Prerequisites, setup, and running the demo apps
 -   [Development Tools](./development-tools.md) - Development mode, React DevTools, and logging
+-   [Developer Workflows](./developer-workflows.md) - Commit conventions, pull requests, and labeling
 -   [Testing](./testing.md) - Running tests and ensuring code quality
 -   [Troubleshooting](./troubleshooting.md) - Common issues and solutions
 
