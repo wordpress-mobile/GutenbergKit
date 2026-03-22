@@ -41,6 +41,9 @@ playground.xcworkspace
 .build/
 .swiftpm
 
+# Ruby tooling
+vendor/bundle
+
 # Logs
 logs
 *.log
@@ -190,8 +193,8 @@ local.properties
 /android/Gutenberg/src/main/assets/index.html
 
 # Disabled removing these files until this is published like Android in CI.
-# /ios/Sources/GutenbergKit/Gutenberg/assets
-# /ios/Sources/GutenbergKit/Gutenberg/index.html
+# /ios/Sources/GutenbergKitResources/Gutenberg/assets
+# /ios/Sources/GutenbergKitResources/Gutenberg/index.html
 
 # Translation files
 src/translations/*

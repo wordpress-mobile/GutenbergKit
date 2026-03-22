@@ -25,7 +25,7 @@ public struct EditorProgress: Codable, Sendable, Equatable {
     /// - Parameters:
     ///   - completed: The number of completed items.
     ///   - total: The total number of items.
-    package init(completed: Int, total: Int) {
+    init(completed: Int, total: Int) {
         self.completed = completed
         self.total = total
     }
