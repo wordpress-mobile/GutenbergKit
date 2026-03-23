@@ -43,9 +43,10 @@ After the release is created, it is ready for integration into the WordPress app
 
 GitHub automatically generates release notes when a release is created. Notes are organized into the following categories based on PR labels:
 
+-   **Breaking Changes** — `[Type] Breaking Change`
 -   **Features & Enhancements** — `[Type] Enhancement`
 -   **Bug Fixes** — `[Type] Bug`, `[Type] Regression`
--   **Other Changes** — everything else
+-   **Other Changes** — everything else (excludes `[Type] Automated Testing`, `[Type] Build Tooling`, `[Type] Task`, `[Type] Developer Documentation`, and `dependencies`)
 
 Dependabot dependency bump PRs are excluded automatically.
 
