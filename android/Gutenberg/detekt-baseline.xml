@@ -1,0 +1,48 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>CyclomaticComplexMethod:EditorConfiguration.kt$EditorConfiguration$override fun equals(other: Any?): Boolean</ID>
+    <ID>ExplicitItLambdaParameter:EditorAssetsLibrary.kt$EditorAssetsLibrary${ str, it -&gt; str + "%02x".format(it) }</ID>
+    <ID>FunctionNaming:EditorURLCache.kt$EditorURLCache$private fun __store( response: EditorURLResponse, url: String, httpMethod: EditorHttpMethod, currentDate: Date )</ID>
+    <ID>LongParameterList:EditorService.kt$EditorService.Companion$( context: Context, configuration: EditorConfiguration, httpClient: EditorHTTPClientProtocol? = null, cachePolicy: EditorCachePolicy = EditorCachePolicy.Always, coroutineScope: CoroutineScope, storageRoot: File? = null, tempStorageRoot: File? = null, cacheRoot: File? = null )</ID>
+    <ID>MaxLineLength:EditorConfiguration.kt$EditorConfiguration.Builder$fun setNamespaceExcludedPaths(namespaceExcludedPaths: Array&lt;String&gt;)</ID>
+    <ID>MaxLineLength:EditorConfiguration.kt$EditorConfiguration.Companion$fun</ID>
+    <ID>MaxLineLength:EditorHTTPClientTest.kt$EditorHTTPClientTest$val wpErrorJson = """{"code": "rest_invalid_param", "message": "Invalid parameter(s): title", "data": {"status": 400, "params": {"title": "Title is required."}}}"""</ID>
+    <ID>MaxLineLength:EditorHTTPClientTest.kt$EditorHTTPClientTest$val wpErrorJson = """{"code": "rest_invalid_param", "message": "Invalid parameter(s): title, content", "data": {"status": 400}, "additional_errors": [{"code": "rest_invalid_field", "message": "Content is required."}]}"""</ID>
+    <ID>MaxLineLength:EditorSettingsTest.kt$EditorSettingsTest$val jsonString = """{"styles": [{"css": ".theme-class { background: blue; }", "isGlobalStyles": true}, {"css": ".another { margin: 10px; }", "isGlobalStyles": false}]}"""</ID>
+    <ID>MaxLineLength:EditorSettingsTest.kt$EditorSettingsTest$val jsonString = """{"styles": [{"css": "body { color: red; }", "isGlobalStyles": true}, {"css": "h1 { font-size: 2em; }", "isGlobalStyles": false}]}"""</ID>
+    <ID>MaxLineLength:EditorSettingsTest.kt$EditorSettingsTest$val jsonString = """{"styles": [{"css": null, "isGlobalStyles": true}, {"css": "h1 { font-size: 2em; }", "isGlobalStyles": false}]}"""</ID>
+    <ID>MaxLineLength:GutenbergView.kt$GutenbergView$constructor</ID>
+    <ID>MaxLineLength:RESTAPIRepositoryTest.kt$RESTAPIRepositoryTest$val rawJSON = """{"styles":[{"css":".theme-style{color:blue}","isGlobalStyles":true},{"css":".another{margin:0}","isGlobalStyles":false}]}"""</ID>
+    <ID>NestedBlockDepth:EditorAssetsLibrary.kt$EditorAssetsLibrary$private fun cleanupOldCache()</ID>
+    <ID>NestedBlockDepth:FileCache.kt$FileCache$fun copyToCache(context: Context, uri: Uri, maxSizeBytes: Long = DEFAULT_MAX_FILE_SIZE): Uri?</ID>
+    <ID>NestedBlockDepth:FileCache.kt$FileCache$private fun getFileSize(context: Context, uri: Uri): Long?</ID>
+    <ID>PrintStackTrace:GutenbergView.kt$GutenbergView$e</ID>
+    <ID>ReturnCount:GutenbergView.kt$GutenbergView.&lt;no name provided&gt;$override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest): Boolean</ID>
+    <ID>SwallowedException:EditorAssetsLibrary.kt$EditorAssetsLibrary$e: Exception</ID>
+    <ID>SwallowedException:EditorConfiguration.kt$EditorConfiguration$e: Exception</ID>
+    <ID>SwallowedException:EditorDependenciesSerializer.kt$EditorDependenciesSerializer$e: Exception</ID>
+    <ID>SwallowedException:EditorHTTPClient.kt$EditorHTTPClient$e: Exception</ID>
+    <ID>SwallowedException:EditorHTTPClient.kt$EditorHTTPClient$e: JsonSyntaxException</ID>
+    <ID>SwallowedException:EditorURLResponse.kt$EditorURLResponse$e: Exception</ID>
+    <ID>SwallowedException:LocalEditorAssetManifest.kt$LocalEditorAssetManifest$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:CachedAssetRequestInterceptor.kt$CachedAssetRequestInterceptor$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:EditorAssetsLibrary.kt$EditorAssetsLibrary$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:EditorConfiguration.kt$EditorConfiguration$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:EditorDependenciesSerializer.kt$EditorDependenciesSerializer$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:EditorHTTPClient.kt$EditorHTTPClient$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:EditorURLResponse.kt$EditorURLResponse$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:FileCache.kt$FileCache$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:GutenbergView.kt$GutenbergView$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:LocalEditorAssetManifest.kt$LocalEditorAssetManifest$e: Exception</ID>
+    <ID>TooGenericExceptionThrown:EditorAssetsLibrary.kt$EditorAssetsLibrary$throw Exception("Failed to fetch asset: $httpURL (${connection.responseCode})")</ID>
+    <ID>TooGenericExceptionThrown:EditorAssetsLibrary.kt$EditorAssetsLibrary$throw Exception("Failed to fetch manifest: ${connection.responseCode}")</ID>
+    <ID>TooManyFunctions:GutenbergView.kt$GutenbergView : WebView</ID>
+    <ID>UnusedParameter:EditorService.kt$EditorService.Companion$coroutineScope: CoroutineScope</ID>
+    <ID>UnusedPrivateMember:GutenbergView.kt$GutenbergView.Companion$private fun cleanupWarmup()</ID>
+    <ID>UnusedPrivateProperty:GutenbergView.kt$GutenbergView.Companion$private const val ASSET_LOADING_TIMEOUT_MS = 5000L</ID>
+    <ID>UseCheckOrError:TestResources.kt$TestResources$throw IllegalStateException( "Could not find iOS test resources. Tried: ${possiblePaths.map { it.absolutePath }}" )</ID>
+    <ID>UseRequire:EditorAssetsLibrary.kt$EditorAssetsLibrary$throw IllegalArgumentException("Unsupported URL for caching: $httpURL")</ID>
+  </CurrentIssues>
+</SmellBaseline>

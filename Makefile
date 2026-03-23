@@ -191,6 +191,11 @@ lint-js: npm-dependencies ## Lint JavaScript code
 lint-js-fix: npm-dependencies ## Lint and auto-fix JavaScript code
 	npm run lint:js:fix
 
+.PHONY: lint-android
+lint-android: ## Lint Android code with Detekt
+	@echo "--- :android: Running Detekt"
+	./android/gradlew -p ./android detekt
+
 .PHONY: lint-swift
 lint-swift: ## Lint Swift code
 	swift package plugin swiftlint
