@@ -92,7 +92,7 @@
 		"@testing-library/user-event": "^14.6.1",
 		"@types/react": "^19.2.7",
 		"@types/react-dom": "^19.2.3",
-		"@vitejs/plugin-react": "^5.1.4",
+		"@vitejs/plugin-react": "^6.0.1",
 		"@wordpress/dependency-extraction-webpack-plugin": "^6.41.0",
 		"@wordpress/env": "^11.2.0",
 		"@wordpress/eslint-plugin": "^24.3.0",
@@ -108,8 +108,7 @@
 		"react-devtools": "^7.0.1",
 		"react-devtools-core": "^7.0.1",
 		"sass-embedded": "^1.98.0",
-		"vite": "^7.3.1",
-		"vite-plugin-node-polyfills": "^0.25.0",
+		"vite": "^8.0.0",
 		"vitest": "^4.1.0"
 	}
 }
