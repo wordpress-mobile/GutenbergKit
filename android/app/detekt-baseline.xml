@@ -26,11 +26,6 @@
     <ID>LongParameterList:MainActivity.kt$( configurations: List&lt;ConfigurationItem&gt;, onConfigurationClick: (ConfigurationItem) -&gt; Unit, onConfigurationLongClick: (ConfigurationItem) -&gt; Boolean, onAddConfiguration: (String) -&gt; Unit, onDeleteConfiguration: (ConfigurationItem) -&gt; Unit, isDiscoveringSite: Boolean = false, onDismissDiscovering: () -&gt; Unit = {}, isLoadingCapabilities: Boolean = false )</ID>
     <ID>MaxLineLength:MainActivity.kt$MainActivity$private</ID>
     <ID>MaxLineLength:SitePreparationViewModel.kt$SitePreparationViewModel$"Could not connect to Local WordPress at ${credentials.siteUrl}.\n\nThe wp-env server may not be running. Start it with 'make wp-env-start'."</ID>
-    <ID>NewLineAtEndOfFile:AuthenticationManager.kt$com.example.gutenbergkit.AuthenticationManager.kt</ID>
-    <ID>NewLineAtEndOfFile:ConfigurationAdapter.kt$com.example.gutenbergkit.ConfigurationAdapter.kt</ID>
-    <ID>NewLineAtEndOfFile:ConfigurationItem.kt$com.example.gutenbergkit.ConfigurationItem.kt</ID>
-    <ID>NewLineAtEndOfFile:ConfigurationStorage.kt$com.example.gutenbergkit.ConfigurationStorage.kt</ID>
-    <ID>NewLineAtEndOfFile:ExampleUnitTest.kt$com.example.gutenbergkit.ExampleUnitTest.kt</ID>
     <ID>SwallowedException:ConfigurationStorage.kt$ConfigurationStorage$e: Exception</ID>
     <ID>SwallowedException:SitePreparationActivity.kt$SitePreparationActivity.Companion$e: Exception</ID>
     <ID>SwallowedException:SitePreparationViewModel.kt$SitePreparationViewModel$e: java.net.ConnectException</ID>
