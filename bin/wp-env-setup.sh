@@ -18,21 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CREDENTIALS_FILE="$PROJECT_ROOT/.wp-env.credentials.json"
 
-# Discover the actual site URL from wp-env (supports auto-port selection).
-SITE_URL=$(npx wp-env status --json 2>/dev/null | node -e "
-    let data = '';
-    process.stdin.on('data', chunk => data += chunk);
-    process.stdin.on('end', () => {
-        try { process.stdout.write(JSON.parse(data).urls.development); }
-        catch { process.exit(1); }
-    });
-") || true
-
-if [ -z "$SITE_URL" ]; then
-    echo "Error: Could not determine site URL from wp-env status."
-    exit 1
-fi
-
+SITE_URL="http://localhost:8888"
 USERNAME="admin"
 PASSWORD="password"
 APP_NAME="GutenbergKit"
