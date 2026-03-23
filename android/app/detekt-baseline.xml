@@ -2,24 +2,6 @@
 <SmellBaseline>
   <ManuallySuppressedIssues></ManuallySuppressedIssues>
   <CurrentIssues>
-    <ID>FunctionNaming:ConfigurationDialogs.kt$@Composable fun AddConfigurationDialog( siteUrlInput: String, onSiteUrlChange: (String) -&gt; Unit, onConfirm: () -&gt; Unit, onDismiss: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:ConfigurationDialogs.kt$@Composable fun DeleteConfigurationDialog( onConfirm: () -&gt; Unit, onDismiss: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:ConfigurationDialogs.kt$@Composable fun DiscoveringSiteDialog( onDismiss: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:EditorActivity.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun EditorScreen( configuration: EditorConfiguration, dependencies: EditorDependencies? = null, coroutineScope: CoroutineScope, onClose: () -&gt; Unit, onGutenbergViewCreated: (GutenbergView) -&gt; Unit = {} )</ID>
-    <ID>FunctionNaming:MainActivity.kt$@Composable fun AddNewConfigurationCard( onClick: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:MainActivity.kt$@OptIn(ExperimentalFoundationApi::class) @Composable fun ConfigurationCard( configuration: ConfigurationItem, onClick: () -&gt; Unit, onLongClick: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:MainActivity.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun MainScreen( configurations: List&lt;ConfigurationItem&gt;, onConfigurationClick: (ConfigurationItem) -&gt; Unit, onConfigurationLongClick: (ConfigurationItem) -&gt; Boolean, onAddConfiguration: (String) -&gt; Unit, onDeleteConfiguration: (ConfigurationItem) -&gt; Unit, isDiscoveringSite: Boolean = false, onDismissDiscovering: () -&gt; Unit = {}, isLoadingCapabilities: Boolean = false )</ID>
-    <ID>FunctionNaming:SitePreparationActivity.kt$@Composable private fun DependenciesStatusCard(hasDependencies: Boolean)</ID>
-    <ID>FunctionNaming:SitePreparationActivity.kt$@Composable private fun EditorConfigurationDetailsCard(configuration: EditorConfiguration)</ID>
-    <ID>FunctionNaming:SitePreparationActivity.kt$@Composable private fun ErrorCard(error: String)</ID>
-    <ID>FunctionNaming:SitePreparationActivity.kt$@Composable private fun FeatureConfigurationCard( enableNativeInserter: Boolean, onEnableNativeInserterChange: (Boolean) -&gt; Unit, enableNetworkLogging: Boolean, onEnableNetworkLoggingChange: (Boolean) -&gt; Unit, postType: String, onPostTypeChange: (String) -&gt; Unit )</ID>
-    <ID>FunctionNaming:SitePreparationActivity.kt$@Composable private fun KeyValueBooleanRow(key: String, value: Boolean)</ID>
-    <ID>FunctionNaming:SitePreparationActivity.kt$@Composable private fun KeyValueRow(key: String, value: String)</ID>
-    <ID>FunctionNaming:SitePreparationActivity.kt$@Composable private fun LoadedView( uiState: SitePreparationUiState, viewModel: SitePreparationViewModel, modifier: Modifier = Modifier )</ID>
-    <ID>FunctionNaming:SitePreparationActivity.kt$@Composable private fun LoadingView(modifier: Modifier = Modifier)</ID>
-    <ID>FunctionNaming:SitePreparationActivity.kt$@Composable private fun LocalCachesCard( isLoading: Boolean, loadingProgress: Float?, cacheBundleCount: Int?, onPrepareEditor: () -&gt; Unit, onPrepareEditorIgnoringCache: () -&gt; Unit, onClearCache: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:SitePreparationActivity.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun SitePreparationScreen( viewModel: SitePreparationViewModel, onClose: () -&gt; Unit, onStartEditor: (EditorConfiguration, org.wordpress.gutenberg.model.EditorDependencies?) -&gt; Unit )</ID>
-    <ID>FunctionNaming:Theme.kt$@Composable fun AppTheme( darkTheme: Boolean = isSystemInDarkTheme(), dynamicColor: Boolean = true, content: @Composable () -&gt; Unit )</ID>
     <ID>LongMethod:EditorActivity.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun EditorScreen( configuration: EditorConfiguration, dependencies: EditorDependencies? = null, coroutineScope: CoroutineScope, onClose: () -&gt; Unit, onGutenbergViewCreated: (GutenbergView) -&gt; Unit = {} )</ID>
     <ID>LongMethod:MainActivity.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun MainScreen( configurations: List&lt;ConfigurationItem&gt;, onConfigurationClick: (ConfigurationItem) -&gt; Unit, onConfigurationLongClick: (ConfigurationItem) -&gt; Boolean, onAddConfiguration: (String) -&gt; Unit, onDeleteConfiguration: (ConfigurationItem) -&gt; Unit, isDiscoveringSite: Boolean = false, onDismissDiscovering: () -&gt; Unit = {}, isLoadingCapabilities: Boolean = false )</ID>
     <ID>LongMethod:SitePreparationActivity.kt$@Composable private fun FeatureConfigurationCard( enableNativeInserter: Boolean, onEnableNativeInserterChange: (Boolean) -&gt; Unit, enableNetworkLogging: Boolean, onEnableNetworkLoggingChange: (Boolean) -&gt; Unit, postType: String, onPostTypeChange: (String) -&gt; Unit )</ID>
