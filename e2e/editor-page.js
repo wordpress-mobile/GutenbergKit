@@ -60,7 +60,7 @@ export default class EditorPage {
 		const config = {
 			...DEFAULT_GBKIT,
 			editorSettings,
-			...( editorAssets && { editorAssets } ),
+			editorAssets,
 			...gbkit,
 			post: {
 				...DEFAULT_GBKIT.post,
