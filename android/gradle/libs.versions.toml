@@ -22,7 +22,7 @@ composeBom = "2024.12.01"
 activityCompose = "1.9.3"
 jsoup = "1.18.1"
 okhttp = "4.12.0"
-detekt = "1.23.7"
+detekt = "1.23.8"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
