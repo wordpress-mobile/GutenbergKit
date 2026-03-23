@@ -72,7 +72,7 @@
 		"@wordpress/shortcode": "^4.38.0",
 		"@wordpress/style-engine": "^2.38.0",
 		"@wordpress/token-list": "^3.38.0",
-		"@wordpress/url": "^4.38.0",
+		"@wordpress/url": "^4.42.0",
 		"@wordpress/viewport": "^6.38.0",
 		"@wordpress/warning": "^3.42.0",
 		"@wordpress/widgets": "^4.38.0",
