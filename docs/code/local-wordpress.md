@@ -18,7 +18,7 @@ make wp-env-start
 This command:
 
 1. Installs npm dependencies (if needed).
-2. Starts a WordPress Playground instance at **http://localhost:8888**.
+2. Starts a WordPress Playground instance (port auto-selected, defaulting to 8888).
 3. Creates an application password for the `admin` user.
 4. Writes credentials to `.wp-env.credentials.json` (gitignored).
 
@@ -68,7 +68,7 @@ Both demo apps include a **"Local WordPress"** option that is always visible. Wh
 
 ### iOS Simulator
 
-The iOS Simulator shares the host machine's network stack. Requests to `localhost:8888` work directly.
+The iOS Simulator shares the host machine's network stack. Requests to `localhost` work directly.
 
 The Xcode scheme includes a `WP_ENV_CREDENTIALS_PATH` environment variable pointing to the credentials file.
 
@@ -78,7 +78,7 @@ The Android emulator cannot reach `localhost` on the host machine directly. The 
 
 #### Image URLs in the Android Emulator
 
-WordPress generates image URLs (e.g., for uploaded media) using its configured site URL, which defaults to `http://localhost:8888`. These URLs don't resolve inside the Android emulator because `localhost` points to the emulator itself.
+WordPress generates image URLs (e.g., for uploaded media) using its configured site URL. These URLs don't resolve inside the Android emulator because `localhost` points to the emulator itself.
 
 To fix this, activate a mu-plugin that remaps URLs and restart wp-env:
 
@@ -94,7 +94,7 @@ To revert (for browser access or iOS testing):
 make wp-env-android-reset
 ```
 
-Note: While the URL override is active, the WordPress admin dashboard (`http://localhost:8888/wp-admin/`) will redirect to `10.0.2.2`, which doesn't resolve in a desktop browser.
+Note: While the URL override is active, the WordPress admin dashboard will redirect to `10.0.2.2`, which doesn't resolve in a desktop browser.
 
 ### Physical Devices
 
@@ -106,26 +106,12 @@ Physical devices cannot reach `localhost`. You'll need to:
 
 ## WordPress Admin
 
-Access the WordPress admin dashboard at **http://localhost:8888/wp-admin/**:
+Access the WordPress admin dashboard at the URL shown in the `make wp-env-start` output, e.g. **http://localhost:8888/wp-admin/**:
 
 -   **Username:** `admin`
 -   **Password:** `password`
 
 ## Troubleshooting
-
-### Port 8888 is already in use
-
-```
-Error: Port 8888 is already allocated
-```
-
-Another service is using port 8888. Stop the conflicting service or change the wp-env port in `.wp-env.json`:
-
-```json
-{
-	"port": 9999
-}
-```
 
 ### Resetting the environment
 
