@@ -6,7 +6,14 @@ This guide covers commit conventions, pull request guidelines, and labeling work
 
 This project follows the [Conventional Commits](https://www.conventionalcommits.org/) specification for commit messages and pull request titles.
 
-Format: `<type>: <description>`
+Format: `<type>[optional scope][optional !]: <description>`
+
+To signal a **breaking change**, append `!` after the type (and scope, if present):
+
+```
+feat!: remove deprecated editor bridge method
+fix(api)!: change block serialization format
+```
 
 Common types:
 
@@ -45,5 +52,6 @@ PRs are automatically labeled based on the Conventional Commits prefix in the ti
 | `docs`                               | `[Type] Developer Documentation` |
 | `build`, `ci`                        | `[Type] Build Tooling`           |
 | `refactor`, `task`, `chore`, `style` | `[Type] Task`                    |
+| any type with `!`                    | `[Type] Breaking Change`         |
 
 If you manually apply a type label before the automation runs, your choice is respected — the workflow skips re-labeling when a conflicting type label is already present.
