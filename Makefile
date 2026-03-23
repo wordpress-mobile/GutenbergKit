@@ -153,6 +153,7 @@ preview: npm-dependencies ## Preview the production build locally
 
 .PHONY: wp-env-start
 wp-env-start: npm-dependencies ## Start the local WordPress environment (RESET=1 to regenerate credentials)
+	npm run wp-env start -- --runtime=playground
 	@RESET=$(RESET) bash bin/wp-env-setup.sh
 
 .PHONY: wp-env-stop

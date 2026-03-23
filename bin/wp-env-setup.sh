@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
 #
-# wp-env-setup.sh — Start and auto-provision the local WordPress environment.
+# wp-env-setup.sh — Auto-provision credentials for the local WordPress environment.
 #
-# Starts the wp-env WordPress environment (if not already running) and creates
-# an application password for the admin user, writing the credentials to
-# .wp-env.credentials.json so the demo apps can connect automatically.
+# Creates an application password for the admin user and writes the credentials
+# to .wp-env.credentials.json so the demo apps can connect automatically.
 #
 # This script uses only REST API calls (no WP-CLI / wp-env run), so it works
 # with both the Docker and Playground runtimes.
 #
 # Usage:
-#   bash bin/wp-env-setup.sh           # Start env (if needed) and create credentials (skips if file exists)
+#   bash bin/wp-env-setup.sh           # Create credentials (skips if file exists)
 #   RESET=1 bash bin/wp-env-setup.sh   # Recreate credentials from scratch
 
 set -euo pipefail
@@ -19,40 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CREDENTIALS_FILE="$PROJECT_ROOT/.wp-env.credentials.json"
 
-USERNAME="admin"
-PASSWORD="password"
-APP_NAME="GutenbergKit"
-
-# ---------------------------------------------------------------------------
-# Parse flags
-# ---------------------------------------------------------------------------
-
-RESET="${RESET:-}"
-
-# ---------------------------------------------------------------------------
-# Start wp-env (if not already running)
-# ---------------------------------------------------------------------------
-
-WP_ENV_STATUS=$(npx wp-env status --json 2>/dev/null) || true
-IS_RUNNING=$(echo "$WP_ENV_STATUS" | node -e "
-    let data = '';
-    process.stdin.on('data', chunk => data += chunk);
-    process.stdin.on('end', () => {
-        try { process.stdout.write(JSON.parse(data).status === 'running' ? 'true' : 'false'); }
-        catch { process.stdout.write('false'); }
-    });
-") || true
-
-if [ "$IS_RUNNING" = "true" ]; then
-    echo "WordPress environment is already running — skipping wp-env start."
-else
-    npx wp-env start --runtime=playground
-fi
-
-# ---------------------------------------------------------------------------
-# Discover the actual site URL (supports auto-port selection)
-# ---------------------------------------------------------------------------
-
+# Discover the actual site URL from wp-env (supports auto-port selection).
 SITE_URL=$(npx wp-env status --json 2>/dev/null | node -e "
     let data = '';
     process.stdin.on('data', chunk => data += chunk);
@@ -67,9 +33,15 @@ if [ -z "$SITE_URL" ]; then
     exit 1
 fi
 
+USERNAME="admin"
+PASSWORD="password"
+APP_NAME="GutenbergKit"
+
 # ---------------------------------------------------------------------------
-# Credentials idempotency check
+# Parse flags
 # ---------------------------------------------------------------------------
+
+RESET="${RESET:-}"
 
 if { [ "$RESET" = "true" ] || [ "$RESET" = "1" ]; } && [ -f "$CREDENTIALS_FILE" ]; then
     echo "Removing existing credentials file..."

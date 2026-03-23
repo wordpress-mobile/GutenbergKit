@@ -47,16 +47,14 @@ The `.wp-env.json` file at the project root configures the environment:
 
 ### Credential Provisioning
 
-The `bin/wp-env-setup.sh` script handles the full startup flow:
+The `bin/wp-env-setup.sh` script runs automatically after `wp-env start`:
 
-1. Checks if wp-env is already running — skips `wp-env start` if so (prevents duplicate instances).
-2. Starts the WordPress Playground environment if not already running.
-3. Waits for WordPress to be ready (health check with retries).
-4. Creates an application password for the `admin` user via the REST API.
-5. Generates a Base64-encoded Basic Auth header.
-6. Writes credentials to `.wp-env.credentials.json`.
+1. Waits for WordPress to be ready (health check with retries).
+2. Creates an application password for the `admin` user via the REST API.
+3. Generates a Base64-encoded Basic Auth header.
+4. Writes credentials to `.wp-env.credentials.json`.
 
-The script is idempotent — it skips starting a second instance if one is already running, and skips credential provisioning if the credentials file already exists. Use `make wp-env-start RESET=1` (or `make wp-env-clean`) to regenerate credentials.
+The script is idempotent — it skips if the credentials file already exists. Use `make wp-env-start RESET=1` (or `make wp-env-clean`) to regenerate.
 
 ### Demo App Integration
 
