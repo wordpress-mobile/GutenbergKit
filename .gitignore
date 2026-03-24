@@ -44,6 +44,9 @@ playground.xcworkspace
 # Ruby tooling
 vendor/bundle
 
+# Fastlane
+fastlane/report.xml
+
 # Logs
 logs
 *.log
