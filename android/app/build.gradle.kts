@@ -32,6 +32,12 @@ android {
 
     sourceSets["main"].assets.srcDir(copyOAuthCredentials.map { it.destinationDir })
 
+    applicationVariants.configureEach {
+        mergeAssetsProvider.configure {
+            dependsOn(copyOAuthCredentials)
+        }
+    }
+
     defaultConfig {
         applicationId = "com.example.gutenbergkit"
         minSdk = 24

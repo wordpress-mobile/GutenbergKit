@@ -195,7 +195,8 @@ wp_com_oauth_credentials.json
 # /ios/Sources/GutenbergKit/Gutenberg/index.html
 
 # Translation files
-src/translations/
+src/translations/*
+!src/translations/.gitkeep
 
 # Playwright
 e2e/test-results/
@@ -205,6 +206,7 @@ playwright-report/
 .wp-env.credentials.json
 wp-env/mu-plugins/*
 !wp-env/mu-plugins/gutenbergkit-cors.php
+!wp-env/mu-plugins/gutenbergkit-jetpack-blocks.php
 
 # Claude
 .claude/settings.local.json

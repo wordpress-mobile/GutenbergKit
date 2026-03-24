@@ -57,6 +57,11 @@ struct SitePreparationView: View {
                 Toggle("Enable Native Inserter", isOn: $viewModel.enableNativeInserter)
                 Toggle("Enable Network Logging", isOn: $viewModel.enableNetworkLogging)
 
+                Picker("Network Fallback", selection: $viewModel.networkFallbackMode) {
+                    Text("Disabled").tag(NetworkFallbackMode.disabled)
+                    Text("Automatic").tag(NetworkFallbackMode.automatic)
+                }
+
                 if viewModel.postTypes.isEmpty {
                     HStack {
                         Text("Post Type")
@@ -159,6 +164,16 @@ class SitePreparationViewModel {
         }
     }
 
+    var networkFallbackMode: NetworkFallbackMode {
+        get { editorConfiguration?.networkFallbackMode ?? .disabled }
+        set {
+            guard let config = editorConfiguration else { return }
+            editorConfiguration = config.toBuilder()
+                .setNetworkFallbackMode(newValue)
+                .build()
+        }
+    }
+
     var postTypes: [PostTypeDetails] = []
 
     var selectedPostTypeDetails: PostTypeDetails {
@@ -249,9 +264,15 @@ class SitePreparationViewModel {
                     )
                     self.client = client
 
-                    try await self.loadPostTypes()
-                    let newConfiguration = try await self.loadConfiguration(for: account)
-                    self.editorConfiguration = Self.applyDemoAppDefaults(to: newConfiguration)
+                    do {
+                        try await self.loadPostTypes()
+                        let newConfiguration = try await self.loadConfiguration(for: account)
+                        self.editorConfiguration = Self.applyDemoAppDefaults(to: newConfiguration)
+                    } catch let error where Self.isNetworkError(error) {
+                        self.postTypes = [.post, .page]
+                        let fallback = Self.buildOfflineConfiguration(for: account)
+                        self.editorConfiguration = Self.applyDemoAppDefaults(to: fallback)
+                    }
                 }
             } catch {
                 self.error = error
@@ -263,6 +284,34 @@ class SitePreparationViewModel {
         configuration.toBuilder()
             .setNativeInserterEnabled(true)
             .build()
+    }
+
+    private static func isNetworkError(_ error: Error) -> Bool {
+        if let wpError = error as? WpApiError,
+           case .RequestExecutionFailed(_, _, .deviceIsOfflineError, _, _) = wpError {
+            return true
+        }
+        return error is URLError
+    }
+
+    private static func buildOfflineConfiguration(for account: Account) -> EditorConfiguration {
+        EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: URL(string: account.siteUrl)!,
+            siteApiRoot: URL(string: account.siteApiRoot)!
+        )
+        // Optimistically enable theme styles and plugins so that
+        // previously-cached assets from an earlier online session can still be
+        // used. For sites that don't support these features, this is safe
+        // because EditorService won't be able to fetch the remote manifests
+        // while offline and the automatic network fallback will gracefully
+        // degrade to an empty asset bundle.
+        .setShouldUseThemeStyles(true)
+        .setShouldUsePlugins(true)
+        .setNetworkFallbackMode(.automatic)
+        .setAuthHeader(account.authHeader)
+        .setLogLevel(.debug)
+        .build()
     }
 
     /// Prepares the editor by caching all resources and preparing an `EditorDependencies` object to inject into the editor.

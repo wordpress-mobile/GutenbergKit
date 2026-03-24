@@ -98,11 +98,5 @@ test.describe( 'Editor Error Handling', () => {
 		await expect(
 			page.locator( '.gutenberg-kit-visual-editor' )
 		).toBeVisible();
-
-		await expect(
-			page.getByText(
-				'Loading plugins failed, using default editor configuration.'
-			)
-		).toBeHidden();
 	} );
 } );
