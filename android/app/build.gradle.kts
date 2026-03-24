@@ -20,21 +20,25 @@ val wpEnvCredentials: Map<String, String> = run {
     }
 }
 
-// Copy shared OAuth credentials into Android assets so they're available at runtime.
-val copyOAuthCredentials by tasks.registering(Copy::class) {
-    from(rootProject.file("../wp_com_oauth_credentials.json"))
-    into(layout.buildDirectory.dir("generated/oauth-assets"))
-}
-
 android {
     namespace = "com.example.gutenbergkit"
     compileSdk = 34
 
-    sourceSets["main"].assets.srcDir(copyOAuthCredentials.map { it.destinationDir })
+    // Copy shared OAuth credentials into Android assets so they're available at runtime.
+    // Only registered when the file exists — the app handles the missing-file case gracefully.
+    val oauthCredentialsFile = rootProject.file("../wp_com_oauth_credentials.json")
+    if (oauthCredentialsFile.exists()) {
+        val copyOAuthCredentials by tasks.registering(Copy::class) {
+            from(oauthCredentialsFile)
+            into(layout.buildDirectory.dir("generated/oauth-assets"))
+        }
 
-    applicationVariants.configureEach {
-        mergeAssetsProvider.configure {
-            dependsOn(copyOAuthCredentials)
+        sourceSets["main"].assets.srcDir(copyOAuthCredentials.map { it.destinationDir })
+
+        applicationVariants.configureEach {
+            mergeAssetsProvider.configure {
+                dependsOn(copyOAuthCredentials)
+            }
         }
     }
 
