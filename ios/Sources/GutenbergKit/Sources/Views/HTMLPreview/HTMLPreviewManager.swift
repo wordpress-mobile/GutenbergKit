@@ -5,6 +5,7 @@ import CryptoKit
 import ImageIO
 import UniformTypeIdentifiers
 import SwiftUI
+import GutenbergKitResources
 
 /// Renders HTML content to images using a pool of WKWebView instances.
 ///
@@ -52,7 +53,7 @@ public final class HTMLPreviewManager: ObservableObject {
     // MARK: - Initialization
 
     public init(themeStyles: String? = nil) {
-        let gutenbergCSS = Self.loadGutenbergCSS() ?? ""
+        let gutenbergCSS = GutenbergKitResources.loadGutenbergCSS() ?? ""
         assert(!gutenbergCSS.isEmpty, "Failed to load Gutenberg CSS from bundle. Previews will not render correctly.")
 
         self.editorStyles = gutenbergCSS
@@ -65,23 +66,6 @@ public final class HTMLPreviewManager: ObservableObject {
         self.templateHash = template.sha1
 
         self.urlCache = HTMLPreviewManager.makeCache()
-    }
-
-    /// Loads the Gutenberg CSS from the bundled assets
-    private static func loadGutenbergCSS() -> String? {
-        guard let assetsURL = Bundle.module.url(forResource: "Gutenberg", withExtension: nil) else {
-            assertionFailure("Gutenberg resource not found in bundle")
-            return nil
-        }
-
-        let assetsDirectory = assetsURL.appendingPathComponent("assets")
-        guard let files = try? FileManager.default.contentsOfDirectory(at: assetsDirectory, includingPropertiesForKeys: nil),
-              let cssURL = files.first(where: { $0.lastPathComponent.hasPrefix("index-") && $0.lastPathComponent.hasSuffix(".css") }),
-              let css = try? String(contentsOf: cssURL, encoding: .utf8) else {
-            assertionFailure("Failed to load Gutenberg CSS from bundle")
-            return nil
-        }
-        return css
     }
 
     // MARK: - Public API

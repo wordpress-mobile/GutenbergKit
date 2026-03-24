@@ -47,6 +47,12 @@ steps:
           queue: android
       plugins: *plugins
 
+    - label: ':android: Lint Android'
+      command: make lint-android
+      agents:
+          queue: android
+      plugins: *plugins
+
     - label: ':android: Test Android Library'
       command: make test-android
       agents:
@@ -54,7 +60,11 @@ steps:
       plugins: *plugins
 
     - label: ':swift: Test Swift Package'
-      command: swift test
+      depends_on: build-react
+      command: |
+          buildkite-agent artifact download dist.tar.gz .
+          tar -xzf dist.tar.gz
+          make test-swift-package
       plugins: *plugins
 
     - label: ':ios: Test iOS E2E'
