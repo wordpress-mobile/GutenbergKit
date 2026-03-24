@@ -61,6 +61,7 @@ class SitePreparationActivity : ComponentActivity() {
     companion object {
         private const val EXTRA_CONFIGURATION_ITEM = "configuration_item"
         private const val KEY_TYPE = "type"
+        private const val KEY_ACCOUNT_ID = "accountId"
         private const val KEY_NAME = "name"
         private const val KEY_SITE_URL = "siteUrl"
         private const val KEY_SITE_API_ROOT = "siteApiRoot"
@@ -90,6 +91,7 @@ class SitePreparationActivity : ComponentActivity() {
                 is ConfigurationItem.ConfiguredEditor -> {
                     JSONObject().apply {
                         put(KEY_TYPE, TYPE_CONFIGURED)
+                        put(KEY_ACCOUNT_ID, accountId.toLong())
                         put(KEY_NAME, name)
                         put(KEY_SITE_URL, siteUrl)
                         put(KEY_SITE_API_ROOT, siteApiRoot)
@@ -110,6 +112,7 @@ class SitePreparationActivity : ComponentActivity() {
                     TYPE_LOCAL_WORDPRESS -> ConfigurationItem.LocalWordPress
                     TYPE_CONFIGURED -> {
                         ConfigurationItem.ConfiguredEditor(
+                            accountId = json.optLong(KEY_ACCOUNT_ID, 0).toULong(),
                             name = json.getString(KEY_NAME),
                             siteUrl = json.getString(KEY_SITE_URL),
                             siteApiRoot = json.getString(KEY_SITE_API_ROOT),

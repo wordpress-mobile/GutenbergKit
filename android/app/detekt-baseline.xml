@@ -1,28 +1,23 @@
 <?xml version="1.0" ?>
 <SmellBaseline>
-  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <ManuallySuppressedIssues/>
   <CurrentIssues>
     <ID>LongMethod:EditorActivity.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun EditorScreen( configuration: EditorConfiguration, dependencies: EditorDependencies? = null, coroutineScope: CoroutineScope, onClose: () -&gt; Unit, onGutenbergViewCreated: (GutenbergView) -&gt; Unit = {} )</ID>
-    <ID>LongMethod:MainActivity.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun MainScreen( configurations: List&lt;ConfigurationItem&gt;, onConfigurationClick: (ConfigurationItem) -&gt; Unit, onConfigurationLongClick: (ConfigurationItem) -&gt; Boolean, onAddConfiguration: (String) -&gt; Unit, onDeleteConfiguration: (ConfigurationItem) -&gt; Unit, isDiscoveringSite: Boolean = false, onDismissDiscovering: () -&gt; Unit = {}, isLoadingCapabilities: Boolean = false )</ID>
+    <ID>LongMethod:MainActivity.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun MainScreen( configurations: List&lt;ConfigurationItem&gt;, onConfigurationClick: (ConfigurationItem) -&gt; Unit, onConfigurationLongClick: (ConfigurationItem) -&gt; Boolean, onAddConfiguration: (String) -&gt; Unit, onDeleteConfiguration: (ConfigurationItem) -&gt; Unit, isDiscoveringSite: Boolean = false, onDismissDiscovering: () -&gt; Unit = {}, isLoadingCapabilities: Boolean = false, authError: String? = null, onDismissAuthError: () -&gt; Unit = {} )</ID>
     <ID>LongMethod:SitePreparationActivity.kt$@Composable private fun FeatureConfigurationCard( enableNativeInserter: Boolean, onEnableNativeInserterChange: (Boolean) -&gt; Unit, enableNetworkLogging: Boolean, onEnableNetworkLoggingChange: (Boolean) -&gt; Unit, postType: String, onPostTypeChange: (String) -&gt; Unit )</ID>
-    <ID>LongParameterList:MainActivity.kt$( configurations: List&lt;ConfigurationItem&gt;, onConfigurationClick: (ConfigurationItem) -&gt; Unit, onConfigurationLongClick: (ConfigurationItem) -&gt; Boolean, onAddConfiguration: (String) -&gt; Unit, onDeleteConfiguration: (ConfigurationItem) -&gt; Unit, isDiscoveringSite: Boolean = false, onDismissDiscovering: () -&gt; Unit = {}, isLoadingCapabilities: Boolean = false )</ID>
-    <ID>MaxLineLength:MainActivity.kt$MainActivity$private</ID>
+    <ID>LongParameterList:MainActivity.kt$( configurations: List&lt;ConfigurationItem&gt;, onConfigurationClick: (ConfigurationItem) -&gt; Unit, onConfigurationLongClick: (ConfigurationItem) -&gt; Boolean, onAddConfiguration: (String) -&gt; Unit, onDeleteConfiguration: (ConfigurationItem) -&gt; Unit, isDiscoveringSite: Boolean = false, onDismissDiscovering: () -&gt; Unit = {}, isLoadingCapabilities: Boolean = false, authError: String? = null, onDismissAuthError: () -&gt; Unit = {} )</ID>
     <ID>MaxLineLength:SitePreparationViewModel.kt$SitePreparationViewModel$"Could not connect to Local WordPress at ${credentials.siteUrl}.\n\nThe wp-env server may not be running. Start it with 'make wp-env-start'."</ID>
-    <ID>SwallowedException:ConfigurationStorage.kt$ConfigurationStorage$e: Exception</ID>
+    <ID>SwallowedException:AuthenticationManager.kt$AuthenticationManager$e: Exception</ID>
     <ID>SwallowedException:SitePreparationActivity.kt$SitePreparationActivity.Companion$e: Exception</ID>
     <ID>SwallowedException:SitePreparationViewModel.kt$SitePreparationViewModel$e: java.net.ConnectException</ID>
-    <ID>ThrowsCount:AuthenticationManager.kt$AuthenticationManager$fun processAuthenticationResult(intent: Intent, callback: AuthenticationCallback)</ID>
+    <ID>ThrowsCount:AuthenticationManager.kt$AuthenticationManager$private fun handleApplicationPasswordsCallback( data: Uri, callback: AuthenticationCallback )</ID>
     <ID>TooGenericExceptionCaught:AuthenticationManager.kt$AuthenticationManager$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:ConfigurationStorage.kt$ConfigurationStorage$e: Exception</ID>
     <ID>TooGenericExceptionCaught:SiteCapabilitiesDiscovery.kt$SiteCapabilitiesDiscovery$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:SiteCapabilitiesDiscovery.kt$SiteCapabilitiesDiscovery$httpError: Exception</ID>
     <ID>TooGenericExceptionCaught:SitePreparationActivity.kt$SitePreparationActivity.Companion$e: Exception</ID>
     <ID>TooGenericExceptionCaught:SitePreparationViewModel.kt$SitePreparationViewModel$e: Exception</ID>
     <ID>UnusedParameter:MainActivity.kt$onConfigurationLongClick: (ConfigurationItem) -&gt; Boolean</ID>
-    <ID>UnusedPrivateMember:MainActivity.kt$MainActivity$private fun createBundledConfiguration(): EditorConfiguration</ID>
-    <ID>UnusedPrivateMember:MainActivity.kt$MainActivity$private fun launchEditor(configuration: EditorConfiguration)</ID>
     <ID>UnusedPrivateProperty:MainActivity.kt$MainActivity$private val siteCapabilitiesDiscovery = SiteCapabilitiesDiscovery()</ID>
-    <ID>UseCheckOrError:AuthenticationManager.kt$AuthenticationManager$throw IllegalStateException("API root URL is not available")</ID>
+    <ID>UseCheckOrError:AuthenticationManager.kt$AuthenticationManager$throw IllegalStateException("API discovery result is not available")</ID>
     <ID>UseCheckOrError:AuthenticationManager.kt$AuthenticationManager$throw IllegalStateException("password is missing from authentication")</ID>
     <ID>UseCheckOrError:AuthenticationManager.kt$AuthenticationManager$throw IllegalStateException("site_url is missing from authentication")</ID>
     <ID>UseCheckOrError:AuthenticationManager.kt$AuthenticationManager$throw IllegalStateException("username is missing from authentication")</ID>

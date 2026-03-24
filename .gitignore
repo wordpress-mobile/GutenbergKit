@@ -187,6 +187,7 @@ local.properties
 /android/.gradle
 /android/.kotlin
 /android/.idea
+wp_com_oauth_credentials.json
 
 ## Production Build Products
 /android/Gutenberg/src/main/assets/assets

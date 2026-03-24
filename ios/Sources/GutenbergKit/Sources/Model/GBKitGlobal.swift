@@ -83,7 +83,10 @@ public struct GBKitGlobal: Sendable, Codable {
     let editorSettings: JSON?
     
     let preloadData: JSON?
-    
+
+    /// Pre-fetched editor assets (scripts, styles, allowed block types) for plugin loading.
+    let editorAssets: JSON?
+
     /// Creates a global configuration from an editor configuration and dependencies.
     ///
     /// - Parameters:
@@ -116,6 +119,18 @@ public struct GBKitGlobal: Sendable, Codable {
         self.enableNetworkLogging = configuration.enableNetworkLogging
         self.editorSettings = dependencies.editorSettings.jsonValue
         self.preloadData = try dependencies.preloadList?.build()
+        self.editorAssets = Self.buildEditorAssets(from: dependencies.assetBundle)
+    }
+
+    private static func buildEditorAssets(from bundle: EditorAssetBundle) -> JSON? {
+        guard let representation = try? bundle.getEditorRepresentation() as EditorAssetBundle.EditorRepresentation else {
+            return nil
+        }
+        return .object([
+            "scripts": .string(representation.scripts),
+            "styles": .string(representation.styles),
+            "allowed_block_types": .array(representation.allowedBlockTypes.map { .string($0) })
+        ])
     }
     
     /// Serializes the configuration to a JSON string for injection into JavaScript.

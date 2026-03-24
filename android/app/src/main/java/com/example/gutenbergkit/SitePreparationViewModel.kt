@@ -36,6 +36,8 @@ class SitePreparationViewModel(
     val uiState: StateFlow<SitePreparationUiState> = _uiState.asStateFlow()
 
     private val siteCapabilitiesDiscovery = SiteCapabilitiesDiscovery()
+    private val networkAvailabilityProvider =
+        (application as GutenbergKitApplication).networkAvailabilityProvider
 
     fun startLoading() {
         viewModelScope.launch {
@@ -50,6 +52,7 @@ class SitePreparationViewModel(
                         try {
                             loadConfiguration(
                                 ConfigurationItem.ConfiguredEditor(
+                                    accountId = 0u,
                                     name = "Local WordPress",
                                     siteUrl = credentials.siteUrl,
                                     siteApiRoot = credentials.siteApiRoot,
@@ -208,16 +211,34 @@ class SitePreparationViewModel(
 
     private suspend fun loadConfiguration(config: ConfigurationItem.ConfiguredEditor): EditorConfiguration {
         val capabilities = siteCapabilitiesDiscovery.discoverCapabilities(
-            siteApiRoot = config.siteApiRoot
+            siteUrl = config.siteUrl,
+            networkAvailabilityProvider = networkAvailabilityProvider
         )
+
+        // For WP.com sites, the stored siteApiRoot is namespace-specific
+        // (e.g. https://public-api.wordpress.com/wp/v2/sites/1562023).
+        // The editor needs the base REST API root and a siteApiNamespace
+        // so the JS middleware can insert the site ID into request paths.
+        val wpComSiteId = extractWpComSiteId(config.siteApiRoot)
+        val siteApiRoot = if (wpComSiteId != null) {
+            "https://public-api.wordpress.com/"
+        } else {
+            config.siteApiRoot
+        }
+        val siteApiNamespace = if (wpComSiteId != null) {
+            arrayOf("sites/$wpComSiteId/")
+        } else {
+            arrayOf()
+        }
 
         return EditorConfiguration.builder(
             siteURL = config.siteUrl,
-            siteApiRoot = config.siteApiRoot,
+            siteApiRoot = siteApiRoot,
             postType = _uiState.value.postType
         )
             .setPlugins(capabilities.supportsPlugins)
             .setThemeStyles(capabilities.supportsThemeStyles)
+            .setSiteApiNamespace(siteApiNamespace)
             .setNamespaceExcludedPaths(arrayOf())
             .setAuthHeader(config.authHeader)
             .setTitle("")
@@ -227,6 +248,17 @@ class SitePreparationViewModel(
             .setEnableNetworkLogging(true)
             .setEnableAssetCaching(capabilities.supportsPlugins)
             .build()
+    }
+
+    /**
+     * Extracts the WP.com site ID from a namespace-specific API root URL.
+     * Returns null if the URL is not a WP.com API root.
+     *
+     * Example: "https://public-api.wordpress.com/wp/v2/sites/1562023" -> "1562023"
+     */
+    private fun extractWpComSiteId(siteApiRoot: String): String? {
+        val regex = Regex("""public-api\.wordpress\.com/.+/sites/(\d+)""")
+        return regex.find(siteApiRoot)?.groupValues?.get(1)
     }
 
     fun buildConfiguration(): EditorConfiguration? {

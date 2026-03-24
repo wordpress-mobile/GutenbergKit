@@ -1,68 +1,43 @@
 import Foundation
+import WordPressAPI
 
-/// Manages persistence of editor configurations
+/// Manages persistence of editor configurations using encrypted account storage
 class ConfigurationStorage: ObservableObject {
-    private let userDefaults: UserDefaults
-    private let configurationsKey = "saved_configurations"
+
+    let accountRepository: AccountRepository
 
     @Published
     var editorConfigurations: [ConfigurationItem] = []
 
-    init(userDefaults: UserDefaults = .standard) {
-        self.userDefaults = userDefaults
+    init() throws {
+        let rootPath = URL.applicationSupportDirectory.path(percentEncoded: false)
+        let transformer = try SecureEnclavePasswordTransformer(applicationName: "gutenbergkit-demo")
+        self.accountRepository = try AccountRepository(rootPath: rootPath, passwordTransformer: transformer)
     }
 
     /// Load saved configurations from storage
-    ///
-    /// Includes the bundled editor
     @discardableResult
-    func loadConfigurations() -> [ConfigurationItem] {
-        guard let data = userDefaults.data(forKey: configurationsKey) else {
-            return []
-        }
-
-        do {
-            let configs = try JSONDecoder().decode([ConfiguredEditor].self, from: data)
-            self.editorConfigurations = configs.map { .editorConfiguration($0) }
-            return self.editorConfigurations
-        } catch {
-            NSLog("Failed to decode configurations: \(error)")
-            return []
-        }
+    func loadConfigurations() throws -> [ConfigurationItem] {
+        let accounts = try accountRepository.all()
+        self.editorConfigurations = accounts.map { .account($0) }
+        return self.editorConfigurations
     }
 
-    /// Save configurations to storage
-    func saveConfigurations(_ configurations: [ConfigurationItem]) {
-        let configs = configurations.compactMap { item -> ConfiguredEditor? in
-            if case .editorConfiguration(let config) = item {
-                return config
-            }
-            return nil
-        }
-
-        do {
-            let data = try JSONEncoder().encode(configs)
-            userDefaults.set(data, forKey: configurationsKey)
-        } catch {
-            NSLog("Failed to encode configurations: \(error)")
-        }
+    /// Add an account to storage
+    func addAccount(_ account: Account) throws {
+        _ = try accountRepository.store(account: account)
+        try loadConfigurations()
     }
 
-    /// Add a configuration to storage
-    func addConfiguration(_ configuration: ConfigurationItem) {
-        self.editorConfigurations.append(configuration)
-        self.saveConfigurations(self.editorConfigurations)
-        self.loadConfigurations()
+    /// Delete an account from storage
+    func deleteAccount(id: UInt64) throws {
+        try accountRepository.remove(id: id)
+        try loadConfigurations()
     }
 
     /// Delete configuration from storage
-    func deleteConfiguration(_ configuration: ConfigurationItem) {
-        guard let ix = self.editorConfigurations.firstIndex(where: { $0.id == configuration.id }) else {
-            return
-        }
-        self.editorConfigurations.remove(at: ix)
-
-        self.saveConfigurations(self.editorConfigurations)
-        self.loadConfigurations()
+    func deleteConfiguration(_ configuration: ConfigurationItem) throws {
+        guard case .account(let account) = configuration else { return }
+        try deleteAccount(id: account.id())
     }
 }

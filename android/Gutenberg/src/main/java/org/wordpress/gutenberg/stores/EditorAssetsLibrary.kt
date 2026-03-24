@@ -266,7 +266,13 @@ class EditorAssetsLibrary(
 
     private fun editorAssetsUrl(configuration: EditorConfiguration): String {
         val baseUrl = configuration.siteApiRoot.trimEnd('/')
-        return "$baseUrl/wpcom/v2/editor-assets?exclude=core,gutenberg"
+        val namespace = configuration.siteApiNamespace.firstOrNull()
+
+        return if (namespace != null) {
+            "$baseUrl/wpcom/v2/${namespace}editor-assets?exclude=core,gutenberg"
+        } else {
+            "$baseUrl/wpcom/v2/editor-assets?exclude=core,gutenberg"
+        }
     }
 
     /**

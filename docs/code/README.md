@@ -17,6 +17,7 @@ This guide is for developers who want to contribute code to GutenbergKit.
 -   [Preloading](./preloading.md) - Asset preloading
 -   [Local WordPress](./local-wordpress.md) - Local WordPress environment for testing
 -   [Physical Device Setup](./physical-device-setup.md) - Running on physical devices
+-   [WordPress.com OAuth](./wpcom-oauth.md) - Connecting demo apps to WordPress.com sites
 
 ## Get Involved
 

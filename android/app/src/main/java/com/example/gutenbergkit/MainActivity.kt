@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -43,13 +44,16 @@ import com.example.gutenbergkit.ui.dialogs.DeleteConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DiscoveringSiteDialog
 import com.example.gutenbergkit.ui.theme.AppTheme
 import org.wordpress.gutenberg.BuildConfig
-import org.wordpress.gutenberg.model.EditorConfiguration
+import uniffi.wp_mobile.Account
 
 class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCallback {
     private val configurations = mutableStateListOf<ConfigurationItem>()
     private val isDiscoveringSite = mutableStateOf(false)
     private val isLoadingCapabilities = mutableStateOf(false)
-    private lateinit var configurationStorage: ConfigurationStorage
+    private val authError = mutableStateOf<String?>(null)
+    private val gutenbergKitApp by lazy { application as GutenbergKitApplication }
+    private val accountRepository by lazy { gutenbergKitApp.accountRepository }
+    private val networkAvailabilityProvider by lazy { gutenbergKitApp.networkAvailabilityProvider }
     private lateinit var authenticationManager: AuthenticationManager
     private val siteCapabilitiesDiscovery = SiteCapabilitiesDiscovery()
 
@@ -61,8 +65,7 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        configurationStorage = ConfigurationStorage(this)
-        authenticationManager = AuthenticationManager(this)
+        authenticationManager = AuthenticationManager(this, accountRepository, networkAvailabilityProvider, lifecycleScope)
 
         // Add default bundled editor configuration
         configurations.add(ConfigurationItem.BundledEditor)
@@ -70,8 +73,10 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
         // Add local WordPress option
         configurations.add(ConfigurationItem.LocalWordPress)
 
-        // Load saved configurations
-        configurations.addAll(configurationStorage.loadConfigurations())
+        // Load saved accounts
+        configurations.addAll(
+            accountRepository.all().map { ConfigurationItem.ConfiguredEditor.fromAccount(it) }
+        )
 
         setContent {
             AppTheme {
@@ -81,7 +86,7 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
                         when (config) {
                             is ConfigurationItem.BundledEditor -> launchSitePreparation(config)
                             is ConfigurationItem.LocalWordPress -> launchSitePreparation(config)
-                            is ConfigurationItem.ConfiguredEditor -> loadConfiguredEditor(config)
+                            is ConfigurationItem.ConfiguredEditor -> launchSitePreparation(config)
                         }
                     },
                     onConfigurationLongClick = { config ->
@@ -96,56 +101,23 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
                         authenticationManager.startAuthentication(siteUrl, this)
                     },
                     onDeleteConfiguration = { config ->
+                        if (config is ConfigurationItem.ConfiguredEditor) {
+                            accountRepository.remove(config.accountId)
+                        }
                         configurations.remove(config)
-                        configurationStorage.saveConfigurations(configurations)
                     },
                     isDiscoveringSite = isDiscoveringSite.value,
                     onDismissDiscovering = { isDiscoveringSite.value = false },
-                    isLoadingCapabilities = isLoadingCapabilities.value
+                    isLoadingCapabilities = isLoadingCapabilities.value,
+                    authError = authError.value,
+                    onDismissAuthError = { authError.value = null }
                 )
             }
         }
     }
 
-    private fun createBundledConfiguration(): EditorConfiguration =
-        createCommonConfigurationBuilder(
-            siteUrl = "https://example.com",
-            siteApiRoot = "https://example.com",
-            postType = "post"
-        )
-            .setPlugins(false)
-            .setSiteApiNamespace(arrayOf())
-            .setNamespaceExcludedPaths(arrayOf())
-            .setAuthHeader("")
-            .setCookies(emptyMap())
-            .setEnableOfflineMode(true)
-            .build()
-
-    private fun loadConfiguredEditor(config: ConfigurationItem.ConfiguredEditor) {
-        launchSitePreparation(config)
-    }
-
     private fun launchSitePreparation(config: ConfigurationItem) {
         val intent = SitePreparationActivity.createIntent(this, config)
-        startActivity(intent)
-    }
-
-    private fun createCommonConfigurationBuilder(siteUrl: String, siteApiRoot: String, postType: String = "post"): EditorConfiguration.Builder =
-        EditorConfiguration.builder(
-            siteURL = siteUrl,
-            siteApiRoot = siteApiRoot,
-            postType = postType
-        )
-            .setTitle("")
-            .setContent("")
-            .setThemeStyles(false)
-            .setHideTitle(false)
-            .setCookies(emptyMap())
-            .setEnableNetworkLogging(true)
-
-    private fun launchEditor(configuration: EditorConfiguration) {
-        val intent = Intent(this, EditorActivity::class.java)
-        intent.putExtra(EXTRA_CONFIGURATION, configuration)
         startActivity(intent)
     }
 
@@ -154,22 +126,14 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
         authenticationManager.processAuthenticationResult(intent, this)
     }
 
-    override fun onAuthenticationSuccess(siteUrl: String, siteApiRoot: String, authToken: String) {
+    override fun onAuthenticationSuccess(account: Account) {
         isDiscoveringSite.value = false
-        val siteName = siteUrl.removePrefix("https://").removePrefix("http://").substringBefore("/")
-        val newConfig = ConfigurationItem.ConfiguredEditor(
-            name = siteName,
-            siteUrl = siteUrl,
-            siteApiRoot = siteApiRoot,
-            authHeader = authToken
-        )
-        configurations.add(newConfig)
-        configurationStorage.saveConfigurations(configurations)
+        configurations.add(ConfigurationItem.ConfiguredEditor.fromAccount(account))
     }
 
     override fun onAuthenticationFailure(errorMessage: String) {
         isDiscoveringSite.value = false
-        // Error will be shown in Compose UI
+        authError.value = errorMessage
     }
 }
 
@@ -187,7 +151,9 @@ fun MainScreen(
     onDeleteConfiguration: (ConfigurationItem) -> Unit,
     isDiscoveringSite: Boolean = false,
     onDismissDiscovering: () -> Unit = {},
-    isLoadingCapabilities: Boolean = false
+    isLoadingCapabilities: Boolean = false,
+    authError: String? = null,
+    onDismissAuthError: () -> Unit = {}
 ) {
     var showAddDialog = remember { mutableStateOf(false) }
     var showDeleteDialog = remember { mutableStateOf<ConfigurationItem.ConfiguredEditor?>(null) }
@@ -329,6 +295,19 @@ fun MainScreen(
     if (isLoadingCapabilities) {
         DiscoveringSiteDialog(
             onDismiss = { /* Cannot dismiss while loading */ }
+        )
+    }
+
+    authError?.let { error ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = onDismissAuthError,
+            title = { Text("Authentication Error") },
+            text = { Text(error) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = onDismissAuthError) {
+                    Text("OK")
+                }
+            }
         )
     }
 }

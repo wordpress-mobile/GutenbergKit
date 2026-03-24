@@ -27,6 +27,9 @@ function readCredentials() {
 /** Cached editor settings — fetched once and reused across all tests. */
 let cachedEditorSettings = null;
 
+/** Cached editor assets — fetched once and reused across all tests. */
+let cachedEditorAssets = null;
+
 /**
  * Fetch editor settings from the wp-env WordPress instance.
  *
@@ -58,6 +61,34 @@ async function fetchEditorSettings( creds ) {
 	return cachedEditorSettings;
 }
 
+/**
+ * Fetch editor assets (plugin/theme scripts and styles) from wp-env.
+ *
+ * @param {Object} creds Credentials object from readCredentials().
+ * @return {Promise<Object>} Editor assets suitable for window.GBKit.editorAssets.
+ */
+async function fetchEditorAssets( creds ) {
+	if ( cachedEditorAssets ) {
+		return cachedEditorAssets;
+	}
+
+	const url = new URL( `${ creds.siteApiRoot }wpcom/v2/editor-assets` );
+	url.searchParams.set( 'exclude', 'core,gutenberg' );
+
+	const response = await fetch( url.toString(), {
+		headers: { Authorization: creds.authHeader },
+	} );
+
+	if ( ! response.ok ) {
+		throw new Error(
+			`Failed to fetch editor assets: ${ response.status } ${ response.statusText }`
+		);
+	}
+
+	cachedEditorAssets = await response.json();
+	return cachedEditorAssets;
+}
+
 export const credentials = readCredentials();
 
 /**
@@ -79,4 +110,13 @@ export const uploadsPathPattern = `:${ port }/wp-content/uploads/`;
  */
 export async function getEditorSettings() {
 	return fetchEditorSettings( credentials );
+}
+
+/**
+ * Get editor assets, fetching from wp-env on first call.
+ *
+ * @return {Promise<Object>} Editor assets object.
+ */
+export async function getEditorAssets() {
+	return fetchEditorAssets( credentials );
 }

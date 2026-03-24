@@ -139,6 +139,7 @@
 				0C4F59872BEFF4970028BD96 /* Sources */,
 				0C4F59882BEFF4970028BD96 /* Frameworks */,
 				0C4F59892BEFF4970028BD96 /* Resources */,
+				AA0000012F00000000000200 /* Copy OAuth Credentials */,
 			);
 			buildRules = (
 			);
@@ -218,6 +219,29 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		AA0000012F00000000000200 /* Copy OAuth Credentials */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../../wp_com_oauth_credentials.json",
+			);
+			name = "Copy OAuth Credentials";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(PRODUCT_NAME).app/wp_com_oauth_credentials.json",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "CREDS_FILE=\"${SRCROOT}/../../wp_com_oauth_credentials.json\"\nif [ -f \"$CREDS_FILE\" ]; then\n  cp \"$CREDS_FILE\" \"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXResourcesBuildPhase section */
 		0C4F59892BEFF4970028BD96 /* Resources */ = {
@@ -535,7 +559,7 @@
 			repositoryURL = "https://github.com/Automattic/wordpress-rs";
 			requirement = {
 				kind = revision;
-				revision = "alpha-20260203";
+				revision = "alpha-20260313";
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
