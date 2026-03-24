@@ -288,7 +288,7 @@ class SitePreparationViewModel {
 
     private static func isNetworkError(_ error: Error) -> Bool {
         if let wpError = error as? WpApiError,
-           case .RequestExecutionFailed(statusCode: _, redirects: _, reason: .deviceIsOfflineError) = wpError {
+           case .RequestExecutionFailed(_, _, .deviceIsOfflineError, _, _) = wpError {
             return true
         }
         return error is URLError
