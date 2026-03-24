@@ -84,6 +84,7 @@ dependencies {
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.recyclerview)
     implementation(libs.wordpress.rs.android)
+    implementation(libs.okhttp)
     implementation(project(":Gutenberg"))
 
     // Compose
