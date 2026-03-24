@@ -10,13 +10,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import org.wordpress.gutenberg.model.EditorCachePolicy
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.services.EditorService
-import rs.wordpress.api.kotlin.NetworkAvailabilityProvider
 
 data class SitePreparationUiState(
     val enableNativeInserter: Boolean = true,
@@ -39,11 +36,8 @@ class SitePreparationViewModel(
     val uiState: StateFlow<SitePreparationUiState> = _uiState.asStateFlow()
 
     private val siteCapabilitiesDiscovery = SiteCapabilitiesDiscovery()
-    private val networkAvailabilityProvider = NetworkAvailabilityProvider {
-        val cm = application.getSystemService(ConnectivityManager::class.java)
-        val capabilities = cm.getNetworkCapabilities(cm.activeNetwork)
-        capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
-    }
+    private val networkAvailabilityProvider =
+        (application as GutenbergKitApplication).networkAvailabilityProvider
 
     fun startLoading() {
         viewModelScope.launch {

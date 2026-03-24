@@ -1,8 +1,6 @@
 package com.example.gutenbergkit
 
 import android.content.Intent
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -46,7 +44,6 @@ import com.example.gutenbergkit.ui.dialogs.DeleteConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DiscoveringSiteDialog
 import com.example.gutenbergkit.ui.theme.AppTheme
 import org.wordpress.gutenberg.BuildConfig
-import rs.wordpress.api.kotlin.NetworkAvailabilityProvider
 import uniffi.wp_mobile.Account
 
 class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCallback {
@@ -54,16 +51,11 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
     private val isDiscoveringSite = mutableStateOf(false)
     private val isLoadingCapabilities = mutableStateOf(false)
     private val authError = mutableStateOf<String?>(null)
-    private val accountRepository by lazy {
-        (application as GutenbergKitApplication).accountRepository
-    }
+    private val gutenbergKitApp by lazy { application as GutenbergKitApplication }
+    private val accountRepository by lazy { gutenbergKitApp.accountRepository }
+    private val networkAvailabilityProvider by lazy { gutenbergKitApp.networkAvailabilityProvider }
     private lateinit var authenticationManager: AuthenticationManager
     private val siteCapabilitiesDiscovery = SiteCapabilitiesDiscovery()
-    private val networkAvailabilityProvider = NetworkAvailabilityProvider {
-        val cm = getSystemService(ConnectivityManager::class.java)
-        val capabilities = cm.getNetworkCapabilities(cm.activeNetwork)
-        capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
-    }
 
     companion object {
         const val EXTRA_CONFIGURATION = "configuration"
