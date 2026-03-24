@@ -122,6 +122,11 @@ copy-dist-android:
 build-swift-package: build ## Build the Swift package for iOS
 	$(call XCODEBUILD_CMD, build, GutenbergKit)
 
+.PHONY: build-resources-xcframework
+build-resources-xcframework: build ## Build GutenbergKitResources XCFramework
+	@echo "--- :swift: Building GutenbergKitResources XCFramework"
+	./build_xcframework.sh
+
 .PHONY: local-android-library
 local-android-library: build ## Build the Android library to local Maven
 	@echo "--- :android: Building Library"
