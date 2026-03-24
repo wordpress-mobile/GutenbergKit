@@ -1,6 +1,8 @@
 package com.example.gutenbergkit
 
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -44,6 +46,7 @@ import com.example.gutenbergkit.ui.dialogs.DeleteConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DiscoveringSiteDialog
 import com.example.gutenbergkit.ui.theme.AppTheme
 import org.wordpress.gutenberg.BuildConfig
+import rs.wordpress.api.kotlin.NetworkAvailabilityProvider
 import uniffi.wp_mobile.Account
 
 class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCallback {
@@ -56,6 +59,11 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
     }
     private lateinit var authenticationManager: AuthenticationManager
     private val siteCapabilitiesDiscovery = SiteCapabilitiesDiscovery()
+    private val networkAvailabilityProvider = NetworkAvailabilityProvider {
+        val cm = getSystemService(ConnectivityManager::class.java)
+        val capabilities = cm.getNetworkCapabilities(cm.activeNetwork)
+        capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+    }
 
     companion object {
         const val EXTRA_CONFIGURATION = "configuration"
@@ -65,7 +73,7 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        authenticationManager = AuthenticationManager(this, accountRepository, lifecycleScope)
+        authenticationManager = AuthenticationManager(this, accountRepository, networkAvailabilityProvider, lifecycleScope)
 
         // Add default bundled editor configuration
         configurations.add(ConfigurationItem.BundledEditor)

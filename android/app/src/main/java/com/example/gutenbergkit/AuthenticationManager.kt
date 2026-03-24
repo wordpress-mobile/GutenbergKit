@@ -11,6 +11,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import rs.wordpress.api.kotlin.ApiDiscoveryResult
 import rs.wordpress.api.kotlin.WpComApiClient
+import rs.wordpress.api.kotlin.NetworkAvailabilityProvider
 import rs.wordpress.api.kotlin.WpLoginClient
 import rs.wordpress.api.kotlin.WpRequestResult
 import rs.wordpress.api.kotlin.toURL
@@ -30,6 +31,7 @@ import uniffi.wp_mobile.wordpressComSiteApiRoot
 class AuthenticationManager(
     private val context: Context,
     private val accountRepository: AccountRepository,
+    private val networkAvailabilityProvider: NetworkAvailabilityProvider,
     private val scope: CoroutineScope
 ) {
     interface AuthenticationCallback {
@@ -54,7 +56,10 @@ class AuthenticationManager(
 
         scope.launch(Dispatchers.IO) {
             try {
-                when (val apiDiscoveryResult = WpLoginClient(emptyList()).apiDiscovery(siteUrl)) {
+                when (val apiDiscoveryResult = WpLoginClient(
+                        interceptors = emptyList(),
+                        networkAvailabilityProvider = networkAvailabilityProvider
+                    ).apiDiscovery(siteUrl)) {
                     is ApiDiscoveryResult.Success -> {
                         val success = apiDiscoveryResult.success
                         currentDiscoverySuccess = success
@@ -196,7 +201,8 @@ class AuthenticationManager(
 
                 val wpComClient = WpComApiClient(
                     authProvider = WpAuthenticationProvider.none(),
-                    interceptors = emptyList()
+                    interceptors = emptyList(),
+                    networkAvailabilityProvider = networkAvailabilityProvider
                 )
 
                 val tokenResult = wpComClient.request { client ->

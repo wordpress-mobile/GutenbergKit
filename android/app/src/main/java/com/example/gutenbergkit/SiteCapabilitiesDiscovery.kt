@@ -4,6 +4,7 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import rs.wordpress.api.kotlin.ApiDiscoveryResult
+import rs.wordpress.api.kotlin.NetworkAvailabilityProvider
 import rs.wordpress.api.kotlin.WpLoginClient
 
 /**
@@ -35,9 +36,13 @@ class SiteCapabilitiesDiscovery {
      */
     suspend fun discoverCapabilities(
         siteUrl: String,
+        networkAvailabilityProvider: NetworkAvailabilityProvider,
     ): SiteCapabilities = withContext(Dispatchers.IO) {
         try {
-            when (val apiDiscoveryResult = WpLoginClient(emptyList()).apiDiscovery(siteUrl)) {
+            when (val apiDiscoveryResult = WpLoginClient(
+                interceptors = emptyList(),
+                networkAvailabilityProvider = networkAvailabilityProvider
+            ).apiDiscovery(siteUrl)) {
                 is ApiDiscoveryResult.Success -> {
                     val apiDetails = apiDiscoveryResult.success.apiDetails
                     val siteSlug = siteUrl

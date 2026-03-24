@@ -12,7 +12,7 @@ class GutenbergKitApplication : Application() {
         super.onCreate()
         accountRepository = AccountRepository(
             rootPath = filesDir.resolve("accounts").absolutePath,
-            passwordTransformer = KeystorePasswordTransformer()
+            passwordTransformer = KeystorePasswordTransformer("GutenbergKit")
         )
     }
 }
