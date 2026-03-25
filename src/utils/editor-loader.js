@@ -61,6 +61,13 @@ async function processEditorAssets( assets ) {
  * Load the asset files for a block
  *
  * @param {string} html The HTML content to parse for assets.
+ *
+ * @todo Remove the core and Gutenberg asset filtering once the relevant Jetpack
+ * plugin release is available that excludes these assets from the editor assets
+ * endpoint response. See: https://github.com/Automattic/jetpack/pull/45715
+ *
+ * @todo Replace the client `lodash-js-after` script filtering with more robust
+ * server-side filtering in the editor assets endpoint.
  */
 async function loadAssets( html ) {
 	const doc = new window.DOMParser().parseFromString( html, 'text/html' );
@@ -69,8 +76,6 @@ async function loadAssets( html ) {
 		doc.querySelectorAll( 'link[rel="stylesheet"],script' )
 	).filter( ( asset ) => {
 		/**
-		 * TODO: Remove this once the relevant Jetpack plugin release is available.
-		 *
 		 * Exclude WordPress core and Gutenberg assets to avoid loading duplicate
 		 * assets, which causes editor loading failures.
 		 *
@@ -87,9 +92,12 @@ async function loadAssets( html ) {
 			return false;
 		}
 
-		// WordPress's lodash-js-after inline script calls _.noConflict() to
-		// restore window._ to Underscore.js. GutenbergKit doesn't load
-		// Underscore, so this wipes window._ to undefined.
+		/**
+		 * WordPress's lodash-js-after inline script calls _.noConflict() to
+		 * restore window._ to Underscore.js. GutenbergKit doesn't load
+		 * Underscore, so this wipes window._ to undefined. Ideally, this filtering
+		 * occurs in the editor assets endpoint.
+		 */
 		if ( asset.id === 'lodash-js-after' ) {
 			return false;
 		}

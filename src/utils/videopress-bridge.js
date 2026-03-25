@@ -18,6 +18,8 @@ import { warn, debug, error } from './logger';
  * This function overrides wp.media.ajax to intercept VideoPress-specific
  * AJAX requests and redirect them to the appropriate REST API endpoints.
  *
+ * @todo Remove this bridge once the `videopress/video` block type is allowed and stable.
+ *
  * @return {void}
  */
 export function initializeVideoPressAjaxBridge() {
