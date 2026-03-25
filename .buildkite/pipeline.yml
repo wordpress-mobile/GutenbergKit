@@ -96,9 +96,16 @@ steps:
       plugins: *plugins
 
     - label: ':s3: Publish XCFramework to S3'
-      if: build.env("NEW_VERSION") != null
+      # Eventually, we might want to gate this based on an env var
+      # to be set by the process that starts the pipeline
+      #
+      # if: build.env("NEW_VERSION") != null
       depends_on: build-xcframework
-      command: bundle exec fastlane publish_to_s3 version:$NEW_VERSION
+      command: |
+          buildkite-agent artifact download '*.xcframework.zip' .
+          buildkite-agent artifact download '*.xcframework.zip.checksum.txt' .
+          install_gems
+          bundle exec fastlane publish_to_s3 version:${NEW_VERSION:-$BUILDKITE_COMMIT}
       plugins: *plugins
 
     - label: ':ios: Test iOS E2E'
