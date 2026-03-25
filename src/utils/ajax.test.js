@@ -65,6 +65,22 @@ describe( 'configureAjax', () => {
 			);
 		} );
 
+		it( 'should strip trailing slash from siteURL', () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteURL: 'https://example.com/',
+				authHeader: null,
+			} );
+
+			configureAjax();
+
+			expect( global.window.ajaxurl ).toBe(
+				'https://example.com/wp-admin/admin-ajax.php'
+			);
+			expect( global.window.wp.ajax.settings.url ).toBe(
+				'https://example.com/wp-admin/admin-ajax.php'
+			);
+		} );
+
 		it( 'should log warning when siteURL is missing', () => {
 			bridge.getGBKit.mockReturnValue( {
 				siteURL: null,

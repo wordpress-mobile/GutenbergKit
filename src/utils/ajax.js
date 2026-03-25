@@ -20,7 +20,8 @@ export function configureAjax() {
 	window.wp.ajax = window.wp.ajax || {};
 	window.wp.ajax.settings = window.wp.ajax.settings || {};
 
-	const { siteURL, authHeader } = getGBKit();
+	const { siteURL: rawSiteURL, authHeader } = getGBKit();
+	const siteURL = rawSiteURL?.replace( /\/+$/, '' );
 	configureAjaxUrl( siteURL );
 	configureAjaxAuth( siteURL, authHeader );
 	configureMediaAjax();
