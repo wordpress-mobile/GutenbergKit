@@ -5,8 +5,13 @@ import { getGBKit } from './bridge';
 import { warn, debug } from './logger';
 
 /**
- * GutenbergKit lacks authentication cookies required for AJAX requests.
- * This configures a root URL and authentication header for AJAX requests.
+ * Configure AJAX for use without authentication cookies.
+ *
+ * GutenbergKit runs in a WebView without WordPress session cookies,
+ * so AJAX requests need explicit URL and token-based authentication.
+ * Additionally, WordPress core media globals (`wp.media.ajax`,
+ * `wp.media.post`) are normally set by wp-includes/js/media-models.js,
+ * which GutenbergKit doesn't load — so we alias them here.
  *
  * @return {void}
  */
@@ -18,6 +23,7 @@ export function configureAjax() {
 	const { siteURL, authHeader } = getGBKit();
 	configureAjaxUrl( siteURL );
 	configureAjaxAuth( authHeader );
+	configureMediaAjax();
 }
 
 function configureAjaxUrl( siteURL ) {
@@ -81,4 +87,17 @@ function configureAjaxAuth( authHeader ) {
 	}
 
 	debug( 'AJAX auth configured' );
+}
+
+/**
+ * Alias `wp.media.ajax` and `wp.media.post` to the (now-authenticated)
+ * `wp.ajax.send` and `wp.ajax.post`. WordPress core normally sets these
+ * in `wp-includes/js/media-models.js`, which GutenbergKit doesn't load.
+ *
+ * @see https://github.com/WordPress/wordpress-develop/blob/117af7e/src/js/_enqueues/wp/media/models.js#L134
+ */
+function configureMediaAjax() {
+	window.wp.media = window.wp.media || {};
+	window.wp.media.ajax = window.wp.ajax.send;
+	window.wp.media.post = window.wp.ajax.post;
 }

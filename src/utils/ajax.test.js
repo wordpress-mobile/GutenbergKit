@@ -494,4 +494,61 @@ describe( 'configureAjax', () => {
 			);
 		} );
 	} );
+
+	describe( 'Media AJAX configuration', () => {
+		it( 'should alias wp.media.ajax to the wrapped wp.ajax.send', () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteURL: 'https://example.com',
+				authHeader: 'Bearer media-token',
+			} );
+
+			global.window.wp = {
+				ajax: {
+					send: originalWpAjaxSend,
+					post: originalWpAjaxPost,
+					settings: {},
+				},
+			};
+
+			configureAjax();
+
+			expect( global.window.wp.media.ajax ).toBe(
+				global.window.wp.ajax.send
+			);
+		} );
+
+		it( 'should alias wp.media.post to the wrapped wp.ajax.post', () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteURL: 'https://example.com',
+				authHeader: 'Bearer media-token',
+			} );
+
+			global.window.wp = {
+				ajax: {
+					send: originalWpAjaxSend,
+					post: originalWpAjaxPost,
+					settings: {},
+				},
+			};
+
+			configureAjax();
+
+			expect( global.window.wp.media.post ).toBe(
+				global.window.wp.ajax.post
+			);
+		} );
+
+		it( 'should initialize wp.media if it does not exist', () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteURL: 'https://example.com',
+				authHeader: null,
+			} );
+
+			global.window.wp = {};
+
+			configureAjax();
+
+			expect( global.window.wp.media ).toBeDefined();
+		} );
+	} );
 } );
