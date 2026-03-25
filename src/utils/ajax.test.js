@@ -15,9 +15,7 @@ vi.mock( './logger' );
 
 describe( 'configureAjax', () => {
 	let originalWindow;
-	let mockJQueryAjaxSetup;
-	let originalWpAjaxSend;
-	let originalWpAjaxPost;
+	let mockJQueryAjaxPrefilter;
 
 	beforeEach( () => {
 		vi.clearAllMocks();
@@ -34,29 +32,10 @@ describe( 'configureAjax', () => {
 		global.window.ajaxurl = undefined;
 
 		// Mock jQuery
-		mockJQueryAjaxSetup = vi.fn();
+		mockJQueryAjaxPrefilter = vi.fn();
 		global.window.jQuery = {
-			ajaxSetup: mockJQueryAjaxSetup,
+			ajaxPrefilter: mockJQueryAjaxPrefilter,
 		};
-
-		// Create mock functions for wp.ajax methods
-		originalWpAjaxSend = vi.fn( ( options ) => {
-			// Simulate calling beforeSend if it exists
-			if ( options?.beforeSend ) {
-				const mockXhr = { setRequestHeader: vi.fn() };
-				options.beforeSend( mockXhr );
-			}
-			return Promise.resolve();
-		} );
-
-		originalWpAjaxPost = vi.fn( ( options ) => {
-			// Simulate calling beforeSend if it exists
-			if ( options?.beforeSend ) {
-				const mockXhr = { setRequestHeader: vi.fn() };
-				options.beforeSend( mockXhr );
-			}
-			return Promise.resolve();
-		} );
 	} );
 
 	afterEach( () => {
@@ -131,139 +110,82 @@ describe( 'configureAjax', () => {
 	} );
 
 	describe( 'Auth configuration', () => {
-		beforeEach( () => {
-			// Setup wp.ajax with original methods
-			global.window.wp = {
-				ajax: {
-					send: originalWpAjaxSend,
-					post: originalWpAjaxPost,
-					settings: {},
-				},
-			};
-		} );
-
-		it( 'should configure jQuery ajax with auth header', () => {
+		it( 'should register a jQuery ajaxPrefilter', () => {
 			bridge.getGBKit.mockReturnValue( {
-				siteURL: null,
+				siteURL: 'https://example.com',
 				authHeader: 'Bearer test-token',
 			} );
 
 			configureAjax();
 
-			expect( mockJQueryAjaxSetup ).toHaveBeenCalledWith( {
-				headers: {
-					Authorization: 'Bearer test-token',
-				},
-			} );
+			expect( mockJQueryAjaxPrefilter ).toHaveBeenCalledWith(
+				expect.any( Function )
+			);
 			expect( logger.debug ).toHaveBeenCalledWith(
 				'AJAX auth configured'
 			);
 		} );
 
-		it( 'should wrap wp.ajax.send with auth header', async () => {
+		it( 'should inject auth header for same-site requests', () => {
 			bridge.getGBKit.mockReturnValue( {
-				siteURL: null,
-				authHeader: 'Bearer send-token',
+				siteURL: 'https://example.com',
+				authHeader: 'Bearer test-token',
 			} );
 
 			configureAjax();
 
-			// Call the wrapped send method
-			const options = { data: 'test' };
-			await global.window.wp.ajax.send( 'test_action', options );
+			const prefilter = mockJQueryAjaxPrefilter.mock.calls[ 0 ][ 0 ];
+			const options = {
+				url: 'https://example.com/wp-admin/admin-ajax.php',
+			};
+			prefilter( options );
 
-			// Verify the original was called
-			expect( originalWpAjaxSend ).toHaveBeenCalled();
-
-			// Verify beforeSend was added
-			const calledOptions = originalWpAjaxSend.mock.calls[ 0 ][ 1 ];
-			expect( calledOptions.beforeSend ).toBeDefined();
-
-			// Verify auth header is set
 			const mockXhr = { setRequestHeader: vi.fn() };
-			calledOptions.beforeSend( mockXhr );
+			options.beforeSend( mockXhr );
+
 			expect( mockXhr.setRequestHeader ).toHaveBeenCalledWith(
 				'Authorization',
-				'Bearer send-token'
+				'Bearer test-token'
 			);
 		} );
 
-		it( 'should wrap wp.ajax.post with auth header', async () => {
+		it( 'should not inject auth header for cross-origin requests', () => {
 			bridge.getGBKit.mockReturnValue( {
-				siteURL: null,
-				authHeader: 'Bearer post-token',
+				siteURL: 'https://example.com',
+				authHeader: 'Bearer test-token',
 			} );
 
 			configureAjax();
 
-			// Call the wrapped post method
-			const options = {};
-			await global.window.wp.ajax.post( 'test_action', options );
+			const prefilter = mockJQueryAjaxPrefilter.mock.calls[ 0 ][ 0 ];
+			const options = { url: 'https://evil.com/steal' };
+			prefilter( options );
 
-			// Verify the original was called
-			expect( originalWpAjaxPost ).toHaveBeenCalled();
-
-			// Verify beforeSend was added
-			const calledOptions = originalWpAjaxPost.mock.calls[ 0 ][ 1 ];
-			expect( calledOptions.beforeSend ).toBeDefined();
-
-			// Verify auth header is set
-			const mockXhr = { setRequestHeader: vi.fn() };
-			calledOptions.beforeSend( mockXhr );
-			expect( mockXhr.setRequestHeader ).toHaveBeenCalledWith(
-				'Authorization',
-				'Bearer post-token'
-			);
+			expect( options.beforeSend ).toBeUndefined();
 		} );
 
-		it( 'should preserve original beforeSend in wp.ajax.send', async () => {
+		it( 'should preserve original beforeSend', () => {
 			bridge.getGBKit.mockReturnValue( {
-				siteURL: null,
-				authHeader: 'Bearer preserve-token',
+				siteURL: 'https://example.com',
+				authHeader: 'Bearer test-token',
 			} );
 
 			configureAjax();
 
-			// Call with existing beforeSend
+			const prefilter = mockJQueryAjaxPrefilter.mock.calls[ 0 ][ 0 ];
 			const originalBeforeSend = vi.fn();
-			const options = { beforeSend: originalBeforeSend };
-			await global.window.wp.ajax.send( 'test_action', options );
+			const options = {
+				url: 'https://example.com/wp-admin/admin-ajax.php',
+				beforeSend: originalBeforeSend,
+			};
+			prefilter( options );
 
-			// Get the wrapped beforeSend
-			const calledOptions = originalWpAjaxSend.mock.calls[ 0 ][ 1 ];
 			const mockXhr = { setRequestHeader: vi.fn() };
-			calledOptions.beforeSend( mockXhr );
+			options.beforeSend( mockXhr );
 
-			// Verify both auth header and original beforeSend were called
 			expect( mockXhr.setRequestHeader ).toHaveBeenCalledWith(
 				'Authorization',
-				'Bearer preserve-token'
-			);
-			expect( originalBeforeSend ).toHaveBeenCalledWith( mockXhr );
-		} );
-
-		it( 'should preserve original beforeSend in wp.ajax.post', async () => {
-			bridge.getGBKit.mockReturnValue( {
-				siteURL: null,
-				authHeader: 'Bearer preserve-post-token',
-			} );
-
-			configureAjax();
-
-			// Call with existing beforeSend
-			const originalBeforeSend = vi.fn();
-			const options = { beforeSend: originalBeforeSend };
-			await global.window.wp.ajax.post( 'test_action', options );
-
-			// Get the wrapped beforeSend
-			const calledOptions = originalWpAjaxPost.mock.calls[ 0 ][ 1 ];
-			const mockXhr = { setRequestHeader: vi.fn() };
-			calledOptions.beforeSend( mockXhr );
-
-			// Verify both auth header and original beforeSend were called
-			expect( mockXhr.setRequestHeader ).toHaveBeenCalledWith(
-				'Authorization',
-				'Bearer preserve-post-token'
+				'Bearer test-token'
 			);
 			expect( originalBeforeSend ).toHaveBeenCalledWith( mockXhr );
 		} );
@@ -279,7 +201,7 @@ describe( 'configureAjax', () => {
 			expect( logger.warn ).toHaveBeenCalledWith(
 				'Unable to configure AJAX auth without authHeader'
 			);
-			expect( mockJQueryAjaxSetup ).not.toHaveBeenCalled();
+			expect( mockJQueryAjaxPrefilter ).not.toHaveBeenCalled();
 		} );
 
 		it( 'should handle undefined authHeader', () => {
@@ -292,7 +214,7 @@ describe( 'configureAjax', () => {
 			expect( logger.warn ).toHaveBeenCalledWith(
 				'Unable to configure AJAX auth without authHeader'
 			);
-			expect( mockJQueryAjaxSetup ).not.toHaveBeenCalled();
+			expect( mockJQueryAjaxPrefilter ).not.toHaveBeenCalled();
 		} );
 	} );
 
@@ -302,15 +224,6 @@ describe( 'configureAjax', () => {
 				siteURL: 'https://example.com',
 				authHeader: 'Bearer full-token',
 			} );
-
-			// Setup wp.ajax with methods
-			global.window.wp = {
-				ajax: {
-					send: originalWpAjaxSend,
-					post: originalWpAjaxPost,
-					settings: {},
-				},
-			};
 
 			configureAjax();
 
@@ -323,11 +236,9 @@ describe( 'configureAjax', () => {
 			);
 
 			// Check auth configuration
-			expect( mockJQueryAjaxSetup ).toHaveBeenCalledWith( {
-				headers: {
-					Authorization: 'Bearer full-token',
-				},
-			} );
+			expect( mockJQueryAjaxPrefilter ).toHaveBeenCalledWith(
+				expect.any( Function )
+			);
 
 			// Check debug logs
 			expect( logger.debug ).toHaveBeenCalledWith(
@@ -385,50 +296,6 @@ describe( 'configureAjax', () => {
 			expect( logger.debug ).toHaveBeenCalledWith(
 				'AJAX auth configured'
 			);
-		} );
-
-		it( 'should handle missing wp.ajax.send method', () => {
-			bridge.getGBKit.mockReturnValue( {
-				siteURL: 'https://example.com',
-				authHeader: 'Bearer no-send',
-			} );
-
-			global.window.wp = {
-				ajax: {
-					post: originalWpAjaxPost,
-					settings: {},
-				},
-			};
-
-			expect( () => configureAjax() ).not.toThrow();
-
-			// Should not wrap send (it doesn't exist)
-			expect( global.window.wp.ajax.send ).toBeUndefined();
-
-			// Should still wrap post
-			expect( global.window.wp.ajax.post ).not.toBe( originalWpAjaxPost );
-		} );
-
-		it( 'should handle missing wp.ajax.post method', () => {
-			bridge.getGBKit.mockReturnValue( {
-				siteURL: 'https://example.com',
-				authHeader: 'Bearer no-post',
-			} );
-
-			global.window.wp = {
-				ajax: {
-					send: originalWpAjaxSend,
-					settings: {},
-				},
-			};
-
-			expect( () => configureAjax() ).not.toThrow();
-
-			// Should not wrap post (it doesn't exist)
-			expect( global.window.wp.ajax.post ).toBeUndefined();
-
-			// Should still wrap send
-			expect( global.window.wp.ajax.send ).not.toBe( originalWpAjaxSend );
 		} );
 
 		it( 'should handle missing wp.ajax entirely', () => {
@@ -493,49 +360,62 @@ describe( 'configureAjax', () => {
 				'https://example.com/wp-admin/admin-ajax.php'
 			);
 		} );
+
+		it( 'should not modify options when URL is missing', () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteURL: 'https://example.com',
+				authHeader: 'Bearer test-token',
+			} );
+
+			configureAjax();
+
+			const prefilter = mockJQueryAjaxPrefilter.mock.calls[ 0 ][ 0 ];
+			const options = {};
+			prefilter( options );
+
+			expect( options.beforeSend ).toBeUndefined();
+		} );
 	} );
 
 	describe( 'Media AJAX configuration', () => {
-		it( 'should alias wp.media.ajax to the wrapped wp.ajax.send', () => {
+		it( 'should alias wp.media.ajax to wp.ajax.send', () => {
+			const mockSend = vi.fn();
 			bridge.getGBKit.mockReturnValue( {
 				siteURL: 'https://example.com',
-				authHeader: 'Bearer media-token',
+				authHeader: null,
 			} );
 
 			global.window.wp = {
 				ajax: {
-					send: originalWpAjaxSend,
-					post: originalWpAjaxPost,
+					send: mockSend,
+					post: vi.fn(),
 					settings: {},
 				},
 			};
 
 			configureAjax();
 
-			expect( global.window.wp.media.ajax ).toBe(
-				global.window.wp.ajax.send
-			);
+			expect( global.window.wp.media.ajax ).toBe( mockSend );
 		} );
 
-		it( 'should alias wp.media.post to the wrapped wp.ajax.post', () => {
+		it( 'should alias wp.media.post to wp.ajax.post', () => {
+			const mockPost = vi.fn();
 			bridge.getGBKit.mockReturnValue( {
 				siteURL: 'https://example.com',
-				authHeader: 'Bearer media-token',
+				authHeader: null,
 			} );
 
 			global.window.wp = {
 				ajax: {
-					send: originalWpAjaxSend,
-					post: originalWpAjaxPost,
+					send: vi.fn(),
+					post: mockPost,
 					settings: {},
 				},
 			};
 
 			configureAjax();
 
-			expect( global.window.wp.media.post ).toBe(
-				global.window.wp.ajax.post
-			);
+			expect( global.window.wp.media.post ).toBe( mockPost );
 		} );
 
 		it( 'should initialize wp.media if it does not exist', () => {

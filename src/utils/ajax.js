@@ -22,7 +22,7 @@ export function configureAjax() {
 
 	const { siteURL, authHeader } = getGBKit();
 	configureAjaxUrl( siteURL );
-	configureAjaxAuth( authHeader );
+	configureAjaxAuth( siteURL, authHeader );
 	configureMediaAjax();
 }
 
@@ -40,51 +40,25 @@ function configureAjaxUrl( siteURL ) {
 	debug( 'AJAX URL configured' );
 }
 
-function configureAjaxAuth( authHeader ) {
+function configureAjaxAuth( siteURL, authHeader ) {
 	if ( ! authHeader ) {
 		warn( 'Unable to configure AJAX auth without authHeader' );
 		return;
 	}
 
-	window.jQuery?.ajaxSetup( {
-		headers: {
-			Authorization: authHeader,
-		},
+	window.jQuery?.ajaxPrefilter( function ( options ) {
+		if ( ! options.url?.startsWith( siteURL ) ) {
+			return;
+		}
+
+		const originalBeforeSend = options.beforeSend;
+		options.beforeSend = function ( xhr ) {
+			xhr.setRequestHeader( 'Authorization', authHeader );
+			if ( typeof originalBeforeSend === 'function' ) {
+				originalBeforeSend( xhr );
+			}
+		};
 	} );
-
-	if ( typeof window.wp.ajax.send === 'function' ) {
-		const originalSend = window.wp.ajax.send;
-		window.wp.ajax.send = function ( action, options = {} ) {
-			const originalBeforeSend = options.beforeSend;
-
-			options.beforeSend = function ( xhr ) {
-				xhr.setRequestHeader( 'Authorization', authHeader );
-
-				if ( typeof originalBeforeSend === 'function' ) {
-					originalBeforeSend( xhr );
-				}
-			};
-
-			return originalSend.call( this, action, options );
-		};
-	}
-
-	if ( typeof window.wp.ajax.post === 'function' ) {
-		const originalPost = window.wp.ajax.post;
-		window.wp.ajax.post = function ( action, options = {} ) {
-			const originalBeforeSend = options.beforeSend;
-
-			options.beforeSend = function ( xhr ) {
-				xhr.setRequestHeader( 'Authorization', authHeader );
-
-				if ( typeof originalBeforeSend === 'function' ) {
-					originalBeforeSend( xhr );
-				}
-			};
-
-			return originalPost.call( this, action, options );
-		};
-	}
 
 	debug( 'AJAX auth configured' );
 }
