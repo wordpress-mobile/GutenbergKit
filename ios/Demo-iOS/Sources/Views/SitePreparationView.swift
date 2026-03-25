@@ -425,7 +425,7 @@ class SitePreparationViewModel {
 
         return EditorConfigurationBuilder(
             postType: selectedPostTypeDetails,
-            siteURL: URL(string: apiRoot.siteUrlString())!,
+            siteURL: URL(string: apiRoot.homeUrlString())!,
             siteApiRoot: siteApiRoot
         )
         .setShouldUseThemeStyles(canUseEditorStyles)
