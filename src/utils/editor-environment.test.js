@@ -17,6 +17,7 @@ import { loadEditorAssets } from './editor-loader.js';
 import EditorLoadError from '../components/editor-load-error/index.jsx';
 import { error } from './logger.js';
 import { configureAjax } from './ajax.js';
+import { initializeVideoPressAjaxBridge } from './videopress-bridge.js';
 import { initializeWordPressGlobals } from './wordpress-globals.js';
 import { configureLocale } from './localization.js';
 import { configureApiFetch } from './api-fetch.js';
@@ -28,6 +29,7 @@ vi.mock( './fetch-interceptor.js' );
 vi.mock( './logger.js' );
 vi.mock( './editor-styles.js' );
 vi.mock( './ajax.js' );
+vi.mock( './videopress-bridge.js' );
 
 vi.mock( './wordpress-globals.js', () => ( {
 	initializeWordPressGlobals: vi.fn(),
@@ -64,6 +66,7 @@ describe( 'setUpEditorEnvironment', () => {
 		configureApiFetch.mockImplementation( () => {} );
 		initializeFetchInterceptor.mockImplementation( () => {} );
 		configureAjax.mockImplementation( () => {} );
+		initializeVideoPressAjaxBridge.mockImplementation( () => {} );
 		initializeEditor.mockImplementation( () => {} );
 		EditorLoadError.mockReturnValue( '<div>Error</div>' );
 		loadEditorAssets.mockResolvedValue( {
@@ -100,6 +103,10 @@ describe( 'setUpEditorEnvironment', () => {
 			callOrder.push( 'configureAjax' );
 		} );
 
+		initializeVideoPressAjaxBridge.mockImplementation( () => {
+			callOrder.push( 'initializeVideoPressAjaxBridge' );
+		} );
+
 		initializeEditor.mockImplementation( () => {
 			callOrder.push( 'initializeEditor' );
 		} );
@@ -113,6 +120,7 @@ describe( 'setUpEditorEnvironment', () => {
 			'loadRemainingGlobals',
 			'configureApiFetch',
 			'configureAjax',
+			'initializeVideoPressAjaxBridge',
 			'initializeEditor',
 		] );
 	} );
@@ -222,6 +230,39 @@ describe( 'setUpEditorEnvironment', () => {
 			testError
 		);
 		expect( editorLoaded ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'initializes VideoPress bridge when videopress/video is not in allowed block types', async () => {
+		getGBKit.mockReturnValue( { plugins: true } );
+		loadEditorAssets.mockResolvedValue( {
+			allowedBlockTypes: [ 'core/paragraph', 'core/heading' ],
+		} );
+
+		await setUpEditorEnvironment();
+
+		expect( configureAjax ).toHaveBeenCalledTimes( 1 );
+		expect( initializeVideoPressAjaxBridge ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'skips VideoPress bridge when videopress/video is in allowed block types', async () => {
+		getGBKit.mockReturnValue( { plugins: true } );
+		loadEditorAssets.mockResolvedValue( {
+			allowedBlockTypes: [ 'core/paragraph', 'videopress/video' ],
+		} );
+
+		await setUpEditorEnvironment();
+
+		expect( configureAjax ).toHaveBeenCalledTimes( 1 );
+		expect( initializeVideoPressAjaxBridge ).not.toHaveBeenCalled();
+	} );
+
+	it( 'initializes VideoPress bridge when allowed block types is undefined', async () => {
+		getGBKit.mockReturnValue( { plugins: false } );
+
+		await setUpEditorEnvironment();
+
+		expect( configureAjax ).toHaveBeenCalledTimes( 1 );
+		expect( initializeVideoPressAjaxBridge ).toHaveBeenCalledTimes( 1 );
 	} );
 
 	it( 'returns a promise that resolves when initialization completes', async () => {

@@ -10,6 +10,7 @@ import {
 import { configureLocale } from './localization';
 import { loadEditorAssets } from './editor-loader';
 import { configureAjax } from './ajax';
+import { initializeVideoPressAjaxBridge } from './videopress-bridge';
 import { initializeFetchInterceptor } from './fetch-interceptor';
 import EditorLoadError from '../components/editor-load-error';
 import { setLogLevel, error } from './logger';
@@ -131,17 +132,26 @@ async function loadPluginsIfEnabled() {
 
 /**
  * Initialize the editor module. Lazy-loaded to ensure WordPress globals are
- * before importing the editor module and referencing `window.wp` globals.
+ * available before importing the editor module and referencing `window.wp`
+ * globals.
  *
  * @param {Object} pluginLoadResult - Results from plugin loading
  * @return {Promise} Promise that resolves when the editor is initialized
  */
 async function initializeEditor( pluginLoadResult = {} ) {
 	const { initializeEditor: _initializeEditor } = await import( './editor' );
-	configureAjax(); // Configure AJAX URL and token authentication
+	const { allowedBlockTypes } = pluginLoadResult;
+
+	configureAjax();
+
+	if ( ! allowedBlockTypes?.includes( 'videopress/video' ) ) {
+		// The VideoPress block isn't available, so initialize the bridge to handle
+		// any `core/video` blocks extended to rely upon VideoPress upload services.
+		initializeVideoPressAjaxBridge();
+	}
 
 	_initializeEditor( {
-		allowedBlockTypes: pluginLoadResult.allowedBlockTypes,
+		allowedBlockTypes,
 		pluginLoadFailed: pluginLoadResult.pluginLoadFailed,
 	} );
 }
