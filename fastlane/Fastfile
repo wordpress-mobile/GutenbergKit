@@ -40,15 +40,11 @@ lane :publish_to_s3 do |options|
 end
 
 lane :xcframework_sign do
-  require_env_vars!(*ASC_API_KEY_ENV_VARS, *CODE_SIGNING_STORAGE_ENV_VARS)
-
-  set_up_signing_release
-
   sh(
     'codesign',
     '--timestamp',
     '-s', 'Apple Distribution',
-    xcframework_file_path.sub('.zip', '')
+    xcframework_dir_path
   )
 end
 
@@ -75,12 +71,17 @@ end
 
 def xcframework_checksum_file_path
   Dir.glob(File.join(PROJECT_ROOT, 'GutenbergKitResources-*.xcframework.zip.checksum.txt')).first \
-    || UI.user_error!('XCFramework checksum file not found. Run build_xcframework.sh first.')
+    || UI.user_error!('XCFramework checksum file not found. Run package_xcframework.sh first.')
+end
+
+def xcframework_dir_path
+  Dir.glob(File.join(PROJECT_ROOT, 'build', 'GutenbergKitResources-*.xcframework')).first \
+    || UI.user_error!('XCFramework not found. Run build_xcframework.sh first.')
 end
 
 def xcframework_file_path
   Dir.glob(File.join(PROJECT_ROOT, 'GutenbergKitResources-*.xcframework.zip')).first \
-    || UI.user_error!('XCFramework zip not found. Run build_xcframework.sh first.')
+    || UI.user_error!('XCFramework zip not found. Run package_xcframework.sh first.')
 end
 
 def required_version!(options)

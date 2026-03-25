@@ -7,8 +7,7 @@
 #   - Package.swift must have `resourcesMode` set to `.local`
 #
 # Output:
-#   - GutenbergKitResources-<git-sha>.xcframework.zip
-#   - GutenbergKitResources-<git-sha>.xcframework.zip.checksum.txt
+#   - build/GutenbergKitResources-<git-sha>.xcframework
 #
 # Adapted from:
 # https://github.com/OpenSwiftUIProject/ProtobufKit/blob/937eae542/Scripts/build_xcframework.sh
@@ -19,12 +18,10 @@ set -euo pipefail
 SCHEME="GutenbergKitResources"
 MINIMUM_IOS_VERSION="17.0"
 BUILD_DIR="$(pwd)/build"
-OUTPUT_DIR="${1:-$(pwd)}"
 DERIVED_DATA_PATH="${BUILD_DIR}/DerivedData"
 
 GIT_SHA="$(git rev-parse HEAD)"
 XCFRAMEWORK_NAME="${SCHEME}-${GIT_SHA}.xcframework"
-ZIP_NAME="${XCFRAMEWORK_NAME}.zip"
 
 link_dylib() {
     local object_file="$1"
@@ -192,16 +189,5 @@ if [ -d "${SIM_DSYMS}" ]; then
     cp -r "${SIM_DSYMS}" "${XCFRAMEWORK_PATH}/ios-arm64_x86_64-simulator/"
 fi
 
-# Create ZIP archive
-echo "--- Creating ZIP archive"
-(cd "${BUILD_DIR}" && zip -r "${ZIP_NAME}" "$(basename "${XCFRAMEWORK_PATH}")" > /dev/null)
-cp "${BUILD_DIR}/${ZIP_NAME}" "${OUTPUT_DIR}/${ZIP_NAME}"
-
-# Compute checksum
-echo "--- Computing checksum"
-CHECKSUM=$(swift package compute-checksum "${OUTPUT_DIR}/${ZIP_NAME}")
-echo "${CHECKSUM}" > "${OUTPUT_DIR}/${ZIP_NAME}.checksum.txt"
-
 echo ""
-echo "XCFramework: ${OUTPUT_DIR}/${ZIP_NAME}"
-echo "Checksum:    ${CHECKSUM}"
+echo "XCFramework: ${XCFRAMEWORK_PATH}"
