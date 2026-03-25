@@ -73,7 +73,11 @@ steps:
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
+          install_gems
+          bundle exec fastlane set_up_signing_release
           make build-resources-xcframework
+          bundle exec fastlane xcframework_sign
+          ./package_xcframework.sh
       artifact_paths:
           - '*.xcframework.zip'
           - '*.xcframework.zip.checksum.txt'
