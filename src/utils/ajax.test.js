@@ -170,13 +170,13 @@ describe( 'configureAjax', () => {
 
 			// Call the wrapped send method
 			const options = { data: 'test' };
-			await global.window.wp.ajax.send( options );
+			await global.window.wp.ajax.send( 'test_action', options );
 
 			// Verify the original was called
 			expect( originalWpAjaxSend ).toHaveBeenCalled();
 
 			// Verify beforeSend was added
-			const calledOptions = originalWpAjaxSend.mock.calls[ 0 ][ 0 ];
+			const calledOptions = originalWpAjaxSend.mock.calls[ 0 ][ 1 ];
 			expect( calledOptions.beforeSend ).toBeDefined();
 
 			// Verify auth header is set
@@ -197,14 +197,14 @@ describe( 'configureAjax', () => {
 			configureAjax();
 
 			// Call the wrapped post method
-			const options = { action: 'test_action' };
-			await global.window.wp.ajax.post( options );
+			const options = {};
+			await global.window.wp.ajax.post( 'test_action', options );
 
 			// Verify the original was called
 			expect( originalWpAjaxPost ).toHaveBeenCalled();
 
 			// Verify beforeSend was added
-			const calledOptions = originalWpAjaxPost.mock.calls[ 0 ][ 0 ];
+			const calledOptions = originalWpAjaxPost.mock.calls[ 0 ][ 1 ];
 			expect( calledOptions.beforeSend ).toBeDefined();
 
 			// Verify auth header is set
@@ -227,10 +227,10 @@ describe( 'configureAjax', () => {
 			// Call with existing beforeSend
 			const originalBeforeSend = vi.fn();
 			const options = { beforeSend: originalBeforeSend };
-			await global.window.wp.ajax.send( options );
+			await global.window.wp.ajax.send( 'test_action', options );
 
 			// Get the wrapped beforeSend
-			const calledOptions = originalWpAjaxSend.mock.calls[ 0 ][ 0 ];
+			const calledOptions = originalWpAjaxSend.mock.calls[ 0 ][ 1 ];
 			const mockXhr = { setRequestHeader: vi.fn() };
 			calledOptions.beforeSend( mockXhr );
 
@@ -253,10 +253,10 @@ describe( 'configureAjax', () => {
 			// Call with existing beforeSend
 			const originalBeforeSend = vi.fn();
 			const options = { beforeSend: originalBeforeSend };
-			await global.window.wp.ajax.post( options );
+			await global.window.wp.ajax.post( 'test_action', options );
 
 			// Get the wrapped beforeSend
-			const calledOptions = originalWpAjaxPost.mock.calls[ 0 ][ 0 ];
+			const calledOptions = originalWpAjaxPost.mock.calls[ 0 ][ 1 ];
 			const mockXhr = { setRequestHeader: vi.fn() };
 			calledOptions.beforeSend( mockXhr );
 

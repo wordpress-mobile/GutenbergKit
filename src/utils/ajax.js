@@ -48,7 +48,7 @@ function configureAjaxAuth( authHeader ) {
 
 	if ( typeof window.wp.ajax.send === 'function' ) {
 		const originalSend = window.wp.ajax.send;
-		window.wp.ajax.send = function ( options ) {
+		window.wp.ajax.send = function ( action, options = {} ) {
 			const originalBeforeSend = options.beforeSend;
 
 			options.beforeSend = function ( xhr ) {
@@ -59,13 +59,13 @@ function configureAjaxAuth( authHeader ) {
 				}
 			};
 
-			return originalSend.call( this, options );
+			return originalSend.call( this, action, options );
 		};
 	}
 
 	if ( typeof window.wp.ajax.post === 'function' ) {
 		const originalPost = window.wp.ajax.post;
-		window.wp.ajax.post = function ( options ) {
+		window.wp.ajax.post = function ( action, options = {} ) {
 			const originalBeforeSend = options.beforeSend;
 
 			options.beforeSend = function ( xhr ) {
@@ -76,7 +76,7 @@ function configureAjaxAuth( authHeader ) {
 				}
 			};
 
-			return originalPost.call( this, options );
+			return originalPost.call( this, action, options );
 		};
 	}
 
