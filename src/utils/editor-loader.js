@@ -87,6 +87,13 @@ async function loadAssets( html ) {
 			return false;
 		}
 
+		// WordPress's lodash-js-after inline script calls _.noConflict() to
+		// restore window._ to Underscore.js. GutenbergKit doesn't load
+		// Underscore, so this wipes window._ to undefined.
+		if ( asset.id === 'lodash-js-after' ) {
+			return false;
+		}
+
 		return !! asset.id;
 	} );
 
