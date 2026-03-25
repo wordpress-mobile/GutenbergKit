@@ -67,7 +67,7 @@ import * as wordcount from '@wordpress/wordcount';
  *
  * @return {void}
  */
-export function initializeWordPressGlobals() {
+export async function initializeWordPressGlobals() {
 	window.jQuery = jquery; // Expose jQuery for plugins
 
 	// Initialize the wp namespace if it doesn't exist
@@ -139,4 +139,7 @@ export function initializeWordPressGlobals() {
 
 	// React JSX runtime for plugin compatibility
 	window.ReactJSXRuntime = ReactJSXRuntime;
+
+	// Load wp-util after jQuery and lodash are on window
+	await import( '../../vendor/wp-util.js' );
 }

@@ -2,3 +2,4 @@ android/
 build/
 dist/
 ios/
+vendor/

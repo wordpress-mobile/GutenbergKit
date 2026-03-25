@@ -84,7 +84,7 @@ function setLogLevelFromGBKit() {
 async function initializeWordPressGlobals() {
 	const { initializeWordPressGlobals: _initializeWordPressGlobals } =
 		await import( './wordpress-globals' );
-	_initializeWordPressGlobals();
+	await _initializeWordPressGlobals();
 }
 
 /**
