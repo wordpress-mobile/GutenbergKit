@@ -7,6 +7,7 @@ struct EditorList: View {
 
     @State private var showAddDialog = false
     @State private var showDebugSettings = false
+    @State private var showMediaProxyServer = false
 
     @State var configurationToDelete: ConfigurationItem?
     @State private var errorMessage: String?
@@ -88,6 +89,9 @@ struct EditorList: View {
                 DebugSettingsView()
             }
         }
+        .navigationDestination(isPresented: $showMediaProxyServer) {
+            MediaProxyServerView()
+        }
         .navigationTitle("GutenbergKit")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -99,10 +103,20 @@ struct EditorList: View {
             }
 
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showDebugSettings = true
+                Menu {
+                    Button {
+                        showMediaProxyServer = true
+                    } label: {
+                        Label("Media Proxy Server", systemImage: "server.rack")
+                    }
+
+                    Button {
+                        showDebugSettings = true
+                    } label: {
+                        Label("Debug Settings", systemImage: "gearshape")
+                    }
                 } label: {
-                    Image(systemName: "gearshape")
+                    Image(systemName: "ellipsis.circle")
                 }
             }
         }.onAppear {

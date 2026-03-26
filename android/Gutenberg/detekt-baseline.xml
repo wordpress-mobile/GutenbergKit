@@ -1,11 +1,31 @@
 <?xml version="1.0" ?>
 <SmellBaseline>
-  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <ManuallySuppressedIssues/>
   <CurrentIssues>
+    <ID>ComplexCondition:FixtureTests.kt$FixtureTests$expected.has("isComplete") &amp;&amp; !expected.get("isComplete").asBoolean &amp;&amp; expected.has("hasHeaders") &amp;&amp; !expected.get("hasHeaders").asBoolean</ID>
     <ID>CyclomaticComplexMethod:EditorConfiguration.kt$EditorConfiguration$override fun equals(other: Any?): Boolean</ID>
+    <ID>CyclomaticComplexMethod:FixtureTests.kt$FixtureTests$@Test fun `request parsing - all incremental cases pass`()</ID>
+    <ID>CyclomaticComplexMethod:HTTPRequestSerializer.kt$HTTPRequestSerializer$fun parseHeaders(data: ByteArray): HeaderParseResult</ID>
+    <ID>CyclomaticComplexMethod:HttpServer.kt$HttpServer$private suspend fun handleRequest(socket: Socket)</ID>
+    <ID>CyclomaticComplexMethod:MultipartPart.kt$MultipartPart.Companion$fun parseChunked( source: RequestBody.FileBacked, boundary: String ): List&lt;MultipartPart&gt;</ID>
     <ID>ExplicitItLambdaParameter:EditorAssetsLibrary.kt$EditorAssetsLibrary${ str, it -&gt; str + "%02x".format(it) }</ID>
     <ID>FunctionNaming:EditorURLCache.kt$EditorURLCache$private fun __store( response: EditorURLResponse, url: String, httpMethod: EditorHttpMethod, currentDate: Date )</ID>
+    <ID>LongMethod:FixtureTests.kt$FixtureTests$@Test fun `request parsing - all basic cases pass`()</ID>
+    <ID>LongMethod:FixtureTests.kt$FixtureTests$@Test fun `request parsing - all incremental cases pass`()</ID>
+    <ID>LongMethod:HTTPRequestParser.kt$HTTPRequestParser$fun append(data: ByteArray): Unit</ID>
+    <ID>LongMethod:HTTPRequestSerializer.kt$HTTPRequestSerializer$fun parseHeaders(data: ByteArray): HeaderParseResult</ID>
+    <ID>LongMethod:HttpServer.kt$HttpServer$private suspend fun handleRequest(socket: Socket)</ID>
+    <ID>LongMethod:MultipartPart.kt$MultipartPart.Companion$fun parse( source: RequestBody, bodyData: ReadOnlyBytes, bodyFileOffset: Long, boundary: String ): List&lt;MultipartPart&gt;</ID>
+    <ID>LongMethod:MultipartPart.kt$MultipartPart.Companion$fun parseChunked( source: RequestBody.FileBacked, boundary: String ): List&lt;MultipartPart&gt;</ID>
     <ID>LongParameterList:EditorService.kt$EditorService.Companion$( context: Context, configuration: EditorConfiguration, httpClient: EditorHTTPClientProtocol? = null, cachePolicy: EditorCachePolicy = EditorCachePolicy.Always, coroutineScope: CoroutineScope, storageRoot: File? = null, tempStorageRoot: File? = null, cacheRoot: File? = null )</ID>
+    <ID>LongParameterList:HttpServer.kt$HttpServer$( val name: String, private val requestedPort: Int = 0, private val externallyAccessible: Boolean, private val requiresAuthentication: Boolean = true, private val maxConnections: Int = DEFAULT_MAX_CONNECTIONS, private val maxBodySize: Long = DEFAULT_MAX_BODY_SIZE, private val readTimeoutMs: Int = DEFAULT_READ_TIMEOUT_MS, private val idleTimeoutMs: Int = DEFAULT_IDLE_TIMEOUT_MS, private val cacheDir: File? = null, private val handler: suspend (HttpRequest) -&gt; HttpResponse )</ID>
+    <ID>LoopWithTooManyJumpStatements:HTTPRequestParser.kt$HTTPRequestParser$for</ID>
+    <ID>LoopWithTooManyJumpStatements:HTTPRequestSerializer.kt$HTTPRequestSerializer$for</ID>
+    <ID>LoopWithTooManyJumpStatements:HeaderValue.kt$HeaderValue$while</ID>
+    <ID>LoopWithTooManyJumpStatements:HttpServer.kt$HttpServer$while</ID>
+    <ID>LoopWithTooManyJumpStatements:HttpServer.kt$HttpServer.Companion$for</ID>
+    <ID>LoopWithTooManyJumpStatements:MultipartPart.kt$MultipartPart.Companion$for</ID>
+    <ID>LoopWithTooManyJumpStatements:MultipartPart.kt$MultipartPart.Companion$while</ID>
     <ID>MaxLineLength:EditorConfiguration.kt$EditorConfiguration.Builder$fun setNamespaceExcludedPaths(namespaceExcludedPaths: Array&lt;String&gt;)</ID>
     <ID>MaxLineLength:EditorConfiguration.kt$EditorConfiguration.Companion$fun</ID>
     <ID>MaxLineLength:EditorHTTPClientTest.kt$EditorHTTPClientTest$val wpErrorJson = """{"code": "rest_invalid_param", "message": "Invalid parameter(s): title", "data": {"status": 400, "params": {"title": "Title is required."}}}"""</ID>
@@ -14,12 +34,20 @@
     <ID>MaxLineLength:EditorSettingsTest.kt$EditorSettingsTest$val jsonString = """{"styles": [{"css": "body { color: red; }", "isGlobalStyles": true}, {"css": "h1 { font-size: 2em; }", "isGlobalStyles": false}]}"""</ID>
     <ID>MaxLineLength:EditorSettingsTest.kt$EditorSettingsTest$val jsonString = """{"styles": [{"css": null, "isGlobalStyles": true}, {"css": "h1 { font-size: 2em; }", "isGlobalStyles": false}]}"""</ID>
     <ID>MaxLineLength:GutenbergView.kt$GutenbergView$constructor</ID>
+    <ID>MaxLineLength:HttpServerAuthenticationTests.kt$HttpServerAuthenticationTests$val raw = "GET /test HTTP/1.1\r\nHost: 127.0.0.1\r\nProxy-Authorization: Bearer ${server.token}\r\nRelay-Authorization: Bearer wrong\r\n\r\n"</ID>
     <ID>MaxLineLength:RESTAPIRepositoryTest.kt$RESTAPIRepositoryTest$val rawJSON = """{"styles":[{"css":".theme-style{color:blue}","isGlobalStyles":true},{"css":".another{margin:0}","isGlobalStyles":false}]}"""</ID>
+    <ID>MaxLineLength:RequestBody.kt$Buffer$internal</ID>
     <ID>NestedBlockDepth:EditorAssetsLibrary.kt$EditorAssetsLibrary$private fun cleanupOldCache()</ID>
     <ID>NestedBlockDepth:FileCache.kt$FileCache$fun copyToCache(context: Context, uri: Uri, maxSizeBytes: Long = DEFAULT_MAX_FILE_SIZE): Uri?</ID>
     <ID>NestedBlockDepth:FileCache.kt$FileCache$private fun getFileSize(context: Context, uri: Uri): Long?</ID>
+    <ID>NestedBlockDepth:FixtureTests.kt$FixtureTests$@Test fun `multipart parsing - all cases pass`()</ID>
+    <ID>NestedBlockDepth:FixtureTests.kt$FixtureTests$@Test fun `request parsing - all incremental cases pass`()</ID>
+    <ID>NestedBlockDepth:MultipartPart.kt$MultipartPart.Companion$fun parseChunked( source: RequestBody.FileBacked, boundary: String ): List&lt;MultipartPart&gt;</ID>
     <ID>PrintStackTrace:GutenbergView.kt$GutenbergView$e</ID>
     <ID>ReturnCount:GutenbergView.kt$GutenbergView.&lt;no name provided&gt;$override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest): Boolean</ID>
+    <ID>ReturnCount:HTTPRequestSerializer.kt$HTTPRequestSerializer$fun parseHeaders(data: ByteArray): HeaderParseResult</ID>
+    <ID>ReturnCount:HttpServer.kt$HttpServer$private suspend fun handleRequest(socket: Socket)</ID>
+    <ID>ReturnCount:ParsedHTTPRequest.kt$ParsedHTTPRequest.Companion$private fun extractBoundary(contentType: String): String?</ID>
     <ID>SwallowedException:EditorAssetsLibrary.kt$EditorAssetsLibrary$e: Exception</ID>
     <ID>SwallowedException:EditorConfiguration.kt$EditorConfiguration$e: Exception</ID>
     <ID>SwallowedException:EditorDependenciesSerializer.kt$EditorDependenciesSerializer$e: Exception</ID>
@@ -27,6 +55,11 @@
     <ID>SwallowedException:EditorHTTPClient.kt$EditorHTTPClient$e: JsonSyntaxException</ID>
     <ID>SwallowedException:EditorURLResponse.kt$EditorURLResponse$e: Exception</ID>
     <ID>SwallowedException:LocalEditorAssetManifest.kt$LocalEditorAssetManifest$e: Exception</ID>
+    <ID>ThrowsCount:HTTPRequestSerializer.kt$HTTPRequestSerializer$internal fun validateContentLength(value: String, existing: Long?): Long</ID>
+    <ID>ThrowsCount:MultipartPart.kt$MultipartPart.Companion$fun parse( source: RequestBody, bodyData: ReadOnlyBytes, bodyFileOffset: Long, boundary: String ): List&lt;MultipartPart&gt;</ID>
+    <ID>ThrowsCount:MultipartPart.kt$MultipartPart.Companion$fun parseChunked( source: RequestBody.FileBacked, boundary: String ): List&lt;MultipartPart&gt;</ID>
+    <ID>ThrowsCount:MultipartPart.kt$MultipartPart.Companion$private fun parsePartHeaders(headerData: ByteArray, body: RequestBody): MultipartPart</ID>
+    <ID>ThrowsCount:ParsedHTTPRequest.kt$ParsedHTTPRequest$fun multipartParts(): List&lt;MultipartPart&gt;</ID>
     <ID>TooGenericExceptionCaught:CachedAssetRequestInterceptor.kt$CachedAssetRequestInterceptor$e: Exception</ID>
     <ID>TooGenericExceptionCaught:EditorAssetsLibrary.kt$EditorAssetsLibrary$e: Exception</ID>
     <ID>TooGenericExceptionCaught:EditorConfiguration.kt$EditorConfiguration$e: Exception</ID>
@@ -35,6 +68,7 @@
     <ID>TooGenericExceptionCaught:EditorURLResponse.kt$EditorURLResponse$e: Exception</ID>
     <ID>TooGenericExceptionCaught:FileCache.kt$FileCache$e: Exception</ID>
     <ID>TooGenericExceptionCaught:GutenbergView.kt$GutenbergView$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:HttpServer.kt$HttpServer$e: Exception</ID>
     <ID>TooGenericExceptionCaught:LocalEditorAssetManifest.kt$LocalEditorAssetManifest$e: Exception</ID>
     <ID>TooGenericExceptionThrown:EditorAssetsLibrary.kt$EditorAssetsLibrary$throw Exception("Failed to fetch asset: $httpURL (${connection.responseCode})")</ID>
     <ID>TooGenericExceptionThrown:EditorAssetsLibrary.kt$EditorAssetsLibrary$throw Exception("Failed to fetch manifest: ${connection.responseCode}")</ID>
@@ -44,5 +78,6 @@
     <ID>UnusedPrivateProperty:GutenbergView.kt$GutenbergView.Companion$private const val ASSET_LOADING_TIMEOUT_MS = 5000L</ID>
     <ID>UseCheckOrError:TestResources.kt$TestResources$throw IllegalStateException( "Could not find iOS test resources. Tried: ${possiblePaths.map { it.absolutePath }}" )</ID>
     <ID>UseRequire:EditorAssetsLibrary.kt$EditorAssetsLibrary$throw IllegalArgumentException("Unsupported URL for caching: $httpURL")</ID>
+    <ID>VariableNaming:HttpServer.kt$HttpServer$private val TAG = "GutenbergKit.HTTP"</ID>
   </CurrentIssues>
 </SmellBaseline>

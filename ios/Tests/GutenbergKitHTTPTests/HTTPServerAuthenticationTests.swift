@@ -1,0 +1,401 @@
+#if canImport(Network)
+
+import Foundation
+import Network
+import Testing
+@testable import GutenbergKitHTTP
+
+@Suite("HTTPServer Authentication")
+struct HTTPServerAuthenticationTests {
+
+    @Test("request without token returns 407 with Content-Type and Proxy-Authenticate")
+    func noTokenReturns407WithHeaders() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let url = URL(string: "http://127.0.0.1:\(server.port)/test")!
+        let (_, response) = try await URLSession.shared.data(for: URLRequest(url: url))
+        let http = try #require(response as? HTTPURLResponse)
+
+        #expect(http.statusCode == 407)
+        #expect(http.value(forHTTPHeaderField: "Content-Type") == "text/plain")
+        #expect(http.value(forHTTPHeaderField: "Proxy-Authenticate") == "Bearer")
+    }
+
+    @Test("request with wrong token returns 407")
+    func wrongTokenReturns407() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let url = URL(string: "http://127.0.0.1:\(server.port)/test")!
+        var request = URLRequest(url: url)
+        request.setValue("Bearer wrong-token", forHTTPHeaderField: "Proxy-Authorization")
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        let http = try #require(response as? HTTPURLResponse)
+
+        #expect(http.statusCode == 407)
+        #expect(http.value(forHTTPHeaderField: "Proxy-Authenticate") == "Bearer")
+    }
+
+    @Test("request with valid token returns 200")
+    func validTokenReturns200() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let url = URL(string: "http://127.0.0.1:\(server.port)/test")!
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Proxy-Authorization")
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        let http = try #require(response as? HTTPURLResponse)
+
+        #expect(http.statusCode == 200)
+    }
+
+    @Test("request with lowercase 'bearer' scheme returns 200")
+    func lowercaseBearerSchemeReturns200() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let url = URL(string: "http://127.0.0.1:\(server.port)/test")!
+        var request = URLRequest(url: url)
+        request.setValue("bearer \(server.token)", forHTTPHeaderField: "Proxy-Authorization")
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        let http = try #require(response as? HTTPURLResponse)
+
+        #expect(http.statusCode == 200)
+    }
+
+    @Test("request with uppercase 'BEARER' scheme returns 200")
+    func uppercaseBearerSchemeReturns200() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let url = URL(string: "http://127.0.0.1:\(server.port)/test")!
+        var request = URLRequest(url: url)
+        request.setValue("BEARER \(server.token)", forHTTPHeaderField: "Proxy-Authorization")
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        let http = try #require(response as? HTTPURLResponse)
+
+        #expect(http.statusCode == 200)
+    }
+
+    // MARK: - Relay-Authorization (fetch()-compatible alternative)
+
+    @Test("Relay-Authorization with valid token returns 200")
+    func relayAuthValidTokenReturns200() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let url = URL(string: "http://127.0.0.1:\(server.port)/test")!
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        let http = try #require(response as? HTTPURLResponse)
+
+        #expect(http.statusCode == 200)
+    }
+
+    @Test("Relay-Authorization with wrong token returns 407")
+    func relayAuthWrongTokenReturns407() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let url = URL(string: "http://127.0.0.1:\(server.port)/test")!
+        var request = URLRequest(url: url)
+        request.setValue("Bearer wrong-token", forHTTPHeaderField: "Relay-Authorization")
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        let http = try #require(response as? HTTPURLResponse)
+
+        #expect(http.statusCode == 407)
+    }
+
+    @Test("Relay-Authorization with lowercase 'bearer' scheme returns 200")
+    func relayAuthLowercaseBearerReturns200() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let url = URL(string: "http://127.0.0.1:\(server.port)/test")!
+        var request = URLRequest(url: url)
+        request.setValue("bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        let http = try #require(response as? HTTPURLResponse)
+
+        #expect(http.statusCode == 200)
+    }
+
+    @Test("Authorization header passes through to handler alongside Relay-Authorization")
+    func authorizationPassesThroughWithRelayAuth() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { req in
+            let auth = req.parsed.header("Authorization") ?? ""
+            let relayAuth = req.parsed.header("Relay-Authorization") ?? "absent"
+            return HTTPResponse(
+                status: 200,
+                headers: [("X-Received-Auth", auth), ("X-Received-Relay", relayAuth)],
+                body: Data("OK\n".utf8)
+            )
+        }
+        defer { server.stop() }
+
+        let raw = "GET /test HTTP/1.1\r\nHost: 127.0.0.1\r\nRelay-Authorization: Bearer \(server.token)\r\nAuthorization: Basic dXNlcjpwYXNz\r\n\r\n"
+        let response = try await sendRaw(raw, toPort: server.port)
+
+        #expect(response.contains("HTTP/1.1 200"))
+        #expect(response.contains("X-Received-Auth: Basic dXNlcjpwYXNz"))
+    }
+
+    @Test("Proxy-Authorization takes precedence over Relay-Authorization")
+    func proxyAuthTakesPrecedenceOverRelayAuth() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        // Proxy-Authorization has the correct token, Relay-Authorization has a wrong one.
+        // Server should accept because Proxy-Authorization is checked first.
+        let raw = "GET /test HTTP/1.1\r\nHost: 127.0.0.1\r\nProxy-Authorization: Bearer \(server.token)\r\nRelay-Authorization: Bearer wrong\r\n\r\n"
+        let response = try await sendRaw(raw, toPort: server.port)
+        #expect(response.hasPrefix("HTTP/1.1 200"))
+    }
+
+    // MARK: - Authorization Passthrough
+
+    @Test("Authorization header passes through to handler alongside Proxy-Authorization")
+    func authorizationPassesThroughToHandler() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { req in
+            // Echo the Authorization header back in X-Received-Auth so the
+            // test can verify it arrived at the handler untouched.
+            let auth = req.parsed.header("Authorization") ?? ""
+            return HTTPResponse(
+                status: 200,
+                headers: [("X-Received-Auth", auth)],
+                body: Data("OK\n".utf8)
+            )
+        }
+        defer { server.stop() }
+
+        let url = URL(string: "http://127.0.0.1:\(server.port)/test")!
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Proxy-Authorization")
+        request.setValue("Basic dXNlcjpwYXNz", forHTTPHeaderField: "Authorization")
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        let http = try #require(response as? HTTPURLResponse)
+
+        #expect(http.statusCode == 200)
+        #expect(http.value(forHTTPHeaderField: "X-Received-Auth") == "Basic dXNlcjpwYXNz")
+    }
+
+    // MARK: - CORS Preflight (OPTIONS) Auth Exemption
+
+    @Test("OPTIONS without token returns 200 (CORS preflight exempt from auth)")
+    func optionsWithoutTokenReturns200() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let raw = "OPTIONS /test HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
+        let response = try await sendRaw(raw, toPort: server.port)
+        #expect(response.hasPrefix("HTTP/1.1 200"))
+    }
+
+    @Test("GET without token still returns 407 (only OPTIONS is exempt)")
+    func getWithoutTokenStillReturns407() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let url = URL(string: "http://127.0.0.1:\(server.port)/test")!
+        let (_, response) = try await URLSession.shared.data(for: URLRequest(url: url))
+        let http = try #require(response as? HTTPURLResponse)
+
+        #expect(http.statusCode == 407)
+    }
+
+    // MARK: - Content-Length Requirement
+
+    @Test("POST without Content-Length returns 411")
+    func postWithoutContentLengthReturns411() async throws {
+        let server = try await HTTPServer.start(
+            name: "length-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        // URLSession always adds Content-Length, so use a raw TCP connection.
+        let raw = "POST /test HTTP/1.1\r\nHost: 127.0.0.1\r\nProxy-Authorization: Bearer \(server.token)\r\n\r\n"
+        let response = try await sendRaw(raw, toPort: server.port)
+        #expect(response.hasPrefix("HTTP/1.1 411"))
+    }
+
+    @Test("GET without Content-Length returns 200 (body not expected)")
+    func getWithoutContentLengthReturns200() async throws {
+        let server = try await HTTPServer.start(
+            name: "length-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let url = URL(string: "http://127.0.0.1:\(server.port)/test")!
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Proxy-Authorization")
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        let http = try #require(response as? HTTPURLResponse)
+        #expect(http.statusCode == 200)
+    }
+
+    @Test("POST with Content-Length returns 200")
+    func postWithContentLengthReturns200() async throws {
+        let server = try await HTTPServer.start(
+            name: "length-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let url = URL(string: "http://127.0.0.1:\(server.port)/test")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = Data("hello".utf8)
+        request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Proxy-Authorization")
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        let http = try #require(response as? HTTPURLResponse)
+        #expect(http.statusCode == 200)
+    }
+
+    // MARK: - Auth Disabled
+
+    @Test("authentication is disabled when requiresAuthentication is false")
+    func authDisabledPassesThrough() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: false
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let url = URL(string: "http://127.0.0.1:\(server.port)/test")!
+        let (_, response) = try await URLSession.shared.data(for: URLRequest(url: url))
+        let http = try #require(response as? HTTPURLResponse)
+
+        #expect(http.statusCode == 200)
+    }
+    // MARK: - Helpers
+
+    /// Sends a raw HTTP request over TCP and returns the response string.
+    ///
+    /// Needed because URLSession always adds Content-Length automatically.
+    private func sendRaw(_ request: String, toPort port: UInt16) async throws -> String {
+        let connection = NWConnection(
+            host: .ipv4(.loopback),
+            port: NWEndpoint.Port(rawValue: port)!,
+            using: .tcp
+        )
+        defer { connection.cancel() }
+
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, any Swift.Error>) in
+            connection.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    connection.stateUpdateHandler = nil
+                    cont.resume()
+                case .failed(let error):
+                    connection.stateUpdateHandler = nil
+                    cont.resume(throwing: error)
+                default:
+                    break
+                }
+            }
+            connection.start(queue: .global())
+        }
+
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, any Swift.Error>) in
+            connection.send(content: Data(request.utf8), completion: .contentProcessed { error in
+                if let error { cont.resume(throwing: error) } else { cont.resume() }
+            })
+        }
+
+        return try await withCheckedThrowingContinuation { cont in
+            connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { data, _, _, error in
+                if let error {
+                    cont.resume(throwing: error)
+                } else {
+                    cont.resume(returning: String(data: data ?? Data(), encoding: .utf8) ?? "")
+                }
+            }
+        }
+    }
+}
+
+#endif // canImport(Network)

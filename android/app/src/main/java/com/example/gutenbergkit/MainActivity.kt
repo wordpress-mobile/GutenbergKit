@@ -21,12 +21,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -106,6 +110,9 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
                         }
                         configurations.remove(config)
                     },
+                    onMediaProxyServer = {
+                        startActivity(Intent(this, MediaProxyServerActivity::class.java))
+                    },
                     isDiscoveringSite = isDiscoveringSite.value,
                     onDismissDiscovering = { isDiscoveringSite.value = false },
                     isLoadingCapabilities = isLoadingCapabilities.value,
@@ -149,6 +156,7 @@ fun MainScreen(
     onConfigurationLongClick: (ConfigurationItem) -> Boolean,
     onAddConfiguration: (String) -> Unit,
     onDeleteConfiguration: (ConfigurationItem) -> Unit,
+    onMediaProxyServer: () -> Unit = {},
     isDiscoveringSite: Boolean = false,
     onDismissDiscovering: () -> Unit = {},
     isLoadingCapabilities: Boolean = false,
@@ -158,12 +166,33 @@ fun MainScreen(
     var showAddDialog = remember { mutableStateOf(false) }
     var showDeleteDialog = remember { mutableStateOf<ConfigurationItem.ConfiguredEditor?>(null) }
     var siteUrlInput = remember { mutableStateOf("") }
+    var showOverflowMenu = remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.demo_title)) }
+                title = { Text(stringResource(R.string.demo_title)) },
+                actions = {
+                    IconButton(onClick = { showOverflowMenu.value = true }) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = stringResource(R.string.more_options)
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showOverflowMenu.value,
+                        onDismissRequest = { showOverflowMenu.value = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Media Proxy Server") },
+                            onClick = {
+                                showOverflowMenu.value = false
+                                onMediaProxyServer()
+                            }
+                        )
+                    }
+                }
             )
         },
         floatingActionButton = {

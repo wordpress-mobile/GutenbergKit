@@ -1,0 +1,125 @@
+{
+	"description": "Header value parameter extraction tests. Given a parameter name and a header value string, extract the parameter's value.",
+	"tests": [
+		{
+			"description": "Extracts unquoted parameter value",
+			"parameter": "boundary",
+			"headerValue": "multipart/form-data; boundary=AaB03x",
+			"expected": "AaB03x"
+		},
+		{
+			"description": "Unquoted value terminated by semicolon",
+			"parameter": "boundary",
+			"headerValue": "multipart/form-data; boundary=AaB03x; charset=utf-8",
+			"expected": "AaB03x"
+		},
+		{
+			"description": "Unquoted value at end of string",
+			"parameter": "charset",
+			"headerValue": "text/plain; charset=utf-8",
+			"expected": "utf-8"
+		},
+		{
+			"description": "Extracts quoted parameter value",
+			"parameter": "name",
+			"headerValue": "form-data; name=\"field1\"",
+			"expected": "field1"
+		},
+		{
+			"description": "Empty quoted value",
+			"parameter": "name",
+			"headerValue": "form-data; name=\"\"",
+			"expected": ""
+		},
+		{
+			"description": "Quoted value with spaces",
+			"parameter": "name",
+			"headerValue": "form-data; name=\"my field\"",
+			"expected": "my field"
+		},
+		{
+			"description": "Quoted value with escaped quote",
+			"parameter": "name",
+			"headerValue": "form-data; name=\"field\\\"name\"",
+			"expected": "field\"name"
+		},
+		{
+			"description": "Quoted value with escaped backslash",
+			"parameter": "filename",
+			"headerValue": "form-data; filename=\"C:\\\\path\\\\file.txt\"",
+			"expected": "C:\\path\\file.txt"
+		},
+		{
+			"description": "Quoted value with escaped single-quote",
+			"parameter": "boundary",
+			"headerValue": "multipart/form-data; boundary=\"abc\\'def\"",
+			"expected": "abc'def"
+		},
+		{
+			"description": "Parameter name matching is case-insensitive",
+			"parameter": "Boundary",
+			"headerValue": "multipart/form-data; boundary=AaB03x",
+			"expected": "AaB03x"
+		},
+		{
+			"description": "Parameter inside another quoted value is not matched",
+			"parameter": "name",
+			"headerValue": "form-data; dummy=\"name=evil\"; name=\"real\"",
+			"expected": "real"
+		},
+		{
+			"description": "boundary= inside quoted value is skipped",
+			"parameter": "boundary",
+			"headerValue": "multipart/form-data; charset=\"boundary=fake\"; boundary=RealBoundary",
+			"expected": "RealBoundary"
+		},
+		{
+			"description": "Missing parameter returns null",
+			"parameter": "filename",
+			"headerValue": "form-data; name=\"field1\"",
+			"expected": null
+		},
+		{
+			"description": "Empty header value returns null",
+			"parameter": "name",
+			"headerValue": "",
+			"expected": null
+		},
+		{
+			"description": "Extracts correct parameter when multiple are present",
+			"parameter": "filename",
+			"headerValue": "form-data; name=\"file\"; filename=\"photo.jpg\"",
+			"expected": "photo.jpg"
+		},
+		{
+			"description": "Does not match parameter name as substring of another parameter name",
+			"parameter": "name",
+			"headerValue": "form-data; filename=\"test.jpg\"; name=\"real\"",
+			"expected": "real"
+		},
+		{
+			"description": "Unterminated quoted value returns accumulated content",
+			"parameter": "name",
+			"headerValue": "form-data; name=\"unclosed",
+			"expected": "unclosed"
+		},
+		{
+			"description": "Quoted value containing semicolons",
+			"parameter": "name",
+			"headerValue": "form-data; name=\"a;b;c\"",
+			"expected": "a;b;c"
+		},
+		{
+			"description": "No space after semicolon",
+			"parameter": "name",
+			"headerValue": "form-data;name=\"field1\"",
+			"expected": "field1"
+		},
+		{
+			"description": "Backslash at end of quoted value",
+			"parameter": "name",
+			"headerValue": "form-data; name=\"trailing\\",
+			"expected": "trailing"
+		}
+	]
+}
