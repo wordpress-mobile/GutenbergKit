@@ -92,6 +92,9 @@ describe( 'configureAjax', () => {
 			expect( logger.warn ).toHaveBeenCalledWith(
 				'Unable to configure AJAX URL without siteURL'
 			);
+			expect( logger.warn ).toHaveBeenCalledWith(
+				'Unable to configure AJAX auth without siteURL'
+			);
 			expect( global.window.ajaxurl ).toBeUndefined();
 		} );
 
@@ -104,6 +107,9 @@ describe( 'configureAjax', () => {
 
 			expect( logger.warn ).toHaveBeenCalledWith(
 				'Unable to configure AJAX URL without siteURL'
+			);
+			expect( logger.warn ).toHaveBeenCalledWith(
+				'Unable to configure AJAX auth without siteURL'
 			);
 			expect( global.window.ajaxurl ).toBeUndefined();
 		} );
@@ -175,6 +181,21 @@ describe( 'configureAjax', () => {
 
 			const prefilter = mockJQueryAjaxPrefilter.mock.calls[ 0 ][ 0 ];
 			const options = { url: 'https://evil.com/steal' };
+			prefilter( options );
+
+			expect( options.beforeSend ).toBeUndefined();
+		} );
+
+		it( 'should not inject auth header for lookalike subdomain prefixes', () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteURL: 'https://example.com',
+				authHeader: 'Bearer test-token',
+			} );
+
+			configureAjax();
+
+			const prefilter = mockJQueryAjaxPrefilter.mock.calls[ 0 ][ 0 ];
+			const options = { url: 'https://example.com.evil.com/steal' };
 			prefilter( options );
 
 			expect( options.beforeSend ).toBeUndefined();
@@ -274,7 +295,7 @@ describe( 'configureAjax', () => {
 				'Unable to configure AJAX URL without siteURL'
 			);
 			expect( logger.warn ).toHaveBeenCalledWith(
-				'Unable to configure AJAX auth without authHeader'
+				'Unable to configure AJAX auth without siteURL'
 			);
 		} );
 	} );

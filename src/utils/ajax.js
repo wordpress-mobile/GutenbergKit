@@ -42,6 +42,11 @@ function configureAjaxUrl( siteURL ) {
 }
 
 function configureAjaxAuth( siteURL, authHeader ) {
+	if ( ! siteURL ) {
+		warn( 'Unable to configure AJAX auth without siteURL' );
+		return;
+	}
+
 	if ( ! authHeader ) {
 		warn( 'Unable to configure AJAX auth without authHeader' );
 		return;
@@ -52,8 +57,10 @@ function configureAjaxAuth( siteURL, authHeader ) {
 		return;
 	}
 
+	const siteOrigin = new URL( siteURL ).origin;
+
 	window.jQuery.ajaxPrefilter( function ( options ) {
-		if ( ! options.url?.startsWith( siteURL ) ) {
+		if ( ! isSameOrigin( options.url, siteOrigin ) ) {
 			return;
 		}
 
@@ -67,6 +74,25 @@ function configureAjaxAuth( siteURL, authHeader ) {
 	} );
 
 	debug( 'AJAX auth configured' );
+}
+
+/**
+ * Check whether a request URL shares the same origin as the site.
+ *
+ * Uses `URL.origin` so that scheme, host, and port must all match exactly,
+ * preventing credential leakage to lookalike domains (e.g.
+ * `https://example.com.evil.com`).
+ *
+ * @param {string} requestUrl The URL of the outgoing request.
+ * @param {string} siteOrigin The origin derived from `siteURL`.
+ * @return {boolean} Whether the request targets the same origin.
+ */
+function isSameOrigin( requestUrl, siteOrigin ) {
+	try {
+		return new URL( requestUrl ).origin === siteOrigin;
+	} catch {
+		return false;
+	}
 }
 
 /**
