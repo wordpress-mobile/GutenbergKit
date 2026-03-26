@@ -304,9 +304,9 @@ Some Gutenberg blocks and features use WordPress AJAX (`admin-ajax.php`) for fun
 
 3. **Set authentication header**: The `authHeader` configuration must be set. GutenbergKit injects this header into all AJAX requests since the WebView lacks WordPress authentication cookies.
 
-4. **Android: Configure `assetLoaderDomain`**: On Android, you must set the `assetLoaderDomain` to a domain that your WordPress site/plugin allows. This is because Android's WebViewAssetLoader serves the editor from a configurable domain, and AJAX requests must pass CORS validation on your server.
+4. **Android: Configure `assetLoaderDomain`**: On Android, you must set the `assetLoaderDomain` to a domain that your WordPress site/plugin allows. This is because Android's WebViewAssetLoader serves the editor from a configurable domain, and AJAX requests must pass CORS validation on your server. For example, the Jetpack mobile plugin allows requests from `android-app-assets.jetpack.com`.
 
-   For example, the Jetpack mobile plugin allows requests from `android-app-assets.jetpack.com`:
+**Configuration examples:**
 
 ```swift
 // iOS - siteURL and authHeader are required
