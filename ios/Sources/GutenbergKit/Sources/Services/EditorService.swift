@@ -123,20 +123,20 @@ public actor EditorService {
             self.progress = nil
         }
 
-        async let settings = try prepareEditorSettings()
-        async let assetBundle = try self.prepareAssetBundle()
-        async let preloadList = try preparePreloadList()
-
-        // Automatically clean up old asset bundles
-        try await onceEvery(.seconds(86_400)) {
-            try await self.cleanup()
+        if self.configuration.networkFallbackMode == .automatic {
+            do {
+                return try await fetchDependencies()
+            } catch {
+                guard isNetworkError(error) else { throw error }
+                return EditorDependencies(
+                    editorSettings: .undefined,
+                    assetBundle: .empty,
+                    preloadList: nil
+                )
+            }
+        } else {
+            return try await fetchDependencies()
         }
-
-        return try await EditorDependencies(
-            editorSettings: settings,
-            assetBundle: assetBundle,
-            preloadList: preloadList
-        )
     }
 
     /// Clear unused on-disk resources associated with this service's configuration.
@@ -165,6 +165,35 @@ public actor EditorService {
             total: self.progress!.total)
         self.progress = progress
         await self.progressCallback?(progress)
+    }
+
+    private func fetchDependencies() async throws -> EditorDependencies {
+        async let settings = try prepareEditorSettings()
+        async let assetBundle = try self.prepareAssetBundle()
+        async let preloadList = try preparePreloadList()
+
+        // Automatically clean up old asset bundles
+        try await onceEvery(.seconds(86_400)) {
+            try await self.cleanup()
+        }
+
+        return try await EditorDependencies(
+            editorSettings: settings,
+            assetBundle: assetBundle,
+            preloadList: preloadList
+        )
+    }
+
+    private func isNetworkError(_ error: Error) -> Bool {
+        guard let urlError = error as? URLError else { return false }
+        return [
+            .notConnectedToInternet,
+            .networkConnectionLost,
+            .timedOut,
+            .cannotFindHost,
+            .cannotConnectToHost,
+            .dnsLookupFailed,
+        ].contains(urlError.code)
     }
 
     private func prepareEditorSettings() async throws -> EditorSettings {

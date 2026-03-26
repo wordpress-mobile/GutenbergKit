@@ -4,6 +4,10 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -40,6 +44,7 @@ import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.model.GBKitGlobal
 import org.wordpress.gutenberg.services.EditorService
+import java.util.Collections
 import java.util.Locale
 
 private const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
@@ -91,6 +96,10 @@ class GutenbergView : WebView {
     private lateinit var dependencies: EditorDependencies
 
     private val handler = Handler(Looper.getMainLooper())
+    private var connectivityManager: ConnectivityManager? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    @Volatile private var lastKnownConnectivity: Boolean? = null
+    private val availableNetworks = Collections.synchronizedSet(mutableSetOf<Network>())
     var filePathCallback: ValueCallback<Array<Uri?>?>? = null
     val pickImageRequestCode = 1
 
@@ -614,6 +623,9 @@ class GutenbergView : WebView {
         Log.i("GutenbergView", "EditorLoaded received in native code")
         isEditorLoaded = true
         handler.post {
+            lastKnownConnectivity?.let { isConnected ->
+                if (!isConnected) dispatchConnectivityEvent(false)
+            }
             if(!didFireEditorLoaded) {
                 loadingListener?.onEditorReady()
                 editorDidBecomeAvailableListener?.onEditorAvailable(this)
@@ -859,8 +871,14 @@ class GutenbergView : WebView {
         }
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        startNetworkMonitoring()
+    }
+
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        stopNetworkMonitoring()
         clearConfig()
         this.stopLoading()
         FileCache.clearCache(context)
@@ -878,6 +896,51 @@ class GutenbergView : WebView {
         latestContentProvider = null
         handler.removeCallbacksAndMessages(null)
         this.destroy()
+    }
+
+    // Network Monitoring
+
+    private fun startNetworkMonitoring() {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+        connectivityManager = cm
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                availableNetworks.add(network)
+                handleConnectivityChange(true)
+            }
+            override fun onLost(network: Network) {
+                availableNetworks.remove(network)
+                handleConnectivityChange(availableNetworks.isNotEmpty())
+            }
+        }
+        networkCallback = callback
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+        cm.registerNetworkCallback(request, callback)
+    }
+
+    private fun stopNetworkMonitoring() {
+        try {
+            connectivityManager?.let { cm -> networkCallback?.let { cb -> cm.unregisterNetworkCallback(cb) } }
+        } catch (e: IllegalArgumentException) {
+            Log.w("GutenbergView", "NetworkCallback was not registered: ${e.message}")
+        }
+        connectivityManager = null
+        networkCallback = null
+        availableNetworks.clear()
+    }
+
+    private fun handleConnectivityChange(isConnected: Boolean) {
+        if (lastKnownConnectivity == isConnected) return
+        lastKnownConnectivity = isConnected
+        if (!isEditorLoaded) return
+        handler.post { dispatchConnectivityEvent(isConnected) }
+    }
+
+    private fun dispatchConnectivityEvent(isConnected: Boolean) {
+        val eventName = if (isConnected) "online" else "offline"
+        this.evaluateJavascript("window.dispatchEvent(new Event('$eventName'));", null)
     }
 
     companion object {

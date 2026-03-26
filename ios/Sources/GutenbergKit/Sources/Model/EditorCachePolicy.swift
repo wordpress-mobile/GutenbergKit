@@ -94,7 +94,7 @@ public enum EditorCachePolicy: Sendable {
     ///   (i.e., the cached response hasn't expired yet).
     /// - ``always``: Always returns `true` - cached responses are always used.
     ///
-    package func allowsResponseWith(date: Date, currentDate: Date = .now) -> Bool {
+    func allowsResponseWith(date: Date, currentDate: Date = .now) -> Bool {
         switch self {
         case .ignore: false
         case .maxAge(let interval): date.addingTimeInterval(interval) > currentDate

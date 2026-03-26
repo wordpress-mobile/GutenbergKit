@@ -1,11 +1,8 @@
 /**
  * WordPress dependencies
  */
-import {
-	EditorSnackbars,
-	ErrorBoundary,
-	AutosaveMonitor,
-} from '@wordpress/editor';
+import { ErrorBoundary, AutosaveMonitor } from '@wordpress/editor';
+import { SnackbarNotices } from '@wordpress/notices';
 
 /**
  * Internal dependencies
@@ -13,6 +10,7 @@ import {
 import Editor from '../editor';
 import { onEditorContentChanged } from '../../utils/bridge';
 import EditorLoadNotice from '../editor-load-notice';
+import OfflineIndicator from '../offline-indicator';
 import './style.scss';
 
 /**
@@ -28,9 +26,10 @@ export default function Layout( props ) {
 
 	return (
 		<ErrorBoundary canCopyContent>
+			<OfflineIndicator />
 			<AutosaveMonitor autosave={ onEditorContentChanged } />
 			<Editor { ...editorProps }>
-				<EditorSnackbars />
+				<SnackbarNotices className="gutenberg-kit-layout__snackbar" />
 			</Editor>
 			<EditorLoadNotice
 				className="gutenberg-kit-layout__load-notice"

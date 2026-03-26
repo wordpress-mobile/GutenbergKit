@@ -57,6 +57,11 @@ struct SitePreparationView: View {
                 Toggle("Enable Native Inserter", isOn: $viewModel.enableNativeInserter)
                 Toggle("Enable Network Logging", isOn: $viewModel.enableNetworkLogging)
 
+                Picker("Network Fallback", selection: $viewModel.networkFallbackMode) {
+                    Text("Disabled").tag(NetworkFallbackMode.disabled)
+                    Text("Automatic").tag(NetworkFallbackMode.automatic)
+                }
+
                 if viewModel.postTypes.isEmpty {
                     HStack {
                         Text("Post Type")
@@ -159,6 +164,16 @@ class SitePreparationViewModel {
         }
     }
 
+    var networkFallbackMode: NetworkFallbackMode {
+        get { editorConfiguration?.networkFallbackMode ?? .disabled }
+        set {
+            guard let config = editorConfiguration else { return }
+            editorConfiguration = config.toBuilder()
+                .setNetworkFallbackMode(newValue)
+                .build()
+        }
+    }
+
     var postTypes: [PostTypeDetails] = []
 
     var selectedPostTypeDetails: PostTypeDetails {
@@ -207,16 +222,17 @@ class SitePreparationViewModel {
                     guard let credentials = LocalWordPressCredentials.load() else {
                         throw AppError(errorDescription: "Local WordPress not configured.\n\nRun 'make wp-env-start' from the project root to set up a local WordPress environment.")
                     }
-                    let siteDetails = ConfiguredEditor(
-                        name: "Local WordPress",
-                        siteUrl: credentials.siteUrl,
-                        siteApiRoot: credentials.siteApiRoot,
-                        authHeader: credentials.authHeader
+                    let account = Account.selfHostedSite(
+                        id: 0,
+                        domain: credentials.siteUrl,
+                        username: credentials.username,
+                        password: credentials.appPassword,
+                        siteApiRoot: credentials.siteApiRoot
                     )
                     do {
-                        let parsedApiRoot = try ParsedUrl.parse(input: siteDetails.siteApiRoot)
+                        let parsedApiRoot = try ParsedUrl.parse(input: account.siteApiRoot)
                         let configuration = URLSessionConfiguration.ephemeral
-                        configuration.httpAdditionalHeaders = ["Authorization": siteDetails.authHeader]
+                        configuration.httpAdditionalHeaders = ["Authorization": account.authHeader]
                         let client = WordPressAPI(
                             urlSession: .init(configuration: configuration),
                             apiRootUrl: parsedApiRoot,
@@ -225,25 +241,38 @@ class SitePreparationViewModel {
                         self.client = client
 
                         try await self.loadPostTypes()
-                        let newConfiguration = try await self.loadConfiguration(for: siteDetails)
+                        let newConfiguration = try await self.loadConfiguration(for: account)
                         self.editorConfiguration = Self.applyDemoAppDefaults(to: newConfiguration)
                     } catch is URLError {
                         throw AppError(errorDescription: "Could not connect to Local WordPress at localhost:8888.\n\nThe wp-env server may not be running. Start it with 'make wp-env-start'.")
                     }
-                case .editorConfiguration(let siteDetails):
-                    let parsedApiRoot = try ParsedUrl.parse(input: siteDetails.siteApiRoot)
+                case .account(let account):
+                    let apiUrlResolver: ApiUrlResolver
+                    if account.isWpCom(), let siteId = Self.extractWpComSiteId(from: account.siteApiRoot) {
+                        apiUrlResolver = WpComDotOrgApiUrlResolver(siteId: siteId, baseUrl: .production)
+                    } else {
+                        let parsedApiRoot = try ParsedUrl.parse(input: account.siteApiRoot)
+                        apiUrlResolver = WpOrgSiteApiUrlResolver(apiRootUrl: parsedApiRoot)
+                    }
+
                     let configuration = URLSessionConfiguration.ephemeral
-                    configuration.httpAdditionalHeaders = ["Authorization": siteDetails.authHeader]
+                    configuration.httpAdditionalHeaders = ["Authorization": account.authHeader]
                     let client = WordPressAPI(
                         urlSession: .init(configuration: configuration),
-                        apiRootUrl: parsedApiRoot,
-                        authentication: .none,
+                        apiUrlResolver: apiUrlResolver,
+                        authenticationProvider: .staticWithAuth(auth: .none),
                     )
                     self.client = client
 
-                    try await self.loadPostTypes()
-                    let newConfiguration = try await self.loadConfiguration(for: siteDetails)
-                    self.editorConfiguration = Self.applyDemoAppDefaults(to: newConfiguration)
+                    do {
+                        try await self.loadPostTypes()
+                        let newConfiguration = try await self.loadConfiguration(for: account)
+                        self.editorConfiguration = Self.applyDemoAppDefaults(to: newConfiguration)
+                    } catch let error where Self.isNetworkError(error) {
+                        self.postTypes = [.post, .page]
+                        let fallback = Self.buildOfflineConfiguration(for: account)
+                        self.editorConfiguration = Self.applyDemoAppDefaults(to: fallback)
+                    }
                 }
             } catch {
                 self.error = error
@@ -255,6 +284,34 @@ class SitePreparationViewModel {
         configuration.toBuilder()
             .setNativeInserterEnabled(true)
             .build()
+    }
+
+    private static func isNetworkError(_ error: Error) -> Bool {
+        if let wpError = error as? WpApiError,
+           case .RequestExecutionFailed(_, _, .deviceIsOfflineError, _, _) = wpError {
+            return true
+        }
+        return error is URLError
+    }
+
+    private static func buildOfflineConfiguration(for account: Account) -> EditorConfiguration {
+        EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: URL(string: account.siteUrl)!,
+            siteApiRoot: URL(string: account.siteApiRoot)!
+        )
+        // Optimistically enable theme styles and plugins so that
+        // previously-cached assets from an earlier online session can still be
+        // used. For sites that don't support these features, this is safe
+        // because EditorService won't be able to fetch the remote manifests
+        // while offline and the automatic network fallback will gracefully
+        // degrade to an empty asset bundle.
+        .setShouldUseThemeStyles(true)
+        .setShouldUsePlugins(true)
+        .setNetworkFallbackMode(.automatic)
+        .setAuthHeader(account.authHeader)
+        .setLogLevel(.debug)
+        .build()
     }
 
     /// Prepares the editor by caching all resources and preparing an `EditorDependencies` object to inject into the editor.
@@ -341,23 +398,54 @@ class SitePreparationViewModel {
     }
 
     @MainActor
-    private func loadConfiguration(for config: ConfiguredEditor) async throws -> EditorConfiguration {
+    private func loadConfiguration(for account: Account) async throws -> EditorConfiguration {
 
         let apiRoot = try await client!.apiRoot.get().data
 
+        // For WP.com sites, extract the site ID from the stored API root and
+        // configure the namespace so the JS middleware inserts it into paths.
+        let wpComSiteId = Self.extractWpComSiteId(from: account.siteApiRoot)
+
+        // Use the numeric site ID for WP.com route checks, or the domain slug for self-hosted
+        let siteIdentifier = wpComSiteId ?? URL(string: account.siteUrl)?.host ?? account.siteUrl
+
         let canUsePlugins = apiRoot.hasRoute(route: "/wpcom/v2/editor-assets")
+            || apiRoot.hasRoute(route: "/wpcom/v2/sites/\(siteIdentifier)/editor-assets")
         let canUseEditorStyles = apiRoot.hasRoute(route: "/wp-block-editor/v1/settings")
+            || apiRoot.hasRoute(route: "/wp-block-editor/v1/sites/\(siteIdentifier)/settings")
+        let siteApiRoot: URL
+        let siteApiNamespace: [String]
+        if let wpComSiteId {
+            siteApiRoot = URL(string: "https://public-api.wordpress.com/")!
+            siteApiNamespace = ["sites/\(wpComSiteId)/"]
+        } else {
+            siteApiRoot = URL(string: account.siteApiRoot)!
+            siteApiNamespace = []
+        }
 
         return EditorConfigurationBuilder(
             postType: selectedPostTypeDetails,
             siteURL: URL(string: apiRoot.siteUrlString())!,
-            siteApiRoot: URL(string: config.siteApiRoot)!
+            siteApiRoot: siteApiRoot
         )
         .setShouldUseThemeStyles(canUseEditorStyles)
         .setShouldUsePlugins(canUsePlugins)
-        .setAuthHeader(config.authHeader)
+        .setSiteApiNamespace(siteApiNamespace)
+        .setAuthHeader(account.authHeader)
         .setLogLevel(.debug)
         .build()
+    }
+
+    /// Extract the numeric WP.com site ID from a WP.com API root URL.
+    /// e.g. "https://public-api.wordpress.com/wp/v2/sites/1562023" -> "1562023"
+    private static func extractWpComSiteId(from siteApiRoot: String) -> String? {
+        guard siteApiRoot.contains("public-api.wordpress.com") else { return nil }
+        let pattern = #"sites/(\d+)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: siteApiRoot, range: NSRange(siteApiRoot.startIndex..., in: siteApiRoot)),
+              let range = Range(match.range(at: 1), in: siteApiRoot)
+        else { return nil }
+        return String(siteApiRoot[range])
     }
 
     @MainActor

@@ -1,0 +1,10 @@
+diff --git a/node_modules/mousetrap/plugins/global-bind/mousetrap-global-bind.js b/node_modules/mousetrap/plugins/global-bind/mousetrap-global-bind.js
+index 6b86a99..15f0c59 100644
+--- a/node_modules/mousetrap/plugins/global-bind/mousetrap-global-bind.js
++++ b/node_modules/mousetrap/plugins/global-bind/mousetrap-global-bind.js
+@@ -43,4 +43,4 @@
+     };
+ 
+     Mousetrap.init();
+-}) (typeof Mousetrap !== "undefined" ? Mousetrap : undefined);
++}) (typeof require !== "undefined" ? require("mousetrap") : typeof Mousetrap !== "undefined" ? Mousetrap : undefined);

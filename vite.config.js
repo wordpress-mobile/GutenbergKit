@@ -3,7 +3,6 @@
  */
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import MagicString from 'magic-string';
 
 /**
@@ -11,18 +10,27 @@ import MagicString from 'magic-string';
  */
 import { defaultRequestToExternal } from '@wordpress/dependency-extraction-webpack-plugin/lib/util';
 
+// Stub for Node.js modules imported by PostCSS via @wordpress/block-editor.
+// PostCSS marks these as `false` in its `browser` field, but the direct file
+// path imports (e.g., `postcss/lib/processor`) bypass that field.
+const nodeModuleStub = new URL( './src/stubs/node-modules.js', import.meta.url )
+	.pathname;
+
 export default defineConfig( {
 	base: '',
 	build: {
 		outDir: '../dist',
 		target: 'esnext',
 	},
-	plugins: [
-		nodePolyfills(),
-		react(),
-		wordPressExternals(),
-		reactDevTools(),
-	],
+	resolve: {
+		alias: {
+			path: nodeModuleStub,
+			fs: nodeModuleStub,
+			url: nodeModuleStub,
+			'source-map-js': nodeModuleStub,
+		},
+	},
+	plugins: [ react(), wordPressExternals(), reactDevTools() ],
 	root: 'src',
 	css: {
 		preprocessorOptions: {

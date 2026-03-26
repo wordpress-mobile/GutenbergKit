@@ -24,6 +24,24 @@ android {
     namespace = "com.example.gutenbergkit"
     compileSdk = 34
 
+    // Copy shared OAuth credentials into Android assets so they're available at runtime.
+    // Only registered when the file exists — the app handles the missing-file case gracefully.
+    val oauthCredentialsFile = rootProject.file("../wp_com_oauth_credentials.json")
+    if (oauthCredentialsFile.exists()) {
+        val copyOAuthCredentials by tasks.registering(Copy::class) {
+            from(oauthCredentialsFile)
+            into(layout.buildDirectory.dir("generated/oauth-assets"))
+        }
+
+        sourceSets["main"].assets.srcDir(copyOAuthCredentials.map { it.destinationDir })
+
+        applicationVariants.configureEach {
+            mergeAssetsProvider.configure {
+                dependsOn(copyOAuthCredentials)
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "com.example.gutenbergkit"
         minSdk = 24
@@ -70,6 +88,7 @@ dependencies {
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.recyclerview)
     implementation(libs.wordpress.rs.android)
+    implementation(libs.okhttp)
     implementation(project(":Gutenberg"))
 
     // Compose
@@ -83,8 +102,4 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(libs.androidx.espresso.web)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

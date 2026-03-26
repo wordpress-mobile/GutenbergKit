@@ -3,6 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <application
+        android:name=".GutenbergKitApplication"
         android:allowBackup="true"
         android:networkSecurityConfig="@xml/network_security_config"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -29,6 +30,16 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:host="authorized"
+                    android:scheme="gutenbergkit" >
+                </data>
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="wpcom-authorized"
                     android:scheme="gutenbergkit" >
                 </data>
             </intent-filter>

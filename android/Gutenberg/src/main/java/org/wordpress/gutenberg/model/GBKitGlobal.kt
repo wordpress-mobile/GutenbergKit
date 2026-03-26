@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.encodeToJsonElement
 import org.wordpress.gutenberg.encodeForEditor
 
 /**
@@ -60,7 +61,9 @@ data class GBKitGlobal(
     /** The raw editor settings JSON from the WordPress REST API. */
     val editorSettings: JsonElement?,
     /** Pre-fetched API responses JSON for faster editor initialization. */
-    val preloadData: JsonElement? = null
+    val preloadData: JsonElement? = null,
+    /** Pre-fetched editor assets (scripts, styles, allowed block types) for plugin loading. */
+    val editorAssets: JsonElement? = null
 ) {
     /**
      * The post data passed to the editor.
@@ -111,7 +114,14 @@ data class GBKitGlobal(
                 ),
                 enableNetworkLogging = configuration.enableNetworkLogging,
                 editorSettings = dependencies?.editorSettings?.jsonValue,
-                preloadData = dependencies?.preloadList?.build()
+                preloadData = dependencies?.preloadList?.build(),
+                editorAssets = dependencies?.assetBundle?.let { bundle ->
+                    try {
+                        json.encodeToJsonElement(bundle.getEditorRepresentation())
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
             )
         }
     }

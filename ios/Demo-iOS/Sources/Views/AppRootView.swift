@@ -8,9 +8,6 @@ struct AppRootView: View {
     @EnvironmentObject
     private var configurationStorage: ConfigurationStorage
 
-    @EnvironmentObject
-    private var authenticationManager: AuthenticationManager
-
     @State private var configurations: [ConfigurationItem] = [.bundledEditor]
     @State private var siteUrlInput = ""
 
@@ -36,10 +33,6 @@ struct AppRootView: View {
         })
     }
 
-    private func deleteConfiguration(_ config: ConfigurationItem) {
-        configurations.removeAll { $0.id == config.id }
-        configurationStorage.saveConfigurations(configurations)
-    }
 }
 
 struct AppError: LocalizedError {

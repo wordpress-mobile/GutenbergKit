@@ -43,8 +43,6 @@ enum EditorUITestHelpers {
         XCTAssertTrue(addBlockButton.waitForExistence(timeout: 10), "Add block button not found in WebView toolbar")
         addBlockButton.tap()
 
-        // Use firstMatch because the same block can appear in multiple
-        // inserter sections (e.g. most-used and its category section).
         let blockOption = app.buttons[name].firstMatch
         XCTAssertTrue(blockOption.waitForExistence(timeout: 10), "\(name) block not found in block inserter")
         blockOption.tap()

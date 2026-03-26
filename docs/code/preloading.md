@@ -264,6 +264,30 @@ site (for instance, the bundled editor in the demo app, or you just want an edit
 
 The JavaScript side falls back to `defaultPreloadData` which contains minimal type definitions to allow basic editor functionality.
 
+## Network Fallback Mode
+
+When `EditorConfiguration.networkFallbackMode` is set to `.automatic`, the editor gracefully handles network failures for sites that exist but are temporarily unreachable. Unlike offline mode (which skips networking entirely), network fallback mode attempts to fetch dependencies normally and only falls back to the bundled editor when a network error occurs.
+
+```swift
+let config = EditorConfigurationBuilder(
+    postType: .post,
+    siteURL: siteURL,
+    siteApiRoot: apiRoot
+)
+.setNetworkFallbackMode(.automatic)
+.build()
+```
+
+When a network error is caught (e.g., `notConnectedToInternet`, `timedOut`, `cannotConnectToHost`), `EditorService.prepare()` returns empty dependencies — the same as offline mode — so the bundled editor loads instead of showing an error. Non-network errors (e.g., decoding failures) still propagate normally.
+
+On the JavaScript side, an `OfflineIndicator` component displays a "Working Offline" status bar at the top of the editor when the device loses connectivity. The indicator automatically appears and disappears based on the browser's `online`/`offline` events.
+
+| Mode                              | Use case                                | Behavior                                                    |
+| --------------------------------- | --------------------------------------- | ----------------------------------------------------------- |
+| `isOfflineModeEnabled: true`      | No site (demo app, standalone editor)   | Skip all networking, use bundled defaults                   |
+| `networkFallbackMode: .automatic` | Site exists but may be offline          | Try network, fall back to bundled editor on network failure |
+| `networkFallbackMode: .disabled`  | Site exists, network required (default) | Network failures are fatal errors                           |
+
 ## Progress Reporting
 
 The preloading system reports its progress to give the user high-quality feedback about the loading process - if the user loads the

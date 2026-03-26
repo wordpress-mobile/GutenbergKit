@@ -24,10 +24,11 @@ class RESTAPIRepository(
     private val json = Json { ignoreUnknownKeys = true }
 
     private val apiRoot = configuration.siteApiRoot.trimEnd('/')
-    private val editorSettingsUrl = "$apiRoot$EDITOR_SETTINGS_PATH"
-    private val activeThemeUrl = "$apiRoot$ACTIVE_THEME_PATH"
-    private val siteSettingsUrl = "$apiRoot$SITE_SETTINGS_PATH"
-    private val postTypesUrl = "$apiRoot$POST_TYPES_PATH"
+    private val namespace = configuration.siteApiNamespace.firstOrNull()
+    private val editorSettingsUrl = buildNamespacedUrl(EDITOR_SETTINGS_PATH)
+    private val activeThemeUrl = buildNamespacedUrl(ACTIVE_THEME_PATH)
+    private val siteSettingsUrl = buildNamespacedUrl(SITE_SETTINGS_PATH)
+    private val postTypesUrl = buildNamespacedUrl(POST_TYPES_PATH)
 
     /**
      * Cleanup any expired cache entries.
@@ -72,7 +73,7 @@ class RESTAPIRepository(
     }
 
     private fun buildPostUrl(id: Int): String {
-        return "$apiRoot/wp/v2/posts/$id?context=edit"
+        return buildNamespacedUrl("/wp/v2/posts/$id?context=edit")
     }
 
     // MARK: Editor Settings
@@ -139,7 +140,7 @@ class RESTAPIRepository(
     }
 
     private fun buildPostTypeUrl(type: String): String {
-        return "$apiRoot/wp/v2/types/$type?context=edit"
+        return buildNamespacedUrl("/wp/v2/types/$type?context=edit")
     }
 
     // MARK: GET Active Theme
@@ -210,6 +211,26 @@ class RESTAPIRepository(
         )
         cache.store(urlResponse, url, method)
         return urlResponse
+    }
+
+    /**
+     * Builds a URL from the API root and path, inserting the site API namespace
+     * after the version segment if one is configured.
+     *
+     * For example, with namespace `sites/123/` and path `/wp/v2/types`:
+     * the result is `$apiRoot/wp/v2/sites/123/types`.
+     */
+    private fun buildNamespacedUrl(path: String): String {
+        if (namespace == null) {
+            return "$apiRoot$path"
+        }
+
+        val parts = path.removePrefix("/").split("/", limit = 3)
+        if (parts.size < 3) {
+            return "$apiRoot$path"
+        }
+
+        return "$apiRoot/${parts[0]}/${parts[1]}/$namespace${parts[2]}"
     }
 
     companion object {

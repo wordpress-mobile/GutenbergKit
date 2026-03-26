@@ -7,7 +7,7 @@ import { setLocaleData } from '@wordpress/i18n';
  * Internal dependencies
  */
 import { getGBKit } from './bridge';
-import { error, debug } from './logger';
+import { warn, debug } from './logger';
 
 const DEFAULT_LOCALE = 'en';
 
@@ -40,7 +40,9 @@ async function loadTranslations( locale ) {
 		);
 		setLocaleData( translations );
 	} catch ( err ) {
-		// Continue with default locale
-		error( 'Error loading translations', err );
+		warn(
+			`Translations unavailable for locale "${ locale }". Falling back to English.`
+		);
+		debug( 'Translation loading error details:', err );
 	}
 }

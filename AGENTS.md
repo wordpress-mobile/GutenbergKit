@@ -78,11 +78,7 @@ These commands ensure code quality and prevent lint errors from blocking commits
 
 ### Commit and Pull Request Guidelines
 
-When creating pull requests:
-
-1. **Use the PR template**: Read `.github/PULL_REQUEST_TEMPLATE.md` to get the current template structure and follow it when writing the PR body.
-2. **Assign a label**: Use `gh label list` to retrieve available labels and select the most relevant one for the PR.
-3. **Use Conventional Commits**: Follow the Conventional Commits specification for commit messages (e.g. `feat: add new block type`, `fix: resolve toolbar bug`).
+Follow the conventions documented in [Developer Workflows](./docs/code/developer-workflows.md), including Conventional Commits prefixes, PR template usage, and label assignment.
 
 ### E2E Test Interaction Guidelines
 

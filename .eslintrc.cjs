@@ -5,7 +5,6 @@ module.exports = {
 		browser: true,
 		es2020: true,
 	},
-	ignorePatterns: [ 'android', 'dist', 'ios' ],
 	parserOptions: {
 		ecmaVersion: 'latest',
 		sourceType: 'module',

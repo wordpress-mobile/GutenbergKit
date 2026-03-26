@@ -35,8 +35,9 @@ struct GutenbergApp: App {
     @StateObject
     private var navigation = Navigation()
 
-    private let configurationStorage = ConfigurationStorage()
-    private let authenticationManager = AuthenticationManager()
+    // swiftlint:disable:next force_try
+    // ConfigurationStorage uses SecureEnclave, which is available on all supported devices and Simulator.
+    private let configurationStorage = try! ConfigurationStorage()
 
     init() {
         // Configure logger for GutenbergKit
@@ -63,7 +64,6 @@ struct GutenbergApp: App {
         }
         .environment(\.navigation, navigation)
         .environmentObject(configurationStorage)
-        .environmentObject(authenticationManager)
     }
 }
 
