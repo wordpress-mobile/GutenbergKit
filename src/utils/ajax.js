@@ -33,10 +33,11 @@ function configureAjaxUrl( siteURL ) {
 		return;
 	}
 
+	const ajaxUrl = `${ siteURL }/wp-admin/admin-ajax.php`;
 	// Global used within WordPress admin pages
-	window.ajaxurl = `${ siteURL }/wp-admin/admin-ajax.php`;
+	window.ajaxurl = ajaxUrl;
 	// Global used by WordPress' JavaScript API
-	window.wp.ajax.settings.url = `${ siteURL }/wp-admin/admin-ajax.php`;
+	window.wp.ajax.settings.url = ajaxUrl;
 
 	debug( 'AJAX URL configured' );
 }
