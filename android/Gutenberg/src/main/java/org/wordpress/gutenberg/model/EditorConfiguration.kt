@@ -97,7 +97,20 @@ data class EditorConfiguration(
         fun setEditorAssetsEndpoint(editorAssetsEndpoint: String?) = apply { this.editorAssetsEndpoint = editorAssetsEndpoint }
         fun setEnableNetworkLogging(enableNetworkLogging: Boolean) = apply { this.enableNetworkLogging = enableNetworkLogging }
         fun setEnableOfflineMode(enableOfflineMode: Boolean) = apply { this.enableOfflineMode = enableOfflineMode }
-        fun setAssetLoaderDomain(assetLoaderDomain: String?) = apply { this.assetLoaderDomain = assetLoaderDomain }
+        fun setAssetLoaderDomain(assetLoaderDomain: String?) = apply {
+            if (assetLoaderDomain != null) {
+                require(!assetLoaderDomain.contains("://")) {
+                    "assetLoaderDomain must be a bare domain (e.g., \"assets.example.com\"), not a URL"
+                }
+                require(!assetLoaderDomain.contains("/")) {
+                    "assetLoaderDomain must be a bare domain without a path"
+                }
+                require(assetLoaderDomain.isNotBlank()) {
+                    "assetLoaderDomain must not be blank"
+                }
+            }
+            this.assetLoaderDomain = assetLoaderDomain
+        }
 
         fun build(): EditorConfiguration = EditorConfiguration(
             title = title,
