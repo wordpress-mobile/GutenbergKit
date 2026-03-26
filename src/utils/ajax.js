@@ -47,7 +47,12 @@ function configureAjaxAuth( siteURL, authHeader ) {
 		return;
 	}
 
-	window.jQuery?.ajaxPrefilter( function ( options ) {
+	if ( ! window.jQuery?.ajaxPrefilter ) {
+		warn( 'Unable to configure AJAX auth: jQuery not available' );
+		return;
+	}
+
+	window.jQuery.ajaxPrefilter( function ( options ) {
 		if ( ! options.url?.startsWith( siteURL ) ) {
 			return;
 		}

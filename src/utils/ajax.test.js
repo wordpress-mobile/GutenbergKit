@@ -280,7 +280,7 @@ describe( 'configureAjax', () => {
 	} );
 
 	describe( 'Edge cases', () => {
-		it( 'should handle missing jQuery gracefully', () => {
+		it( 'should warn when jQuery is missing', () => {
 			bridge.getGBKit.mockReturnValue( {
 				siteURL: 'https://example.com',
 				authHeader: 'Bearer no-jquery',
@@ -292,12 +292,15 @@ describe( 'configureAjax', () => {
 			expect( logger.debug ).toHaveBeenCalledWith(
 				'AJAX URL configured'
 			);
-			expect( logger.debug ).toHaveBeenCalledWith(
+			expect( logger.warn ).toHaveBeenCalledWith(
+				'Unable to configure AJAX auth: jQuery not available'
+			);
+			expect( logger.debug ).not.toHaveBeenCalledWith(
 				'AJAX auth configured'
 			);
 		} );
 
-		it( 'should handle undefined jQuery', () => {
+		it( 'should warn when jQuery is undefined', () => {
 			bridge.getGBKit.mockReturnValue( {
 				siteURL: 'https://example.com',
 				authHeader: 'Bearer undefined-jquery',
@@ -309,7 +312,10 @@ describe( 'configureAjax', () => {
 			expect( logger.debug ).toHaveBeenCalledWith(
 				'AJAX URL configured'
 			);
-			expect( logger.debug ).toHaveBeenCalledWith(
+			expect( logger.warn ).toHaveBeenCalledWith(
+				'Unable to configure AJAX auth: jQuery not available'
+			);
+			expect( logger.debug ).not.toHaveBeenCalledWith(
 				'AJAX auth configured'
 			);
 		} );
