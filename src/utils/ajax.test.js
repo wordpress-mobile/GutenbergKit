@@ -461,7 +461,7 @@ describe( 'configureAjax', () => {
 			expect( global.window.wp.media.post ).toBe( mockPost );
 		} );
 
-		it( 'should initialize wp.media if it does not exist', () => {
+		it( 'should not initialize wp.media when wp.ajax.send is unavailable', () => {
 			bridge.getGBKit.mockReturnValue( {
 				siteURL: 'https://example.com',
 				authHeader: null,
@@ -471,7 +471,47 @@ describe( 'configureAjax', () => {
 
 			configureAjax();
 
-			expect( global.window.wp.media ).toBeDefined();
+			expect( global.window.wp.media ).toBeUndefined();
+			expect( logger.warn ).toHaveBeenCalledWith(
+				'Unable to configure media AJAX: wp.ajax.send/post not available'
+			);
+		} );
+
+		it( 'should warn when wp.ajax.send or wp.ajax.post are not available', () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteURL: 'https://example.com',
+				authHeader: null,
+			} );
+
+			// wp.ajax exists but without send/post (e.g., wp-util.js failed to load)
+			global.window.wp = {
+				ajax: {
+					settings: {},
+				},
+			};
+
+			configureAjax();
+
+			expect( logger.warn ).toHaveBeenCalledWith(
+				'Unable to configure media AJAX: wp.ajax.send/post not available'
+			);
+			expect( global.window.wp.media ).toBeUndefined();
+		} );
+	} );
+
+	describe( 'Invalid siteURL handling', () => {
+		it( 'should warn when siteURL is not a valid URL for auth config', () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteURL: 'not-a-url',
+				authHeader: 'Bearer test-token',
+			} );
+
+			configureAjax();
+
+			expect( logger.warn ).toHaveBeenCalledWith(
+				'Unable to configure AJAX auth: invalid siteURL'
+			);
+			expect( mockJQueryAjaxPrefilter ).not.toHaveBeenCalled();
 		} );
 	} );
 } );

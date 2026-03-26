@@ -57,7 +57,13 @@ function configureAjaxAuth( siteURL, authHeader ) {
 		return;
 	}
 
-	const siteOrigin = new URL( siteURL ).origin;
+	let siteOrigin;
+	try {
+		siteOrigin = new URL( siteURL ).origin;
+	} catch {
+		warn( 'Unable to configure AJAX auth: invalid siteURL' );
+		return;
+	}
 
 	window.jQuery.ajaxPrefilter( function ( options ) {
 		if ( ! isSameOrigin( options.url, siteOrigin ) ) {
@@ -103,6 +109,13 @@ function isSameOrigin( requestUrl, siteOrigin ) {
  * @see https://github.com/WordPress/wordpress-develop/blob/117af7e/src/js/_enqueues/wp/media/models.js#L134
  */
 function configureMediaAjax() {
+	if ( ! window.wp.ajax.send || ! window.wp.ajax.post ) {
+		warn(
+			'Unable to configure media AJAX: wp.ajax.send/post not available'
+		);
+		return;
+	}
+
 	window.wp.media = window.wp.media || {};
 	window.wp.media.ajax = window.wp.ajax.send;
 	window.wp.media.post = window.wp.ajax.post;
