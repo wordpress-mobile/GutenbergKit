@@ -79,9 +79,15 @@ public struct GBKitGlobal: Sendable, Codable {
     
     /// Whether to log network requests in the JavaScript console.
     let enableNetworkLogging: Bool
-    
+
+    /// Port the local HTTP server is listening on for native media uploads.
+    let nativeUploadPort: Int?
+
+    /// Per-session auth token for requests to the local upload server.
+    let nativeUploadToken: String?
+
     let editorSettings: JSON?
-    
+
     let preloadData: JSON?
 
     /// Pre-fetched editor assets (scripts, styles, allowed block types) for plugin loading.
@@ -92,9 +98,13 @@ public struct GBKitGlobal: Sendable, Codable {
     /// - Parameters:
     ///   - configuration: The editor configuration.
     ///   - dependencies: The pre-fetched editor dependencies (unused but reserved for future use).
+    ///   - nativeUploadPort: Port of the local upload server, or nil if not running.
+    ///   - nativeUploadToken: Auth token for the local upload server, or nil if not running.
     public init(
         configuration: EditorConfiguration,
-        dependencies: EditorDependencies
+        dependencies: EditorDependencies,
+        nativeUploadPort: Int? = nil,
+        nativeUploadToken: String? = nil
     ) throws {
         self.siteURL = configuration.isOfflineModeEnabled ? nil : configuration.siteURL
         self.siteApiRoot = configuration.isOfflineModeEnabled ? nil : configuration.siteApiRoot
@@ -117,6 +127,8 @@ public struct GBKitGlobal: Sendable, Codable {
         )
         self.logLevel = configuration.logLevel.rawValue
         self.enableNetworkLogging = configuration.enableNetworkLogging
+        self.nativeUploadPort = nativeUploadPort
+        self.nativeUploadToken = nativeUploadToken
         self.editorSettings = dependencies.editorSettings.jsonValue
         self.preloadData = try dependencies.preloadList?.build()
         self.editorAssets = Self.buildEditorAssets(from: dependencies.assetBundle)

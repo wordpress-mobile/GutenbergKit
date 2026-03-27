@@ -1,5 +1,5 @@
 {
-  "originHash" : "e4f07fb846fe4e484ddbb0d1c5783d0a62ffee053e850e8a2abe0b8e0323bbd4",
+  "originHash" : "6db3023106dfc39818a2a045dfbd8be56ad662c039842cf91e1f21a9bd7ce81f",
   "pins" : [
     {
       "identity" : "svgview",
@@ -17,6 +17,15 @@
       "state" : {
         "revision" : "aa85ee96017a730031bafe411cde24a08a17a9c9",
         "version" : "2.8.8"
+      }
+    },
+    {
+      "identity" : "wordpress-rs",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Automattic/wordpress-rs",
+      "state" : {
+        "branch" : "alpha-20260313",
+        "revision" : "cde2fda82257f4ac7b81543d5b831bb267d4e52c"
       }
     }
   ],
