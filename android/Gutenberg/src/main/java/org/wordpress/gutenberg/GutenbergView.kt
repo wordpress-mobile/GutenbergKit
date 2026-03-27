@@ -114,6 +114,7 @@ class GutenbergView : FrameLayout {
     /** Optional delegate for customizing media upload behavior (resize, transcode, custom upload). */
     var mediaUploadDelegate: MediaUploadDelegate? = null
         set(value) {
+            if (field === value) return
             field = value
             // Stop any previously running server before starting a new one.
             uploadServer?.stop()
