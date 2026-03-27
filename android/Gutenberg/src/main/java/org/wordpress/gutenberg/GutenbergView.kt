@@ -111,6 +111,24 @@ class GutenbergView : FrameLayout {
 
     var requestInterceptor: GutenbergRequestInterceptor = DefaultGutenbergRequestInterceptor()
 
+    /** Optional delegate for customizing media upload behavior (resize, transcode, custom upload). */
+    var mediaUploadDelegate: MediaUploadDelegate? = null
+        set(value) {
+            field = value
+            // Stop any previously running server before starting a new one.
+            uploadServer?.stop()
+            uploadServer = null
+            // (Re)start the upload server so it captures the delegate.
+            // This handles the common case where the delegate is set after
+            // construction but before the editor finishes loading.
+            if (value != null) {
+                startUploadServer()
+            }
+        }
+
+    private var uploadServer: MediaUploadServer? = null
+    private val uploadHttpClient: okhttp3.OkHttpClient by lazy { okhttp3.OkHttpClient() }
+
     private var onFileChooserRequested: ((Intent, Int) -> Unit)? = null
     private var contentChangeListener: ContentChangeListener? = null
     private var historyChangeListener: HistoryChangeListener? = null
@@ -579,7 +597,12 @@ class GutenbergView : FrameLayout {
     }
 
     private fun setGlobalJavaScriptVariables() {
-        val gbKit = GBKitGlobal.fromConfiguration(configuration, dependencies)
+        val gbKit = GBKitGlobal.fromConfiguration(
+            configuration,
+            dependencies,
+            nativeUploadPort = uploadServer?.port,
+            nativeUploadToken = uploadServer?.token
+        )
         val gbKitJson = gbKit.toJsonString()
         val gbKitConfig = """
             window.GBKit = $gbKitJson;
@@ -589,6 +612,26 @@ class GutenbergView : FrameLayout {
         webView.evaluateJavascript(gbKitConfig, null)
     }
 
+
+    private fun startUploadServer() {
+        if (configuration.siteApiRoot.isEmpty() || configuration.authHeader.isEmpty()) return
+
+        try {
+            val defaultUploader = DefaultMediaUploader(
+                httpClient = uploadHttpClient,
+                siteApiRoot = configuration.siteApiRoot,
+                authHeader = configuration.authHeader,
+                siteApiNamespace = configuration.siteApiNamespace.toList()
+            )
+            uploadServer = MediaUploadServer(
+                uploadDelegate = mediaUploadDelegate,
+                defaultUploader = defaultUploader,
+                cacheDir = context.cacheDir
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to start upload server", e)
+        }
+    }
 
     fun clearConfig() {
         val jsCode = """
@@ -1018,6 +1061,8 @@ class GutenbergView : FrameLayout {
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         stopNetworkMonitoring()
+        uploadServer?.stop()
+        uploadServer = null
         clearConfig()
         // Cancel in-flight animations to prevent withEndAction callbacks from
         // firing on detached views.
@@ -1091,6 +1136,8 @@ class GutenbergView : FrameLayout {
     }
 
     companion object {
+        private const val TAG = "GutenbergView"
+
         /** Hosts that are safe to serve assets over HTTP (local development only). */
         private val LOCAL_HOSTS = setOf("localhost", "127.0.0.1", "10.0.2.2")
 
