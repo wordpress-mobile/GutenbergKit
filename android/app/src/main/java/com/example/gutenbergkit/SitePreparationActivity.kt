@@ -145,8 +145,8 @@ class SitePreparationActivity : ComponentActivity() {
                 SitePreparationScreen(
                     viewModel = viewModel,
                     onClose = { finish() },
-                    onStartEditor = { configuration, dependencies ->
-                        launchEditor(configuration, dependencies)
+                    onStartEditor = { configuration, dependencies, enableNativeMediaUpload ->
+                        launchEditor(configuration, dependencies, enableNativeMediaUpload)
                     }
                 )
             }
@@ -155,10 +155,12 @@ class SitePreparationActivity : ComponentActivity() {
 
     private fun launchEditor(
         configuration: EditorConfiguration,
-        dependencies: org.wordpress.gutenberg.model.EditorDependencies?
+        dependencies: org.wordpress.gutenberg.model.EditorDependencies?,
+        enableNativeMediaUpload: Boolean
     ) {
         val intent = Intent(this, EditorActivity::class.java).apply {
             putExtra(MainActivity.EXTRA_CONFIGURATION, configuration)
+            putExtra(EditorActivity.EXTRA_ENABLE_NATIVE_MEDIA_UPLOAD, enableNativeMediaUpload)
 
             // Serialize dependencies to disk and pass the file path
             if (dependencies != null) {
@@ -175,7 +177,7 @@ class SitePreparationActivity : ComponentActivity() {
 fun SitePreparationScreen(
     viewModel: SitePreparationViewModel,
     onClose: () -> Unit,
-    onStartEditor: (EditorConfiguration, org.wordpress.gutenberg.model.EditorDependencies?) -> Unit
+    onStartEditor: (EditorConfiguration, org.wordpress.gutenberg.model.EditorDependencies?, Boolean) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -201,7 +203,7 @@ fun SitePreparationScreen(
                         Button(
                             onClick = {
                                 viewModel.buildConfiguration()?.let { config ->
-                                    onStartEditor(config, uiState.editorDependencies)
+                                    onStartEditor(config, uiState.editorDependencies, uiState.enableNativeMediaUpload)
                                 }
                             },
                             modifier = Modifier.padding(end = 8.dp)
@@ -264,6 +266,8 @@ private fun LoadedView(
             FeatureConfigurationCard(
                 enableNativeInserter = uiState.enableNativeInserter,
                 onEnableNativeInserterChange = viewModel::setEnableNativeInserter,
+                enableNativeMediaUpload = uiState.enableNativeMediaUpload,
+                onEnableNativeMediaUploadChange = viewModel::setEnableNativeMediaUpload,
                 enableNetworkLogging = uiState.enableNetworkLogging,
                 onEnableNetworkLoggingChange = viewModel::setEnableNetworkLogging,
                 postType = uiState.postType,
@@ -345,6 +349,8 @@ private fun DependenciesStatusCard(hasDependencies: Boolean) {
 private fun FeatureConfigurationCard(
     enableNativeInserter: Boolean,
     onEnableNativeInserterChange: (Boolean) -> Unit,
+    enableNativeMediaUpload: Boolean,
+    onEnableNativeMediaUploadChange: (Boolean) -> Unit,
     enableNetworkLogging: Boolean,
     onEnableNetworkLoggingChange: (Boolean) -> Unit,
     postType: String,
@@ -368,6 +374,21 @@ private fun FeatureConfigurationCard(
                 Switch(
                     checked = enableNativeInserter,
                     onCheckedChange = onEnableNativeInserterChange
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // Enable Native Media Upload Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Enable Native Media Upload")
+                Switch(
+                    checked = enableNativeMediaUpload,
+                    onCheckedChange = onEnableNativeMediaUploadChange
                 )
             }
 

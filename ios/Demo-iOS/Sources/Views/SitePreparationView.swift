@@ -55,6 +55,7 @@ struct SitePreparationView: View {
 
             Section("Feature Configuration") {
                 Toggle("Enable Native Inserter", isOn: $viewModel.enableNativeInserter)
+                Toggle("Enable Native Media Upload", isOn: $viewModel.enableNativeMediaUpload)
                 Toggle("Enable Network Logging", isOn: $viewModel.enableNetworkLogging)
 
                 Picker("Network Fallback", selection: $viewModel.networkFallbackMode) {
@@ -153,6 +154,8 @@ class SitePreparationViewModel {
                 .build()
         }
     }
+
+    var enableNativeMediaUpload: Bool = true
 
     var enableNetworkLogging: Bool {
         get { editorConfiguration?.enableNetworkLogging ?? false }
@@ -494,7 +497,8 @@ class SitePreparationViewModel {
 
         let editor = RunnableEditor(
             configuration: configuration,
-            dependencies: self.editorDependencies
+            dependencies: self.editorDependencies,
+            enableNativeMediaUpload: self.enableNativeMediaUpload
         )
 
         navigation.present(editor)

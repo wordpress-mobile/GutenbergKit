@@ -56,7 +56,7 @@ struct GutenbergApp: App {
                     let editor = navigation.editor!
 
                     NavigationStack {
-                        EditorView(configuration: editor.configuration, dependencies: editor.dependencies)
+                        EditorView(configuration: editor.configuration, dependencies: editor.dependencies, enableNativeMediaUpload: editor.enableNativeMediaUpload)
                     }
                 }
 

@@ -34,6 +34,7 @@ enum ConfigurationItem: Identifiable, Equatable, Hashable {
 struct RunnableEditor: Equatable, Hashable {
     let configuration: EditorConfiguration
     let dependencies: EditorDependencies?
+    var enableNativeMediaUpload: Bool = true
 }
 
 /// Credentials loaded from the wp-env setup script output
