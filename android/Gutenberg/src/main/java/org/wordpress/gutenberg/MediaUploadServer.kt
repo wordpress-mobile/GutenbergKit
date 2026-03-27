@@ -197,10 +197,8 @@ internal class MediaUploadServer(
 
     private fun corsPreflightResponse(): HttpResponse = HttpResponse(
         status = 204,
-        headers = mapOf(
-            "Access-Control-Allow-Origin" to "*",
+        headers = corsHeaders + mapOf(
             "Access-Control-Allow-Methods" to "POST, OPTIONS",
-            "Access-Control-Allow-Headers" to "Relay-Authorization, Content-Type",
             "Access-Control-Max-Age" to "86400"
         ),
         body = ByteArray(0)
