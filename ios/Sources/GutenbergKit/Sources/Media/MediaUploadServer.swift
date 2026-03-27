@@ -75,7 +75,6 @@ final class MediaUploadServer: Sendable {
     }
 
     private static func handleUpload(_ request: HTTPServer.Request, context: UploadContext) async -> HTTPResponse {
-        // Parse multipart form-data using the library's RFC 7578 parser.
         let parts: [MultipartPart]
         do {
             parts = try request.parsed.multipartParts()
@@ -181,10 +180,8 @@ final class MediaUploadServer: Sendable {
     private static func corsPreflightResponse() -> HTTPResponse {
         HTTPResponse(
             status: 204,
-            headers: [
-                ("Access-Control-Allow-Origin", "*"),
+            headers: corsHeaders + [
                 ("Access-Control-Allow-Methods", "POST, OPTIONS"),
-                ("Access-Control-Allow-Headers", "Relay-Authorization, Content-Type"),
                 ("Access-Control-Max-Age", "86400"),
             ],
             body: Data()
