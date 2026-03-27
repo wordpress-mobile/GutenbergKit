@@ -164,8 +164,8 @@ class SitePreparationActivity : ComponentActivity() {
                     viewModel = viewModel,
                     accountId = accountId,
                     onClose = { finish() },
-                    onStartEditor = { configuration, dependencies ->
-                        launchEditor(configuration, dependencies)
+                    onStartEditor = { configuration, dependencies, enableNativeMediaUpload ->
+                        launchEditor(configuration, dependencies, enableNativeMediaUpload)
                     },
                     onBrowsePosts = { configuration, dependencies, postType ->
                         accountId?.let {
@@ -179,10 +179,12 @@ class SitePreparationActivity : ComponentActivity() {
 
     private fun launchEditor(
         configuration: EditorConfiguration,
-        dependencies: EditorDependencies?
+        dependencies: EditorDependencies?,
+        enableNativeMediaUpload: Boolean
     ) {
         val intent = Intent(this, EditorActivity::class.java).apply {
             putExtra(MainActivity.EXTRA_CONFIGURATION, configuration)
+            putExtra(EditorActivity.EXTRA_ENABLE_NATIVE_MEDIA_UPLOAD, enableNativeMediaUpload)
 
             // Serialize dependencies to disk and pass the file path
             if (dependencies != null) {
@@ -211,7 +213,7 @@ fun SitePreparationScreen(
     viewModel: SitePreparationViewModel,
     accountId: ULong?,
     onClose: () -> Unit,
-    onStartEditor: (EditorConfiguration, EditorDependencies?) -> Unit,
+    onStartEditor: (EditorConfiguration, EditorDependencies?, Boolean) -> Unit,
     onBrowsePosts: (EditorConfiguration, EditorDependencies?, PostTypeDetails) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -242,7 +244,7 @@ fun SitePreparationScreen(
                         Button(
                             onClick = {
                                 viewModel.buildConfiguration()?.let { config ->
-                                    onStartEditor(config, uiState.editorDependencies)
+                                    onStartEditor(config, uiState.editorDependencies, uiState.enableNativeMediaUpload)
                                 }
                             },
                             modifier = Modifier.padding(end = 8.dp)
@@ -318,6 +320,8 @@ private fun LoadedView(
                 onEnableNativeInserterChange = viewModel::setEnableNativeInserter,
                 enableInserterMediaStrip = uiState.enableInserterMediaStrip,
                 onEnableInserterMediaStripChange = viewModel::setEnableInserterMediaStrip,
+                enableNativeMediaUpload = uiState.enableNativeMediaUpload,
+                onEnableNativeMediaUploadChange = viewModel::setEnableNativeMediaUpload,
                 enableNetworkLogging = uiState.enableNetworkLogging,
                 onEnableNetworkLoggingChange = viewModel::setEnableNetworkLogging,
                 postTypes = uiState.postTypes,
@@ -404,6 +408,8 @@ private fun FeatureConfigurationCard(
     onEnableNativeInserterChange: (Boolean) -> Unit,
     enableInserterMediaStrip: Boolean,
     onEnableInserterMediaStripChange: (Boolean) -> Unit,
+    enableNativeMediaUpload: Boolean,
+    onEnableNativeMediaUploadChange: (Boolean) -> Unit,
     enableNetworkLogging: Boolean,
     onEnableNetworkLoggingChange: (Boolean) -> Unit,
     postTypes: List<PostTypeDetails>,
@@ -446,6 +452,21 @@ private fun FeatureConfigurationCard(
                     checked = enableInserterMediaStrip,
                     onCheckedChange = onEnableInserterMediaStripChange,
                     enabled = enableNativeInserter
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // Enable Native Media Upload Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Enable Native Media Upload")
+                Switch(
+                    checked = enableNativeMediaUpload,
+                    onCheckedChange = onEnableNativeMediaUploadChange
                 )
             }
 
