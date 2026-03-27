@@ -58,6 +58,10 @@ data class GBKitGlobal(
     val logLevel: String = "warn",
     /** Whether to log network requests in the JavaScript console. */
     val enableNetworkLogging: Boolean,
+    /** Port the local HTTP server is listening on for native media uploads. */
+    val nativeUploadPort: Int? = null,
+    /** Per-session auth token for requests to the local upload server. */
+    val nativeUploadToken: String? = null,
     /** The raw editor settings JSON from the WordPress REST API. */
     val editorSettings: JsonElement?,
     /** Pre-fetched API responses JSON for faster editor initialization. */
@@ -90,10 +94,14 @@ data class GBKitGlobal(
          *
          * @param configuration The editor configuration.
          * @param dependencies The pre-fetched editor dependencies.
+         * @param nativeUploadPort Port of the local upload server, or null if not running.
+         * @param nativeUploadToken Auth token for the local upload server, or null if not running.
          */
         fun fromConfiguration(
             configuration: EditorConfiguration,
-            dependencies: EditorDependencies?
+            dependencies: EditorDependencies?,
+            nativeUploadPort: Int? = null,
+            nativeUploadToken: String? = null
         ): GBKitGlobal {
             return GBKitGlobal(
                 siteURL = configuration.siteURL.ifEmpty { null },
@@ -113,6 +121,8 @@ data class GBKitGlobal(
                     content = configuration.content.encodeForEditor()
                 ),
                 enableNetworkLogging = configuration.enableNetworkLogging,
+                nativeUploadPort = nativeUploadPort,
+                nativeUploadToken = nativeUploadToken,
                 editorSettings = dependencies?.editorSettings?.jsonValue,
                 preloadData = dependencies?.preloadList?.build(),
                 editorAssets = dependencies?.assetBundle?.let { bundle ->
