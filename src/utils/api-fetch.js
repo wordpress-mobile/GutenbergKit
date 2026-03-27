@@ -8,10 +8,14 @@ import { getQueryArg } from '@wordpress/url';
  * Internal dependencies
  */
 import { getGBKit } from './bridge';
+import { info, error as logError } from './logger';
 
 /**
  * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
  */
+
+/** Matches `POST /wp/v2/media` but not sub-paths like `/wp/v2/media/123`. */
+const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
 
 /**
  * Initializes the API fetch configuration and middleware.
@@ -26,6 +30,7 @@ export function configureApiFetch() {
 	apiFetch.use( apiPathModifierMiddleware );
 	apiFetch.use( tokenAuthMiddleware );
 	apiFetch.use( filterEndpointsMiddleware );
+	apiFetch.use( nativeMediaUploadMiddleware );
 	apiFetch.use( mediaUploadMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
 	apiFetch.use(
@@ -132,6 +137,117 @@ function filterEndpointsMiddleware( options, next ) {
 }
 
 /**
+ * Middleware that routes media uploads through the native host's local HTTP
+ * server for processing (e.g. image resizing) before uploading to WordPress.
+ *
+ * Exported for testing only.
+ *
+ * When `nativeUploadPort` is configured in GBKit, this middleware intercepts
+ * `POST /wp/v2/media` requests, forwards the file to the native server, and
+ * returns the response in WordPress REST API attachment format so the existing
+ * Gutenberg upload pipeline (blob previews, save locking, entity caching)
+ * works unchanged.
+ *
+ * When the native server is not configured, requests pass through unmodified.
+ *
+ * Note: Ideally, media uploads would be handled via the `mediaUpload` editor
+ * setting (see the Gutenberg Framework guides), but GutenbergKit uses
+ * Gutenberg's `EditorProvider` which overwrites that setting internally:
+ * https://github.com/WordPress/gutenberg/blob/29914e1d09a344edce58d938fa4992e1ec248e41/packages/editor/src/components/provider/use-block-editor-settings.js#L340
+ *
+ * Until GutenbergKit is refactored to use `BlockEditorProvider` and aligns
+ * with the Gutenberg Framework guides (https://wordpress.org/gutenberg-framework/docs/intro/),
+ * this api-fetch middleware approach is necessary. For context, see:
+ * - https://github.com/wordpress-mobile/GutenbergKit/pull/24
+ * - https://github.com/wordpress-mobile/GutenbergKit/pull/50
+ * - https://github.com/wordpress-mobile/GutenbergKit/pull/108
+ *
+ * @type {APIFetchMiddleware}
+ */
+export function nativeMediaUploadMiddleware( options, next ) {
+	const { nativeUploadPort, nativeUploadToken } = getGBKit();
+
+	if (
+		! nativeUploadPort ||
+		! options.method ||
+		options.method.toUpperCase() !== 'POST' ||
+		! options.path ||
+		! MEDIA_UPLOAD_PATH.test( options.path ) ||
+		! ( options.body instanceof FormData )
+	) {
+		return next( options );
+	}
+
+	const file = options.body.get( 'file' );
+	if ( ! file ) {
+		return next( options );
+	}
+
+	info(
+		`Routing upload of ${ file.name } through native server on port ${ nativeUploadPort }`
+	);
+
+	const formData = new FormData();
+	formData.append( 'file', file, file.name );
+
+	return fetch( `http://localhost:${ nativeUploadPort }/upload`, {
+		method: 'POST',
+		headers: {
+			'Relay-Authorization': `Bearer ${ nativeUploadToken }`,
+		},
+		body: formData,
+		signal: options.signal,
+	} )
+		.then( ( response ) => {
+			if ( ! response.ok ) {
+				return response.text().then( ( body ) => {
+					const message =
+						response.status === 413
+							? `The file is too large to upload. Please choose a smaller file.`
+							: `Native upload failed (${ response.status }): ${
+									body || response.statusText
+							  }`;
+					const error = new Error( message );
+					error.code =
+						response.status === 413
+							? 'upload_file_too_large'
+							: 'upload_failed';
+					throw error;
+				} );
+			}
+			return response.json();
+		} )
+		.then( ( result ) => {
+			// Transform native server response into WordPress REST API
+			// attachment shape expected by @wordpress/media-utils.
+			return {
+				id: result.id,
+				source_url: result.url,
+				alt_text: result.alt || '',
+				caption: {
+					raw: result.caption || '',
+					rendered: result.caption || '',
+				},
+				title: {
+					raw: result.title || '',
+					rendered: result.title || '',
+				},
+				mime_type: result.mime,
+				media_type: result.type,
+				media_details: {
+					width: result.width || 0,
+					height: result.height || 0,
+				},
+				link: result.url,
+			};
+		} )
+		.catch( ( err ) => {
+			logError( 'Native upload failed', err );
+			throw err;
+		} );
+}
+
+/**
  * Middleware to modify media upload requests.
  *
  * This middleware intercepts requests to the media endpoint and conditionally
@@ -142,7 +258,7 @@ function filterEndpointsMiddleware( options, next ) {
 function mediaUploadMiddleware( options, next ) {
 	if (
 		options.path &&
-		options.path.startsWith( '/wp/v2/media' ) &&
+		MEDIA_UPLOAD_PATH.test( options.path ) &&
 		options.method === 'POST' &&
 		options.body instanceof FormData &&
 		options.body.get( 'post' ) === '-1'
