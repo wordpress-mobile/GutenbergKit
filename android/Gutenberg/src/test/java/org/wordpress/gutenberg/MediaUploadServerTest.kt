@@ -230,7 +230,7 @@ class MediaUploadServerTest {
             runBlocking { uploader.upload(file, "image/jpeg", "fail.jpg") }
             throw AssertionError("Expected exception")
         } catch (e: MediaUploadException) {
-            assertTrue(e.message!!.contains("500"))
+            assertTrue(e.message!!.contains("Internal error"))
         }
 
         mockWpServer.shutdown()

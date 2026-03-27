@@ -277,9 +277,13 @@ internal open class DefaultMediaUploader(
         val body = response.body?.string()
 
         if (!response.isSuccessful) {
-            throw MediaUploadException(
-                "Upload failed (${response.code}): ${body ?: response.message}"
-            )
+            // Try to extract the human-readable message from a WordPress error
+            // response ({"code":"...","message":"..."}) before falling back to
+            // the raw body.
+            val errorMessage = body?.let {
+                try { org.json.JSONObject(it).optString("message", null) } catch (_: org.json.JSONException) { null }
+            } ?: body ?: response.message
+            throw MediaUploadException(errorMessage)
         }
 
         if (body == null) {
