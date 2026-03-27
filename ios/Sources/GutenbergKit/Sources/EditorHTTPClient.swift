@@ -32,13 +32,21 @@ struct WPError: Decodable {
 public actor EditorHTTPClient: EditorHTTPClientProtocol {
 
     /// Errors that can occur during HTTP requests.
-    enum ClientError: Error {
+    enum ClientError: Error, LocalizedError {
         /// The server returned a WordPress-formatted error response.
         case wpError(WPError)
         /// A file download failed with the given HTTP status code.
         case downloadFailed(statusCode: Int)
         /// An unexpected error occurred with the given response data and status code.
         case unknown(response: Data, statusCode: Int)
+
+        var errorDescription: String? {
+            switch self {
+            case .wpError(let error): error.message
+            case .downloadFailed(let code): "Download failed (\(code))"
+            case .unknown(_, let code): "Request failed (\(code))"
+            }
+        }
     }
 
     /// The base user agent string identifying the platform.

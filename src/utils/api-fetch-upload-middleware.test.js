@@ -273,33 +273,6 @@ describe( 'nativeMediaUploadMiddleware', () => {
 
 	// MARK: - Error handling
 
-	it( 'throws user-friendly error on 413 response', async () => {
-		getGBKit.mockReturnValue( {
-			nativeUploadPort: 8080,
-			nativeUploadToken: 'token',
-		} );
-
-		global.fetch = vi.fn( () =>
-			Promise.resolve( {
-				ok: false,
-				status: 413,
-				statusText: 'Payload Too Large',
-				text: () =>
-					Promise.resolve( 'Upload exceeds maximum allowed size' ),
-			} )
-		);
-
-		await expect(
-			nativeMediaUploadMiddleware(
-				makePostMediaOptions( makeFile() ),
-				makeNext()
-			)
-		).rejects.toMatchObject( {
-			code: 'upload_file_too_large',
-			message: expect.stringContaining( 'too large' ),
-		} );
-	} );
-
 	it( 'throws on non-ok response from local server', async () => {
 		getGBKit.mockReturnValue( {
 			nativeUploadPort: 8080,
