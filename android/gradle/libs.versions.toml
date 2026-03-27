@@ -25,6 +25,7 @@ okhttp = "4.12.0"
 detekt = "1.23.8"
 buildkite-test-collector = "0.4.0"
 androidsvg = "1.4"
+json = "20240303"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -59,6 +60,7 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
 buildkite-test-collector-instrumented = { group = "com.buildkite.test-collector-android", name = "instrumented-test-collector", version.ref = "buildkite-test-collector" }
 androidsvg = { group = "com.caverock", name = "androidsvg-aar", version.ref = "androidsvg" }
+json = { group = "org.json", name = "json", version.ref = "json" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

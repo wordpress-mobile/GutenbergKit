@@ -10,6 +10,7 @@
     <ID>CyclomaticComplexMethod:MultipartPart.kt$MultipartPart.Companion$fun parseChunked( source: RequestBody.FileBacked, boundary: String ): List&lt;MultipartPart&gt;</ID>
     <ID>ExplicitItLambdaParameter:EditorAssetsLibrary.kt$EditorAssetsLibrary${ str, it -&gt; str + "%02x".format(it) }</ID>
     <ID>FunctionNaming:EditorURLCache.kt$EditorURLCache$private fun __store( response: EditorURLResponse, url: String, httpMethod: EditorHttpMethod, currentDate: Date )</ID>
+    <ID>LargeClass:GutenbergView.kt$GutenbergView : FrameLayout</ID>
     <ID>LongMethod:FixtureTests.kt$FixtureTests$@Test fun `request parsing - all basic cases pass`()</ID>
     <ID>LongMethod:FixtureTests.kt$FixtureTests$@Test fun `request parsing - all incremental cases pass`()</ID>
     <ID>LongMethod:HTTPRequestParser.kt$HTTPRequestParser$fun append(data: ByteArray): Unit</ID>
