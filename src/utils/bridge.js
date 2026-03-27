@@ -232,6 +232,8 @@ export function onNetworkRequest( requestData ) {
  * @property {string}   [hideTitle]              Whether to hide the title.
  * @property {Post}     [post]                   The post data.
  * @property {boolean}  [enableNetworkLogging]   Enables logging of all network requests/responses to the native host via onNetworkRequest bridge method.
+ * @property {number}   [nativeUploadPort]       Port the local HTTP server is listening on. If absent, the native upload override is not activated.
+ * @property {string}   [nativeUploadToken]      Per-session auth token for requests to the local upload server.
  */
 
 /**
