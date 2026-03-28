@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Looper
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import kotlinx.coroutines.test.TestScope
 import org.junit.Before
@@ -12,6 +13,7 @@ import org.junit.Test
 import org.junit.Rule
 import org.junit.runner.RunWith
 import org.mockito.Mock
+import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 import org.mockito.MockitoAnnotations
 import org.robolectric.RobolectricTestRunner
@@ -19,6 +21,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -170,5 +173,39 @@ class GutenbergViewTest {
             userAgent.contains("GutenbergKit/"))
         assertTrue("User agent should contain version number",
             userAgent.contains("GutenbergKit/${GutenbergKitVersion.VERSION}"))
+    }
+
+    @Test
+    fun `shouldOverrideUrlLoading allows asset path URLs on site domain`() {
+        val siteView = GutenbergView(
+            EditorConfiguration.builder("https://example.com", "https://example.com/wp-json/")
+                .build(),
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+
+        val request = mock(WebResourceRequest::class.java)
+        `when`(request.url).thenReturn(Uri.parse("https://example.com/assets/index.html"))
+
+        val result = siteView.webViewClient.shouldOverrideUrlLoading(siteView, request)
+        assertFalse("Asset path URLs on the site domain should load in the WebView", result)
+    }
+
+    @Test
+    fun `shouldOverrideUrlLoading blocks non-asset URLs on site domain`() {
+        val siteView = GutenbergView(
+            EditorConfiguration.builder("https://example.com", "https://example.com/wp-json/")
+                .build(),
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+
+        val request = mock(WebResourceRequest::class.java)
+        `when`(request.url).thenReturn(Uri.parse("https://example.com/some-page"))
+
+        val result = siteView.webViewClient.shouldOverrideUrlLoading(siteView, request)
+        assertTrue("Non-asset URLs on the site domain should open externally", result)
     }
 }

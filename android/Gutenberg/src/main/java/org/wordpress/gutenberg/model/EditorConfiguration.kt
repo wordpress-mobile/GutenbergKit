@@ -28,8 +28,7 @@ data class EditorConfiguration(
     val cachedAssetHosts: Set<String> = emptySet(),
     val editorAssetsEndpoint: String? = null,
     val enableNetworkLogging: Boolean = false,
-    var enableOfflineMode: Boolean = false,
-    val assetLoaderDomain: String? = null
+    var enableOfflineMode: Boolean = false
 ): Parcelable {
 
     /**
@@ -74,7 +73,6 @@ data class EditorConfiguration(
         private var editorAssetsEndpoint: String? = null
         private var enableNetworkLogging: Boolean = false
         private var enableOfflineMode: Boolean = false
-        private var assetLoaderDomain: String? = null
 
         fun setTitle(title: String) = apply { this.title = title }
         fun setContent(content: String) = apply { this.content = content }
@@ -97,20 +95,6 @@ data class EditorConfiguration(
         fun setEditorAssetsEndpoint(editorAssetsEndpoint: String?) = apply { this.editorAssetsEndpoint = editorAssetsEndpoint }
         fun setEnableNetworkLogging(enableNetworkLogging: Boolean) = apply { this.enableNetworkLogging = enableNetworkLogging }
         fun setEnableOfflineMode(enableOfflineMode: Boolean) = apply { this.enableOfflineMode = enableOfflineMode }
-        fun setAssetLoaderDomain(assetLoaderDomain: String?) = apply {
-            if (assetLoaderDomain != null) {
-                require(!assetLoaderDomain.contains("://")) {
-                    "assetLoaderDomain must be a bare domain (e.g., \"assets.example.com\"), not a URL"
-                }
-                require(!assetLoaderDomain.contains("/")) {
-                    "assetLoaderDomain must be a bare domain without a path"
-                }
-                require(assetLoaderDomain.isNotBlank()) {
-                    "assetLoaderDomain must not be blank"
-                }
-            }
-            this.assetLoaderDomain = assetLoaderDomain
-        }
 
         fun build(): EditorConfiguration = EditorConfiguration(
             title = title,
@@ -133,8 +117,7 @@ data class EditorConfiguration(
             cachedAssetHosts = cachedAssetHosts,
             editorAssetsEndpoint = editorAssetsEndpoint,
             enableNetworkLogging = enableNetworkLogging,
-            enableOfflineMode = enableOfflineMode,
-            assetLoaderDomain = assetLoaderDomain
+            enableOfflineMode = enableOfflineMode
         )
     }
 
@@ -162,7 +145,6 @@ data class EditorConfiguration(
         .setEditorAssetsEndpoint(editorAssetsEndpoint)
         .setEnableNetworkLogging(enableNetworkLogging)
         .setEnableOfflineMode(enableOfflineMode)
-        .setAssetLoaderDomain(assetLoaderDomain)
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -191,7 +173,6 @@ data class EditorConfiguration(
         if (editorAssetsEndpoint != other.editorAssetsEndpoint) return false
         if (enableNetworkLogging != other.enableNetworkLogging) return false
         if (enableOfflineMode != other.enableOfflineMode) return false
-        if (assetLoaderDomain != other.assetLoaderDomain) return false
         if (siteId != other.siteId) return false
 
         return true
@@ -219,7 +200,6 @@ data class EditorConfiguration(
         result = 31 * result + (editorAssetsEndpoint?.hashCode() ?: 0)
         result = 31 * result + enableNetworkLogging.hashCode()
         result = 31 * result + enableOfflineMode.hashCode()
-        result = 31 * result + (assetLoaderDomain?.hashCode() ?: 0)
         result = 31 * result + siteId.hashCode()
         return result
     }

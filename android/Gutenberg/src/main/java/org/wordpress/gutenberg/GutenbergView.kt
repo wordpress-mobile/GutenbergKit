@@ -244,10 +244,18 @@ class GutenbergView : WebView {
             ): WebResourceResponse? {
                 if (request.url == null) {
                     return super.shouldInterceptRequest(view, request)
-                } else if (request.url.host == assetDomain) {
+                }
+
+                // Check the cache interceptor first — it handles JS/CSS
+                // assets from any allowed host, which may include the asset
+                // domain when it matches the site domain.
+                if (requestInterceptor.canIntercept(request)) {
+                    val response = requestInterceptor.handleRequest(request)
+                    if (response != null) return response
+                }
+
+                if (request.url.host == assetDomain) {
                     return assetLoader.shouldInterceptRequest(request.url)
-                } else if (requestInterceptor.canIntercept(request)) {
-                    return requestInterceptor.handleRequest(request)
                 }
 
                 return super.shouldInterceptRequest(view, request)
@@ -276,8 +284,10 @@ class GutenbergView : WebView {
                     return false
                 }
 
-                // Allow asset URLs
-                if (url.host == assetDomain) {
+                // Allow asset URLs (restrict to the asset path prefix so that
+                // arbitrary site pages don't load inside the WebView when the
+                // asset domain matches the site domain)
+                if (url.host == assetDomain && url.path?.startsWith("/assets/") == true) {
                     return false
                 }
 
@@ -395,8 +405,10 @@ class GutenbergView : WebView {
     private fun loadEditor(dependencies: EditorDependencies) {
         this.dependencies = dependencies
 
-        // Set up asset loader domain
-        assetDomain = configuration.assetLoaderDomain ?: DEFAULT_ASSET_DOMAIN
+        // Derive the asset loader domain from the site URL so that the editor
+        // document shares the site's origin, making REST API and AJAX requests
+        // same-origin and eliminating CORS restrictions.
+        assetDomain = Uri.parse(configuration.siteURL).host ?: DEFAULT_ASSET_DOMAIN
 
         // Set up asset caching
         requestInterceptor = CachedAssetRequestInterceptor(
