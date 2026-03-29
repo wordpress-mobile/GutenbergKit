@@ -66,7 +66,7 @@
 		"@wordpress/primitives": "^4.42.0",
 		"@wordpress/priority-queue": "^3.38.0",
 		"@wordpress/private-apis": "^1.38.0",
-		"@wordpress/rich-text": "^7.38.0",
+		"@wordpress/rich-text": "^7.42.0",
 		"@wordpress/router": "^1.38.0",
 		"@wordpress/server-side-render": "^6.14.0",
 		"@wordpress/shortcode": "^4.38.0",
