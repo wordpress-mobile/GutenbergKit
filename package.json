@@ -76,7 +76,7 @@
 		"@wordpress/viewport": "^6.38.0",
 		"@wordpress/warning": "^3.42.0",
 		"@wordpress/widgets": "^4.38.0",
-		"@wordpress/wordcount": "^4.38.0",
+		"@wordpress/wordcount": "^4.42.0",
 		"clsx": "^2.1.1",
 		"jquery": "^3.7.1",
 		"lodash": "^4.17.23",
