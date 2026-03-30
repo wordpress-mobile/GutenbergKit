@@ -61,7 +61,7 @@
 		"@wordpress/notices": "^5.38.0",
 		"@wordpress/patterns": "^2.38.0",
 		"@wordpress/plugins": "^7.38.0",
-		"@wordpress/preferences": "^4.38.0",
+		"@wordpress/preferences": "^4.42.0",
 		"@wordpress/preferences-persistence": "^2.41.0",
 		"@wordpress/primitives": "^4.42.0",
 		"@wordpress/priority-queue": "^3.38.0",
