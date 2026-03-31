@@ -291,3 +291,39 @@ val configuration = EditorConfiguration.builder()
     .setEditorSettings(editorSettingsJSON)
     .build()
 ```
+
+### AJAX Support
+
+Some Gutenberg blocks and features use WordPress AJAX (`admin-ajax.php`) for functionality like form submissions. GutenbergKit supports AJAX requests when properly configured.
+
+**Requirements:**
+
+1. **Production bundle required**: AJAX requests fail with CORS errors when using the development server because the editor runs on `localhost` while AJAX requests target your WordPress site. You must use a production bundle built with `make build`.
+
+2. **Configure `siteURL`**: The `siteURL` configuration option must be set to your WordPress site URL. This is used to construct the AJAX endpoint (`{siteURL}/wp-admin/admin-ajax.php`). On Android, the editor is served from the site's domain so that AJAX requests are same-origin.
+
+3. **Set authentication header**: The `authHeader` configuration must be set. GutenbergKit injects this header into all AJAX requests since the WebView lacks WordPress authentication cookies.
+
+**Configuration examples:**
+
+```swift
+// iOS
+let configuration = EditorConfigurationBuilder(
+    postType: "post",
+    siteURL: URL(string: "https://example.com")!,
+    siteApiRoot: URL(string: "https://example.com/wp-json")!
+)
+    .setAuthHeader("Bearer your-token")
+    .build()
+```
+
+```kotlin
+// Android
+val configuration = EditorConfiguration.builder(
+    siteURL = "https://example.com",
+    siteApiRoot = "https://example.com/wp-json"
+)
+    .setPostType("post")
+    .setAuthHeader("Bearer your-token")
+    .build()
+```

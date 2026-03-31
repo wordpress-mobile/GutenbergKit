@@ -28,3 +28,11 @@ The file does not exist at "[path]" which is in the optimize deps directory. The
 -   Deleting the `node_modules/.vite` directory (or `node_modules` entirely) and restarting the development server via `make dev-server`.
 
 You may also need to clear your browser cache to ensure no stale files are used.
+
+## AJAX requests fail with CORS errors
+
+**Error:** `Access to XMLHttpRequest at 'https://example.com/wp-admin/admin-ajax.php' from origin 'http://localhost:5173' has been blocked by CORS policy`
+
+This error occurs when the editor makes AJAX requests (e.g., from blocks that use `admin-ajax.php`) while running on the development server. The browser blocks these cross-origin requests because the editor runs on `localhost` while AJAX targets your WordPress site.
+
+**Solution:** AJAX functionality requires a production bundle. Build the editor assets with `make build` and test AJAX features using the demo apps without using the `GUTENBERG_EDITOR_URL` environment variable. See the [AJAX Support section](../integration.md#ajax-support) in the Integration Guide for complete configuration details.

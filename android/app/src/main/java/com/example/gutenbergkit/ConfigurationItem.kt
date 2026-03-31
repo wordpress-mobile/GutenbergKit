@@ -31,7 +31,7 @@ sealed class ConfigurationItem {
                 is Account.WpCom -> ConfiguredEditor(
                     accountId = account.id,
                     name = account.username,
-                    siteUrl = account.username,
+                    siteUrl = "https://${account.username}",
                     siteApiRoot = account.siteApiRoot,
                     authHeader = "Bearer ${account.token}"
                 )

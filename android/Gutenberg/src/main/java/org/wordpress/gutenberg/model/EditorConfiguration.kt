@@ -28,7 +28,7 @@ data class EditorConfiguration(
     val cachedAssetHosts: Set<String> = emptySet(),
     val editorAssetsEndpoint: String? = null,
     val enableNetworkLogging: Boolean = false,
-    var enableOfflineMode: Boolean = false,
+    var enableOfflineMode: Boolean = false
 ): Parcelable {
 
     /**

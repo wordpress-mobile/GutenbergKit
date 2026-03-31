@@ -9,6 +9,7 @@ import {
 } from './bridge';
 import { configureLocale } from './localization';
 import { loadEditorAssets } from './editor-loader';
+import { configureAjax } from './ajax';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge';
 import { initializeFetchInterceptor } from './fetch-interceptor';
 import EditorLoadError from '../components/editor-load-error';
@@ -33,7 +34,6 @@ export async function setUpEditorEnvironment() {
 		await configureLocale();
 		await initializeWordPressGlobals();
 		await configureApiFetch();
-		initializeVideoPressAjaxBridge();
 		const pluginLoadResult = await loadPluginsIfEnabled();
 		await initializeEditor( pluginLoadResult );
 	} catch ( err ) {
@@ -84,7 +84,7 @@ function setLogLevelFromGBKit() {
 async function initializeWordPressGlobals() {
 	const { initializeWordPressGlobals: _initializeWordPressGlobals } =
 		await import( './wordpress-globals' );
-	_initializeWordPressGlobals();
+	await _initializeWordPressGlobals();
 }
 
 /**
@@ -132,15 +132,26 @@ async function loadPluginsIfEnabled() {
 
 /**
  * Initialize the editor module. Lazy-loaded to ensure WordPress globals are
- * before importing the editor module and referencing `window.wp` globals.
+ * available before importing the editor module and referencing `window.wp`
+ * globals.
  *
  * @param {Object} pluginLoadResult - Results from plugin loading
  * @return {Promise} Promise that resolves when the editor is initialized
  */
 async function initializeEditor( pluginLoadResult = {} ) {
 	const { initializeEditor: _initializeEditor } = await import( './editor' );
+	const { allowedBlockTypes } = pluginLoadResult;
+
+	configureAjax();
+
+	if ( ! allowedBlockTypes?.includes( 'videopress/video' ) ) {
+		// The VideoPress block isn't available, so initialize the bridge to handle
+		// any `core/video` blocks extended to rely upon VideoPress upload services.
+		initializeVideoPressAjaxBridge();
+	}
+
 	_initializeEditor( {
-		allowedBlockTypes: pluginLoadResult.allowedBlockTypes,
+		allowedBlockTypes,
 		pluginLoadFailed: pluginLoadResult.pluginLoadFailed,
 	} );
 }

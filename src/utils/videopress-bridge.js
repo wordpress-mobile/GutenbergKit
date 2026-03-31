@@ -1,7 +1,6 @@
 /**
  * Internal dependencies
  */
-import { getGBKit } from './bridge';
 import { warn, debug, error } from './logger';
 
 /**
@@ -18,6 +17,8 @@ import { warn, debug, error } from './logger';
  * This function overrides wp.media.ajax to intercept VideoPress-specific
  * AJAX requests and redirect them to the appropriate REST API endpoints.
  *
+ * @todo Remove this bridge once the `videopress/video` block type is allowed and stable.
+ *
  * @return {void}
  */
 export function initializeVideoPressAjaxBridge() {
@@ -25,16 +26,6 @@ export function initializeVideoPressAjaxBridge() {
 	if ( ! window.wp || ! window.wp.apiFetch ) {
 		warn( 'VideoPress bridge: wp.apiFetch not available' );
 		return;
-	}
-
-	// Initialize wp.ajax if not already present
-	window.wp.ajax = window.wp.ajax || {};
-	window.wp.ajax.settings = window.wp.ajax.settings || {};
-
-	// Set up AJAX settings with site URL
-	const { siteURL } = getGBKit();
-	if ( siteURL ) {
-		window.wp.ajax.settings.url = `${ siteURL }/wp-admin/admin-ajax.php`;
 	}
 
 	// Store original wp.media.ajax function if it exists

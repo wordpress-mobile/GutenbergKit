@@ -47,8 +47,8 @@ import org.wordpress.gutenberg.services.EditorService
 import java.util.Collections
 import java.util.Locale
 
-private const val ASSET_URL = "https://appassets.androidplatform.net/assets/index.html"
-private const val ASSET_URL_HTTP = "http://appassets.androidplatform.net/assets/index.html"
+const val DEFAULT_ASSET_DOMAIN = "appassets.androidplatform.net"
+const val ASSET_PATH_INDEX = "/assets/index.html"
 
 /**
  * A WebView-based Gutenberg block editor for Android.
@@ -92,6 +92,7 @@ class GutenbergView : WebView {
     private var isEditorLoaded = false
     private var didFireEditorLoaded = false
     private lateinit var assetLoader: WebViewAssetLoader
+    private lateinit var assetDomain: String
     private val configuration: EditorConfiguration
     private lateinit var dependencies: EditorDependencies
 
@@ -243,10 +244,18 @@ class GutenbergView : WebView {
             ): WebResourceResponse? {
                 if (request.url == null) {
                     return super.shouldInterceptRequest(view, request)
-                } else if (request.url.host?.contains("appassets.androidplatform.net") == true) {
+                }
+
+                // Check the cache interceptor first — it handles JS/CSS
+                // assets from any allowed host, which may include the asset
+                // domain when it matches the site domain.
+                if (requestInterceptor.canIntercept(request)) {
+                    val response = requestInterceptor.handleRequest(request)
+                    if (response != null) return response
+                }
+
+                if (request.url.host == assetDomain) {
                     return assetLoader.shouldInterceptRequest(request.url)
-                } else if (requestInterceptor.canIntercept(request)) {
-                    return requestInterceptor.handleRequest(request)
                 }
 
                 return super.shouldInterceptRequest(view, request)
@@ -275,8 +284,10 @@ class GutenbergView : WebView {
                     return false
                 }
 
-                // Allow asset URLs
-                if (url.host == "appassets.androidplatform.net") {
+                // Allow asset URLs (restrict to the asset path prefix so that
+                // arbitrary site pages don't load inside the WebView when the
+                // asset domain matches the site domain)
+                if (url.host == assetDomain && url.path?.startsWith("/assets/") == true) {
                     return false
                 }
 
@@ -394,6 +405,11 @@ class GutenbergView : WebView {
     private fun loadEditor(dependencies: EditorDependencies) {
         this.dependencies = dependencies
 
+        // Derive the asset loader domain from the site URL so that the editor
+        // document shares the site's origin, making REST API and AJAX requests
+        // same-origin and eliminating CORS restrictions.
+        assetDomain = Uri.parse(configuration.siteURL).host ?: DEFAULT_ASSET_DOMAIN
+
         // Set up asset caching
         requestInterceptor = CachedAssetRequestInterceptor(
             dependencies.assetBundle,
@@ -407,6 +423,7 @@ class GutenbergView : WebView {
         val siteUri = Uri.parse(configuration.siteURL)
         val isLocalHttpSite = siteUri.scheme == "http" && siteUri.host in LOCAL_HOSTS
         assetLoader = WebViewAssetLoader.Builder()
+            .setDomain(assetDomain)
             .setHttpAllowed(isLocalHttpSite)
             .addPathHandler("/assets/", AssetsPathHandler(this.context))
             .build()
@@ -416,7 +433,8 @@ class GutenbergView : WebView {
 
         initializeWebView()
 
-        val assetUrl = if (isLocalHttpSite) ASSET_URL_HTTP else ASSET_URL
+        val scheme = if (isLocalHttpSite) "http" else "https"
+        val assetUrl = "$scheme://$assetDomain$ASSET_PATH_INDEX"
         val editorUrl = BuildConfig.GUTENBERG_EDITOR_URL.ifEmpty {
             assetUrl
         }
@@ -424,7 +442,7 @@ class GutenbergView : WebView {
         WebStorage.getInstance().deleteAllData()
         this.clearCache(true)
         // All cookies are third-party cookies because the root of this document
-        // lives under `appassets.androidplatform.net`
+        // lives under the configured asset domain (e.g., `https://appassets.androidplatform.net`)
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
 
         // Erase all local cookies before loading the URL – we don't want to persist
