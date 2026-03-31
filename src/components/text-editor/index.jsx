@@ -1,6 +1,7 @@
 /**
  * WordPress dependencies
  */
+import { forwardRef } from '@wordpress/element';
 import { PostTitleRaw, PostTextEditor } from '@wordpress/editor';
 
 /**
@@ -13,14 +14,17 @@ import './style.scss';
  *
  * @param {Object}  props           Component props.
  * @param {boolean} props.hideTitle Whether to hide the title input.
+ * @param {Object}  ref             Forwarded ref.
  *
  * @return {Element} The rendered text editor component.
  */
-export default function TextEditor( { hideTitle } ) {
+const TextEditor = forwardRef( function TextEditor( { hideTitle }, ref ) {
 	return (
-		<div className="gutenberg-kit-text-editor">
+		<div className="gutenberg-kit-text-editor" ref={ ref }>
 			{ ! hideTitle && <PostTitleRaw /> }
 			<PostTextEditor />
 		</div>
 	);
-}
+} );
+
+export default TextEditor;
