@@ -16,7 +16,6 @@ import { unregisterDisallowedBlocks } from './blocks';
 vi.mock( '@wordpress/blocks' );
 vi.mock( '@wordpress/editor' );
 vi.mock( import( '@wordpress/data' ), { spy: true } );
-vi.mock( '@wordpress/preferences' );
 vi.mock( '@wordpress/block-library' );
 vi.mock( './blocks' );
 vi.mock( './bridge' );

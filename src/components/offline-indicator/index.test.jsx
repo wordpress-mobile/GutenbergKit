@@ -9,7 +9,6 @@ import { render, screen, act } from '@testing-library/react';
  */
 import OfflineIndicator from '.';
 
-vi.mock( '@wordpress/i18n' );
 vi.mock( '../../utils/bridge', () => ( {
 	getGBKit: vi.fn( () => ( {} ) ),
 } ) );
