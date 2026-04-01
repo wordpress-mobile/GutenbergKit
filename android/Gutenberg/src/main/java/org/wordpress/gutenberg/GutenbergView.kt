@@ -1071,7 +1071,7 @@ class GutenbergView : FrameLayout {
 
     private fun dispatchConnectivityEvent(isConnected: Boolean) {
         val eventName = if (isConnected) "online" else "offline"
-        this.evaluateJavascript("window.dispatchEvent(new Event('$eventName'));", null)
+        webView.evaluateJavascript("window.dispatchEvent(new Event('$eventName'));", null)
     }
 
     companion object {
