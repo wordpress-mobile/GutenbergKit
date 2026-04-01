@@ -9,7 +9,6 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
  */
 import EditorLoadNotice from '.';
 
-vi.mock( '@wordpress/i18n' );
 vi.mock( '@wordpress/components' );
 
 describe( 'EditorLoadNotice', () => {

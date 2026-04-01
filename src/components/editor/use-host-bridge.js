@@ -16,7 +16,7 @@ import { warn } from '../../utils/logger';
 
 window.editor = window.editor || {};
 
-export function useHostBridge( post, editorRef ) {
+export function useHostBridge( post, editorRef, markBridgeReady ) {
 	const { editEntityRecord } = useDispatch( coreStore );
 	const { undo, redo, switchEditorMode } = useDispatch( editorStore );
 	const { getEditedPostAttribute, getEditedPostContent } =
@@ -176,6 +176,11 @@ export function useHostBridge( post, editorRef ) {
 			return true;
 		};
 
+		// Signal that all window.editor.* methods are assigned. The native
+		// host is notified only after this AND the editor element is visible
+		// (coordinated by useEditorReady).
+		markBridgeReady();
+
 		return () => {
 			delete window.editor.setContent;
 			delete window.editor.setTitle;
@@ -185,11 +190,13 @@ export function useHostBridge( post, editorRef ) {
 			delete window.editor.redo;
 			delete window.editor.switchEditorMode;
 			delete window.editor.dismissTopModal;
+			delete window.editor.focus;
 			delete window.editor.appendTextAtCursor;
 		};
 	}, [
 		editorRef,
 		editContent,
+		markBridgeReady,
 		getEditedPostAttribute,
 		getEditedPostContent,
 		redo,

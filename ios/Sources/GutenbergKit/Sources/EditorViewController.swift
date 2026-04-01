@@ -376,7 +376,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Returns the current editor content.
     public func getContent() async throws -> String {
-        try await webView.evaluateJavaScript("editor.getContent();") as! String
+        guard isReady else { throw EditorNotReadyError() }
+        return try await webView.evaluateJavaScript("editor.getContent();") as! String
     }
 
     public struct EditorTitleAndContent: Decodable {
@@ -387,6 +388,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Returns the current editor title and content.
     public func getTitleAndContent() async throws -> EditorTitleAndContent {
+        guard isReady else { throw EditorNotReadyError() }
         let result = try await webView.evaluateJavaScript("editor.getTitleAndContent();")
         guard let dictionary = result as? [String: Any],
               let title = dictionary["title"] as? String,
@@ -399,23 +401,26 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Steps backwards in the editor history state
     public func undo() {
+        guard isReady else { return }
         evaluate("editor.undo();")
     }
 
     /// Steps forwards in the editor history state
     public func redo() {
+        guard isReady else { return }
         evaluate("editor.redo();")
     }
 
     /// Dismisses the topmost modal dialog or menu in the editor
     public func dismissTopModal() {
+        guard isReady else { return }
         evaluate("editor.dismissTopModal();")
     }
 
     /// Enables code editor.
     public var isCodeEditorEnabled: Bool = false {
         didSet {
-            guard isCodeEditorEnabled != oldValue else { return }
+            guard isCodeEditorEnabled != oldValue, isReady else { return }
             evaluate("editor.switchEditorMode('\(isCodeEditorEnabled ? "text" : "visual")');")
         }
     }
@@ -573,6 +578,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     /// - parameter text: The text to append at the cursor position.
     public func appendTextAtCursor(_ text: String) {
+        guard isReady else { return }
         let escapedText = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? text
         evaluate("editor.appendTextAtCursor(decodeURIComponent('\(escapedText)'));")
     }
@@ -679,6 +685,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     fileprivate func controllerWebContentProcessDidTerminate(_ controller: GutenbergEditorController) {
+        // Reset readiness so JS bridge calls are blocked until the editor
+        // re-emits onEditorLoaded after the reload completes.
+        self.isReady = false
         webView.reload()
     }
 
@@ -731,6 +740,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(5)) {
             _ = editorViewController
         }
+    }
+}
+
+/// Error thrown when a JS bridge method is called before the editor is ready.
+public struct EditorNotReadyError: LocalizedError {
+    public var errorDescription: String? {
+        "The editor is not ready. Wait for editorDidLoad before calling JS bridge methods."
     }
 }
 

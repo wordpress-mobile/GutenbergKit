@@ -4,7 +4,6 @@
 import { store as coreStore } from '@wordpress/core-data';
 import { useSelect } from '@wordpress/data';
 import { store as editorStore, EditorProvider } from '@wordpress/editor';
-import { useRef } from '@wordpress/element';
 
 /**
  * Internal dependencies
@@ -13,6 +12,7 @@ import VisualEditor from '../visual-editor';
 import './style.scss';
 import { useSyncHistoryControls } from './use-sync-history-controls';
 import { useHostBridge } from './use-host-bridge';
+import { useEditorReady } from './use-editor-ready';
 import { useHostExceptionLogging } from './use-host-exception-logging';
 import { useEditorSetup } from './use-editor-setup';
 import { useMediaUpload } from './use-media-upload';
@@ -37,8 +37,8 @@ import { usePlusAutocompleter } from './use-plus-autocompleter';
  * @return {Element} The rendered App component.
  */
 export default function Editor( { post, children, hideTitle } ) {
-	const editorRef = useRef( null );
-	useHostBridge( post, editorRef );
+	const [ callbackRef, editorRef, markBridgeReady ] = useEditorReady();
+	useHostBridge( post, editorRef, markBridgeReady );
 	useSyncFeaturedImage();
 	useSyncHistoryControls();
 	useHostExceptionLogging();
@@ -84,18 +84,19 @@ export default function Editor( { post, children, hideTitle } ) {
 	}
 
 	return (
-		<div className="gutenberg-kit-editor" ref={ editorRef }>
+		<div className="gutenberg-kit-editor">
 			<EditorProvider
 				post={ currentPost }
 				settings={ settings }
 				useSubRegistry={ false }
 			>
 				{ mode === 'visual' && isRichEditingEnabled && (
-					<VisualEditor hideTitle={ hideTitle } />
+					<VisualEditor ref={ callbackRef } hideTitle={ hideTitle } />
 				) }
 
 				{ ( mode === 'text' || ! isRichEditingEnabled ) && (
 					<TextEditor
+						ref={ callbackRef }
 						// We should auto-focus the canvas (title) on load.
 						// eslint-disable-next-line jsx-a11y/no-autofocus
 						autoFocus={ true }

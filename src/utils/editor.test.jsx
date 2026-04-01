@@ -13,15 +13,10 @@ import { getGBKit, getPost } from './bridge';
 import { getDefaultEditorSettings } from './editor-settings';
 import { unregisterDisallowedBlocks } from './blocks';
 
-vi.mock( '@wordpress/blocks', () => ( {} ) );
-vi.mock( '@wordpress/editor', () => ( {
-	store: { name: 'core/editor' },
-} ) );
+vi.mock( '@wordpress/blocks' );
+vi.mock( '@wordpress/editor' );
 vi.mock( import( '@wordpress/data' ), { spy: true } );
-vi.mock( '@wordpress/preferences' );
-vi.mock( '@wordpress/block-library', () => ( {
-	registerCoreBlocks: vi.fn(),
-} ) );
+vi.mock( '@wordpress/block-library' );
 vi.mock( './blocks' );
 vi.mock( './bridge' );
 vi.mock( './editor-settings' );

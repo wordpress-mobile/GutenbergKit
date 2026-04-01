@@ -6,7 +6,7 @@ import clsx from 'clsx';
 /**
  * WordPress dependencies
  */
-import { useRef } from '@wordpress/element';
+import { forwardRef, useRef } from '@wordpress/element';
 import {
 	BlockList,
 	privateApis as blockEditorPrivateApis,
@@ -30,7 +30,6 @@ import EditorToolbar from '../editor-toolbar';
 import { useEditorStyles } from './use-editor-styles';
 import { unlock } from '../../lock-unlock';
 import DefaultBlockAppender from '../default-block-appender';
-import { useEditorVisible } from './use-editor-visible';
 import defaultThemeStyles from './default-theme-styles.scss?inline';
 import commonStyles from './wp-common-styles.scss?inline';
 
@@ -55,9 +54,8 @@ const alignCSS = `.is-root-container.alignwide { max-width: var(--wp--style--glo
  *
  * @return {Element} The rendered Editor component.
  */
-function VisualEditor( { hideTitle } ) {
+const VisualEditor = forwardRef( function VisualEditor( { hideTitle }, ref ) {
 	const editorPostTitleRef = useRef();
-	const editorVisibleRef = useEditorVisible();
 
 	const {
 		renderingMode,
@@ -139,7 +137,7 @@ function VisualEditor( { hideTitle } ) {
 	);
 
 	return (
-		<div className={ editorClasses } ref={ editorVisibleRef }>
+		<div className={ editorClasses } ref={ ref }>
 			<BlockCanvas shouldIframe={ false } height="100%" styles={ styles }>
 				{ themeSupportsLayout &&
 					! themeHasDisabledLayoutStyles &&
@@ -174,6 +172,6 @@ function VisualEditor( { hideTitle } ) {
 			<EditorToolbar className="gutenberg-kit-visual-editor__toolbar" />
 		</div>
 	);
-}
+} );
 
 export default VisualEditor;
