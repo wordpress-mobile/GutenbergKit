@@ -188,7 +188,7 @@ class GutenbergViewTest {
         val request = mock(WebResourceRequest::class.java)
         `when`(request.url).thenReturn(Uri.parse("https://example.com/assets/index.html"))
 
-        val result = siteView.webViewClient.shouldOverrideUrlLoading(siteView, request)
+        val result = siteView.editorWebView.webViewClient.shouldOverrideUrlLoading(siteView.editorWebView, request)
         assertFalse("Asset path URLs on the site domain should load in the WebView", result)
     }
 
@@ -205,7 +205,7 @@ class GutenbergViewTest {
         val request = mock(WebResourceRequest::class.java)
         `when`(request.url).thenReturn(Uri.parse("https://example.com/some-page"))
 
-        val result = siteView.webViewClient.shouldOverrideUrlLoading(siteView, request)
+        val result = siteView.editorWebView.webViewClient.shouldOverrideUrlLoading(siteView.editorWebView, request)
         assertTrue("Non-asset URLs on the site domain should open externally", result)
     }
 }
