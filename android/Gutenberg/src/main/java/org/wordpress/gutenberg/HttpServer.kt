@@ -39,7 +39,11 @@ data class HttpRequest(
     val target: String,
     val headers: Map<String, String>,
     val body: org.wordpress.gutenberg.http.RequestBody? = null,
-    val parseDurationMs: Double = 0.0
+    val parseDurationMs: Double = 0.0,
+    /** A server-detected error that occurred after headers were parsed
+     *  (e.g., payload too large). When set, the handler is responsible
+     *  for building an appropriate error response. */
+    val serverError: org.wordpress.gutenberg.http.HTTPRequestParseError? = null
 ) {
     /**
      * Returns the value of the first header matching the given name (case-insensitive).
@@ -322,6 +326,31 @@ class HttpServer(
                     status = 400,
                     body = "Bad Request".toByteArray()
                 ))
+                return
+            }
+
+            // If the parser detected a non-fatal error (e.g., payload too
+            // large after drain), let the handler build the response.
+            parser.pendingParseError?.let { error ->
+                val parseDurationMs = (System.nanoTime() - parseStart) / 1_000_000.0
+                val request = HttpRequest(
+                    method = partial.method,
+                    target = partial.target,
+                    headers = partial.headers,
+                    parseDurationMs = parseDurationMs,
+                    serverError = error
+                )
+                val response = try {
+                    handler(request)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Handler threw", e)
+                    HttpResponse(
+                        status = error.httpStatus,
+                        body = (STATUS_TEXT[error.httpStatus] ?: "Error").toByteArray()
+                    )
+                }
+                sendResponse(socket, response)
+                Log.d(TAG, "${partial.method} ${partial.target} → ${response.status} (${"%.1f".format(parseDurationMs)}ms)")
                 return
             }
 

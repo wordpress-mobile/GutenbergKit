@@ -3,6 +3,7 @@ package org.wordpress.gutenberg
 import android.util.Log
 import org.wordpress.gutenberg.http.HeaderValue
 import org.wordpress.gutenberg.http.MultipartPart
+import org.wordpress.gutenberg.http.HTTPRequestParseError
 import org.wordpress.gutenberg.http.MultipartParseException
 import java.io.File
 import java.io.IOException
@@ -91,6 +92,16 @@ internal class MediaUploadServer(
     // MARK: - Request Handling
 
     private suspend fun handleRequest(request: HttpRequest): HttpResponse {
+        // Server-detected error (e.g., payload too large) — build the
+        // error response here so it includes CORS headers.
+        request.serverError?.let { error ->
+            val message = when (error) {
+                HTTPRequestParseError.PAYLOAD_TOO_LARGE -> "The file is too large to upload in the editor."
+                else -> error.errorId
+            }
+            return errorResponse(error.httpStatus, message)
+        }
+
         // CORS preflight — the library exempts OPTIONS from auth, so this is
         // reached without a token.
         if (request.method.uppercase() == "OPTIONS") {

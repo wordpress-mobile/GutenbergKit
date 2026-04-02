@@ -107,6 +107,15 @@ public final class HTTPRequestParser: @unchecked Sendable {
         lock.withLock { _state }
     }
 
+    /// The parse error detected during buffering, if any.
+    ///
+    /// Non-fatal errors like ``HTTPRequestParseError/payloadTooLarge`` are
+    /// exposed here instead of being thrown by ``parseRequest()``, allowing
+    /// the caller to still access the parsed headers.
+    public var parseError: HTTPRequestParseError? {
+        lock.withLock { _parseError }
+    }
+
     /// The expected body length from `Content-Length`, available once headers have been received.
     public var expectedBodyLength: Int64? {
         lock.withLock {
@@ -128,7 +137,11 @@ public final class HTTPRequestParser: @unchecked Sendable {
         try lock.withLock {
             guard _state.hasHeaders else { return nil }
 
-            if let error = _parseError {
+            // Payload-too-large means "valid headers, rejected body" — let
+            // the caller access the parsed headers so the handler can build
+            // a response (e.g., with CORS headers). Other parse errors
+            // indicate genuinely malformed requests and are still thrown.
+            if let error = _parseError, error != .payloadTooLarge {
                 throw error
             }
 
@@ -147,7 +160,11 @@ public final class HTTPRequestParser: @unchecked Sendable {
 
             guard let headers = _parsedHeaders else { return nil }
 
-            guard _state.isComplete else {
+            // Return partial (headers only) when the body was rejected or
+            // hasn't fully arrived yet. The payloadTooLarge case goes through
+            // drain mode which discards body bytes without buffering them, so
+            // there is no body to extract even though the state is .complete.
+            guard _state.isComplete, _parseError == nil else {
                 return .partial(
                     method: headers.method,
                     target: headers.target,

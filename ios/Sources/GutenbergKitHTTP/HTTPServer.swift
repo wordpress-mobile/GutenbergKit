@@ -75,6 +75,16 @@ public final class HTTPServer: Sendable {
         public let parsed: ParsedHTTPRequest
         /// Time spent receiving and parsing the request.
         public let parseDuration: Duration
+        /// A server-detected error that occurred after headers were parsed
+        /// (e.g., payload too large). When set, the handler is responsible
+        /// for building an appropriate error response.
+        public let serverError: HTTPRequestParseError?
+
+        init(parsed: ParsedHTTPRequest, parseDuration: Duration, serverError: HTTPRequestParseError? = nil) {
+            self.parsed = parsed
+            self.parseDuration = parseDuration
+            self.serverError = serverError
+        }
     }
 
     public typealias Response = HTTPResponse
@@ -281,6 +291,13 @@ public final class HTTPServer: Sendable {
                                 throw HTTPServerError.connectionClosed
                             }
 
+                            // If the parser detected a non-fatal error (e.g.,
+                            // payload too large after drain), return the partial
+                            // request so the handler can build the response.
+                            if parser.parseError != nil {
+                                return partial
+                            }
+
                             // Check auth before consuming body to avoid buffering
                             // up to maxRequestBodySize for unauthenticated clients.
                             // OPTIONS is exempt because CORS preflight requests
@@ -319,7 +336,7 @@ public final class HTTPServer: Sendable {
                     }
                 }
 
-                let response = await handler(Request(parsed: request, parseDuration: duration))
+                let response = await handler(Request(parsed: request, parseDuration: duration, serverError: parser.parseError))
                 await send(response, on: connection)
                 let (sec, atto) = duration.components
                 let ms = Double(sec) * 1000.0 + Double(atto) / 1_000_000_000_000_000.0

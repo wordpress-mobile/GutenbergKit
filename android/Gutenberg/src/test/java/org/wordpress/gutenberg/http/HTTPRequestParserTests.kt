@@ -4,7 +4,6 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -99,7 +98,7 @@ class HTTPRequestParserTests {
     }
 
     @Test
-    fun `drains oversized body before reporting payloadTooLarge`() {
+    fun `drains oversized body and returns partial with parseError`() {
         val parser = HTTPRequestParser(maxBodySize = 100)
         parser.append("POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Length: 101\r\n\r\n".toByteArray())
 
@@ -109,11 +108,13 @@ class HTTPRequestParserTests {
         // Feed the remaining body bytes to complete the drain.
         parser.append(ByteArray(101) { 0x41 })
         assertTrue(parser.state.isComplete)
-        assertThrows(HTTPRequestParseException::class.java) {
-            parser.parseRequest()
-        }.also {
-            assertEquals(HTTPRequestParseError.PAYLOAD_TOO_LARGE, it.error)
-        }
+
+        // parseRequest() returns partial headers instead of throwing.
+        val request = parser.parseRequest()!!
+        assertEquals("POST", request.method)
+        assertEquals("/upload", request.target)
+        assertFalse(request.isComplete)
+        assertEquals(HTTPRequestParseError.PAYLOAD_TOO_LARGE, parser.pendingParseError)
     }
 
     @Test
@@ -136,11 +137,10 @@ class HTTPRequestParserTests {
         }
 
         assertTrue(parser.state.isComplete)
-        assertThrows(HTTPRequestParseException::class.java) {
-            parser.parseRequest()
-        }.also {
-            assertEquals(HTTPRequestParseError.PAYLOAD_TOO_LARGE, it.error)
-        }
+        val request = parser.parseRequest()!!
+        assertEquals("POST", request.method)
+        assertFalse(request.isComplete)
+        assertEquals(HTTPRequestParseError.PAYLOAD_TOO_LARGE, parser.pendingParseError)
     }
 
     @Test
@@ -153,13 +153,11 @@ class HTTPRequestParserTests {
         parser.append(ByteArray(1000) { 0x43 })
         assertTrue(parser.state.isComplete)
 
-        // The parser should still report the error, confirming the bytes
-        // were consumed without being stored.
-        assertThrows(HTTPRequestParseException::class.java) {
-            parser.parseRequest()
-        }.also {
-            assertEquals(HTTPRequestParseError.PAYLOAD_TOO_LARGE, it.error)
-        }
+        // parseRequest() returns headers; error is on pendingParseError.
+        val request = parser.parseRequest()!!
+        assertEquals("POST", request.method)
+        assertFalse(request.isComplete)
+        assertEquals(HTTPRequestParseError.PAYLOAD_TOO_LARGE, parser.pendingParseError)
     }
 
     // MARK: - Error HTTP Status Mapping

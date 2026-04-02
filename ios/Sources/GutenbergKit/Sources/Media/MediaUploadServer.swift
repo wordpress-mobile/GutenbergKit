@@ -60,6 +60,16 @@ final class MediaUploadServer: Sendable {
     private static func handleRequest(_ request: HTTPServer.Request, context: UploadContext) async -> HTTPResponse {
         let parsed = request.parsed
 
+        // Server-detected error (e.g., payload too large) — build the
+        // error response here so it includes CORS headers.
+        if let serverError = request.serverError {
+            let message: String = switch serverError {
+            case .payloadTooLarge: "The file is too large to upload in the editor."
+            default: "\(serverError.httpStatusText)"
+            }
+            return errorResponse(status: serverError.httpStatus, body: message)
+        }
+
         // CORS preflight — the library exempts OPTIONS from auth, so this is
         // reached without a token.
         if parsed.method.uppercased() == "OPTIONS" {

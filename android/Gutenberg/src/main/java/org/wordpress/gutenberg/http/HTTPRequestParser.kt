@@ -82,6 +82,15 @@ class HTTPRequestParser(
     /** The current buffering state. */
     val state: State get() = synchronized(lock) { _state }
 
+    /**
+     * The parse error detected during buffering, if any.
+     *
+     * Non-fatal errors like [HTTPRequestParseError.PAYLOAD_TOO_LARGE] are
+     * exposed here instead of being thrown by [parseRequest], allowing the
+     * caller to still access the parsed headers.
+     */
+    val pendingParseError: HTTPRequestParseError? get() = synchronized(lock) { parseError }
+
     /** Creates a parser and immediately parses the given raw HTTP string. */
     constructor(
         input: String,
@@ -211,7 +220,11 @@ class HTTPRequestParser(
     fun parseRequest(): ParsedHTTPRequest? = synchronized(lock) {
         if (!_state.hasHeaders) return null
 
-        parseError?.let { throw HTTPRequestParseException(it) }
+        // Payload-too-large means "valid headers, rejected body" — let
+        // the caller access the parsed headers so the handler can build
+        // a response (e.g., with CORS headers). Other parse errors
+        // indicate genuinely malformed requests and are still thrown.
+        parseError?.let { if (it != HTTPRequestParseError.PAYLOAD_TOO_LARGE) throw HTTPRequestParseException(it) }
 
         if (parsedHeaders == null) {
             val headerData = buffer.read(0, minOf(bytesWritten, MAX_HEADER_SIZE.toLong()).toInt())
@@ -227,7 +240,11 @@ class HTTPRequestParser(
 
         val headers = parsedHeaders ?: return null
 
-        if (_state != State.COMPLETE) {
+        // Return partial (headers only) when the body was rejected or
+        // hasn't fully arrived yet. The payloadTooLarge case goes through
+        // drain mode which discards body bytes without buffering them, so
+        // there is no body to extract even though the state is COMPLETE.
+        if (_state != State.COMPLETE || parseError != null) {
             return ParsedHTTPRequest(
                 method = headers.method,
                 target = headers.target,
