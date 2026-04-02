@@ -36,7 +36,6 @@ final class MediaUploadServer: Sendable {
         let server = try await HTTPServer.start(
             name: "media-upload",
             requiresAuthentication: true,
-            errorResponseHeaders: corsHeaders,
             handler: { request in
                 await Self.handleRequest(request, context: context)
             }

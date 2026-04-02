@@ -134,9 +134,6 @@ public final class HTTPServer: Sendable {
     ///     the connection. Defaults to 30 seconds.
     ///   - idleTimeout: The maximum time to wait between consecutive reads before closing
     ///     the connection. Prevents slow-loris attacks. Defaults to 5 seconds.
-    ///   - errorResponseHeaders: Headers to include on all server-generated error responses
-    ///     (e.g. 408 timeout, 413 payload too large). Useful for CORS headers that the
-    ///     browser requires even on error responses.
     ///   - handler: A closure invoked for each fully-parsed request. Return an ``HTTPResponse``
     ///     to send back to the client.
     /// - Returns: A running ``HTTPServer`` instance.
@@ -150,7 +147,6 @@ public final class HTTPServer: Sendable {
         maxConnections: Int = HTTPServer.defaultMaxConnections,
         readTimeout: Duration = HTTPServer.defaultReadTimeout,
         idleTimeout: Duration = HTTPServer.defaultIdleTimeout,
-        errorResponseHeaders: [(String, String)] = [],
         handler: @escaping @Sendable (HTTPServer.Request) async -> HTTPResponse
     ) async throws -> HTTPServer {
         // Sanitize to prevent path traversal — only allow safe filename characters.
@@ -191,8 +187,7 @@ public final class HTTPServer: Sendable {
                 requiresAuthentication: requiresAuth,
                 maxRequestBodySize: maxRequestBodySize, readTimeout: readTimeout,
                 idleTimeout: idleTimeout, tempDirectory: tempDirectory,
-                connectionCounter: connectionCounter, connectionTasks: connectionTasks,
-                errorResponseHeaders: errorResponseHeaders, handler: handler
+                connectionCounter: connectionCounter, connectionTasks: connectionTasks, handler: handler
             )
         }
 
@@ -256,7 +251,6 @@ public final class HTTPServer: Sendable {
         tempDirectory: URL,
         connectionCounter: ConnectionCounter,
         connectionTasks: ConnectionTasks,
-        errorResponseHeaders: [(String, String)],
         handler: @escaping @Sendable (HTTPServer.Request) async -> HTTPResponse
     ) {
         connection.start(queue: queue)
@@ -331,28 +325,27 @@ public final class HTTPServer: Sendable {
                 let ms = Double(sec) * 1000.0 + Double(atto) / 1_000_000_000_000_000.0
                 Logger.httpServer.debug("\(request.method) \(request.target) → \(response.status) (\(String(format: "%.1f", ms))ms)")
             } catch HTTPServerError.authenticationFailed {
-                await send(HTTPResponse(status: 407, headers: errorResponseHeaders + [("Content-Type", "text/plain"), ("Proxy-Authenticate", "Bearer")]), on: connection)
+                await send(HTTPResponse(status: 407, headers: [("Content-Type", "text/plain"), ("Proxy-Authenticate", "Bearer")]), on: connection)
             } catch HTTPServerError.lengthRequired {
-                await send(HTTPResponse(status: 411, statusText: "Length Required", headers: errorResponseHeaders, body: Data("Length Required".utf8)), on: connection)
+                await send(HTTPResponse(status: 411, statusText: "Length Required", body: Data("Length Required".utf8)), on: connection)
             } catch is CancellationError {
                 Logger.httpServer.debug("Connection cancelled during shutdown")
                 connection.cancel()
             } catch HTTPServerError.readTimeout {
                 Logger.httpServer.warning("Read timeout, closing connection")
-                await send(HTTPResponse(status: 408, statusText: "Request Timeout", headers: errorResponseHeaders, body: Data("Request Timeout".utf8)), on: connection)
+                await send(HTTPResponse(status: 408, statusText: "Request Timeout", body: Data("Request Timeout".utf8)), on: connection)
             } catch let error as HTTPRequestParseError {
                 Logger.httpServer.error("Parse error: \(error)")
                 let statusText = String(error.httpStatusText)
                 let response = HTTPResponse(
                     status: error.httpStatus,
                     statusText: statusText,
-                    headers: errorResponseHeaders,
                     body: Data(statusText.utf8)
                 )
                 await send(response, on: connection)
             } catch {
                 Logger.httpServer.error("Unexpected error: \(error)")
-                await send(HTTPResponse(status: 400, statusText: "Bad Request", headers: errorResponseHeaders, body: Data("Malformed HTTP request".utf8)), on: connection)
+                await send(HTTPResponse(status: 400, statusText: "Bad Request", body: Data("Malformed HTTP request".utf8)), on: connection)
             }
         }
         connectionTasks.track(taskID, task)
