@@ -32,6 +32,7 @@ jobs:
               uses: github/codeql-action/init@v4
               with:
                   languages: ${{ matrix.language }}
+                  build-mode: none
 
             # The :Gutenberg Gradle build generates `SupportedLocales.kt` from
             # `src/main/assets/supported-locales.json`, which is emitted by the
@@ -47,9 +48,6 @@ jobs:
             - name: Populate Android assets via JS build
               if: matrix.language == 'java-kotlin'
               run: make build
-
-            - name: Autobuild
-              uses: github/codeql-action/autobuild@v4
 
             - name: Perform CodeQL Analysis
               uses: github/codeql-action/analyze@v4
