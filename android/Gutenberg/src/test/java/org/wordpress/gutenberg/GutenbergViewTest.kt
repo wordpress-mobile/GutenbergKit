@@ -68,7 +68,7 @@ class GutenbergViewTest {
         }
 
         // When
-        gutenbergView.webChromeClient?.onShowFileChooser(
+        gutenbergView.editorWebView.webChromeClient?.onShowFileChooser(
             mockWebView,
             mockFilePathCallback,
             mockFileChooserParams
@@ -108,7 +108,7 @@ class GutenbergViewTest {
 
         // When
         `when`(mockFileChooserParams.mode).thenReturn(WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE)
-        gutenbergView.webChromeClient?.onShowFileChooser(
+        gutenbergView.editorWebView.webChromeClient?.onShowFileChooser(
             mockWebView,
             mockFilePathCallback,
             mockFileChooserParams
@@ -134,7 +134,7 @@ class GutenbergViewTest {
     @Test
     fun `onShowFileChooser stores file path callback`() {
         // When
-        gutenbergView.webChromeClient?.onShowFileChooser(
+        gutenbergView.editorWebView.webChromeClient?.onShowFileChooser(
             mockWebView,
             mockFilePathCallback,
             mockFileChooserParams
@@ -148,7 +148,7 @@ class GutenbergViewTest {
     @Test
     fun `resetFilePathCallback clears the callback`() {
         // Given
-        gutenbergView.webChromeClient?.onShowFileChooser(
+        gutenbergView.editorWebView.webChromeClient?.onShowFileChooser(
             mockWebView,
             mockFilePathCallback,
             mockFileChooserParams
@@ -168,7 +168,7 @@ class GutenbergViewTest {
         // that was already set up in the @Before method
 
         // Then
-        val userAgent = gutenbergView.settings.userAgentString
+        val userAgent = gutenbergView.editorWebView.settings.userAgentString
         assertTrue("User agent should contain GutenbergKit identifier",
             userAgent.contains("GutenbergKit/"))
         assertTrue("User agent should contain version number",
@@ -188,7 +188,7 @@ class GutenbergViewTest {
         val request = mock(WebResourceRequest::class.java)
         `when`(request.url).thenReturn(Uri.parse("https://example.com/assets/index.html"))
 
-        val result = siteView.webViewClient.shouldOverrideUrlLoading(siteView, request)
+        val result = siteView.editorWebView.webViewClient.shouldOverrideUrlLoading(siteView.editorWebView, request)
         assertFalse("Asset path URLs on the site domain should load in the WebView", result)
     }
 
@@ -205,7 +205,7 @@ class GutenbergViewTest {
         val request = mock(WebResourceRequest::class.java)
         `when`(request.url).thenReturn(Uri.parse("https://example.com/some-page"))
 
-        val result = siteView.webViewClient.shouldOverrideUrlLoading(siteView, request)
+        val result = siteView.editorWebView.webViewClient.shouldOverrideUrlLoading(siteView.editorWebView, request)
         assertTrue("Non-asset URLs on the site domain should open externally", result)
     }
 }

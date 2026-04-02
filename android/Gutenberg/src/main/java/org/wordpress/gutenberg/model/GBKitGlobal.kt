@@ -71,7 +71,7 @@ data class GBKitGlobal(
     @Serializable
     data class Post(
         /** The post ID, or -1 for new posts. */
-        val id: Int,
+        val id: Int, // TODO: Instead of the `-1` trick, this should just be `null` for new posts
         /** The post type (e.g., `post`, `page`). */
         val type: String,
         /** The post status (e.g., `draft`, `publish`, `pending`). */
@@ -95,6 +95,8 @@ data class GBKitGlobal(
             configuration: EditorConfiguration,
             dependencies: EditorDependencies?
         ): GBKitGlobal {
+            val postId = (configuration.postId?.toInt() ?: -1).takeIf({ it != 0 })
+
             return GBKitGlobal(
                 siteURL = configuration.siteURL.ifEmpty { null },
                 siteApiRoot = configuration.siteApiRoot.ifEmpty { null },
@@ -106,9 +108,9 @@ data class GBKitGlobal(
                 hideTitle = configuration.hideTitle,
                 locale = configuration.locale ?: "en",
                 post = Post(
-                    id = configuration.postId ?: -1,
+                    id = postId ?: -1,
                     type = configuration.postType,
-                    status = configuration.postStatus ?: "draft",
+                    status = configuration.postStatus,
                     title = configuration.title.encodeForEditor(),
                     content = configuration.content.encodeForEditor()
                 ),

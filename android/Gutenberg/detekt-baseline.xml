@@ -72,7 +72,7 @@
     <ID>TooGenericExceptionCaught:LocalEditorAssetManifest.kt$LocalEditorAssetManifest$e: Exception</ID>
     <ID>TooGenericExceptionThrown:EditorAssetsLibrary.kt$EditorAssetsLibrary$throw Exception("Failed to fetch asset: $httpURL (${connection.responseCode})")</ID>
     <ID>TooGenericExceptionThrown:EditorAssetsLibrary.kt$EditorAssetsLibrary$throw Exception("Failed to fetch manifest: ${connection.responseCode}")</ID>
-    <ID>TooManyFunctions:GutenbergView.kt$GutenbergView : WebView</ID>
+    <ID>TooManyFunctions:GutenbergView.kt$GutenbergView : FrameLayout</ID>
     <ID>UnusedParameter:EditorService.kt$EditorService.Companion$coroutineScope: CoroutineScope</ID>
     <ID>UnusedPrivateMember:GutenbergView.kt$GutenbergView.Companion$private fun cleanupWarmup()</ID>
     <ID>UnusedPrivateProperty:GutenbergView.kt$GutenbergView.Companion$private const val ASSET_LOADING_TIMEOUT_MS = 5000L</ID>

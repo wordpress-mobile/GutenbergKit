@@ -36,7 +36,7 @@ class GBKitGlobalTest {
     }
 
     private fun makeConfiguration(
-        postId: Int? = null,
+        postId: UInt? = null,
         title: String? = null,
         content: String? = null,
         siteURL: String = TEST_SITE_URL,
@@ -107,7 +107,7 @@ class GBKitGlobalTest {
 
     @Test
     fun `maps postID to post id`() {
-        val withPostID = makeConfiguration(postId = 42)
+        val withPostID = makeConfiguration(postId = 42u)
         val withoutPostID = makeConfiguration(postId = null)
 
         val globalWith = GBKitGlobal.fromConfiguration(withPostID, makeDependencies())
@@ -115,6 +115,13 @@ class GBKitGlobalTest {
 
         assertEquals(42, globalWith.post.id)
         assertEquals(-1, globalWithout.post.id)
+    }
+
+    @Test
+    fun `maps zero postID to negative one`() {
+        val configuration = makeConfiguration(postId = 0u)
+        val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
+        assertEquals(-1, global.post.id)
     }
 
     @Test
@@ -149,7 +156,7 @@ class GBKitGlobalTest {
 
     @Test
     fun `toJsonString includes all required fields`() {
-        val configuration = makeConfiguration(postId = 123, title = "Test", content = "Content")
+        val configuration = makeConfiguration(postId = 123u, title = "Test", content = "Content")
         val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
 
         val jsonString = global.toJsonString()
@@ -165,7 +172,7 @@ class GBKitGlobalTest {
 
     @Test
     fun `toJsonString round-trips through serialization`() {
-        val configuration = makeConfiguration(postId = 99, title = "Round Trip", content = "Test content")
+        val configuration = makeConfiguration(postId = 99u, title = "Round Trip", content = "Test content")
         val original = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
 
         val jsonString = original.toJsonString()
