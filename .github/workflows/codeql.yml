@@ -59,6 +59,9 @@ jobs:
             - name: Build Swift package
               run: swift build --build-tests
 
+            - name: Build Demo app
+              run: xcodebuild build -project ios/Demo-iOS/Gutenberg.xcodeproj -scheme Gutenberg -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
+
             - name: Perform CodeQL Analysis
               uses: github/codeql-action/analyze@v4
               with:
