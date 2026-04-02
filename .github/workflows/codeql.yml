@@ -22,13 +22,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                include:
-                    - language: actions
-                      build-mode: none
-                    - language: java-kotlin
-                      build-mode: autobuild
-                    - language: javascript-typescript
-                      build-mode: none
+                language: [actions, javascript-typescript]
 
         steps:
             - name: Checkout repository
@@ -38,12 +32,34 @@ jobs:
               uses: github/codeql-action/init@v4
               with:
                   languages: ${{ matrix.language }}
-                  build-mode: ${{ matrix.build-mode }}
+                  build-mode: none
 
             - name: Perform CodeQL Analysis
               uses: github/codeql-action/analyze@v4
               with:
                   category: '/language:${{ matrix.language }}'
+
+    analyze-kotlin:
+        name: Analyze (java-kotlin)
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v5
+
+            - name: Initialize CodeQL
+              uses: github/codeql-action/init@v4
+              with:
+                  languages: java-kotlin
+
+            - name: Build Android project
+              run: cd android && ./gradlew compileDebugSources compileDebugTestSources compileDebugAndroidTestSources
+
+            - name: Perform CodeQL Analysis
+              uses: github/codeql-action/analyze@v4
+              with:
+                  category: '/language:java-kotlin'
 
     analyze-swift:
         name: Analyze (swift)
