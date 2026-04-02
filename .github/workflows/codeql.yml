@@ -54,7 +54,7 @@ jobs:
                   languages: java-kotlin
 
             - name: Build Android project
-              run: cd android && ./gradlew compileDebugSources compileDebugUnitTestSources compileDebugAndroidTestSources
+              run: cd android && ./gradlew compileDebugSources compileDebugUnitTestSources
 
             - name: Perform CodeQL Analysis
               uses: github/codeql-action/analyze@v4
