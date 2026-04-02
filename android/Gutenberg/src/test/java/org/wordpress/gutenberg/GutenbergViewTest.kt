@@ -82,15 +82,10 @@ class GutenbergViewTest {
 
         // Then
         assertTrue("Intent should not be null", capturedIntent != null)
-        assertTrue("Intent should be a chooser", capturedIntent?.action == Intent.ACTION_CHOOSER)
-
-        // Get the original intent from the chooser
-        val originalIntent = capturedIntent?.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
-        assertTrue("Original intent should not be null", originalIntent != null)
-        assertTrue("Original intent action should be ACTION_GET_CONTENT",
-            originalIntent?.action == Intent.ACTION_GET_CONTENT)
-        assertTrue("Original intent should have CATEGORY_OPENABLE",
-            originalIntent?.hasCategory(Intent.CATEGORY_OPENABLE) == true)
+        assertTrue("Intent action should be ACTION_OPEN_DOCUMENT",
+            capturedIntent?.action == Intent.ACTION_OPEN_DOCUMENT)
+        assertTrue("Intent should have CATEGORY_OPENABLE",
+            capturedIntent?.hasCategory(Intent.CATEGORY_OPENABLE) == true)
         assertEquals("Pick image request code should be 1",
             1, gutenbergView.pickImageRequestCode)
     }
@@ -122,13 +117,10 @@ class GutenbergViewTest {
 
         // Then
         assertTrue("Intent should not be null", capturedIntent != null)
-        assertTrue("Intent should be a chooser", capturedIntent?.action == Intent.ACTION_CHOOSER)
-
-        // Get the original intent from the chooser
-        val originalIntent = capturedIntent?.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
-        assertTrue("Original intent should not be null", originalIntent != null)
-        assertTrue("Original intent should allow multiple selection",
-            originalIntent?.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false) == true)
+        assertTrue("Intent action should be ACTION_OPEN_DOCUMENT",
+            capturedIntent?.action == Intent.ACTION_OPEN_DOCUMENT)
+        assertTrue("Intent should allow multiple selection",
+            capturedIntent?.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false) == true)
     }
 
     @Test

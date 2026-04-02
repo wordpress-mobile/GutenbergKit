@@ -32,12 +32,12 @@ import androidx.lifecycle.lifecycleScope
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+
 import org.json.JSONException
 import org.json.JSONObject
 import org.wordpress.gutenberg.model.EditorConfiguration
@@ -341,7 +341,12 @@ class GutenbergView : WebView {
                 // Only use `acceptTypes` if it is not merely an empty string
                 val mimeTypes = fileChooserParams?.acceptTypes?.takeUnless { it.size == 1 && it[0].isEmpty() } ?: arrayOf("*/*")
 
-                val intent = Intent(Intent.ACTION_GET_CONTENT)
+                // Use ACTION_OPEN_DOCUMENT instead of ACTION_PICK_IMAGES to
+                // bypass the Android Photo Picker, which returns proxy URIs
+                // that trigger Chromium's ERR_UPLOAD_FILE_CHANGED error.
+                // ACTION_OPEN_DOCUMENT routes directly to DocumentsUI, which
+                // returns stable content URIs suitable for WebView uploads.
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
                 intent.setType(mimeTypes[0])
                 intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
                 intent.addCategory(Intent.CATEGORY_OPENABLE)
@@ -352,7 +357,7 @@ class GutenbergView : WebView {
 
                 onFileChooserRequested?.let { callback ->
                     handler.post {
-                        callback(Intent.createChooser(intent, "Select Files"), pickImageRequestCode)
+                        callback(intent, pickImageRequestCode)
                     }
                 }
                 return true
@@ -847,48 +852,6 @@ class GutenbergView : WebView {
         } else null
     }
 
-    /**
-     * Processes file URIs to work around Chrome ERR_UPLOAD_FILE_CHANGED bug.
-     *
-     * This method caches files from cloud storage providers (Google Drive, OneDrive, etc.)
-     * to local storage to prevent upload failures. Files from known-safe local providers
-     * (MediaStore, Downloads) are passed through unchanged for optimal performance.
-     *
-     * Apps should call this method with URIs from the file picker, then pass the result
-     * to filePathCallback.onReceiveValue() to complete the file selection.
-     *
-     * @param context Android context for file operations
-     * @param uris Array of URIs from file picker
-     * @return Array of processed URIs (cached for cloud URIs, original for local URIs)
-     */
-    suspend fun processFileUris(context: Context, uris: Array<Uri?>?): Array<Uri?>? {
-        if (uris == null) return null
-
-        return withContext(Dispatchers.IO) {
-            uris.map { uri ->
-                if (uri == null) return@map null
-
-                if (uri.scheme == "content") {
-                    if (FileCache.isKnownSafeLocalProvider(uri)) {
-                        Log.i("GutenbergView", "Using local provider URI directly: $uri")
-                        uri
-                    } else {
-                        val cachedUri = FileCache.copyToCache(context, uri)
-                        if (cachedUri != null) {
-                            Log.i("GutenbergView", "Copied content URI to cache: $uri -> $cachedUri")
-                            cachedUri
-                        } else {
-                            Log.w("GutenbergView", "Failed to copy content URI to cache, using original: $uri")
-                            uri
-                        }
-                    }
-                } else {
-                    uri
-                }
-            }.toTypedArray()
-        }
-    }
-
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         startNetworkMonitoring()
@@ -899,7 +862,6 @@ class GutenbergView : WebView {
         stopNetworkMonitoring()
         clearConfig()
         this.stopLoading()
-        FileCache.clearCache(context)
         contentChangeListener = null
         historyChangeListener = null
         featuredImageChangeListener = null
