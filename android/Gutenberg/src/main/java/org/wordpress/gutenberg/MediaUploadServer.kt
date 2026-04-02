@@ -78,6 +78,7 @@ internal class MediaUploadServer(
             externallyAccessible = false,
             requiresAuthentication = true,
             cacheDir = cacheDir,
+            errorResponseHeaders = corsHeaders,
             handler = { request -> handleRequest(request) }
         )
         server.start()
@@ -190,11 +191,6 @@ internal class MediaUploadServer(
 
     // MARK: - Response Building
 
-    private val corsHeaders: Map<String, String> = mapOf(
-        "Access-Control-Allow-Origin" to "*",
-        "Access-Control-Allow-Headers" to "Relay-Authorization, Content-Type"
-    )
-
     private fun corsPreflightResponse(): HttpResponse = HttpResponse(
         status = 204,
         headers = corsHeaders + mapOf(
@@ -240,6 +236,11 @@ internal class MediaUploadServer(
 
     companion object {
         private const val TAG = "MediaUploadServer"
+
+        private val corsHeaders: Map<String, String> = mapOf(
+            "Access-Control-Allow-Origin" to "*",
+            "Access-Control-Allow-Headers" to "Relay-Authorization, Content-Type"
+        )
     }
 }
 

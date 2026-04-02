@@ -150,6 +150,7 @@ class HttpServer(
     private val readTimeoutMs: Int = DEFAULT_READ_TIMEOUT_MS,
     private val idleTimeoutMs: Int = DEFAULT_IDLE_TIMEOUT_MS,
     private val cacheDir: File? = null,
+    private val errorResponseHeaders: Map<String, String> = emptyMap(),
     private val handler: suspend (HttpRequest) -> HttpResponse
 ) {
     @Volatile
@@ -250,6 +251,7 @@ class HttpServer(
                 try {
                     sendResponse(sock, HttpResponse(
                         status = 408,
+                        headers = errorResponseHeaders + ("Content-Type" to "text/plain"),
                         body = "Request Timeout".toByteArray()
                     ))
                 } catch (_: Exception) {
@@ -306,12 +308,14 @@ class HttpServer(
                 val statusText = STATUS_TEXT[e.error.httpStatus] ?: "Bad Request"
                 sendResponse(socket, HttpResponse(
                     status = e.error.httpStatus,
+                    headers = errorResponseHeaders + ("Content-Type" to "text/plain"),
                     body = statusText.toByteArray()
                 ))
                 return
             } catch (_: java.io.IOException) {
                 sendResponse(socket, HttpResponse(
                     status = 500,
+                    headers = errorResponseHeaders + ("Content-Type" to "text/plain"),
                     body = "Internal Server Error".toByteArray()
                 ))
                 return
@@ -320,6 +324,7 @@ class HttpServer(
             if (partial == null) {
                 sendResponse(socket, HttpResponse(
                     status = 400,
+                    headers = errorResponseHeaders + ("Content-Type" to "text/plain"),
                     body = "Bad Request".toByteArray()
                 ))
                 return
@@ -335,7 +340,7 @@ class HttpServer(
                 if (!authenticate(proxyAuth, token)) {
                     sendResponse(socket, HttpResponse(
                         status = 407,
-                        headers = mapOf("Content-Type" to "text/plain", "Proxy-Authenticate" to "Bearer")
+                        headers = errorResponseHeaders + mapOf("Content-Type" to "text/plain", "Proxy-Authenticate" to "Bearer")
                     ))
                     return
                 }
@@ -348,6 +353,7 @@ class HttpServer(
             if (upperMethod in listOf("POST", "PUT", "PATCH") && partial.header("Content-Length") == null) {
                 sendResponse(socket, HttpResponse(
                     status = 411,
+                    headers = errorResponseHeaders + ("Content-Type" to "text/plain"),
                     body = "Length Required".toByteArray()
                 ))
                 return
@@ -370,12 +376,14 @@ class HttpServer(
                 val statusText = STATUS_TEXT[e.error.httpStatus] ?: "Bad Request"
                 sendResponse(socket, HttpResponse(
                     status = e.error.httpStatus,
+                    headers = errorResponseHeaders + ("Content-Type" to "text/plain"),
                     body = statusText.toByteArray()
                 ))
                 return
             } catch (_: java.io.IOException) {
                 sendResponse(socket, HttpResponse(
                     status = 500,
+                    headers = errorResponseHeaders + ("Content-Type" to "text/plain"),
                     body = "Internal Server Error".toByteArray()
                 ))
                 return
@@ -387,6 +395,7 @@ class HttpServer(
                 parsed?.body?.fileOwner?.close()
                 sendResponse(socket, HttpResponse(
                     status = 400,
+                    headers = errorResponseHeaders + ("Content-Type" to "text/plain"),
                     body = "Bad Request".toByteArray()
                 ))
                 return
