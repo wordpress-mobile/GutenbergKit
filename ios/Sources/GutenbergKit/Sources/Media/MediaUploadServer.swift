@@ -292,15 +292,11 @@ class DefaultMediaUploader: @unchecked Sendable {
     }
 
     func upload(fileURL: URL, mimeType: String, filename: String) async throws -> MediaUploadResult {
-        let fileData = try Data(contentsOf: fileURL)
         let boundary = UUID().uuidString
 
-        var body = Data()
-        body.append("--\(boundary)\r\n")
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n")
-        body.append("Content-Type: \(mimeType)\r\n\r\n")
-        body.append(fileData)
-        body.append("\r\n--\(boundary)--\r\n")
+        let (bodyStream, contentLength) = try Self.multipartBodyStream(
+            fileURL: fileURL, boundary: boundary, filename: filename, mimeType: mimeType
+        )
 
         // When a site API namespace is configured (e.g. "sites/12345/"), insert
         // it into the media endpoint path so the request reaches the correct site.
@@ -313,7 +309,8 @@ class DefaultMediaUploader: @unchecked Sendable {
         var request = URLRequest(url: uploadURL)
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.httpBody = body
+        request.setValue("\(contentLength)", forHTTPHeaderField: "Content-Length")
+        request.httpBodyStream = bodyStream
 
         let (data, response) = try await httpClient.perform(request)
 
@@ -342,6 +339,92 @@ class DefaultMediaUploader: @unchecked Sendable {
             width: wpMedia.media_details?.width,
             height: wpMedia.media_details?.height
         )
+    }
+
+    // MARK: - Streaming Multipart Body
+
+    /// Builds a multipart/form-data body as an `InputStream` that streams the
+    /// file from disk without loading it into memory.
+    ///
+    /// Uses a bound stream pair with a background writer thread — the same
+    /// pattern as `RequestBody.makePipedFileSliceStream`.
+    ///
+    /// - Returns: A tuple of the input stream and the total content length.
+    static func multipartBodyStream(
+        fileURL: URL,
+        boundary: String,
+        filename: String,
+        mimeType: String
+    ) throws -> (InputStream, Int) {
+        let preamble = Data(
+            ("--\(boundary)\r\n"
+            + "Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n"
+            + "Content-Type: \(mimeType)\r\n\r\n").utf8
+        )
+        let epilogue = Data("\r\n--\(boundary)--\r\n".utf8)
+
+        guard let fileSize = try FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? Int else {
+            throw MediaUploadError.streamReadFailed
+        }
+        let contentLength = preamble.count + fileSize + epilogue.count
+
+        let fileHandle = try FileHandle(forReadingFrom: fileURL)
+
+        var readStream: InputStream?
+        var writeStream: OutputStream?
+        Stream.getBoundStreams(withBufferSize: 65_536, inputStream: &readStream, outputStream: &writeStream)
+
+        guard let inputStream = readStream, let outputStream = writeStream else {
+            try? fileHandle.close()
+            throw MediaUploadError.streamReadFailed
+        }
+
+        outputStream.open()
+
+        // OutputStream is not Sendable but is safely transferred to the
+        // writer thread — only the thread accesses it after this point.
+        nonisolated(unsafe) let output = outputStream
+
+        Thread.detachNewThread {
+            defer {
+                output.close()
+                try? fileHandle.close()
+            }
+
+            // Write preamble (multipart headers).
+            guard Self.writeAll(preamble, to: output) else { return }
+
+            // Stream file content in chunks.
+            var remaining = fileSize
+            while remaining > 0 {
+                let chunkSize = min(65_536, remaining)
+                guard let chunk = try? fileHandle.read(upToCount: chunkSize),
+                      !chunk.isEmpty else {
+                    break
+                }
+                guard Self.writeAll(chunk, to: output) else { return }
+                remaining -= chunk.count
+            }
+
+            // Write epilogue (closing boundary).
+            _ = Self.writeAll(epilogue, to: output)
+        }
+
+        return (inputStream, contentLength)
+    }
+
+    /// Writes all bytes of `data` to the output stream, handling partial writes.
+    private static func writeAll(_ data: Data, to output: OutputStream) -> Bool {
+        data.withUnsafeBytes { buffer in
+            guard let base = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
+            var written = 0
+            while written < data.count {
+                let result = output.write(base.advanced(by: written), maxLength: data.count - written)
+                if result <= 0 { return false }
+                written += result
+            }
+            return true
+        }
     }
 }
 
@@ -374,12 +457,17 @@ enum MediaUploadError: Error, LocalizedError {
     /// The WordPress REST API returned a non-JSON response (e.g. HTML error page).
     case unexpectedResponse(preview: String, underlyingError: Error)
 
+    /// Failed to read the file for streaming upload.
+    case streamReadFailed
+
     var errorDescription: String? {
         switch self {
         case .uploadFailed(let statusCode, let preview):
             return "Upload failed (\(statusCode)): \(preview)"
         case .unexpectedResponse(let preview, _):
             return "WordPress returned an unexpected response: \(preview)"
+        case .streamReadFailed:
+            return "Failed to read file for upload"
         }
     }
 }

@@ -171,6 +171,77 @@ struct MediaUploadServerTests {
   }
 }
 
+// MARK: - Streaming Multipart Body Tests
+
+@Suite("DefaultMediaUploader streaming multipart body")
+struct MultipartBodyStreamTests {
+
+  @Test("streaming output matches in-memory multipart format")
+  func streamMatchesInMemory() throws {
+    let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("stream-test-\(UUID().uuidString)")
+    let fileContent = Data("hello world".utf8)
+    try fileContent.write(to: tempFile)
+    defer { try? FileManager.default.removeItem(at: tempFile) }
+
+    let boundary = "test-boundary-123"
+    let filename = "photo.jpg"
+    let mimeType = "image/jpeg"
+
+    // Build expected output using the old in-memory approach.
+    var expected = Data()
+    expected.append(Data("--\(boundary)\r\n".utf8))
+    expected.append(Data("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".utf8))
+    expected.append(Data("Content-Type: \(mimeType)\r\n\r\n".utf8))
+    expected.append(fileContent)
+    expected.append(Data("\r\n--\(boundary)--\r\n".utf8))
+
+    // Build streaming output.
+    let (stream, contentLength) = try DefaultMediaUploader.multipartBodyStream(
+      fileURL: tempFile, boundary: boundary, filename: filename, mimeType: mimeType
+    )
+    #expect(contentLength == expected.count)
+
+    let result = readAllFromStream(stream)
+    #expect(result == expected)
+  }
+
+  @Test("content length matches actual stream output for larger files")
+  func contentLengthAccurate() throws {
+    let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("stream-test-\(UUID().uuidString)")
+    let fileContent = Data(repeating: 0x42, count: 100_000)
+    try fileContent.write(to: tempFile)
+    defer { try? FileManager.default.removeItem(at: tempFile) }
+
+    let (stream, contentLength) = try DefaultMediaUploader.multipartBodyStream(
+      fileURL: tempFile, boundary: "boundary", filename: "big.bin", mimeType: "application/octet-stream"
+    )
+
+    let result = readAllFromStream(stream)
+    #expect(result.count == contentLength)
+  }
+}
+
+// MARK: - Helpers
+
+/// Reads all bytes from an InputStream using `read()` return value as
+/// the sole termination signal (not `hasBytesAvailable`, which is
+/// unreliable for piped/bound streams).
+private func readAllFromStream(_ stream: InputStream) -> Data {
+  stream.open()
+  defer { stream.close() }
+
+  var data = Data()
+  let bufferSize = 8192
+  let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+  defer { buffer.deallocate() }
+  while true {
+    let read = stream.read(buffer, maxLength: bufferSize)
+    if read <= 0 { break }
+    data.append(buffer, count: read)
+  }
+  return data
+}
+
 // MARK: - Mocks
 
 private final class MockUploadDelegate: MediaUploadDelegate, @unchecked Sendable {
