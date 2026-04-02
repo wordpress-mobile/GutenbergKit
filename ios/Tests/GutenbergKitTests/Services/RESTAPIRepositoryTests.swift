@@ -261,6 +261,143 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
         #expect(capturedURL?.absoluteString.contains("context=edit") == true)
         #expect(capturedURL?.absoluteString.contains("/posts/42") == true)
     }
+
+    @Test("URLs include namespace when siteApiNamespace is set")
+    func urlsIncludeNamespace() async throws {
+        let capturingClient = URLCollectingMockHTTPClient()
+
+        let configuration = EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: URL(string: "https://public-api.wordpress.com")!,
+            siteApiRoot: URL(string: "https://public-api.wordpress.com/wp-json")!,
+            siteApiNamespace: ["sites/123/"]
+        )
+        .setShouldUsePlugins(true)
+        .setShouldUseThemeStyles(true)
+        .setAuthHeader("Bearer test")
+        .build()
+
+        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory)
+        let repository = RESTAPIRepository(
+            configuration: configuration,
+            httpClient: capturingClient,
+            cache: cache
+        )
+
+        _ = try await repository.fetchPost(id: 1)
+        _ = try await repository.fetchPostType(for: "post")
+        _ = try await repository.fetchActiveTheme()
+        _ = try await repository.fetchPostTypes()
+
+        let expectedURLs: Set<String> = [
+            "https://public-api.wordpress.com/wp-json/wp/v2/sites/123/posts/1?context=edit",
+            "https://public-api.wordpress.com/wp-json/wp/v2/sites/123/types/post?context=edit",
+            "https://public-api.wordpress.com/wp-json/wp/v2/sites/123/themes?context=edit&status=active",
+            "https://public-api.wordpress.com/wp-json/wp/v2/sites/123/types?context=view",
+        ]
+
+        #expect(Set(await capturingClient.capturedURLs) == expectedURLs)
+    }
+
+    @Test("URLs include namespace without trailing slash")
+    func urlsIncludeNamespaceWithoutTrailingSlash() async throws {
+        let capturingClient = URLCollectingMockHTTPClient()
+
+        let configuration = EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: URL(string: "https://public-api.wordpress.com")!,
+            siteApiRoot: URL(string: "https://public-api.wordpress.com/wp-json")!,
+            siteApiNamespace: ["sites/123"]  // No trailing slash
+        )
+        .setShouldUsePlugins(true)
+        .setShouldUseThemeStyles(true)
+        .setAuthHeader("Bearer test")
+        .build()
+
+        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory)
+        let repository = RESTAPIRepository(
+            configuration: configuration,
+            httpClient: capturingClient,
+            cache: cache
+        )
+
+        _ = try await repository.fetchPost(id: 1)
+        _ = try await repository.fetchPostType(for: "post")
+        _ = try await repository.fetchActiveTheme()
+        _ = try await repository.fetchPostTypes()
+
+        let expectedURLs: Set<String> = [
+            "https://public-api.wordpress.com/wp-json/wp/v2/sites/123/posts/1?context=edit",
+            "https://public-api.wordpress.com/wp-json/wp/v2/sites/123/types/post?context=edit",
+            "https://public-api.wordpress.com/wp-json/wp/v2/sites/123/themes?context=edit&status=active",
+            "https://public-api.wordpress.com/wp-json/wp/v2/sites/123/types?context=view",
+        ]
+
+        #expect(Set(await capturingClient.capturedURLs) == expectedURLs)
+    }
+
+    @Test("Editor settings URL includes namespace")
+    func editorSettingsUrlIncludesNamespace() async throws {
+        let capturingClient = URLCollectingMockHTTPClient()
+
+        let configuration = EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: URL(string: "https://public-api.wordpress.com")!,
+            siteApiRoot: URL(string: "https://public-api.wordpress.com/wp-json")!,
+            siteApiNamespace: ["sites/456/"]
+        )
+        .setShouldUsePlugins(true)
+        .setShouldUseThemeStyles(true)
+        .setAuthHeader("Bearer test")
+        .setEditorSettings("undefined")
+        .build()
+
+        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory)
+        let repository = RESTAPIRepository(
+            configuration: configuration,
+            httpClient: capturingClient,
+            cache: cache
+        )
+
+        _ = try await repository.fetchEditorSettings()
+
+        #expect(await capturingClient.capturedURLs.count == 1)
+        #expect(
+            await capturingClient.capturedURLs.first
+                == "https://public-api.wordpress.com/wp-json/wp-block-editor/v1/sites/456/settings"
+        )
+    }
+
+    @Test("Settings options URL includes namespace")
+    func settingsOptionsUrlIncludesNamespace() async throws {
+        let capturingClient = URLCollectingMockHTTPClient()
+
+        let configuration = EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: URL(string: "https://public-api.wordpress.com")!,
+            siteApiRoot: URL(string: "https://public-api.wordpress.com/wp-json")!,
+            siteApiNamespace: ["sites/789/"]
+        )
+        .setShouldUsePlugins(true)
+        .setShouldUseThemeStyles(true)
+        .setAuthHeader("Bearer test")
+        .build()
+
+        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory)
+        let repository = RESTAPIRepository(
+            configuration: configuration,
+            httpClient: capturingClient,
+            cache: cache
+        )
+
+        _ = try await repository.fetchSettingsOptions()
+
+        #expect(await capturingClient.capturedURLs.count == 1)
+        #expect(
+            await capturingClient.capturedURLs.first
+                == "https://public-api.wordpress.com/wp-json/wp/v2/sites/789/settings"
+        )
+    }
 }
 
 // MARK: - URL Capturing Mock Client
@@ -278,6 +415,30 @@ final class URLCapturingMockHTTPClient: EditorHTTPClientProtocol, @unchecked Sen
 
     func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse) {
         let url = try #require(urlRequest.url)
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try Data().write(to: tempURL)
+        return (
+            tempURL,
+            HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+        )
+    }
+}
+
+actor URLCollectingMockHTTPClient: EditorHTTPClientProtocol {
+    private(set) var capturedURLs: [String] = []
+
+    func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let url = try #require(urlRequest.url)
+        capturedURLs.append(url.absoluteString)
+        return (
+            Data(#"{}"#.utf8),
+            HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+        )
+    }
+
+    func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse) {
+        let url = try #require(urlRequest.url)
+        capturedURLs.append(url.absoluteString)
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try Data().write(to: tempURL)
         return (

@@ -337,6 +337,131 @@ class RESTAPIRepositoryTest {
         assertEquals(expectedURLs, capturedURLs.toSet())
     }
 
+    @Test
+    fun `URLs include namespace when siteApiNamespace is set`() = runBlocking {
+        val capturedURLs = mutableListOf<String>()
+        val capturingClient = createCapturingClient { capturedURLs.add(it) }
+
+        val configuration = EditorConfiguration.builder(
+            TEST_SITE_URL,
+            "https://public-api.wordpress.com/wp-json",
+            "post"
+        )
+            .setSiteApiNamespace(arrayOf("sites/123/"))
+            .setPlugins(true)
+            .setThemeStyles(true)
+            .setAuthHeader("Bearer test")
+            .build()
+
+        val cache = EditorURLCache(cacheRoot, EditorCachePolicy.Always)
+        val repository = RESTAPIRepository(configuration, capturingClient, cache)
+
+        repository.fetchPost(id = 1)
+        repository.fetchPostType("post")
+        repository.fetchActiveTheme()
+        repository.fetchPostTypes()
+
+        val expectedURLs = setOf(
+            "https://public-api.wordpress.com/wp-json/wp/v2/sites/123/posts/1?context=edit",
+            "https://public-api.wordpress.com/wp-json/wp/v2/sites/123/types/post?context=edit",
+            "https://public-api.wordpress.com/wp-json/wp/v2/sites/123/themes?context=edit&status=active",
+            "https://public-api.wordpress.com/wp-json/wp/v2/sites/123/types?context=view"
+        )
+
+        assertEquals(expectedURLs, capturedURLs.toSet())
+    }
+
+    @Test
+    fun `URLs include namespace without trailing slash`() = runBlocking {
+        val capturedURLs = mutableListOf<String>()
+        val capturingClient = createCapturingClient { capturedURLs.add(it) }
+
+        val configuration = EditorConfiguration.builder(
+            TEST_SITE_URL,
+            "https://public-api.wordpress.com/wp-json",
+            "post"
+        )
+            .setSiteApiNamespace(arrayOf("sites/123"))  // No trailing slash
+            .setPlugins(true)
+            .setThemeStyles(true)
+            .setAuthHeader("Bearer test")
+            .build()
+
+        val cache = EditorURLCache(cacheRoot, EditorCachePolicy.Always)
+        val repository = RESTAPIRepository(configuration, capturingClient, cache)
+
+        repository.fetchPost(id = 1)
+        repository.fetchPostType("post")
+        repository.fetchActiveTheme()
+        repository.fetchPostTypes()
+
+        val expectedURLs = setOf(
+            "https://public-api.wordpress.com/wp-json/wp/v2/sites/123/posts/1?context=edit",
+            "https://public-api.wordpress.com/wp-json/wp/v2/sites/123/types/post?context=edit",
+            "https://public-api.wordpress.com/wp-json/wp/v2/sites/123/themes?context=edit&status=active",
+            "https://public-api.wordpress.com/wp-json/wp/v2/sites/123/types?context=view"
+        )
+
+        assertEquals(expectedURLs, capturedURLs.toSet())
+    }
+
+    @Test
+    fun `editor settings URL includes namespace`() = runBlocking {
+        val capturedURLs = mutableListOf<String>()
+        val capturingClient = createCapturingClient { capturedURLs.add(it) }
+
+        val configuration = EditorConfiguration.builder(
+            TEST_SITE_URL,
+            "https://public-api.wordpress.com/wp-json",
+            "post"
+        )
+            .setSiteApiNamespace(arrayOf("sites/456/"))
+            .setPlugins(true)
+            .setThemeStyles(true)
+            .setAuthHeader("Bearer test")
+            .setEditorSettings(null)
+            .build()
+
+        val cache = EditorURLCache(cacheRoot, EditorCachePolicy.Always)
+        val repository = RESTAPIRepository(configuration, capturingClient, cache)
+
+        repository.fetchEditorSettings()
+
+        assertEquals(1, capturedURLs.size)
+        assertEquals(
+            "https://public-api.wordpress.com/wp-json/wp-block-editor/v1/sites/456/settings",
+            capturedURLs.first()
+        )
+    }
+
+    @Test
+    fun `settings options URL includes namespace`() = runBlocking {
+        val capturedURLs = mutableListOf<String>()
+        val capturingClient = createCapturingClient { capturedURLs.add(it) }
+
+        val configuration = EditorConfiguration.builder(
+            TEST_SITE_URL,
+            "https://public-api.wordpress.com/wp-json",
+            "post"
+        )
+            .setSiteApiNamespace(arrayOf("sites/789/"))
+            .setPlugins(true)
+            .setThemeStyles(true)
+            .setAuthHeader("Bearer test")
+            .build()
+
+        val cache = EditorURLCache(cacheRoot, EditorCachePolicy.Always)
+        val repository = RESTAPIRepository(configuration, capturingClient, cache)
+
+        repository.fetchSettingsOptions()
+
+        assertEquals(1, capturedURLs.size)
+        assertEquals(
+            "https://public-api.wordpress.com/wp-json/wp/v2/sites/789/settings",
+            capturedURLs.first()
+        )
+    }
+
     private fun createCapturingClient(onRequest: (String) -> Unit): EditorHTTPClientProtocol {
         return object : EditorHTTPClientProtocol {
             override suspend fun download(url: String, destination: File): EditorHTTPClientDownloadResponse {
