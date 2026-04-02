@@ -25,12 +25,27 @@ interface EditorHTTPClientProtocol {
 }
 
 /**
+ * The response data from an HTTP request, either in-memory bytes or a downloaded file.
+ */
+sealed class EditorResponseData {
+    data class Bytes(val data: ByteArray) : EditorResponseData() {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is Bytes) return false
+            return data.contentEquals(other.data)
+        }
+        override fun hashCode(): Int = data.contentHashCode()
+    }
+    data class File(val file: java.io.File) : EditorResponseData()
+}
+
+/**
  * A delegate for observing HTTP requests made by the editor.
  *
  * Implement this interface to inspect or log all network requests.
  */
 interface EditorHTTPClientDelegate {
-    fun didPerformRequest(url: String, method: EditorHttpMethod, response: Response, data: ByteArray)
+    fun didPerformRequest(url: String, method: EditorHttpMethod, response: Response, data: EditorResponseData)
 }
 
 /**
@@ -141,18 +156,32 @@ class EditorHTTPClient(
 
     override suspend fun download(url: String, destination: File): EditorHTTPClientDownloadResponse =
         withContext(Dispatchers.IO) {
+            Log.d(TAG, "DOWNLOAD $url")
+            Log.d(TAG, "  Destination: ${destination.absolutePath}")
+
             val request = Request.Builder()
                 .url(url)
                 .addHeader("Authorization", authHeader)
                 .get()
                 .build()
 
-            val response = client.newCall(request).execute()
+            Log.d(TAG, "  Request headers: ${redactHeaders(request.headers)}")
+
+            val response: Response
+            try {
+                response = client.newCall(request).execute()
+            } catch (e: IOException) {
+                Log.e(TAG, "DOWNLOAD $url – network error: ${e.message}", e)
+                throw e
+            }
+
             val statusCode = response.code
             val headers = extractHeaders(response)
+            Log.d(TAG, "DOWNLOAD $url – $statusCode")
+            Log.d(TAG, "  Response headers: ${redactHeaders(response.headers)}")
 
             if (statusCode !in 200..299) {
-                Log.e(TAG, "HTTP error downloading $url: $statusCode")
+                Log.e(TAG, "DOWNLOAD $url – HTTP error: $statusCode")
                 throw EditorHTTPClientError.DownloadFailed(statusCode)
             }
 
@@ -163,8 +192,14 @@ class EditorHTTPClient(
                         input.copyTo(output)
                     }
                 }
-                Log.d(TAG, "Downloaded file: file=${destination.absolutePath}, size=${destination.length()} bytes, url=$url")
-            } ?: throw EditorHTTPClientError.DownloadFailed(statusCode)
+                Log.d(TAG, "DOWNLOAD $url – complete (${destination.length()} bytes)")
+                Log.d(TAG, "  Saved to: ${destination.absolutePath}")
+            } ?: run {
+                Log.e(TAG, "DOWNLOAD $url – empty response body")
+                throw EditorHTTPClientError.DownloadFailed(statusCode)
+            }
+
+            delegate?.didPerformRequest(url, EditorHttpMethod.GET, response, EditorResponseData.File(destination))
 
             EditorHTTPClientDownloadResponse(
                 file = destination,
@@ -175,6 +210,8 @@ class EditorHTTPClient(
 
     override suspend fun perform(method: EditorHttpMethod, url: String): EditorHTTPClientResponse =
         withContext(Dispatchers.IO) {
+            Log.d(TAG, "$method $url")
+
             // OkHttp requires a body for POST, PUT, PATCH methods
             // GET, HEAD, OPTIONS, DELETE don't require a body
             val requiresBody = method in listOf(
@@ -190,7 +227,15 @@ class EditorHTTPClient(
                 .method(method.toString(), requestBody)
                 .build()
 
-            val response = client.newCall(request).execute()
+            Log.d(TAG, "  Request headers: ${redactHeaders(request.headers)}")
+
+            val response: Response
+            try {
+                response = client.newCall(request).execute()
+            } catch (e: IOException) {
+                Log.e(TAG, "$method $url – network error: ${e.message}", e)
+                throw e
+            }
 
             // Note: This loads the entire response into memory. This is acceptable because
             // this method is only used for WordPress REST API responses (editor settings, post
@@ -200,14 +245,22 @@ class EditorHTTPClient(
             val statusCode = response.code
             val headers = extractHeaders(response)
 
-            delegate?.didPerformRequest(url, method, response, data)
+            Log.d(TAG, "$method $url – $statusCode (${data.size} bytes)")
+            Log.d(TAG, "  Response headers: ${redactHeaders(response.headers)}")
+
+            delegate?.didPerformRequest(url, method, response, EditorResponseData.Bytes(data))
 
             if (statusCode !in 200..299) {
-                Log.e(TAG, "HTTP error fetching $url: $statusCode")
+                Log.e(TAG, "$method $url – HTTP error: $statusCode")
+                // Log the raw body to aid debugging unexpected error formats.
+                // This is acceptable because the WordPress REST API should never
+                // include sensitive information (tokens, credentials) in responses.
+                Log.e(TAG, "  Response body: ${data.toString(Charsets.UTF_8)}")
 
                 // Try to parse as WordPress error
                 val wpError = tryParseWPError(data)
                 if (wpError != null) {
+                    Log.e(TAG, "  WP error – code: ${wpError.code}, message: ${wpError.message}")
                     throw EditorHTTPClientError.WPErrorResponse(wpError)
                 }
 
@@ -259,5 +312,17 @@ class EditorHTTPClient(
     companion object {
         private const val TAG = "EditorHTTPClient"
         private val gson = Gson()
+
+        private val SENSITIVE_HEADERS = setOf("authorization", "cookie", "set-cookie")
+
+        /**
+         * Returns a string representation of the given OkHttp headers with
+         * sensitive values (Authorization, Cookie) redacted.
+         */
+        internal fun redactHeaders(headers: okhttp3.Headers): String {
+            return headers.joinToString(", ") { (name, value) ->
+                if (name.lowercase() in SENSITIVE_HEADERS) "$name: <redacted>" else "$name: $value"
+            }
+        }
     }
 }

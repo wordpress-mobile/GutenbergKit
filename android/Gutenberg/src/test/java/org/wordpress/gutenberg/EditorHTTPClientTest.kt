@@ -263,10 +263,10 @@ class EditorHTTPClientTest {
         var delegateCalled = false
         var capturedUrl: String? = null
         var capturedMethod: EditorHttpMethod? = null
-        var capturedData: ByteArray? = null
+        var capturedData: EditorResponseData? = null
 
         val delegate = object : EditorHTTPClientDelegate {
-            override fun didPerformRequest(url: String, method: EditorHttpMethod, response: Response, data: ByteArray) {
+            override fun didPerformRequest(url: String, method: EditorHttpMethod, response: Response, data: EditorResponseData) {
                 delegateCalled = true
                 capturedUrl = url
                 capturedMethod = method
@@ -280,7 +280,8 @@ class EditorHTTPClientTest {
         assertTrue(delegateCalled)
         assertTrue(capturedUrl?.contains("test") == true)
         assertEquals(EditorHttpMethod.GET, capturedMethod)
-        assertEquals("response data", capturedData?.toString(Charsets.UTF_8))
+        val bytes = (capturedData as? EditorResponseData.Bytes)?.data
+        assertEquals("response data", bytes?.toString(Charsets.UTF_8))
     }
 
     @Test
