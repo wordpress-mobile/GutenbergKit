@@ -27,6 +27,12 @@ data class EditorConfiguration(
     val enableAssetCaching: Boolean = false,
     val cachedAssetHosts: Set<String> = emptySet(),
     val editorAssetsEndpoint: String? = null,
+    /**
+     * Enables the JavaScript editor to surface network request/response details
+     * to the native host app (via the bridge). This does **not** control the
+     * native [EditorHTTPClient][org.wordpress.gutenberg.EditorHTTPClient]'s own
+     * debug logging, which always runs at the platform debug level.
+     */
     val enableNetworkLogging: Boolean = false,
     var enableOfflineMode: Boolean = false
 ): Parcelable {
