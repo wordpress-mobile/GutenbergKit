@@ -21,6 +21,13 @@ public enum EditorLocalizableString {
     // MARK: - Editor Loading
     case loadingEditor
     case editorError
+
+    // MARK: - Lockdown Mode
+    case lockdownModeTitle
+    case lockdownModeWarning
+    case lockdownModeExcludeHint
+    case lockdownModeLearnMore
+    case lockdownModeDismiss
 }
 
 /// Provides localized strings for the editor.
@@ -46,6 +53,11 @@ public final class EditorLocalization {
         case .patternsCategoryAll: "All"
         case .loadingEditor: "Loading Editor"
         case .editorError: "Editor Error"
+        case .lockdownModeTitle: "Lockdown Mode Detected"
+        case .lockdownModeWarning: "Lockdown Mode is enabled. The editor may not work correctly."
+        case .lockdownModeExcludeHint: "You can exclude this app from Lockdown Mode in Settings, then re-open the editor to restore full functionality."
+        case .lockdownModeLearnMore: "Learn More"
+        case .lockdownModeDismiss: "Dismiss"
         }
     }
 

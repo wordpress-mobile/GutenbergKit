@@ -109,6 +109,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let mediaPicker: MediaPickerController?
     private let controller: GutenbergEditorController
     private let bundleProvider: EditorAssetBundleProvider
+    private let lockdownModeMonitor: LockdownModeMonitor
 
     // MARK: - Private Properties (UI)
 
@@ -170,7 +171,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         )
         self.bundleProvider = EditorAssetBundleProvider(httpClient: httpClient)
         self.mediaPicker = mediaPicker
-        self.controller = GutenbergEditorController(configuration: configuration)
+        self.lockdownModeMonitor = LockdownModeMonitor()
+        self.controller = GutenbergEditorController(configuration: configuration, lockdownModeMonitor: self.lockdownModeMonitor)
 
         // The `allowFileAccessFromFileURLs` allows the web view to access the
         // files from the local filesystem.
@@ -211,6 +213,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         controller.delegate = self
         webView.navigationDelegate = controller
 
+        // Set up Lockdown Mode monitoring with foreground detection
+        lockdownModeMonitor.setup(presentingViewController: self)
+
         // FIXME: implement with CSS (bottom toolbar)
         webView.scrollView.verticalScrollIndicatorInsets = UIEdgeInsets(top: 0, left: 0, bottom: 47, right: 0)
 
@@ -223,7 +228,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             webView.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
         ])
 
-        // WebView starts hidden; fades in when editor is ready (see didLoadEditor())
+        // WebView starts hidden and fades in when editor navigation completes
         webView.alpha = 0
 
         // Warmup mode - load HTML without dependencies for WebKit prewarming
@@ -583,6 +588,21 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         evaluate("editor.appendTextAtCursor(decodeURIComponent('\(escapedText)'));")
     }
 
+    /// Sets focus to the editor if the content is empty.
+    ///
+    /// This method programmatically focuses the editor, placing the cursor in the content area
+    /// so the user can begin typing immediately. Focus is only applied when the editor is displaying
+    /// empty content to avoid disrupting existing content editing.
+    ///
+    /// Use the `force` parameter to apply focus even when there is content in the editor.
+    ///
+    /// - Parameter force: When true, applies focus even when there is content in the editor.
+    public func focus(force: Bool = false) {
+        if force || configuration.content.isEmpty {
+            evaluate("editor.focus();")
+        }
+    }
+
     // MARK: - Navigation Overlay
 
     private func setupNavigationOverlay() {
@@ -712,20 +732,23 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         self.hideActivityView()
         self.isReady = true
 
-        // Fade in the WebView - it was hidden (alpha = 0) since viewDidLoad()
+        // Fade in the WebView now that navigation is complete
         UIView.animate(withDuration: 0.2, delay: 0.1, options: [.allowUserInteraction]) {
             self.webView.alpha = 1
         }
+
+        // If lockdown mode was detected, show the sheet — skip autofocus entirely
+        // since the editor may not function correctly with Lockdown Mode restrictions.
+        if !lockdownModeMonitor.isLockdownModeEnabled {
+            self.focus()
+        }
+        lockdownModeMonitor.presentSheetIfNeeded(onDismiss: {})
 
         // Log performance timing for monitoring
         let duration = CFAbsoluteTimeGetCurrent() - timestampInit
         print("gutenbergkit-measure_editor-first-render:", duration)
 
         delegate?.editorDidLoad(self)
-
-        if configuration.content.isEmpty {
-            evaluate("editor.focus();")
-        }
     }
 
     // MARK: - Warmup
@@ -762,9 +785,11 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     weak var delegate: GutenbergEditorControllerDelegate?
     let configuration: EditorConfiguration
     private let navigationPolicy: EditorNavigationPolicy
+    private let lockdownModeMonitor: LockdownModeMonitor
 
-    init(configuration: EditorConfiguration) {
+    init(configuration: EditorConfiguration, lockdownModeMonitor: LockdownModeMonitor) {
         self.configuration = configuration
+        self.lockdownModeMonitor = lockdownModeMonitor
         let devServerURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init)
         self.navigationPolicy = EditorNavigationPolicy(devServerURL: devServerURL)
         super.init()
@@ -795,6 +820,7 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         NSLog("navigation: \(String(describing: navigation))")
+        lockdownModeMonitor.detectLockdownMode(for: webView)
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
