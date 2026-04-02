@@ -50,7 +50,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
 import com.example.gutenbergkit.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
+
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.GutenbergView
 import org.wordpress.gutenberg.EditorLoadingListener
@@ -75,12 +75,9 @@ class EditorActivity : ComponentActivity() {
         filePickerLauncher = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()
         ) { result ->
-            lifecycleScope.launch {
-                val uris = gutenbergView?.extractUrisFromIntent(result.data)
-                val processedUris = gutenbergView?.processFileUris(this@EditorActivity, uris)
-                gutenbergView?.filePathCallback?.onReceiveValue(processedUris)
-                gutenbergView?.resetFilePathCallback()
-            }
+            val uris = gutenbergView?.extractUrisFromIntent(result.data)
+            gutenbergView?.filePathCallback?.onReceiveValue(uris)
+            gutenbergView?.resetFilePathCallback()
         }
 
         if (0 != (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE)) {

@@ -38,8 +38,6 @@
     <ID>MaxLineLength:RESTAPIRepositoryTest.kt$RESTAPIRepositoryTest$val rawJSON = """{"styles":[{"css":".theme-style{color:blue}","isGlobalStyles":true},{"css":".another{margin:0}","isGlobalStyles":false}]}"""</ID>
     <ID>MaxLineLength:RequestBody.kt$Buffer$internal</ID>
     <ID>NestedBlockDepth:EditorAssetsLibrary.kt$EditorAssetsLibrary$private fun cleanupOldCache()</ID>
-    <ID>NestedBlockDepth:FileCache.kt$FileCache$fun copyToCache(context: Context, uri: Uri, maxSizeBytes: Long = DEFAULT_MAX_FILE_SIZE): Uri?</ID>
-    <ID>NestedBlockDepth:FileCache.kt$FileCache$private fun getFileSize(context: Context, uri: Uri): Long?</ID>
     <ID>NestedBlockDepth:FixtureTests.kt$FixtureTests$@Test fun `multipart parsing - all cases pass`()</ID>
     <ID>NestedBlockDepth:FixtureTests.kt$FixtureTests$@Test fun `request parsing - all incremental cases pass`()</ID>
     <ID>NestedBlockDepth:MultipartPart.kt$MultipartPart.Companion$fun parseChunked( source: RequestBody.FileBacked, boundary: String ): List&lt;MultipartPart&gt;</ID>
@@ -66,7 +64,6 @@
     <ID>TooGenericExceptionCaught:EditorDependenciesSerializer.kt$EditorDependenciesSerializer$e: Exception</ID>
     <ID>TooGenericExceptionCaught:EditorHTTPClient.kt$EditorHTTPClient$e: Exception</ID>
     <ID>TooGenericExceptionCaught:EditorURLResponse.kt$EditorURLResponse$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:FileCache.kt$FileCache$e: Exception</ID>
     <ID>TooGenericExceptionCaught:GutenbergView.kt$GutenbergView$e: Exception</ID>
     <ID>TooGenericExceptionCaught:HttpServer.kt$HttpServer$e: Exception</ID>
     <ID>TooGenericExceptionCaught:LocalEditorAssetManifest.kt$LocalEditorAssetManifest$e: Exception</ID>
