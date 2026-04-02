@@ -73,15 +73,34 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
     public func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
 
         let configuredRequest = self.configureRequest(urlRequest)
-        let (data, response) = try await self.urlSession.data(for: configuredRequest)
+        let url = configuredRequest.url!.absoluteString
+        let method = configuredRequest.httpMethod ?? "GET"
+        Logger.http.debug("📡 \(method) \(url)")
+        Logger.http.debug("📡 Request headers: \(self.redactHeaders(configuredRequest.allHTTPHeaderFields))")
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await self.urlSession.data(for: configuredRequest)
+        } catch {
+            Logger.http.error("📡 \(method) \(url) – network error: \(error.localizedDescription)")
+            throw error
+        }
+
         self.delegate?.didPerformRequest(configuredRequest, response: response, data: .bytes(data))
 
         let httpResponse = response as! HTTPURLResponse
+        Logger.http.debug("📡 \(method) \(url) – \(httpResponse.statusCode) (\(data.count) bytes)")
+        Logger.http.debug("📡 Response headers: \(self.redactHeaders(httpResponse.allHeaderFields))")
 
         guard 200...299 ~= httpResponse.statusCode else {
-            Logger.http.error("📡 HTTP error fetching \(configuredRequest.url!.absoluteString): \(httpResponse.statusCode)")
+            Logger.http.error("📡 \(method) \(url) – HTTP error: \(httpResponse.statusCode)")
+            // Log the raw body to aid debugging unexpected error formats.
+            // This is acceptable because the WordPress REST API should never
+            // include sensitive information (tokens, credentials) in responses.
+            Logger.http.error("📡 Response body: \(String(data: data, encoding: .utf8) ?? "<non-utf8>")")
 
             if let wpError = try? JSONDecoder().decode(WPError.self, from: data) {
+                Logger.http.error("📡 WP error – code: \(wpError.code), message: \(wpError.message)")
                 throw ClientError.wpError(wpError)
             }
 
@@ -94,18 +113,50 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
     public func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse) {
 
         let configuredRequest = self.configureRequest(urlRequest)
-        let (url, response) = try await self.urlSession.download(for: configuredRequest, delegate: nil)
+        let requestURL = configuredRequest.url!.absoluteString
+        Logger.http.debug("📡 DOWNLOAD \(requestURL)")
+        Logger.http.debug("📡 Request headers: \(self.redactHeaders(configuredRequest.allHTTPHeaderFields))")
+
+        let (url, response): (URL, URLResponse)
+        do {
+            (url, response) = try await self.urlSession.download(for: configuredRequest, delegate: nil)
+        } catch {
+            Logger.http.error("📡 DOWNLOAD \(requestURL) – network error: \(error.localizedDescription)")
+            throw error
+        }
+
         self.delegate?.didPerformRequest(configuredRequest, response: response, data: .file(url))
 
         let httpResponse = response as! HTTPURLResponse
+        Logger.http.debug("📡 DOWNLOAD \(requestURL) – \(httpResponse.statusCode)")
+        Logger.http.debug("📡 Downloaded to: \(url.path)")
+        Logger.http.debug("📡 Response headers: \(self.redactHeaders(httpResponse.allHeaderFields))")
 
         guard 200...299 ~= httpResponse.statusCode else {
-            Logger.http.error("📡 HTTP error fetching \(configuredRequest.url!.absoluteString): \(httpResponse.statusCode)")
+            Logger.http.error("📡 DOWNLOAD \(requestURL) – HTTP error: \(httpResponse.statusCode)")
 
             throw ClientError.downloadFailed(statusCode: httpResponse.statusCode)
         }
 
         return (url, response as! HTTPURLResponse)
+    }
+
+    private static let sensitiveHeaders: Set<String> = ["authorization", "cookie", "set-cookie"]
+
+    private func redactHeaders(_ headers: [String: String]?) -> String {
+        guard let headers else { return "[:]" }
+        let redacted = headers.map { key, value in
+            Self.sensitiveHeaders.contains(key.lowercased()) ? "\(key): <redacted>" : "\(key): \(value)"
+        }
+        return "[\(redacted.joined(separator: ", "))]"
+    }
+
+    private func redactHeaders(_ headers: [AnyHashable: Any]) -> String {
+        let redacted = headers.map { key, value in
+            let name = "\(key)"
+            return Self.sensitiveHeaders.contains(name.lowercased()) ? "\(name): <redacted>" : "\(name): \(value)"
+        }
+        return "[\(redacted.joined(separator: ", "))]"
     }
 
     private func configureRequest(_ request: URLRequest) -> URLRequest {
