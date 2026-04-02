@@ -37,12 +37,18 @@ class HTTPRequestParser(
         NEEDS_MORE_DATA,
         /** Headers have been fully received but the body is still incomplete. */
         HEADERS_COMPLETE,
+        /**
+         * The request body exceeds the maximum allowed size and is being
+         * drained (read and discarded) so the server can send a clean 413
+         * response. No body bytes are buffered in this state.
+         */
+        DRAINING,
         /** All data has been received (headers and body). */
         COMPLETE;
 
         /** Whether headers have been fully received. */
         val hasHeaders: Boolean
-            get() = this == HEADERS_COMPLETE || this == COMPLETE
+            get() = this == HEADERS_COMPLETE || this == DRAINING || this == COMPLETE
 
         /** Whether all data has been received. */
         val isComplete: Boolean
@@ -107,6 +113,17 @@ class HTTPRequestParser(
     fun append(data: ByteArray): Unit = synchronized(lock) {
         if (_state == State.COMPLETE) return
 
+        // In drain mode, discard bytes without buffering and check
+        // whether the full Content-Length has been consumed.
+        if (_state == State.DRAINING) {
+            bytesWritten += data.size.toLong()
+            val offset = headerEndOffset
+            if (offset != null && bytesWritten - offset >= expectedContentLength) {
+                _state = State.COMPLETE
+            }
+            return
+        }
+
         val accepted: Boolean
         try {
             accepted = buffer.append(data)
@@ -166,7 +183,7 @@ class HTTPRequestParser(
 
             if (expectedContentLength > maxBodySize) {
                 parseError = HTTPRequestParseError.PAYLOAD_TOO_LARGE
-                _state = State.COMPLETE
+                _state = State.DRAINING
                 return
             }
         }

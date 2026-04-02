@@ -389,11 +389,16 @@ struct HTTPRequestParserTests {
 
     // MARK: - Max Body Size
 
-    @Test("rejects request when Content-Length exceeds maxBodySize")
+    @Test("drains oversized body before reporting payloadTooLarge")
     func rejectsOversizedContentLength() {
         let parser = HTTPRequestParser(maxBodySize: 100)
         parser.append(Data("POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Length: 101\r\n\r\n".utf8))
 
+        // Parser enters drain mode — not yet complete.
+        #expect(parser.state == .draining)
+
+        // Feed the remaining body bytes to complete the drain.
+        parser.append(Data(repeating: 0x41, count: 101))
         #expect(parser.state.isComplete)
         #expect(throws: HTTPRequestParseError.payloadTooLarge) {
             try parser.parseRequest()
@@ -424,13 +429,44 @@ struct HTTPRequestParserTests {
         #expect(try readAll(requestBody) == Data(body.utf8))
     }
 
-    @Test("rejects oversized Content-Length even when body data hasn't arrived")
+    @Test("enters drain mode for oversized Content-Length even when body hasn't arrived")
     func rejectsOversizedBeforeBodyArrives() {
         let parser = HTTPRequestParser(maxBodySize: 50)
         parser.append(Data("POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Length: 999999\r\n\r\n".utf8))
 
-        // Parser should mark complete immediately without waiting for body bytes
+        // Parser enters drain mode — headers are available but not yet complete.
+        #expect(parser.state == .draining)
+        #expect(parser.state.hasHeaders)
+        #expect(!parser.state.isComplete)
+
+        // Feed body bytes in chunks to complete the drain.
+        let chunkSize = 8192
+        var remaining = 999999
+        while remaining > 0 {
+            let size = min(chunkSize, remaining)
+            parser.append(Data(repeating: 0x42, count: size))
+            remaining -= size
+        }
+
         #expect(parser.state.isComplete)
+        #expect(throws: HTTPRequestParseError.payloadTooLarge) {
+            try parser.parseRequest()
+        }
+    }
+
+    @Test("drain mode does not buffer body bytes")
+    func drainDoesNotBuffer() {
+        let parser = HTTPRequestParser(maxBodySize: 10)
+        let headers = "POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1000\r\n\r\n"
+        parser.append(Data(headers.utf8))
+        #expect(parser.state == .draining)
+
+        // Feed 1000 bytes of body data.
+        parser.append(Data(repeating: 0x43, count: 1000))
+        #expect(parser.state.isComplete)
+
+        // The parser should still report the error, confirming the bytes
+        // were consumed without being stored.
         #expect(throws: HTTPRequestParseError.payloadTooLarge) {
             try parser.parseRequest()
         }

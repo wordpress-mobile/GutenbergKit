@@ -270,6 +270,12 @@ public final class HTTPServer: Sendable {
                             // Phase 1: receive headers only.
                             try await Self.receiveUntil(\.hasHeaders, parser: parser, on: connection, idleTimeout: idleTimeout)
 
+                            // Drain oversized body before throwing so the
+                            // client receives the 413 (RFC 9110 §15.5.14).
+                            if parser.state == .draining {
+                                try await Self.receiveUntil(\.isComplete, parser: parser, on: connection, idleTimeout: idleTimeout)
+                            }
+
                             // Validate headers (triggers full RFC validation).
                             guard let partial = try parser.parseRequest() else {
                                 throw HTTPServerError.connectionClosed

@@ -286,6 +286,19 @@ class HttpServer(
                 parser.append(buffer.copyOfRange(0, bytesRead))
             }
 
+            // Drain oversized body before throwing so the
+            // client receives the 413 (RFC 9110 §15.5.14).
+            if (parser.state == HTTPRequestParser.State.DRAINING) {
+                while (!parser.state.isComplete) {
+                    if (System.nanoTime() > deadlineNanos) {
+                        throw SocketTimeoutException("Read deadline exceeded")
+                    }
+                    val bytesRead = input.read(buffer)
+                    if (bytesRead == -1) break
+                    parser.append(buffer.copyOfRange(0, bytesRead))
+                }
+            }
+
             // Validate headers (triggers full RFC validation).
             val partial = try {
                 parser.parseRequest()

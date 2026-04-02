@@ -27,6 +27,10 @@ public final class HTTPRequestParser: @unchecked Sendable {
         case needsMoreData
         /// Headers have been fully received but the body is still incomplete.
         case headersComplete
+        /// The request body exceeds the maximum allowed size and is being
+        /// drained (read and discarded) so the server can send a clean 413
+        /// response. No body bytes are buffered in this state.
+        case draining
         /// All data has been received (headers and body).
         case complete
     }
@@ -179,6 +183,17 @@ public final class HTTPRequestParser: @unchecked Sendable {
         lock.withLock {
             guard !_state.isComplete else { return }
 
+            // In drain mode, discard bytes without buffering and check
+            // whether the full Content-Length has been consumed.
+            if case .draining = _state {
+                bytesWritten += data.count
+                if let offset = headerEndOffset,
+                   Int64(bytesWritten - offset) >= expectedContentLength {
+                    _state = .complete
+                }
+                return
+            }
+
             let accepted: Bool
             do {
                 accepted = try buffer.append(data)
@@ -236,7 +251,7 @@ public final class HTTPRequestParser: @unchecked Sendable {
 
                 if expectedContentLength > maxBodySize {
                     _parseError = .payloadTooLarge
-                    _state = .complete
+                    _state = .draining
                     return
                 }
             }
@@ -403,14 +418,16 @@ extension HTTPRequestParser.State {
 
     /// Whether all data has been received (headers and body).
     public var isComplete: Bool {
-        if case .complete = self { return true }
-        return false
+        switch self {
+        case .complete: return true
+        case .needsMoreData, .headersComplete, .draining: return false
+        }
     }
 
-    /// Whether headers have been fully received (true for both `.headersComplete` and `.complete`).
+    /// Whether headers have been fully received (true for `.headersComplete`, `.draining`, and `.complete`).
     public var hasHeaders: Bool {
         switch self {
-        case .headersComplete, .complete: return true
+        case .headersComplete, .draining, .complete: return true
         case .needsMoreData: return false
         }
     }
