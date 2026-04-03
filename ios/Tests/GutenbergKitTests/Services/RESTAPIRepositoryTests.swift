@@ -261,6 +261,33 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
         #expect(capturedURL?.absoluteString.contains("context=edit") == true)
         #expect(capturedURL?.absoluteString.contains("/posts/42") == true)
     }
+
+    @Test("namespace is inserted into URLs")
+    func namespaceIsInsertedIntoURLs() async throws {
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        let configuration = makeConfiguration(siteApiNamespace: ["sites/123/"])
+        let repository = makeRepository(configuration: configuration, httpClient: mockClient)
+
+        _ = try await repository.fetchPost(id: 1)
+        _ = try await repository.fetchEditorSettings()
+        _ = try await repository.fetchSettingsOptions()
+
+        let urls = mockClient.requestedURLs.map(\.absoluteString)
+        #expect(urls.contains { $0.contains("sites/123/posts/1") })
+        #expect(urls.contains { $0.contains("sites/123/settings") })
+    }
+
+    @Test("namespace without trailing slash is normalized")
+    func namespaceWithoutTrailingSlashIsNormalized() async throws {
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        let configuration = makeConfiguration(siteApiNamespace: ["sites/123"])
+        let repository = makeRepository(configuration: configuration, httpClient: mockClient)
+
+        _ = try await repository.fetchPost(id: 1)
+
+        let urls = mockClient.requestedURLs.map(\.absoluteString)
+        #expect(urls.contains { $0.contains("sites/123/posts/1") })
+    }
 }
 
 // MARK: - URL Capturing Mock Client
@@ -286,3 +313,4 @@ final class URLCapturingMockHTTPClient: EditorHTTPClientProtocol, @unchecked Sen
         )
     }
 }
+
