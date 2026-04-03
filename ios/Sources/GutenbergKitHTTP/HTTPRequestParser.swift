@@ -205,7 +205,7 @@ public final class HTTPRequestParser: @unchecked Sendable {
             if case .draining = _state {
                 bytesWritten += data.count
                 if let offset = headerEndOffset,
-                   Int64(bytesWritten - offset) >= expectedContentLength {
+                   Int64(bytesWritten) - Int64(offset) >= expectedContentLength {
                     _state = .complete
                 }
                 return
