@@ -76,7 +76,7 @@ data class EditorConfiguration(
 
         fun setTitle(title: String) = apply { this.title = title }
         fun setContent(content: String) = apply { this.content = content }
-        fun setPostId(postId: UInt?) = apply { this.postId = postId }
+        fun setPostId(postId: UInt?) = apply { this.postId = postId?.takeIf { it != 0u } }
         fun setPostType(postType: String) = apply { this.postType = postType }
         fun setPostStatus(postStatus: String) = apply { this.postStatus = postStatus }
         fun setThemeStyles(themeStyles: Boolean) = apply { this.themeStyles = themeStyles }
@@ -99,7 +99,7 @@ data class EditorConfiguration(
         fun build(): EditorConfiguration = EditorConfiguration(
             title = title,
             content = content,
-            postId = postId,
+            postId = postId?.takeIf { it != 0u },
             postType = postType,
             postStatus = postStatus,
             themeStyles = themeStyles,
