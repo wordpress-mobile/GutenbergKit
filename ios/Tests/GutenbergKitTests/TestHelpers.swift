@@ -17,7 +17,7 @@ protocol MakesTestFixtures {
 
     func makeConfiguration(
         postID: Int?, title: String?, content: String?, siteURL: URL, postType: PostTypeDetails,
-        shouldUsePlugins: Bool, shouldUseThemeStyles: Bool
+        shouldUsePlugins: Bool, shouldUseThemeStyles: Bool, siteApiNamespace: [String]
     ) -> EditorConfiguration
     func makeConfigurationBuilder(postType: PostTypeDetails) -> EditorConfigurationBuilder
     func makeService(for configuration: EditorConfiguration?) -> EditorService
@@ -40,12 +40,14 @@ extension MakesTestFixtures {
         siteURL: URL = Self.testSiteURL,
         postType: PostTypeDetails = .post,
         shouldUsePlugins: Bool = true,
-        shouldUseThemeStyles: Bool = true
+        shouldUseThemeStyles: Bool = true,
+        siteApiNamespace: [String] = []
     ) -> EditorConfiguration {
         var builder = EditorConfigurationBuilder(
             postType: postType,
             siteURL: siteURL,
-            siteApiRoot: Self.testApiRoot
+            siteApiRoot: Self.testApiRoot,
+            siteApiNamespace: siteApiNamespace
         )
             .apply(title, { $0.setTitle($1) })
             .apply(content, { $0.setContent($1) })

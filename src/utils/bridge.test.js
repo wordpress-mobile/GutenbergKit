@@ -282,6 +282,33 @@ describe( 'getPost', () => {
 			expect( result.title.raw ).toBe( 'Updated Title' );
 			expect( result.content.raw ).toBe( 'Updated Content' );
 		} );
+
+		it( 'should coerce post ID 0 to -1 with host content', async () => {
+			const hostContent = {
+				title: 'Title',
+				content: 'Content',
+			};
+			window.webkit = {
+				messageHandlers: {
+					requestLatestContent: {
+						postMessage: vi.fn().mockResolvedValue( hostContent ),
+					},
+				},
+			};
+			window.GBKit = {
+				post: {
+					id: 0,
+					type: 'post',
+					status: 'draft',
+					title: 'Title',
+					content: 'Content',
+				},
+			};
+
+			const result = await getPost();
+
+			expect( result.id ).toBe( -1 );
+		} );
 	} );
 
 	describe( 'fallback to GBKit', () => {
@@ -339,6 +366,22 @@ describe( 'getPost', () => {
 				restBase: 'posts',
 				restNamespace: 'wp/v2',
 			} );
+		} );
+
+		it( 'should coerce post ID 0 to -1 in GBKit fallback', async () => {
+			window.GBKit = {
+				post: {
+					id: 0,
+					type: 'post',
+					status: 'draft',
+					title: 'Title',
+					content: 'Content',
+				},
+			};
+
+			const result = await getPost();
+
+			expect( result.id ).toBe( -1 );
 		} );
 	} );
 

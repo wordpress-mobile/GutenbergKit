@@ -300,7 +300,7 @@ export async function getPost() {
 	if ( hostContent ) {
 		debug( 'Using content from native host' );
 		return {
-			id: post?.id ?? -1,
+			id: post?.id || -1,
 			type: post?.type || 'post',
 			restBase: post?.restBase || 'posts',
 			restNamespace: post?.restNamespace || 'wp/v2',
@@ -313,7 +313,7 @@ export async function getPost() {
 	if ( post ) {
 		debug( 'Native bridge unavailable, using GBKit initial content' );
 		return {
-			id: post.id,
+			id: post.id || -1,
 			type: post.type || 'post',
 			restBase: post.restBase || 'posts',
 			restNamespace: post.restNamespace || 'wp/v2',

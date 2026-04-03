@@ -24,7 +24,9 @@ class RESTAPIRepository(
     private val json = Json { ignoreUnknownKeys = true }
 
     private val apiRoot = configuration.siteApiRoot.trimEnd('/')
-    private val namespace = configuration.siteApiNamespace.firstOrNull()
+    private val namespace = configuration.siteApiNamespace.firstOrNull()?.let {
+        it.trimEnd('/') + "/"
+    }
     private val editorSettingsUrl = buildNamespacedUrl(EDITOR_SETTINGS_PATH)
     private val activeThemeUrl = buildNamespacedUrl(ACTIVE_THEME_PATH)
     private val siteSettingsUrl = buildNamespacedUrl(SITE_SETTINGS_PATH)
