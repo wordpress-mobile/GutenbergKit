@@ -1,4 +1,5 @@
 import Foundation
+import GutenbergKitHTTP
 import Testing
 @testable import GutenbergKit
 
@@ -131,8 +132,8 @@ struct MediaUploadServerTests {
     #expect(result.type == "image")
   }
 
-  @Test("falls back to default uploader when delegate returns nil")
-  func delegateFallbackToDefault() async throws {
+  @Test("uses passthrough when delegate does not modify file")
+  func delegatePassthrough() async throws {
     let delegate = ProcessOnlyDelegate()
     let mockUploader = MockDefaultUploader()
     let server = try await MediaUploadServer.start(uploadDelegate: delegate, defaultUploader: mockUploader)
@@ -154,7 +155,9 @@ struct MediaUploadServerTests {
     #expect(httpResponse.statusCode == 200)
 
     #expect(delegate.processFileCalled)
-    #expect(mockUploader.uploadCalled)
+    // Passthrough: original body forwarded directly, not re-encoded.
+    #expect(mockUploader.passthroughUploadCalled)
+    #expect(!mockUploader.uploadCalled)
 
     let result = try JSONDecoder().decode(MediaUploadResult.self, from: data)
     #expect(result.id == 99)
@@ -294,8 +297,10 @@ private final class ProcessOnlyDelegate: MediaUploadDelegate, @unchecked Sendabl
 private final class MockDefaultUploader: DefaultMediaUploader, @unchecked Sendable {
   private let lock = NSLock()
   private var _uploadCalled = false
+  private var _passthroughUploadCalled = false
 
   var uploadCalled: Bool { lock.withLock { _uploadCalled } }
+  var passthroughUploadCalled: Bool { lock.withLock { _passthroughUploadCalled } }
 
   init() {
     super.init(httpClient: MockHTTPClient(), siteApiRoot: URL(string: "https://example.com/wp-json/")!)
@@ -303,7 +308,16 @@ private final class MockDefaultUploader: DefaultMediaUploader, @unchecked Sendab
 
   override func upload(fileURL: URL, mimeType: String, filename: String) async throws -> MediaUploadResult {
     lock.withLock { _uploadCalled = true }
-    return MediaUploadResult(
+    return mockResult()
+  }
+
+  override func passthroughUpload(body: RequestBody, contentType: String) async throws -> MediaUploadResult {
+    lock.withLock { _passthroughUploadCalled = true }
+    return mockResult()
+  }
+
+  private func mockResult() -> MediaUploadResult {
+    MediaUploadResult(
       id: 99,
       url: "https://example.com/doc.pdf",
       title: "doc",

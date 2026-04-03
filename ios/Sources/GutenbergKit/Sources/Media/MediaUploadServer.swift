@@ -123,11 +123,27 @@ final class MediaUploadServer: Sendable {
         let result: Result<MediaUploadResult, Error>
         var processedURL: URL?
         do {
-            let (media, processed) = try await processAndUpload(
+            let uploadResult = try await processAndUpload(
                 fileURL: fileURL, mimeType: mimeType, filename: filePart.filename ?? "upload", context: context
             )
-            processedURL = processed
-            result = .success(media)
+            switch uploadResult {
+            case .uploaded(let media, let processed):
+                processedURL = processed
+                Logger.uploadServer.debug("Uploading processed file to WordPress")
+                result = .success(media)
+            case .passthrough:
+                // Delegate didn't modify the file — forward the original
+                // request body to WordPress without re-encoding.
+                Logger.uploadServer.debug("Passthrough: forwarding original request body to WordPress")
+                guard let body = request.parsed.body,
+                      let contentType = request.parsed.header("Content-Type"),
+                      let defaultUploader = context.defaultUploader else {
+                    result = .failure(UploadError.noUploader)
+                    break
+                }
+                let media = try await defaultUploader.passthroughUpload(body: body, contentType: contentType)
+                result = .success(media)
+            }
         } catch {
             result = .failure(error)
         }
@@ -158,9 +174,18 @@ final class MediaUploadServer: Sendable {
 
     // MARK: - Delegate Pipeline
 
+    /// Result of the delegate processing + upload pipeline.
+    private enum UploadResult {
+        /// The delegate (or default uploader) completed the upload.
+        case uploaded(MediaUploadResult, processedURL: URL)
+        /// The delegate didn't modify the file and `uploadFile` returned nil.
+        /// The caller should forward the original request body to WordPress.
+        case passthrough
+    }
+
     private static func processAndUpload(
         fileURL: URL, mimeType: String, filename: String, context: UploadContext
-    ) async throws -> (MediaUploadResult, URL) {
+    ) async throws -> UploadResult {
         // Step 1: Process (resize, transcode, etc.)
         let processedURL: URL
         if let delegate = context.uploadDelegate {
@@ -172,9 +197,15 @@ final class MediaUploadServer: Sendable {
         // Step 2: Upload to remote WordPress
         if let delegate = context.uploadDelegate,
            let result = try await delegate.uploadFile(at: processedURL, mimeType: mimeType, filename: filename) {
-            return (result, processedURL)
+            return .uploaded(result, processedURL: processedURL)
         } else if let defaultUploader = context.defaultUploader {
-            return (try await defaultUploader.upload(fileURL: processedURL, mimeType: mimeType, filename: filename), processedURL)
+            // If the delegate didn't modify the file, the original request
+            // body can be forwarded directly — skip multipart re-encoding.
+            if processedURL == fileURL {
+                return .passthrough
+            }
+            let result = try await defaultUploader.upload(fileURL: processedURL, mimeType: mimeType, filename: filename)
+            return .uploaded(result, processedURL: processedURL)
         } else {
             throw UploadError.noUploader
         }
@@ -291,6 +322,16 @@ class DefaultMediaUploader: @unchecked Sendable {
         self.siteApiNamespace = siteApiNamespace.first
     }
 
+    /// The WordPress media endpoint URL, accounting for site API namespaces.
+    private var mediaEndpointURL: URL {
+        let mediaPath = if let siteApiNamespace {
+            "wp/v2/\(siteApiNamespace)media"
+        } else {
+            "wp/v2/media"
+        }
+        return siteApiRoot.appending(path: mediaPath)
+    }
+
     func upload(fileURL: URL, mimeType: String, filename: String) async throws -> MediaUploadResult {
         let boundary = UUID().uuidString
 
@@ -298,20 +339,30 @@ class DefaultMediaUploader: @unchecked Sendable {
             fileURL: fileURL, boundary: boundary, filename: filename, mimeType: mimeType
         )
 
-        // When a site API namespace is configured (e.g. "sites/12345/"), insert
-        // it into the media endpoint path so the request reaches the correct site.
-        let mediaPath = if let siteApiNamespace {
-            "wp/v2/\(siteApiNamespace)media"
-        } else {
-            "wp/v2/media"
-        }
-        let uploadURL = siteApiRoot.appending(path: mediaPath)
-        var request = URLRequest(url: uploadURL)
+        var request = URLRequest(url: mediaEndpointURL)
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.setValue("\(contentLength)", forHTTPHeaderField: "Content-Length")
         request.httpBodyStream = bodyStream
 
+        return try await performUpload(request)
+    }
+
+    /// Forwards the original request body to WordPress without re-encoding.
+    ///
+    /// Used when the delegate's `processFile` returned the file unchanged —
+    /// the incoming multipart body is already valid for WordPress.
+    func passthroughUpload(body: RequestBody, contentType: String) async throws -> MediaUploadResult {
+        var request = URLRequest(url: mediaEndpointURL)
+        request.httpMethod = "POST"
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        request.setValue("\(body.count)", forHTTPHeaderField: "Content-Length")
+        request.httpBodyStream = try body.makeInputStream()
+
+        return try await performUpload(request)
+    }
+
+    private func performUpload(_ request: URLRequest) async throws -> MediaUploadResult {
         let (data, response) = try await httpClient.perform(request)
 
         guard (200...299).contains(response.statusCode) else {
