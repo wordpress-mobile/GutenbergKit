@@ -268,9 +268,11 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
         let configuration = makeConfiguration(siteApiNamespace: ["sites/123/"])
         let repository = makeRepository(configuration: configuration, httpClient: mockClient)
 
-        _ = try await repository.fetchPost(id: 1)
-        _ = try await repository.fetchEditorSettings()
-        _ = try await repository.fetchSettingsOptions()
+        // Using try? because the mock returns empty data that fails decoding.
+        // We only care about the URLs that were requested, not the responses.
+        _ = try? await repository.fetchPost(id: 1)
+        _ = try? await repository.fetchEditorSettings()
+        _ = try? await repository.fetchSettingsOptions()
 
         let urls = mockClient.requestedURLs.map(\.absoluteString)
         #expect(urls.contains { $0.contains("sites/123/posts/1") })
@@ -283,7 +285,9 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
         let configuration = makeConfiguration(siteApiNamespace: ["sites/123"])
         let repository = makeRepository(configuration: configuration, httpClient: mockClient)
 
-        _ = try await repository.fetchPost(id: 1)
+        // Using try? because the mock returns empty data that fails decoding.
+        // We only care about the URL that was requested, not the response.
+        _ = try? await repository.fetchPost(id: 1)
 
         let urls = mockClient.requestedURLs.map(\.absoluteString)
         #expect(urls.contains { $0.contains("sites/123/posts/1") })
