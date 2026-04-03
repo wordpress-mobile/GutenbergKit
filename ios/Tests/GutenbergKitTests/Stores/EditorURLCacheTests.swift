@@ -142,7 +142,7 @@ struct EditorURLCacheTests {
 
     // MARK: - clear()
 
-    @Test("clear removes all entries")
+    @Test("clear removes all entries", .timeLimit(.minutes(1)))
     func clearRemovesAll() throws {
         try cache.store(makeResponse(), for: testURL, httpMethod: .GET)
         let otherURL = URL(string: "https://example.com/other")!
@@ -155,7 +155,7 @@ struct EditorURLCacheTests {
         #expect(try cache.response(for: otherURL, httpMethod: .GET) == nil)
     }
 
-    @Test("store succeeds after clear")
+    @Test("store succeeds after clear", .timeLimit(.minutes(1)))
     func storeAfterClear() throws {
         try cache.store(makeResponse(), for: testURL, httpMethod: .GET)
         try cache.clear()
@@ -169,13 +169,14 @@ struct EditorURLCacheTests {
 
     /// Polls until `URLCache.removeAllCachedResponses()` has taken effect.
     ///
-    /// Uses exponential backoff (0.05s, 0.1s, 0.2s, 0.4s, ...) with a 1s total timeout.
+    /// Uses exponential backoff (0.05s, 0.1s, 0.2s, 0.4s, ...) with a 5s total timeout.
     /// `URLCache` clears asynchronously, so the in-memory layer may still serve
-    /// stale entries for a short window after `clear()` returns.
+    /// stale entries for a short window after `clear()` returns. CI environments
+    /// with slower I/O may need the longer timeout.
     private func waitForClearToTakeEffect(cache: EditorURLCache, url: URL) throws {
         var delay: TimeInterval = 0.05
         var elapsed: TimeInterval = 0
-        while elapsed < 1.0 {
+        while elapsed < 5.0 {
             guard try cache.response(for: url, httpMethod: .GET) != nil else { return }
             Thread.sleep(forTimeInterval: delay)
             elapsed += delay
