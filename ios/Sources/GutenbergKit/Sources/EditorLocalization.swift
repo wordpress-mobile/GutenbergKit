@@ -10,7 +10,6 @@ public enum EditorLocalizableString {
 
     // MARK: - Media
     case failedToInsertMedia
-    case fileTooLarge
 
     // MARK: - Patterns
     case patterns
@@ -40,7 +39,6 @@ public final class EditorLocalization {
         case .search: "Search"
         case .insertBlock: "Insert Block"
         case .failedToInsertMedia: "Failed to insert media"
-        case .fileTooLarge: "The file is too large to upload in the editor."
         case .patterns: "Patterns"
         case .noPatternsFound: "No Patterns Found"
         case .insertPattern: "Insert Pattern"
