@@ -93,7 +93,7 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
   ) {
     self.title = title
     self.content = content
-    self.postID = postID
+    self.postID = postID == 0 ? nil : postID
     self.postType = postType
     self.postStatus = postStatus
     self.shouldUseThemeStyles = shouldUseThemeStyles

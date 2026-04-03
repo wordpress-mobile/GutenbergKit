@@ -79,6 +79,15 @@ class EditorConfigurationBuilderTest {
     }
 
     @Test
+    fun `setPostId with zero results in null`() {
+        val config = builder()
+            .setPostId(0u)
+            .build()
+
+        assertNull(config.postId)
+    }
+
+    @Test
     fun `setPostId with null clears postId`() {
         val config = builder()
             .setPostId(123u)
