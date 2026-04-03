@@ -30,14 +30,27 @@ The script:
 1. Checks that your working directory is clean
 1. Ensures required dependencies are installed
 1. Increments the version number[^1]
+1. Updates `CHANGELOG.md` — moves the Trunk section to the new version and creates a fresh Trunk section
 1. Builds the project[^2]
 1. Commits changes
 1. Creates a Git tag
 1. Pushes to `origin/trunk` with tags
-1. Creates a GitHub release
-1. Creates a new release on GitHub: `gh release create vX.X.X --generate-notes --title "X.X.X"`
+1. Creates a GitHub release: `gh release create vX.X.X --generate-notes --title "X.X.X"`
 
 After the release is created, it is ready for integration into the WordPress app.
+
+## Changelog
+
+The project maintains a `CHANGELOG.md` file at the repository root. It uses a **Trunk** section at the top where unreleased changes are staged under four categories:
+
+-   **Breaking Changes** — API removals, behavior changes, platform requirement increases
+-   **New Features** — new capabilities
+-   **Bug Fixes** — bug fixes
+-   **Internal Changes** — refactors, tooling, tests, docs
+
+When you merge a PR that contains user-facing changes, add an entry to the appropriate section in Trunk. Breaking changes are especially important to capture — they help consumers of the library plan upgrades.
+
+During a release, the script automatically renames the Trunk section to the new version number and creates a fresh empty Trunk section.
 
 ## Release Notes
 

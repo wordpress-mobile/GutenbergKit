@@ -247,6 +247,50 @@ build_project() {
     print_success "Build completed successfully"
 }
 
+# Function to update CHANGELOG.md for a release
+update_changelog() {
+    local version=$1
+
+    print_status "Updating CHANGELOG.md..."
+
+    if [ "$DRY_RUN" = "true" ]; then
+        return
+    fi
+
+    local changelog="CHANGELOG.md"
+
+    if [ ! -f "$changelog" ]; then
+        print_warning "CHANGELOG.md not found, skipping changelog update"
+        return
+    fi
+
+    # Replace "## Trunk" with the new version heading, then prepend a fresh Trunk section
+    sed -i '' "s/^## Trunk$/## $version/" "$changelog"
+
+    # Insert the new Trunk section after the horizontal rule
+    sed -i '' "/^---$/a\\
+\\
+## Trunk\\
+\\
+### Breaking Changes\\
+\\
+_None_\\
+\\
+### New Features\\
+\\
+_None_\\
+\\
+### Bug Fixes\\
+\\
+_None_\\
+\\
+### Internal Changes\\
+\\
+_None_" "$changelog"
+
+    print_success "CHANGELOG.md updated for version $version"
+}
+
 # Function to commit changes
 commit_changes() {
     local version=$1
@@ -374,6 +418,9 @@ main() {
     else
         new_version=$(get_current_version)
     fi
+
+    update_changelog "$new_version"
+    echo
 
     build_project
     echo
