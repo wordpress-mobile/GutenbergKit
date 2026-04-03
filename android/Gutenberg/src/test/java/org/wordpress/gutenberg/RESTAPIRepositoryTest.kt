@@ -38,12 +38,15 @@ class RESTAPIRepositoryTest {
 
     private fun makeConfiguration(
         shouldUsePlugins: Boolean = true,
-        shouldUseThemeStyles: Boolean = true
+        shouldUseThemeStyles: Boolean = true,
+        siteApiRoot: String = TEST_API_ROOT,
+        siteApiNamespace: Array<String> = arrayOf()
     ): EditorConfiguration {
-        return EditorConfiguration.builder(TEST_SITE_URL, TEST_API_ROOT, "post")
+        return EditorConfiguration.builder(TEST_SITE_URL, siteApiRoot, "post")
             .setPlugins(shouldUsePlugins)
             .setThemeStyles(shouldUseThemeStyles)
             .setAuthHeader("Bearer test-token")
+            .setSiteApiNamespace(siteApiNamespace)
             .build()
     }
 
@@ -335,6 +338,33 @@ class RESTAPIRepositoryTest {
         )
 
         assertEquals(expectedURLs, capturedURLs.toSet())
+    }
+
+    @Test
+    fun `namespace is inserted into URLs`() = runBlocking {
+        val capturedURLs = mutableListOf<String>()
+        val capturingClient = createCapturingClient { capturedURLs.add(it) }
+        val configuration = makeConfiguration(siteApiNamespace = arrayOf("sites/123/"))
+        val repository = makeRepository(configuration = configuration, httpClient = capturingClient)
+
+        repository.fetchPost(id = 1)
+        repository.fetchEditorSettings()
+        repository.fetchSettingsOptions()
+
+        assertTrue(capturedURLs.any { it.contains("sites/123/posts/1") })
+        assertTrue(capturedURLs.any { it.contains("sites/123/settings") })
+    }
+
+    @Test
+    fun `namespace without trailing slash is normalized`() = runBlocking {
+        val capturedURLs = mutableListOf<String>()
+        val capturingClient = createCapturingClient { capturedURLs.add(it) }
+        val configuration = makeConfiguration(siteApiNamespace = arrayOf("sites/123"))
+        val repository = makeRepository(configuration = configuration, httpClient = capturingClient)
+
+        repository.fetchPost(id = 1)
+
+        assertTrue(capturedURLs.any { it.contains("sites/123/posts/1") })
     }
 
     private fun createCapturingClient(onRequest: (String) -> Unit): EditorHTTPClientProtocol {

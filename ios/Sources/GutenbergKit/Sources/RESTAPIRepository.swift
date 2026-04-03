@@ -61,9 +61,11 @@ public struct RESTAPIRepository: Sendable {
     /// Builds a URL by inserting the namespace after the version segment of the path.
     /// For example: `/wp/v2/posts` with namespace `sites/123/` becomes `/wp/v2/sites/123/posts`
     private static func buildNamespacedURL(apiRoot: URL, path: String, namespace: String?) -> URL {
-        guard let namespace = namespace else {
+        guard let rawNamespace = namespace else {
             return apiRoot.appending(rawPath: path)
         }
+
+        let namespace = rawNamespace.hasSuffix("/") ? rawNamespace : rawNamespace + "/"
 
         // Parse the path to find where to insert the namespace
         // Path format is typically: /prefix/version/endpoint (e.g., /wp/v2/posts or /wp-block-editor/v1/settings)
