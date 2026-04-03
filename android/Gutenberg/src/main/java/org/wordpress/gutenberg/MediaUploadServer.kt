@@ -187,13 +187,7 @@ internal class MediaUploadServer(
                     // Delegate didn't modify the file — forward the original
                     // request body to WordPress without re-encoding.
                     Log.d(TAG, "Passthrough: forwarding original request body to WordPress")
-                    val body = request.body
-                        ?: throw MediaUploadException("Missing request body for passthrough")
-                    val contentType = request.header("Content-Type")
-                        ?: throw MediaUploadException("Missing Content-Type for passthrough")
-                    val uploader = defaultUploader
-                        ?: throw MediaUploadException("No default uploader configured")
-                    uploader.passthroughUpload(body, contentType)
+                    performPassthroughUpload(request)
                 }
             }
             return successResponse(media)
@@ -211,6 +205,16 @@ internal class MediaUploadServer(
     private sealed class UploadResult {
         data class Uploaded(val result: MediaUploadResult, val processedFile: File) : UploadResult()
         data object Passthrough : UploadResult()
+    }
+
+    private suspend fun performPassthroughUpload(request: HttpRequest): MediaUploadResult {
+        val body = request.body
+        val contentType = request.header("Content-Type")
+        val uploader = defaultUploader
+        if (body == null || contentType == null || uploader == null) {
+            throw MediaUploadException("Passthrough upload requires a request body, Content-Type, and default uploader")
+        }
+        return uploader.passthroughUpload(body, contentType)
     }
 
     private suspend fun processAndUpload(
