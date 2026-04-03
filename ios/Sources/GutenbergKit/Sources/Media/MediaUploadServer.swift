@@ -64,7 +64,7 @@ final class MediaUploadServer: Sendable {
         // error response here so it includes CORS headers.
         if let serverError = request.serverError {
             let message: String = switch serverError {
-            case .payloadTooLarge: "The file is too large to upload in the editor."
+            case .payloadTooLarge: await MainActor.run { EditorLocalization[.fileTooLarge] }
             default: "\(serverError.httpStatusText)"
             }
             return errorResponse(status: serverError.httpStatus, body: message)
