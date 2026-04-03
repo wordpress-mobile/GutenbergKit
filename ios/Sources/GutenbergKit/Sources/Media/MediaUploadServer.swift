@@ -414,7 +414,7 @@ class DefaultMediaUploader: @unchecked Sendable {
         )
         let epilogue = Data("\r\n--\(boundary)--\r\n".utf8)
 
-        guard let fileSize = try FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? Int else {
+        guard let fileSize = try FileManager.default.attributesOfItem(atPath: fileURL.path(percentEncoded: false))[.size] as? Int else {
             throw MediaUploadError.streamReadFailed
         }
         let contentLength = preamble.count + fileSize + epilogue.count
