@@ -42,7 +42,7 @@
 		"@wordpress/data-controls": "^4.41.0",
 		"@wordpress/date": "^5.38.0",
 		"@wordpress/deprecated": "^4.38.0",
-		"@wordpress/dom": "^4.38.0",
+		"@wordpress/dom": "^4.43.0",
 		"@wordpress/dom-ready": "^4.38.0",
 		"@wordpress/edit-post": "^8.41.0",
 		"@wordpress/editor": "^14.38.0",
