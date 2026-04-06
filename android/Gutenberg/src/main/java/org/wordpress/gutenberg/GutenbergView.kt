@@ -737,6 +737,56 @@ class GutenbergView : FrameLayout {
         }
     }
 
+    private val pendingSaveCallbacks = Collections.synchronizedMap(mutableMapOf<String, SavePostCallback>())
+
+    /**
+     * Triggers the editor store's save lifecycle and invokes [callback] when it completes.
+     *
+     * This drives the WordPress `core/editor` store through its full save flow, causing
+     * `isSavingPost()` to transition `true` → `false`. Plugins that subscribe to this
+     * lifecycle (e.g., VideoPress syncing metadata via `/wpcom/v2/videopress/meta`) fire
+     * their side-effect API calls during this transition.
+     *
+     * The actual post content is **not** persisted by this method — the host app is
+     * responsible for reading content via [getTitleAndContent] and saving it through
+     * its own REST API calls. The callback fires only after the editor store's save
+     * lifecycle completes, so it is safe to read and persist content at that point.
+     *
+     * Note: `window.editor.savePost()` is an async JS function that returns a Promise.
+     * Android's `WebView.evaluateJavascript` cannot await Promises (unlike iOS's
+     * `WKWebView.callAsyncJavaScript`), so we dispatch the call and route completion
+     * back via the `editorDelegate` JavaScript interface.
+     */
+    fun savePost(callback: SavePostCallback) {
+        if (!isEditorLoaded) {
+            Log.e("GutenbergView", "You can't save until the editor has loaded")
+            callback.onComplete(false, "Editor not loaded")
+            return
+        }
+        val requestId = java.util.UUID.randomUUID().toString()
+        pendingSaveCallbacks[requestId] = callback
+        handler.post {
+            webView.evaluateJavascript(
+                "editor.savePost()" +
+                    ".then(() => editorDelegate.onSavePostComplete('$requestId', true, null))" +
+                    ".catch((e) => editorDelegate.onSavePostComplete('$requestId', false, String(e)));",
+                null
+            )
+        }
+    }
+
+    @JavascriptInterface
+    fun onSavePostComplete(requestId: String, success: Boolean, error: String?) {
+        val callback = pendingSaveCallbacks.remove(requestId) ?: return
+        handler.post {
+            callback.onComplete(success, error)
+        }
+    }
+
+    fun interface SavePostCallback {
+        fun onComplete(success: Boolean, error: String?)
+    }
+
     fun appendTextAtCursor(text: String) {
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't append text until the editor has loaded")
