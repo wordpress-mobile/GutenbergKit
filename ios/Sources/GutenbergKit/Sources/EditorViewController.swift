@@ -431,6 +431,21 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         evaluate("editor.redo();")
     }
 
+    /// Triggers the editor store's save lifecycle.
+    ///
+    /// This drives the WordPress `core/editor` store through its full save flow,
+    /// causing `isSavingPost()` to transition `true` → `false`. Plugins that
+    /// subscribe to this lifecycle (e.g., VideoPress syncing metadata) will fire
+    /// their side-effect API calls.
+    ///
+    /// The actual post content is **not** persisted by this method — the host app
+    /// is responsible for reading content via ``getTitleAndContent()`` and saving
+    /// it through its own REST API calls.
+    public func savePost() async throws {
+        guard isReady else { throw EditorNotReadyError() }
+        _ = try await webView.callAsyncJavaScript("await editor.savePost();", in: nil, contentWorld: .page)
+    }
+
     /// Dismisses the topmost modal dialog or menu in the editor
     public func dismissTopModal() {
         guard isReady else { return }
