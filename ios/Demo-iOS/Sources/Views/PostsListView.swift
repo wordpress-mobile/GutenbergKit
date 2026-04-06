@@ -77,7 +77,8 @@ struct PostsListView: View {
 
         let editor = RunnableEditor(
             configuration: configuration,
-            dependencies: viewModel.editorDependencies
+            dependencies: viewModel.editorDependencies,
+            apiClient: viewModel.client
         )
 
         navigation.present(editor)

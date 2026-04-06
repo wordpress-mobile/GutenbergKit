@@ -34,6 +34,22 @@ enum ConfigurationItem: Identifiable, Equatable, Hashable {
 struct RunnableEditor: Equatable, Hashable {
     let configuration: EditorConfiguration
     let dependencies: EditorDependencies?
+    let apiClient: WordPressAPI?
+
+    init(configuration: EditorConfiguration, dependencies: EditorDependencies?, apiClient: WordPressAPI? = nil) {
+        self.configuration = configuration
+        self.dependencies = dependencies
+        self.apiClient = apiClient
+    }
+
+    static func == (lhs: RunnableEditor, rhs: RunnableEditor) -> Bool {
+        lhs.configuration == rhs.configuration && lhs.dependencies == rhs.dependencies
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(configuration)
+        hasher.combine(dependencies)
+    }
 }
 
 /// Credentials loaded from the wp-env setup script output
