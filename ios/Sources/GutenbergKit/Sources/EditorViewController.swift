@@ -374,12 +374,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         evaluate("editor.setContent('\(escapedString)');", isCritical: true)
     }
 
-    /// Returns the current editor content.
-    public func getContent() async throws -> String {
-        guard isReady else { throw EditorNotReadyError() }
-        return try await webView.evaluateJavaScript("editor.getContent();") as! String
-    }
-
     public struct EditorTitleAndContent: Decodable {
         public let title: String
         public let content: String

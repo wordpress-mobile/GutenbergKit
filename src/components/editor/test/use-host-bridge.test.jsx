@@ -9,11 +9,44 @@ import { renderHook } from '@testing-library/react';
  */
 import { useHostBridge } from '../use-host-bridge';
 
-vi.mock( '@wordpress/data' );
-vi.mock( '@wordpress/core-data' );
-vi.mock( '@wordpress/editor' );
+const mockGetEditedPostAttribute = vi.fn();
+const mockGetEditedPostContent = vi.fn();
+
+vi.mock( '@wordpress/data', () => ( {
+	useSelect: ( store ) => {
+		if ( store?.name === 'core/editor' ) {
+			return {
+				getEditedPostAttribute: mockGetEditedPostAttribute,
+				getEditedPostContent: mockGetEditedPostContent,
+			};
+		}
+		// block-editor store selectors
+		return {
+			getSelectedBlockClientId: vi.fn(),
+			getBlock: vi.fn(),
+			getSelectionStart: vi.fn(),
+			getSelectionEnd: vi.fn(),
+		};
+	},
+	useDispatch: () => ( {
+		editEntityRecord: vi.fn(),
+		undo: vi.fn(),
+		redo: vi.fn(),
+		switchEditorMode: vi.fn(),
+		updateBlock: vi.fn(),
+		selectionChange: vi.fn(),
+	} ),
+} ) );
+vi.mock( '@wordpress/core-data', () => ( {
+	store: { name: 'core' },
+} ) );
+vi.mock( '@wordpress/editor', () => ( {
+	store: { name: 'core/editor' },
+} ) );
 vi.mock( '@wordpress/blocks' );
-vi.mock( '@wordpress/block-editor' );
+vi.mock( '@wordpress/block-editor', () => ( {
+	store: { name: 'core/block-editor' },
+} ) );
 
 const defaultPost = {
 	id: 1,
@@ -43,7 +76,6 @@ describe( 'useHostBridge', () => {
 		// Verify all bridge methods exist
 		expect( window.editor.setContent ).toBeTypeOf( 'function' );
 		expect( window.editor.setTitle ).toBeTypeOf( 'function' );
-		expect( window.editor.getContent ).toBeTypeOf( 'function' );
 		expect( window.editor.getTitleAndContent ).toBeTypeOf( 'function' );
 		expect( window.editor.undo ).toBeTypeOf( 'function' );
 		expect( window.editor.redo ).toBeTypeOf( 'function' );
@@ -53,6 +85,41 @@ describe( 'useHostBridge', () => {
 		expect( window.editor.appendTextAtCursor ).toBeTypeOf( 'function' );
 
 		expect( markBridgeReady ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'getTitleAndContent returns plain strings when data store returns objects', () => {
+		mockGetEditedPostAttribute.mockReturnValue( {
+			raw: 'Hello World',
+			rendered: '<b>Hello World</b>',
+		} );
+		mockGetEditedPostContent.mockReturnValue( {
+			raw: '<!-- wp:paragraph -->\n<p>Hello</p>\n<!-- /wp:paragraph -->',
+			rendered: '<p>Hello</p>',
+			protected: false,
+		} );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		const result = window.editor.getTitleAndContent();
+		expect( result.title ).toBe( 'Hello World' );
+		expect( result.content ).toBe(
+			'<!-- wp:paragraph -->\n<p>Hello</p>\n<!-- /wp:paragraph -->'
+		);
+	} );
+
+	it( 'getTitleAndContent passes through plain strings unchanged', () => {
+		mockGetEditedPostAttribute.mockReturnValue( 'Plain Title' );
+		mockGetEditedPostContent.mockReturnValue( 'Plain Content' );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		const result = window.editor.getTitleAndContent();
+		expect( result.title ).toBe( 'Plain Title' );
+		expect( result.content ).toBe( 'Plain Content' );
 	} );
 
 	it( 'cleans up window.editor methods on unmount', () => {
@@ -66,7 +133,6 @@ describe( 'useHostBridge', () => {
 
 		expect( window.editor.setContent ).toBeUndefined();
 		expect( window.editor.setTitle ).toBeUndefined();
-		expect( window.editor.getContent ).toBeUndefined();
 		expect( window.editor.getTitleAndContent ).toBeUndefined();
 		expect( window.editor.undo ).toBeUndefined();
 		expect( window.editor.redo ).toBeUndefined();

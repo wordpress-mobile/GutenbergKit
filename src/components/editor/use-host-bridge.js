@@ -51,21 +51,15 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 			editContent( { title: decodeURIComponent( title ) } );
 		};
 
-		window.editor.getContent = ( completeComposition = false ) => {
-			if ( completeComposition ) {
-				endComposition( editorRef.current );
-			}
-
-			return getEditedPostContent();
-		};
-
 		window.editor.getTitleAndContent = ( completeComposition = false ) => {
 			if ( completeComposition ) {
 				endComposition( editorRef.current );
 			}
 
-			const title = getEditedPostAttribute( 'title' );
-			const content = getEditedPostContent();
+			const title = normalizeAttribute(
+				getEditedPostAttribute( 'title' )
+			);
+			const content = normalizeAttribute( getEditedPostContent() );
 			const changed =
 				title !== postTitleRef.current ||
 				content !== postContentRef.current;
@@ -184,7 +178,6 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 		return () => {
 			delete window.editor.setContent;
 			delete window.editor.setTitle;
-			delete window.editor.getContent;
 			delete window.editor.getTitleAndContent;
 			delete window.editor.undo;
 			delete window.editor.redo;
@@ -209,6 +202,24 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 		updateBlock,
 		selectionChange,
 	] );
+}
+
+/**
+ * Normalizes a WordPress data store attribute to a plain string.
+ *
+ * The data store may return either a plain string or a `{ raw, rendered }`
+ * object depending on internal state (e.g. before vs. after the user edits
+ * a field). This function always extracts the raw string so the host app
+ * receives a consistent type.
+ *
+ * @param {string|Object} value The value from a data store selector.
+ * @return {string} The raw string value.
+ */
+function normalizeAttribute( value ) {
+	if ( typeof value === 'object' ) {
+		return value?.raw ?? '';
+	}
+	return value ?? '';
 }
 
 /**

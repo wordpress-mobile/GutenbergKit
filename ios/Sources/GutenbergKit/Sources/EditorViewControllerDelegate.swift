@@ -18,7 +18,7 @@ public protocol EditorViewControllerDelegate: AnyObject {
 
     /// Notifies the client about the new edits.
     ///
-    /// - note: To get the latest content, call ``EditorViewController/getContent()``.
+    /// - note: To get the latest content, call ``EditorViewController/getTitleAndContent()``.
     /// Retrieving the content is a relatively expensive operation and should not
     /// be performed too frequently during editing.
     ///
