@@ -1,23 +1,27 @@
 import SwiftUI
 import GutenbergKit
+import WordPressAPI
 
 struct EditorView: View {
     private let configuration: EditorConfiguration
     private let dependencies: EditorDependencies?
+    private let apiClient: WordPressAPI?
 
     @State private var viewModel = EditorViewModel()
 
     @Environment(\.dismiss) var dismiss
 
-    init(configuration: EditorConfiguration, dependencies: EditorDependencies? = nil) {
+    init(configuration: EditorConfiguration, dependencies: EditorDependencies? = nil, apiClient: WordPressAPI? = nil) {
         self.configuration = configuration
         self.dependencies = dependencies
+        self.apiClient = apiClient
     }
 
     var body: some View {
         _EditorView(
             configuration: configuration,
             dependencies: dependencies,
+            apiClient: apiClient,
             viewModel: viewModel
         )
             .toolbar { toolbar }
@@ -57,6 +61,17 @@ struct EditorView: View {
         ToolbarItemGroup(placement: .topBarTrailing) {
             moreMenu
                 .disabled(viewModel.isModalDialogOpen)
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                viewModel.save()
+            } label: {
+                Text("Save")
+                    .fontWeight(.semibold)
+            }
+            .disabled(!viewModel.canSave)
+            .accessibilityLabel("Save")
         }
     }
 
@@ -99,15 +114,18 @@ struct EditorView: View {
 private struct _EditorView: UIViewControllerRepresentable {
     private let configuration: EditorConfiguration
     private let dependencies: EditorDependencies?
+    private let apiClient: WordPressAPI?
     private let viewModel: EditorViewModel
 
     init(
         configuration: EditorConfiguration,
         dependencies: EditorDependencies? = nil,
+        apiClient: WordPressAPI? = nil,
         viewModel: EditorViewModel
     ) {
         self.configuration = configuration
         self.dependencies = dependencies
+        self.apiClient = apiClient
         self.viewModel = viewModel
     }
 
@@ -124,6 +142,33 @@ private struct _EditorView: UIViewControllerRepresentable {
             switch $0 {
             case .redo: viewController?.redo()
             case .undo: viewController?.undo()
+            }
+        }
+
+        viewModel.hasPostID = configuration.postID != nil
+
+        viewModel.saveHandler = { [weak viewController, configuration, apiClient] in
+            guard let viewController else { return }
+            do {
+                // 1. Trigger the editor store save lifecycle so plugins fire side-effects
+                try await viewController.savePost()
+                print("savePost() completed — editor store save lifecycle fired")
+
+                // 2. Persist post content via REST API
+                if let apiClient, let postID = configuration.postID {
+                    let titleAndContent = try await viewController.getTitleAndContent()
+                    let params = PostUpdateParams(title: .some(titleAndContent.title), content: .some(titleAndContent.content), meta: nil)
+                    let endpointType: PostEndpointType = configuration.postType.postType == "page" ? .pages : .posts
+                    _ = try await apiClient.posts.updateCancellation(
+                        postEndpointType: endpointType,
+                        postId: Int64(postID),
+                        params: params,
+                        context: nil
+                    )
+                    print("Post \(postID) persisted via REST API")
+                }
+            } catch {
+                print("Save failed: \(error)")
             }
         }
 
@@ -145,7 +190,7 @@ private struct _EditorView: UIViewControllerRepresentable {
         // MARK: - EditorViewControllerDelegate
 
         func editorDidLoad(_ viewContoller: EditorViewController) {
-            // No-op for demo
+            viewModel.isEditorReady = true
         }
 
         func editor(_ viewContoller: EditorViewController, didDisplayInitialContent content: String) {
@@ -232,6 +277,14 @@ private final class EditorViewModel {
     var hasUndo = false
     var hasRedo = false
     var isCodeEditorEnabled = false
+    var isSaving = false
+    var isEditorReady = false
+
+    var hasPostID = false
+
+    var canSave: Bool {
+        isEditorReady && !isSaving && hasPostID
+    }
 
     enum Action {
         case undo
@@ -239,6 +292,16 @@ private final class EditorViewModel {
     }
 
     var perform: (_ action: Action) -> Void = { _ in assertionFailure() }
+    var saveHandler: () async -> Void = {}
+
+    func save() {
+        guard canSave else { return }
+        isSaving = true
+        Task {
+            await saveHandler()
+            isSaving = false
+        }
+    }
 }
 
 #Preview {
