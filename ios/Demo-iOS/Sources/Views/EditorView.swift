@@ -30,6 +30,18 @@ struct EditorView: View {
             viewModel: viewModel
         )
             .toolbar { toolbar }
+            .alert(
+                "Save failed",
+                isPresented: Binding(
+                    get: { viewModel.errorMessage != nil },
+                    set: { if !$0 { viewModel.errorMessage = nil } }
+                ),
+                presenting: viewModel.errorMessage
+            ) { _ in
+                Button("OK", role: .cancel) {}
+            } message: { message in
+                Text(message)
+            }
     }
 
     @ToolbarContentBuilder
@@ -145,8 +157,21 @@ private struct _EditorView: UIViewControllerRepresentable {
         viewController.isCodeEditorEnabled = viewModel.isCodeEditorEnabled
     }
 
-    /// Persists the post via the REST API.
+    /// Triggers the editor store save lifecycle, then persists the post via the REST API.
+    ///
+    /// A lifecycle failure must **not** block the user from saving their work — the
+    /// warning is logged and persistence proceeds anyway. Persist failures surface
+    /// through `viewModel.errorMessage`, which the parent view binds to an `Alert`.
     private func persistPost(viewController: EditorViewController, viewModel: EditorViewModel) async {
+        // 1. Trigger the editor store save lifecycle so plugins fire side-effects.
+        do {
+            try await viewController.savePost()
+            print("editor.savePost() completed — editor store save lifecycle fired")
+        } catch {
+            print("editor.savePost() lifecycle failed; persisting anyway: \(error)")
+        }
+
+        // 2. Persist post content via REST API.
         guard let apiClient, let postID = configuration.postID else { return }
         do {
             let titleAndContent = try await viewController.getTitleAndContent()
@@ -169,6 +194,7 @@ private struct _EditorView: UIViewControllerRepresentable {
             print("Post \(postID) persisted via REST API")
         } catch {
             print("Failed to persist post \(postID): \(error)")
+            viewModel.errorMessage = "Failed to save post: \(error.localizedDescription)"
         }
     }
 
@@ -289,6 +315,7 @@ private final class EditorViewModel {
     var isCodeEditorEnabled = false
     var isSaving = false
     var isEditorReady = false
+    var errorMessage: String?
 
     var hasPostID = false
 
