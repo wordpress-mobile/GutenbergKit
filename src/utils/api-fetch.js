@@ -7,7 +7,7 @@ import { getQueryArg } from '@wordpress/url';
 /**
  * Internal dependencies
  */
-import { getGBKit } from './bridge';
+import { getGBKit, POST_FALLBACKS } from './bridge';
 
 /**
  * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
@@ -114,13 +114,16 @@ function tokenAuthMiddleware( options, next ) {
  */
 function filterEndpointsMiddleware( options, next ) {
 	const { post } = getGBKit();
-	const { id, restNamespace, restBase } = post ?? {};
 
-	if ( id === undefined || ! restNamespace || ! restBase ) {
+	if ( ! post || post.id === undefined ) {
 		return next( options );
 	}
 
-	const disabledPath = `/${ restNamespace }/${ restBase }/${ id }`;
+	// Apply the same fallback contract as `getPost()` so the filter still
+	// engages on hosts whose payload omits restBase/restNamespace.
+	const restNamespace = post.restNamespace || POST_FALLBACKS.restNamespace;
+	const restBase = post.restBase || POST_FALLBACKS.restBase;
+	const disabledPath = `/${ restNamespace }/${ restBase }/${ post.id }`;
 
 	if (
 		options.path === disabledPath ||

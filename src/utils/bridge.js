@@ -216,6 +216,19 @@ export function onNetworkRequest( requestData ) {
  */
 
 /**
+ * Default values used when the native host omits fields from the post payload.
+ * Centralized here so all consumers (getPost, filterEndpointsMiddleware) agree
+ * on the fallback contract.
+ */
+export const POST_FALLBACKS = {
+	id: -1,
+	type: 'post',
+	restBase: 'posts',
+	restNamespace: 'wp/v2',
+	status: 'draft',
+};
+
+/**
  * Retrieves the native-host-provided GBKit object from localStorage or returns
  * an empty object if not found.
  *
@@ -300,11 +313,11 @@ export async function getPost() {
 	if ( hostContent ) {
 		debug( 'Using content from native host' );
 		return {
-			id: post?.id || -1,
-			type: post?.type || 'post',
-			restBase: post?.restBase || 'posts',
-			restNamespace: post?.restNamespace || 'wp/v2',
-			status: post?.status || 'draft',
+			id: post?.id || POST_FALLBACKS.id,
+			type: post?.type || POST_FALLBACKS.type,
+			restBase: post?.restBase || POST_FALLBACKS.restBase,
+			restNamespace: post?.restNamespace || POST_FALLBACKS.restNamespace,
+			status: post?.status || POST_FALLBACKS.status,
 			title: { raw: hostContent.title },
 			content: { raw: hostContent.content },
 		};
@@ -313,11 +326,11 @@ export async function getPost() {
 	if ( post ) {
 		debug( 'Native bridge unavailable, using GBKit initial content' );
 		return {
-			id: post.id || -1,
-			type: post.type || 'post',
-			restBase: post.restBase || 'posts',
-			restNamespace: post.restNamespace || 'wp/v2',
-			status: post.status || 'draft',
+			id: post.id || POST_FALLBACKS.id,
+			type: post.type || POST_FALLBACKS.type,
+			restBase: post.restBase || POST_FALLBACKS.restBase,
+			restNamespace: post.restNamespace || POST_FALLBACKS.restNamespace,
+			status: post.status || POST_FALLBACKS.status,
 			title: { raw: decodeURIComponent( post.title ) },
 			content: { raw: decodeURIComponent( post.content ) },
 		};
@@ -325,11 +338,7 @@ export async function getPost() {
 
 	// Fallback to default empty post
 	return {
-		id: -1,
-		type: 'post',
-		restBase: 'posts',
-		restNamespace: 'wp/v2',
-		status: 'draft',
+		...POST_FALLBACKS,
 		title: { raw: '' },
 		content: { raw: '' },
 	};
