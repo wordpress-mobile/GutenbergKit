@@ -1,12 +1,13 @@
 package com.example.gutenbergkit
 
+import android.content.Context
 import android.content.Intent
-import android.os.Bundle
-import android.view.ViewGroup
-import android.webkit.WebView
 import android.content.pm.ApplicationInfo
 import android.os.Build
+import android.os.Bundle
 import android.util.Log
+import android.view.ViewGroup
+import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -39,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
@@ -146,7 +148,7 @@ fun EditorScreen(
     var isSaving by remember { mutableStateOf(false) }
     var gutenbergViewRef by remember { mutableStateOf<GutenbergView?>(null) }
     val saveScope = rememberCoroutineScope()
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
 
     val canSave = !isSaving && accountId != null && configuration.postId != null
 
@@ -348,7 +350,7 @@ private suspend fun GutenbergView.savePostAwait(): Boolean =
  * and persistence proceeds anyway.
  */
 private suspend fun persistPost(
-    context: android.content.Context,
+    context: Context,
     view: GutenbergView,
     configuration: EditorConfiguration,
     accountId: ULong,
@@ -407,11 +409,11 @@ private suspend fun persistPost(
             }
             else -> {
                 Log.e("EditorActivity", "Failed to persist post $postId: $result")
-                "Failed to save post"
+                context.getString(R.string.save_failed_generic)
             }
         }
     } catch (e: Exception) {
         Log.e("EditorActivity", "Failed to persist post $postId", e)
-        "Failed to save post: ${e.message ?: "unknown error"}"
+        context.getString(R.string.save_failed_with_reason, e.message ?: "unknown error")
     }
 }

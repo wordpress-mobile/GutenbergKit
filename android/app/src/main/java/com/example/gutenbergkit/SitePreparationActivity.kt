@@ -49,11 +49,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import com.example.gutenbergkit.ui.theme.AppTheme
 import org.wordpress.gutenberg.model.EditorConfiguration
+import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.model.EditorDependenciesSerializer
 import org.wordpress.gutenberg.model.PostTypeDetails
 
@@ -164,7 +166,7 @@ class SitePreparationActivity : ComponentActivity() {
 
     private fun launchEditor(
         configuration: EditorConfiguration,
-        dependencies: org.wordpress.gutenberg.model.EditorDependencies?
+        dependencies: EditorDependencies?
     ) {
         val intent = Intent(this, EditorActivity::class.java).apply {
             putExtra(MainActivity.EXTRA_CONFIGURATION, configuration)
@@ -182,7 +184,7 @@ class SitePreparationActivity : ComponentActivity() {
         accountId: ULong,
         postType: PostTypeDetails,
         configuration: EditorConfiguration,
-        dependencies: org.wordpress.gutenberg.model.EditorDependencies?
+        dependencies: EditorDependencies?
     ) {
         startActivity(
             PostsListActivity.createIntent(this, accountId, postType, configuration, dependencies)
@@ -196,8 +198,8 @@ fun SitePreparationScreen(
     viewModel: SitePreparationViewModel,
     accountId: ULong?,
     onClose: () -> Unit,
-    onStartEditor: (EditorConfiguration, org.wordpress.gutenberg.model.EditorDependencies?) -> Unit,
-    onBrowsePosts: (EditorConfiguration, org.wordpress.gutenberg.model.EditorDependencies?, PostTypeDetails) -> Unit
+    onStartEditor: (EditorConfiguration, EditorDependencies?) -> Unit,
+    onBrowsePosts: (EditorConfiguration, EditorDependencies?, PostTypeDetails) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -214,7 +216,7 @@ fun SitePreparationScreen(
                     IconButton(onClick = onClose) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = stringResource(R.string.back)
                         )
                     }
                 },
@@ -472,7 +474,7 @@ private fun FeatureConfigurationCard(
                     onClick = onBrowsePosts,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Browse")
+                    Text(stringResource(R.string.browse))
                 }
             }
         }
