@@ -75,7 +75,9 @@ class RESTAPIRepository(
     }
 
     private fun buildPostUrl(id: Int): String {
-        return buildNamespacedUrl("/wp/v2/posts/$id?context=edit")
+        val restNamespace = configuration.postType.restNamespace
+        val restBase = configuration.postType.restBase
+        return buildNamespacedUrl("/$restNamespace/$restBase/$id?context=edit")
     }
 
     // MARK: Editor Settings
