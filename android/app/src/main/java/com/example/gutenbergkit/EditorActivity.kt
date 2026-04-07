@@ -7,6 +7,7 @@ import android.webkit.WebView
 import android.content.pm.ApplicationInfo
 import android.os.Build
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -198,13 +199,16 @@ fun EditorScreen(
                             isSaving = true
                             saveScope.launch {
                                 try {
-                                    persistPost(
+                                    val errorMessage = persistPost(
                                         context = context,
                                         view = view,
                                         configuration = configuration,
                                         accountId = accountId,
                                         postId = postId
                                     )
+                                    if (errorMessage != null) {
+                                        Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
+                                    }
                                 } finally {
                                     isSaving = false
                                 }
@@ -339,7 +343,9 @@ private suspend fun GutenbergView.savePostAwait(): Boolean =
  * Reads the latest title/content from the editor and PUTs it to the WordPress REST API.
  *
  * Triggers [GutenbergView.savePost] first so plugin side-effects (e.g., VideoPress
- * syncing metadata) settle before the content is read and persisted.
+ * syncing metadata) settle before the content is read and persisted. A lifecycle
+ * failure must NOT block the user from saving their work — the warning is logged
+ * and persistence proceeds anyway.
  */
 private suspend fun persistPost(
     context: android.content.Context,
@@ -347,13 +353,17 @@ private suspend fun persistPost(
     configuration: EditorConfiguration,
     accountId: ULong,
     postId: UInt
-) {
-    try {
-        val saveSucceeded = view.savePostAwait()
-        if (!saveSucceeded) {
-            Log.w("EditorActivity", "editor.savePost() reported failure; persisting anyway")
-        }
+): String? {
+    // 1. Trigger the editor store save lifecycle so plugins fire side-effects.
+    val saveSucceeded = view.savePostAwait()
+    if (saveSucceeded) {
+        Log.i("EditorActivity", "editor.savePost() completed — editor store save lifecycle fired")
+    } else {
+        Log.w("EditorActivity", "editor.savePost() lifecycle failed; persisting anyway")
+    }
 
+    // 2. Persist post content via REST API.
+    return try {
         val titleAndContent = suspendCancellableCoroutine<Pair<CharSequence, CharSequence>> { cont ->
             view.getTitleAndContent(
                 originalContent = configuration.content,
@@ -367,7 +377,7 @@ private suspend fun persistPost(
 
         val app = context.applicationContext as GutenbergKitApplication
         val account = app.accountRepository.all().firstOrNull { it.id() == accountId }
-            ?: throw IllegalStateException("Account not found")
+            ?: error("Account not found")
         val client = app.createApiClient(account)
 
         val endpointType = when (configuration.postType.postType) {
@@ -393,12 +403,15 @@ private suspend fun persistPost(
         when (result) {
             is WpRequestResult.Success -> {
                 Log.i("EditorActivity", "Post $postId persisted via REST API")
+                null
             }
             else -> {
                 Log.e("EditorActivity", "Failed to persist post $postId: $result")
+                "Failed to save post"
             }
         }
     } catch (e: Exception) {
-        Log.e("EditorActivity", "Save failed", e)
+        Log.e("EditorActivity", "Failed to persist post $postId", e)
+        "Failed to save post: ${e.message ?: "unknown error"}"
     }
 }
