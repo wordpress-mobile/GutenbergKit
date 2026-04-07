@@ -96,21 +96,11 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 			redo();
 		};
 
-		// Unlike `undo`/`redo`/`switchEditorMode` above, we intentionally
-		// expose the underlying Promise here so native hosts can `await` the
-		// editor store's full save lifecycle (e.g., iOS uses
-		// `WKWebView.callAsyncJavaScript` to wait for completion).
-		//
-		// We also suppress the "Draft saved." / "Post updated." snackbar that
-		// `core/editor` dispatches as part of the save lifecycle: native hosts
-		// own their own UI for save feedback (toasts, alerts, etc.), and the
-		// editor's web snackbar would just compete with them. The notice has a
-		// stable id (`editor-save`) which we remove on both success and
-		// failure paths.
 		window.editor.savePost = async () => {
 			try {
 				return await savePost();
 			} finally {
+				// Native hosts display their own save feedback, disable the default
 				removeNotice( 'editor-save' );
 			}
 		};
