@@ -760,6 +760,11 @@ class GutenbergView : FrameLayout {
      * its own REST API calls. The callback fires only after the editor store's save
      * lifecycle completes, so it is safe to read and persist content at that point.
      *
+     * **Important:** if the callback reports `success = false` (for example because a
+     * third-party plugin subscribed to the lifecycle errored out), hosts should still
+     * proceed to read and persist content. A misbehaving plugin must not block the
+     * user from saving their work — log the lifecycle failure and continue.
+     *
      * Note: `window.editor.savePost()` is an async JS function that returns a Promise.
      * Android's `WebView.evaluateJavascript` cannot await Promises (unlike iOS's
      * `WKWebView.callAsyncJavaScript`), so we dispatch the call and route completion
@@ -773,11 +778,15 @@ class GutenbergView : FrameLayout {
         }
         val requestId = java.util.UUID.randomUUID().toString()
         pendingSaveCallbacks[requestId] = callback
+        // Quote the requestId for safe JS string interpolation. UUIDs are safe
+        // today, but routing all values through `JSONObject.quote()` ensures we
+        // never accidentally inject untrusted strings into the JS context.
+        val quotedRequestId = JSONObject.quote(requestId)
         handler.post {
             webView.evaluateJavascript(
                 "editor.savePost()" +
-                    ".then(() => editorDelegate.onSavePostComplete('$requestId', true, null))" +
-                    ".catch((e) => editorDelegate.onSavePostComplete('$requestId', false, String(e)));",
+                    ".then(() => editorDelegate.onSavePostComplete($quotedRequestId, true, null))" +
+                    ".catch((e) => editorDelegate.onSavePostComplete($quotedRequestId, false, String(e)));",
                 null
             )
         }
@@ -1091,8 +1100,21 @@ class GutenbergView : FrameLayout {
         latestContentProvider = null
         blockInserterDialog?.dismiss()
         blockInserterDialog = null
+        // Fail any save callbacks still waiting on a JS Promise — without this,
+        // coroutines awaiting `savePost()` would hang forever (and leak whatever
+        // they captured) when the view is torn down mid-save.
+        drainPendingSaveCallbacks("View detached")
         handler.removeCallbacksAndMessages(null)
         webView.destroy()
+    }
+
+    private fun drainPendingSaveCallbacks(reason: String) {
+        val pending = synchronized(pendingSaveCallbacks) {
+            val snapshot = pendingSaveCallbacks.toMap()
+            pendingSaveCallbacks.clear()
+            snapshot
+        }
+        pending.values.forEach { it.onComplete(false, reason) }
     }
 
     // Network Monitoring

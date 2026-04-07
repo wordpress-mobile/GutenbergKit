@@ -94,9 +94,11 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 			redo();
 		};
 
-		window.editor.savePost = async () => {
-			await savePost();
-		};
+		// Unlike `undo`/`redo`/`switchEditorMode` above, we intentionally
+		// expose the underlying Promise here so native hosts can `await` the
+		// editor store's full save lifecycle (e.g., iOS uses
+		// `WKWebView.callAsyncJavaScript` to wait for completion).
+		window.editor.savePost = savePost;
 
 		window.editor.switchEditorMode = ( mode ) => {
 			// Do not return the `Promise` return value to avoid host errors.

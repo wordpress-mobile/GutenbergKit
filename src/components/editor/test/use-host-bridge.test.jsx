@@ -98,6 +98,7 @@ describe( 'useHostBridge', () => {
 		expect( window.editor.getTitleAndContent ).toBeTypeOf( 'function' );
 		expect( window.editor.undo ).toBeTypeOf( 'function' );
 		expect( window.editor.redo ).toBeTypeOf( 'function' );
+		expect( window.editor.savePost ).toBeTypeOf( 'function' );
 		expect( window.editor.switchEditorMode ).toBeTypeOf( 'function' );
 		expect( window.editor.dismissTopModal ).toBeTypeOf( 'function' );
 		expect( window.editor.focus ).toBeTypeOf( 'function' );
@@ -418,6 +419,7 @@ describe( 'useHostBridge', () => {
 		expect( window.editor.getTitleAndContent ).toBeUndefined();
 		expect( window.editor.undo ).toBeUndefined();
 		expect( window.editor.redo ).toBeUndefined();
+		expect( window.editor.savePost ).toBeUndefined();
 		expect( window.editor.switchEditorMode ).toBeUndefined();
 		expect( window.editor.dismissTopModal ).toBeUndefined();
 		expect( window.editor.focus ).toBeUndefined();
