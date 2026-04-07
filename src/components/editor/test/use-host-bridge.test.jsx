@@ -8,9 +8,16 @@ import { renderHook } from '@testing-library/react';
  * Internal dependencies
  */
 import { useHostBridge } from '../use-host-bridge';
+import { getBlockType } from '@wordpress/blocks';
 
 const mockGetEditedPostAttribute = vi.fn();
 const mockGetEditedPostContent = vi.fn();
+const mockGetSelectedBlockClientId = vi.fn();
+const mockGetBlock = vi.fn();
+const mockGetSelectionStart = vi.fn();
+const mockGetSelectionEnd = vi.fn();
+const mockUpdateBlock = vi.fn();
+const mockSelectionChange = vi.fn();
 
 vi.mock( '@wordpress/data', () => ( {
 	useSelect: ( store ) => {
@@ -22,10 +29,10 @@ vi.mock( '@wordpress/data', () => ( {
 		}
 		// block-editor store selectors
 		return {
-			getSelectedBlockClientId: vi.fn(),
-			getBlock: vi.fn(),
-			getSelectionStart: vi.fn(),
-			getSelectionEnd: vi.fn(),
+			getSelectedBlockClientId: mockGetSelectedBlockClientId,
+			getBlock: mockGetBlock,
+			getSelectionStart: mockGetSelectionStart,
+			getSelectionEnd: mockGetSelectionEnd,
 		};
 	},
 	useDispatch: () => ( {
@@ -33,8 +40,8 @@ vi.mock( '@wordpress/data', () => ( {
 		undo: vi.fn(),
 		redo: vi.fn(),
 		switchEditorMode: vi.fn(),
-		updateBlock: vi.fn(),
-		selectionChange: vi.fn(),
+		updateBlock: mockUpdateBlock,
+		selectionChange: mockSelectionChange,
 	} ),
 } ) );
 vi.mock( '@wordpress/core-data', () => ( {
@@ -43,7 +50,28 @@ vi.mock( '@wordpress/core-data', () => ( {
 vi.mock( '@wordpress/editor', () => ( {
 	store: { name: 'core/editor' },
 } ) );
-vi.mock( '@wordpress/blocks' );
+vi.mock( '@wordpress/blocks', () => ( {
+	parse: vi.fn( () => [] ),
+	serialize: vi.fn( () => '' ),
+	getBlockType: vi.fn(),
+} ) );
+vi.mock( '@wordpress/rich-text', () => ( {
+	create: vi.fn( ( { html } ) => ( {
+		text: html,
+		formats: [],
+		replacements: [],
+		start: 0,
+		end: html.length,
+	} ) ),
+	insert: vi.fn( ( value, text ) => ( {
+		text: value.text + text,
+		formats: [],
+		replacements: [],
+		start: 0,
+		end: value.text.length + text.length,
+	} ) ),
+	toHTMLString: vi.fn( ( { value } ) => value.text ),
+} ) );
 vi.mock( '@wordpress/block-editor', () => ( {
 	store: { name: 'core/block-editor' },
 } ) );
@@ -120,6 +148,207 @@ describe( 'useHostBridge', () => {
 		const result = window.editor.getTitleAndContent();
 		expect( result.title ).toBe( 'Plain Title' );
 		expect( result.content ).toBe( 'Plain Content' );
+	} );
+
+	it( 'getTitleAndContent returns empty strings when data store returns null', () => {
+		mockGetEditedPostAttribute.mockReturnValue( null );
+		mockGetEditedPostContent.mockReturnValue( null );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		const result = window.editor.getTitleAndContent();
+		expect( result.title ).toBe( '' );
+		expect( result.content ).toBe( '' );
+	} );
+
+	it( 'getTitleAndContent returns empty strings when data store returns undefined', () => {
+		mockGetEditedPostAttribute.mockReturnValue( undefined );
+		mockGetEditedPostContent.mockReturnValue( undefined );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		const result = window.editor.getTitleAndContent();
+		expect( result.title ).toBe( '' );
+		expect( result.content ).toBe( '' );
+	} );
+
+	it( 'getTitleAndContent returns empty string for object with raw: null', () => {
+		mockGetEditedPostAttribute.mockReturnValue( { raw: null } );
+		mockGetEditedPostContent.mockReturnValue( {
+			raw: undefined,
+		} );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		const result = window.editor.getTitleAndContent();
+		expect( result.title ).toBe( '' );
+		expect( result.content ).toBe( '' );
+	} );
+
+	it( 'getTitleAndContent returns empty string for arrays', () => {
+		mockGetEditedPostAttribute.mockReturnValue( [ 'unexpected' ] );
+		mockGetEditedPostContent.mockReturnValue( [] );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		const result = window.editor.getTitleAndContent();
+		expect( result.title ).toBe( '' );
+		expect( result.content ).toBe( '' );
+	} );
+
+	it( 'getTitleAndContent coerces non-string primitives to strings', () => {
+		mockGetEditedPostAttribute.mockReturnValue( 42 );
+		mockGetEditedPostContent.mockReturnValue( false );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		const result = window.editor.getTitleAndContent();
+		expect( result.title ).toBe( '42' );
+		expect( result.content ).toBe( 'false' );
+	} );
+
+	it( 'getTitleAndContent reports changed correctly with object values', () => {
+		mockGetEditedPostAttribute.mockReturnValue( {
+			raw: 'Changed Title',
+			rendered: '<b>Changed Title</b>',
+		} );
+		mockGetEditedPostContent.mockReturnValue( '' );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		const first = window.editor.getTitleAndContent();
+		expect( first.changed ).toBe( true );
+		expect( first.title ).toBe( 'Changed Title' );
+
+		const second = window.editor.getTitleAndContent();
+		expect( second.changed ).toBe( false );
+	} );
+
+	it( 'getTitleAndContent reports changed: false when values match initial state', () => {
+		mockGetEditedPostAttribute.mockReturnValue( '' );
+		mockGetEditedPostContent.mockReturnValue( '' );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		const result = window.editor.getTitleAndContent();
+		expect( result.changed ).toBe( false );
+	} );
+
+	it( 'appendTextAtCursor normalizes object-shaped block content', () => {
+		mockGetSelectedBlockClientId.mockReturnValue( 'block-1' );
+		mockGetBlock.mockReturnValue( {
+			name: 'core/paragraph',
+			clientId: 'block-1',
+			attributes: {
+				content: {
+					raw: '<p>Existing</p>',
+					rendered: '<p>Existing</p>',
+				},
+			},
+		} );
+		getBlockType.mockReturnValue( {
+			attributes: { content: { type: 'string' } },
+		} );
+		mockGetSelectionStart.mockReturnValue( {
+			clientId: 'block-1',
+			attributeKey: 'content',
+			offset: 8,
+		} );
+		mockGetSelectionEnd.mockReturnValue( {
+			clientId: 'block-1',
+			attributeKey: 'content',
+			offset: 8,
+		} );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		const result = window.editor.appendTextAtCursor( ' appended' );
+
+		expect( result ).toBe( true );
+		expect( mockUpdateBlock ).toHaveBeenCalledWith( 'block-1', {
+			attributes: expect.objectContaining( {
+				content: expect.any( String ),
+			} ),
+		} );
+	} );
+
+	it( 'appendTextAtCursor works with plain string block content', () => {
+		mockGetSelectedBlockClientId.mockReturnValue( 'block-1' );
+		mockGetBlock.mockReturnValue( {
+			name: 'core/paragraph',
+			clientId: 'block-1',
+			attributes: { content: 'Hello' },
+		} );
+		getBlockType.mockReturnValue( {
+			attributes: { content: { type: 'string' } },
+		} );
+		mockGetSelectionStart.mockReturnValue( {
+			clientId: 'block-1',
+			attributeKey: 'content',
+			offset: 5,
+		} );
+		mockGetSelectionEnd.mockReturnValue( {
+			clientId: 'block-1',
+			attributeKey: 'content',
+			offset: 5,
+		} );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		const result = window.editor.appendTextAtCursor( ' World' );
+
+		expect( result ).toBe( true );
+		expect( mockUpdateBlock ).toHaveBeenCalledWith( 'block-1', {
+			attributes: expect.objectContaining( {
+				content: expect.any( String ),
+			} ),
+		} );
+	} );
+
+	it( 'appendTextAtCursor returns false when no block is selected', () => {
+		mockGetSelectedBlockClientId.mockReturnValue( null );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		expect( window.editor.appendTextAtCursor( 'text' ) ).toBe( false );
+	} );
+
+	it( 'appendTextAtCursor returns false for blocks without content attribute', () => {
+		mockGetSelectedBlockClientId.mockReturnValue( 'block-1' );
+		mockGetBlock.mockReturnValue( {
+			name: 'core/image',
+			clientId: 'block-1',
+			attributes: { url: 'test.jpg' },
+		} );
+		getBlockType.mockReturnValue( {
+			attributes: { url: { type: 'string' } },
+		} );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		expect( window.editor.appendTextAtCursor( 'text' ) ).toBe( false );
 	} );
 
 	it( 'cleans up window.editor methods on unmount', () => {

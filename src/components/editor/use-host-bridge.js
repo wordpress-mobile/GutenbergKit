@@ -36,10 +36,12 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 		[ editEntityRecord, post.id, post.type ]
 	);
 
-	const postTitleRef = useRef( post.title.raw );
+	const postTitleRef = useRef( normalizeAttribute( post.title ) );
 	const postContentRef = useRef( null );
 	if ( postContentRef.current === null ) {
-		postContentRef.current = serialize( parse( post.content.raw || '' ) );
+		postContentRef.current = serialize(
+			parse( normalizeAttribute( post.content ) )
+		);
 	}
 
 	useEffect( () => {
@@ -139,7 +141,9 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 				return false;
 			}
 
-			const blockContent = block.attributes?.content || '';
+			const blockContent = normalizeAttribute(
+				block.attributes?.content
+			);
 			const currentValue = create( { html: blockContent } );
 			const selectionStart = getSelectionStart();
 			const selectionEnd = getSelectionEnd();
@@ -212,14 +216,17 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
  * a field). This function always extracts the raw string so the host app
  * receives a consistent type.
  *
- * @param {string|Object} value The value from a data store selector.
+ * @param {string|Object|null|undefined} value The value from a data store selector.
  * @return {string} The raw string value.
  */
 function normalizeAttribute( value ) {
-	if ( typeof value === 'object' ) {
-		return value?.raw ?? '';
+	if ( value === null || value === undefined ) {
+		return '';
 	}
-	return value ?? '';
+	if ( typeof value === 'object' ) {
+		return value.raw ?? '';
+	}
+	return String( value );
 }
 
 /**
