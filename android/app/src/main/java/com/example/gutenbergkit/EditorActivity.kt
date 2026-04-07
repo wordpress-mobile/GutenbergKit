@@ -370,10 +370,10 @@ private suspend fun persistPost(
             ?: throw IllegalStateException("Account not found")
         val client = app.createApiClient(account)
 
-        val endpointType = when (configuration.postType) {
+        val endpointType = when (configuration.postType.postType) {
             "page" -> PostEndpointType.Pages
             "post" -> PostEndpointType.Posts
-            else -> PostEndpointType.Custom(configuration.postType)
+            else -> PostEndpointType.Custom(configuration.postType.postType)
         }
 
         val params = PostUpdateParams(

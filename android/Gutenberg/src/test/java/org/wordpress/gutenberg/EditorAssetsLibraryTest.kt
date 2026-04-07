@@ -15,6 +15,7 @@ import org.wordpress.gutenberg.model.EditorCachePolicy
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorProgress
 import org.wordpress.gutenberg.model.LocalEditorAssetManifest
+import org.wordpress.gutenberg.model.PostTypeDetails
 import org.wordpress.gutenberg.model.TestResources
 import org.wordpress.gutenberg.model.http.EditorHTTPHeaders
 import org.wordpress.gutenberg.model.http.EditorHttpMethod
@@ -37,7 +38,7 @@ class EditorAssetsLibraryTest {
         val testConfiguration: EditorConfiguration = EditorConfiguration.builder(
             TEST_SITE_URL,
             TEST_API_ROOT,
-            "post"
+            PostTypeDetails.post
         )
             .setPlugins(true)
             .setThemeStyles(true)
@@ -46,7 +47,7 @@ class EditorAssetsLibraryTest {
         val minimalConfiguration: EditorConfiguration = EditorConfiguration.builder(
             TEST_SITE_URL,
             TEST_API_ROOT,
-            "post"
+            PostTypeDetails.post
         )
             .setPlugins(false)
             .setThemeStyles(false)

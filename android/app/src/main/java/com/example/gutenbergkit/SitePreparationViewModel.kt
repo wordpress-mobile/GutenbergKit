@@ -13,7 +13,22 @@ import kotlinx.coroutines.launch
 import org.wordpress.gutenberg.model.EditorCachePolicy
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
+import org.wordpress.gutenberg.model.PostTypeDetails
 import org.wordpress.gutenberg.services.EditorService
+
+/**
+ * Maps a post type slug to its [PostTypeDetails].
+ *
+ * This is a temporary placeholder until the demo fetches real `restBase`/
+ * `restNamespace` from the WordPress REST API. For the standard `post` and
+ * `page` slugs we know the correct values; anything else gets a naive
+ * pluralization fallback that's likely wrong for real CPTs.
+ */
+private fun slugToPostTypeDetails(slug: String): PostTypeDetails = when (slug) {
+    "post" -> PostTypeDetails.post
+    "page" -> PostTypeDetails.page
+    else -> PostTypeDetails(postType = slug, restBase = if (slug.endsWith("s")) slug else "${slug}s")
+}
 
 data class SitePreparationUiState(
     val enableNativeInserter: Boolean = true,
@@ -198,7 +213,7 @@ class SitePreparationViewModel(
         return EditorConfiguration.builder(
             siteURL = "https://example.com",
             siteApiRoot = "https://example.com",
-            postType = "post"
+            postType = PostTypeDetails.post
         )
             .setPlugins(false)
             .setSiteApiNamespace(arrayOf())
@@ -234,7 +249,7 @@ class SitePreparationViewModel(
         return EditorConfiguration.builder(
             siteURL = config.siteUrl,
             siteApiRoot = siteApiRoot,
-            postType = _uiState.value.postType
+            postType = slugToPostTypeDetails(_uiState.value.postType)
         )
             .setPlugins(capabilities.supportsPlugins)
             .setThemeStyles(capabilities.supportsThemeStyles)
@@ -267,7 +282,7 @@ class SitePreparationViewModel(
         return baseConfig.toBuilder()
             .setEnableNetworkLogging(_uiState.value.enableNetworkLogging)
             // TODO: Add setNativeInserterEnabled when it's available in EditorConfiguration
-            .setPostType(_uiState.value.postType)
+            .setPostType(slugToPostTypeDetails(_uiState.value.postType))
             .build()
     }
 }

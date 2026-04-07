@@ -12,6 +12,7 @@ import org.wordpress.gutenberg.EditorHTTPClientDownloadResponse
 import org.wordpress.gutenberg.EditorHTTPClientProtocol
 import org.wordpress.gutenberg.EditorHTTPClientResponse
 import org.wordpress.gutenberg.model.EditorConfiguration
+import org.wordpress.gutenberg.model.PostTypeDetails
 import org.wordpress.gutenberg.model.http.EditorHTTPHeaders
 import org.wordpress.gutenberg.model.http.EditorHttpMethod
 import java.io.File
@@ -35,7 +36,7 @@ class EditorServiceTest {
         val testConfiguration: EditorConfiguration = EditorConfiguration.builder(
             TEST_SITE_URL,
             TEST_API_ROOT,
-            "post"
+            PostTypeDetails.post
         )
             .setPlugins(true)
             .setThemeStyles(true)

@@ -27,7 +27,7 @@ class GBKitGlobalTest {
 
     private fun makePreloadList(): EditorPreloadList {
         return EditorPreloadList(
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = EditorURLResponse(data = "{}", responseHeaders = EditorHTTPHeaders()),
             postTypesData = EditorURLResponse(data = "{}", responseHeaders = EditorHTTPHeaders()),
             activeThemeData = EditorURLResponse(data = "{}", responseHeaders = EditorHTTPHeaders()),
@@ -40,7 +40,7 @@ class GBKitGlobalTest {
         title: String? = null,
         content: String? = null,
         siteURL: String = TEST_SITE_URL,
-        postType: String = "post",
+        postType: PostTypeDetails = PostTypeDetails.post,
         shouldUsePlugins: Boolean = true,
         shouldUseThemeStyles: Boolean = true
     ): EditorConfiguration {

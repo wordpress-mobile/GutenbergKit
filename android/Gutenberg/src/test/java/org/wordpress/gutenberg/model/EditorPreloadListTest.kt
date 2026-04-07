@@ -37,7 +37,7 @@ class EditorPreloadListTest {
         val preloadList = EditorPreloadList(
             postID = 42,
             postData = postData,
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = makeResponse(),
             postTypesData = makeResponse(),
             activeThemeData = makeResponse(),
@@ -51,14 +51,14 @@ class EditorPreloadListTest {
     @Test
     fun `initializes with custom post type`() {
         val preloadList = EditorPreloadList(
-            postType = "page",
+            postType = PostTypeDetails.page,
             postTypeData = makeResponse(),
             postTypesData = makeResponse(),
             activeThemeData = makeResponse(),
             settingsOptionsData = makeResponse()
         )
 
-        assertEquals("page", preloadList.postType)
+        assertEquals(PostTypeDetails.page, preloadList.postType)
     }
 
     // MARK: - build() Exact Output Tests
@@ -66,7 +66,7 @@ class EditorPreloadListTest {
     @Test
     fun `build produces exact JSON for post type`() {
         val preloadList = EditorPreloadList(
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = makeResponse(data = """{"slug":"post"}"""),
             postTypesData = makeResponse(data = "{}"),
             activeThemeData = makeResponse(data = "[]"),
@@ -81,7 +81,7 @@ class EditorPreloadListTest {
     @Test
     fun `build produces exact JSON for page type`() {
         val preloadList = EditorPreloadList(
-            postType = "page",
+            postType = PostTypeDetails.page,
             postTypeData = makeResponse(data = """{"slug":"page"}"""),
             postTypesData = makeResponse(data = "{}"),
             activeThemeData = makeResponse(data = "[]"),
@@ -98,7 +98,7 @@ class EditorPreloadListTest {
         val preloadList = EditorPreloadList(
             postID = 123,
             postData = makeResponse(data = """{"id":123,"title":"Test"}"""),
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = makeResponse(data = "{}"),
             postTypesData = makeResponse(data = "{}"),
             activeThemeData = makeResponse(data = "[]"),
@@ -114,7 +114,7 @@ class EditorPreloadListTest {
     fun `build produces exact JSON with Accept header`() {
         val headers = EditorHTTPHeaders(mapOf("Accept" to "application/json"))
         val preloadList = EditorPreloadList(
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = makeResponse(data = "{}", headers = headers),
             postTypesData = makeResponse(data = "{}"),
             activeThemeData = makeResponse(data = "[]"),
@@ -130,7 +130,7 @@ class EditorPreloadListTest {
     fun `build produces exact JSON with Link header`() {
         val headers = EditorHTTPHeaders(mapOf("Link" to """<https://example.com>; rel="next""""))
         val preloadList = EditorPreloadList(
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = makeResponse(data = "{}", headers = headers),
             postTypesData = makeResponse(data = "{}"),
             activeThemeData = makeResponse(data = "[]"),
@@ -148,7 +148,7 @@ class EditorPreloadListTest {
             mapOf("Link" to "<https://example.com>", "Accept" to "application/json")
         )
         val preloadList = EditorPreloadList(
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = makeResponse(data = "{}", headers = headers),
             postTypesData = makeResponse(data = "{}"),
             activeThemeData = makeResponse(data = "[]"),
@@ -165,7 +165,7 @@ class EditorPreloadListTest {
         val preloadList = EditorPreloadList(
             postID = null,
             postData = null,
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = makeResponse(),
             postTypesData = makeResponse(),
             activeThemeData = makeResponse(),
@@ -182,7 +182,7 @@ class EditorPreloadListTest {
         val preloadList = EditorPreloadList(
             postID = 42,
             postData = null,
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = makeResponse(),
             postTypesData = makeResponse(),
             activeThemeData = makeResponse(),
@@ -197,7 +197,7 @@ class EditorPreloadListTest {
     @Test
     fun `build produces exact JSON for custom_post_type`() {
         val preloadList = EditorPreloadList(
-            postType = "custom_post_type",
+            postType = PostTypeDetails(postType = "custom_post_type", restBase = "custom_post_type"),
             postTypeData = makeResponse(),
             postTypesData = makeResponse(),
             activeThemeData = makeResponse(),
@@ -214,7 +214,7 @@ class EditorPreloadListTest {
     @Test
     fun `build(formatted = false) returns valid JSON string`() {
         val preloadList = EditorPreloadList(
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = makeResponse(data = """{"slug":"post"}"""),
             postTypesData = makeResponse(data = "{}"),
             activeThemeData = makeResponse(data = "[]"),
@@ -229,7 +229,7 @@ class EditorPreloadListTest {
     @Test
     fun `build(formatted = true) returns valid JSON string`() {
         val preloadList = EditorPreloadList(
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = makeResponse(data = """{"slug":"post"}"""),
             postTypesData = makeResponse(data = "{}"),
             activeThemeData = makeResponse(data = "[]"),
@@ -244,7 +244,7 @@ class EditorPreloadListTest {
     @Test
     fun `build(formatted = true) produces pretty-printed JSON`() {
         val preloadList = EditorPreloadList(
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = makeResponse(data = "{}"),
             postTypesData = makeResponse(data = "{}"),
             activeThemeData = makeResponse(data = "[]"),
@@ -283,7 +283,7 @@ class EditorPreloadListTest {
         val preloadList = EditorPreloadList(
             postID = 123,
             postData = makeResponse(data = """{"id":123,"title":"Test"}"""),
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = makeResponse(data = """{"slug":"post"}"""),
             postTypesData = makeResponse(data = "{}"),
             activeThemeData = makeResponse(data = "[]"),
@@ -304,7 +304,7 @@ class EditorPreloadListTest {
         val preloadList = EditorPreloadList(
             postID = 123,
             postData = makeResponse(data = """{"id":123,"title":"Test"}"""),
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = makeResponse(data = """{"slug":"post"}"""),
             postTypesData = makeResponse(data = "{}"),
             activeThemeData = makeResponse(data = "[]"),
@@ -326,7 +326,7 @@ class EditorPreloadListTest {
             mapOf("Accept" to "application/json", "Content-Type" to "application/json")
         )
         val preloadList = EditorPreloadList(
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = makeResponse(headers = headers),
             postTypesData = makeResponse(),
             activeThemeData = makeResponse(),
@@ -343,7 +343,7 @@ class EditorPreloadListTest {
             mapOf("Accept" to "application/json", "X-Custom" to "value")
         )
         val preloadList = EditorPreloadList(
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = makeResponse(headers = headers),
             postTypesData = makeResponse(),
             activeThemeData = makeResponse(),
@@ -362,7 +362,7 @@ class EditorPreloadListTest {
         val preloadList = EditorPreloadList(
             postID = 1,
             postData = makeResponse(headers = headers),
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = makeResponse(),
             postTypesData = makeResponse(),
             activeThemeData = makeResponse(),
@@ -379,14 +379,14 @@ class EditorPreloadListTest {
     fun `two preload lists with same data are equal`() {
         val response = makeResponse(data = """{"test":true}""")
         val preloadList1 = EditorPreloadList(
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = response,
             postTypesData = response,
             activeThemeData = response,
             settingsOptionsData = response
         )
         val preloadList2 = EditorPreloadList(
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = response,
             postTypesData = response,
             activeThemeData = response,
@@ -400,14 +400,14 @@ class EditorPreloadListTest {
     fun `preload lists with different post types are not equal`() {
         val response = makeResponse()
         val preloadList1 = EditorPreloadList(
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = response,
             postTypesData = response,
             activeThemeData = response,
             settingsOptionsData = response
         )
         val preloadList2 = EditorPreloadList(
-            postType = "page",
+            postType = PostTypeDetails.page,
             postTypeData = response,
             postTypesData = response,
             activeThemeData = response,
@@ -423,7 +423,7 @@ class EditorPreloadListTest {
         val preloadList1 = EditorPreloadList(
             postID = 1,
             postData = response,
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = response,
             postTypesData = response,
             activeThemeData = response,
@@ -432,7 +432,7 @@ class EditorPreloadListTest {
         val preloadList2 = EditorPreloadList(
             postID = 2,
             postData = response,
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = response,
             postTypesData = response,
             activeThemeData = response,
