@@ -35,9 +35,8 @@
     <string name="close">Close</string>
     <string name="undo">Undo</string>
     <string name="redo">Redo</string>
-    <string name="publish">PUBLISH</string>
     <string name="more_options">More options</string>
-    <string name="save">Save</string>
+    <string name="save">SAVE</string>
     <string name="preview">Preview</string>
     <string name="visual_editor">Visual editor</string>
     <string name="code_editor">Code editor</string>

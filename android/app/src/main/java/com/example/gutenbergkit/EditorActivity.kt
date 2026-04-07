@@ -231,11 +231,6 @@ fun EditorScreen(
                             onDismissRequest = { showMenu = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text(stringResource(R.string.save)) },
-                                onClick = { },
-                                enabled = false
-                            )
-                            DropdownMenuItem(
                                 text = { Text(stringResource(R.string.preview)) },
                                 onClick = { },
                                 enabled = false
