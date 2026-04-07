@@ -219,18 +219,6 @@ fun SitePreparationScreen(
                 },
                 actions = {
                     if (uiState.editorConfiguration != null) {
-                        if (accountId != null) {
-                            OutlinedButton(
-                                onClick = {
-                                    viewModel.buildConfiguration()?.let { config ->
-                                        onBrowsePosts(config, uiState.editorDependencies, uiState.postType)
-                                    }
-                                },
-                                modifier = Modifier.padding(end = 8.dp)
-                            ) {
-                                Text("Browse")
-                            }
-                        }
                         Button(
                             onClick = {
                                 viewModel.buildConfiguration()?.let { config ->
@@ -252,6 +240,12 @@ fun SitePreparationScreen(
             LoadedView(
                 uiState = uiState,
                 viewModel = viewModel,
+                accountId = accountId,
+                onBrowsePosts = {
+                    viewModel.buildConfiguration()?.let { config ->
+                        onBrowsePosts(config, uiState.editorDependencies, uiState.postType)
+                    }
+                },
                 modifier = Modifier.padding(innerPadding)
             )
         }
@@ -278,6 +272,8 @@ private fun LoadingView(modifier: Modifier = Modifier) {
 private fun LoadedView(
     uiState: SitePreparationUiState,
     viewModel: SitePreparationViewModel,
+    accountId: ULong?,
+    onBrowsePosts: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -300,7 +296,9 @@ private fun LoadedView(
                 enableNetworkLogging = uiState.enableNetworkLogging,
                 onEnableNetworkLoggingChange = viewModel::setEnableNetworkLogging,
                 postType = uiState.postType,
-                onPostTypeChange = viewModel::setPostType
+                onPostTypeChange = viewModel::setPostType,
+                showBrowseButton = accountId != null,
+                onBrowsePosts = onBrowsePosts
             )
         }
 
@@ -381,7 +379,9 @@ private fun FeatureConfigurationCard(
     enableNetworkLogging: Boolean,
     onEnableNetworkLoggingChange: (Boolean) -> Unit,
     postType: String,
-    onPostTypeChange: (String) -> Unit
+    onPostTypeChange: (String) -> Unit,
+    showBrowseButton: Boolean = false,
+    onBrowsePosts: () -> Unit = {}
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -449,6 +449,16 @@ private fun FeatureConfigurationCard(
                             modifier = Modifier.padding(start = 8.dp)
                         )
                     }
+                }
+            }
+
+            if (showBrowseButton) {
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onBrowsePosts,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Browse")
                 }
             }
         }
