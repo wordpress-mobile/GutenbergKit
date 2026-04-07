@@ -42,6 +42,10 @@ struct RunnableEditor: Equatable, Hashable {
         self.apiClient = apiClient
     }
 
+    // `apiClient` is intentionally excluded from `==` and `hash(into:)`:
+    // `WordPressAPI` is not `Hashable`/`Equatable` (it owns native Rust state),
+    // and two editors with the same configuration but different client
+    // instances should be treated as equal for navigation/identity purposes.
     static func == (lhs: RunnableEditor, rhs: RunnableEditor) -> Bool {
         lhs.configuration == rhs.configuration && lhs.dependencies == rhs.dependencies
     }

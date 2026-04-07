@@ -140,36 +140,9 @@ private struct _EditorView: UIViewControllerRepresentable {
 
         viewModel.hasPostID = configuration.postID != nil
 
-        viewModel.saveHandler = { [weak viewController, weak viewModel, configuration, apiClient] in
-            guard let viewController else { return }
-
-            // 1. Trigger the editor store save lifecycle so plugins fire side-effects.
-            //    A lifecycle failure must NOT block the user from saving their work —
-            //    log the warning and proceed to persist content anyway.
-            do {
-                try await viewController.savePost()
-                print("editor.savePost() completed — editor store save lifecycle fired")
-            } catch {
-                print("editor.savePost() lifecycle failed; persisting anyway: \(error)")
-            }
-
-            // 2. Persist post content via REST API.
-            guard let apiClient, let postID = configuration.postID else { return }
-            do {
-                let titleAndContent = try await viewController.getTitleAndContent()
-                let params = PostUpdateParams(title: .some(titleAndContent.title), content: .some(titleAndContent.content), meta: nil)
-                let endpointType: PostEndpointType = configuration.postType.postType == "page" ? .pages : .posts
-                _ = try await apiClient.posts.updateCancellation(
-                    postEndpointType: endpointType,
-                    postId: Int64(postID),
-                    params: params,
-                    context: nil
-                )
-                print("Post \(postID) persisted via REST API")
-            } catch {
-                print("Failed to persist post \(postID): \(error)")
-                viewModel?.errorMessage = "Failed to save post: \(error.localizedDescription)"
-            }
+        viewModel.saveHandler = { [weak viewController, weak viewModel] in
+            guard let viewController, let viewModel else { return }
+            await persistPost(viewController: viewController, viewModel: viewModel)
         }
 
         return viewController
@@ -177,6 +150,37 @@ private struct _EditorView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ viewController: EditorViewController, context: Context) {
         viewController.isCodeEditorEnabled = viewModel.isCodeEditorEnabled
+    }
+
+    /// Triggers the editor store save lifecycle, then persists the post via the REST API.
+    ///
+    /// A lifecycle failure must **not** block the user from saving their work — the
+    /// warning is logged and persistence proceeds anyway. Persist failures surface
+    /// through `viewModel.errorMessage`, which the parent view binds to an `Alert`.
+    private func persistPost(viewController: EditorViewController, viewModel: EditorViewModel) async {
+        do {
+            try await viewController.savePost()
+            print("editor.savePost() completed — editor store save lifecycle fired")
+        } catch {
+            print("editor.savePost() lifecycle failed; persisting anyway: \(error)")
+        }
+
+        guard let apiClient, let postID = configuration.postID else { return }
+        do {
+            let titleAndContent = try await viewController.getTitleAndContent()
+            let params = PostUpdateParams(title: .some(titleAndContent.title), content: .some(titleAndContent.content), meta: nil)
+            let endpointType: PostEndpointType = configuration.postType.postType == "page" ? .pages : .posts
+            _ = try await apiClient.posts.updateCancellation(
+                postEndpointType: endpointType,
+                postId: Int64(postID),
+                params: params,
+                context: nil
+            )
+            print("Post \(postID) persisted via REST API")
+        } catch {
+            print("Failed to persist post \(postID): \(error)")
+            viewModel.errorMessage = "Failed to save post: \(error.localizedDescription)"
+        }
     }
 
     @MainActor
