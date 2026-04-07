@@ -118,6 +118,29 @@ class GBKitGlobalTest {
     }
 
     @Test
+    fun `populates restBase and restNamespace for post type`() {
+        val configuration = makeConfiguration(postType = "post")
+        val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
+        assertEquals("posts", global.post.restBase)
+        assertEquals("wp/v2", global.post.restNamespace)
+    }
+
+    @Test
+    fun `populates restBase for page post type`() {
+        val configuration = makeConfiguration(postType = "page")
+        val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
+        assertEquals("pages", global.post.restBase)
+        assertEquals("wp/v2", global.post.restNamespace)
+    }
+
+    @Test
+    fun `pluralizes custom post type slugs for restBase`() {
+        val configuration = makeConfiguration(postType = "product")
+        val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
+        assertEquals("products", global.post.restBase)
+    }
+
+    @Test
     fun `maps zero postID to negative one`() {
         val configuration = makeConfiguration(postId = 0u)
         val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
