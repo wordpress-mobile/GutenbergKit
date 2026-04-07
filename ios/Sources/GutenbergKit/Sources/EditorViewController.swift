@@ -421,6 +421,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// The actual post content is **not** persisted by this method — the host app
     /// is responsible for reading content via ``getTitleAndContent()`` and saving
     /// it through its own REST API calls.
+    ///
+    /// > Important: If this call throws (for example, because a third-party plugin
+    /// > subscribed to the lifecycle errors out), hosts should still proceed to
+    /// > read and persist content. A misbehaving plugin must not block the user
+    /// > from saving their work — log the lifecycle failure and continue.
     public func savePost() async throws {
         guard isReady else { throw EditorNotReadyError() }
         _ = try await webView.callAsyncJavaScript("await editor.savePost();", in: nil, contentWorld: .page)
