@@ -244,11 +244,12 @@ class SitePreparationViewModel(
             arrayOf()
         }
 
-        // Fetch the site's post types and pick the first one as the default
-        // selection. Falls back to `PostTypeDetails.post` if the call fails so
-        // the editor can still launch with a sensible default.
+        // Fetch the site's post types. Default the picker to `post` when it's
+        // available (the typical case); otherwise pick the first type in the
+        // list. Falls back to `PostTypeDetails.post` if the call fails so the
+        // editor can still launch with a sensible default.
         val postTypes = loadPostTypes(config) ?: listOf(PostTypeDetails.post)
-        val defaultPostType = postTypes.first()
+        val defaultPostType = postTypes.firstOrNull { it.postType == "post" } ?: postTypes.first()
         _uiState.update {
             it.copy(
                 postTypes = postTypes,
