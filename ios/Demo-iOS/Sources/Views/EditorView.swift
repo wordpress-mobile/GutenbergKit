@@ -128,29 +128,9 @@ private struct _EditorView: UIViewControllerRepresentable {
 
         viewModel.hasPostID = configuration.postID != nil
 
-        viewModel.saveHandler = { [weak viewController, configuration, apiClient] in
-            guard let viewController else { return }
-            do {
-                // 1. Trigger the editor store save lifecycle so plugins fire side-effects
-                try await viewController.savePost()
-                print("savePost() completed — editor store save lifecycle fired")
-
-                // 2. Persist post content via REST API
-                if let apiClient, let postID = configuration.postID {
-                    let titleAndContent = try await viewController.getTitleAndContent()
-                    let params = PostUpdateParams(title: .some(titleAndContent.title), content: .some(titleAndContent.content), meta: nil)
-                    let endpointType: PostEndpointType = configuration.postType.postType == "page" ? .pages : .posts
-                    _ = try await apiClient.posts.updateCancellation(
-                        postEndpointType: endpointType,
-                        postId: Int64(postID),
-                        params: params,
-                        context: nil
-                    )
-                    print("Post \(postID) persisted via REST API")
-                }
-            } catch {
-                print("Save failed: \(error)")
-            }
+        viewModel.saveHandler = { [weak viewController, weak viewModel] in
+            guard let viewController, let viewModel else { return }
+            await persistPost(viewController: viewController, viewModel: viewModel)
         }
 
         return viewController
@@ -158,6 +138,25 @@ private struct _EditorView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ viewController: EditorViewController, context: Context) {
         viewController.isCodeEditorEnabled = viewModel.isCodeEditorEnabled
+    }
+
+    /// Persists the post via the REST API.
+    private func persistPost(viewController: EditorViewController, viewModel: EditorViewModel) async {
+        guard let apiClient, let postID = configuration.postID else { return }
+        do {
+            let titleAndContent = try await viewController.getTitleAndContent()
+            let params = PostUpdateParams(title: .some(titleAndContent.title), content: .some(titleAndContent.content), meta: nil)
+            let endpointType: PostEndpointType = configuration.postType.postType == "page" ? .pages : .posts
+            _ = try await apiClient.posts.updateCancellation(
+                postEndpointType: endpointType,
+                postId: Int64(postID),
+                params: params,
+                context: nil
+            )
+            print("Post \(postID) persisted via REST API")
+        } catch {
+            print("Failed to persist post \(postID): \(error)")
+        }
     }
 
     @MainActor
