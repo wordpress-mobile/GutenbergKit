@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -43,16 +44,22 @@ import androidx.lifecycle.lifecycleScope
 import com.example.gutenbergkit.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.GutenbergView
 import org.wordpress.gutenberg.RecordedNetworkRequest
 import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.model.EditorDependenciesSerializer
+import rs.wordpress.api.kotlin.WpRequestResult
+import uniffi.wp_api.PostEndpointType
+import uniffi.wp_api.PostUpdateParams
+import kotlin.coroutines.resume
 
 class EditorActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_DEPENDENCIES_PATH = "dependencies_path"
+        const val EXTRA_ACCOUNT_ID = "account_id"
     }
 
     private var gutenbergView: GutenbergView? = null
@@ -93,11 +100,15 @@ class EditorActivity : ComponentActivity() {
         val dependenciesPath = intent.getStringExtra(EXTRA_DEPENDENCIES_PATH)
         val dependencies = dependenciesPath?.let { EditorDependenciesSerializer.readFromDisk(it) }
 
+        // Optional account ID for REST API persistence (set when launched from PostsListActivity)
+        val accountId = intent.getLongExtra(EXTRA_ACCOUNT_ID, -1L).takeIf { it >= 0 }?.toULong()
+
         setContent {
             AppTheme {
                 EditorScreen(
                     configuration = configuration,
                     dependencies = dependencies,
+                    accountId = accountId,
                     coroutineScope =  this.lifecycleScope,
                     onClose = { finish() },
                     onGutenbergViewCreated = { view ->
@@ -121,6 +132,7 @@ class EditorActivity : ComponentActivity() {
 fun EditorScreen(
     configuration: EditorConfiguration,
     dependencies: EditorDependencies? = null,
+    accountId: ULong? = null,
     coroutineScope: CoroutineScope,
     onClose: () -> Unit,
     onGutenbergViewCreated: (GutenbergView) -> Unit = {}
@@ -130,7 +142,12 @@ fun EditorScreen(
     var hasUndoState by remember { mutableStateOf(false) }
     var hasRedoState by remember { mutableStateOf(false) }
     var isCodeEditorEnabled by remember { mutableStateOf(false) }
+    var isSaving by remember { mutableStateOf(false) }
     var gutenbergViewRef by remember { mutableStateOf<GutenbergView?>(null) }
+    val saveScope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val canSave = !isSaving && accountId != null && configuration.postId != null
 
     BackHandler(enabled = isModalDialogOpen) {
         gutenbergViewRef?.dismissTopModal()
@@ -173,6 +190,31 @@ fun EditorScreen(
                             contentDescription = stringResource(R.string.redo)
                         )
                     }
+                    TextButton(
+                        onClick = {
+                            val view = gutenbergViewRef ?: return@TextButton
+                            val postId = configuration.postId
+                            if (accountId == null || postId == null) return@TextButton
+                            isSaving = true
+                            saveScope.launch {
+                                try {
+                                    persistPost(
+                                        context = context,
+                                        view = view,
+                                        configuration = configuration,
+                                        accountId = accountId,
+                                        postId = postId
+                                    )
+                                } finally {
+                                    isSaving = false
+                                }
+                            }
+                        },
+                        enabled = canSave && !isModalDialogOpen
+                    ) {
+                        Text(stringResource(R.string.save))
+                    }
+
                     TextButton(onClick = { }, enabled = false) {
                         Text(stringResource(R.string.publish))
                     }
@@ -301,5 +343,86 @@ fun EditorScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         )
+    }
+}
+
+/**
+ * Suspends until the editor store's save lifecycle completes.
+ *
+ * Bridges the [GutenbergView.savePost] callback to a coroutine so the caller
+ * can sequence post-save work (like persisting content via the REST API).
+ */
+private suspend fun GutenbergView.savePostAwait(): Boolean =
+    suspendCancellableCoroutine { continuation ->
+        savePost { success, _ ->
+            if (continuation.isActive) continuation.resume(success)
+        }
+    }
+
+/**
+ * Reads the latest title/content from the editor and PUTs it to the WordPress REST API.
+ *
+ * Triggers [GutenbergView.savePost] first so plugin side-effects (e.g., VideoPress
+ * syncing metadata) settle before the content is read and persisted.
+ */
+private suspend fun persistPost(
+    context: android.content.Context,
+    view: GutenbergView,
+    configuration: EditorConfiguration,
+    accountId: ULong,
+    postId: UInt
+) {
+    try {
+        val saveSucceeded = view.savePostAwait()
+        if (!saveSucceeded) {
+            Log.w("EditorActivity", "editor.savePost() reported failure; persisting anyway")
+        }
+
+        val titleAndContent = suspendCancellableCoroutine<Pair<CharSequence, CharSequence>> { cont ->
+            view.getTitleAndContent(
+                originalContent = configuration.content,
+                callback = object : GutenbergView.TitleAndContentCallback {
+                    override fun onResult(title: CharSequence, content: CharSequence) {
+                        if (cont.isActive) cont.resume(title to content)
+                    }
+                }
+            )
+        }
+
+        val app = context.applicationContext as GutenbergKitApplication
+        val account = app.accountRepository.all().firstOrNull { it.id() == accountId }
+            ?: throw IllegalStateException("Account not found")
+        val client = app.createApiClient(account)
+
+        val endpointType = when (configuration.postType) {
+            "page" -> PostEndpointType.Pages
+            "post" -> PostEndpointType.Posts
+            else -> PostEndpointType.Custom(configuration.postType)
+        }
+
+        val params = PostUpdateParams(
+            title = titleAndContent.first.toString(),
+            content = titleAndContent.second.toString(),
+            meta = null
+        )
+
+        val result = client.request { builder ->
+            builder.posts().update(
+                postEndpointType = endpointType,
+                postId = postId.toLong(),
+                params = params
+            )
+        }
+
+        when (result) {
+            is WpRequestResult.Success -> {
+                Log.i("EditorActivity", "Post $postId persisted via REST API")
+            }
+            else -> {
+                Log.e("EditorActivity", "Failed to persist post $postId: $result")
+            }
+        }
+    } catch (e: Exception) {
+        Log.e("EditorActivity", "Save failed", e)
     }
 }
