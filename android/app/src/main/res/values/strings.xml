@@ -39,4 +39,15 @@
     <string name="save">SAVE</string>
     <string name="visual_editor">Visual editor</string>
     <string name="code_editor">Code editor</string>
+    <string name="save_failed_generic">Failed to save post</string>
+    <string name="save_failed_with_reason">Failed to save post: %1$s</string>
+
+    <!-- Site Preparation Activity -->
+    <string name="browse">Browse</string>
+
+    <!-- Posts List Activity -->
+    <string name="posts">Posts</string>
+    <string name="back">Back</string>
+    <string name="no_posts_found">No posts found</string>
+    <string name="error_loading_posts">Error loading posts</string>
 </resources>

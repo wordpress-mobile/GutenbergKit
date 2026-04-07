@@ -1,5 +1,6 @@
 package com.example.gutenbergkit
 
+import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -33,9 +34,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -59,7 +60,7 @@ import uniffi.wp_api.PostStatus
  * Lists posts from a WordPress site so the user can pick one to edit.
  *
  * Receives an [EditorConfiguration] (already prepared) and an account ID via Intent extras,
- * fetches posts via the WordPress REST API using [WpApiClient], and on selection launches
+ * fetches posts via the WordPress REST API using `WpApiClient`, and on selection launches
  * [EditorActivity] with the post's title, content, and ID.
  */
 class PostsListActivity : ComponentActivity() {
@@ -102,10 +103,14 @@ class PostsListActivity : ComponentActivity() {
             return
         }
 
-        val viewModel = ViewModelProvider(
-            this,
-            PostsListViewModelFactory(application, accountId, postType)
-        )[PostsListViewModel::class.java]
+        // Inline factory — simpler than a dedicated `ViewModelProvider.Factory`
+        // class for a one-shot screen with immutable constructor args.
+        val factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                PostsListViewModel(application, accountId, postType) as T
+        }
+        val viewModel = ViewModelProvider(this, factory)[PostsListViewModel::class.java]
 
         setContent {
             AppTheme {
@@ -150,10 +155,10 @@ data class PostsListUiState(
 )
 
 class PostsListViewModel(
-    application: android.app.Application,
+    private val application: Application,
     private val accountId: ULong,
     private val postType: PostTypeDetails
-) : AndroidViewModel(application) {
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PostsListUiState())
     val uiState: StateFlow<PostsListUiState> = _uiState.asStateFlow()
@@ -165,9 +170,9 @@ class PostsListViewModel(
             _uiState.update { it.copy(isLoading = true, error = null, posts = emptyList()) }
 
             try {
-                val app = getApplication<GutenbergKitApplication>()
+                val app = application as GutenbergKitApplication
                 val account = app.accountRepository.all().firstOrNull { it.id() == accountId }
-                    ?: throw IllegalStateException("Account not found")
+                    ?: error("Account not found")
                 val client = app.createApiClient(account)
 
                 val endpointType = when (postType.postType) {
@@ -176,50 +181,27 @@ class PostsListViewModel(
                     else -> PostEndpointType.Custom(postType.postType)
                 }
 
-                val all = mutableListOf<AnyPostWithEditContext>()
-                var page = 1u
-                val perPage = 20u
-                while (true) {
-                    val params = PostListParams(
-                        page = page,
-                        perPage = perPage,
-                        status = listOf(PostStatus.Any)
-                    )
-                    val result = client.request { builder ->
-                        builder.posts().listWithEditContext(endpointType, params)
+                // Single page only — matches the iOS demo, which doesn't paginate either.
+                val params = PostListParams(
+                    page = 1u,
+                    perPage = 20u,
+                    status = listOf(PostStatus.Any)
+                )
+                val result = client.request { builder ->
+                    builder.posts().listWithEditContext(endpointType, params)
+                }
+                when (result) {
+                    is WpRequestResult.Success -> {
+                        _uiState.update { it.copy(posts = result.response.data, isLoading = false) }
                     }
-                    when (result) {
-                        is WpRequestResult.Success -> {
-                            val data = result.response.data
-                            all.addAll(data)
-                            if (data.size < perPage.toInt()) break
-                            page++
-                        }
-                        else -> {
-                            throw IllegalStateException("Failed to load posts: $result")
-                        }
+                    else -> {
+                        error("Failed to load posts: $result")
                     }
                 }
-
-                _uiState.update { it.copy(posts = all, isLoading = false) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Unknown error", isLoading = false) }
             }
         }
-    }
-}
-
-class PostsListViewModelFactory(
-    private val application: android.app.Application,
-    private val accountId: ULong,
-    private val postType: PostTypeDetails
-) : ViewModelProvider.Factory {
-    @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(PostsListViewModel::class.java)) {
-            return PostsListViewModel(application, accountId, postType) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
 
@@ -240,12 +222,12 @@ fun PostsListScreen(
         modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text("Posts") },
+                title = { Text(stringResource(R.string.posts)) },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = stringResource(R.string.back)
                         )
                     }
                 }
@@ -270,7 +252,7 @@ fun PostsListScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            "Error loading posts",
+                            stringResource(R.string.error_loading_posts),
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
@@ -281,7 +263,7 @@ fun PostsListScreen(
                 }
                 uiState.posts.isEmpty() -> {
                     Text(
-                        "No posts found",
+                        stringResource(R.string.no_posts_found),
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
