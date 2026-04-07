@@ -5,6 +5,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 
 /**
+ * WordPress dependencies
+ */
+import { useDispatch } from '@wordpress/data';
+
+/**
  * Internal dependencies
  */
 import { useHostBridge } from '../use-host-bridge';
@@ -77,5 +82,40 @@ describe( 'useHostBridge', () => {
 		expect( window.editor.dismissTopModal ).toBeUndefined();
 		expect( window.editor.focus ).toBeUndefined();
 		expect( window.editor.appendTextAtCursor ).toBeUndefined();
+	} );
+
+	describe( 'window.editor.savePost', () => {
+		it( 'removes the editor-save snackbar after a successful save', async () => {
+			renderHook( () =>
+				useHostBridge( defaultPost, editorRef, markBridgeReady )
+			);
+
+			// `useDispatch` is mocked to return the same shared actions
+			// object for every call (see `__mocks__/@wordpress/data.js`),
+			// so we can grab the action mocks here regardless of which
+			// store was passed.
+			const { savePost, removeNotice } = useDispatch();
+			savePost.mockResolvedValueOnce( undefined );
+
+			await window.editor.savePost();
+
+			expect( savePost ).toHaveBeenCalledTimes( 1 );
+			expect( removeNotice ).toHaveBeenCalledWith( 'editor-save' );
+		} );
+
+		it( 'removes the editor-save snackbar even when the save fails', async () => {
+			renderHook( () =>
+				useHostBridge( defaultPost, editorRef, markBridgeReady )
+			);
+
+			const { savePost, removeNotice } = useDispatch();
+			const failure = new Error( 'plugin lifecycle error' );
+			savePost.mockRejectedValueOnce( failure );
+
+			await expect( window.editor.savePost() ).rejects.toThrow( failure );
+
+			expect( savePost ).toHaveBeenCalledTimes( 1 );
+			expect( removeNotice ).toHaveBeenCalledWith( 'editor-save' );
+		} );
 	} );
 } );
