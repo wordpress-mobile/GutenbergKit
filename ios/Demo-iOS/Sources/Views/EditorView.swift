@@ -89,33 +89,14 @@ struct EditorView: View {
 
     private var moreMenu: some View {
         Menu {
-            Section {
-                Button(action: {
-                    viewModel.isCodeEditorEnabled.toggle()
-                }, label: {
-                    Label(
-                        viewModel.isCodeEditorEnabled ? "Visual Editor" : "Code Editor",
-                        systemImage: viewModel.isCodeEditorEnabled ? "doc.richtext" : "curlybraces"
-                    )
-                })
-                Button(action: /*@START_MENU_TOKEN@*/{}/*@END_MENU_TOKEN@*/, label: {
-                    Label("Preview", systemImage: "safari")
-                }).disabled(true)
-                Button(action: /*@START_MENU_TOKEN@*/{}/*@END_MENU_TOKEN@*/, label: {
-                    Label("Revisions (42)", systemImage: "clock.arrow.circlepath")
-                }).disabled(true)
-                Button(action: /*@START_MENU_TOKEN@*/{}/*@END_MENU_TOKEN@*/, label: {
-                    Label("Post Settings", systemImage: "gearshape")
-                }).disabled(true)
-                Button(action: /*@START_MENU_TOKEN@*/{}/*@END_MENU_TOKEN@*/, label: {
-                    Label("Help", systemImage: "questionmark.circle")
-                }).disabled(true)
-            }
-            Section {
-                Text("Blocks: 4, Words: 8, Characters: 15")
-            } header: {
-
-            }
+            Button(action: {
+                viewModel.isCodeEditorEnabled.toggle()
+            }, label: {
+                Label(
+                    viewModel.isCodeEditorEnabled ? "Visual Editor" : "Code Editor",
+                    systemImage: viewModel.isCodeEditorEnabled ? "doc.richtext" : "curlybraces"
+                )
+            })
         } label: {
             Image(systemName: "ellipsis")
         }
