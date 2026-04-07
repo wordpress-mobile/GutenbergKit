@@ -55,6 +55,7 @@ import androidx.lifecycle.ViewModelProvider
 import com.example.gutenbergkit.ui.theme.AppTheme
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependenciesSerializer
+import org.wordpress.gutenberg.model.PostTypeDetails
 
 class SitePreparationActivity : ComponentActivity() {
 
@@ -179,7 +180,7 @@ class SitePreparationActivity : ComponentActivity() {
 
     private fun launchPostsList(
         accountId: ULong,
-        postType: String,
+        postType: PostTypeDetails,
         configuration: EditorConfiguration,
         dependencies: org.wordpress.gutenberg.model.EditorDependencies?
     ) {
@@ -196,7 +197,7 @@ fun SitePreparationScreen(
     accountId: ULong?,
     onClose: () -> Unit,
     onStartEditor: (EditorConfiguration, org.wordpress.gutenberg.model.EditorDependencies?) -> Unit,
-    onBrowsePosts: (EditorConfiguration, org.wordpress.gutenberg.model.EditorDependencies?, String) -> Unit
+    onBrowsePosts: (EditorConfiguration, org.wordpress.gutenberg.model.EditorDependencies?, PostTypeDetails) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -242,8 +243,11 @@ fun SitePreparationScreen(
                 viewModel = viewModel,
                 accountId = accountId,
                 onBrowsePosts = {
-                    viewModel.buildConfiguration()?.let { config ->
-                        onBrowsePosts(config, uiState.editorDependencies, uiState.postType)
+                    val selectedPostType = uiState.selectedPostType
+                    if (selectedPostType != null) {
+                        viewModel.buildConfiguration()?.let { config ->
+                            onBrowsePosts(config, uiState.editorDependencies, selectedPostType)
+                        }
                     }
                 },
                 modifier = Modifier.padding(innerPadding)
@@ -295,7 +299,8 @@ private fun LoadedView(
                 onEnableNativeInserterChange = viewModel::setEnableNativeInserter,
                 enableNetworkLogging = uiState.enableNetworkLogging,
                 onEnableNetworkLoggingChange = viewModel::setEnableNetworkLogging,
-                postType = uiState.postType,
+                postTypes = uiState.postTypes,
+                selectedPostType = uiState.selectedPostType,
                 onPostTypeChange = viewModel::setPostType,
                 showBrowseButton = accountId != null,
                 onBrowsePosts = onBrowsePosts
@@ -378,8 +383,9 @@ private fun FeatureConfigurationCard(
     onEnableNativeInserterChange: (Boolean) -> Unit,
     enableNetworkLogging: Boolean,
     onEnableNetworkLoggingChange: (Boolean) -> Unit,
-    postType: String,
-    onPostTypeChange: (String) -> Unit,
+    postTypes: List<PostTypeDetails>,
+    selectedPostType: PostTypeDetails?,
+    onPostTypeChange: (PostTypeDetails) -> Unit,
     showBrowseButton: Boolean = false,
     onBrowsePosts: () -> Unit = {}
 ) {
@@ -427,27 +433,35 @@ private fun FeatureConfigurationCard(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
-            Column(modifier = Modifier.selectableGroup()) {
-                listOf("post" to "Post", "page" to "Page").forEach { (value, label) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .selectable(
-                                selected = postType == value,
-                                onClick = { onPostTypeChange(value) },
-                                role = Role.RadioButton
+            if (postTypes.isEmpty()) {
+                Text(
+                    text = "Loading post types…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Column(modifier = Modifier.selectableGroup()) {
+                    postTypes.forEach { postType ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = postType == selectedPostType,
+                                    onClick = { onPostTypeChange(postType) },
+                                    role = Role.RadioButton
+                                )
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = postType == selectedPostType,
+                                onClick = null
                             )
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = postType == value,
-                            onClick = null
-                        )
-                        Text(
-                            text = label,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
+                            Text(
+                                text = postType.postType.replaceFirstChar { it.uppercase() },
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
                     }
                 }
             }
