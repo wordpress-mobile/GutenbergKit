@@ -215,10 +215,6 @@ fun EditorScreen(
                         Text(stringResource(R.string.save))
                     }
 
-                    TextButton(onClick = { }, enabled = false) {
-                        Text(stringResource(R.string.publish))
-                    }
-
                     // Overflow menu button and dropdown in Box for proper anchoring
                     Box {
                         IconButton(
