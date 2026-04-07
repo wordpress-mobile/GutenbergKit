@@ -48,6 +48,7 @@ import kotlinx.coroutines.launch
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.model.EditorDependenciesSerializer
+import org.wordpress.gutenberg.model.PostTypeDetails
 import rs.wordpress.api.kotlin.WpRequestResult
 import uniffi.wp_api.AnyPostWithEditContext
 import uniffi.wp_api.PostEndpointType
@@ -65,18 +66,18 @@ class PostsListActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_ACCOUNT_ID = "account_id"
-        const val EXTRA_POST_ENDPOINT = "post_endpoint"
+        const val EXTRA_POST_TYPE = "post_type"
 
         fun createIntent(
             context: Context,
             accountId: ULong,
-            postEndpoint: String,
+            postType: PostTypeDetails,
             configuration: EditorConfiguration,
             dependencies: EditorDependencies?
         ): Intent {
             return Intent(context, PostsListActivity::class.java).apply {
                 putExtra(EXTRA_ACCOUNT_ID, accountId.toLong())
-                putExtra(EXTRA_POST_ENDPOINT, postEndpoint)
+                putExtra(EXTRA_POST_TYPE, postType)
                 putExtra(MainActivity.EXTRA_CONFIGURATION, configuration)
                 if (dependencies != null) {
                     val filePath = EditorDependenciesSerializer.writeToDisk(context, dependencies)
@@ -91,7 +92,8 @@ class PostsListActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val accountId = intent.getLongExtra(EXTRA_ACCOUNT_ID, -1L).takeIf { it >= 0 }?.toULong()
-        val postEndpoint = intent.getStringExtra(EXTRA_POST_ENDPOINT) ?: "post"
+        val postType = intent.getParcelableExtra(EXTRA_POST_TYPE, PostTypeDetails::class.java)
+            ?: PostTypeDetails.post
         val configuration = intent.getParcelableExtra(MainActivity.EXTRA_CONFIGURATION, EditorConfiguration::class.java)
         val dependenciesPath = intent.getStringExtra(EditorActivity.EXTRA_DEPENDENCIES_PATH)
 
@@ -102,7 +104,7 @@ class PostsListActivity : ComponentActivity() {
 
         val viewModel = ViewModelProvider(
             this,
-            PostsListViewModelFactory(application, accountId, postEndpoint)
+            PostsListViewModelFactory(application, accountId, postType)
         )[PostsListViewModel::class.java]
 
         setContent {
@@ -150,7 +152,7 @@ data class PostsListUiState(
 class PostsListViewModel(
     application: android.app.Application,
     private val accountId: ULong,
-    private val postEndpoint: String
+    private val postType: PostTypeDetails
 ) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(PostsListUiState())
@@ -168,10 +170,10 @@ class PostsListViewModel(
                     ?: throw IllegalStateException("Account not found")
                 val client = app.createApiClient(account)
 
-                val endpointType = when (postEndpoint) {
+                val endpointType = when (postType.postType) {
                     "page" -> PostEndpointType.Pages
                     "post" -> PostEndpointType.Posts
-                    else -> PostEndpointType.Custom(postEndpoint)
+                    else -> PostEndpointType.Custom(postType.postType)
                 }
 
                 val all = mutableListOf<AnyPostWithEditContext>()
@@ -210,12 +212,12 @@ class PostsListViewModel(
 class PostsListViewModelFactory(
     private val application: android.app.Application,
     private val accountId: ULong,
-    private val postEndpoint: String
+    private val postType: PostTypeDetails
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(PostsListViewModel::class.java)) {
-            return PostsListViewModel(application, accountId, postEndpoint) as T
+            return PostsListViewModel(application, accountId, postType) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
