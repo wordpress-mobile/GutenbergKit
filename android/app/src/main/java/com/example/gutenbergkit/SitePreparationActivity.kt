@@ -140,13 +140,21 @@ class SitePreparationActivity : ComponentActivity() {
             SitePreparationViewModelFactory(application, configurationItem)
         )[SitePreparationViewModel::class.java]
 
+        val accountId = (configurationItem as? ConfigurationItem.ConfiguredEditor)?.accountId
+
         setContent {
             AppTheme {
                 SitePreparationScreen(
                     viewModel = viewModel,
+                    accountId = accountId,
                     onClose = { finish() },
                     onStartEditor = { configuration, dependencies ->
                         launchEditor(configuration, dependencies)
+                    },
+                    onBrowsePosts = { configuration, dependencies, postType ->
+                        accountId?.let {
+                            launchPostsList(it, postType, configuration, dependencies)
+                        }
                     }
                 )
             }
@@ -168,14 +176,27 @@ class SitePreparationActivity : ComponentActivity() {
         }
         startActivity(intent)
     }
+
+    private fun launchPostsList(
+        accountId: ULong,
+        postType: String,
+        configuration: EditorConfiguration,
+        dependencies: org.wordpress.gutenberg.model.EditorDependencies?
+    ) {
+        startActivity(
+            PostsListActivity.createIntent(this, accountId, postType, configuration, dependencies)
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SitePreparationScreen(
     viewModel: SitePreparationViewModel,
+    accountId: ULong?,
     onClose: () -> Unit,
-    onStartEditor: (EditorConfiguration, org.wordpress.gutenberg.model.EditorDependencies?) -> Unit
+    onStartEditor: (EditorConfiguration, org.wordpress.gutenberg.model.EditorDependencies?) -> Unit,
+    onBrowsePosts: (EditorConfiguration, org.wordpress.gutenberg.model.EditorDependencies?, String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -198,6 +219,18 @@ fun SitePreparationScreen(
                 },
                 actions = {
                     if (uiState.editorConfiguration != null) {
+                        if (accountId != null) {
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.buildConfiguration()?.let { config ->
+                                        onBrowsePosts(config, uiState.editorDependencies, uiState.postType)
+                                    }
+                                },
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                Text("Browse")
+                            }
+                        }
                         Button(
                             onClick = {
                                 viewModel.buildConfiguration()?.let { config ->
