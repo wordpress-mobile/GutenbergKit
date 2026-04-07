@@ -5,11 +5,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 
 /**
- * WordPress dependencies
- */
-import { useDispatch } from '@wordpress/data';
-
-/**
  * Internal dependencies
  */
 import { useHostBridge } from '../use-host-bridge';
@@ -21,8 +16,20 @@ const mockGetSelectedBlockClientId = vi.fn();
 const mockGetBlock = vi.fn();
 const mockGetSelectionStart = vi.fn();
 const mockGetSelectionEnd = vi.fn();
-const mockUpdateBlock = vi.fn();
-const mockSelectionChange = vi.fn();
+
+// Hoisted so the `vi.mock` factory below can capture references to the
+// same spies the tests assert on. `vi.mock` is hoisted above imports,
+// so plain top-level `const`s aren't visible to its factory.
+const dispatchMocks = vi.hoisted( () => ( {
+	savePost: vi.fn(),
+	removeNotice: vi.fn(),
+	undo: vi.fn(),
+	redo: vi.fn(),
+	switchEditorMode: vi.fn(),
+	editEntityRecord: vi.fn(),
+	updateBlock: vi.fn(),
+	selectionChange: vi.fn(),
+} ) );
 
 vi.mock( '@wordpress/data', () => ( {
 	useSelect: ( store ) => {
@@ -40,14 +47,7 @@ vi.mock( '@wordpress/data', () => ( {
 			getSelectionEnd: mockGetSelectionEnd,
 		};
 	},
-	useDispatch: () => ( {
-		editEntityRecord: vi.fn(),
-		undo: vi.fn(),
-		redo: vi.fn(),
-		switchEditorMode: vi.fn(),
-		updateBlock: mockUpdateBlock,
-		selectionChange: mockSelectionChange,
-	} ),
+	useDispatch: vi.fn( () => dispatchMocks ),
 } ) );
 vi.mock( '@wordpress/core-data' );
 vi.mock( '@wordpress/editor' );
@@ -297,7 +297,7 @@ describe( 'useHostBridge', () => {
 		const result = window.editor.appendTextAtCursor( ' appended' );
 
 		expect( result ).toBe( true );
-		expect( mockUpdateBlock ).toHaveBeenCalledWith( 'block-1', {
+		expect( dispatchMocks.updateBlock ).toHaveBeenCalledWith( 'block-1', {
 			attributes: expect.objectContaining( {
 				content: expect.any( String ),
 			} ),
@@ -332,7 +332,7 @@ describe( 'useHostBridge', () => {
 		const result = window.editor.appendTextAtCursor( ' World' );
 
 		expect( result ).toBe( true );
-		expect( mockUpdateBlock ).toHaveBeenCalledWith( 'block-1', {
+		expect( dispatchMocks.updateBlock ).toHaveBeenCalledWith( 'block-1', {
 			attributes: expect.objectContaining( {
 				content: expect.any( String ),
 			} ),
@@ -434,36 +434,34 @@ describe( 'useHostBridge', () => {
 
 	describe( 'window.editor.savePost', () => {
 		it( 'removes the editor-save snackbar after a successful save', async () => {
+			dispatchMocks.savePost.mockResolvedValueOnce( undefined );
+
 			renderHook( () =>
 				useHostBridge( defaultPost, editorRef, markBridgeReady )
 			);
-
-			// `useDispatch` is mocked to return the same shared actions
-			// object for every call (see `__mocks__/@wordpress/data.js`),
-			// so we can grab the action mocks here regardless of which
-			// store was passed.
-			const { savePost, removeNotice } = useDispatch();
-			savePost.mockResolvedValueOnce( undefined );
 
 			await window.editor.savePost();
 
-			expect( savePost ).toHaveBeenCalledTimes( 1 );
-			expect( removeNotice ).toHaveBeenCalledWith( 'editor-save' );
+			expect( dispatchMocks.savePost ).toHaveBeenCalledTimes( 1 );
+			expect( dispatchMocks.removeNotice ).toHaveBeenCalledWith(
+				'editor-save'
+			);
 		} );
 
 		it( 'removes the editor-save snackbar even when the save fails', async () => {
+			const failure = new Error( 'plugin lifecycle error' );
+			dispatchMocks.savePost.mockRejectedValueOnce( failure );
+
 			renderHook( () =>
 				useHostBridge( defaultPost, editorRef, markBridgeReady )
 			);
 
-			const { savePost, removeNotice } = useDispatch();
-			const failure = new Error( 'plugin lifecycle error' );
-			savePost.mockRejectedValueOnce( failure );
-
 			await expect( window.editor.savePost() ).rejects.toThrow( failure );
 
-			expect( savePost ).toHaveBeenCalledTimes( 1 );
-			expect( removeNotice ).toHaveBeenCalledWith( 'editor-save' );
+			expect( dispatchMocks.savePost ).toHaveBeenCalledTimes( 1 );
+			expect( dispatchMocks.removeNotice ).toHaveBeenCalledWith(
+				'editor-save'
+			);
 		} );
 	} );
 } );
