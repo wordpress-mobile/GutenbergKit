@@ -52,6 +52,7 @@ import rs.wordpress.api.kotlin.WpRequestResult
 import uniffi.wp_api.AnyPostWithEditContext
 import uniffi.wp_api.PostEndpointType
 import uniffi.wp_api.PostListParams
+import uniffi.wp_api.PostStatus
 
 /**
  * Lists posts from a WordPress site so the user can pick one to edit.
@@ -177,7 +178,11 @@ class PostsListViewModel(
                 var page = 1u
                 val perPage = 20u
                 while (true) {
-                    val params = PostListParams(page = page, perPage = perPage)
+                    val params = PostListParams(
+                        page = page,
+                        perPage = perPage,
+                        status = listOf(PostStatus.Any)
+                    )
                     val result = client.request { builder ->
                         builder.posts().listWithEditContext(endpointType, params)
                     }
