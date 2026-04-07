@@ -12,6 +12,7 @@ import { useHostBridge } from '../use-host-bridge';
 vi.mock( '@wordpress/data' );
 vi.mock( '@wordpress/core-data' );
 vi.mock( '@wordpress/editor' );
+vi.mock( '@wordpress/notices' );
 vi.mock( '@wordpress/blocks' );
 vi.mock( '@wordpress/block-editor' );
 
