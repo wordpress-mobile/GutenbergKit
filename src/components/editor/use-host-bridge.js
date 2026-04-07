@@ -5,6 +5,7 @@ import { useEffect, useCallback, useRef } from '@wordpress/element';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as coreStore } from '@wordpress/core-data';
 import { store as editorStore } from '@wordpress/editor';
+import { store as noticesStore } from '@wordpress/notices';
 import { parse, serialize, getBlockType } from '@wordpress/blocks';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { insert, create, toHTMLString } from '@wordpress/rich-text';
@@ -20,6 +21,7 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 	const { editEntityRecord } = useDispatch( coreStore );
 	const { undo, redo, switchEditorMode, savePost } =
 		useDispatch( editorStore );
+	const { removeNotice } = useDispatch( noticesStore );
 	const { getEditedPostAttribute, getEditedPostContent } =
 		useSelect( editorStore );
 	const { updateBlock, selectionChange } = useDispatch( blockEditorStore );
@@ -98,7 +100,20 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 		// expose the underlying Promise here so native hosts can `await` the
 		// editor store's full save lifecycle (e.g., iOS uses
 		// `WKWebView.callAsyncJavaScript` to wait for completion).
-		window.editor.savePost = savePost;
+		//
+		// We also suppress the "Draft saved." / "Post updated." snackbar that
+		// `core/editor` dispatches as part of the save lifecycle: native hosts
+		// own their own UI for save feedback (toasts, alerts, etc.), and the
+		// editor's web snackbar would just compete with them. The notice has a
+		// stable id (`editor-save`) which we remove on both success and
+		// failure paths.
+		window.editor.savePost = async () => {
+			try {
+				return await savePost();
+			} finally {
+				removeNotice( 'editor-save' );
+			}
+		};
 
 		window.editor.switchEditorMode = ( mode ) => {
 			// Do not return the `Promise` return value to avoid host errors.
@@ -213,6 +228,7 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 		getEditedPostAttribute,
 		getEditedPostContent,
 		savePost,
+		removeNotice,
 		redo,
 		switchEditorMode,
 		undo,
