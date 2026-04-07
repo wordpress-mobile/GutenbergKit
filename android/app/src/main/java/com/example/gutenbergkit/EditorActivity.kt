@@ -237,12 +237,27 @@ fun EditorScreen(
                             onDismissRequest = { showMenu = false }
                         ) {
                             DropdownMenuItem(
+                                text = { Text(stringResource(R.string.preview)) },
+                                onClick = { },
+                                enabled = false
+                            )
+                            DropdownMenuItem(
                                 text = { Text(stringResource(if (isCodeEditorEnabled) R.string.visual_editor else R.string.code_editor)) },
                                 onClick = {
                                     isCodeEditorEnabled = !isCodeEditorEnabled
                                     gutenbergViewRef?.textEditorEnabled = isCodeEditorEnabled
                                     showMenu = false
                                 }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.post_settings)) },
+                                onClick = { },
+                                enabled = false
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.help)) },
+                                onClick = { },
+                                enabled = false
                             )
                         }
                     }
