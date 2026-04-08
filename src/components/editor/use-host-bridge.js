@@ -230,7 +230,7 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
  * @return {string} The raw string value.
  */
 function normalizeAttribute( value ) {
-	if ( value === null || value === undefined ) {
+	if ( value === null || value === undefined || Array.isArray( value ) ) {
 		return '';
 	}
 	if ( typeof value === 'object' ) {
