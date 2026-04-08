@@ -25,7 +25,6 @@ export function configureApiFetch() {
 	apiFetch.use( corsMiddleware );
 	apiFetch.use( apiPathModifierMiddleware );
 	apiFetch.use( tokenAuthMiddleware );
-	apiFetch.use( filterEndpointsMiddleware );
 	apiFetch.use( mediaUploadMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
 	apiFetch.use(
@@ -104,30 +103,6 @@ function tokenAuthMiddleware( options, next ) {
 		options.credentials = 'omit'; // Avoid cookies disrupting token authentication
 	}
 
-	return next( options );
-}
-
-/**
- * Middleware to filter out requests to specific endpoints.
- *
- * @type {APIFetchMiddleware}
- */
-function filterEndpointsMiddleware( options, next ) {
-	const { post } = getGBKit();
-	const { id, restNamespace, restBase } = post ?? {};
-
-	if ( id === undefined || ! restNamespace || ! restBase ) {
-		return next( options );
-	}
-
-	const disabledPath = `/${ restNamespace }/${ restBase }/${ id }`;
-
-	if (
-		options.path === disabledPath ||
-		options.path?.startsWith( `${ disabledPath }?` )
-	) {
-		return Promise.resolve( [] );
-	}
 	return next( options );
 }
 

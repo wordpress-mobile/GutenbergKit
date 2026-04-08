@@ -10,6 +10,7 @@ import { registerCoreBlocks } from '@wordpress/block-library';
 import { unregisterDisallowedBlocks } from './blocks';
 import { getGBKit, getPost } from './bridge';
 import { getDefaultEditorSettings } from './editor-settings';
+import { primePostEntity } from './prime-post-entity';
 
 /**
  * Configure editor settings and styles, and render the editor.
@@ -44,6 +45,10 @@ export async function initializeEditor( {
 	unregisterDisallowedBlocks( allowedBlockTypes );
 
 	const post = await getPost();
+
+	// Seed core-data with the post's entity config and record before rendering,
+	// so `<EditorProvider>`'s resolvers short-circuit instead of refetching.
+	primePostEntity( post );
 
 	createRoot( document.getElementById( 'root' ) ).render(
 		<StrictMode>
