@@ -380,6 +380,16 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         public let changed: Bool
     }
 
+    /// Returns just the current editor content, without the title.
+    ///
+    /// Use this when the editor is used without a title field (e.g. as a
+    /// comment editor). Delegates to `getTitleAndContent()` internally so
+    /// the same normalization is applied.
+    public func getContent() async throws -> String {
+        let result = try await getTitleAndContent()
+        return result.content
+    }
+
     /// Returns the current editor title and content.
     public func getTitleAndContent() async throws -> EditorTitleAndContent {
         guard isReady else { throw EditorNotReadyError() }

@@ -104,6 +104,7 @@ describe( 'useHostBridge', () => {
 		// Verify all bridge methods exist
 		expect( window.editor.setContent ).toBeTypeOf( 'function' );
 		expect( window.editor.setTitle ).toBeTypeOf( 'function' );
+		expect( window.editor.getContent ).toBeTypeOf( 'function' );
 		expect( window.editor.getTitleAndContent ).toBeTypeOf( 'function' );
 		expect( window.editor.undo ).toBeTypeOf( 'function' );
 		expect( window.editor.redo ).toBeTypeOf( 'function' );
@@ -148,6 +149,24 @@ describe( 'useHostBridge', () => {
 		const result = window.editor.getTitleAndContent();
 		expect( result.title ).toBe( 'Plain Title' );
 		expect( result.content ).toBe( 'Plain Content' );
+	} );
+
+	it( 'getContent returns normalized content string', () => {
+		mockGetEditedPostAttribute.mockReturnValue( 'Title' );
+		mockGetEditedPostContent.mockReturnValue( {
+			raw: '<!-- wp:paragraph -->\n<p>Hello</p>\n<!-- /wp:paragraph -->',
+			rendered: '<p>Hello</p>',
+		} );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		const result = window.editor.getContent();
+		expect( typeof result ).toBe( 'string' );
+		expect( result ).toBe(
+			'<!-- wp:paragraph -->\n<p>Hello</p>\n<!-- /wp:paragraph -->'
+		);
 	} );
 
 	it( 'getTitleAndContent returns empty strings when data store returns null', () => {
@@ -362,6 +381,7 @@ describe( 'useHostBridge', () => {
 
 		expect( window.editor.setContent ).toBeUndefined();
 		expect( window.editor.setTitle ).toBeUndefined();
+		expect( window.editor.getContent ).toBeUndefined();
 		expect( window.editor.getTitleAndContent ).toBeUndefined();
 		expect( window.editor.undo ).toBeUndefined();
 		expect( window.editor.redo ).toBeUndefined();

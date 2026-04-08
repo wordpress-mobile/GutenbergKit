@@ -53,6 +53,15 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 			editContent( { title: decodeURIComponent( title ) } );
 		};
 
+		// Convenience accessor for contexts where only the content is needed
+		// (e.g. a comment editor with no title field). Delegates to
+		// getTitleAndContent so normalization happens in one place.
+		window.editor.getContent = ( completeComposition = false ) => {
+			const { content } =
+				window.editor.getTitleAndContent( completeComposition );
+			return content;
+		};
+
 		window.editor.getTitleAndContent = ( completeComposition = false ) => {
 			if ( completeComposition ) {
 				endComposition( editorRef.current );
@@ -182,6 +191,7 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 		return () => {
 			delete window.editor.setContent;
 			delete window.editor.setTitle;
+			delete window.editor.getContent;
 			delete window.editor.getTitleAndContent;
 			delete window.editor.undo;
 			delete window.editor.redo;
