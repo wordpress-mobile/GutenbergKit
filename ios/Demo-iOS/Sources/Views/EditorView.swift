@@ -1,6 +1,11 @@
 import SwiftUI
 import GutenbergKit
 import WordPressAPI
+// `PostUpdateParams` is not yet re-exported from `WordPressAPI` in the pinned
+// wordpress-rs release. It is reachable via the internal module, which is the
+// same workaround WordPress-iOS uses. Remove this import once a tagged release
+// including Automattic/wordpress-rs#1270 is adopted.
+import WordPressAPIInternal
 
 struct EditorView: View {
     private let configuration: EditorConfiguration
