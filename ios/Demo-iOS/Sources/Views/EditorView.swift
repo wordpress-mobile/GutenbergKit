@@ -165,10 +165,10 @@ private struct _EditorView: UIViewControllerRepresentable {
     private func persistPost(viewController: EditorViewController, viewModel: EditorViewModel) async {
         // 1. Trigger the editor store save lifecycle so plugins fire side-effects.
         do {
-            try await viewController.savePost()
-            print("editor.savePost() completed — editor store save lifecycle fired")
+            try await viewController.triggerSaveLifecycle()
+            print("editor.triggerSaveLifecycle() completed — editor store save lifecycle fired")
         } catch {
-            print("editor.savePost() lifecycle failed; persisting anyway: \(error)")
+            print("editor.triggerSaveLifecycle() failed; persisting anyway: \(error)")
         }
 
         // 2. Persist post content via REST API.

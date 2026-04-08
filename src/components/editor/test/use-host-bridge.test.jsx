@@ -104,7 +104,7 @@ describe( 'useHostBridge', () => {
 		expect( window.editor.getTitleAndContent ).toBeTypeOf( 'function' );
 		expect( window.editor.undo ).toBeTypeOf( 'function' );
 		expect( window.editor.redo ).toBeTypeOf( 'function' );
-		expect( window.editor.savePost ).toBeTypeOf( 'function' );
+		expect( window.editor.triggerSaveLifecycle ).toBeTypeOf( 'function' );
 		expect( window.editor.switchEditorMode ).toBeTypeOf( 'function' );
 		expect( window.editor.dismissTopModal ).toBeTypeOf( 'function' );
 		expect( window.editor.focus ).toBeTypeOf( 'function' );
@@ -375,7 +375,7 @@ describe( 'useHostBridge', () => {
 
 		// The block should contain the original content plus the
 		// appended text — not just the appended text alone.
-		expect( mockUpdateBlock ).toHaveBeenCalledWith( 'block-1', {
+		expect( dispatchMocks.updateBlock ).toHaveBeenCalledWith( 'block-1', {
 			attributes: expect.objectContaining( {
 				content: 'Existing block content @username ',
 			} ),
@@ -425,14 +425,14 @@ describe( 'useHostBridge', () => {
 		expect( window.editor.getTitleAndContent ).toBeUndefined();
 		expect( window.editor.undo ).toBeUndefined();
 		expect( window.editor.redo ).toBeUndefined();
-		expect( window.editor.savePost ).toBeUndefined();
+		expect( window.editor.triggerSaveLifecycle ).toBeUndefined();
 		expect( window.editor.switchEditorMode ).toBeUndefined();
 		expect( window.editor.dismissTopModal ).toBeUndefined();
 		expect( window.editor.focus ).toBeUndefined();
 		expect( window.editor.appendTextAtCursor ).toBeUndefined();
 	} );
 
-	describe( 'window.editor.savePost', () => {
+	describe( 'window.editor.triggerSaveLifecycle', () => {
 		it( 'removes the editor-save snackbar after a successful save', async () => {
 			dispatchMocks.savePost.mockResolvedValueOnce( undefined );
 
@@ -440,7 +440,7 @@ describe( 'useHostBridge', () => {
 				useHostBridge( defaultPost, editorRef, markBridgeReady )
 			);
 
-			await window.editor.savePost();
+			await window.editor.triggerSaveLifecycle();
 
 			expect( dispatchMocks.savePost ).toHaveBeenCalledTimes( 1 );
 			expect( dispatchMocks.removeNotice ).toHaveBeenCalledWith(
@@ -456,7 +456,9 @@ describe( 'useHostBridge', () => {
 				useHostBridge( defaultPost, editorRef, markBridgeReady )
 			);
 
-			await expect( window.editor.savePost() ).rejects.toThrow( failure );
+			await expect(
+				window.editor.triggerSaveLifecycle()
+			).rejects.toThrow( failure );
 
 			expect( dispatchMocks.savePost ).toHaveBeenCalledTimes( 1 );
 			expect( dispatchMocks.removeNotice ).toHaveBeenCalledWith(

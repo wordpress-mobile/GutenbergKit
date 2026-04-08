@@ -96,7 +96,7 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 			redo();
 		};
 
-		window.editor.savePost = async () => {
+		window.editor.triggerSaveLifecycle = async () => {
 			try {
 				// Await the lifecycle so hosts can sequence persistence after
 				// plugin side-effects settle, do not return the `Promise` return value
@@ -206,7 +206,7 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 			delete window.editor.setTitle;
 			delete window.editor.getContent;
 			delete window.editor.getTitleAndContent;
-			delete window.editor.savePost;
+			delete window.editor.triggerSaveLifecycle;
 			delete window.editor.undo;
 			delete window.editor.redo;
 			delete window.editor.switchEditorMode;

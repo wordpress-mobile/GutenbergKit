@@ -345,12 +345,12 @@ fun EditorScreen(
 /**
  * Suspends until the editor store's save lifecycle completes.
  *
- * Bridges the [GutenbergView.savePost] callback to a coroutine so the caller
- * can sequence post-save work (like persisting content via the REST API).
+ * Bridges the [GutenbergView.triggerSaveLifecycle] callback to a coroutine so
+ * the caller can sequence post-save work (like persisting content via the REST API).
  */
-private suspend fun GutenbergView.savePostAwait(): Boolean =
+private suspend fun GutenbergView.triggerSaveLifecycleAwait(): Boolean =
     suspendCancellableCoroutine { continuation ->
-        savePost { success, _ ->
+        triggerSaveLifecycle { success, _ ->
             if (continuation.isActive) continuation.resume(success)
         }
     }
@@ -358,10 +358,10 @@ private suspend fun GutenbergView.savePostAwait(): Boolean =
 /**
  * Reads the latest title/content from the editor and PUTs it to the WordPress REST API.
  *
- * Triggers [GutenbergView.savePost] first so plugin side-effects (e.g., VideoPress
- * syncing metadata) settle before the content is read and persisted. A lifecycle
- * failure must NOT block the user from saving their work — the warning is logged
- * and persistence proceeds anyway.
+ * Triggers [GutenbergView.triggerSaveLifecycle] first so plugin side-effects
+ * (e.g., VideoPress syncing metadata) settle before the content is read and
+ * persisted. A lifecycle failure must NOT block the user from saving their
+ * work — the warning is logged and persistence proceeds anyway.
  */
 private suspend fun persistPost(
     context: Context,
@@ -371,11 +371,11 @@ private suspend fun persistPost(
     postId: UInt
 ): String? {
     // 1. Trigger the editor store save lifecycle so plugins fire side-effects.
-    val saveSucceeded = view.savePostAwait()
-    if (saveSucceeded) {
-        Log.i("EditorActivity", "editor.savePost() completed — editor store save lifecycle fired")
+    val lifecycleSucceeded = view.triggerSaveLifecycleAwait()
+    if (lifecycleSucceeded) {
+        Log.i("EditorActivity", "editor.triggerSaveLifecycle() completed — editor store save lifecycle fired")
     } else {
-        Log.w("EditorActivity", "editor.savePost() lifecycle failed; persisting anyway")
+        Log.w("EditorActivity", "editor.triggerSaveLifecycle() failed; persisting anyway")
     }
 
     // 2. Persist post content via REST API.

@@ -446,9 +446,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// > subscribed to the lifecycle errors out), hosts should still proceed to
     /// > read and persist content. A misbehaving plugin must not block the user
     /// > from saving their work — log the lifecycle failure and continue.
-    public func savePost() async throws {
+    public func triggerSaveLifecycle() async throws {
         guard isReady else { throw EditorNotReadyError() }
-        _ = try await webView.callAsyncJavaScript("await editor.savePost();", in: nil, contentWorld: .page)
+        _ = try await webView.callAsyncJavaScript("await editor.triggerSaveLifecycle();", in: nil, contentWorld: .page)
     }
 
     /// Dismisses the topmost modal dialog or menu in the editor

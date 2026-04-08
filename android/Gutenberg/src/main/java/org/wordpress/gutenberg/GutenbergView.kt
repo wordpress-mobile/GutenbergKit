@@ -745,7 +745,7 @@ class GutenbergView : FrameLayout {
         }
     }
 
-    private val pendingSaveCallbacks = Collections.synchronizedMap(mutableMapOf<String, SavePostCallback>())
+    private val pendingLifecycleCallbacks = Collections.synchronizedMap(mutableMapOf<String, SaveLifecycleCallback>())
 
     /**
      * Triggers the editor store's save lifecycle and invokes [callback] when it completes.
@@ -765,44 +765,44 @@ class GutenbergView : FrameLayout {
      * proceed to read and persist content. A misbehaving plugin must not block the
      * user from saving their work — log the lifecycle failure and continue.
      *
-     * Note: `window.editor.savePost()` is an async JS function that returns a Promise.
-     * Android's `WebView.evaluateJavascript` cannot await Promises (unlike iOS's
-     * `WKWebView.callAsyncJavaScript`), so we dispatch the call and route completion
-     * back via the `editorDelegate` JavaScript interface.
+     * Note: `window.editor.triggerSaveLifecycle()` is an async JS function that returns
+     * a Promise. Android's `WebView.evaluateJavascript` cannot await Promises (unlike
+     * iOS's `WKWebView.callAsyncJavaScript`), so we dispatch the call and route
+     * completion back via the `editorDelegate` JavaScript interface.
      */
-    fun savePost(callback: SavePostCallback) {
+    fun triggerSaveLifecycle(callback: SaveLifecycleCallback) {
         if (!isEditorLoaded) {
-            Log.e("GutenbergView", "You can't save until the editor has loaded")
+            Log.e("GutenbergView", "You can't trigger the save lifecycle until the editor has loaded")
             handler.post {
                 callback.onComplete(false, "Editor not loaded")
             }
             return
         }
         val requestId = java.util.UUID.randomUUID().toString()
-        pendingSaveCallbacks[requestId] = callback
+        pendingLifecycleCallbacks[requestId] = callback
         // Quote the requestId for safe JS string interpolation. UUIDs are safe
         // today, but routing all values through `JSONObject.quote()` ensures we
         // never accidentally inject untrusted strings into the JS context.
         val quotedRequestId = JSONObject.quote(requestId)
         handler.post {
             webView.evaluateJavascript(
-                "editor.savePost()" +
-                    ".then(() => editorDelegate.onSavePostComplete($quotedRequestId, true, null))" +
-                    ".catch((e) => editorDelegate.onSavePostComplete($quotedRequestId, false, (e && e.message) || String(e)));",
+                "editor.triggerSaveLifecycle()" +
+                    ".then(() => editorDelegate.onSaveLifecycleComplete($quotedRequestId, true, null))" +
+                    ".catch((e) => editorDelegate.onSaveLifecycleComplete($quotedRequestId, false, (e && e.message) || String(e)));",
                 null
             )
         }
     }
 
     @JavascriptInterface
-    fun onSavePostComplete(requestId: String, success: Boolean, error: String?) {
-        val callback = pendingSaveCallbacks.remove(requestId) ?: return
+    fun onSaveLifecycleComplete(requestId: String, success: Boolean, error: String?) {
+        val callback = pendingLifecycleCallbacks.remove(requestId) ?: return
         handler.post {
             callback.onComplete(success, error)
         }
     }
 
-    fun interface SavePostCallback {
+    fun interface SaveLifecycleCallback {
         fun onComplete(success: Boolean, error: String?)
     }
 
@@ -1102,18 +1102,18 @@ class GutenbergView : FrameLayout {
         latestContentProvider = null
         blockInserterDialog?.dismiss()
         blockInserterDialog = null
-        // Fail any save callbacks still waiting on a JS Promise — without this,
-        // coroutines awaiting `savePost()` would hang forever (and leak whatever
-        // they captured) when the view is torn down mid-save.
-        drainPendingSaveCallbacks("View detached")
+        // Fail any lifecycle callbacks still waiting on a JS Promise — without
+        // this, coroutines awaiting `triggerSaveLifecycle()` would hang forever
+        // (and leak whatever they captured) when the view is torn down mid-save.
+        drainPendingLifecycleCallbacks("View detached")
         handler.removeCallbacksAndMessages(null)
         webView.destroy()
     }
 
-    private fun drainPendingSaveCallbacks(reason: String) {
-        val pending = synchronized(pendingSaveCallbacks) {
-            val snapshot = pendingSaveCallbacks.toMap()
-            pendingSaveCallbacks.clear()
+    private fun drainPendingLifecycleCallbacks(reason: String) {
+        val pending = synchronized(pendingLifecycleCallbacks) {
+            val snapshot = pendingLifecycleCallbacks.toMap()
+            pendingLifecycleCallbacks.clear()
             snapshot
         }
         pending.values.forEach { it.onComplete(false, reason) }
