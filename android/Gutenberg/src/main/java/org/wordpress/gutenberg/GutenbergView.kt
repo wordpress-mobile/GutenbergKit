@@ -773,7 +773,9 @@ class GutenbergView : FrameLayout {
     fun savePost(callback: SavePostCallback) {
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't save until the editor has loaded")
-            callback.onComplete(false, "Editor not loaded")
+            handler.post {
+                callback.onComplete(false, "Editor not loaded")
+            }
             return
         }
         val requestId = java.util.UUID.randomUUID().toString()
