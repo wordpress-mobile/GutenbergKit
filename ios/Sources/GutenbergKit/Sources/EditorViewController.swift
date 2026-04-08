@@ -374,16 +374,20 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         evaluate("editor.setContent('\(escapedString)');", isCritical: true)
     }
 
-    /// Returns the current editor content.
-    public func getContent() async throws -> String {
-        guard isReady else { throw EditorNotReadyError() }
-        return try await webView.evaluateJavaScript("editor.getContent();") as! String
-    }
-
     public struct EditorTitleAndContent: Decodable {
         public let title: String
         public let content: String
         public let changed: Bool
+    }
+
+    /// Returns just the current editor content, without the title.
+    ///
+    /// Use this when the editor is used without a title field (e.g. as a
+    /// comment editor). Delegates to `getTitleAndContent()` internally so
+    /// the same normalization is applied.
+    public func getContent() async throws -> String {
+        let result = try await getTitleAndContent()
+        return result.content
     }
 
     /// Returns the current editor title and content.

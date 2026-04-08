@@ -36,10 +36,12 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 		[ editEntityRecord, post.id, post.type ]
 	);
 
-	const postTitleRef = useRef( post.title.raw );
+	const postTitleRef = useRef( normalizeAttribute( post.title ) );
 	const postContentRef = useRef( null );
 	if ( postContentRef.current === null ) {
-		postContentRef.current = serialize( parse( post.content.raw || '' ) );
+		postContentRef.current = serialize(
+			parse( normalizeAttribute( post.content ) )
+		);
 	}
 
 	useEffect( () => {
@@ -51,12 +53,13 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 			editContent( { title: decodeURIComponent( title ) } );
 		};
 
+		// Convenience accessor for contexts where only the content is needed
+		// (e.g. a comment editor with no title field). Delegates to
+		// getTitleAndContent so normalization happens in one place.
 		window.editor.getContent = ( completeComposition = false ) => {
-			if ( completeComposition ) {
-				endComposition( editorRef.current );
-			}
-
-			return getEditedPostContent();
+			const { content } =
+				window.editor.getTitleAndContent( completeComposition );
+			return content;
 		};
 
 		window.editor.getTitleAndContent = ( completeComposition = false ) => {
@@ -64,8 +67,10 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 				endComposition( editorRef.current );
 			}
 
-			const title = getEditedPostAttribute( 'title' );
-			const content = getEditedPostContent();
+			const title = normalizeAttribute(
+				getEditedPostAttribute( 'title' )
+			);
+			const content = normalizeAttribute( getEditedPostContent() );
 			const changed =
 				title !== postTitleRef.current ||
 				content !== postContentRef.current;
@@ -145,7 +150,9 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 				return false;
 			}
 
-			const blockContent = block.attributes?.content || '';
+			const blockContent = normalizeAttribute(
+				block.attributes?.content
+			);
 			const currentValue = create( { html: blockContent } );
 			const selectionStart = getSelectionStart();
 			const selectionEnd = getSelectionEnd();
@@ -209,6 +216,27 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 		updateBlock,
 		selectionChange,
 	] );
+}
+
+/**
+ * Normalizes a WordPress data store attribute to a plain string.
+ *
+ * The data store may return either a plain string or a `{ raw, rendered }`
+ * object depending on internal state (e.g. before vs. after the user edits
+ * a field). This function always extracts the raw string so the host app
+ * receives a consistent type.
+ *
+ * @param {string|Object|null|undefined} value The value from a data store selector.
+ * @return {string} The raw string value.
+ */
+function normalizeAttribute( value ) {
+	if ( value === null || value === undefined || Array.isArray( value ) ) {
+		return '';
+	}
+	if ( typeof value === 'object' ) {
+		return value.raw ?? '';
+	}
+	return String( value );
 }
 
 /**
