@@ -268,7 +268,15 @@ public final class HTTPRequestParser: @unchecked Sendable {
 
                 if expectedContentLength > maxBodySize {
                     _parseError = .payloadTooLarge
-                    _state = .draining
+                    // Check if the body bytes already received in this
+                    // chunk satisfy the drain — small requests may arrive
+                    // as a single read.
+                    if let offset = headerEndOffset,
+                       bytesWritten - Int64(offset) >= expectedContentLength {
+                        _state = .complete
+                    } else {
+                        _state = .draining
+                    }
                     return
                 }
             }

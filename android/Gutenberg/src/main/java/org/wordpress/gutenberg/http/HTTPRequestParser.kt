@@ -126,10 +126,7 @@ class HTTPRequestParser(
         // whether the full Content-Length has been consumed.
         if (_state == State.DRAINING) {
             bytesWritten += data.size.toLong()
-            val offset = headerEndOffset
-            if (offset != null && bytesWritten - offset >= expectedContentLength) {
-                _state = State.COMPLETE
-            }
+            drainIfComplete()
             return
         }
 
@@ -193,6 +190,10 @@ class HTTPRequestParser(
             if (expectedContentLength > maxBodySize) {
                 parseError = HTTPRequestParseError.PAYLOAD_TOO_LARGE
                 _state = State.DRAINING
+                // Complete immediately if body bytes already received
+                // satisfy the drain — small requests may arrive as a
+                // single read.
+                drainIfComplete()
                 return
             }
         }
@@ -204,6 +205,14 @@ class HTTPRequestParser(
             State.COMPLETE
         } else {
             State.HEADERS_COMPLETE
+        }
+    }
+
+    /** Transitions from DRAINING to COMPLETE if all body bytes have been received. */
+    private fun drainIfComplete() {
+        val offset = headerEndOffset ?: return
+        if (bytesWritten - offset >= expectedContentLength) {
+            _state = State.COMPLETE
         }
     }
 

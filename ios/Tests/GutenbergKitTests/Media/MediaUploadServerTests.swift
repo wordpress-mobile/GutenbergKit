@@ -1,6 +1,5 @@
 import Foundation
 import GutenbergKitHTTP
-import Network
 import Testing
 @testable import GutenbergKit
 
@@ -169,59 +168,24 @@ struct MediaUploadServerTests {
     let server = try await MediaUploadServer.start(maxRequestBodySize: 1024)
     defer { server.stop() }
 
-    // Build a raw HTTP request to avoid URLSession's connection-reset
-    // behavior when the server responds before the upload completes.
     let boundary = UUID().uuidString
     let oversizedData = Data(repeating: 0x42, count: 2048)
     let body = buildMultipartBody(boundary: boundary, filename: "big.bin", mimeType: "application/octet-stream", data: oversizedData)
 
-    let headers = [
-      "POST /upload HTTP/1.1",
-      "Host: 127.0.0.1:\(server.port)",
-      "Relay-Authorization: Bearer \(server.token)",
-      "Content-Type: multipart/form-data; boundary=\(boundary)",
-      "Content-Length: \(body.count)",
-      "", ""
-    ].joined(separator: "\r\n")
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    request.httpBody = body
 
-    let rawRequest = Data(headers.utf8) + body
-    let responseData = try await sendRawTCP(to: server.port, data: rawRequest)
-    let responseString = String(data: responseData, encoding: .utf8) ?? ""
+    let (data, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+    #expect(httpResponse.statusCode == 413)
+    #expect(httpResponse.value(forHTTPHeaderField: "Access-Control-Allow-Origin") == "*")
 
-    #expect(responseString.contains("HTTP/1.1 413"))
-    #expect(responseString.contains("Access-Control-Allow-Origin: *"))
-    #expect(responseString.contains("too large"))
-  }
-
-  /// Sends raw bytes over TCP and reads the response.
-  private func sendRawTCP(to port: UInt16, data: Data) async throws -> Data {
-    try await withCheckedThrowingContinuation { continuation in
-      let connection = NWConnection(
-        host: .ipv4(.loopback), port: NWEndpoint.Port(rawValue: port)!,
-        using: .tcp
-      )
-      connection.stateUpdateHandler = { state in
-        if case .ready = state {
-          connection.send(content: data, completion: .contentProcessed { error in
-            if let error {
-              continuation.resume(throwing: error)
-              return
-            }
-            connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { content, _, _, recvError in
-              connection.cancel()
-              if let error = recvError {
-                continuation.resume(throwing: error)
-              } else {
-                continuation.resume(returning: content ?? Data())
-              }
-            }
-          })
-        } else if case .failed(let error) = state {
-          continuation.resume(throwing: error)
-        }
-      }
-      connection.start(queue: .global())
-    }
+    let responseBody = String(data: data, encoding: .utf8) ?? ""
+    #expect(responseBody.contains("too large"))
   }
 
   private func buildMultipartBody(boundary: String, filename: String, mimeType: String, data: Data) -> Data {
