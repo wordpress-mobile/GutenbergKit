@@ -292,7 +292,11 @@ private fun PostRow(post: AnyPostWithEditContext, onClick: () -> Unit) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        val title = post.title?.rendered?.ifBlank { "(no title)" } ?: "(no title)"
+        // Prefer the raw title (database value) over rendered, which is HTML-encoded
+        // for insertion into a page (e.g. spaces become `&nbsp;`).
+        val title = post.title?.raw?.ifBlank { null }
+            ?: post.title?.rendered?.ifBlank { null }
+            ?: "(no title)"
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,

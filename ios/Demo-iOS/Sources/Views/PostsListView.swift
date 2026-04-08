@@ -47,7 +47,9 @@ struct PostsListView: View {
                         openPost(post)
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(post.title?.rendered ?? "")
+                            // Prefer the raw title (database value) over rendered, which is
+                            // HTML-encoded for insertion into a page (e.g. spaces become `&nbsp;`).
+                            Text(post.title?.raw ?? post.title?.rendered ?? "")
                                 .font(.headline)
                             if let excerpt = post.excerpt?.rendered, !excerpt.isEmpty {
                                 Text(excerpt.strippingHTML())
