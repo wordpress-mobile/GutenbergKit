@@ -165,11 +165,11 @@ struct MediaUploadServerTests {
 
   @Test("returns 413 with CORS headers when request body exceeds max size")
   func oversizedUploadReturns413WithCORSHeaders() async throws {
-    let server = try await MediaUploadServer.start(maxRequestBodySize: 100)
+    let server = try await MediaUploadServer.start(maxRequestBodySize: 1024)
     defer { server.stop() }
 
     let boundary = UUID().uuidString
-    let oversizedData = Data(repeating: 0x42, count: 200)
+    let oversizedData = Data(repeating: 0x42, count: 2048)
     let body = buildMultipartBody(boundary: boundary, filename: "big.bin", mimeType: "application/octet-stream", data: oversizedData)
 
     let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
