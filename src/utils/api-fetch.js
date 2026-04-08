@@ -111,6 +111,18 @@ function tokenAuthMiddleware( options, next ) {
  * Middleware to filter out requests to specific endpoints.
  *
  * @type {APIFetchMiddleware}
+ *
+ * @todo Properly seed the post entity and remove this middleware.
+ *
+ * This was added to prevent re-fetching entity content provided by the native
+ * host app, which can lead to content loss. However, we can likely avoid the
+ * need for this middleware by ensuring we properly seed the entity content into
+ * the store on initialization.
+ *
+ * This requires hoisting the relevant logic from `useEditorSetup` to occur
+ * before we render the editor, and invoking `finishResolution`.
+ *
+ * See: https://github.com/wordpress-mobile/GutenbergKit/commit/c9b4fc9978a3760ba97f3f5d4359c2bc2155bb80
  */
 function filterEndpointsMiddleware( options, next ) {
 	const { post } = getGBKit();
