@@ -49,12 +49,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import com.example.gutenbergkit.ui.theme.AppTheme
 import org.wordpress.gutenberg.model.EditorConfiguration
+import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.model.EditorDependenciesSerializer
+import org.wordpress.gutenberg.model.PostTypeDetails
 
 class SitePreparationActivity : ComponentActivity() {
 
@@ -140,13 +143,21 @@ class SitePreparationActivity : ComponentActivity() {
             SitePreparationViewModelFactory(application, configurationItem)
         )[SitePreparationViewModel::class.java]
 
+        val accountId = (configurationItem as? ConfigurationItem.ConfiguredEditor)?.accountId
+
         setContent {
             AppTheme {
                 SitePreparationScreen(
                     viewModel = viewModel,
+                    accountId = accountId,
                     onClose = { finish() },
                     onStartEditor = { configuration, dependencies ->
                         launchEditor(configuration, dependencies)
+                    },
+                    onBrowsePosts = { configuration, dependencies, postType ->
+                        accountId?.let {
+                            launchPostsList(it, postType, configuration, dependencies)
+                        }
                     }
                 )
             }
@@ -155,7 +166,7 @@ class SitePreparationActivity : ComponentActivity() {
 
     private fun launchEditor(
         configuration: EditorConfiguration,
-        dependencies: org.wordpress.gutenberg.model.EditorDependencies?
+        dependencies: EditorDependencies?
     ) {
         val intent = Intent(this, EditorActivity::class.java).apply {
             putExtra(MainActivity.EXTRA_CONFIGURATION, configuration)
@@ -168,14 +179,27 @@ class SitePreparationActivity : ComponentActivity() {
         }
         startActivity(intent)
     }
+
+    private fun launchPostsList(
+        accountId: ULong,
+        postType: PostTypeDetails,
+        configuration: EditorConfiguration,
+        dependencies: EditorDependencies?
+    ) {
+        startActivity(
+            PostsListActivity.createIntent(this, accountId, postType, configuration, dependencies)
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SitePreparationScreen(
     viewModel: SitePreparationViewModel,
+    accountId: ULong?,
     onClose: () -> Unit,
-    onStartEditor: (EditorConfiguration, org.wordpress.gutenberg.model.EditorDependencies?) -> Unit
+    onStartEditor: (EditorConfiguration, EditorDependencies?) -> Unit,
+    onBrowsePosts: (EditorConfiguration, EditorDependencies?, PostTypeDetails) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -192,7 +216,7 @@ fun SitePreparationScreen(
                     IconButton(onClick = onClose) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = stringResource(R.string.back)
                         )
                     }
                 },
@@ -219,6 +243,15 @@ fun SitePreparationScreen(
             LoadedView(
                 uiState = uiState,
                 viewModel = viewModel,
+                accountId = accountId,
+                onBrowsePosts = {
+                    val selectedPostType = uiState.selectedPostType
+                    if (selectedPostType != null) {
+                        viewModel.buildConfiguration()?.let { config ->
+                            onBrowsePosts(config, uiState.editorDependencies, selectedPostType)
+                        }
+                    }
+                },
                 modifier = Modifier.padding(innerPadding)
             )
         }
@@ -245,6 +278,8 @@ private fun LoadingView(modifier: Modifier = Modifier) {
 private fun LoadedView(
     uiState: SitePreparationUiState,
     viewModel: SitePreparationViewModel,
+    accountId: ULong?,
+    onBrowsePosts: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -266,8 +301,11 @@ private fun LoadedView(
                 onEnableNativeInserterChange = viewModel::setEnableNativeInserter,
                 enableNetworkLogging = uiState.enableNetworkLogging,
                 onEnableNetworkLoggingChange = viewModel::setEnableNetworkLogging,
-                postType = uiState.postType,
-                onPostTypeChange = viewModel::setPostType
+                postTypes = uiState.postTypes,
+                selectedPostType = uiState.selectedPostType,
+                onPostTypeChange = viewModel::setPostType,
+                showBrowseButton = accountId != null,
+                onBrowsePosts = onBrowsePosts
             )
         }
 
@@ -347,8 +385,11 @@ private fun FeatureConfigurationCard(
     onEnableNativeInserterChange: (Boolean) -> Unit,
     enableNetworkLogging: Boolean,
     onEnableNetworkLoggingChange: (Boolean) -> Unit,
-    postType: String,
-    onPostTypeChange: (String) -> Unit
+    postTypes: List<PostTypeDetails>,
+    selectedPostType: PostTypeDetails?,
+    onPostTypeChange: (PostTypeDetails) -> Unit,
+    showBrowseButton: Boolean = false,
+    onBrowsePosts: () -> Unit = {}
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -394,28 +435,46 @@ private fun FeatureConfigurationCard(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
-            Column(modifier = Modifier.selectableGroup()) {
-                listOf("post" to "Post", "page" to "Page").forEach { (value, label) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .selectable(
-                                selected = postType == value,
-                                onClick = { onPostTypeChange(value) },
-                                role = Role.RadioButton
+            if (postTypes.isEmpty()) {
+                Text(
+                    text = "Loading post types…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Column(modifier = Modifier.selectableGroup()) {
+                    postTypes.forEach { postType ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = postType == selectedPostType,
+                                    onClick = { onPostTypeChange(postType) },
+                                    role = Role.RadioButton
+                                )
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = postType == selectedPostType,
+                                onClick = null
                             )
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = postType == value,
-                            onClick = null
-                        )
-                        Text(
-                            text = label,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
+                            Text(
+                                text = postType.postType.replaceFirstChar { it.uppercase() },
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
                     }
+                }
+            }
+
+            if (showBrowseButton) {
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onBrowsePosts,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.browse))
                 }
             }
         }

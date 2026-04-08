@@ -27,7 +27,7 @@ class GBKitGlobalTest {
 
     private fun makePreloadList(): EditorPreloadList {
         return EditorPreloadList(
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = EditorURLResponse(data = "{}", responseHeaders = EditorHTTPHeaders()),
             postTypesData = EditorURLResponse(data = "{}", responseHeaders = EditorHTTPHeaders()),
             activeThemeData = EditorURLResponse(data = "{}", responseHeaders = EditorHTTPHeaders()),
@@ -40,7 +40,7 @@ class GBKitGlobalTest {
         title: String? = null,
         content: String? = null,
         siteURL: String = TEST_SITE_URL,
-        postType: String = "post",
+        postType: PostTypeDetails = PostTypeDetails.post,
         shouldUsePlugins: Boolean = true,
         shouldUseThemeStyles: Boolean = true
     ): EditorConfiguration {
@@ -119,7 +119,7 @@ class GBKitGlobalTest {
 
     @Test
     fun `populates restBase and restNamespace for post type`() {
-        val configuration = makeConfiguration(postType = "post")
+        val configuration = makeConfiguration(postType = PostTypeDetails.post)
         val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
         assertEquals("posts", global.post.restBase)
         assertEquals("wp/v2", global.post.restNamespace)
@@ -127,15 +127,17 @@ class GBKitGlobalTest {
 
     @Test
     fun `populates restBase for page post type`() {
-        val configuration = makeConfiguration(postType = "page")
+        val configuration = makeConfiguration(postType = PostTypeDetails.page)
         val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
         assertEquals("pages", global.post.restBase)
         assertEquals("wp/v2", global.post.restNamespace)
     }
 
     @Test
-    fun `pluralizes custom post type slugs for restBase`() {
-        val configuration = makeConfiguration(postType = "product")
+    fun `forwards custom PostTypeDetails restBase into the payload`() {
+        val configuration = makeConfiguration(
+            postType = PostTypeDetails(postType = "product", restBase = "products")
+        )
         val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
         assertEquals("products", global.post.restBase)
     }

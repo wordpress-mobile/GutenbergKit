@@ -34,6 +34,26 @@ enum ConfigurationItem: Identifiable, Equatable, Hashable {
 struct RunnableEditor: Equatable, Hashable {
     let configuration: EditorConfiguration
     let dependencies: EditorDependencies?
+    let apiClient: WordPressAPI?
+
+    init(configuration: EditorConfiguration, dependencies: EditorDependencies?, apiClient: WordPressAPI? = nil) {
+        self.configuration = configuration
+        self.dependencies = dependencies
+        self.apiClient = apiClient
+    }
+
+    // `apiClient` is intentionally excluded from `==` and `hash(into:)`:
+    // `WordPressAPI` is not `Hashable`/`Equatable` (it owns native Rust state),
+    // and two editors with the same configuration but different client
+    // instances should be treated as equal for navigation/identity purposes.
+    static func == (lhs: RunnableEditor, rhs: RunnableEditor) -> Bool {
+        lhs.configuration == rhs.configuration && lhs.dependencies == rhs.dependencies
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(configuration)
+        hasher.combine(dependencies)
+    }
 }
 
 /// Credentials loaded from the wp-env setup script output

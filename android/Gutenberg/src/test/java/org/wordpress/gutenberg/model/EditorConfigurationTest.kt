@@ -15,7 +15,7 @@ class EditorConfigurationBuilderTest {
     companion object {
         const val TEST_SITE_URL = "https://example.com"
         const val TEST_API_ROOT = "https://example.com/wp-json"
-        const val TEST_POST_TYPE = "post"
+        val TEST_POST_TYPE = PostTypeDetails.post
     }
 
     private fun builder() = EditorConfiguration.builder(TEST_SITE_URL, TEST_API_ROOT, TEST_POST_TYPE)
@@ -100,10 +100,10 @@ class EditorConfigurationBuilderTest {
     @Test
     fun `setPostType updates postType`() {
         val config = builder()
-            .setPostType("page")
+            .setPostType(PostTypeDetails.page)
             .build()
 
-        assertEquals("page", config.postType)
+        assertEquals(PostTypeDetails.page, config.postType)
     }
 
     @Test
@@ -310,7 +310,7 @@ class EditorConfigurationBuilderTest {
             .setTitle("Round Trip Title")
             .setContent("<p>Round trip content</p>")
             .setPostId(999u)
-            .setPostType("page")
+            .setPostType(PostTypeDetails.page)
             .setPostStatus("draft")
             .setThemeStyles(true)
             .setPlugins(true)
@@ -387,7 +387,7 @@ class EditorConfigurationBuilderTest {
     fun `toBuilder preserves nullable values when set`() {
         val original = builder()
             .setPostId(123u)
-            .setPostType("post")
+            .setPostType(PostTypeDetails.post)
             .setPostStatus("publish")
             .setEditorSettings("""{"test":true}""")
             .setEditorAssetsEndpoint("https://example.com/assets")
@@ -396,7 +396,7 @@ class EditorConfigurationBuilderTest {
         val rebuilt = original.toBuilder().build()
 
         assertEquals(123u, rebuilt.postId)
-        assertEquals("post", rebuilt.postType)
+        assertEquals(PostTypeDetails.post, rebuilt.postType)
         assertEquals("publish", rebuilt.postStatus)
         assertEquals("""{"test":true}""", rebuilt.editorSettings)
         assertEquals("https://example.com/assets", rebuilt.editorAssetsEndpoint)
@@ -480,7 +480,7 @@ class EditorConfigurationBuilderTest {
         assertTrue(config.enableOfflineMode)
         assertEquals("https://example.com", config.siteURL)
         assertEquals("https://example.com/wp-json/", config.siteApiRoot)
-        assertEquals("post", config.postType)
+        assertEquals(PostTypeDetails.post, config.postType)
     }
 }
 
@@ -489,7 +489,7 @@ class EditorConfigurationTest {
     companion object {
         const val TEST_SITE_URL = "https://example.com"
         const val TEST_API_ROOT = "https://example.com/wp-json"
-        const val TEST_POST_TYPE = "post"
+        val TEST_POST_TYPE = PostTypeDetails.post
     }
 
     private fun builder() = EditorConfiguration.builder(TEST_SITE_URL, TEST_API_ROOT, TEST_POST_TYPE)
@@ -553,10 +553,10 @@ class EditorConfigurationTest {
 
     @Test
     fun `Configurations with different postType are not equal`() {
-        val config1 = EditorConfiguration.builder(TEST_SITE_URL, TEST_API_ROOT, "post")
+        val config1 = EditorConfiguration.builder(TEST_SITE_URL, TEST_API_ROOT, PostTypeDetails.post)
             .build()
 
-        val config2 = EditorConfiguration.builder(TEST_SITE_URL, TEST_API_ROOT, "page")
+        val config2 = EditorConfiguration.builder(TEST_SITE_URL, TEST_API_ROOT, PostTypeDetails.page)
             .build()
 
         assertNotEquals(config1, config2)
@@ -850,11 +850,11 @@ class EditorConfigurationTest {
 
     @Test
     fun `test EditorConfiguration builder sets all properties correctly`() {
-        val config = EditorConfiguration.builder("https://example.com", "https://example.com/wp-json", "post")
+        val config = EditorConfiguration.builder("https://example.com", "https://example.com/wp-json", PostTypeDetails.post)
             .setTitle("Test Title")
             .setContent("Test Content")
             .setPostId(123u)
-            .setPostType("post")
+            .setPostType(PostTypeDetails.post)
             .setPostStatus("publish")
             .setThemeStyles(true)
             .setPlugins(true)
@@ -877,7 +877,7 @@ class EditorConfigurationTest {
         assertEquals("Test Title", config.title)
         assertEquals("Test Content", config.content)
         assertEquals(123u, config.postId)
-        assertEquals("post", config.postType)
+        assertEquals(PostTypeDetails.post, config.postType)
         assertEquals("publish", config.postStatus)
         assertTrue(config.themeStyles)
         assertTrue(config.plugins)

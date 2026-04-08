@@ -11,7 +11,7 @@ data class EditorConfiguration(
     val title: String,
     val content: String,
     val postId: UInt?,
-    val postType: String,
+    val postType: PostTypeDetails,
     val postStatus: String,
     val themeStyles: Boolean,
     val plugins: Boolean,
@@ -46,15 +46,15 @@ data class EditorConfiguration(
     }
     companion object {
         @JvmStatic
-        fun builder(siteURL: String, siteApiRoot: String, postType: String = "post"): Builder = Builder(siteURL, siteApiRoot, postType = postType)
+        fun builder(siteURL: String, siteApiRoot: String, postType: PostTypeDetails = PostTypeDetails.post): Builder = Builder(siteURL, siteApiRoot, postType = postType)
 
         @JvmStatic
-        fun bundled(): EditorConfiguration = Builder("https://example.com", "https://example.com/wp-json/", "post")
+        fun bundled(): EditorConfiguration = Builder("https://example.com", "https://example.com/wp-json/", PostTypeDetails.post)
             .setEnableOfflineMode(true)
             .build()
     }
 
-    class Builder(private var siteURL: String, private var siteApiRoot: String, private var postType: String) {
+    class Builder(private var siteURL: String, private var siteApiRoot: String, private var postType: PostTypeDetails) {
         private var title: String = ""
         private var content: String = ""
         private var postId: UInt? = null
@@ -77,7 +77,7 @@ data class EditorConfiguration(
         fun setTitle(title: String) = apply { this.title = title }
         fun setContent(content: String) = apply { this.content = content }
         fun setPostId(postId: UInt?) = apply { this.postId = postId?.takeIf { it != 0u } }
-        fun setPostType(postType: String) = apply { this.postType = postType }
+        fun setPostType(postType: PostTypeDetails) = apply { this.postType = postType }
         fun setPostStatus(postStatus: String) = apply { this.postStatus = postStatus }
         fun setThemeStyles(themeStyles: Boolean) = apply { this.themeStyles = themeStyles }
         fun setPlugins(plugins: Boolean) = apply { this.plugins = plugins }
