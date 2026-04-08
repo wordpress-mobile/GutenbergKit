@@ -44,17 +44,9 @@ vi.mock( '@wordpress/data', () => ( {
 		selectionChange: mockSelectionChange,
 	} ),
 } ) );
-vi.mock( '@wordpress/core-data', () => ( {
-	store: { name: 'core' },
-} ) );
-vi.mock( '@wordpress/editor', () => ( {
-	store: { name: 'core/editor' },
-} ) );
-vi.mock( '@wordpress/blocks', () => ( {
-	parse: vi.fn( () => [] ),
-	serialize: vi.fn( () => '' ),
-	getBlockType: vi.fn(),
-} ) );
+vi.mock( '@wordpress/core-data' );
+vi.mock( '@wordpress/editor' );
+vi.mock( '@wordpress/blocks' );
 vi.mock( '@wordpress/rich-text', () => ( {
 	create: vi.fn( ( { html } ) => ( {
 		text: html,
@@ -72,9 +64,7 @@ vi.mock( '@wordpress/rich-text', () => ( {
 	} ) ),
 	toHTMLString: vi.fn( ( { value } ) => value.text ),
 } ) );
-vi.mock( '@wordpress/block-editor', () => ( {
-	store: { name: 'core/block-editor' },
-} ) );
+vi.mock( '@wordpress/block-editor' );
 
 const defaultPost = {
 	id: 1,
