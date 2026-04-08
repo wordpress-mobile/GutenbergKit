@@ -98,7 +98,10 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 
 		window.editor.savePost = async () => {
 			try {
-				return await savePost();
+				// Await the lifecycle so hosts can sequence persistence after
+				// plugin side-effects settle, do not return the `Promise` return value
+				// to avoid host errors.
+				await savePost();
 			} finally {
 				// Native hosts display their own save feedback, disable the default
 				removeNotice( 'editor-save' );
