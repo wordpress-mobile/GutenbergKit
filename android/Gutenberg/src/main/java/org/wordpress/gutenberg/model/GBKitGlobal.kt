@@ -74,6 +74,10 @@ data class GBKitGlobal(
         val id: Int, // TODO: Instead of the `-1` trick, this should just be `null` for new posts
         /** The post type (e.g., `post`, `page`). */
         val type: String,
+        /** The REST API base path for this post type (e.g., `posts`, `pages`). */
+        val restBase: String,
+        /** The REST API namespace (e.g., `wp/v2`). */
+        val restNamespace: String,
         /** The post status (e.g., `draft`, `publish`, `pending`). */
         val status: String,
         /** The post title (URL-encoded). */
@@ -110,6 +114,8 @@ data class GBKitGlobal(
                 post = Post(
                     id = postId ?: -1,
                     type = configuration.postType,
+                    restBase = restBaseFor(configuration.postType),
+                    restNamespace = "wp/v2",
                     status = configuration.postStatus,
                     title = configuration.title.encodeForEditor(),
                     content = configuration.content.encodeForEditor()
@@ -125,6 +131,18 @@ data class GBKitGlobal(
                     }
                 }
             )
+        }
+
+        /**
+         * Maps a post type slug to its WordPress REST API base path.
+         *
+         * Defaults to pluralizing the slug for unknown types (e.g., `product` → `products`),
+         * which matches the WordPress convention for most post types.
+         */
+        private fun restBaseFor(postType: String): String = when (postType) {
+            "post" -> "posts"
+            "page" -> "pages"
+            else -> if (postType.endsWith("s")) postType else "${postType}s"
         }
     }
 
