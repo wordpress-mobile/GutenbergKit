@@ -788,7 +788,7 @@ class GutenbergView : FrameLayout {
             webView.evaluateJavascript(
                 "editor.savePost()" +
                     ".then(() => editorDelegate.onSavePostComplete($quotedRequestId, true, null))" +
-                    ".catch((e) => editorDelegate.onSavePostComplete($quotedRequestId, false, String(e)));",
+                    ".catch((e) => editorDelegate.onSavePostComplete($quotedRequestId, false, (e && e.message) || String(e)));",
                 null
             )
         }
