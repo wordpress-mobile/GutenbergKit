@@ -146,7 +146,15 @@ private struct _EditorView: UIViewControllerRepresentable {
         do {
             let titleAndContent = try await viewController.getTitleAndContent()
             let params = PostUpdateParams(title: .some(titleAndContent.title), content: .some(titleAndContent.content), meta: nil)
-            let endpointType: PostEndpointType = configuration.postType.postType == "page" ? .pages : .posts
+            let endpointType: PostEndpointType
+            switch configuration.postType.postType {
+            case "post":
+                endpointType = .posts
+            case "page":
+                endpointType = .pages
+            default:
+                endpointType = .custom(configuration.postType.restBase)
+            }
             _ = try await apiClient.posts.updateCancellation(
                 postEndpointType: endpointType,
                 postId: Int64(postID),
