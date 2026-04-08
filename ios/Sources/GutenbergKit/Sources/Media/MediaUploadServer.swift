@@ -27,15 +27,19 @@ final class MediaUploadServer: Sendable {
     /// - Parameters:
     ///   - uploadDelegate: Optional delegate for customizing file processing and upload.
     ///   - defaultUploader: Fallback uploader used when no delegate provides `uploadFile`.
+    ///   - maxRequestBodySize: The maximum allowed request body size in bytes.
+    ///     Requests exceeding this limit receive a 413 response. Defaults to 4 GB.
     static func start(
         uploadDelegate: (any MediaUploadDelegate)? = nil,
-        defaultUploader: DefaultMediaUploader? = nil
+        defaultUploader: DefaultMediaUploader? = nil,
+        maxRequestBodySize: Int64 = HTTPRequestParser.defaultMaxBodySize
     ) async throws -> MediaUploadServer {
         let context = UploadContext(uploadDelegate: uploadDelegate, defaultUploader: defaultUploader)
 
         let server = try await HTTPServer.start(
             name: "media-upload",
             requiresAuthentication: true,
+            maxRequestBodySize: maxRequestBodySize,
             handler: { request in
                 await Self.handleRequest(request, context: context)
             }

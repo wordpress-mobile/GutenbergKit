@@ -163,6 +163,31 @@ struct MediaUploadServerTests {
     #expect(result.id == 99)
   }
 
+  @Test("returns 413 with CORS headers when request body exceeds max size")
+  func oversizedUploadReturns413WithCORSHeaders() async throws {
+    let server = try await MediaUploadServer.start(maxRequestBodySize: 100)
+    defer { server.stop() }
+
+    let boundary = UUID().uuidString
+    let oversizedData = Data(repeating: 0x42, count: 200)
+    let body = buildMultipartBody(boundary: boundary, filename: "big.bin", mimeType: "application/octet-stream", data: oversizedData)
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    request.httpBody = body
+
+    let (data, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+    #expect(httpResponse.statusCode == 413)
+    #expect(httpResponse.value(forHTTPHeaderField: "Access-Control-Allow-Origin") == "*")
+
+    let responseBody = String(data: data, encoding: .utf8) ?? ""
+    #expect(responseBody.contains("too large"))
+  }
+
   private func buildMultipartBody(boundary: String, filename: String, mimeType: String, data: Data) -> Data {
     var body = Data()
     body.append("--\(boundary)\r\n")
