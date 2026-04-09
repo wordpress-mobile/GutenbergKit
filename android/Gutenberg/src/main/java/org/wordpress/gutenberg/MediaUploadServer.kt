@@ -3,12 +3,14 @@ package org.wordpress.gutenberg
 import android.util.Log
 import org.wordpress.gutenberg.http.HeaderValue
 import org.wordpress.gutenberg.http.MultipartPart
+import org.wordpress.gutenberg.http.HTTPRequestParseError
 import org.wordpress.gutenberg.http.MultipartParseException
 import java.io.File
 import java.io.IOException
 import java.util.UUID
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.asRequestBody
+import okio.source
 
 /**
  * Result of a successful media upload to the remote WordPress server.
@@ -91,6 +93,16 @@ internal class MediaUploadServer(
     // MARK: - Request Handling
 
     private suspend fun handleRequest(request: HttpRequest): HttpResponse {
+        // Server-detected error (e.g., payload too large) — build the
+        // error response here so it includes CORS headers.
+        request.serverError?.let { error ->
+            val message = when (error) {
+                HTTPRequestParseError.PAYLOAD_TOO_LARGE -> "The file is too large to upload in the editor."
+                else -> error.errorId
+            }
+            return errorResponse(error.httpStatus, message)
+        }
+
         // CORS preflight — the library exempts OPTIONS from auth, so this is
         // reached without a token.
         if (request.method.uppercase() == "OPTIONS") {
@@ -112,7 +124,7 @@ internal class MediaUploadServer(
         val tempFile = writePartToTempFile(filePart)
             ?: return errorResponse(500, "Failed to save file")
 
-        return processAndRespond(tempFile, filePart)
+        return processAndRespond(request, tempFile, filePart)
     }
 
     private fun parseFilePart(request: HttpRequest): MultipartPart? {
@@ -157,13 +169,27 @@ internal class MediaUploadServer(
         }
     }
 
-    private suspend fun processAndRespond(tempFile: File, filePart: MultipartPart): HttpResponse {
+    private suspend fun processAndRespond(
+        request: HttpRequest, tempFile: File, filePart: MultipartPart
+    ): HttpResponse {
         var processedFile: File? = null
         try {
-            val (media, processed) = processAndUpload(
+            val uploadResult = processAndUpload(
                 tempFile, filePart.contentType, filePart.filename ?: "upload"
             )
-            processedFile = processed
+            val media = when (uploadResult) {
+                is UploadResult.Uploaded -> {
+                    processedFile = uploadResult.processedFile
+                    Log.d(TAG, "Uploading processed file to WordPress")
+                    uploadResult.result
+                }
+                is UploadResult.Passthrough -> {
+                    // Delegate didn't modify the file — forward the original
+                    // request body to WordPress without re-encoding.
+                    Log.d(TAG, "Passthrough: forwarding original request body to WordPress")
+                    performPassthroughUpload(request)
+                }
+            }
             return successResponse(media)
         } catch (e: MediaUploadException) {
             Log.e(TAG, "Upload processing failed", e)
@@ -176,16 +202,40 @@ internal class MediaUploadServer(
 
     // MARK: - Delegate Pipeline
 
+    private sealed class UploadResult {
+        data class Uploaded(val result: MediaUploadResult, val processedFile: File) : UploadResult()
+        data object Passthrough : UploadResult()
+    }
+
+    private suspend fun performPassthroughUpload(request: HttpRequest): MediaUploadResult {
+        val body = request.body
+        val contentType = request.header("Content-Type")
+        val uploader = defaultUploader
+        if (body == null || contentType == null || uploader == null) {
+            throw MediaUploadException("Passthrough upload requires a request body, Content-Type, and default uploader")
+        }
+        return uploader.passthroughUpload(body, contentType)
+    }
+
     private suspend fun processAndUpload(
         file: File, mimeType: String, filename: String
-    ): Pair<MediaUploadResult, File> {
+    ): UploadResult {
         val processedFile = uploadDelegate?.processFile(file, mimeType) ?: file
 
-        val result = uploadDelegate?.uploadFile(processedFile, mimeType, filename)
-            ?: defaultUploader?.upload(processedFile, mimeType, filename)
-            ?: error("No upload delegate or default uploader configured")
+        // If the delegate provided its own upload, use that.
+        uploadDelegate?.uploadFile(processedFile, mimeType, filename)?.let {
+            return UploadResult.Uploaded(it, processedFile)
+        }
 
-        return Pair(result, processedFile)
+        // If the delegate didn't modify the file, the original request
+        // body can be forwarded directly — skip multipart re-encoding.
+        if (processedFile == file) {
+            return UploadResult.Passthrough
+        }
+
+        val result = defaultUploader?.upload(processedFile, mimeType, filename)
+            ?: error("No upload delegate or default uploader configured")
+        return UploadResult.Uploaded(result, processedFile)
     }
 
     // MARK: - Response Building
@@ -255,6 +305,13 @@ internal open class DefaultMediaUploader(
     private val authHeader: String,
     private val siteApiNamespace: List<String> = emptyList()
 ) {
+    /** The WordPress media endpoint URL, accounting for site API namespaces. */
+    private val mediaEndpointUrl: String
+        get() {
+            val namespace = siteApiNamespace.firstOrNull() ?: ""
+            return "${siteApiRoot}wp/v2/${namespace}media"
+        }
+
     open suspend fun upload(file: File, mimeType: String, filename: String): MediaUploadResult {
         val mediaType = mimeType.toMediaType()
         val requestBody = okhttp3.MultipartBody.Builder()
@@ -262,15 +319,43 @@ internal open class DefaultMediaUploader(
             .addFormDataPart("file", filename, file.asRequestBody(mediaType))
             .build()
 
-        // When a site API namespace is configured (e.g. "sites/12345/"), insert
-        // it into the media endpoint path so the request reaches the correct site.
-        val namespace = siteApiNamespace.firstOrNull() ?: ""
         val request = okhttp3.Request.Builder()
-            .url("${siteApiRoot}wp/v2/${namespace}media")
+            .url(mediaEndpointUrl)
             .addHeader("Authorization", authHeader)
             .post(requestBody)
             .build()
 
+        return performUpload(request)
+    }
+
+    /**
+     * Forwards the original request body to WordPress without re-encoding.
+     *
+     * Used when the delegate's `processFile` returned the file unchanged —
+     * the incoming multipart body is already valid for WordPress.
+     */
+    open suspend fun passthroughUpload(
+        body: org.wordpress.gutenberg.http.RequestBody,
+        contentType: String
+    ): MediaUploadResult {
+        val streamBody = object : okhttp3.RequestBody() {
+            override fun contentType() = contentType.toMediaType()
+            override fun contentLength() = body.size
+            override fun writeTo(sink: okio.BufferedSink) {
+                body.inputStream().use { sink.writeAll(it.source()) }
+            }
+        }
+
+        val request = okhttp3.Request.Builder()
+            .url(mediaEndpointUrl)
+            .addHeader("Authorization", authHeader)
+            .post(streamBody)
+            .build()
+
+        return performUpload(request)
+    }
+
+    private fun performUpload(request: okhttp3.Request): MediaUploadResult {
         val response = httpClient.newCall(request).execute()
         val body = response.body?.string()
 

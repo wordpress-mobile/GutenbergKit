@@ -27,6 +27,10 @@ public final class HTTPRequestParser: @unchecked Sendable {
         case needsMoreData
         /// Headers have been fully received but the body is still incomplete.
         case headersComplete
+        /// The request body exceeds the maximum allowed size and is being
+        /// drained (read and discarded) so the server can send a clean 413
+        /// response. No body bytes are buffered in this state.
+        case draining
         /// All data has been received (headers and body).
         case complete
     }
@@ -46,7 +50,7 @@ public final class HTTPRequestParser: @unchecked Sendable {
     private var buffer: Buffer
     private let maxBodySize: Int64
     private let inMemoryBodyThreshold: Int
-    private var bytesWritten: Int = 0
+    private var bytesWritten: Int64 = 0
     private var _state: State = .needsMoreData
 
     // Lightweight scan results (populated by append)
@@ -103,6 +107,15 @@ public final class HTTPRequestParser: @unchecked Sendable {
         lock.withLock { _state }
     }
 
+    /// The parse error detected during buffering, if any.
+    ///
+    /// Non-fatal errors like ``HTTPRequestParseError/payloadTooLarge`` are
+    /// exposed here instead of being thrown by ``parseRequest()``, allowing
+    /// the caller to still access the parsed headers.
+    public var parseError: HTTPRequestParseError? {
+        lock.withLock { _parseError }
+    }
+
     /// The expected body length from `Content-Length`, available once headers have been received.
     public var expectedBodyLength: Int64? {
         lock.withLock {
@@ -124,12 +137,16 @@ public final class HTTPRequestParser: @unchecked Sendable {
         try lock.withLock {
             guard _state.hasHeaders else { return nil }
 
-            if let error = _parseError {
+            // Payload-too-large means "valid headers, rejected body" — let
+            // the caller access the parsed headers so the handler can build
+            // a response (e.g., with CORS headers). Other parse errors
+            // indicate genuinely malformed requests and are still thrown.
+            if let error = _parseError, error != .payloadTooLarge {
                 throw error
             }
 
             if _parsedHeaders == nil {
-                let headerData = try buffer.read(from: 0, maxLength: min(bytesWritten, Self.maxHeaderSize))
+                let headerData = try buffer.read(from: 0, maxLength: Int(min(bytesWritten, Int64(Self.maxHeaderSize))))
                 switch HTTPRequestSerializer.parseHeaders(from: headerData) {
                 case .parsed(let headers):
                     _parsedHeaders = headers
@@ -143,7 +160,11 @@ public final class HTTPRequestParser: @unchecked Sendable {
 
             guard let headers = _parsedHeaders else { return nil }
 
-            guard _state.isComplete else {
+            // Return partial (headers only) when the body was rejected or
+            // hasn't fully arrived yet. The payloadTooLarge case goes through
+            // drain mode which discards body bytes without buffering them, so
+            // there is no body to extract even though the state is .complete.
+            guard _state.isComplete, _parseError == nil else {
                 return .partial(
                     method: headers.method,
                     target: headers.target,
@@ -179,6 +200,17 @@ public final class HTTPRequestParser: @unchecked Sendable {
         lock.withLock {
             guard !_state.isComplete else { return }
 
+            // In drain mode, discard bytes without buffering and check
+            // whether the full Content-Length has been consumed.
+            if case .draining = _state {
+                bytesWritten += Int64(data.count)
+                if let offset = headerEndOffset,
+                   bytesWritten - Int64(offset) >= expectedContentLength {
+                    _state = .complete
+                }
+                return
+            }
+
             let accepted: Bool
             do {
                 accepted = try buffer.append(data)
@@ -192,12 +224,12 @@ public final class HTTPRequestParser: @unchecked Sendable {
                 _state = .complete
                 return
             }
-            bytesWritten += data.count
+            bytesWritten += Int64(data.count)
 
             if headerEndOffset == nil {
                 let buffered: Data
                 do {
-                    buffered = try buffer.read(from: 0, maxLength: min(bytesWritten, Self.maxHeaderSize))
+                    buffered = try buffer.read(from: 0, maxLength: Int(min(bytesWritten, Int64(Self.maxHeaderSize))))
                 } catch {
                     _parseError = .bufferIOError
                     _state = .complete
@@ -215,7 +247,7 @@ public final class HTTPRequestParser: @unchecked Sendable {
                 let effectiveData = buffered[scanStart...]
 
                 guard let separatorRange = effectiveData.range(of: separator) else {
-                    if bytesWritten > Self.maxHeaderSize {
+                    if bytesWritten > Int64(Self.maxHeaderSize) {
                         _parseError = .headersTooLarge
                         _state = .complete
                     } else {
@@ -236,15 +268,23 @@ public final class HTTPRequestParser: @unchecked Sendable {
 
                 if expectedContentLength > maxBodySize {
                     _parseError = .payloadTooLarge
-                    _state = .complete
+                    // Check if the body bytes already received in this
+                    // chunk satisfy the drain — small requests may arrive
+                    // as a single read.
+                    if let offset = headerEndOffset,
+                       bytesWritten - Int64(offset) >= expectedContentLength {
+                        _state = .complete
+                    } else {
+                        _state = .draining
+                    }
                     return
                 }
             }
 
             guard let offset = headerEndOffset else { return }
-            let bodyBytesAvailable = bytesWritten - offset
+            let bodyBytesAvailable = bytesWritten - Int64(offset)
 
-            if Int64(bodyBytesAvailable) >= expectedContentLength {
+            if bodyBytesAvailable >= expectedContentLength {
                 _state = .complete
             } else {
                 _state = .headersComplete
@@ -403,14 +443,16 @@ extension HTTPRequestParser.State {
 
     /// Whether all data has been received (headers and body).
     public var isComplete: Bool {
-        if case .complete = self { return true }
-        return false
+        switch self {
+        case .complete: return true
+        case .needsMoreData, .headersComplete, .draining: return false
+        }
     }
 
-    /// Whether headers have been fully received (true for both `.headersComplete` and `.complete`).
+    /// Whether headers have been fully received (true for `.headersComplete`, `.draining`, and `.complete`).
     public var hasHeaders: Bool {
         switch self {
-        case .headersComplete, .complete: return true
+        case .headersComplete, .draining, .complete: return true
         case .needsMoreData: return false
         }
     }

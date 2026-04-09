@@ -6,6 +6,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -135,7 +136,7 @@ class MediaUploadServerTest {
     // MARK: - Fallback to default uploader
 
     @Test
-    fun `falls back to default uploader when delegate returns nil for uploadFile`() {
+    fun `uses passthrough when delegate does not modify file`() {
         val delegate = ProcessOnlyDelegate()
         val mockUploader = MockDefaultUploader()
 
@@ -157,7 +158,9 @@ class MediaUploadServerTest {
 
         assertTrue("Expected 200 but got: ${response.statusLine}", response.statusLine.contains("200"))
         assertTrue(delegate.processFileCalled)
-        assertTrue(mockUploader.uploadCalled)
+        // Passthrough: original body forwarded directly, not re-encoded.
+        assertTrue(mockUploader.passthroughUploadCalled)
+        assertFalse(mockUploader.uploadCalled)
 
         val json = JsonParser.parseString(response.body).asJsonObject
         assertEquals(99, json.get("id").asInt)
@@ -386,17 +389,28 @@ class MediaUploadServerTest {
         authHeader = "Bearer mock"
     ) {
         @Volatile var uploadCalled = false
+        @Volatile var passthroughUploadCalled = false
 
         override suspend fun upload(file: File, mimeType: String, filename: String): MediaUploadResult {
             uploadCalled = true
-            return MediaUploadResult(
-                id = 99,
-                url = "https://example.com/doc.pdf",
-                title = "doc",
-                mime = "application/pdf",
-                type = "file"
-            )
+            return mockResult()
         }
+
+        override suspend fun passthroughUpload(
+            body: org.wordpress.gutenberg.http.RequestBody,
+            contentType: String
+        ): MediaUploadResult {
+            passthroughUploadCalled = true
+            return mockResult()
+        }
+
+        private fun mockResult() = MediaUploadResult(
+            id = 99,
+            url = "https://example.com/doc.pdf",
+            title = "doc",
+            mime = "application/pdf",
+            type = "file"
+        )
     }
 
 }

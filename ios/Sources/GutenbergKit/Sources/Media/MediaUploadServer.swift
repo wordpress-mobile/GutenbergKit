@@ -27,15 +27,19 @@ final class MediaUploadServer: Sendable {
     /// - Parameters:
     ///   - uploadDelegate: Optional delegate for customizing file processing and upload.
     ///   - defaultUploader: Fallback uploader used when no delegate provides `uploadFile`.
+    ///   - maxRequestBodySize: The maximum allowed request body size in bytes.
+    ///     Requests exceeding this limit receive a 413 response. Defaults to 4 GB.
     static func start(
         uploadDelegate: (any MediaUploadDelegate)? = nil,
-        defaultUploader: DefaultMediaUploader? = nil
+        defaultUploader: DefaultMediaUploader? = nil,
+        maxRequestBodySize: Int64 = HTTPRequestParser.defaultMaxBodySize
     ) async throws -> MediaUploadServer {
         let context = UploadContext(uploadDelegate: uploadDelegate, defaultUploader: defaultUploader)
 
         let server = try await HTTPServer.start(
             name: "media-upload",
             requiresAuthentication: true,
+            maxRequestBodySize: maxRequestBodySize,
             handler: { request in
                 await Self.handleRequest(request, context: context)
             }
@@ -59,6 +63,16 @@ final class MediaUploadServer: Sendable {
 
     private static func handleRequest(_ request: HTTPServer.Request, context: UploadContext) async -> HTTPResponse {
         let parsed = request.parsed
+
+        // Server-detected error (e.g., payload too large) — build the
+        // error response here so it includes CORS headers.
+        if let serverError = request.serverError {
+            let message: String = switch serverError {
+            case .payloadTooLarge: "The file is too large to upload in the editor."
+            default: "\(serverError.httpStatusText)"
+            }
+            return errorResponse(status: serverError.httpStatus, body: message)
+        }
 
         // CORS preflight — the library exempts OPTIONS from auth, so this is
         // reached without a token.
@@ -113,11 +127,27 @@ final class MediaUploadServer: Sendable {
         let result: Result<MediaUploadResult, Error>
         var processedURL: URL?
         do {
-            let (media, processed) = try await processAndUpload(
+            let uploadResult = try await processAndUpload(
                 fileURL: fileURL, mimeType: mimeType, filename: filePart.filename ?? "upload", context: context
             )
-            processedURL = processed
-            result = .success(media)
+            switch uploadResult {
+            case .uploaded(let media, let processed):
+                processedURL = processed
+                Logger.uploadServer.debug("Uploading processed file to WordPress")
+                result = .success(media)
+            case .passthrough:
+                // Delegate didn't modify the file — forward the original
+                // request body to WordPress without re-encoding.
+                Logger.uploadServer.debug("Passthrough: forwarding original request body to WordPress")
+                guard let body = request.parsed.body,
+                      let contentType = request.parsed.header("Content-Type"),
+                      let defaultUploader = context.defaultUploader else {
+                    result = .failure(UploadError.noUploader)
+                    break
+                }
+                let media = try await defaultUploader.passthroughUpload(body: body, contentType: contentType)
+                result = .success(media)
+            }
         } catch {
             result = .failure(error)
         }
@@ -148,9 +178,18 @@ final class MediaUploadServer: Sendable {
 
     // MARK: - Delegate Pipeline
 
+    /// Result of the delegate processing + upload pipeline.
+    private enum UploadResult {
+        /// The delegate (or default uploader) completed the upload.
+        case uploaded(MediaUploadResult, processedURL: URL)
+        /// The delegate didn't modify the file and `uploadFile` returned nil.
+        /// The caller should forward the original request body to WordPress.
+        case passthrough
+    }
+
     private static func processAndUpload(
         fileURL: URL, mimeType: String, filename: String, context: UploadContext
-    ) async throws -> (MediaUploadResult, URL) {
+    ) async throws -> UploadResult {
         // Step 1: Process (resize, transcode, etc.)
         let processedURL: URL
         if let delegate = context.uploadDelegate {
@@ -162,9 +201,15 @@ final class MediaUploadServer: Sendable {
         // Step 2: Upload to remote WordPress
         if let delegate = context.uploadDelegate,
            let result = try await delegate.uploadFile(at: processedURL, mimeType: mimeType, filename: filename) {
-            return (result, processedURL)
+            return .uploaded(result, processedURL: processedURL)
         } else if let defaultUploader = context.defaultUploader {
-            return (try await defaultUploader.upload(fileURL: processedURL, mimeType: mimeType, filename: filename), processedURL)
+            // If the delegate didn't modify the file, the original request
+            // body can be forwarded directly — skip multipart re-encoding.
+            if processedURL == fileURL {
+                return .passthrough
+            }
+            let result = try await defaultUploader.upload(fileURL: processedURL, mimeType: mimeType, filename: filename)
+            return .uploaded(result, processedURL: processedURL)
         } else {
             throw UploadError.noUploader
         }
@@ -281,30 +326,47 @@ class DefaultMediaUploader: @unchecked Sendable {
         self.siteApiNamespace = siteApiNamespace.first
     }
 
-    func upload(fileURL: URL, mimeType: String, filename: String) async throws -> MediaUploadResult {
-        let fileData = try Data(contentsOf: fileURL)
-        let boundary = UUID().uuidString
-
-        var body = Data()
-        body.append("--\(boundary)\r\n")
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n")
-        body.append("Content-Type: \(mimeType)\r\n\r\n")
-        body.append(fileData)
-        body.append("\r\n--\(boundary)--\r\n")
-
-        // When a site API namespace is configured (e.g. "sites/12345/"), insert
-        // it into the media endpoint path so the request reaches the correct site.
+    /// The WordPress media endpoint URL, accounting for site API namespaces.
+    private var mediaEndpointURL: URL {
         let mediaPath = if let siteApiNamespace {
             "wp/v2/\(siteApiNamespace)media"
         } else {
             "wp/v2/media"
         }
-        let uploadURL = siteApiRoot.appending(path: mediaPath)
-        var request = URLRequest(url: uploadURL)
+        return siteApiRoot.appending(path: mediaPath)
+    }
+
+    func upload(fileURL: URL, mimeType: String, filename: String) async throws -> MediaUploadResult {
+        let boundary = UUID().uuidString
+
+        let (bodyStream, contentLength) = try Self.multipartBodyStream(
+            fileURL: fileURL, boundary: boundary, filename: filename, mimeType: mimeType
+        )
+
+        var request = URLRequest(url: mediaEndpointURL)
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.httpBody = body
+        request.setValue("\(contentLength)", forHTTPHeaderField: "Content-Length")
+        request.httpBodyStream = bodyStream
 
+        return try await performUpload(request)
+    }
+
+    /// Forwards the original request body to WordPress without re-encoding.
+    ///
+    /// Used when the delegate's `processFile` returned the file unchanged —
+    /// the incoming multipart body is already valid for WordPress.
+    func passthroughUpload(body: RequestBody, contentType: String) async throws -> MediaUploadResult {
+        var request = URLRequest(url: mediaEndpointURL)
+        request.httpMethod = "POST"
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        request.setValue("\(body.count)", forHTTPHeaderField: "Content-Length")
+        request.httpBodyStream = try body.makeInputStream()
+
+        return try await performUpload(request)
+    }
+
+    private func performUpload(_ request: URLRequest) async throws -> MediaUploadResult {
         let (data, response) = try await httpClient.perform(request)
 
         guard (200...299).contains(response.statusCode) else {
@@ -332,6 +394,92 @@ class DefaultMediaUploader: @unchecked Sendable {
             width: wpMedia.media_details?.width,
             height: wpMedia.media_details?.height
         )
+    }
+
+    // MARK: - Streaming Multipart Body
+
+    /// Builds a multipart/form-data body as an `InputStream` that streams the
+    /// file from disk without loading it into memory.
+    ///
+    /// Uses a bound stream pair with a background writer thread — the same
+    /// pattern as `RequestBody.makePipedFileSliceStream`.
+    ///
+    /// - Returns: A tuple of the input stream and the total content length.
+    static func multipartBodyStream(
+        fileURL: URL,
+        boundary: String,
+        filename: String,
+        mimeType: String
+    ) throws -> (InputStream, Int) {
+        let preamble = Data(
+            ("--\(boundary)\r\n"
+            + "Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n"
+            + "Content-Type: \(mimeType)\r\n\r\n").utf8
+        )
+        let epilogue = Data("\r\n--\(boundary)--\r\n".utf8)
+
+        guard let fileSize = try FileManager.default.attributesOfItem(atPath: fileURL.path(percentEncoded: false))[.size] as? Int else {
+            throw MediaUploadError.streamReadFailed
+        }
+        let contentLength = preamble.count + fileSize + epilogue.count
+
+        let fileHandle = try FileHandle(forReadingFrom: fileURL)
+
+        var readStream: InputStream?
+        var writeStream: OutputStream?
+        Stream.getBoundStreams(withBufferSize: 65_536, inputStream: &readStream, outputStream: &writeStream)
+
+        guard let inputStream = readStream, let outputStream = writeStream else {
+            try? fileHandle.close()
+            throw MediaUploadError.streamReadFailed
+        }
+
+        outputStream.open()
+
+        // OutputStream is not Sendable but is safely transferred to the
+        // writer thread — only the thread accesses it after this point.
+        nonisolated(unsafe) let output = outputStream
+
+        Thread.detachNewThread {
+            defer {
+                output.close()
+                try? fileHandle.close()
+            }
+
+            // Write preamble (multipart headers).
+            guard Self.writeAll(preamble, to: output) else { return }
+
+            // Stream file content in chunks.
+            var remaining = fileSize
+            while remaining > 0 {
+                let chunkSize = min(65_536, remaining)
+                guard let chunk = try? fileHandle.read(upToCount: chunkSize),
+                      !chunk.isEmpty else {
+                    break
+                }
+                guard Self.writeAll(chunk, to: output) else { return }
+                remaining -= chunk.count
+            }
+
+            // Write epilogue (closing boundary).
+            _ = Self.writeAll(epilogue, to: output)
+        }
+
+        return (inputStream, contentLength)
+    }
+
+    /// Writes all bytes of `data` to the output stream, handling partial writes.
+    private static func writeAll(_ data: Data, to output: OutputStream) -> Bool {
+        data.withUnsafeBytes { buffer in
+            guard let base = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
+            var written = 0
+            while written < data.count {
+                let result = output.write(base.advanced(by: written), maxLength: data.count - written)
+                if result <= 0 { return false }
+                written += result
+            }
+            return true
+        }
     }
 }
 
@@ -364,12 +512,17 @@ enum MediaUploadError: Error, LocalizedError {
     /// The WordPress REST API returned a non-JSON response (e.g. HTML error page).
     case unexpectedResponse(preview: String, underlyingError: Error)
 
+    /// Failed to read the file for streaming upload.
+    case streamReadFailed
+
     var errorDescription: String? {
         switch self {
         case .uploadFailed(let statusCode, let preview):
             return "Upload failed (\(statusCode)): \(preview)"
         case .unexpectedResponse(let preview, _):
             return "WordPress returned an unexpected response: \(preview)"
+        case .streamReadFailed:
+            return "Failed to read file for upload"
         }
     }
 }

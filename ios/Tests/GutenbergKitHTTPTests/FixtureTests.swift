@@ -255,7 +255,14 @@ struct RequestParsingFixtureTests {
         let expectedError = testCase.expected.error
         do {
             _ = try parser.parseRequest()
-            Issue.record("Expected error \(expectedError) but parsing succeeded — \(testCase.description)")
+            // Non-fatal errors (e.g., payloadTooLarge) are exposed via
+            // parseError instead of being thrown.
+            if let parseError = parser.parseError {
+                let errorName = String(describing: parseError)
+                #expect(errorName == expectedError, "\(testCase.description): expected \(expectedError) but got \(errorName)")
+            } else {
+                Issue.record("Expected error \(expectedError) but parsing succeeded — \(testCase.description)")
+            }
         } catch {
             let errorName = String(describing: error)
             #expect(errorName == expectedError, "\(testCase.description): expected \(expectedError) but got \(errorName)")
