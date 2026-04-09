@@ -50,7 +50,7 @@ public final class HTTPRequestParser: @unchecked Sendable {
     private var buffer: Buffer
     private let maxBodySize: Int64
     private let inMemoryBodyThreshold: Int
-    private var bytesWritten: Int = 0
+    private var bytesWritten: Int64 = 0
     private var _state: State = .needsMoreData
 
     // Lightweight scan results (populated by append)
@@ -146,7 +146,7 @@ public final class HTTPRequestParser: @unchecked Sendable {
             }
 
             if _parsedHeaders == nil {
-                let headerData = try buffer.read(from: 0, maxLength: min(bytesWritten, Self.maxHeaderSize))
+                let headerData = try buffer.read(from: 0, maxLength: Int(min(bytesWritten, Int64(Self.maxHeaderSize))))
                 switch HTTPRequestSerializer.parseHeaders(from: headerData) {
                 case .parsed(let headers):
                     _parsedHeaders = headers
@@ -203,9 +203,9 @@ public final class HTTPRequestParser: @unchecked Sendable {
             // In drain mode, discard bytes without buffering and check
             // whether the full Content-Length has been consumed.
             if case .draining = _state {
-                bytesWritten += data.count
+                bytesWritten += Int64(data.count)
                 if let offset = headerEndOffset,
-                   Int64(bytesWritten) - Int64(offset) >= expectedContentLength {
+                   bytesWritten - Int64(offset) >= expectedContentLength {
                     _state = .complete
                 }
                 return
@@ -224,12 +224,12 @@ public final class HTTPRequestParser: @unchecked Sendable {
                 _state = .complete
                 return
             }
-            bytesWritten += data.count
+            bytesWritten += Int64(data.count)
 
             if headerEndOffset == nil {
                 let buffered: Data
                 do {
-                    buffered = try buffer.read(from: 0, maxLength: min(bytesWritten, Self.maxHeaderSize))
+                    buffered = try buffer.read(from: 0, maxLength: Int(min(bytesWritten, Int64(Self.maxHeaderSize))))
                 } catch {
                     _parseError = .bufferIOError
                     _state = .complete
@@ -247,7 +247,7 @@ public final class HTTPRequestParser: @unchecked Sendable {
                 let effectiveData = buffered[scanStart...]
 
                 guard let separatorRange = effectiveData.range(of: separator) else {
-                    if bytesWritten > Self.maxHeaderSize {
+                    if bytesWritten > Int64(Self.maxHeaderSize) {
                         _parseError = .headersTooLarge
                         _state = .complete
                     } else {
@@ -268,15 +268,23 @@ public final class HTTPRequestParser: @unchecked Sendable {
 
                 if expectedContentLength > maxBodySize {
                     _parseError = .payloadTooLarge
-                    _state = .draining
+                    // Check if the body bytes already received in this
+                    // chunk satisfy the drain — small requests may arrive
+                    // as a single read.
+                    if let offset = headerEndOffset,
+                       bytesWritten - Int64(offset) >= expectedContentLength {
+                        _state = .complete
+                    } else {
+                        _state = .draining
+                    }
                     return
                 }
             }
 
             guard let offset = headerEndOffset else { return }
-            let bodyBytesAvailable = bytesWritten - offset
+            let bodyBytesAvailable = bytesWritten - Int64(offset)
 
-            if Int64(bodyBytesAvailable) >= expectedContentLength {
+            if bodyBytesAvailable >= expectedContentLength {
                 _state = .complete
             } else {
                 _state = .headersComplete
