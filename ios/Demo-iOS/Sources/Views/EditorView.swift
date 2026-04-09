@@ -216,7 +216,24 @@ private struct _EditorView: UIViewControllerRepresentable {
         }
 
         func editor(_ viewController: EditorViewController, didTriggerAutocompleter type: String) {
-            // No-op for demo
+            let suggestions: [String]
+            switch type {
+            case "at-symbol":
+                suggestions = ["alice", "bob", "charlie"]
+            case "plus-symbol":
+                suggestions = ["photoblog", "traveldiaries", "dailydev"]
+            default:
+                return
+            }
+
+            let alert = UIAlertController(title: "Select a suggestion", message: nil, preferredStyle: .actionSheet)
+            for suggestion in suggestions {
+                alert.addAction(UIAlertAction(title: suggestion, style: .default) { _ in
+                    viewController.appendTextAtCursor(suggestion + " ")
+                })
+            }
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+            viewController.present(alert, animated: true)
         }
 
         func editor(_ viewController: EditorViewController, didOpenModalDialog dialogType: String) {

@@ -332,6 +332,49 @@ describe( 'useHostBridge', () => {
 		} );
 	} );
 
+	it( 'appendTextAtCursor preserves existing content when block attribute is a RichTextData object', () => {
+		const existingContent = 'Existing block content @';
+		const richTextData = {
+			toString: () => existingContent,
+			valueOf: () => existingContent,
+			toHTMLString: () => existingContent,
+		};
+
+		mockGetSelectedBlockClientId.mockReturnValue( 'block-1' );
+		mockGetBlock.mockReturnValue( {
+			name: 'core/paragraph',
+			clientId: 'block-1',
+			attributes: { content: richTextData },
+		} );
+		getBlockType.mockReturnValue( {
+			attributes: { content: { type: 'string' } },
+		} );
+		mockGetSelectionStart.mockReturnValue( {
+			clientId: 'block-1',
+			attributeKey: 'content',
+			offset: existingContent.length,
+		} );
+		mockGetSelectionEnd.mockReturnValue( {
+			clientId: 'block-1',
+			attributeKey: 'content',
+			offset: existingContent.length,
+		} );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		window.editor.appendTextAtCursor( 'username ' );
+
+		// The block should contain the original content plus the
+		// appended text — not just the appended text alone.
+		expect( mockUpdateBlock ).toHaveBeenCalledWith( 'block-1', {
+			attributes: expect.objectContaining( {
+				content: 'Existing block content @username ',
+			} ),
+		} );
+	} );
+
 	it( 'appendTextAtCursor returns false when no block is selected', () => {
 		mockGetSelectedBlockClientId.mockReturnValue( null );
 

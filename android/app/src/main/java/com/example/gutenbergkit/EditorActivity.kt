@@ -1,5 +1,6 @@
 package com.example.gutenbergkit
 
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -309,6 +310,22 @@ fun EditorScreen(
                             request.responseBody?.let {
                                 Log.d("EditorActivity", "   Response Body: ${it.take(200)}...")
                             }
+                        }
+                    })
+                    setAutocompleterTriggeredListener(object : GutenbergView.AutocompleterTriggeredListener {
+                        override fun onAutocompleterTriggered(type: String) {
+                            val suggestions = when (type) {
+                                "at-symbol" -> arrayOf("alice", "bob", "charlie")
+                                "plus-symbol" -> arrayOf("photoblog", "traveldiaries", "dailydev")
+                                else -> return
+                            }
+                            AlertDialog.Builder(context)
+                                .setTitle("Select a suggestion")
+                                .setItems(suggestions) { _, which ->
+                                    appendTextAtCursor(suggestions[which] + " ")
+                                }
+                                .setNegativeButton("Cancel", null)
+                                .show()
                         }
                     })
                     // Demo app has no persistence layer, so return null.

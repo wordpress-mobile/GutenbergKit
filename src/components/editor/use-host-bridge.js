@@ -150,9 +150,7 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 				return false;
 			}
 
-			const blockContent = normalizeAttribute(
-				block.attributes?.content
-			);
+			const blockContent = block.attributes?.content || '';
 			const currentValue = create( { html: blockContent } );
 			const selectionStart = getSelectionStart();
 			const selectionEnd = getSelectionEnd();
