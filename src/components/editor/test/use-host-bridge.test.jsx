@@ -14,10 +14,19 @@ const mockGetEditedPostAttribute = vi.fn();
 const mockGetEditedPostContent = vi.fn();
 const mockGetSelectedBlockClientId = vi.fn();
 const mockGetBlock = vi.fn();
+const mockGetBlocks = vi.fn();
 const mockGetSelectionStart = vi.fn();
 const mockGetSelectionEnd = vi.fn();
 const mockUpdateBlock = vi.fn();
 const mockSelectionChange = vi.fn();
+const mockSavePost = vi.fn();
+const mockSetEditedPost = vi.fn();
+const mockDidPostSaveRequestFail = vi.fn();
+const mockGetCurrentPostId = vi.fn();
+const mockRemoveNotice = vi.fn();
+const mockEditEntityRecord = vi.fn();
+const mockGetEditedEntityRecord = vi.fn();
+const mockGetLastEntitySaveError = vi.fn();
 
 vi.mock( '@wordpress/data', () => ( {
 	useSelect: ( store ) => {
@@ -25,28 +34,55 @@ vi.mock( '@wordpress/data', () => ( {
 			return {
 				getEditedPostAttribute: mockGetEditedPostAttribute,
 				getEditedPostContent: mockGetEditedPostContent,
+				didPostSaveRequestFail: mockDidPostSaveRequestFail,
+				getCurrentPostId: mockGetCurrentPostId,
+			};
+		}
+		if ( store?.name === 'core' ) {
+			return {
+				getEditedEntityRecord: mockGetEditedEntityRecord,
+				getLastEntitySaveError: mockGetLastEntitySaveError,
 			};
 		}
 		// block-editor store selectors
 		return {
 			getSelectedBlockClientId: mockGetSelectedBlockClientId,
 			getBlock: mockGetBlock,
+			getBlocks: mockGetBlocks,
 			getSelectionStart: mockGetSelectionStart,
 			getSelectionEnd: mockGetSelectionEnd,
 		};
 	},
 	useDispatch: () => ( {
-		editEntityRecord: vi.fn(),
+		editEntityRecord: mockEditEntityRecord,
 		undo: vi.fn(),
 		redo: vi.fn(),
 		switchEditorMode: vi.fn(),
+		savePost: mockSavePost,
+		setEditedPost: mockSetEditedPost,
+		removeNotice: mockRemoveNotice,
 		updateBlock: mockUpdateBlock,
 		selectionChange: mockSelectionChange,
 	} ),
 } ) );
-vi.mock( '@wordpress/core-data' );
+vi.mock( '@wordpress/core-data', () => ( {
+	store: { name: 'core' },
+} ) );
 vi.mock( '@wordpress/editor' );
+vi.mock( '@wordpress/notices' );
 vi.mock( '@wordpress/blocks' );
+
+const mockAddFilter = vi.fn();
+const mockRemoveFilter = vi.fn();
+vi.mock( '@wordpress/hooks', () => ( {
+	addFilter: ( ...args ) => mockAddFilter( ...args ),
+	removeFilter: ( ...args ) => mockRemoveFilter( ...args ),
+} ) );
+
+const mockHydratePost = vi.fn();
+vi.mock( '../../../utils/bridge', () => ( {
+	hydratePost: ( ...args ) => mockHydratePost( ...args ),
+} ) );
 vi.mock( '@wordpress/rich-text', () => ( {
 	create: vi.fn( ( { html } ) => ( {
 		text: html,
@@ -65,6 +101,7 @@ vi.mock( '@wordpress/rich-text', () => ( {
 	toHTMLString: vi.fn( ( { value } ) => value.text ),
 } ) );
 vi.mock( '@wordpress/block-editor' );
+vi.mock( '@wordpress/api-fetch', () => ( { default: vi.fn() } ) );
 
 const defaultPost = {
 	id: 1,
@@ -84,6 +121,9 @@ describe( 'useHostBridge', () => {
 		// Reset window.editor to initial state (matches the module-level
 		// `window.editor = window.editor || {}` in use-host-bridge.js)
 		window.editor = {};
+		// Default: existing post with positive ID
+		mockGetCurrentPostId.mockReturnValue( 1 );
+		mockGetBlocks.mockReturnValue( [] );
 	} );
 
 	it( 'assigns window.editor methods and calls markBridgeReady', () => {
@@ -102,6 +142,7 @@ describe( 'useHostBridge', () => {
 		expect( window.editor.dismissTopModal ).toBeTypeOf( 'function' );
 		expect( window.editor.focus ).toBeTypeOf( 'function' );
 		expect( window.editor.appendTextAtCursor ).toBeTypeOf( 'function' );
+		expect( window.editor.savePost ).toBeTypeOf( 'function' );
 
 		expect( markBridgeReady ).toHaveBeenCalledTimes( 1 );
 	} );
@@ -360,7 +401,212 @@ describe( 'useHostBridge', () => {
 		expect( window.editor.appendTextAtCursor( 'text' ) ).toBe( false );
 	} );
 
-	it( 'cleans up window.editor methods on unmount', () => {
+	it( 'registers editor.preSavePost filter on mount', () => {
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		expect( mockAddFilter ).toHaveBeenCalledWith(
+			'editor.preSavePost',
+			'GutenbergKit/hydratePost',
+			expect.any( Function )
+		);
+	} );
+
+	it( 'preSavePost filter passes full entity to native and merges result', async () => {
+		const currentEntity = {
+			id: 1,
+			type: 'post',
+			title: { raw: 'Hello' },
+			categories: [ 1 ],
+		};
+		const modifiedPost = {
+			categories: [ 1, 2 ],
+			tags: [ 3 ],
+			featured_media: 42,
+		};
+		mockGetEditedEntityRecord.mockReturnValue( currentEntity );
+		mockHydratePost.mockResolvedValue( modifiedPost );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		const filterCallback = mockAddFilter.mock.calls.find(
+			( call ) => call[ 0 ] === 'editor.preSavePost'
+		)[ 2 ];
+
+		const edits = { id: 1, content: 'World' };
+		const result = await filterCallback( edits );
+
+		expect( mockHydratePost ).toHaveBeenCalledWith( currentEntity );
+		expect( result ).toEqual( { ...edits, ...modifiedPost } );
+	} );
+
+	it( 'preSavePost filter strips meta from hydrated post to avoid type mismatches', async () => {
+		const currentEntity = {
+			id: 1,
+			type: 'post',
+			title: { raw: 'Hello' },
+			meta: { _jetpack_newsletter_tier_id: 0 },
+		};
+		const modifiedPost = {
+			categories: [ 1, 2 ],
+			meta: { _jetpack_newsletter_tier_id: 0 },
+		};
+		mockGetEditedEntityRecord.mockReturnValue( currentEntity );
+		mockHydratePost.mockResolvedValue( modifiedPost );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		const filterCallback = mockAddFilter.mock.calls.find(
+			( call ) => call[ 0 ] === 'editor.preSavePost'
+		)[ 2 ];
+
+		const edits = { id: 1, content: 'World' };
+		const result = await filterCallback( edits );
+
+		expect( result.categories ).toEqual( [ 1, 2 ] );
+		expect( result ).not.toHaveProperty( 'meta' );
+	} );
+
+	it( 'preSavePost filter returns edits unchanged when native returns null', async () => {
+		mockGetEditedEntityRecord.mockReturnValue( defaultPost );
+		mockHydratePost.mockResolvedValue( null );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		const filterCallback = mockAddFilter.mock.calls.find(
+			( call ) => call[ 0 ] === 'editor.preSavePost'
+		)[ 2 ];
+
+		const edits = { id: 1, content: '' };
+		const result = await filterCallback( edits );
+
+		expect( result ).toEqual( edits );
+	} );
+
+	it( 'preSavePost filter strips id for new posts so Gutenberg sends POST', async () => {
+		mockGetEditedEntityRecord.mockReturnValue( defaultPost );
+		mockHydratePost.mockResolvedValue( null );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		const filterCallback = mockAddFilter.mock.calls.find(
+			( call ) => call[ 0 ] === 'editor.preSavePost'
+		)[ 2 ];
+
+		const edits = { id: -1, content: 'Hello' };
+		const result = await filterCallback( edits );
+
+		expect( result ).toEqual( { content: 'Hello' } );
+		expect( result ).not.toHaveProperty( 'id' );
+	} );
+
+	it( 'savePost calls savePost dispatch and suppresses notice', async () => {
+		mockGetEditedEntityRecord.mockReturnValue( defaultPost );
+		mockSavePost.mockResolvedValue();
+		mockDidPostSaveRequestFail.mockReturnValue( false );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		await window.editor.savePost();
+
+		expect( mockSavePost ).toHaveBeenCalledTimes( 1 );
+		expect( mockRemoveNotice ).toHaveBeenCalledWith( 'editor-save' );
+	} );
+
+	it( 'savePost suppresses notice even when save fails', async () => {
+		mockGetEditedEntityRecord.mockReturnValue( defaultPost );
+		mockSavePost.mockRejectedValue( new Error( 'Network error' ) );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		await expect( window.editor.savePost() ).rejects.toThrow(
+			'Network error'
+		);
+		expect( mockRemoveNotice ).toHaveBeenCalledWith( 'editor-save' );
+	} );
+
+	it( 'savePost throws when Gutenberg reports save failure', async () => {
+		mockGetEditedEntityRecord.mockReturnValue( defaultPost );
+		mockSavePost.mockResolvedValue();
+		mockDidPostSaveRequestFail.mockReturnValue( true );
+		mockGetLastEntitySaveError.mockReturnValue( {
+			message: 'REST API error',
+		} );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		await expect( window.editor.savePost() ).rejects.toThrow(
+			'REST API error'
+		);
+		expect( mockRemoveNotice ).toHaveBeenCalledWith( 'editor-save' );
+	} );
+
+	it( 'savePost does not call setEditedPost for existing posts', async () => {
+		mockGetCurrentPostId.mockReturnValue( 1 );
+		mockGetEditedEntityRecord.mockReturnValue( defaultPost );
+		mockSavePost.mockResolvedValue();
+		mockDidPostSaveRequestFail.mockReturnValue( false );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		await window.editor.savePost();
+
+		expect( mockSetEditedPost ).not.toHaveBeenCalled();
+	} );
+
+	it( 'savePost passes __unstableFetch for new posts and calls setEditedPost with created ID', async () => {
+		const newPost = { ...defaultPost, id: -1 };
+		mockGetCurrentPostId.mockReturnValue( -1 );
+		mockGetEditedEntityRecord.mockReturnValue( newPost );
+		mockDidPostSaveRequestFail.mockReturnValue( false );
+
+		// When savePost is called, invoke the __unstableFetch wrapper
+		// to simulate the server returning a real ID.
+		mockSavePost.mockImplementation( async ( options ) => {
+			if ( options?.__unstableFetch ) {
+				await options.__unstableFetch( {
+					method: 'POST',
+					path: '/wp/v2/posts',
+					data: {},
+				} );
+			}
+		} );
+
+		const { default: apiFetch } = await import( '@wordpress/api-fetch' );
+		apiFetch.mockResolvedValue( { id: 42, type: 'post' } );
+
+		renderHook( () =>
+			useHostBridge( newPost, editorRef, markBridgeReady )
+		);
+
+		await window.editor.savePost();
+
+		expect( mockSavePost ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				__unstableFetch: expect.any( Function ),
+			} )
+		);
+		expect( mockSetEditedPost ).toHaveBeenCalledWith( 'post', 42 );
+	} );
+
+	it( 'cleans up window.editor methods and filter on unmount', () => {
 		const { unmount } = renderHook( () =>
 			useHostBridge( defaultPost, editorRef, markBridgeReady )
 		);
@@ -379,5 +625,10 @@ describe( 'useHostBridge', () => {
 		expect( window.editor.dismissTopModal ).toBeUndefined();
 		expect( window.editor.focus ).toBeUndefined();
 		expect( window.editor.appendTextAtCursor ).toBeUndefined();
+		expect( window.editor.savePost ).toBeUndefined();
+		expect( mockRemoveFilter ).toHaveBeenCalledWith(
+			'editor.preSavePost',
+			'GutenbergKit/hydratePost'
+		);
 	} );
 } );
