@@ -14,41 +14,11 @@ import { getGBKit } from './bridge';
  */
 
 /**
- * Undo httpV1Middleware's method override at the network level.
- *
- * Gutenberg's built-in httpV1Middleware rewrites PUT/PATCH/DELETE to POST and
- * adds an X-HTTP-Method-Override header.  This is useful for servers that
- * reject non-POST methods, but the header is not in the CORS allow-list for
- * many WordPress hosts (including WordPress.com), so cross-origin preflight
- * requests fail.
- *
- * Because httpV1Middleware runs *after* all custom apiFetch middleware (which
- * can only be prepended), we intercept at the globalThis.fetch level — the
- * last stop before the network — and restore the original HTTP method.
- */
-function installHttpMethodOverrideFix() {
-	const nativeFetch = globalThis.fetch;
-	globalThis.fetch = function ( input, init ) {
-		if ( init?.headers?.[ 'X-HTTP-Method-Override' ] ) {
-			init = {
-				...init,
-				method: init.headers[ 'X-HTTP-Method-Override' ],
-			};
-			const { 'X-HTTP-Method-Override': _override, ...headers } =
-				init.headers;
-			init.headers = headers;
-		}
-		return nativeFetch.call( this, input, init );
-	};
-}
-
-/**
  * Initializes the API fetch configuration and middleware.
  *
  * @return {void}
  */
 export function configureApiFetch() {
-	installHttpMethodOverrideFix();
 	const { siteApiRoot = '', preloadData = null } = getGBKit();
 
 	apiFetch.use( apiFetch.createRootURLMiddleware( siteApiRoot ) );

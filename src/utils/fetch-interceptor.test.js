@@ -61,9 +61,8 @@ describe( 'initializeFetchInterceptor', () => {
 		vi.clearAllMocks();
 	} );
 
-	it( 'should not initialize when network logging is disabled', () => {
-		// Store the current fetch (which is the mock from beforeEach)
-		const currentFetch = window.fetch;
+	it( 'should skip network logging when disabled but still wrap fetch', async () => {
+		const underlyingFetch = global.fetch;
 
 		bridge.getGBKit.mockReturnValue( {
 			enableNetworkLogging: false,
@@ -71,10 +70,38 @@ describe( 'initializeFetchInterceptor', () => {
 
 		initializeFetchInterceptor();
 
-		// Should not have initialized
-		expect( window.__fetchInterceptorInitialized ).toBeUndefined();
-		// Fetch should not have been wrapped (should still be the same mock)
-		expect( window.fetch ).toBe( currentFetch );
+		// Fetch should be wrapped (for the HTTP method override fix)
+		expect( window.fetch ).not.toBe( underlyingFetch );
+
+		await window.fetch( 'https://example.com/api', { method: 'GET' } );
+
+		// The underlying fetch should be called
+		expect( underlyingFetch ).toHaveBeenCalled();
+		// But no network logging should occur
+		expect( bridge.onNetworkRequest ).not.toHaveBeenCalled();
+	} );
+
+	it( 'should strip X-HTTP-Method-Override and restore original method', async () => {
+		const underlyingFetch = global.fetch;
+
+		bridge.getGBKit.mockReturnValue( {
+			enableNetworkLogging: false,
+		} );
+
+		initializeFetchInterceptor();
+
+		await window.fetch( 'https://example.com/api/posts/1', {
+			method: 'POST',
+			headers: {
+				'X-HTTP-Method-Override': 'PUT',
+				'Content-Type': 'application/json',
+			},
+		} );
+
+		const [ , init ] = underlyingFetch.mock.calls[ 0 ];
+		expect( init.method ).toBe( 'PUT' );
+		expect( init.headers ).not.toHaveProperty( 'X-HTTP-Method-Override' );
+		expect( init.headers[ 'Content-Type' ] ).toBe( 'application/json' );
 	} );
 
 	it( 'should derive statusText from status code when empty (HTTP/2)', async () => {
