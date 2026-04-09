@@ -9,7 +9,6 @@ import { renderHook } from '@testing-library/react';
  */
 import { useHostBridge } from '../use-host-bridge';
 import { getBlockType } from '@wordpress/blocks';
-import { create } from '@wordpress/rich-text';
 
 const mockGetEditedPostAttribute = vi.fn();
 const mockGetEditedPostContent = vi.fn();
@@ -334,10 +333,11 @@ describe( 'useHostBridge', () => {
 	} );
 
 	it( 'appendTextAtCursor preserves existing content when block attribute is a RichTextData object', () => {
+		const existingContent = 'Existing block content @';
 		const richTextData = {
-			toString: () => '@',
-			valueOf: () => '@',
-			toHTMLString: () => '@',
+			toString: () => existingContent,
+			valueOf: () => existingContent,
+			toHTMLString: () => existingContent,
 		};
 
 		mockGetSelectedBlockClientId.mockReturnValue( 'block-1' );
@@ -352,28 +352,27 @@ describe( 'useHostBridge', () => {
 		mockGetSelectionStart.mockReturnValue( {
 			clientId: 'block-1',
 			attributeKey: 'content',
-			offset: 1,
+			offset: existingContent.length,
 		} );
 		mockGetSelectionEnd.mockReturnValue( {
 			clientId: 'block-1',
 			attributeKey: 'content',
-			offset: 1,
+			offset: existingContent.length,
 		} );
 
 		renderHook( () =>
 			useHostBridge( defaultPost, editorRef, markBridgeReady )
 		);
 
-		create.mockClear();
-
 		window.editor.appendTextAtCursor( 'username ' );
 
-		// create() should receive the RichTextData (or its string
-		// representation), NOT an empty string.
-		const htmlArg = create.mock.calls[ 0 ][ 0 ].html;
-		const htmlString =
-			typeof htmlArg === 'object' ? htmlArg.toString() : htmlArg;
-		expect( htmlString ).toBe( '@' );
+		// The block should contain the original content plus the
+		// appended text — not just the appended text alone.
+		expect( mockUpdateBlock ).toHaveBeenCalledWith( 'block-1', {
+			attributes: expect.objectContaining( {
+				content: 'Existing block content @username ',
+			} ),
+		} );
 	} );
 
 	it( 'appendTextAtCursor returns false when no block is selected', () => {
