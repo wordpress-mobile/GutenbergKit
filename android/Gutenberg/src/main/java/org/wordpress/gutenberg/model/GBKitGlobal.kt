@@ -70,8 +70,8 @@ data class GBKitGlobal(
      */
     @Serializable
     data class Post(
-        /** The post ID, or -1 for new posts. */
-        val id: Int, // TODO: Instead of the `-1` trick, this should just be `null` for new posts
+        /** The post ID, or `-1` for new posts. */
+        val id: Int,
         /** The post type (e.g., `post`, `page`). */
         val type: String,
         /** The REST API base path for this post type (e.g., `posts`, `pages`). */
@@ -99,7 +99,7 @@ data class GBKitGlobal(
             configuration: EditorConfiguration,
             dependencies: EditorDependencies?
         ): GBKitGlobal {
-            val postId = (configuration.postId?.toInt() ?: -1).takeIf({ it != 0 })
+            val postId = configuration.postId?.toInt()?.takeIf { it > 0 } ?: -1
 
             return GBKitGlobal(
                 siteURL = configuration.siteURL.ifEmpty { null },
@@ -112,7 +112,7 @@ data class GBKitGlobal(
                 hideTitle = configuration.hideTitle,
                 locale = configuration.locale ?: "en",
                 post = Post(
-                    id = postId ?: -1,
+                    id = postId,
                     type = configuration.postType.postType,
                     restBase = configuration.postType.restBase,
                     restNamespace = configuration.postType.restNamespace,
