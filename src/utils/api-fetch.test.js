@@ -22,7 +22,13 @@ import apiFetch from '@wordpress/api-fetch';
 import { configureApiFetch } from './api-fetch';
 import * as bridge from './bridge';
 
-vi.mock( './bridge' );
+vi.mock( './bridge', async ( importOriginal ) => {
+	const actual = await importOriginal();
+	return {
+		...actual,
+		getGBKit: vi.fn(),
+	};
+} );
 
 describe( 'api-fetch credentials handling', () => {
 	let originalFetch;
@@ -116,6 +122,76 @@ describe( 'api-fetch credentials handling', () => {
 
 		expect( options.credentials ).toBe( 'omit' );
 		expect( options.headers.Authorization ).toBe( 'Bearer override-token' );
+	} );
+
+	describe( 'filterEndpointsMiddleware', () => {
+		it( 'filters the post endpoint when restBase and restNamespace are provided', async () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://example.com/wp-json/',
+				siteApiNamespace: [ 'wp/v2' ],
+				namespaceExcludedPaths: [],
+				post: {
+					id: 42,
+					restBase: 'posts',
+					restNamespace: 'wp/v2',
+				},
+			} );
+
+			const result = await apiFetch( { path: '/wp/v2/posts/42' } );
+
+			expect( global.fetch ).not.toHaveBeenCalled();
+			expect( result ).toEqual( [] );
+		} );
+
+		it( 'falls back to default restBase and restNamespace when omitted from the payload', async () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://example.com/wp-json/',
+				siteApiNamespace: [ 'wp/v2' ],
+				namespaceExcludedPaths: [],
+				post: {
+					id: 7,
+					// restBase and restNamespace intentionally omitted
+				},
+			} );
+
+			const result = await apiFetch( { path: '/wp/v2/posts/7' } );
+
+			expect( global.fetch ).not.toHaveBeenCalled();
+			expect( result ).toEqual( [] );
+		} );
+
+		it( 'lets the request through when post id is undefined', async () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://example.com/wp-json/',
+				siteApiNamespace: [ 'wp/v2' ],
+				namespaceExcludedPaths: [],
+				post: {},
+			} );
+
+			try {
+				await apiFetch( { path: '/wp/v2/posts/99' } );
+			} catch ( error ) {
+				// Ignore errors from the actual fetch
+			}
+
+			expect( global.fetch ).toHaveBeenCalled();
+		} );
+
+		it( 'lets the request through when no post payload is present', async () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://example.com/wp-json/',
+				siteApiNamespace: [ 'wp/v2' ],
+				namespaceExcludedPaths: [],
+			} );
+
+			try {
+				await apiFetch( { path: '/wp/v2/posts/99' } );
+			} catch ( error ) {
+				// Ignore errors from the actual fetch
+			}
+
+			expect( global.fetch ).toHaveBeenCalled();
+		} );
 	} );
 
 	it( 'should preserve other headers when adding Authorization', async () => {

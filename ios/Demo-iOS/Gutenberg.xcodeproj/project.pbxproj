@@ -223,6 +223,25 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		0C4F59892BEFF4970028BD96 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0CE8E78F2C339B0600B9DC67 /* Preview Assets.xcassets in Resources */,
+				0CE8E78B2C339B0600B9DC67 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000012F00000000000005 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXShellScriptBuildPhase section */
 		AA0000012F00000000000200 /* Copy OAuth Credentials */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -245,25 +264,6 @@
 			shellScript = "CREDS_FILE=\"${SRCROOT}/../../wp_com_oauth_credentials.json\"\nif [ -f \"$CREDS_FILE\" ]; then\n  cp \"$CREDS_FILE\" \"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
-
-/* Begin PBXResourcesBuildPhase section */
-		0C4F59892BEFF4970028BD96 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				0CE8E78F2C339B0600B9DC67 /* Preview Assets.xcassets in Resources */,
-				0CE8E78B2C339B0600B9DC67 /* Assets.xcassets in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		AA0000012F00000000000005 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		0C4F59872BEFF4970028BD96 /* Sources */ = {

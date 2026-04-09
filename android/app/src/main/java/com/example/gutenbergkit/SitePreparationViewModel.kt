@@ -13,12 +13,18 @@ import kotlinx.coroutines.launch
 import org.wordpress.gutenberg.model.EditorCachePolicy
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
+import org.wordpress.gutenberg.model.PostTypeDetails
 import org.wordpress.gutenberg.services.EditorService
+import rs.wordpress.api.kotlin.WpRequestResult
+import uniffi.wp_api.PostType as WpPostType
 
 data class SitePreparationUiState(
     val enableNativeInserter: Boolean = true,
     val enableNetworkLogging: Boolean = false,
-    val postType: String = "post",
+    /** All viewable post types fetched from the site, or empty while loading. */
+    val postTypes: List<PostTypeDetails> = emptyList(),
+    /** The post type currently selected in the picker. Null until [postTypes] loads. */
+    val selectedPostType: PostTypeDetails? = null,
     val cacheBundleCount: Int? = null,
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -83,8 +89,8 @@ class SitePreparationViewModel(
         _uiState.update { it.copy(enableNetworkLogging = enabled) }
     }
 
-    fun setPostType(postType: String) {
-        _uiState.update { it.copy(postType = postType) }
+    fun setPostType(postType: PostTypeDetails) {
+        _uiState.update { it.copy(selectedPostType = postType) }
     }
 
     fun prepareEditor() {
@@ -195,10 +201,17 @@ class SitePreparationViewModel(
     }
 
     private fun createBundledConfiguration(): EditorConfiguration {
+        // Bundled offline editor: only the standard `post` type is meaningful.
+        _uiState.update {
+            it.copy(
+                postTypes = listOf(PostTypeDetails.post),
+                selectedPostType = PostTypeDetails.post
+            )
+        }
         return EditorConfiguration.builder(
             siteURL = "https://example.com",
             siteApiRoot = "https://example.com",
-            postType = "post"
+            postType = PostTypeDetails.post
         )
             .setPlugins(false)
             .setSiteApiNamespace(arrayOf())
@@ -231,10 +244,23 @@ class SitePreparationViewModel(
             arrayOf()
         }
 
+        // Fetch the site's post types. Default the picker to `post` when it's
+        // available (the typical case); otherwise pick the first type in the
+        // list. Falls back to `PostTypeDetails.post` if the call fails so the
+        // editor can still launch with a sensible default.
+        val postTypes = loadPostTypes(config) ?: listOf(PostTypeDetails.post)
+        val defaultPostType = postTypes.firstOrNull { it.postType == "post" } ?: postTypes.first()
+        _uiState.update {
+            it.copy(
+                postTypes = postTypes,
+                selectedPostType = defaultPostType
+            )
+        }
+
         return EditorConfiguration.builder(
             siteURL = config.siteUrl,
             siteApiRoot = siteApiRoot,
-            postType = _uiState.value.postType
+            postType = defaultPostType
         )
             .setPlugins(capabilities.supportsPlugins)
             .setThemeStyles(capabilities.supportsThemeStyles)
@@ -251,6 +277,49 @@ class SitePreparationViewModel(
     }
 
     /**
+     * Fetches the site's post types from the WordPress REST API and returns the
+     * subset relevant to the editor picker.
+     *
+     * Mirrors the iOS [SitePreparationView.loadPostTypes] filter:
+     * - always include the standard `post` and `page` types
+     * - include custom types only when they are `viewable` and have UI visibility
+     * - exclude all internal types (`Attachment`, `WpBlock`, etc.)
+     *
+     * Returns `null` if the post types could not be fetched (e.g. account not
+     * found, network error). Callers fall back to a sensible default.
+     */
+    private suspend fun loadPostTypes(
+        config: ConfigurationItem.ConfiguredEditor
+    ): List<PostTypeDetails>? {
+        val app = getApplication<GutenbergKitApplication>()
+        val account = app.accountRepository.all().firstOrNull { it.id() == config.accountId }
+            ?: return null
+        val client = app.createApiClient(account)
+
+        val result = client.request { builder ->
+            builder.postTypes().listWithEditContext()
+        }
+        if (result !is WpRequestResult.Success) return null
+
+        return result.response.data.postTypes
+            .filter { (type, details) ->
+                when (type) {
+                    is WpPostType.Post, is WpPostType.Page -> true
+                    is WpPostType.Custom -> details.viewable && details.visibility.showUi
+                    else -> false
+                }
+            }
+            .map { (_, details) ->
+                PostTypeDetails(
+                    postType = details.slug,
+                    restBase = details.restBase,
+                    restNamespace = details.restNamespace
+                )
+            }
+            .sortedBy { it.postType }
+    }
+
+    /**
      * Extracts the WP.com site ID from a namespace-specific API root URL.
      * Returns null if the URL is not a WP.com API root.
      *
@@ -263,11 +332,12 @@ class SitePreparationViewModel(
 
     fun buildConfiguration(): EditorConfiguration? {
         val baseConfig = _uiState.value.editorConfiguration ?: return null
+        val selectedPostType = _uiState.value.selectedPostType ?: return null
 
         return baseConfig.toBuilder()
             .setEnableNetworkLogging(_uiState.value.enableNetworkLogging)
             // TODO: Add setNativeInserterEnabled when it's available in EditorConfiguration
-            .setPostType(_uiState.value.postType)
+            .setPostType(selectedPostType)
             .build()
     }
 }

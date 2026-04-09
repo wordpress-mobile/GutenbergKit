@@ -1,12 +1,15 @@
 package com.example.gutenbergkit
 
+import android.app.AlertDialog
+import android.content.Context
 import android.content.Intent
-import android.os.Bundle
-import android.view.ViewGroup
-import android.webkit.WebView
 import android.content.pm.ApplicationInfo
 import android.os.Build
+import android.os.Bundle
 import android.util.Log
+import android.view.ViewGroup
+import android.webkit.WebView
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -35,24 +38,32 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
 import com.example.gutenbergkit.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
-
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.GutenbergView
 import org.wordpress.gutenberg.RecordedNetworkRequest
 import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.model.EditorDependenciesSerializer
+import rs.wordpress.api.kotlin.WpRequestResult
+import uniffi.wp_api.PostEndpointType
+import uniffi.wp_api.PostUpdateParams
+import kotlin.coroutines.resume
 
 class EditorActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_DEPENDENCIES_PATH = "dependencies_path"
+        const val EXTRA_ACCOUNT_ID = "account_id"
     }
 
     private var gutenbergView: GutenbergView? = null
@@ -90,11 +101,15 @@ class EditorActivity : ComponentActivity() {
         val dependenciesPath = intent.getStringExtra(EXTRA_DEPENDENCIES_PATH)
         val dependencies = dependenciesPath?.let { EditorDependenciesSerializer.readFromDisk(it) }
 
+        // Optional account ID for REST API persistence (set when launched from PostsListActivity)
+        val accountId = intent.getLongExtra(EXTRA_ACCOUNT_ID, -1L).takeIf { it >= 0 }?.toULong()
+
         setContent {
             AppTheme {
                 EditorScreen(
                     configuration = configuration,
                     dependencies = dependencies,
+                    accountId = accountId,
                     coroutineScope =  this.lifecycleScope,
                     onClose = { finish() },
                     onGutenbergViewCreated = { view ->
@@ -118,6 +133,7 @@ class EditorActivity : ComponentActivity() {
 fun EditorScreen(
     configuration: EditorConfiguration,
     dependencies: EditorDependencies? = null,
+    accountId: ULong? = null,
     coroutineScope: CoroutineScope,
     onClose: () -> Unit,
     onGutenbergViewCreated: (GutenbergView) -> Unit = {}
@@ -127,7 +143,12 @@ fun EditorScreen(
     var hasUndoState by remember { mutableStateOf(false) }
     var hasRedoState by remember { mutableStateOf(false) }
     var isCodeEditorEnabled by remember { mutableStateOf(false) }
+    var isSaving by remember { mutableStateOf(false) }
     var gutenbergViewRef by remember { mutableStateOf<GutenbergView?>(null) }
+    val saveScope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    val canSave = !isSaving && accountId != null && configuration.postId != null
 
     BackHandler(enabled = isModalDialogOpen) {
         gutenbergViewRef?.dismissTopModal()
@@ -170,8 +191,32 @@ fun EditorScreen(
                             contentDescription = stringResource(R.string.redo)
                         )
                     }
-                    TextButton(onClick = { }, enabled = false) {
-                        Text(stringResource(R.string.publish))
+                    TextButton(
+                        onClick = {
+                            val view = gutenbergViewRef ?: return@TextButton
+                            val postId = configuration.postId
+                            if (accountId == null || postId == null) return@TextButton
+                            isSaving = true
+                            saveScope.launch {
+                                try {
+                                    val errorMessage = persistPost(
+                                        context = context,
+                                        view = view,
+                                        configuration = configuration,
+                                        accountId = accountId,
+                                        postId = postId
+                                    )
+                                    if (errorMessage != null) {
+                                        Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
+                                    }
+                                } finally {
+                                    isSaving = false
+                                }
+                            }
+                        },
+                        enabled = canSave && !isModalDialogOpen
+                    ) {
+                        Text(stringResource(R.string.save))
                     }
 
                     // Overflow menu button and dropdown in Box for proper anchoring
@@ -190,32 +235,12 @@ fun EditorScreen(
                             onDismissRequest = { showMenu = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text(stringResource(R.string.save)) },
-                                onClick = { },
-                                enabled = false
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.preview)) },
-                                onClick = { },
-                                enabled = false
-                            )
-                            DropdownMenuItem(
                                 text = { Text(stringResource(if (isCodeEditorEnabled) R.string.visual_editor else R.string.code_editor)) },
                                 onClick = {
                                     isCodeEditorEnabled = !isCodeEditorEnabled
                                     gutenbergViewRef?.textEditorEnabled = isCodeEditorEnabled
                                     showMenu = false
                                 }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.post_settings)) },
-                                onClick = { },
-                                enabled = false
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.help)) },
-                                onClick = { },
-                                enabled = false
                             )
                         }
                     }
@@ -284,6 +309,22 @@ fun EditorScreen(
                             }
                         }
                     })
+                    setAutocompleterTriggeredListener(object : GutenbergView.AutocompleterTriggeredListener {
+                        override fun onAutocompleterTriggered(type: String) {
+                            val suggestions = when (type) {
+                                "at-symbol" -> arrayOf("alice", "bob", "charlie")
+                                "plus-symbol" -> arrayOf("photoblog", "traveldiaries", "dailydev")
+                                else -> return
+                            }
+                            AlertDialog.Builder(context)
+                                .setTitle("Select a suggestion")
+                                .setItems(suggestions) { _, which ->
+                                    appendTextAtCursor(suggestions[which] + " ")
+                                }
+                                .setNegativeButton("Cancel", null)
+                                .show()
+                        }
+                    })
                     // Demo app has no persistence layer, so return null.
                     // In a real app, return the persisted title and content from autosave.
                     setLatestContentProvider(object : GutenbergView.LatestContentProvider {
@@ -298,5 +339,68 @@ fun EditorScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         )
+    }
+}
+
+/**
+ * Reads the latest title/content from the editor and PUTs it to the WordPress REST API.
+ */
+private suspend fun persistPost(
+    context: Context,
+    view: GutenbergView,
+    configuration: EditorConfiguration,
+    accountId: ULong,
+    postId: UInt
+): String? {
+    return try {
+        val titleAndContent = suspendCancellableCoroutine<Pair<CharSequence, CharSequence>> { cont ->
+            view.getTitleAndContent(
+                originalContent = configuration.content,
+                callback = object : GutenbergView.TitleAndContentCallback {
+                    override fun onResult(title: CharSequence, content: CharSequence) {
+                        if (cont.isActive) cont.resume(title to content)
+                    }
+                }
+            )
+        }
+
+        val app = context.applicationContext as GutenbergKitApplication
+        val account = app.accountRepository.all().firstOrNull { it.id() == accountId }
+            ?: error("Account not found")
+        val client = app.createApiClient(account)
+
+        val endpointType = when (configuration.postType.postType) {
+            "page" -> PostEndpointType.Pages
+            "post" -> PostEndpointType.Posts
+            else -> PostEndpointType.Custom(configuration.postType.postType)
+        }
+
+        val params = PostUpdateParams(
+            title = titleAndContent.first.toString(),
+            content = titleAndContent.second.toString(),
+            meta = null
+        )
+
+        val result = client.request { builder ->
+            builder.posts().update(
+                postEndpointType = endpointType,
+                postId = postId.toLong(),
+                params = params
+            )
+        }
+
+        when (result) {
+            is WpRequestResult.Success -> {
+                Log.i("EditorActivity", "Post $postId persisted via REST API")
+                null
+            }
+            else -> {
+                Log.e("EditorActivity", "Failed to persist post $postId: $result")
+                context.getString(R.string.save_failed_generic)
+            }
+        }
+    } catch (e: Exception) {
+        Log.e("EditorActivity", "Failed to persist post $postId", e)
+        context.getString(R.string.save_failed_with_reason, e.message ?: "unknown error")
     }
 }

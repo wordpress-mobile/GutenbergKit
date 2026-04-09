@@ -74,6 +74,10 @@ data class GBKitGlobal(
         val id: Int, // TODO: Instead of the `-1` trick, this should just be `null` for new posts
         /** The post type (e.g., `post`, `page`). */
         val type: String,
+        /** The REST API base path for this post type (e.g., `posts`, `pages`). */
+        val restBase: String,
+        /** The REST API namespace (e.g., `wp/v2`). */
+        val restNamespace: String,
         /** The post status (e.g., `draft`, `publish`, `pending`). */
         val status: String,
         /** The post title (URL-encoded). */
@@ -109,7 +113,9 @@ data class GBKitGlobal(
                 locale = configuration.locale ?: "en",
                 post = Post(
                     id = postId ?: -1,
-                    type = configuration.postType,
+                    type = configuration.postType.postType,
+                    restBase = configuration.postType.restBase,
+                    restNamespace = configuration.postType.restNamespace,
                     status = configuration.postStatus,
                     title = configuration.title.encodeForEditor(),
                     content = configuration.content.encodeForEditor()

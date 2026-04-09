@@ -12,6 +12,7 @@ import org.junit.rules.TemporaryFolder
 import org.wordpress.gutenberg.model.EditorCachePolicy
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorSettings
+import org.wordpress.gutenberg.model.PostTypeDetails
 import org.wordpress.gutenberg.model.http.EditorHTTPHeaders
 import org.wordpress.gutenberg.model.http.EditorHttpMethod
 import org.wordpress.gutenberg.stores.EditorURLCache
@@ -42,7 +43,7 @@ class RESTAPIRepositoryTest {
         siteApiRoot: String = TEST_API_ROOT,
         siteApiNamespace: Array<String> = arrayOf()
     ): EditorConfiguration {
-        return EditorConfiguration.builder(TEST_SITE_URL, siteApiRoot, "post")
+        return EditorConfiguration.builder(TEST_SITE_URL, siteApiRoot, PostTypeDetails.post)
             .setPlugins(shouldUsePlugins)
             .setThemeStyles(shouldUseThemeStyles)
             .setAuthHeader("Bearer test-token")
@@ -290,7 +291,7 @@ class RESTAPIRepositoryTest {
         val configuration = EditorConfiguration.builder(
             TEST_SITE_URL,
             "https://example.com/wp-json",  // No trailing slash
-            "post"
+            PostTypeDetails.post
         ).setPlugins(true).setThemeStyles(true).setAuthHeader("Bearer test").build()
 
         val cache = EditorURLCache(cacheRoot, EditorCachePolicy.Always)
@@ -319,7 +320,7 @@ class RESTAPIRepositoryTest {
         val configuration = EditorConfiguration.builder(
             TEST_SITE_URL,
             "https://example.com/wp-json/",  // With trailing slash
-            "post"
+            PostTypeDetails.post
         ).setPlugins(true).setThemeStyles(true).setAuthHeader("Bearer test").build()
 
         val cache = EditorURLCache(cacheRoot, EditorCachePolicy.Always)

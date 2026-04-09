@@ -28,8 +28,8 @@ data class EditorPreloadList private constructor(
     val postID: Int?,
     /** The pre-fetched post data for the post being edited. */
     val postData: EditorURLResponse?,
-    /** The post type identifier (e.g., "post", "page"). */
-    val postType: String,
+    /** Details about the post type, including REST API configuration. */
+    val postType: PostTypeDetails,
     /** Pre-fetched data for the current post type's schema. */
     val postTypeData: EditorURLResponse,
     /** Pre-fetched data for all available post types. */
@@ -47,7 +47,7 @@ data class EditorPreloadList private constructor(
     constructor(
         postID: Int? = null,
         postData: EditorURLResponse? = null,
-        postType: String,
+        postType: PostTypeDetails,
         postTypeData: EditorURLResponse,
         postTypesData: EditorURLResponse,
         activeThemeData: EditorURLResponse?,
@@ -72,7 +72,7 @@ data class EditorPreloadList private constructor(
     fun build(): JsonElement {
         val entries = mutableMapOf<String, JsonElement>()
 
-        entries[buildPostTypePath(postType)] = postTypeData.toJsonElement()
+        entries[buildPostTypePath(postType.postType)] = postTypeData.toJsonElement()
         entries[POST_TYPES_PATH] = postTypesData.toJsonElement()
 
         if (postID != null && postData != null) {
@@ -115,7 +115,8 @@ data class EditorPreloadList private constructor(
     }
 
     /** Builds the API path for fetching a specific post. */
-    private fun buildPostPath(id: Int): String = "/wp/v2/posts/$id?context=edit"
+    private fun buildPostPath(id: Int): String =
+        "/${postType.restNamespace}/${postType.restBase}/$id?context=edit"
 
     /** Builds the API path for fetching a post type's schema. */
     private fun buildPostTypePath(type: String): String = "/wp/v2/types/$type?context=edit"

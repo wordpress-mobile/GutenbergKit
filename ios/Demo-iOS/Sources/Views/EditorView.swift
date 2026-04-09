@@ -1,23 +1,32 @@
 import SwiftUI
 import GutenbergKit
+import WordPressAPI
+// `PostUpdateParams` is not yet re-exported from `WordPressAPI` in the pinned
+// wordpress-rs release. It is reachable via the internal module, which is the
+// same workaround WordPress-iOS uses. Remove this import once a tagged release
+// including Automattic/wordpress-rs#1270 is adopted.
+import WordPressAPIInternal
 
 struct EditorView: View {
     private let configuration: EditorConfiguration
     private let dependencies: EditorDependencies?
+    private let apiClient: WordPressAPI?
 
     @State private var viewModel = EditorViewModel()
 
     @Environment(\.dismiss) var dismiss
 
-    init(configuration: EditorConfiguration, dependencies: EditorDependencies? = nil) {
+    init(configuration: EditorConfiguration, dependencies: EditorDependencies? = nil, apiClient: WordPressAPI? = nil) {
         self.configuration = configuration
         self.dependencies = dependencies
+        self.apiClient = apiClient
     }
 
     var body: some View {
         _EditorView(
             configuration: configuration,
             dependencies: dependencies,
+            apiClient: apiClient,
             viewModel: viewModel
         )
             .toolbar { toolbar }
@@ -58,37 +67,29 @@ struct EditorView: View {
             moreMenu
                 .disabled(viewModel.isModalDialogOpen)
         }
+
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                viewModel.save()
+            } label: {
+                Text("Save")
+                    .fontWeight(.semibold)
+            }
+            .disabled(!viewModel.canSave)
+            .accessibilityLabel("Save")
+        }
     }
 
     private var moreMenu: some View {
         Menu {
-            Section {
-                Button(action: {
-                    viewModel.isCodeEditorEnabled.toggle()
-                }, label: {
-                    Label(
-                        viewModel.isCodeEditorEnabled ? "Visual Editor" : "Code Editor",
-                        systemImage: viewModel.isCodeEditorEnabled ? "doc.richtext" : "curlybraces"
-                    )
-                })
-                Button(action: /*@START_MENU_TOKEN@*/{}/*@END_MENU_TOKEN@*/, label: {
-                    Label("Preview", systemImage: "safari")
-                }).disabled(true)
-                Button(action: /*@START_MENU_TOKEN@*/{}/*@END_MENU_TOKEN@*/, label: {
-                    Label("Revisions (42)", systemImage: "clock.arrow.circlepath")
-                }).disabled(true)
-                Button(action: /*@START_MENU_TOKEN@*/{}/*@END_MENU_TOKEN@*/, label: {
-                    Label("Post Settings", systemImage: "gearshape")
-                }).disabled(true)
-                Button(action: /*@START_MENU_TOKEN@*/{}/*@END_MENU_TOKEN@*/, label: {
-                    Label("Help", systemImage: "questionmark.circle")
-                }).disabled(true)
-            }
-            Section {
-                Text("Blocks: 4, Words: 8, Characters: 15")
-            } header: {
-
-            }
+            Button(action: {
+                viewModel.isCodeEditorEnabled.toggle()
+            }, label: {
+                Label(
+                    viewModel.isCodeEditorEnabled ? "Visual Editor" : "Code Editor",
+                    systemImage: viewModel.isCodeEditorEnabled ? "doc.richtext" : "curlybraces"
+                )
+            })
         } label: {
             Image(systemName: "ellipsis")
         }
@@ -99,15 +100,18 @@ struct EditorView: View {
 private struct _EditorView: UIViewControllerRepresentable {
     private let configuration: EditorConfiguration
     private let dependencies: EditorDependencies?
+    private let apiClient: WordPressAPI?
     private let viewModel: EditorViewModel
 
     init(
         configuration: EditorConfiguration,
         dependencies: EditorDependencies? = nil,
+        apiClient: WordPressAPI? = nil,
         viewModel: EditorViewModel
     ) {
         self.configuration = configuration
         self.dependencies = dependencies
+        self.apiClient = apiClient
         self.viewModel = viewModel
     }
 
@@ -127,11 +131,45 @@ private struct _EditorView: UIViewControllerRepresentable {
             }
         }
 
+        viewModel.hasPostID = configuration.postID != nil
+
+        viewModel.saveHandler = { [weak viewController, weak viewModel] in
+            guard let viewController, let viewModel else { return }
+            await persistPost(viewController: viewController, viewModel: viewModel)
+        }
+
         return viewController
     }
 
     func updateUIViewController(_ viewController: EditorViewController, context: Context) {
         viewController.isCodeEditorEnabled = viewModel.isCodeEditorEnabled
+    }
+
+    /// Persists the post via the REST API.
+    private func persistPost(viewController: EditorViewController, viewModel: EditorViewModel) async {
+        guard let apiClient, let postID = configuration.postID else { return }
+        do {
+            let titleAndContent = try await viewController.getTitleAndContent()
+            let params = PostUpdateParams(title: .some(titleAndContent.title), content: .some(titleAndContent.content), meta: nil)
+            let endpointType: PostEndpointType
+            switch configuration.postType.postType {
+            case "post":
+                endpointType = .posts
+            case "page":
+                endpointType = .pages
+            default:
+                endpointType = .custom(configuration.postType.restBase)
+            }
+            _ = try await apiClient.posts.updateCancellation(
+                postEndpointType: endpointType,
+                postId: Int64(postID),
+                params: params,
+                context: nil
+            )
+            print("Post \(postID) persisted via REST API")
+        } catch {
+            print("Failed to persist post \(postID): \(error)")
+        }
     }
 
     @MainActor
@@ -145,7 +183,7 @@ private struct _EditorView: UIViewControllerRepresentable {
         // MARK: - EditorViewControllerDelegate
 
         func editorDidLoad(_ viewContoller: EditorViewController) {
-            // No-op for demo
+            viewModel.isEditorReady = true
         }
 
         func editor(_ viewContoller: EditorViewController, didDisplayInitialContent content: String) {
@@ -178,7 +216,24 @@ private struct _EditorView: UIViewControllerRepresentable {
         }
 
         func editor(_ viewController: EditorViewController, didTriggerAutocompleter type: String) {
-            // No-op for demo
+            let suggestions: [String]
+            switch type {
+            case "at-symbol":
+                suggestions = ["alice", "bob", "charlie"]
+            case "plus-symbol":
+                suggestions = ["photoblog", "traveldiaries", "dailydev"]
+            default:
+                return
+            }
+
+            let alert = UIAlertController(title: "Select a suggestion", message: nil, preferredStyle: .actionSheet)
+            for suggestion in suggestions {
+                alert.addAction(UIAlertAction(title: suggestion, style: .default) { _ in
+                    viewController.appendTextAtCursor(suggestion + " ")
+                })
+            }
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+            viewController.present(alert, animated: true)
         }
 
         func editor(_ viewController: EditorViewController, didOpenModalDialog dialogType: String) {
@@ -232,6 +287,14 @@ private final class EditorViewModel {
     var hasUndo = false
     var hasRedo = false
     var isCodeEditorEnabled = false
+    var isSaving = false
+    var isEditorReady = false
+
+    var hasPostID = false
+
+    var canSave: Bool {
+        isEditorReady && !isSaving && hasPostID
+    }
 
     enum Action {
         case undo
@@ -239,6 +302,16 @@ private final class EditorViewModel {
     }
 
     var perform: (_ action: Action) -> Void = { _ in assertionFailure() }
+    var saveHandler: () async -> Void = {}
+
+    func save() {
+        guard canSave else { return }
+        isSaving = true
+        Task {
+            await saveHandler()
+            isSaving = false
+        }
+    }
 }
 
 #Preview {
