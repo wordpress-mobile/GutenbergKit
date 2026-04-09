@@ -39,7 +39,11 @@ data class HttpRequest(
     val target: String,
     val headers: Map<String, String>,
     val body: org.wordpress.gutenberg.http.RequestBody? = null,
-    val parseDurationMs: Double = 0.0
+    val parseDurationMs: Double = 0.0,
+    /** A server-detected error that occurred after headers were parsed
+     *  (e.g., payload too large). When set, the handler is responsible
+     *  for building an appropriate error response. */
+    val serverError: org.wordpress.gutenberg.http.HTTPRequestParseError? = null
 ) {
     /**
      * Returns the value of the first header matching the given name (case-insensitive).
@@ -277,13 +281,12 @@ class HttpServer(
             val buffer = ByteArray(READ_CHUNK_SIZE)
 
             // Phase 1: receive headers only.
-            while (!parser.state.hasHeaders) {
-                if (System.nanoTime() > deadlineNanos) {
-                    throw SocketTimeoutException("Read deadline exceeded")
-                }
-                val bytesRead = input.read(buffer)
-                if (bytesRead == -1) break
-                parser.append(buffer.copyOfRange(0, bytesRead))
+            readUntil(parser, input, buffer, deadlineNanos) { it.hasHeaders }
+
+            // Drain oversized body before throwing so the
+            // client receives the 413 (RFC 9110 §15.5.14).
+            if (parser.state == HTTPRequestParser.State.DRAINING) {
+                readUntil(parser, input, buffer, deadlineNanos) { it.isComplete }
             }
 
             // Validate headers (triggers full RFC validation).
@@ -309,6 +312,31 @@ class HttpServer(
                     status = 400,
                     body = "Bad Request".toByteArray()
                 ))
+                return
+            }
+
+            // If the parser detected a non-fatal error (e.g., payload too
+            // large after drain), let the handler build the response.
+            parser.pendingParseError?.let { error ->
+                val parseDurationMs = (System.nanoTime() - parseStart) / 1_000_000.0
+                val request = HttpRequest(
+                    method = partial.method,
+                    target = partial.target,
+                    headers = partial.headers,
+                    parseDurationMs = parseDurationMs,
+                    serverError = error
+                )
+                val response = try {
+                    handler(request)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Handler threw", e)
+                    HttpResponse(
+                        status = error.httpStatus,
+                        body = (STATUS_TEXT[error.httpStatus] ?: "Error").toByteArray()
+                    )
+                }
+                sendResponse(socket, response)
+                Log.d(TAG, "${partial.method} ${partial.target} → ${response.status} (${"%.1f".format(parseDurationMs)}ms)")
                 return
             }
 
@@ -341,14 +369,7 @@ class HttpServer(
             }
 
             // Phase 2: receive body (skipped if already complete).
-            while (!parser.state.isComplete) {
-                if (System.nanoTime() > deadlineNanos) {
-                    throw SocketTimeoutException("Read deadline exceeded")
-                }
-                val bytesRead = input.read(buffer)
-                if (bytesRead == -1) break
-                parser.append(buffer.copyOfRange(0, bytesRead))
-            }
+            readUntil(parser, input, buffer, deadlineNanos) { it.isComplete }
 
             // Final parse with body.
             val parsed = try {
@@ -403,6 +424,24 @@ class HttpServer(
                 sendResponse(socket, response)
                 Log.d(TAG, "${parsed.method} ${parsed.target} → ${response.status} (${"%.1f".format(parseDurationMs)}ms)")
             }
+        }
+    }
+
+    /** Reads data into the parser until [condition] is satisfied or the connection closes. */
+    private fun readUntil(
+        parser: HTTPRequestParser,
+        input: BufferedInputStream,
+        buffer: ByteArray,
+        deadlineNanos: Long,
+        condition: (HTTPRequestParser.State) -> Boolean
+    ) {
+        while (!condition(parser.state)) {
+            if (System.nanoTime() > deadlineNanos) {
+                throw SocketTimeoutException("Read deadline exceeded")
+            }
+            val bytesRead = input.read(buffer)
+            if (bytesRead == -1) break
+            parser.append(buffer.copyOfRange(0, bytesRead))
         }
     }
 

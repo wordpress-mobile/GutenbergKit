@@ -217,7 +217,7 @@ export function nativeMediaUploadMiddleware( options, next ) {
 			if ( ! response.ok ) {
 				return response.text().then( ( body ) => {
 					const error = new Error(
-						`Native upload failed (${ response.status }): ${
+						`Upload failed (${ response.status }): ${
 							body || response.statusText
 						}`
 					);

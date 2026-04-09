@@ -37,12 +37,18 @@ class HTTPRequestParser(
         NEEDS_MORE_DATA,
         /** Headers have been fully received but the body is still incomplete. */
         HEADERS_COMPLETE,
+        /**
+         * The request body exceeds the maximum allowed size and is being
+         * drained (read and discarded) so the server can send a clean 413
+         * response. No body bytes are buffered in this state.
+         */
+        DRAINING,
         /** All data has been received (headers and body). */
         COMPLETE;
 
         /** Whether headers have been fully received. */
         val hasHeaders: Boolean
-            get() = this == HEADERS_COMPLETE || this == COMPLETE
+            get() = this == HEADERS_COMPLETE || this == DRAINING || this == COMPLETE
 
         /** Whether all data has been received. */
         val isComplete: Boolean
@@ -76,6 +82,15 @@ class HTTPRequestParser(
     /** The current buffering state. */
     val state: State get() = synchronized(lock) { _state }
 
+    /**
+     * The parse error detected during buffering, if any.
+     *
+     * Non-fatal errors like [HTTPRequestParseError.PAYLOAD_TOO_LARGE] are
+     * exposed here instead of being thrown by [parseRequest], allowing the
+     * caller to still access the parsed headers.
+     */
+    val pendingParseError: HTTPRequestParseError? get() = synchronized(lock) { parseError }
+
     /** Creates a parser and immediately parses the given raw HTTP string. */
     constructor(
         input: String,
@@ -106,6 +121,14 @@ class HTTPRequestParser(
      */
     fun append(data: ByteArray): Unit = synchronized(lock) {
         if (_state == State.COMPLETE) return
+
+        // In drain mode, discard bytes without buffering and check
+        // whether the full Content-Length has been consumed.
+        if (_state == State.DRAINING) {
+            bytesWritten += data.size.toLong()
+            drainIfComplete()
+            return
+        }
 
         val accepted: Boolean
         try {
@@ -166,7 +189,11 @@ class HTTPRequestParser(
 
             if (expectedContentLength > maxBodySize) {
                 parseError = HTTPRequestParseError.PAYLOAD_TOO_LARGE
-                _state = State.COMPLETE
+                _state = State.DRAINING
+                // Complete immediately if body bytes already received
+                // satisfy the drain — small requests may arrive as a
+                // single read.
+                drainIfComplete()
                 return
             }
         }
@@ -178,6 +205,14 @@ class HTTPRequestParser(
             State.COMPLETE
         } else {
             State.HEADERS_COMPLETE
+        }
+    }
+
+    /** Transitions from DRAINING to COMPLETE if all body bytes have been received. */
+    private fun drainIfComplete() {
+        val offset = headerEndOffset ?: return
+        if (bytesWritten - offset >= expectedContentLength) {
+            _state = State.COMPLETE
         }
     }
 
@@ -194,7 +229,11 @@ class HTTPRequestParser(
     fun parseRequest(): ParsedHTTPRequest? = synchronized(lock) {
         if (!_state.hasHeaders) return null
 
-        parseError?.let { throw HTTPRequestParseException(it) }
+        // Payload-too-large means "valid headers, rejected body" — let
+        // the caller access the parsed headers so the handler can build
+        // a response (e.g., with CORS headers). Other parse errors
+        // indicate genuinely malformed requests and are still thrown.
+        parseError?.let { if (it != HTTPRequestParseError.PAYLOAD_TOO_LARGE) throw HTTPRequestParseException(it) }
 
         if (parsedHeaders == null) {
             val headerData = buffer.read(0, minOf(bytesWritten, MAX_HEADER_SIZE.toLong()).toInt())
@@ -210,7 +249,11 @@ class HTTPRequestParser(
 
         val headers = parsedHeaders ?: return null
 
-        if (_state != State.COMPLETE) {
+        // Return partial (headers only) when the body was rejected or
+        // hasn't fully arrived yet. The payloadTooLarge case goes through
+        // drain mode which discards body bytes without buffering them, so
+        // there is no body to extract even though the state is COMPLETE.
+        if (_state != State.COMPLETE || parseError != null) {
             return ParsedHTTPRequest(
                 method = headers.method,
                 target = headers.target,

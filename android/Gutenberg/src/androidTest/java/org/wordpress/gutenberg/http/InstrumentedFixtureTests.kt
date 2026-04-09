@@ -151,7 +151,18 @@ class InstrumentedFixtureTests {
 
             try {
                 parser.parseRequest()
-                fail("$description: expected error $expectedError but parsing succeeded")
+                // Non-fatal errors (e.g., payloadTooLarge) are exposed via
+                // pendingParseError instead of being thrown.
+                val pendingError = parser.pendingParseError
+                if (pendingError != null) {
+                    assertEquals(
+                        expectedError,
+                        pendingError.errorId,
+                        "$description: expected $expectedError but got ${pendingError.errorId}"
+                    )
+                } else {
+                    fail("$description: expected error $expectedError but parsing succeeded")
+                }
             } catch (e: HTTPRequestParseException) {
                 assertEquals(
                     expectedError,
