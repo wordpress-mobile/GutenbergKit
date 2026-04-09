@@ -90,6 +90,7 @@ const val ASSET_PATH_INDEX = "/assets/index.html"
  * - If `dependencies` is provided, the editor loads immediately (fast path)
  * - If `dependencies` is null, dependencies are fetched asynchronously before loading
  */
+@Suppress("LargeClass")
 class GutenbergView : FrameLayout {
     private val webView: WebView
     private var isEditorLoaded = false
@@ -119,7 +120,11 @@ class GutenbergView : FrameLayout {
     private var autocompleterTriggeredListener: AutocompleterTriggeredListener? = null
     private var modalDialogStateListener: ModalDialogStateListener? = null
     private var networkRequestListener: NetworkRequestListener? = null
+    private var saveAvailabilityListener: SaveAvailabilityListener? = null
     private var latestContentProvider: LatestContentProvider? = null
+    private var latestPostProvider: LatestPostProvider? = null
+    private var savePostListener: SavePostListener? = null
+    private val pendingSaveCallbacks = Collections.synchronizedMap(mutableMapOf<String, SavePostCallback>())
 
     /**
      * Stores the contextId from the most recent openMediaLibrary call
@@ -180,8 +185,20 @@ class GutenbergView : FrameLayout {
         networkRequestListener = listener
     }
 
+    fun setSaveAvailabilityListener(listener: SaveAvailabilityListener?) {
+        saveAvailabilityListener = listener
+    }
+
     fun setLatestContentProvider(provider: LatestContentProvider?) {
         latestContentProvider = provider
+    }
+
+    fun setLatestPostProvider(provider: LatestPostProvider?) {
+        latestPostProvider = provider
+    }
+
+    fun setSavePostListener(listener: SavePostListener?) {
+        savePostListener = listener
     }
 
     fun setOnFileChooserRequestedListener(listener: (Intent, Int) -> Unit) {
@@ -666,6 +683,18 @@ class GutenbergView : FrameLayout {
         fun onNetworkRequest(request: RecordedNetworkRequest)
     }
 
+    data class SaveAvailabilityState(
+        val isDirty: Boolean,
+        val isSaveable: Boolean,
+        val isSavingLocked: Boolean,
+        val isSaving: Boolean,
+        val isAutosaving: Boolean
+    )
+
+    interface SaveAvailabilityListener {
+        fun onSaveAvailabilityChanged(state: SaveAvailabilityState)
+    }
+
     /**
      * Provides the latest persisted content for recovery after WebView refresh.
      *
@@ -688,6 +717,44 @@ class GutenbergView : FrameLayout {
         val title: String,
         val content: String
     )
+
+    /**
+     * Pre-save hook: receives the current post and returns a modified version.
+     *
+     * When the editor's `savePost()` is called, it passes the full entity record
+     * to this provider. The host may inspect and modify any fields — for example,
+     * updating categories or tags that were changed in native UI — and return the
+     * modified post as a JSON string.
+     */
+    interface LatestPostProvider {
+        /**
+         * Called with the current post entity as a JSON string. Return a JSON string
+         * of modified fields to merge into the entity, or null for no modifications.
+         *
+         * @param postJson The current entity record as a JSON string.
+         */
+        fun getLatestPost(postJson: String): String?
+    }
+
+    /**
+     * Callback for the `savePost()` operation.
+     */
+    interface SavePostCallback {
+        fun onSuccess()
+        fun onFailure(error: String)
+    }
+
+    /**
+     * Listener notified when the editor finishes saving a post or encounters an error.
+     *
+     * Unlike [SavePostCallback] (which is per-call), this listener is set once and fires
+     * for every save operation, making it suitable for analytics, logging, or UI updates
+     * that should always react to save results.
+     */
+    interface SavePostListener {
+        fun onPostSaved()
+        fun onPostSaveFailed(error: String)
+    }
 
     fun getTitleAndContent(originalContent: CharSequence, callback: TitleAndContentCallback, completeComposition: Boolean = false) {
         if (!isEditorLoaded) {
@@ -715,6 +782,50 @@ class GutenbergView : FrameLayout {
                     originalContent
                 }
                 callback.onResult(title, content)
+            }
+        }
+    }
+
+    /**
+     * Saves the post via the editor's built-in save mechanism.
+     *
+     * This triggers the full Gutenberg save lifecycle including plugin side-effects.
+     * The native host should show its own save feedback — the editor's built-in
+     * save notice is suppressed automatically.
+     *
+     * @param callback Called on the main thread when the save completes or fails.
+     */
+    fun savePost(callback: SavePostCallback) {
+        if (!isEditorLoaded) {
+            callback.onFailure("Editor not ready")
+            return
+        }
+        val callbackId = java.util.UUID.randomUUID().toString()
+        pendingSaveCallbacks[callbackId] = callback
+        handler.post {
+            webView.evaluateJavascript("""
+                (async function() {
+                    try {
+                        await editor.savePost();
+                        editorDelegate.onSavePostComplete('$callbackId', true, '');
+                    } catch (e) {
+                        editorDelegate.onSavePostComplete('$callbackId', false, e.message || 'Unknown error');
+                    }
+                })();
+            """.trimIndent(), null)
+        }
+    }
+
+    @JavascriptInterface
+    fun onSavePostComplete(callbackId: String, success: Boolean, errorMessage: String) {
+        val callback = pendingSaveCallbacks.remove(callbackId) ?: return
+        handler.post {
+            if (success) {
+                callback.onSuccess()
+                savePostListener?.onPostSaved()
+            } else {
+                callback.onFailure(errorMessage)
+                savePostListener?.onPostSaveFailed(errorMessage)
             }
         }
     }
@@ -784,6 +895,16 @@ class GutenbergView : FrameLayout {
     @JavascriptInterface
     fun onEditorHistoryChanged(hasUndo: Boolean, hasRedo: Boolean) {
         historyChangeListener?.onHistoryChanged(hasUndo, hasRedo)
+    }
+
+    @JavascriptInterface
+    @Suppress("MaxLineLength")
+    fun onSaveAvailabilityChanged(isDirty: Boolean, isSaveable: Boolean, isSavingLocked: Boolean, isSaving: Boolean, isAutosaving: Boolean) {
+        handler.post {
+            saveAvailabilityListener?.onSaveAvailabilityChanged(
+                SaveAvailabilityState(isDirty, isSaveable, isSavingLocked, isSaving, isAutosaving)
+            )
+        }
     }
 
     @JavascriptInterface
@@ -928,6 +1049,21 @@ class GutenbergView : FrameLayout {
         }
     }
 
+    /**
+     * Pre-save hook called by JavaScript with the current entity record.
+     *
+     * The host app receives the full post via [LatestPostProvider] and may return
+     * a modified version. The returned JSON is merged into the entity record as
+     * edits before the save PUT is sent.
+     *
+     * @param postJson The current entity record as a JSON string.
+     * @return JSON string with modified post fields, or null if no modifications needed.
+     */
+    @JavascriptInterface
+    fun hydratePost(postJson: String): String? {
+        return latestPostProvider?.getLatestPost(postJson)
+    }
+
     fun resetFilePathCallback() {
         filePathCallback = null
     }
@@ -1025,6 +1161,12 @@ class GutenbergView : FrameLayout {
         networkRequestListener = null
         requestInterceptor = DefaultGutenbergRequestInterceptor()
         latestContentProvider = null
+        latestPostProvider = null
+        // Drain pending save callbacks to prevent leaks
+        for (callback in pendingSaveCallbacks.values) {
+            callback.onFailure("Editor detached")
+        }
+        pendingSaveCallbacks.clear()
         handler.removeCallbacksAndMessages(null)
         webView.destroy()
     }

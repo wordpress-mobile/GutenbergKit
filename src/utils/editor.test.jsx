@@ -17,9 +17,11 @@ vi.mock( '@wordpress/blocks' );
 vi.mock( '@wordpress/editor' );
 vi.mock( import( '@wordpress/data' ), { spy: true } );
 vi.mock( '@wordpress/block-library' );
+vi.mock( '@wordpress/core-data' );
 vi.mock( './blocks' );
 vi.mock( './bridge' );
 vi.mock( './editor-settings' );
+vi.mock( './prime-post-entity' );
 vi.mock( '../components/layout', () => ( {
 	default: () => null,
 } ) );

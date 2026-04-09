@@ -60,18 +60,6 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// - parameter request: The network request details including URL, headers, body, response, and timing.
     func editor(_ viewController: EditorViewController, didLogNetworkRequest request: RecordedNetworkRequest)
 
-    /// Provides the latest persisted content for recovery after WebView refresh.
-    ///
-    /// Called when the WebView requests content during initialization. The host app should return
-    /// the most recently persisted title and content from autosave. This allows content recovery
-    /// when the WebView is re-initialized (e.g., due to OS memory pressure or page refresh).
-    ///
-    /// Note: The values in `EditorConfiguration.title` and `EditorConfiguration.content` are "initial values"
-    /// injected at WebView load time. After a WebView refresh, these may be stale. This delegate method
-    /// allows the host app to provide fresher content from its autosave mechanism.
-    ///
-    /// - Returns: A tuple of (title, content), or nil if no persisted content is available.
-    func editorDidRequestLatestContent(_ controller: EditorViewController) -> (title: String, content: String)?
 }
 
 #endif
@@ -83,6 +71,20 @@ public struct EditorState {
     public var hasUndo = false
     /// Set to `true` if the editor has redo history.
     public var hasRedo = false
+}
+
+/// The current save availability state of the editor.
+public struct SaveAvailabilityState: Decodable {
+    /// Whether the post has unsaved changes.
+    public var isDirty: Bool
+    /// Whether the post has saveable content (title, excerpt, or content).
+    public var isSaveable: Bool
+    /// Whether saving has been explicitly locked (e.g. by a plugin or validation error).
+    public var isSavingLocked: Bool
+    /// Whether a save is currently in progress.
+    public var isSaving: Bool
+    /// Whether an autosave is currently in progress.
+    public var isAutosaving: Bool
 }
 
 // Definition of JavaScript exception, which will be used to

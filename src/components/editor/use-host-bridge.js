@@ -5,22 +5,34 @@ import { useEffect, useCallback, useRef } from '@wordpress/element';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as coreStore } from '@wordpress/core-data';
 import { store as editorStore } from '@wordpress/editor';
+import { store as noticesStore } from '@wordpress/notices';
 import { parse, serialize, getBlockType } from '@wordpress/blocks';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { insert, create, toHTMLString } from '@wordpress/rich-text';
+import { addFilter, removeFilter } from '@wordpress/hooks';
+import apiFetch from '@wordpress/api-fetch';
 
 /**
  * Internal dependencies
  */
 import { warn } from '../../utils/logger';
+import { hydratePost } from '../../utils/bridge';
 
 window.editor = window.editor || {};
 
 export function useHostBridge( post, editorRef, markBridgeReady ) {
 	const { editEntityRecord } = useDispatch( coreStore );
-	const { undo, redo, switchEditorMode } = useDispatch( editorStore );
-	const { getEditedPostAttribute, getEditedPostContent } =
-		useSelect( editorStore );
+	const { getEditedEntityRecord, getLastEntitySaveError } =
+		useSelect( coreStore );
+	const { undo, redo, switchEditorMode, savePost } =
+		useDispatch( editorStore );
+	const { removeNotice } = useDispatch( noticesStore );
+	const {
+		getEditedPostAttribute,
+		getEditedPostContent,
+		didPostSaveRequestFail,
+		getCurrentPostId,
+	} = useSelect( editorStore );
 	const { updateBlock, selectionChange } = useDispatch( blockEditorStore );
 	const {
 		getSelectedBlockClientId,
@@ -31,9 +43,14 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 
 	const editContent = useCallback(
 		( edits ) => {
-			editEntityRecord( 'postType', post.type, post.id, edits );
+			editEntityRecord(
+				'postType',
+				post.type,
+				getCurrentPostId(),
+				edits
+			);
 		},
-		[ editEntityRecord, post.id, post.type ]
+		[ editEntityRecord, getCurrentPostId, post.type ]
 	);
 
 	const postTitleRef = useRef( normalizeAttribute( post.title ) );
@@ -183,6 +200,110 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 			return true;
 		};
 
+		window.editor.savePost = async () => {
+			const isNewPost = getCurrentPostId() <= 0;
+			let createdId = null;
+
+			const saveOptions = {};
+			if ( isNewPost ) {
+				saveOptions.__unstableFetch = async ( fetchOptions ) => {
+					const result = await apiFetch( fetchOptions );
+					if ( fetchOptions.method === 'POST' && result?.id > 0 ) {
+						createdId = result.id;
+					}
+					return result;
+				};
+			}
+
+			try {
+				await savePost( saveOptions );
+			} finally {
+				// Suppress the editor's built-in save notice — the native
+				// host shows its own platform-appropriate feedback.
+				removeNotice( 'editor-save' );
+			}
+
+			// Gutenberg's savePost() never throws — it stores errors
+			// internally via REQUEST_POST_UPDATE_FAILURE. Surface the
+			// failure so the native host can display an error.
+			if ( didPostSaveRequestFail() ) {
+				const postId = getCurrentPostId();
+				const saveError = getLastEntitySaveError(
+					'postType',
+					post.type,
+					postId
+				);
+				throw new Error(
+					saveError?.message || saveError || 'Post save failed'
+				);
+			}
+
+			// After a successful create, record the server-assigned ID as
+			// an edit so subsequent saves use PUT /{restBase}/{id} instead
+			// of POST.  We deliberately avoid setEditedPost() — switching
+			// entity records mid-session causes the title's contentEditable
+			// to lose its value.
+			if ( isNewPost && createdId ) {
+				editEntityRecord( 'postType', post.type, getCurrentPostId(), {
+					id: createdId,
+				} );
+			}
+
+			// Return the saved entity so the native host can use it in
+			// post-save delegate callbacks.  getEditedEntityRecord
+			// returns raw-extracted strings for title/content, but the
+			// native EditorPost parser expects { raw, rendered } objects.
+			const postId = getCurrentPostId();
+			const savedRecord = getEditedEntityRecord(
+				'postType',
+				post.type,
+				postId
+			);
+			return {
+				...savedRecord,
+				title:
+					typeof savedRecord.title === 'string'
+						? { raw: savedRecord.title }
+						: savedRecord.title,
+				content: { raw: getEditedPostContent() },
+			};
+		};
+
+		// Register a pre-save filter so that every save path (native bridge,
+		// keyboard shortcut, plugin-triggered, autosave) hydrates the post
+		// with native-side metadata before the PUT is sent.
+		addFilter(
+			'editor.preSavePost',
+			'GutenbergKit/hydratePost',
+			async ( edits ) => {
+				const postId = getCurrentPostId();
+				const currentPost = getEditedEntityRecord(
+					'postType',
+					post.type,
+					postId
+				);
+				const modifiedPost = await hydratePost( currentPost );
+				if ( modifiedPost ) {
+					// Strip `meta` — the native host round-trips it
+					// from the entity record but the REST API may
+					// reject values whose types changed during the
+					// Foundation↔JSON conversion (e.g. integer meta
+					// fields returned as doubles).
+					const { meta: _meta, ...safeFields } = modifiedPost;
+					edits = { ...edits, ...safeFields };
+				}
+
+				// For new posts (id <= 0), strip the id so Gutenberg sends
+				// POST (create) instead of PUT to /{restBase}/{id}.
+				if ( edits.id !== undefined && edits.id <= 0 ) {
+					const { id: _id, ...rest } = edits;
+					return rest;
+				}
+
+				return edits;
+			}
+		);
+
 		// Signal that all window.editor.* methods are assigned. The native
 		// host is notified only after this AND the editor element is visible
 		// (coordinated by useEditorReady).
@@ -199,16 +320,26 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 			delete window.editor.dismissTopModal;
 			delete window.editor.focus;
 			delete window.editor.appendTextAtCursor;
+			delete window.editor.savePost;
+			removeFilter( 'editor.preSavePost', 'GutenbergKit/hydratePost' );
 		};
 	}, [
 		editorRef,
 		editContent,
+		getEditedEntityRecord,
+		getLastEntitySaveError,
 		markBridgeReady,
 		getEditedPostAttribute,
 		getEditedPostContent,
+		getCurrentPostId,
+		post.type,
 		redo,
+		savePost,
+		didPostSaveRequestFail,
+		removeNotice,
 		switchEditorMode,
 		undo,
+		editEntityRecord,
 		getSelectedBlockClientId,
 		getBlock,
 		getSelectionStart,

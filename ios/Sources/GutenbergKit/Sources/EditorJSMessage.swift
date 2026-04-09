@@ -49,6 +49,8 @@ struct EditorJSMessage {
         case log
         /// A network request was made
         case onNetworkRequest
+        /// The save availability state changed.
+        case onSaveAvailabilityChanged
     }
 
     struct DidUpdateBlocksBody: Decodable {

@@ -283,7 +283,7 @@ describe( 'getPost', () => {
 			expect( result.content.raw ).toBe( 'Updated Content' );
 		} );
 
-		it( 'should coerce post ID 0 to -1 with host content', async () => {
+		it( 'should preserve post ID as-is with host content', async () => {
 			const hostContent = {
 				title: 'Title',
 				content: 'Content',
@@ -307,7 +307,7 @@ describe( 'getPost', () => {
 
 			const result = await getPost();
 
-			expect( result.id ).toBe( -1 );
+			expect( result.id ).toBe( 0 );
 		} );
 	} );
 
@@ -368,7 +368,7 @@ describe( 'getPost', () => {
 			} );
 		} );
 
-		it( 'should coerce post ID 0 to -1 in GBKit fallback', async () => {
+		it( 'should preserve post ID as-is in GBKit fallback', async () => {
 			window.GBKit = {
 				post: {
 					id: 0,
@@ -381,7 +381,7 @@ describe( 'getPost', () => {
 
 			const result = await getPost();
 
-			expect( result.id ).toBe( -1 );
+			expect( result.id ).toBe( 0 );
 		} );
 	} );
 
@@ -392,7 +392,6 @@ describe( 'getPost', () => {
 			const result = await getPost();
 
 			expect( result ).toEqual( {
-				id: -1,
 				type: 'post',
 				status: 'draft',
 				title: { raw: '' },
@@ -420,7 +419,7 @@ describe( 'getPost', () => {
 			const result = await getPost();
 
 			expect( result ).toEqual( {
-				id: -1,
+				id: undefined,
 				type: 'post',
 				status: 'draft',
 				title: { raw: 'Title' },

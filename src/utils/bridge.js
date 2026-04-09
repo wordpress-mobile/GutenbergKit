@@ -64,6 +64,34 @@ export function onEditorHistoryChanged( hasUndo, hasRedo ) {
 }
 
 /**
+ * Notifies the native host that the save availability state has changed.
+ *
+ * @param {Object}  state                The save availability state.
+ * @param {boolean} state.isDirty        Whether the post has unsaved changes.
+ * @param {boolean} state.isSaveable     Whether the post has saveable content.
+ * @param {boolean} state.isSavingLocked Whether saving has been explicitly locked.
+ * @param {boolean} state.isSaving       Whether a save is currently in progress.
+ * @param {boolean} state.isAutosaving   Whether an autosave is currently in progress.
+ *
+ * @return {void}
+ */
+export function onSaveAvailabilityChanged( {
+	isDirty,
+	isSaveable,
+	isSavingLocked,
+	isSaving,
+	isAutosaving,
+} ) {
+	dispatchToBridge( 'onSaveAvailabilityChanged', {
+		isDirty,
+		isSaveable,
+		isSavingLocked,
+		isSaving,
+		isAutosaving,
+	} );
+}
+
+/**
  * Notifies the native host that the featured image has changed.
  *
  * @param {number} [mediaID] The featured image ID.
@@ -221,7 +249,6 @@ export function onNetworkRequest( requestData ) {
  * on the fallback contract.
  */
 export const POST_FALLBACKS = {
-	id: -1,
 	type: 'post',
 	restBase: 'posts',
 	restNamespace: 'wp/v2',
@@ -293,27 +320,123 @@ export async function requestLatestContent() {
 }
 
 /**
- * Retrieves the current post data from the native host
+ * Pre-save hook: hydrates the post with native-side details before saving.
+ *
+ * Called just before `savePost()` persists changes. The editor passes the
+ * full entity record (title, content, categories, tags, meta, featured_media,
+ * etc.) to the native host. The host may enrich or modify any fields — for
+ * example, updating categories or tags that were changed in native UI — and
+ * return the hydrated post. The returned object is merged back into the entity
+ * record as edits before the save PUT is sent.
+ *
+ * If the host returns `null`, no modifications are applied.
+ *
+ * @param {Object} post The current edited entity record.
+ * @return {Promise<Object|null>} The hydrated post, or null if no changes.
+ */
+export async function hydratePost( post ) {
+	if ( window.webkit?.messageHandlers?.hydratePost ) {
+		try {
+			return await window.webkit.messageHandlers.hydratePost.postMessage(
+				post
+			);
+		} catch ( err ) {
+			error( 'Failed to hydrate post from iOS host', err );
+			return null;
+		}
+	}
+
+	if ( window.editorDelegate?.hydratePost ) {
+		try {
+			const result = window.editorDelegate.hydratePost(
+				JSON.stringify( post )
+			);
+			return result ? JSON.parse( result ) : null;
+		} catch ( err ) {
+			error( 'Failed to hydrate post from Android host', err );
+			return null;
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Extracts the full post object from the preload data, if available.
+ *
+ * The preloading system fetches the full post via
+ * `/{restNamespace}/{restBase}/{id}?context=edit` and stores it in
+ * `window.GBKit.preloadData`. This function retrieves that data so the
+ * entity store can be seeded with all fields (categories, tags, meta,
+ * featured_media, excerpt, format, etc.) — not just title and content.
+ *
+ * @param {Object}      post        The minimal post object from GBKit.
+ * @param {Object|null} preloadData The preloaded API responses.
+ * @return {Object|null} The full post object, or null if unavailable.
+ */
+function getPreloadedPost( post, preloadData ) {
+	if ( ! post || ! preloadData || ! post.id ) {
+		return null;
+	}
+
+	const restNamespace = post.restNamespace || POST_FALLBACKS.restNamespace;
+	const restBase = post.restBase || POST_FALLBACKS.restBase;
+	const path = `/${ restNamespace }/${ restBase }/${ post.id }?context=edit`;
+
+	const preloaded = preloadData[ path ];
+	if ( ! preloaded?.body ) {
+		return null;
+	}
+
+	return typeof preloaded.body === 'string'
+		? JSON.parse( preloaded.body )
+		: preloaded.body;
+}
+
+/**
+ * Retrieves the current post data from the native host.
+ *
+ * When editing an existing post, returns the full post object from preloaded
+ * data (including categories, tags, meta, featured_media, etc.) so the entity
+ * store is seeded with complete data. This is required for `savePost()` to
+ * persist all fields correctly.
  *
  * Always requests content from the native host first, as it maintains the
  * latest content via autosave. Falls back to `window.GBKit.post` only if the
  * native bridge is unavailable (e.g., dev mode).
  *
- * Note: `window.GBKit.post.title/content` are "initial values" injected at
- * WebView load. After a WebView refresh, these may be stale. The native host
- * has the authoritative content from autosave.
- *
  * @return {Promise<Post>} The post object.
  */
 export async function getPost() {
-	const { post } = getGBKit();
+	const gbkit = getGBKit();
+	const { post, preloadData } = gbkit;
 
 	const hostContent = await requestLatestContent();
+	const preloadedPost = getPreloadedPost( post, preloadData );
+
+	if ( preloadedPost ) {
+		debug( 'Using full post from preload data' );
+		const fullPost = {
+			...preloadedPost,
+			// Ensure GBKit metadata fields are always present since they
+			// are not part of the standard REST API response.
+			restBase: post?.restBase || POST_FALLBACKS.restBase,
+			restNamespace: post?.restNamespace || POST_FALLBACKS.restNamespace,
+		};
+
+		// Override title/content with native host's authoritative values
+		if ( hostContent ) {
+			fullPost.title = { raw: hostContent.title };
+			fullPost.content = { raw: hostContent.content };
+		}
+
+		return fullPost;
+	}
 
 	if ( hostContent ) {
 		debug( 'Using content from native host' );
 		return {
-			id: post?.id || POST_FALLBACKS.id,
+			id: post?.id,
 			type: post?.type || POST_FALLBACKS.type,
 			restBase: post?.restBase || POST_FALLBACKS.restBase,
 			restNamespace: post?.restNamespace || POST_FALLBACKS.restNamespace,
@@ -326,7 +449,7 @@ export async function getPost() {
 	if ( post ) {
 		debug( 'Native bridge unavailable, using GBKit initial content' );
 		return {
-			id: post.id || POST_FALLBACKS.id,
+			id: post.id,
 			type: post.type || POST_FALLBACKS.type,
 			restBase: post.restBase || POST_FALLBACKS.restBase,
 			restNamespace: post.restNamespace || POST_FALLBACKS.restNamespace,

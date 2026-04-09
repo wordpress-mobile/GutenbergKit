@@ -30,6 +30,17 @@ struct EditorView: View {
             viewModel: viewModel
         )
             .toolbar { toolbar }
+            .alert("Post saved", isPresented: $viewModel.didSave) {
+                Button("OK", role: .cancel) {}
+            }
+            .alert("Save failed", isPresented: Binding(
+                get: { viewModel.saveError != nil },
+                set: { if !$0 { viewModel.saveError = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(viewModel.saveError?.localizedDescription ?? "Unknown error")
+            }
     }
 
     @ToolbarContentBuilder
@@ -122,6 +133,7 @@ private struct _EditorView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> EditorViewController {
         let viewController = EditorViewController(configuration: configuration, dependencies: dependencies)
         viewController.delegate = context.coordinator
+        viewController.persistenceDelegate = context.coordinator
         viewController.webView.isInspectable = true
 
         viewModel.perform = { [weak viewController] in
@@ -131,11 +143,9 @@ private struct _EditorView: UIViewControllerRepresentable {
             }
         }
 
-        viewModel.hasPostID = configuration.postID != nil
-
-        viewModel.saveHandler = { [weak viewController, weak viewModel] in
-            guard let viewController, let viewModel else { return }
-            await persistPost(viewController: viewController, viewModel: viewModel)
+        viewModel.saveHandler = { [weak viewController] in
+            guard let viewController else { return }
+            try await viewController.savePost()
         }
 
         return viewController
@@ -143,33 +153,6 @@ private struct _EditorView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ viewController: EditorViewController, context: Context) {
         viewController.isCodeEditorEnabled = viewModel.isCodeEditorEnabled
-    }
-
-    /// Persists the post via the REST API.
-    private func persistPost(viewController: EditorViewController, viewModel: EditorViewModel) async {
-        guard let apiClient, let postID = configuration.postID else { return }
-        do {
-            let titleAndContent = try await viewController.getTitleAndContent()
-            let params = PostUpdateParams(title: .some(titleAndContent.title), content: .some(titleAndContent.content), meta: nil)
-            let endpointType: PostEndpointType
-            switch configuration.postType.postType {
-            case "post":
-                endpointType = .posts
-            case "page":
-                endpointType = .pages
-            default:
-                endpointType = .custom(configuration.postType.restBase)
-            }
-            _ = try await apiClient.posts.updateCancellation(
-                postEndpointType: endpointType,
-                postId: Int64(postID),
-                params: params,
-                context: nil
-            )
-            print("Post \(postID) persisted via REST API")
-        } catch {
-            print("Failed to persist post \(postID): \(error)")
-        }
     }
 
     @MainActor
@@ -256,11 +239,35 @@ private struct _EditorView: UIViewControllerRepresentable {
             }
         }
 
-        func editorDidRequestLatestContent(_ controller: EditorViewController) -> (title: String, content: String)? {
-            // Demo app has no persistence layer, so return nil.
-            // In a real app, return the persisted title and content from autosave.
-            return nil
-        }
+    }
+}
+
+// MARK: - EditorPersistenceDelegate
+
+extension _EditorView.Coordinator: EditorPersistenceDelegate {
+    func editorDidRequestLatestContent(_ controller: EditorViewController) -> (title: String, content: String)? {
+        // Demo app has no persistence layer, so return nil.
+        // In a real app, return the persisted title and content from autosave.
+        return nil
+    }
+
+    func editor(_ controller: EditorViewController, willSavePost post: EditorPost) -> EditorPost {
+        // Demo app has no modifications to make.
+        // In a real app, inspect the post and return modified fields if needed.
+        return post
+    }
+
+    func editor(_ controller: EditorViewController, didSavePost post: EditorPost) {
+        print("Post saved: \(post.id ?? -1)")
+    }
+
+    func editor(_ controller: EditorViewController, didFailToSavePost post: EditorPost, error: Error) {
+        print("Failed to save post \(post.id ?? -1): \(error)")
+    }
+
+    func editor(_ controller: EditorViewController, didUpdateSaveAvailability state: SaveAvailabilityState) {
+        viewModel.isDirty = state.isDirty
+        viewModel.isSaveable = state.isSaveable
     }
 }
 
@@ -272,11 +279,13 @@ private final class EditorViewModel {
     var isCodeEditorEnabled = false
     var isSaving = false
     var isEditorReady = false
-
-    var hasPostID = false
+    var isDirty = false
+    var isSaveable = false
+    var didSave = false
+    var saveError: Error?
 
     var canSave: Bool {
-        isEditorReady && !isSaving && hasPostID
+        isEditorReady && isDirty && isSaveable && !isSaving
     }
 
     enum Action {
@@ -285,13 +294,19 @@ private final class EditorViewModel {
     }
 
     var perform: (_ action: Action) -> Void = { _ in assertionFailure() }
-    var saveHandler: () async -> Void = {}
+    var saveHandler: () async throws -> Void = {}
 
     func save() {
         guard canSave else { return }
         isSaving = true
         Task {
-            await saveHandler()
+            do {
+                try await saveHandler()
+                didSave = true
+            } catch {
+                saveError = error
+                print("Save failed: \(error)")
+            }
             isSaving = false
         }
     }

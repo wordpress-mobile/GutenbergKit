@@ -9,7 +9,7 @@ public struct GBKitGlobal: Sendable, Codable {
     
     /// The post data passed to the editor.
     public struct Post: Sendable, Codable {
-        /// The post ID, or -1 for new posts.
+        /// The post ID, or `-1` for new posts.
         let id: Int
 
         /// The post type (e.g., "post", "page").

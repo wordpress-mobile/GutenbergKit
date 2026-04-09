@@ -18,16 +18,25 @@ export function initializeFetchInterceptor() {
 	}
 
 	const config = getGBKit();
-
-	// Only override window.fetch if network logging is enabled
-	if ( ! config.enableNetworkLogging ) {
-		debug( 'Network logging disabled, fetch interceptor not initialized' );
-		return;
-	}
-
+	const enableNetworkLogging = config.enableNetworkLogging;
 	const originalFetch = window.fetch;
 
 	window.fetch = async function ( input, init ) {
+		// Gutenberg's httpV1Middleware rewrites PUT/PATCH/DELETE to POST
+		// and adds an X-HTTP-Method-Override header.  That header is not
+		// in the CORS allow-list for many WordPress hosts (including
+		// WordPress.com), so restore the original method before the
+		// request hits the network.
+		if ( init?.headers?.[ 'X-HTTP-Method-Override' ] ) {
+			const { 'X-HTTP-Method-Override': override, ...remainingHeaders } =
+				init.headers;
+			init = { ...init, method: override, headers: remainingHeaders };
+		}
+
+		if ( ! enableNetworkLogging ) {
+			return originalFetch.call( this, input, init );
+		}
+
 		const startTime = performance.now();
 		const requestDetails = extractRequestDetails( input, init );
 

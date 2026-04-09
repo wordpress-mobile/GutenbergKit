@@ -82,6 +82,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Delegate for receiving editor lifecycle and content change callbacks.
     public weak var delegate: EditorViewControllerDelegate?
 
+    /// Delegate for persistence: content recovery and save lifecycle hooks.
+    public weak var persistenceDelegate: EditorPersistenceDelegate?
+
     /// The fetched or provided editor dependencies (settings, assets, preload data).
     private var dependencies: EditorDependencies?
     private var dependencyTaskHandle: Task<Void, Never>?
@@ -184,6 +187,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // Register async message handler for content recovery requests.
         // This allows JavaScript to request the latest persisted content from the native host.
         config.userContentController.addScriptMessageHandler(controller, contentWorld: .page, name: "requestLatestContent")
+
+        // Register async message handler for pre-save post hydration.
+        // This allows JavaScript to hydrate the post with native-side metadata before saving.
+        config.userContentController.addScriptMessageHandler(controller, contentWorld: .page, name: "hydratePost")
 
         self.bundleProvider.bind(to: config)
 
@@ -401,6 +408,42 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             throw NSError(domain: "Invalid data format", code: 0, userInfo: nil)
         }
         return EditorTitleAndContent(title: title, content: content, changed: changed)
+    }
+
+    /// Saves the post via the editor's built-in save mechanism.
+    ///
+    /// This triggers the full Gutenberg save lifecycle:
+    /// 1. The `editor.preSavePost` filter hydrates the post with native metadata
+    /// 2. The editor PUTs the complete post to the REST API
+    /// 3. Plugin side-effects (e.g. VideoPress metadata sync) fire via `isSavingPost()` transitions
+    ///
+    /// The native host should show its own save feedback — the editor's built-in
+    /// save notice is suppressed automatically.
+    ///
+    /// - Throws: `EditorNotReadyError` if the editor hasn't loaded yet, or any
+    ///   error from the JavaScript save operation.
+    public func savePost() async throws {
+        guard isReady else { throw EditorNotReadyError() }
+        do {
+            let result = try await webView.callAsyncJavaScript(
+                "return await editor.savePost();",
+                in: nil,
+                contentWorld: .page
+            )
+            let post = Self.decodeEditorPost(from: result)
+            if let post {
+                persistenceDelegate?.editor(self, didSavePost: post)
+            }
+        } catch {
+            let post = Self.decodeEditorPost(from: nil)
+            persistenceDelegate?.editor(self, didFailToSavePost: post ?? EditorPost(), error: error)
+            throw error
+        }
+    }
+
+    private static func decodeEditorPost(from value: Any?) -> EditorPost? {
+        guard let dict = value as? [String: Any] else { return nil }
+        return EditorPost(dictionary: dict)
     }
 
     /// Steps backwards in the editor history state
@@ -663,6 +706,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                     return
                 }
                 delegate?.editor(self, didLogNetworkRequest: networkRequest)
+            case .onSaveAvailabilityChanged:
+                let state = try message.decode(SaveAvailabilityState.self)
+                persistenceDelegate?.editor(self, didUpdateSaveAvailability: state)
             }
         } catch {
             // Capture detailed diagnostic information for crash reporting
@@ -685,7 +731,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     fileprivate func controllerDidRequestLatestContent(_ controller: GutenbergEditorController) -> (title: String, content: String)? {
-        return delegate?.editorDidRequestLatestContent(self)
+        return persistenceDelegate?.editorDidRequestLatestContent(self)
+    }
+
+    fileprivate func controller(_ controller: GutenbergEditorController, willSavePost post: EditorPost) -> EditorPost {
+        return persistenceDelegate?.editor(self, willSavePost: post) ?? post
     }
 
     fileprivate func controllerWebContentProcessDidTerminate(_ controller: GutenbergEditorController) {
@@ -758,6 +808,7 @@ public struct EditorNotReadyError: LocalizedError {
 private protocol GutenbergEditorControllerDelegate: AnyObject {
     func controller(_ controller: GutenbergEditorController, didReceiveMessage message: EditorJSMessage)
     func controllerDidRequestLatestContent(_ controller: GutenbergEditorController) -> (title: String, content: String)?
+    func controller(_ controller: GutenbergEditorController, willSavePost post: EditorPost) -> EditorPost
     func controllerWebContentProcessDidTerminate(_ controller: GutenbergEditorController)
 }
 
@@ -777,22 +828,44 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     // MARK: - WKScriptMessageHandlerWithReply
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) async -> (Any?, String?) {
-        guard message.name == "requestLatestContent" else {
+        switch message.name {
+        case "requestLatestContent":
+            let content = await MainActor.run {
+                delegate?.controllerDidRequestLatestContent(self)
+            }
+
+            guard let content else {
+                return (nil, nil)  // No content available - not an error
+            }
+
+            return ([
+                "title": content.title,
+                "content": content.content
+            ] as [String: String], nil)
+
+        case "hydratePost":
+            guard let body = message.body as? [String: Any] else {
+                NSLog("GutenbergKit: hydratePost message body is not a dictionary")
+                return (nil, nil)
+            }
+            let post = EditorPost(dictionary: body)
+
+            let modifiedPost = await MainActor.run {
+                delegate?.controller(self, willSavePost: post) ?? post
+            }
+
+            do {
+                let encodedData = try JSONEncoder().encode(modifiedPost)
+                let dict = try JSONSerialization.jsonObject(with: encodedData)
+                return (dict, nil)
+            } catch {
+                NSLog("GutenbergKit: Failed to encode pre-save post: \(error)")
+                return (nil, nil)
+            }
+
+        default:
             return (nil, "Unknown message handler: \(message.name)")
         }
-
-        let content = await MainActor.run {
-            delegate?.controllerDidRequestLatestContent(self)
-        }
-
-        guard let content else {
-            return (nil, nil)  // No content available - not an error
-        }
-
-        return ([
-            "title": content.title,
-            "content": content.content
-        ] as [String: String], nil)
     }
 
     // MARK: - WKNavigationDelegate
