@@ -127,7 +127,14 @@ function tokenAuthMiddleware( options, next ) {
 function filterEndpointsMiddleware( options, next ) {
 	const { post } = getGBKit();
 
-	if ( ! post || post.id === undefined ) {
+	if ( ! post || ! post.id ) {
+		return next( options );
+	}
+
+	// Allow write requests (PUT, POST, PATCH, DELETE) through so that
+	// savePost() can persist changes to the server.
+	const method = ( options.method || 'GET' ).toUpperCase();
+	if ( method !== 'GET' ) {
 		return next( options );
 	}
 

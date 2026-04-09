@@ -11,6 +11,7 @@ import { store as editorStore, EditorProvider } from '@wordpress/editor';
 import VisualEditor from '../visual-editor';
 import './style.scss';
 import { useSyncHistoryControls } from './use-sync-history-controls';
+import { useSyncSaveAvailability } from './use-sync-save-availability';
 import { useHostBridge } from './use-host-bridge';
 import { useEditorReady } from './use-editor-ready';
 import { useHostExceptionLogging } from './use-host-exception-logging';
@@ -41,6 +42,7 @@ export default function Editor( { post, children, hideTitle } ) {
 	useHostBridge( post, editorRef, markBridgeReady );
 	useSyncFeaturedImage();
 	useSyncHistoryControls();
+	useSyncSaveAvailability();
 	useHostExceptionLogging();
 	useEditorSetup( post );
 	useMediaUpload();
