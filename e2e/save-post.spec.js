@@ -14,10 +14,6 @@ import { credentials } from './wp-env-fixtures';
  * the real server.  The mock returns a realistic post object with a
  * server-assigned ID so the editor can update its internal state.
  *
- * Gutenberg's `httpV1Middleware` converts PUT/PATCH/DELETE to POST with an
- * `X-HTTP-Method-Override` header, so the captured `method` reflects the
- * logical REST verb (from the header when present, otherwise the HTTP method).
- *
  * @param {import('@playwright/test').Page} page       Playwright page.
  * @param {Object}                          options
  * @param {number}                          options.id The ID the "server" assigns to a newly created post.
@@ -28,9 +24,7 @@ async function mockPostsEndpoint( page, { id } ) {
 	const apiBase = credentials.siteApiRoot;
 
 	await page.route( `${ apiBase }wp/v2/posts**`, ( route ) => {
-		const headers = route.request().headers();
-		const method =
-			headers[ 'x-http-method-override' ] || route.request().method();
+		const method = route.request().method();
 		const url = route.request().url();
 		requests.push( { method, url } );
 
@@ -74,11 +68,18 @@ test.describe( 'Save Post', () => {
 		const createRequest = requests.find( ( r ) => r.method === 'POST' );
 		expect( createRequest ).toBeDefined();
 
-		// The editor store should now reference the server-assigned ID.
-		const postIdAfterCreate = await page.evaluate( () =>
-			window.wp.data.select( 'core/editor' ).getCurrentPostId()
-		);
-		expect( postIdAfterCreate ).toBe( SERVER_ID );
+		// The server-assigned ID is recorded as an edit on the existing
+		// entity (not via setEditedPost) so the title contentEditable
+		// is preserved.  Verify the edited entity reflects the new ID.
+		const editedId = await page.evaluate( () => {
+			const postId = window.wp.data
+				.select( 'core/editor' )
+				.getCurrentPostId();
+			return window.wp.data
+				.select( 'core' )
+				.getEditedEntityRecord( 'postType', 'post', postId )?.id;
+		} );
+		expect( editedId ).toBe( SERVER_ID );
 
 		// --- Second save: should PUT (update) to the created ID ---
 		// Make an edit so the editor considers the post saveable again.

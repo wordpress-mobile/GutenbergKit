@@ -14,13 +14,11 @@ const mockGetEditedPostAttribute = vi.fn();
 const mockGetEditedPostContent = vi.fn();
 const mockGetSelectedBlockClientId = vi.fn();
 const mockGetBlock = vi.fn();
-const mockGetBlocks = vi.fn();
 const mockGetSelectionStart = vi.fn();
 const mockGetSelectionEnd = vi.fn();
 const mockUpdateBlock = vi.fn();
 const mockSelectionChange = vi.fn();
 const mockSavePost = vi.fn();
-const mockSetEditedPost = vi.fn();
 const mockDidPostSaveRequestFail = vi.fn();
 const mockGetCurrentPostId = vi.fn();
 const mockRemoveNotice = vi.fn();
@@ -48,7 +46,6 @@ vi.mock( '@wordpress/data', () => ( {
 		return {
 			getSelectedBlockClientId: mockGetSelectedBlockClientId,
 			getBlock: mockGetBlock,
-			getBlocks: mockGetBlocks,
 			getSelectionStart: mockGetSelectionStart,
 			getSelectionEnd: mockGetSelectionEnd,
 		};
@@ -59,7 +56,6 @@ vi.mock( '@wordpress/data', () => ( {
 		redo: vi.fn(),
 		switchEditorMode: vi.fn(),
 		savePost: mockSavePost,
-		setEditedPost: mockSetEditedPost,
 		removeNotice: mockRemoveNotice,
 		updateBlock: mockUpdateBlock,
 		selectionChange: mockSelectionChange,
@@ -123,7 +119,6 @@ describe( 'useHostBridge', () => {
 		window.editor = {};
 		// Default: existing post with positive ID
 		mockGetCurrentPostId.mockReturnValue( 1 );
-		mockGetBlocks.mockReturnValue( [] );
 	} );
 
 	it( 'assigns window.editor methods and calls markBridgeReady', () => {
@@ -556,7 +551,7 @@ describe( 'useHostBridge', () => {
 		expect( mockRemoveNotice ).toHaveBeenCalledWith( 'editor-save' );
 	} );
 
-	it( 'savePost does not call setEditedPost for existing posts', async () => {
+	it( 'savePost does not record server ID for existing posts', async () => {
 		mockGetCurrentPostId.mockReturnValue( 1 );
 		mockGetEditedEntityRecord.mockReturnValue( defaultPost );
 		mockSavePost.mockResolvedValue();
@@ -566,12 +561,21 @@ describe( 'useHostBridge', () => {
 			useHostBridge( defaultPost, editorRef, markBridgeReady )
 		);
 
+		mockEditEntityRecord.mockClear();
 		await window.editor.savePost();
 
-		expect( mockSetEditedPost ).not.toHaveBeenCalled();
+		// editEntityRecord should not be called to record a server ID
+		// (it may be called for other edits, but never with just { id }).
+		const idEditCalls = mockEditEntityRecord.mock.calls.filter(
+			( args ) =>
+				args[ 3 ] &&
+				'id' in args[ 3 ] &&
+				Object.keys( args[ 3 ] ).length === 1
+		);
+		expect( idEditCalls ).toHaveLength( 0 );
 	} );
 
-	it( 'savePost passes __unstableFetch for new posts and calls setEditedPost with created ID', async () => {
+	it( 'savePost passes __unstableFetch for new posts and records server ID as edit', async () => {
 		const newPost = { ...defaultPost, id: -1 };
 		mockGetCurrentPostId.mockReturnValue( -1 );
 		mockGetEditedEntityRecord.mockReturnValue( newPost );
@@ -596,6 +600,7 @@ describe( 'useHostBridge', () => {
 			useHostBridge( newPost, editorRef, markBridgeReady )
 		);
 
+		mockEditEntityRecord.mockClear();
 		await window.editor.savePost();
 
 		expect( mockSavePost ).toHaveBeenCalledWith(
@@ -603,7 +608,14 @@ describe( 'useHostBridge', () => {
 				__unstableFetch: expect.any( Function ),
 			} )
 		);
-		expect( mockSetEditedPost ).toHaveBeenCalledWith( 'post', 42 );
+		// The server-assigned ID is recorded as an edit on the existing
+		// entity rather than switching entities with setEditedPost.
+		expect( mockEditEntityRecord ).toHaveBeenCalledWith(
+			'postType',
+			'post',
+			-1,
+			{ id: 42 }
+		);
 	} );
 
 	it( 'cleans up window.editor methods and filter on unmount', () => {

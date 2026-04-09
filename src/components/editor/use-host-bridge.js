@@ -24,7 +24,7 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 	const { editEntityRecord } = useDispatch( coreStore );
 	const { getEditedEntityRecord, getLastEntitySaveError } =
 		useSelect( coreStore );
-	const { undo, redo, switchEditorMode, savePost, setEditedPost } =
+	const { undo, redo, switchEditorMode, savePost } =
 		useDispatch( editorStore );
 	const { removeNotice } = useDispatch( noticesStore );
 	const {
@@ -37,7 +37,6 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 	const {
 		getSelectedBlockClientId,
 		getBlock,
-		getBlocks,
 		getSelectionStart,
 		getSelectionEnd,
 	} = useSelect( blockEditorStore );
@@ -239,20 +238,14 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 				);
 			}
 
-			// After a successful create, point the editor store at the
-			// server-assigned ID so subsequent saves send PUT (update)
-			// instead of POST (create).  The block-editor's blocks are
-			// associated with the old entity (-1), so we re-attach them
-			// to the new entity so content isn't lost.
+			// After a successful create, record the server-assigned ID as
+			// an edit so subsequent saves use PUT /{restBase}/{id} instead
+			// of POST.  We deliberately avoid setEditedPost() — switching
+			// entity records mid-session causes the title's contentEditable
+			// to lose its value.
 			if ( isNewPost && createdId ) {
-				const title = getEditedPostAttribute( 'title' );
-				const blocks = getBlocks();
-				setEditedPost( post.type, createdId );
-				editEntityRecord( 'postType', post.type, createdId, {
-					title,
-					blocks,
-					content: ( { blocks: blocksForSerialization = [] } ) =>
-						serialize( blocksForSerialization ),
+				editEntityRecord( 'postType', post.type, getCurrentPostId(), {
+					id: createdId,
 				} );
 			}
 
@@ -342,7 +335,6 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 		post.type,
 		redo,
 		savePost,
-		setEditedPost,
 		didPostSaveRequestFail,
 		removeNotice,
 		switchEditorMode,
@@ -350,7 +342,6 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 		editEntityRecord,
 		getSelectedBlockClientId,
 		getBlock,
-		getBlocks,
 		getSelectionStart,
 		getSelectionEnd,
 		updateBlock,
