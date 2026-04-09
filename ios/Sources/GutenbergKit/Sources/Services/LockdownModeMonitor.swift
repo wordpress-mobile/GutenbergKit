@@ -147,7 +147,7 @@ class LockdownModeMonitor: ObservableObject {
         hostingController.isModalInPresentation = true
 
         if let sheet = hostingController.sheetPresentationController {
-            sheet.detents = [.medium()]
+            sheet.detents = [.large()]
             sheet.prefersGrabberVisible = false
         }
 
