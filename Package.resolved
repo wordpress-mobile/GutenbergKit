@@ -18,15 +18,6 @@
         "revision" : "aa85ee96017a730031bafe411cde24a08a17a9c9",
         "version" : "2.8.8"
       }
-    },
-    {
-      "identity" : "wordpress-rs",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/Automattic/wordpress-rs",
-      "state" : {
-        "branch" : "alpha-20260313",
-        "revision" : "cde2fda82257f4ac7b81543d5b831bb267d4e52c"
-      }
     }
   ],
   "version" : 3
