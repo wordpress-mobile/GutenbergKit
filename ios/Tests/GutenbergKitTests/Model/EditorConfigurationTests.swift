@@ -65,6 +65,15 @@ struct EditorConfigurationBuilderTests: MakesTestFixtures {
     #expect(config.postID == 123)
   }
 
+  @Test("setPostID with zero results in nil")
+  func setPostIDWithZeroResultsInNil() {
+    let config = makeConfigurationBuilder()
+      .setPostID(0)
+      .build()
+
+    #expect(config.postID == nil)
+  }
+
   @Test("setPostID with nil clears postID")
   func setPostIDWithNilClearsPostID() {
     let config = makeConfigurationBuilder()

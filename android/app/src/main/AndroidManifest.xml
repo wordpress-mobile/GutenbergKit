@@ -50,6 +50,9 @@
         <activity
             android:name=".SitePreparationActivity"
             android:exported="false" />
+        <activity
+            android:name=".PostsListActivity"
+            android:exported="false" />
         <!-- exported="true" so the activity can be launched via adb for testing.
              This is a demo app only — it is never shipped to end users. -->
         <activity

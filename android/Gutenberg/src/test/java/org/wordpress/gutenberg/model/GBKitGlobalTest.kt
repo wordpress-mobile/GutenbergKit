@@ -27,7 +27,7 @@ class GBKitGlobalTest {
 
     private fun makePreloadList(): EditorPreloadList {
         return EditorPreloadList(
-            postType = "post",
+            postType = PostTypeDetails.post,
             postTypeData = EditorURLResponse(data = "{}", responseHeaders = EditorHTTPHeaders()),
             postTypesData = EditorURLResponse(data = "{}", responseHeaders = EditorHTTPHeaders()),
             activeThemeData = EditorURLResponse(data = "{}", responseHeaders = EditorHTTPHeaders()),
@@ -36,11 +36,11 @@ class GBKitGlobalTest {
     }
 
     private fun makeConfiguration(
-        postId: Int? = null,
+        postId: UInt? = null,
         title: String? = null,
         content: String? = null,
         siteURL: String = TEST_SITE_URL,
-        postType: String = "post",
+        postType: PostTypeDetails = PostTypeDetails.post,
         shouldUsePlugins: Boolean = true,
         shouldUseThemeStyles: Boolean = true
     ): EditorConfiguration {
@@ -107,7 +107,7 @@ class GBKitGlobalTest {
 
     @Test
     fun `maps postID to post id`() {
-        val withPostID = makeConfiguration(postId = 42)
+        val withPostID = makeConfiguration(postId = 42u)
         val withoutPostID = makeConfiguration(postId = null)
 
         val globalWith = GBKitGlobal.fromConfiguration(withPostID, makeDependencies())
@@ -115,6 +115,38 @@ class GBKitGlobalTest {
 
         assertEquals(42, globalWith.post.id)
         assertEquals(-1, globalWithout.post.id)
+    }
+
+    @Test
+    fun `populates restBase and restNamespace for post type`() {
+        val configuration = makeConfiguration(postType = PostTypeDetails.post)
+        val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
+        assertEquals("posts", global.post.restBase)
+        assertEquals("wp/v2", global.post.restNamespace)
+    }
+
+    @Test
+    fun `populates restBase for page post type`() {
+        val configuration = makeConfiguration(postType = PostTypeDetails.page)
+        val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
+        assertEquals("pages", global.post.restBase)
+        assertEquals("wp/v2", global.post.restNamespace)
+    }
+
+    @Test
+    fun `forwards custom PostTypeDetails restBase into the payload`() {
+        val configuration = makeConfiguration(
+            postType = PostTypeDetails(postType = "product", restBase = "products")
+        )
+        val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
+        assertEquals("products", global.post.restBase)
+    }
+
+    @Test
+    fun `maps zero postID to negative one`() {
+        val configuration = makeConfiguration(postId = 0u)
+        val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
+        assertEquals(-1, global.post.id)
     }
 
     @Test
@@ -149,7 +181,7 @@ class GBKitGlobalTest {
 
     @Test
     fun `toJsonString includes all required fields`() {
-        val configuration = makeConfiguration(postId = 123, title = "Test", content = "Content")
+        val configuration = makeConfiguration(postId = 123u, title = "Test", content = "Content")
         val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
 
         val jsonString = global.toJsonString()
@@ -165,7 +197,7 @@ class GBKitGlobalTest {
 
     @Test
     fun `toJsonString round-trips through serialization`() {
-        val configuration = makeConfiguration(postId = 99, title = "Round Trip", content = "Test content")
+        val configuration = makeConfiguration(postId = 99u, title = "Round Trip", content = "Test content")
         val original = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
 
         val jsonString = original.toJsonString()

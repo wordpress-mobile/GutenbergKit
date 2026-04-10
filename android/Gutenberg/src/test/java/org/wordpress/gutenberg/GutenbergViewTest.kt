@@ -68,7 +68,7 @@ class GutenbergViewTest {
         }
 
         // When
-        gutenbergView.webChromeClient?.onShowFileChooser(
+        gutenbergView.editorWebView.webChromeClient?.onShowFileChooser(
             mockWebView,
             mockFilePathCallback,
             mockFileChooserParams
@@ -82,15 +82,10 @@ class GutenbergViewTest {
 
         // Then
         assertTrue("Intent should not be null", capturedIntent != null)
-        assertTrue("Intent should be a chooser", capturedIntent?.action == Intent.ACTION_CHOOSER)
-
-        // Get the original intent from the chooser
-        val originalIntent = capturedIntent?.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
-        assertTrue("Original intent should not be null", originalIntent != null)
-        assertTrue("Original intent action should be ACTION_GET_CONTENT",
-            originalIntent?.action == Intent.ACTION_GET_CONTENT)
-        assertTrue("Original intent should have CATEGORY_OPENABLE",
-            originalIntent?.hasCategory(Intent.CATEGORY_OPENABLE) == true)
+        assertTrue("Intent action should be ACTION_OPEN_DOCUMENT",
+            capturedIntent?.action == Intent.ACTION_OPEN_DOCUMENT)
+        assertTrue("Intent should have CATEGORY_OPENABLE",
+            capturedIntent?.hasCategory(Intent.CATEGORY_OPENABLE) == true)
         assertEquals("Pick image request code should be 1",
             1, gutenbergView.pickImageRequestCode)
     }
@@ -108,7 +103,7 @@ class GutenbergViewTest {
 
         // When
         `when`(mockFileChooserParams.mode).thenReturn(WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE)
-        gutenbergView.webChromeClient?.onShowFileChooser(
+        gutenbergView.editorWebView.webChromeClient?.onShowFileChooser(
             mockWebView,
             mockFilePathCallback,
             mockFileChooserParams
@@ -122,19 +117,16 @@ class GutenbergViewTest {
 
         // Then
         assertTrue("Intent should not be null", capturedIntent != null)
-        assertTrue("Intent should be a chooser", capturedIntent?.action == Intent.ACTION_CHOOSER)
-
-        // Get the original intent from the chooser
-        val originalIntent = capturedIntent?.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
-        assertTrue("Original intent should not be null", originalIntent != null)
-        assertTrue("Original intent should allow multiple selection",
-            originalIntent?.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false) == true)
+        assertTrue("Intent action should be ACTION_OPEN_DOCUMENT",
+            capturedIntent?.action == Intent.ACTION_OPEN_DOCUMENT)
+        assertTrue("Intent should allow multiple selection",
+            capturedIntent?.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false) == true)
     }
 
     @Test
     fun `onShowFileChooser stores file path callback`() {
         // When
-        gutenbergView.webChromeClient?.onShowFileChooser(
+        gutenbergView.editorWebView.webChromeClient?.onShowFileChooser(
             mockWebView,
             mockFilePathCallback,
             mockFileChooserParams
@@ -148,7 +140,7 @@ class GutenbergViewTest {
     @Test
     fun `resetFilePathCallback clears the callback`() {
         // Given
-        gutenbergView.webChromeClient?.onShowFileChooser(
+        gutenbergView.editorWebView.webChromeClient?.onShowFileChooser(
             mockWebView,
             mockFilePathCallback,
             mockFileChooserParams
@@ -168,7 +160,7 @@ class GutenbergViewTest {
         // that was already set up in the @Before method
 
         // Then
-        val userAgent = gutenbergView.settings.userAgentString
+        val userAgent = gutenbergView.editorWebView.settings.userAgentString
         assertTrue("User agent should contain GutenbergKit identifier",
             userAgent.contains("GutenbergKit/"))
         assertTrue("User agent should contain version number",
@@ -188,7 +180,7 @@ class GutenbergViewTest {
         val request = mock(WebResourceRequest::class.java)
         `when`(request.url).thenReturn(Uri.parse("https://example.com/assets/index.html"))
 
-        val result = siteView.webViewClient.shouldOverrideUrlLoading(siteView, request)
+        val result = siteView.editorWebView.webViewClient.shouldOverrideUrlLoading(siteView.editorWebView, request)
         assertFalse("Asset path URLs on the site domain should load in the WebView", result)
     }
 
@@ -205,7 +197,7 @@ class GutenbergViewTest {
         val request = mock(WebResourceRequest::class.java)
         `when`(request.url).thenReturn(Uri.parse("https://example.com/some-page"))
 
-        val result = siteView.webViewClient.shouldOverrideUrlLoading(siteView, request)
+        val result = siteView.editorWebView.webViewClient.shouldOverrideUrlLoading(siteView.editorWebView, request)
         assertTrue("Non-asset URLs on the site domain should open externally", result)
     }
 }

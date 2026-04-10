@@ -188,6 +188,17 @@ export default class EditorPage {
 	}
 
 	/**
+	 * Call the bridge's `getTitleAndContent()` and return the result.
+	 *
+	 * @return {Promise<{title: string, content: string, changed: boolean}>} The editor state.
+	 */
+	async getTitleAndContent() {
+		return await this.#page.evaluate( () =>
+			window.editor.getTitleAndContent()
+		);
+	}
+
+	/**
 	 * Retrieve all blocks from the editor via the WP data store.
 	 *
 	 * @return {Promise<Array>} Array of block objects.

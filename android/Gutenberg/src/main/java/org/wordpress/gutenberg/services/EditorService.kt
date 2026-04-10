@@ -285,15 +285,15 @@ class EditorService(
         return coroutineScope {
             val activeThemeDeferred = async { prepareActiveTheme() }
             val settingsOptionsDeferred = async { prepareSettingsOptions() }
-            val postTypeDataDeferred = async { preparePostType(configuration.postType) }
+            val postTypeDataDeferred = async { preparePostType(configuration.postType.postType) }
             val postTypesDataDeferred = async { preparePostTypes() }
 
             val postId = configuration.postId
-            if (postId != null && postId > 0) {
-                val postDataDeferred = async { preparePost(postId) }
+            if (postId != null) {
+                val postDataDeferred = async { preparePost(postId.toInt()) }
 
                 EditorPreloadList(
-                    postID = postId,
+                    postID = postId.toInt(),
                     postData = postDataDeferred.await(),
                     postType = configuration.postType,
                     postTypeData = postTypeDataDeferred.await(),

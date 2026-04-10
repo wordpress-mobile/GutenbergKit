@@ -12,6 +12,7 @@ import org.wordpress.gutenberg.EditorHTTPClientDownloadResponse
 import org.wordpress.gutenberg.EditorHTTPClientProtocol
 import org.wordpress.gutenberg.EditorHTTPClientResponse
 import org.wordpress.gutenberg.model.EditorConfiguration
+import org.wordpress.gutenberg.model.PostTypeDetails
 import org.wordpress.gutenberg.model.http.EditorHTTPHeaders
 import org.wordpress.gutenberg.model.http.EditorHttpMethod
 import java.io.File
@@ -35,7 +36,7 @@ class EditorServiceTest {
         val testConfiguration: EditorConfiguration = EditorConfiguration.builder(
             TEST_SITE_URL,
             TEST_API_ROOT,
-            "post"
+            PostTypeDetails.post
         )
             .setPlugins(true)
             .setThemeStyles(true)
@@ -130,38 +131,19 @@ class EditorServiceTest {
     // MARK: - preparePreloadList Tests (negative postID handling)
 
     @Test
-    fun `prepare does not fetch post when postID is negative`() = runBlocking {
+    fun `prepare does not fetch post when postID is null`() = runBlocking {
         val mockClient = EditorServiceMockHTTPClient()
         val configuration = testConfiguration.toBuilder()
-            .setPostId(-1)
+            .setPostId(null)
             .build()
 
         val service = makeService(configuration = configuration, httpClient = mockClient)
         service.prepare()
 
-        // Verify no request was made to /posts/-1
-        val postRequests = mockClient.requestedURLs.filter { it.contains("/posts/-1") }
+        // Verify no request was made to any specific post endpoint
+        val postRequests = mockClient.requestedURLs.filter { it.matches(Regex(".*/posts/\\d+.*")) }
         assertEquals(
-            "Should not request /posts/-1 for negative post IDs",
-            emptyList<String>(),
-            postRequests
-        )
-    }
-
-    @Test
-    fun `prepare does not fetch post when postID is zero`() = runBlocking {
-        val mockClient = EditorServiceMockHTTPClient()
-        val configuration = testConfiguration.toBuilder()
-            .setPostId(0)
-            .build()
-
-        val service = makeService(configuration = configuration, httpClient = mockClient)
-        service.prepare()
-
-        // Verify no request was made to /posts/0
-        val postRequests = mockClient.requestedURLs.filter { it.contains("/posts/0") }
-        assertEquals(
-            "Should not request /posts/0 for zero post IDs",
+            "Should not request any post for null post IDs",
             emptyList<String>(),
             postRequests
         )
@@ -171,7 +153,7 @@ class EditorServiceTest {
     fun `prepare fetches post when postID is positive`() = runBlocking {
         val mockClient = EditorServiceMockHTTPClient()
         val configuration = testConfiguration.toBuilder()
-            .setPostId(123)
+            .setPostId(123u)
             .build()
 
         val service = makeService(configuration = configuration, httpClient = mockClient)

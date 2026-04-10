@@ -15,7 +15,7 @@ class EditorConfigurationBuilderTest {
     companion object {
         const val TEST_SITE_URL = "https://example.com"
         const val TEST_API_ROOT = "https://example.com/wp-json"
-        const val TEST_POST_TYPE = "post"
+        val TEST_POST_TYPE = PostTypeDetails.post
     }
 
     private fun builder() = EditorConfiguration.builder(TEST_SITE_URL, TEST_API_ROOT, TEST_POST_TYPE)
@@ -72,16 +72,25 @@ class EditorConfigurationBuilderTest {
     @Test
     fun `setPostId updates postId`() {
         val config = builder()
-            .setPostId(123)
+            .setPostId(123u)
             .build()
 
-        assertEquals(123, config.postId)
+        assertEquals(123u, config.postId)
+    }
+
+    @Test
+    fun `setPostId with zero results in null`() {
+        val config = builder()
+            .setPostId(0u)
+            .build()
+
+        assertNull(config.postId)
     }
 
     @Test
     fun `setPostId with null clears postId`() {
         val config = builder()
-            .setPostId(123)
+            .setPostId(123u)
             .setPostId(null)
             .build()
 
@@ -91,10 +100,10 @@ class EditorConfigurationBuilderTest {
     @Test
     fun `setPostType updates postType`() {
         val config = builder()
-            .setPostType("page")
+            .setPostType(PostTypeDetails.page)
             .build()
 
-        assertEquals("page", config.postType)
+        assertEquals(PostTypeDetails.page, config.postType)
     }
 
     @Test
@@ -265,7 +274,7 @@ class EditorConfigurationBuilderTest {
         val config = builder()
             .setTitle("Chained Title")
             .setContent("<p>Chained content</p>")
-            .setPostId(456)
+            .setPostId(456u)
             .setPlugins(true)
             .setThemeStyles(true)
             .setLocale("de_DE")
@@ -274,7 +283,7 @@ class EditorConfigurationBuilderTest {
 
         assertEquals("Chained Title", config.title)
         assertEquals("<p>Chained content</p>", config.content)
-        assertEquals(456, config.postId)
+        assertEquals(456u, config.postId)
         assertTrue(config.plugins)
         assertTrue(config.themeStyles)
         assertEquals("de_DE", config.locale)
@@ -300,8 +309,8 @@ class EditorConfigurationBuilderTest {
         val original = builder()
             .setTitle("Round Trip Title")
             .setContent("<p>Round trip content</p>")
-            .setPostId(999)
-            .setPostType("page")
+            .setPostId(999u)
+            .setPostType(PostTypeDetails.page)
             .setPostStatus("draft")
             .setThemeStyles(true)
             .setPlugins(true)
@@ -330,7 +339,7 @@ class EditorConfigurationBuilderTest {
     fun `toBuilder allows modification of existing config`() {
         val original = builder()
             .setTitle("Original Title")
-            .setPostId(100)
+            .setPostId(100u)
             .build()
 
         val modified = original.toBuilder()
@@ -339,7 +348,7 @@ class EditorConfigurationBuilderTest {
 
         assertEquals("Original Title", original.title)
         assertEquals("Modified Title", modified.title)
-        assertEquals(100, modified.postId)
+        assertEquals(100u, modified.postId)
     }
 
     @Test
@@ -377,8 +386,8 @@ class EditorConfigurationBuilderTest {
     @Test
     fun `toBuilder preserves nullable values when set`() {
         val original = builder()
-            .setPostId(123)
-            .setPostType("post")
+            .setPostId(123u)
+            .setPostType(PostTypeDetails.post)
             .setPostStatus("publish")
             .setEditorSettings("""{"test":true}""")
             .setEditorAssetsEndpoint("https://example.com/assets")
@@ -386,8 +395,8 @@ class EditorConfigurationBuilderTest {
 
         val rebuilt = original.toBuilder().build()
 
-        assertEquals(123, rebuilt.postId)
-        assertEquals("post", rebuilt.postType)
+        assertEquals(123u, rebuilt.postId)
+        assertEquals(PostTypeDetails.post, rebuilt.postType)
         assertEquals("publish", rebuilt.postStatus)
         assertEquals("""{"test":true}""", rebuilt.editorSettings)
         assertEquals("https://example.com/assets", rebuilt.editorAssetsEndpoint)
@@ -471,7 +480,7 @@ class EditorConfigurationBuilderTest {
         assertTrue(config.enableOfflineMode)
         assertEquals("https://example.com", config.siteURL)
         assertEquals("https://example.com/wp-json/", config.siteApiRoot)
-        assertEquals("post", config.postType)
+        assertEquals(PostTypeDetails.post, config.postType)
     }
 }
 
@@ -480,7 +489,7 @@ class EditorConfigurationTest {
     companion object {
         const val TEST_SITE_URL = "https://example.com"
         const val TEST_API_ROOT = "https://example.com/wp-json"
-        const val TEST_POST_TYPE = "post"
+        val TEST_POST_TYPE = PostTypeDetails.post
     }
 
     private fun builder() = EditorConfiguration.builder(TEST_SITE_URL, TEST_API_ROOT, TEST_POST_TYPE)
@@ -532,11 +541,11 @@ class EditorConfigurationTest {
     @Test
     fun `Configurations with different postId are not equal`() {
         val config1 = builder()
-            .setPostId(1)
+            .setPostId(1u)
             .build()
 
         val config2 = builder()
-            .setPostId(2)
+            .setPostId(2u)
             .build()
 
         assertNotEquals(config1, config2)
@@ -544,10 +553,10 @@ class EditorConfigurationTest {
 
     @Test
     fun `Configurations with different postType are not equal`() {
-        val config1 = EditorConfiguration.builder(TEST_SITE_URL, TEST_API_ROOT, "post")
+        val config1 = EditorConfiguration.builder(TEST_SITE_URL, TEST_API_ROOT, PostTypeDetails.post)
             .build()
 
-        val config2 = EditorConfiguration.builder(TEST_SITE_URL, TEST_API_ROOT, "page")
+        val config2 = EditorConfiguration.builder(TEST_SITE_URL, TEST_API_ROOT, PostTypeDetails.page)
             .build()
 
         assertNotEquals(config1, config2)
@@ -803,15 +812,15 @@ class EditorConfigurationTest {
     @Test
     fun `Configurations can be used in Set`() {
         val config1 = builder()
-            .setPostId(1)
+            .setPostId(1u)
             .build()
 
         val config2 = builder()
-            .setPostId(2)
+            .setPostId(2u)
             .build()
 
         val config3 = builder()
-            .setPostId(1)
+            .setPostId(1u)
             .build()
 
         val set = setOf(config1, config2, config3)
@@ -841,11 +850,11 @@ class EditorConfigurationTest {
 
     @Test
     fun `test EditorConfiguration builder sets all properties correctly`() {
-        val config = EditorConfiguration.builder("https://example.com", "https://example.com/wp-json", "post")
+        val config = EditorConfiguration.builder("https://example.com", "https://example.com/wp-json", PostTypeDetails.post)
             .setTitle("Test Title")
             .setContent("Test Content")
-            .setPostId(123)
-            .setPostType("post")
+            .setPostId(123u)
+            .setPostType(PostTypeDetails.post)
             .setPostStatus("publish")
             .setThemeStyles(true)
             .setPlugins(true)
@@ -867,8 +876,8 @@ class EditorConfigurationTest {
 
         assertEquals("Test Title", config.title)
         assertEquals("Test Content", config.content)
-        assertEquals(123, config.postId)
-        assertEquals("post", config.postType)
+        assertEquals(123u, config.postId)
+        assertEquals(PostTypeDetails.post, config.postType)
         assertEquals("publish", config.postStatus)
         assertTrue(config.themeStyles)
         assertTrue(config.plugins)

@@ -231,6 +231,12 @@ class EditorAssetBundleTest {
     // MARK: - hasAssetData Tests
 
     @Test
+    fun `hasAssetData returns false for empty bundle`() {
+        val url = "https://example.com/wp-content/plugins/script.js"
+        assertFalse(EditorAssetBundle.empty.hasAssetData(url))
+    }
+
+    @Test
     fun `hasAssetData returns false for non-existent file`() {
         val bundle = makeBundle()
         val url = "https://example.com/nonexistent.js"
