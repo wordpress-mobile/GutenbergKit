@@ -49,14 +49,6 @@ jobs:
                       if (hasValidPrefix || hasTypeLabel) {
                           const method = hasValidPrefix ? 'Conventional Commits prefix' : 'type label';
                           core.info(`✅ PR has a valid type via ${method}`);
-
-                          if (isBreaking && !labels.some((l) => l.name === '[Type] Breaking Change')) {
-                              core.warning(
-                                  'PR title uses the ! breaking change marker but does not have the [Type] Breaking Change label. ' +
-                                  'The label-pr workflow should apply it automatically — if it has not, apply it manually.'
-                              );
-                          }
-
                           return;
                       }
 
