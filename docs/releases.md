@@ -41,14 +41,9 @@ After the release is created, it is ready for integration into the WordPress app
 
 ## Changelog
 
-The project maintains a `CHANGELOG.md` file at the repository root. It uses a **Trunk** section at the top where unreleased changes are staged under four categories:
+The project maintains a `CHANGELOG.md` file at the repository root that tracks **breaking changes** to help consumers plan upgrades. For the full list of changes in each release, see [GitHub Releases](https://github.com/wordpress-mobile/GutenbergKit/releases) — release notes are auto-generated from PR titles and labels (see [Release Notes](#release-notes) below).
 
--   **Breaking Changes** — API removals, behavior changes, platform requirement increases
--   **New Features** — new capabilities
--   **Bug Fixes** — bug fixes
--   **Internal Changes** — refactors, tooling, tests, docs
-
-When you merge a PR that contains user-facing changes, add an entry to the appropriate section in Trunk. Breaking changes are especially important to capture — they help consumers of the library plan upgrades.
+`CHANGELOG.md` uses a **Trunk** section at the top where upcoming breaking changes are staged before release. When you merge a PR that contains a breaking change, add an entry to the Trunk section describing what changed and its impact on consumers.
 
 During a release, the script automatically renames the Trunk section to the new version number and creates a fresh empty Trunk section.
 

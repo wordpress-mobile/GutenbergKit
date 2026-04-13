@@ -38,7 +38,7 @@ When creating a pull request:
 1. **Use the PR template**: The template in `.github/PULL_REQUEST_TEMPLATE.md` provides the required structure.
 2. **Assign a label**: Use `gh label list` to see available labels and select the most relevant one.
 3. **Follow Conventional Commits**: The PR title should use the same format as commit messages above.
-4. **Update the changelog**: If your PR contains user-facing changes, add an entry to the appropriate section under `## Trunk` in `CHANGELOG.md`. Breaking changes are especially important to capture.
+4. **Update the changelog**: If your PR contains a breaking change, add an entry under `## Trunk` in `CHANGELOG.md` describing what changed and its impact on consumers.
 
 ### Automatic Labeling
 
