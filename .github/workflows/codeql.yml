@@ -73,6 +73,15 @@ jobs:
             - name: Select Xcode
               run: sudo xcode-select -s /Applications/Xcode_26.0.1.app/Contents/Developer
 
+            - name: Cache SPM dependencies
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/Library/Caches/org.swift.swiftpm/repositories
+                  key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+                  restore-keys: |
+                      spm-${{ runner.os }}-
+
             - name: Initialize CodeQL
               uses: github/codeql-action/init@v4
               with:
