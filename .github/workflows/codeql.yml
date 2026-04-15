@@ -88,7 +88,7 @@ jobs:
                   languages: swift
 
             - name: Build Swift package
-              run: swift build --build-tests
+              run: swift build
 
             - name: Build Demo app
               run: xcodebuild build -project ios/Demo-iOS/Gutenberg.xcodeproj -scheme Gutenberg -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
