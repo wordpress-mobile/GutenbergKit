@@ -36,7 +36,7 @@
 		"@wordpress/blocks": "^15.16.0",
 		"@wordpress/commands": "^1.43.0",
 		"@wordpress/components": "^32.0.0",
-		"@wordpress/compose": "^7.38.0",
+		"@wordpress/compose": "^7.44.0",
 		"@wordpress/core-data": "^7.40.1",
 		"@wordpress/data": "^10.42.0",
 		"@wordpress/data-controls": "^4.41.0",
