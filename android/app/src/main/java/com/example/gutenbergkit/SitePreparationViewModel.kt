@@ -329,23 +329,17 @@ class SitePreparationViewModel(
      * Fetches the signed-in user's capabilities so the editor can seed
      * `canUser` without relying on the REST `Allow` header (which is not
      * exposed cross-origin by default in core WordPress).
-     *
-     * Falls back to `uploadFiles = false` if the call fails, matching the
-     * offline/bundled default — if we can't confirm the user can upload, we
-     * opt them out rather than silently enabling a feature they may not have.
      */
     private suspend fun loadUserCapabilities(
         config: ConfigurationItem.ConfiguredEditor
     ): UserCapabilities {
         val app = getApplication<GutenbergKitApplication>()
-        val account = app.accountRepository.all().firstOrNull { it.id() == config.accountId }
-            ?: return UserCapabilities(uploadFiles = false)
+        val account = app.accountRepository.all().first { it.id() == config.accountId }
         val client = app.createApiClient(account)
 
         val result = client.request { builder ->
             builder.users().retrieveMeWithEditContext()
-        }
-        if (result !is WpRequestResult.Success) return UserCapabilities(uploadFiles = false)
+        } as WpRequestResult.Success
 
         return UserCapabilities(
             uploadFiles = result.response.data.capabilities[UserCapability.UploadFiles] ?: false

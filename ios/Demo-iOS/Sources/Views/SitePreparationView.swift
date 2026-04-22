@@ -445,11 +445,7 @@ class SitePreparationViewModel {
     /// exposed cross-origin by default in core WordPress).
     @MainActor
     private func loadUserCapabilities() async throws -> UserCapabilities {
-        guard let client = self.client else {
-            return UserCapabilities(uploadFiles: false)
-        }
-
-        let user = try await client.users.retrieveMeWithEditContext().data
+        let user = try await client!.users.retrieveMeWithEditContext().data
         return UserCapabilities(uploadFiles: user.capabilities[.uploadFiles] ?? false)
     }
 
