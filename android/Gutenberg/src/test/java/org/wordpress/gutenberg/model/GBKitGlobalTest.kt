@@ -193,6 +193,21 @@ class GBKitGlobalTest {
         assertTrue(jsonString.contains("post"))
         assertTrue(jsonString.contains("locale"))
         assertTrue(jsonString.contains("logLevel"))
+        assertTrue(jsonString.contains("userCapabilities"))
+    }
+
+    @Test
+    fun `maps userCapabilities from configuration`() {
+        val withUpload = EditorConfiguration.builder(TEST_SITE_URL, TEST_API_ROOT, PostTypeDetails.post)
+            .setUserCapabilities(UserCapabilities(uploadFiles = true))
+            .build()
+        val withoutUpload = makeConfiguration()
+
+        val globalWith = GBKitGlobal.fromConfiguration(withUpload, makeDependencies())
+        val globalWithout = GBKitGlobal.fromConfiguration(withoutUpload, makeDependencies())
+
+        assertTrue(globalWith.userCapabilities.uploadFiles)
+        assertFalse(globalWithout.userCapabilities.uploadFiles)
     }
 
     @Test

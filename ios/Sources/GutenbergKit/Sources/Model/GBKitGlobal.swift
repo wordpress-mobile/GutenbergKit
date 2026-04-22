@@ -79,7 +79,15 @@ public struct GBKitGlobal: Sendable, Codable {
     
     /// Whether to log network requests in the JavaScript console.
     let enableNetworkLogging: Bool
-    
+
+    /// Host-declared user capabilities used by the JS editor to preseed
+    /// `@wordpress/core-data`'s `canUser` results.
+    ///
+    /// Non-optional so `window.GBKit.userCapabilities` is always present;
+    /// the JS editor can rely on reading it rather than guarding for
+    /// absence.
+    let userCapabilities: UserCapabilities
+
     let editorSettings: JSON?
     
     let preloadData: JSON?
@@ -117,6 +125,7 @@ public struct GBKitGlobal: Sendable, Codable {
         )
         self.logLevel = configuration.logLevel.rawValue
         self.enableNetworkLogging = configuration.enableNetworkLogging
+        self.userCapabilities = configuration.userCapabilities
         self.editorSettings = dependencies.editorSettings.jsonValue
         self.preloadData = try dependencies.preloadList?.build()
         self.editorAssets = Self.buildEditorAssets(from: dependencies.assetBundle)

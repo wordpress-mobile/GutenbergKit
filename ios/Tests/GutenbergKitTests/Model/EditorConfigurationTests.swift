@@ -34,6 +34,17 @@ struct EditorConfigurationBuilderTests: MakesTestFixtures {
     #expect(config.isNativeInserterEnabled == false)
     #expect(config.logLevel == .error)
     #expect(config.enableNetworkLogging == false)
+    #expect(config.userCapabilities == UserCapabilities())
+    #expect(config.userCapabilities.uploadFiles == false)
+  }
+
+  @Test("setUserCapabilities updates userCapabilities")
+  func setUserCapabilitiesUpdates() {
+    let config = makeConfigurationBuilder()
+      .setUserCapabilities(UserCapabilities(uploadFiles: true))
+      .build()
+
+    #expect(config.userCapabilities.uploadFiles == true)
   }
 
   // MARK: - Individual Setter Tests

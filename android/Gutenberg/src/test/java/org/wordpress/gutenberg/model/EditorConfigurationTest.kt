@@ -47,6 +47,17 @@ class EditorConfigurationBuilderTest {
         assertNull(config.editorAssetsEndpoint)
         assertFalse(config.enableNetworkLogging)
         assertFalse(config.enableOfflineMode)
+        assertEquals(UserCapabilities(), config.userCapabilities)
+        assertFalse(config.userCapabilities.uploadFiles)
+    }
+
+    @Test
+    fun `setUserCapabilities updates userCapabilities`() {
+        val config = builder()
+            .setUserCapabilities(UserCapabilities(uploadFiles = true))
+            .build()
+
+        assertTrue(config.userCapabilities.uploadFiles)
     }
 
     // MARK: - Individual Setter Tests
