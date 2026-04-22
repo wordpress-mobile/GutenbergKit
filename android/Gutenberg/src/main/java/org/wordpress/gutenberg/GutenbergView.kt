@@ -901,7 +901,7 @@ class GutenbergView : FrameLayout {
             handler.post {
                 Toast.makeText(
                     context,
-                    "Unable to display the block inserter.",
+                    R.string.gbk_block_inserter_failure,
                     Toast.LENGTH_LONG,
                 ).show()
             }

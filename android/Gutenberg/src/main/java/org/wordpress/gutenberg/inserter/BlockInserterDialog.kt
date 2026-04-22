@@ -12,6 +12,7 @@ import androidx.core.view.setPadding
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import org.wordpress.gutenberg.R
 import org.wordpress.gutenberg.model.BlockInserterPayload
 import org.wordpress.gutenberg.model.BlockInserterSection
 import org.wordpress.gutenberg.model.BlockType
@@ -98,8 +99,8 @@ private class HeaderViewHolder(view: View) : RecyclerView.ViewHolder(view) {
     }
 
     private fun defaultDisplayName(category: String): String = when (category) {
-        MOST_USED_CATEGORY -> "Most used"
-        CONTEXTUAL_CATEGORY -> "Suggested"
+        MOST_USED_CATEGORY -> label.context.getString(R.string.gbk_block_inserter_section_most_used)
+        CONTEXTUAL_CATEGORY -> label.context.getString(R.string.gbk_block_inserter_section_suggested)
         else -> category.replaceFirstChar { it.uppercase() }
     }
 }

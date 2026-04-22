@@ -1,0 +1,6 @@
+<resources>
+    <!-- Block inserter -->
+    <string name="gbk_block_inserter_section_most_used">Most used</string>
+    <string name="gbk_block_inserter_section_suggested">Suggested</string>
+    <string name="gbk_block_inserter_failure">Unable to display the block inserter.</string>
+</resources>
