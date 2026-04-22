@@ -34,6 +34,9 @@ function gutenbergkit_cors_send_origin_headers( $origin ) {
 
 	header( 'Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS' );
 	header( 'Access-Control-Allow-Headers: Authorization, Content-Type, X-WP-Nonce' );
+	// Expose `Allow` so cross-origin JS can read it — `@wordpress/core-data`'s
+	// `canUser` relies on this header to compute permissions.
+	header( 'Access-Control-Expose-Headers: X-WP-Total, X-WP-TotalPages, Link, Allow' );
 }
 
 add_action( 'rest_api_init', function () {
@@ -43,15 +46,24 @@ add_action( 'rest_api_init', function () {
 	add_filter( 'rest_pre_serve_request', function ( $served ) {
 		gutenbergkit_cors_send_origin_headers( get_http_origin() );
 		return $served;
-	});
-}, 15 );
+	}, 15 );
+} );
 
-// Handle preflight OPTIONS requests early.
+// Handle preflight OPTIONS requests early for non-REST routes. REST OPTIONS
+// must be dispatched by WP_REST_Server so the `Allow:` header is attached —
+// `@wordpress/core-data`'s `canUser` depends on it.
 add_action( 'init', function () {
-	if ( isset( $_SERVER['REQUEST_METHOD'] ) && 'OPTIONS' === $_SERVER['REQUEST_METHOD'] ) {
-		gutenbergkit_cors_send_origin_headers( get_http_origin() );
-		header( 'Access-Control-Max-Age: 86400' );
-		status_header( 204 );
-		exit;
+	if ( 'OPTIONS' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) ) {
+		return;
 	}
-});
+
+	$request_uri = $_SERVER['REQUEST_URI'] ?? '';
+	if ( str_contains( $request_uri, '/wp-json/' ) || str_contains( $request_uri, 'rest_route=' ) ) {
+		return;
+	}
+
+	gutenbergkit_cors_send_origin_headers( get_http_origin() );
+	header( 'Access-Control-Max-Age: 86400' );
+	status_header( 204 );
+	exit;
+} );
