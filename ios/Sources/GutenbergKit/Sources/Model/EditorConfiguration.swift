@@ -96,7 +96,7 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
     enableNetworkLogging: Bool = false,
     isOfflineModeEnabled: Bool = false,
     networkFallbackMode: NetworkFallbackMode = .disabled,
-    userCapabilities: UserCapabilities = UserCapabilities()
+    userCapabilities: UserCapabilities
   ) {
     self.title = title
     self.content = content
@@ -225,7 +225,7 @@ public struct EditorConfigurationBuilder {
     enableNetworkLogging: Bool = false,
     isOfflineModeEnabled: Bool = false,
     networkFallbackMode: NetworkFallbackMode = .disabled,
-    userCapabilities: UserCapabilities = UserCapabilities()
+    userCapabilities: UserCapabilities
   ) {
     self.title = title
     self.content = content

@@ -29,7 +29,7 @@ data class EditorConfiguration(
     val editorAssetsEndpoint: String? = null,
     val enableNetworkLogging: Boolean = false,
     var enableOfflineMode: Boolean = false,
-    val userCapabilities: UserCapabilities = UserCapabilities()
+    val userCapabilities: UserCapabilities
 ): Parcelable {
 
     /**
@@ -47,15 +47,30 @@ data class EditorConfiguration(
     }
     companion object {
         @JvmStatic
-        fun builder(siteURL: String, siteApiRoot: String, postType: PostTypeDetails = PostTypeDetails.post): Builder = Builder(siteURL, siteApiRoot, postType = postType)
+        fun builder(
+            siteURL: String,
+            siteApiRoot: String,
+            userCapabilities: UserCapabilities,
+            postType: PostTypeDetails = PostTypeDetails.post
+        ): Builder = Builder(siteURL, siteApiRoot, userCapabilities, postType = postType)
 
         @JvmStatic
-        fun bundled(): EditorConfiguration = Builder("https://example.com", "https://example.com/wp-json/", PostTypeDetails.post)
+        fun bundled(): EditorConfiguration = Builder(
+            "https://example.com",
+            "https://example.com/wp-json/",
+            UserCapabilities(uploadFiles = false),
+            PostTypeDetails.post
+        )
             .setEnableOfflineMode(true)
             .build()
     }
 
-    class Builder(private var siteURL: String, private var siteApiRoot: String, private var postType: PostTypeDetails) {
+    class Builder(
+        private var siteURL: String,
+        private var siteApiRoot: String,
+        private var userCapabilities: UserCapabilities,
+        private var postType: PostTypeDetails
+    ) {
         private var title: String = ""
         private var content: String = ""
         private var postId: UInt? = null
@@ -74,7 +89,6 @@ data class EditorConfiguration(
         private var editorAssetsEndpoint: String? = null
         private var enableNetworkLogging: Boolean = false
         private var enableOfflineMode: Boolean = false
-        private var userCapabilities: UserCapabilities = UserCapabilities()
 
         fun setTitle(title: String) = apply { this.title = title }
         fun setContent(content: String) = apply { this.content = content }
@@ -130,7 +144,7 @@ data class EditorConfiguration(
      *
      * This allows modifying specific fields while preserving others.
      */
-    fun toBuilder(): Builder = Builder(siteURL, siteApiRoot, postType)
+    fun toBuilder(): Builder = Builder(siteURL, siteApiRoot, userCapabilities, postType)
         .setTitle(title)
         .setContent(content)
         .setPostId(postId)
@@ -149,7 +163,6 @@ data class EditorConfiguration(
         .setEditorAssetsEndpoint(editorAssetsEndpoint)
         .setEnableNetworkLogging(enableNetworkLogging)
         .setEnableOfflineMode(enableOfflineMode)
-        .setUserCapabilities(userCapabilities)
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

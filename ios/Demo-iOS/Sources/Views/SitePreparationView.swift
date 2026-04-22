@@ -298,7 +298,8 @@ class SitePreparationViewModel {
         EditorConfigurationBuilder(
             postType: .post,
             siteURL: URL(string: account.siteUrl)!,
-            siteApiRoot: URL(string: account.siteApiRoot)!
+            siteApiRoot: URL(string: account.siteApiRoot)!,
+            userCapabilities: UserCapabilities(uploadFiles: false)
         )
         // Optimistically enable theme styles and plugins so that
         // previously-cached assets from an earlier online session can still be
@@ -426,7 +427,8 @@ class SitePreparationViewModel {
         return EditorConfigurationBuilder(
             postType: selectedPostTypeDetails,
             siteURL: URL(string: apiRoot.homeUrlString())!,
-            siteApiRoot: siteApiRoot
+            siteApiRoot: siteApiRoot,
+            userCapabilities: UserCapabilities(uploadFiles: true)
         )
         .setShouldUseThemeStyles(canUseEditorStyles)
         .setShouldUsePlugins(canUsePlugins)

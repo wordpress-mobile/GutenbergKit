@@ -34,7 +34,7 @@ struct EditorConfigurationBuilderTests: MakesTestFixtures {
     #expect(config.isNativeInserterEnabled == false)
     #expect(config.logLevel == .error)
     #expect(config.enableNetworkLogging == false)
-    #expect(config.userCapabilities == UserCapabilities())
+    #expect(config.userCapabilities == UserCapabilities(uploadFiles: false))
     #expect(config.userCapabilities.uploadFiles == false)
   }
 
@@ -513,13 +513,15 @@ struct EditorConfigurationTests: MakesTestFixtures {
     let config1 = EditorConfigurationBuilder(
       postType: .post,
       siteURL: Self.testSiteURL,
-      siteApiRoot: Self.testApiRoot
+      siteApiRoot: Self.testApiRoot,
+      userCapabilities: UserCapabilities(uploadFiles: false)
     ).setPostID(1).build()
 
     let config2 = EditorConfigurationBuilder(
       postType: .post,
       siteURL: Self.testSiteURL,
-      siteApiRoot: Self.testApiRoot
+      siteApiRoot: Self.testApiRoot,
+      userCapabilities: UserCapabilities(uploadFiles: false)
     ).setPostID(2).build()
 
     #expect(config1 != config2)
@@ -548,19 +550,22 @@ struct EditorConfigurationTests: MakesTestFixtures {
     let config1 = EditorConfigurationBuilder(
       postType: .post,
       siteURL: Self.testSiteURL,
-      siteApiRoot: Self.testApiRoot
+      siteApiRoot: Self.testApiRoot,
+      userCapabilities: UserCapabilities(uploadFiles: false)
     ).setPostID(1).build()
 
     let config2 = EditorConfigurationBuilder(
       postType: .post,
       siteURL: Self.testSiteURL,
-      siteApiRoot: Self.testApiRoot
+      siteApiRoot: Self.testApiRoot,
+      userCapabilities: UserCapabilities(uploadFiles: false)
     ).setPostID(2).build()
 
     let config3 = EditorConfigurationBuilder(
       postType: .post,
       siteURL: Self.testSiteURL,
-      siteApiRoot: Self.testApiRoot
+      siteApiRoot: Self.testApiRoot,
+      userCapabilities: UserCapabilities(uploadFiles: false)
     ).setPostID(1).build()
 
     let set: Set<EditorConfiguration> = [config1, config2, config3]

@@ -47,7 +47,8 @@ extension MakesTestFixtures {
             postType: postType,
             siteURL: siteURL,
             siteApiRoot: Self.testApiRoot,
-            siteApiNamespace: siteApiNamespace
+            siteApiNamespace: siteApiNamespace,
+            userCapabilities: UserCapabilities(uploadFiles: false)
         )
             .apply(title, { $0.setTitle($1) })
             .apply(content, { $0.setContent($1) })
@@ -66,7 +67,8 @@ extension MakesTestFixtures {
         EditorConfigurationBuilder(
             postType: postType,
             siteURL: Self.testSiteURL,
-            siteApiRoot: Self.testApiRoot
+            siteApiRoot: Self.testApiRoot,
+            userCapabilities: UserCapabilities(uploadFiles: false)
         )
     }
 

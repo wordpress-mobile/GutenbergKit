@@ -13,6 +13,7 @@ import org.wordpress.gutenberg.EditorHTTPClientProtocol
 import org.wordpress.gutenberg.EditorHTTPClientResponse
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.PostTypeDetails
+import org.wordpress.gutenberg.model.UserCapabilities
 import org.wordpress.gutenberg.model.http.EditorHTTPHeaders
 import org.wordpress.gutenberg.model.http.EditorHttpMethod
 import java.io.File
@@ -34,9 +35,10 @@ class EditorServiceTest {
         private const val TEST_API_ROOT = "https://example.com/wp-json"
 
         val testConfiguration: EditorConfiguration = EditorConfiguration.builder(
-            TEST_SITE_URL,
-            TEST_API_ROOT,
-            PostTypeDetails.post
+            siteURL = TEST_SITE_URL,
+            siteApiRoot = TEST_API_ROOT,
+            userCapabilities = UserCapabilities(uploadFiles = false),
+            postType = PostTypeDetails.post
         )
             .setPlugins(true)
             .setThemeStyles(true)

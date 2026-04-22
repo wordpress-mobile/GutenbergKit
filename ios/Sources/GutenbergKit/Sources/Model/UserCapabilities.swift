@@ -10,7 +10,7 @@ public struct UserCapabilities: Sendable, Codable, Hashable {
     /// Whether the user has the `upload_files` WordPress capability.
     public let uploadFiles: Bool
 
-    public init(uploadFiles: Bool = false) {
+    public init(uploadFiles: Bool) {
         self.uploadFiles = uploadFiles
     }
 }

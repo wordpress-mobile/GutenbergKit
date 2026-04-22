@@ -16,5 +16,5 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class UserCapabilities(
     /** Whether the user has the `upload_files` WordPress capability. */
-    val uploadFiles: Boolean = false
+    val uploadFiles: Boolean
 ) : Parcelable

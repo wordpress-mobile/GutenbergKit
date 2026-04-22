@@ -41,7 +41,8 @@ import GutenbergKit
 let configuration = EditorConfigurationBuilder(
     postType: "post",
     siteURL: URL(string: "https://example.com")!,
-    siteApiRoot: URL(string: "https://example.com/wp-json")!
+    siteApiRoot: URL(string: "https://example.com/wp-json")!,
+    userCapabilities: UserCapabilities(uploadFiles: true)
 )
     .setTitle("My Post")
     .setContent("<!-- wp:paragraph --><p>Hello world</p><!-- /wp:paragraph -->")
@@ -165,12 +166,13 @@ import org.wordpress.gutenberg.EditorConfiguration
 val gutenbergView = GutenbergView(context)
 gutenbergView.initializeWebView()
 
-val configuration = EditorConfiguration.builder()
+val configuration = EditorConfiguration.builder(
+    siteURL = "https://example.com",
+    siteApiRoot = "https://example.com/wp-json",
+    userCapabilities = UserCapabilities(uploadFiles = true)
+)
     .setTitle("My Post")
     .setContent("<!-- wp:paragraph --><p>Hello world</p><!-- /wp:paragraph -->")
-    .setPostType("post")
-    .setSiteURL("https://example.com")
-    .setSiteApiRoot("https://example.com/wp-json")
     .setAuthHeader("Bearer your-token")
     .build()
 
@@ -238,7 +240,11 @@ GutenbergView.warmup(context, configuration)
 Enable asset caching for plugin and theme styles:
 
 ```kotlin
-val configuration = EditorConfiguration.builder()
+val configuration = EditorConfiguration.builder(
+    siteURL = "https://example.com",
+    siteApiRoot = "https://example.com/wp-json",
+    userCapabilities = UserCapabilities(uploadFiles = true)
+)
     .setEnableAssetCaching(true)
     .setCachedAssetHosts(setOf("example.com", "cdn.example.com"))
     .build()
@@ -260,7 +266,11 @@ let configuration = EditorConfigurationBuilder(...)
 
 ```kotlin
 // Android
-val configuration = EditorConfiguration.builder()
+val configuration = EditorConfiguration.builder(
+    siteURL = "https://example.com",
+    siteApiRoot = "https://example.com/wp-json",
+    userCapabilities = UserCapabilities(uploadFiles = true)
+)
     .setPlugins(true)
     .setEditorAssetsEndpoint("https://example.com/editor-assets")
     .build()
@@ -286,7 +296,11 @@ let configuration = EditorConfigurationBuilder(...)
 // Fetch editor settings JSON from your WordPress site
 val editorSettingsJSON = fetchEditorSettings()
 
-val configuration = EditorConfiguration.builder()
+val configuration = EditorConfiguration.builder(
+    siteURL = "https://example.com",
+    siteApiRoot = "https://example.com/wp-json",
+    userCapabilities = UserCapabilities(uploadFiles = true)
+)
     .setThemeStyles(true)
     .setEditorSettings(editorSettingsJSON)
     .build()
@@ -311,7 +325,8 @@ Some Gutenberg blocks and features use WordPress AJAX (`admin-ajax.php`) for fun
 let configuration = EditorConfigurationBuilder(
     postType: "post",
     siteURL: URL(string: "https://example.com")!,
-    siteApiRoot: URL(string: "https://example.com/wp-json")!
+    siteApiRoot: URL(string: "https://example.com/wp-json")!,
+    userCapabilities: UserCapabilities(uploadFiles: true)
 )
     .setAuthHeader("Bearer your-token")
     .build()
@@ -321,7 +336,8 @@ let configuration = EditorConfigurationBuilder(
 // Android
 val configuration = EditorConfiguration.builder(
     siteURL = "https://example.com",
-    siteApiRoot = "https://example.com/wp-json"
+    siteApiRoot = "https://example.com/wp-json",
+    userCapabilities = UserCapabilities(uploadFiles = true)
 )
     .setPostType("post")
     .setAuthHeader("Bearer your-token")
