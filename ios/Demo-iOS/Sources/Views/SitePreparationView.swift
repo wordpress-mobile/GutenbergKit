@@ -424,11 +424,13 @@ class SitePreparationViewModel {
             siteApiNamespace = []
         }
 
+        let userCapabilities = try await loadUserCapabilities()
+
         return EditorConfigurationBuilder(
             postType: selectedPostTypeDetails,
             siteURL: URL(string: apiRoot.homeUrlString())!,
             siteApiRoot: siteApiRoot,
-            userCapabilities: UserCapabilities(uploadFiles: true)
+            userCapabilities: userCapabilities
         )
         .setShouldUseThemeStyles(canUseEditorStyles)
         .setShouldUsePlugins(canUsePlugins)
@@ -436,6 +438,19 @@ class SitePreparationViewModel {
         .setAuthHeader(account.authHeader)
         .setLogLevel(.debug)
         .build()
+    }
+
+    /// Fetches the signed-in user's capabilities so the editor can seed
+    /// `canUser` without relying on the REST `Allow` header (which is not
+    /// exposed cross-origin by default in core WordPress).
+    @MainActor
+    private func loadUserCapabilities() async throws -> UserCapabilities {
+        guard let client = self.client else {
+            return UserCapabilities(uploadFiles: false)
+        }
+
+        let user = try await client.users.retrieveMeWithEditContext().data
+        return UserCapabilities(uploadFiles: user.capabilities[.uploadFiles] ?? false)
     }
 
     /// Extract the numeric WP.com site ID from a WP.com API root URL.

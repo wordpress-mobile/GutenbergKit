@@ -18,6 +18,7 @@ import org.wordpress.gutenberg.model.UserCapabilities
 import org.wordpress.gutenberg.services.EditorService
 import rs.wordpress.api.kotlin.WpRequestResult
 import uniffi.wp_api.PostType as WpPostType
+import uniffi.wp_api.UserCapability
 
 data class SitePreparationUiState(
     val enableNativeInserter: Boolean = true,
@@ -259,10 +260,12 @@ class SitePreparationViewModel(
             )
         }
 
+        val userCapabilities = loadUserCapabilities(config)
+
         return EditorConfiguration.builder(
             siteURL = config.siteUrl,
             siteApiRoot = siteApiRoot,
-            userCapabilities = UserCapabilities(uploadFiles = true),
+            userCapabilities = userCapabilities,
             postType = defaultPostType
         )
             .setPlugins(capabilities.supportsPlugins)
@@ -320,6 +323,33 @@ class SitePreparationViewModel(
                 )
             }
             .sortedBy { it.postType }
+    }
+
+    /**
+     * Fetches the signed-in user's capabilities so the editor can seed
+     * `canUser` without relying on the REST `Allow` header (which is not
+     * exposed cross-origin by default in core WordPress).
+     *
+     * Falls back to `uploadFiles = false` if the call fails, matching the
+     * offline/bundled default — if we can't confirm the user can upload, we
+     * opt them out rather than silently enabling a feature they may not have.
+     */
+    private suspend fun loadUserCapabilities(
+        config: ConfigurationItem.ConfiguredEditor
+    ): UserCapabilities {
+        val app = getApplication<GutenbergKitApplication>()
+        val account = app.accountRepository.all().firstOrNull { it.id() == config.accountId }
+            ?: return UserCapabilities(uploadFiles = false)
+        val client = app.createApiClient(account)
+
+        val result = client.request { builder ->
+            builder.users().retrieveMeWithEditContext()
+        }
+        if (result !is WpRequestResult.Success) return UserCapabilities(uploadFiles = false)
+
+        return UserCapabilities(
+            uploadFiles = result.response.data.capabilities[UserCapability.UploadFiles] ?: false
+        )
     }
 
     /**
