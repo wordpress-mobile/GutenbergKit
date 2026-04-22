@@ -336,7 +336,7 @@ class SitePreparationViewModel(
 
         return baseConfig.toBuilder()
             .setEnableNetworkLogging(_uiState.value.enableNetworkLogging)
-            // TODO: Add setNativeInserterEnabled when it's available in EditorConfiguration
+            .setEnableNativeBlockInserter(_uiState.value.enableNativeInserter)
             .setPostType(selectedPostType)
             .build()
     }
