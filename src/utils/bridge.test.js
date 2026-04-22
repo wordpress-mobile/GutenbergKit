@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 /**
  * Internal dependencies
  */
-import { requestLatestContent, getPost } from './bridge';
+import { requestLatestContent, getPost, showBlockInserter } from './bridge';
 
 vi.mock( './logger.js', () => ( {
 	error: vi.fn(),
@@ -429,5 +429,119 @@ describe( 'getPost', () => {
 				restNamespace: 'wp/v2',
 			} );
 		} );
+	} );
+} );
+
+describe( 'showBlockInserter', () => {
+	let originalWindow;
+
+	const sampleInserter = {
+		sections: [
+			{
+				name: 'text',
+				title: 'Text',
+				blockTypes: [
+					{
+						id: 'core/paragraph',
+						name: 'core/paragraph',
+						title: 'Paragraph',
+					},
+				],
+			},
+		],
+		patterns: [],
+		patternCategories: [],
+	};
+
+	beforeEach( () => {
+		originalWindow = {
+			webkit: window.webkit,
+			editorDelegate: window.editorDelegate,
+			blockInserter: window.blockInserter,
+		};
+		delete window.webkit;
+		delete window.editorDelegate;
+		delete window.blockInserter;
+	} );
+
+	afterEach( () => {
+		if ( originalWindow.webkit !== undefined ) {
+			window.webkit = originalWindow.webkit;
+		}
+		if ( originalWindow.editorDelegate !== undefined ) {
+			window.editorDelegate = originalWindow.editorDelegate;
+		}
+		if ( originalWindow.blockInserter !== undefined ) {
+			window.blockInserter = originalWindow.blockInserter;
+		}
+	} );
+
+	it( 'is a no-op when window.blockInserter is unavailable', () => {
+		const editorDelegate = { showBlockInserter: vi.fn() };
+		window.editorDelegate = editorDelegate;
+
+		showBlockInserter( { x: 0, y: 0, width: 10, height: 10 } );
+
+		expect( editorDelegate.showBlockInserter ).not.toHaveBeenCalled();
+	} );
+
+	it( 'passes a JSON-stringified payload to the Android bridge', () => {
+		window.blockInserter = sampleInserter;
+		const editorDelegate = { showBlockInserter: vi.fn() };
+		window.editorDelegate = editorDelegate;
+
+		const sourceRect = { x: 1, y: 2, width: 3, height: 4 };
+		showBlockInserter( sourceRect );
+
+		expect( editorDelegate.showBlockInserter ).toHaveBeenCalledTimes( 1 );
+		const arg = editorDelegate.showBlockInserter.mock.calls[ 0 ][ 0 ];
+		expect( typeof arg ).toBe( 'string' );
+		expect( JSON.parse( arg ) ).toEqual( {
+			sections: sampleInserter.sections,
+			patterns: sampleInserter.patterns,
+			patternCategories: sampleInserter.patternCategories,
+			sourceRect,
+		} );
+	} );
+
+	it( 'passes a structured payload to the iOS bridge', () => {
+		window.blockInserter = sampleInserter;
+		const postMessage = vi.fn();
+		window.webkit = {
+			messageHandlers: {
+				editorDelegate: { postMessage },
+			},
+		};
+
+		const sourceRect = { x: 1, y: 2, width: 3, height: 4 };
+		showBlockInserter( sourceRect );
+
+		expect( postMessage ).toHaveBeenCalledTimes( 1 );
+		expect( postMessage ).toHaveBeenCalledWith( {
+			message: 'showBlockInserter',
+			body: {
+				sections: sampleInserter.sections,
+				patterns: sampleInserter.patterns,
+				patternCategories: sampleInserter.patternCategories,
+				sourceRect,
+			},
+		} );
+	} );
+
+	it( 'dispatches to both bridges when both are present', () => {
+		window.blockInserter = sampleInserter;
+		const editorDelegate = { showBlockInserter: vi.fn() };
+		const postMessage = vi.fn();
+		window.editorDelegate = editorDelegate;
+		window.webkit = {
+			messageHandlers: {
+				editorDelegate: { postMessage },
+			},
+		};
+
+		showBlockInserter();
+
+		expect( editorDelegate.showBlockInserter ).toHaveBeenCalledTimes( 1 );
+		expect( postMessage ).toHaveBeenCalledTimes( 1 );
 	} );
 } );
