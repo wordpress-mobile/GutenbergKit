@@ -9,6 +9,7 @@ import android.view.View
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -73,6 +74,7 @@ internal class HtmlToBitmapRenderer(
             // reflects actual content height rather than the viewport height.
             measureAndLayout(webView, webViewWidthPx, max(1, (INITIAL_HEIGHT_DP * density).toInt()))
             loadHtmlAwaitFinish(webView, html)
+            awaitImagesLoaded(webView)
 
             val contentHeightCssPx = fetchContentHeightCssPx(webView)
             val webViewHeightPx = max(1, (contentHeightCssPx * density).toInt())
@@ -111,6 +113,29 @@ internal class HtmlToBitmapRenderer(
             }
         }
 
+    /**
+     * `onPageFinished` fires after `window.load`, but images added async, decoded from
+     * `srcset`, or injected dynamically can still be in flight. Poll
+     * `document.images.every(i => i.complete)` until true or until the soft timeout
+     * expires, at which point we proceed with whatever has loaded rather than fail.
+     */
+    private suspend fun awaitImagesLoaded(webView: WebView) {
+        val deadline = System.currentTimeMillis() + IMAGES_TIMEOUT_MS
+        while (true) {
+            if (areAllImagesComplete(webView)) return
+            if (System.currentTimeMillis() >= deadline) return
+            delay(IMAGES_POLL_INTERVAL_MS)
+        }
+    }
+
+    private suspend fun areAllImagesComplete(webView: WebView): Boolean =
+        suspendCancellableCoroutine { cont ->
+            webView.evaluateJavascript(IMAGES_COMPLETE_JS) { value ->
+                val done = value?.trim() == "true"
+                if (cont.isActive) cont.resume(done)
+            }
+        }
+
     private fun drawToBitmap(
         webView: WebView,
         widthPx: Int,
@@ -139,5 +164,9 @@ internal class HtmlToBitmapRenderer(
         private const val INITIAL_HEIGHT_DP = 80
         private const val MIME_HTML = "text/html"
         private const val ENCODING_UTF8 = "UTF-8"
+        private const val IMAGES_POLL_INTERVAL_MS = 50L
+        private const val IMAGES_TIMEOUT_MS = 4_000L
+        private const val IMAGES_COMPLETE_JS =
+            "Array.from(document.images).every(function(i) { return i.complete; })"
     }
 }
