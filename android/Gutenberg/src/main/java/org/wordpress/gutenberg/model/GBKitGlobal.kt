@@ -109,6 +109,7 @@ data class GBKitGlobal(
                 authHeader = configuration.authHeader,
                 themeStyles = configuration.themeStyles,
                 plugins = configuration.plugins,
+                enableNativeBlockInserter = configuration.enableNativeBlockInserter,
                 hideTitle = configuration.hideTitle,
                 locale = configuration.locale ?: "en",
                 post = Post(
