@@ -67,6 +67,10 @@ internal class HtmlToBitmapRenderer(
             settings.loadWithOverviewMode = false
             isHorizontalScrollBarEnabled = false
             isVerticalScrollBarEnabled = false
+            // Force software rendering so WebView.draw() captures pixels onto a
+            // software Canvas. Without this, Chromium-backed WebViews render into
+            // a GPU texture that isn't reachable from an off-screen draw call.
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null)
         }
 
         return try {
@@ -79,6 +83,10 @@ internal class HtmlToBitmapRenderer(
             val contentHeightCssPx = fetchContentHeightCssPx(webView)
             val webViewHeightPx = max(1, (contentHeightCssPx * density).toInt())
             measureAndLayout(webView, webViewWidthPx, webViewHeightPx)
+            // After resizing, give the software layer a chance to repaint before we
+            // read pixels. Without a parent window there's no invalidation cycle, so
+            // an explicit settle delay is the pragmatic way to avoid a blank frame.
+            delay(POST_LAYOUT_SETTLE_MS)
 
             drawToBitmap(webView, webViewWidthPx, webViewHeightPx, maxOutputDimensionPx)
         } finally {
@@ -166,6 +174,7 @@ internal class HtmlToBitmapRenderer(
         private const val ENCODING_UTF8 = "UTF-8"
         private const val IMAGES_POLL_INTERVAL_MS = 50L
         private const val IMAGES_TIMEOUT_MS = 4_000L
+        private const val POST_LAYOUT_SETTLE_MS = 200L
         private const val IMAGES_COMPLETE_JS =
             "Array.from(document.images).every(function(i) { return i.complete; })"
     }
