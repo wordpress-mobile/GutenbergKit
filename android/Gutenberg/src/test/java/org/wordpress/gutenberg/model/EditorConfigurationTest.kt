@@ -47,6 +47,7 @@ class EditorConfigurationBuilderTest {
         assertNull(config.editorAssetsEndpoint)
         assertFalse(config.enableNetworkLogging)
         assertFalse(config.enableOfflineMode)
+        assertFalse(config.enableNativeBlockInserter)
     }
 
     // MARK: - Individual Setter Tests
@@ -267,6 +268,15 @@ class EditorConfigurationBuilderTest {
         assertTrue(config.enableOfflineMode)
     }
 
+    @Test
+    fun `setEnableNativeBlockInserter updates enableNativeBlockInserter`() {
+        val config = builder()
+            .setEnableNativeBlockInserter(true)
+            .build()
+
+        assertTrue(config.enableNativeBlockInserter)
+    }
+
     // MARK: - Method Chaining Tests
 
     @Test
@@ -328,11 +338,13 @@ class EditorConfigurationBuilderTest {
             .setEditorAssetsEndpoint("https://example.com/roundtrip-assets")
             .setEnableNetworkLogging(true)
             .setEnableOfflineMode(true)
+            .setEnableNativeBlockInserter(true)
             .build()
 
         val rebuilt = original.toBuilder().build()
 
         assertEquals(original, rebuilt)
+        assertTrue(rebuilt.enableNativeBlockInserter)
     }
 
     @Test
@@ -523,6 +535,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -536,6 +549,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -549,6 +563,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -560,6 +575,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -573,6 +589,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -586,6 +603,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -599,6 +617,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -612,6 +631,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -623,6 +643,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -634,6 +655,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -647,6 +669,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -660,6 +683,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -673,6 +697,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -686,6 +711,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -699,6 +725,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -712,6 +739,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -725,6 +753,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -738,6 +767,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -751,6 +781,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -764,6 +795,7 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -777,6 +809,21 @@ class EditorConfigurationTest {
             .build()
 
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
+    }
+
+    @Test
+    fun `Configurations with different enableNativeBlockInserter are not equal`() {
+        val config1 = builder()
+            .setEnableNativeBlockInserter(true)
+            .build()
+
+        val config2 = builder()
+            .setEnableNativeBlockInserter(false)
+            .build()
+
+        assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     @Test
@@ -790,6 +837,7 @@ class EditorConfigurationTest {
 
         assertNotEquals(config1.siteId, config2.siteId)
         assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
     }
 
     // MARK: - Hashable Tests
@@ -872,6 +920,7 @@ class EditorConfigurationTest {
             .setEditorAssetsEndpoint("https://example.com/assets")
             .setEnableNetworkLogging(true)
             .setEnableOfflineMode(false)
+            .setEnableNativeBlockInserter(true)
             .build()
 
         assertEquals("Test Title", config.title)
@@ -895,5 +944,6 @@ class EditorConfigurationTest {
         assertEquals("https://example.com/assets", config.editorAssetsEndpoint)
         assertTrue(config.enableNetworkLogging)
         assertFalse(config.enableOfflineMode)
+        assertTrue(config.enableNativeBlockInserter)
     }
 }
