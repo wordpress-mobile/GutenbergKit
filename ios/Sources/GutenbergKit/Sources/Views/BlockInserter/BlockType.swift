@@ -12,6 +12,7 @@ struct BlockType: Decodable, Identifiable {
     let category: String?
     let keywords: [String]?
     var icon: String?
+    var iconForeground: String?
     var frecency: Double = 0.0
     var isDisabled = false
     var isSearchOnly = false

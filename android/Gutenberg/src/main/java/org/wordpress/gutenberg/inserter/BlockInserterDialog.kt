@@ -1,13 +1,16 @@
 package org.wordpress.gutenberg.inserter
 
 import android.content.Context
+import android.graphics.Color
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -24,7 +27,12 @@ import org.wordpress.gutenberg.model.BlockType
 private const val SEARCH_ONLY_CATEGORY = "gbk-search-only"
 private const val MOST_USED_CATEGORY = "gbk-most-used"
 private const val CONTEXTUAL_CATEGORY = "gbk-contextual"
-private const val ICON_SIZE_DP = 32
+private const val ICON_CHIP_SIZE_DP = 44
+private const val ICON_CHIP_CORNER_DP = 12
+private const val ICON_SIZE_DP = 24
+
+/** ~12% alpha — subtle tinted fill that reads as a chip against either background. */
+private const val ICON_CHIP_FILL_ALPHA = 0x1F
 
 /**
  * Stub bottom-sheet inserter shown when `enableNativeBlockInserter` is on.
@@ -40,11 +48,19 @@ internal class BlockInserterDialog(
     init {
         val items = buildItems(payload)
         val iconSizePx = context.dp(ICON_SIZE_DP)
-        val iconCache = SvgIconCache(iconSizePx)
+        val chipSizePx = context.dp(ICON_CHIP_SIZE_DP)
         val iconTint = context.resolveTextColorPrimary()
+        val surface = context.resolveDialogSurface(iconTint)
+        val iconCache = SvgIconCache(iconSizePx, effectiveChipColor(iconTint, surface))
         val recycler = RecyclerView(context).apply {
             layoutManager = LinearLayoutManager(context)
-            adapter = InserterAdapter(items, iconCache, iconSizePx, iconTint) { block ->
+            adapter = InserterAdapter(
+                items,
+                iconCache,
+                iconSizePx,
+                chipSizePx,
+                iconTint,
+            ) { block ->
                 onBlockSelected(block)
                 dismiss()
             }
@@ -76,6 +92,7 @@ private class InserterAdapter(
     private val rows: List<Row>,
     private val iconCache: SvgIconCache,
     private val iconSizePx: Int,
+    private val chipSizePx: Int,
     private val iconTint: Int,
     private val onBlockClicked: (BlockType) -> Unit,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
@@ -91,7 +108,11 @@ private class InserterAdapter(
         val context = parent.context
         return when (viewType) {
             TYPE_HEADER -> HeaderViewHolder(buildHeaderView(context))
-            else -> BlockViewHolder(buildBlockView(context, iconSizePx), iconCache, iconTint)
+            else -> BlockViewHolder(
+                buildBlockView(context, iconSizePx, chipSizePx, iconTint),
+                iconCache,
+                iconTint,
+            )
         }
     }
 
@@ -122,7 +143,7 @@ private class BlockViewHolder(
     private val iconTint: Int,
 ) : RecyclerView.ViewHolder(view) {
     private val container = view as LinearLayout
-    private val icon = container.getChildAt(0) as ImageView
+    private val icon = (container.getChildAt(0) as FrameLayout).getChildAt(0) as ImageView
     private val textContainer = container.getChildAt(1) as LinearLayout
     private val title = textContainer.getChildAt(0) as TextView
     private val description = textContainer.getChildAt(1) as TextView
@@ -160,9 +181,15 @@ private fun buildHeaderView(context: Context): TextView {
     }
 }
 
-private fun buildBlockView(context: Context, iconSizePx: Int): LinearLayout {
+private fun buildBlockView(
+    context: Context,
+    iconSizePx: Int,
+    chipSizePx: Int,
+    iconTint: Int,
+): LinearLayout {
     val pad = context.dp(16)
     val iconMargin = context.dp(12)
+    val cornerPx = context.dp(ICON_CHIP_CORNER_DP).toFloat()
     return LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         layoutParams = ViewGroup.LayoutParams(
@@ -178,14 +205,7 @@ private fun buildBlockView(context: Context, iconSizePx: Int): LinearLayout {
         )
         isClickable = true
         isFocusable = true
-        addView(
-            ImageView(context).apply {
-                layoutParams = LinearLayout.LayoutParams(iconSizePx, iconSizePx).apply {
-                    rightMargin = iconMargin
-                }
-                scaleType = ImageView.ScaleType.FIT_CENTER
-            },
-        )
+        addView(buildIconChip(context, iconSizePx, chipSizePx, iconTint, iconMargin, cornerPx))
         addView(
             LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
@@ -208,6 +228,80 @@ private fun buildBlockView(context: Context, iconSizePx: Int): LinearLayout {
             },
         )
     }
+}
+
+private fun buildIconChip(
+    context: Context,
+    iconSizePx: Int,
+    chipSizePx: Int,
+    iconTint: Int,
+    rightMarginPx: Int,
+    cornerPx: Float,
+): FrameLayout = FrameLayout(context).apply {
+    layoutParams = LinearLayout.LayoutParams(chipSizePx, chipSizePx).apply {
+        rightMargin = rightMarginPx
+    }
+    background = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = cornerPx
+        setColor(chipFill(iconTint))
+    }
+    addView(
+        ImageView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(iconSizePx, iconSizePx).apply {
+                gravity = Gravity.CENTER
+            }
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        },
+    )
+}
+
+/**
+ * Derive a subtle chip fill from the theme's primary text colour so the chip
+ * sits at a roughly uniform contrast against either a light or dark surface.
+ * Brand-coloured icons (X's black, Dailymotion's #333436) would otherwise
+ * disappear against the dialog's dark background.
+ */
+private fun chipFill(iconTint: Int): Int =
+    (iconTint and 0x00FFFFFF) or (ICON_CHIP_FILL_ALPHA shl 24)
+
+/**
+ * Opaque approximation of what the icon renders against: the chip fill
+ * composited over the dialog surface. Used as the contrast reference in
+ * [SvgIconCache] so single-colour brand icons are measured against what the
+ * user actually sees, not the bare surface behind the chip.
+ */
+private fun effectiveChipColor(iconTint: Int, surface: Int): Int {
+    val alpha = ICON_CHIP_FILL_ALPHA / 255.0
+    val r = (Color.red(iconTint) * alpha + Color.red(surface) * (1 - alpha)).toInt()
+    val g = (Color.green(iconTint) * alpha + Color.green(surface) * (1 - alpha)).toInt()
+    val b = (Color.blue(iconTint) * alpha + Color.blue(surface) * (1 - alpha)).toInt()
+    return Color.rgb(r, g, b)
+}
+
+/**
+ * Best-effort lookup of the bottom sheet's surface colour. Material themes
+ * expose this as `?attr/colorSurface`; older themes as `?android:attr/
+ * colorBackground`. Falls back to the inverse of [iconTint] for pathological
+ * themes that define neither — still preferable to hardcoding black/white
+ * because the real surface is usually off-black/off-white.
+ */
+private fun Context.resolveDialogSurface(iconTint: Int): Int {
+    val typed = TypedValue()
+    val attrs = intArrayOf(
+        com.google.android.material.R.attr.colorSurface,
+        android.R.attr.colorBackground,
+    )
+    for (attr in attrs) {
+        if (theme.resolveAttribute(attr, typed, true)) {
+            return if (typed.resourceId != 0) {
+                resources.getColor(typed.resourceId, theme)
+            } else {
+                typed.data
+            }
+        }
+    }
+    return if (isLight(iconTint)) Color.BLACK else Color.WHITE
 }
 
 private fun Context.dp(value: Int): Int =
