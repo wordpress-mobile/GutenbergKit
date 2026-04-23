@@ -51,6 +51,14 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        // Buildkite Test Engine: upload per-test results when a token is present in the env.
+        // Absent locally → no listener is registered and the collector is fully inert.
+        System.getenv("BUILDKITE_ANALYTICS_TOKEN_ANDROID")?.takeIf { it.isNotBlank() }?.let { token ->
+            testInstrumentationRunnerArguments["listener"] =
+                "com.buildkite.test.collector.android.InstrumentedTestCollector"
+            testInstrumentationRunnerArguments["BUILDKITE_ANALYTICS_TOKEN"] = token
+        }
+
         buildConfigField("String", "WP_ENV_SITE_URL", "\"${wpEnvCredentials["siteUrl"] ?: ""}\"")
         buildConfigField("String", "WP_ENV_SITE_API_ROOT", "\"${wpEnvCredentials["siteApiRoot"] ?: ""}\"")
         buildConfigField("String", "WP_ENV_AUTH_HEADER", "\"${wpEnvCredentials["authHeader"] ?: ""}\"")
@@ -105,5 +113,6 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.web)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.buildkite.test.collector.instrumented)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
