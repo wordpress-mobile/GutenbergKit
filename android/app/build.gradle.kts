@@ -53,7 +53,7 @@ android {
 
         // Buildkite Test Engine: upload per-test results when a token is present in the env.
         // Absent locally → no listener is registered and the collector is fully inert.
-        System.getenv("BUILDKITE_ANALYTICS_TOKEN_ANDROID")?.takeIf { it.isNotBlank() }?.let { token ->
+        System.getenv("BUILDKITE_ANALYTICS_TOKEN_ANDROID_E2E")?.takeIf { it.isNotBlank() }?.let { token ->
             testInstrumentationRunnerArguments["listener"] =
                 "com.buildkite.test.collector.android.InstrumentedTestCollector"
             testInstrumentationRunnerArguments["BUILDKITE_ANALYTICS_TOKEN"] = token
