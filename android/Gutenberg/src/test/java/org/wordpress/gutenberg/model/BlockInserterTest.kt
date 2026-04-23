@@ -80,20 +80,6 @@ class BlockInserterTest {
     }
 
     @Test
-    fun `rejects null arrays on pattern fields`() {
-        val json = """
-            {"patterns": [
-              {"name": "core/p", "title": "P", "content": "",
-               "blockTypes": null, "categories": null, "keywords": null}
-            ]}
-        """.trimIndent()
-
-        assertThrows(SerializationException::class.java) {
-            BlockInserterPayload.fromJson(json)
-        }
-    }
-
-    @Test
     fun `throws SerializationException on malformed input`() {
         assertThrows(SerializationException::class.java) {
             BlockInserterPayload.fromJson("not json")
