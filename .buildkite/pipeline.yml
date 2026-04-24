@@ -74,3 +74,22 @@ steps:
           tar -xzf dist.tar.gz
           make test-ios-e2e
       plugins: *plugins
+
+    - label: ':android: Test Android E2E'
+      depends_on: build-react
+      command: |
+          buildkite-agent artifact download dist.tar.gz .
+          tar -xzf dist.tar.gz
+          echo "--- :robot_face: Starting Android emulator"
+          start-android-emulator \
+              --system-image "system-images;android-34;google_apis;arm64-v8a" \
+              --device "pixel_5"
+          echo "--- :android: Running Android instrumented tests"
+          make test-android-e2e
+      agents:
+          queue: mac-metal
+      plugins: *plugins
+      artifact_paths:
+          - 'android/app/build/reports/androidTests/connected/**/*'
+          - 'android/app/build/outputs/androidTest-results/connected/**/*'
+          - 'android/app/build/outputs/connected_android_test_additional_output/**/*'
