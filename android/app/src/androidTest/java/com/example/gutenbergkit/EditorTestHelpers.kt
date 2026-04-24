@@ -48,8 +48,8 @@ object EditorTestHelpers {
 
     /**
      * Navigates from the main list through the configuration screen
-     * and into the full-screen editor. Waits for the "Add title" element
-     * in the WebView to confirm the editor has loaded.
+     * and into the full-screen editor, then blocks until the Gutenberg
+     * JS has finished booting and `window.editor` is callable.
      */
     fun navigateToEditor(
         rule: EditorTestRule
@@ -62,8 +62,40 @@ object EditorTestHelpers {
         rule.waitForNodeWithText("Start")
         rule.onNodeWithText("Start").performClick()
 
-        // Wait for the WebView to load: poll until the title element appears.
-        waitForWebViewElement(TITLE_SELECTOR, NAVIGATE_TIMEOUT_MS)
+        // Block until the editor JS has booted and the bridge API is live.
+        waitForEditorReady(NAVIGATE_TIMEOUT_MS)
+    }
+
+    /**
+     * Polls the WebView until Gutenberg's editor API is callable AND the
+     * editor toolbar has mounted. Tests that race ahead of this see
+     * `Atom evaluation returned null!` from Espresso-Web because their
+     * DOM queries run before the editor has finished initializing.
+     *
+     * Two gates are checked:
+     *   - `window.editor.setContent` is a function — the native bridge
+     *     is wired up.
+     *   - `[aria-label="Editor toolbar"]` exists — the top-level React
+     *     tree has rendered, so toolbar-scoped selectors will resolve.
+     */
+    fun waitForEditorReady(timeoutMs: Long = NAVIGATE_TIMEOUT_MS) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        val probe = """
+            return (typeof window.editor !== 'undefined'
+                && typeof window.editor.setContent === 'function'
+                && !!document.querySelector('[aria-label="Editor toolbar"]'))
+                ? 'yes' : 'no';
+        """.trimIndent()
+        while (true) {
+            val ready = runCatching { runJs(probe) }.getOrDefault("no")
+            if (ready == "yes") return
+            if (System.currentTimeMillis() >= deadline) {
+                throw AssertionError(
+                    "Gutenberg editor did not become ready within ${timeoutMs}ms"
+                )
+            }
+            Thread.sleep(250)
+        }
     }
 
     /**
@@ -90,6 +122,7 @@ object EditorTestHelpers {
      */
     fun insertBlock(name: String) {
         // Tap the "Add block" toggle button in the WebView toolbar.
+        waitForWebViewElement(ADD_BLOCK_SELECTOR, ELEMENT_TIMEOUT_MS)
         onWebView()
             .forceJavascriptEnabled()
             .withElement(findElement(Locator.CSS_SELECTOR, ADD_BLOCK_SELECTOR))
@@ -282,26 +315,26 @@ object EditorTestHelpers {
 
     /**
      * Polls until a WebView element matching the CSS selector exists.
-     * Uses Espresso Web's `findElement` which throws when the element
-     * is not yet present, retrying until the timeout is reached.
+     *
+     * Uses a JS probe via `script()` rather than `withElement(findElement(...))`
+     * because `withElement` is lazy — the atom doesn't evaluate until a
+     * terminal operation is chained, so a bare `withElement` call never
+     * actually checks anything. `runJs` performs `script()` which is terminal.
      */
     private fun waitForWebViewElement(cssSelector: String, timeoutMs: Long) {
+        val escaped = cssSelector.replace("\\", "\\\\").replace("'", "\\'")
+        val probe = "return document.querySelector('$escaped') ? 'yes' : 'no';"
         val deadline = System.currentTimeMillis() + timeoutMs
 
         while (true) {
-            try {
-                onWebView()
-                    .forceJavascriptEnabled()
-                    .withElement(findElement(Locator.CSS_SELECTOR, cssSelector))
-                return
-            } catch (e: Exception) {
-                if (System.currentTimeMillis() >= deadline) {
-                    throw AssertionError(
-                        "Timed out waiting for WebView element: $cssSelector", e
-                    )
-                }
-                Thread.sleep(500)
+            val found = runCatching { runJs(probe) }.getOrDefault("no")
+            if (found == "yes") return
+            if (System.currentTimeMillis() >= deadline) {
+                throw AssertionError(
+                    "Timed out waiting for WebView element: $cssSelector"
+                )
             }
+            Thread.sleep(250)
         }
     }
 
