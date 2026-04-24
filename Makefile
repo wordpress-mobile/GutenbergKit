@@ -330,6 +330,26 @@ test-android-e2e-dev: ## Run Android E2E tests against the Vite dev server (must
 	@echo "--- :android: Running Android E2E Tests (dev server)"
 	./android/gradlew -p ./android :app:connectedDebugAndroidTest
 
+.PHONY: test-android-library-e2e
+test-android-library-e2e: ## Run instrumented tests for the Gutenberg Android library module
+	$(ENSURE_ANDROID_DEVICE)
+	@echo "--- :android: Running Android Library Instrumented Tests"
+	@mkdir -p android/Gutenberg/build/outputs/buildkite-logs
+	@adb logcat -c
+	@./android/gradlew -p ./android :Gutenberg:connectedDebugAndroidTest; \
+	EXIT=$$?; \
+	adb logcat -d > android/Gutenberg/build/outputs/buildkite-logs/device-logcat.txt; \
+	echo "--- :mag: Buildkite Test Engine collector output"; \
+	if grep -E 'Buildkite|BUILDKITE_ANALYTICS' android/Gutenberg/build/outputs/buildkite-logs/device-logcat.txt; then :; \
+	else \
+		echo "(no Buildkite collector output found in device logcat — listener may not have registered)"; \
+	fi; \
+	if grep -q 'BuildkiteLogger-ERROR\|Buildkite-InstrumentedTestCollector-ERROR' android/Gutenberg/build/outputs/buildkite-logs/device-logcat.txt; then \
+		echo "+++ :rotating_light: Buildkite Test Engine upload failed (see excerpt above)"; \
+		EXIT=1; \
+	fi; \
+	exit $$EXIT
+
 ################################################################################
 # Release Target
 ################################################################################

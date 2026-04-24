@@ -24,6 +24,11 @@ android {
         )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        configureBuildkiteTestCollector(
+            testInstrumentationRunnerArguments,
+            "BUILDKITE_ANALYTICS_TOKEN_ANDROID_LIBRARY_E2E",
+        )
+
         consumerProguardFiles("consumer-rules.pro")
     }
 
@@ -86,6 +91,8 @@ dependencies {
     testImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.buildkite.test.collector.instrumented)
+    androidTestImplementation(kotlin("test"))
 }
 
 project.afterEvaluate {

@@ -4,14 +4,14 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.gson.Gson
 import com.google.gson.JsonObject
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.Base64
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.test.fail
 
 /**
  * Instrumented fixture tests for the pure-Kotlin HTTP parser.
@@ -38,7 +38,7 @@ class InstrumentedFixtureTests {
             val expected = if (test.get("expected").isJsonNull) null else test.get("expected").asString
 
             val result = HeaderValue.extractParameter(parameter, headerValue)
-            assertEquals("$description: result mismatch", expected, result)
+            assertEquals(expected, result, "$description: result mismatch")
         }
     }
 
@@ -72,44 +72,45 @@ class InstrumentedFixtureTests {
             if (expected.has("isComplete") && !expected.get("isComplete").asBoolean &&
                 expected.has("hasHeaders") && !expected.get("hasHeaders").asBoolean
             ) {
-                assertTrue("$description: should not have headers", !parser.state.hasHeaders)
-                assertNull("$description: parseRequest should return null", parser.parseRequest())
+                assertTrue(!parser.state.hasHeaders, "$description: should not have headers")
+                assertNull(parser.parseRequest(), "$description: parseRequest should return null")
                 continue
             }
 
-            val request = parser.parseRequest()
-            assertNotNull("$description: parseRequest returned null", request)
-            request!!
+            val request = assertNotNull(
+                parser.parseRequest(),
+                "$description: parseRequest returned null"
+            )
 
             if (expected.has("method")) {
-                assertEquals("$description: method", expected.get("method").asString, request.method)
+                assertEquals(expected.get("method").asString, request.method, "$description: method")
             }
             if (expected.has("target")) {
-                assertEquals("$description: target", expected.get("target").asString, request.target)
+                assertEquals(expected.get("target").asString, request.target, "$description: target")
             }
             if (expected.has("isComplete") && expected.get("isComplete").asBoolean) {
-                assertTrue("$description: isComplete", parser.state.isComplete)
+                assertTrue(parser.state.isComplete, "$description: isComplete")
             }
             if (expected.has("headers")) {
                 val expectedHeaders = expected.getAsJsonObject("headers")
                 for (entry in expectedHeaders.entrySet()) {
                     assertEquals(
-                        "$description: header ${entry.key}",
                         entry.value.asString,
-                        request.header(entry.key)
+                        request.header(entry.key),
+                        "$description: header ${entry.key}"
                     )
                 }
             }
             if (expected.has("body")) {
                 if (expected.get("body").isJsonNull) {
-                    assertNull("$description: body should be null", request.body)
+                    assertNull(request.body, "$description: body should be null")
                 } else {
                     val expectedBody = expected.get("body").asString
-                    assertNotNull("$description: body should not be null", request.body)
+                    val body = assertNotNull(request.body, "$description: body should not be null")
                     assertEquals(
-                        "$description: body content",
                         expectedBody,
-                        String(request.body!!.readBytes(), Charsets.UTF_8)
+                        String(body.readBytes(), Charsets.UTF_8),
+                        "$description: body content"
                     )
                 }
             }
@@ -191,22 +192,23 @@ class InstrumentedFixtureTests {
                     val afterHeaders = expected.getAsJsonObject("afterHeaders")
                     if (afterHeaders.has("hasHeaders")) {
                         assertEquals(
-                            "$description: hasHeaders after headers",
                             afterHeaders.get("hasHeaders").asBoolean,
-                            parser.state.hasHeaders
+                            parser.state.hasHeaders,
+                            "$description: hasHeaders after headers"
                         )
                     }
                     if (afterHeaders.has("isComplete")) {
                         assertEquals(
-                            "$description: isComplete after headers",
                             afterHeaders.get("isComplete").asBoolean,
-                            parser.state.isComplete
+                            parser.state.isComplete,
+                            "$description: isComplete after headers"
                         )
                     }
                     if (afterHeaders.has("method") || afterHeaders.has("target")) {
-                        val partialRequest = parser.parseRequest()
-                        assertNotNull("$description: partial request should not be null", partialRequest)
-                        partialRequest!!
+                        val partialRequest = assertNotNull(
+                            parser.parseRequest(),
+                            "$description: partial request should not be null"
+                        )
                         if (afterHeaders.has("method")) {
                             assertEquals(afterHeaders.get("method").asString, partialRequest.method)
                         }
@@ -228,34 +230,35 @@ class InstrumentedFixtureTests {
             if (expected.has("isComplete") && !expected.get("isComplete").asBoolean &&
                 expected.has("hasHeaders") && !expected.get("hasHeaders").asBoolean
             ) {
-                assertTrue("$description: should not have headers", !parser.state.hasHeaders)
-                assertNull("$description: parseRequest should return null", parser.parseRequest())
+                assertTrue(!parser.state.hasHeaders, "$description: should not have headers")
+                assertNull(parser.parseRequest(), "$description: parseRequest should return null")
                 continue
             }
 
-            val request = parser.parseRequest()
-            assertNotNull("$description: parseRequest returned null", request)
-            request!!
+            val request = assertNotNull(
+                parser.parseRequest(),
+                "$description: parseRequest returned null"
+            )
 
             if (expected.has("method")) {
-                assertEquals("$description: method", expected.get("method").asString, request.method)
+                assertEquals(expected.get("method").asString, request.method, "$description: method")
             }
             if (expected.has("target")) {
-                assertEquals("$description: target", expected.get("target").asString, request.target)
+                assertEquals(expected.get("target").asString, request.target, "$description: target")
             }
             if (expected.has("isComplete") && expected.get("isComplete").asBoolean) {
-                assertTrue("$description: isComplete", parser.state.isComplete)
+                assertTrue(parser.state.isComplete, "$description: isComplete")
             }
             if (expected.has("body")) {
                 if (expected.get("body").isJsonNull) {
-                    assertNull("$description: body should be null", request.body)
+                    assertNull(request.body, "$description: body should be null")
                 } else {
                     val expectedBody = expected.get("body").asString
-                    assertNotNull("$description: body should not be null", request.body)
+                    val body = assertNotNull(request.body, "$description: body should not be null")
                     assertEquals(
-                        "$description: body content",
                         expectedBody,
-                        String(request.body!!.readBytes(), Charsets.UTF_8)
+                        String(body.readBytes(), Charsets.UTF_8),
+                        "$description: body content"
                     )
                 }
             }
@@ -281,15 +284,15 @@ class InstrumentedFixtureTests {
             val expected = test.getAsJsonObject("expected")
             if (expected.has("contentType")) {
                 assertEquals(
-                    "$description: Content-Type",
                     expected.get("contentType").asString,
-                    request.header("Content-Type")
+                    request.header("Content-Type"),
+                    "$description: Content-Type"
                 )
             }
 
             val parts = request.multipartParts()
             val expectedParts = expected.getAsJsonArray("parts")
-            assertEquals("$description: part count", expectedParts.size(), parts.size)
+            assertEquals(expectedParts.size(), parts.size, "$description: part count")
 
             for (i in 0 until minOf(expectedParts.size(), parts.size)) {
                 val exp = expectedParts[i].asJsonObject
@@ -324,16 +327,12 @@ class InstrumentedFixtureTests {
                     "Content-Type: $contentType\r\n" +
                     "Content-Length: ${body.toByteArray(Charsets.UTF_8).size}\r\n\r\n$body"
                 val parser = HTTPRequestParser(raw)
-                val parsed = parser.parseRequest()
-                assertNotNull("$description: parsing request failed", parsed)
-                request = parsed!!
+                request = assertNotNull(parser.parseRequest(), "$description: parsing request failed")
             } else if (contentType != null) {
                 val raw = "GET /upload HTTP/1.1\r\nHost: localhost\r\n" +
                     "Content-Type: $contentType\r\n\r\n"
                 val parser = HTTPRequestParser(raw)
-                val parsed = parser.parseRequest()
-                assertNotNull("$description: parsing request failed", parsed)
-                request = parsed!!
+                request = assertNotNull(parser.parseRequest(), "$description: parsing request failed")
             } else {
                 fail("$description: invalid error test case")
                 return
@@ -361,22 +360,22 @@ class InstrumentedFixtureTests {
     }
 
     private fun assertPart(description: String, i: Int, exp: JsonObject, part: MultipartPart) {
-        assertEquals("$description: part[$i].name", exp.get("name").asString, part.name)
+        assertEquals(exp.get("name").asString, part.name, "$description: part[$i].name")
         if (exp.has("filename")) {
             if (exp.get("filename").isJsonNull) {
-                assertNull("$description: part[$i].filename should be null", part.filename)
+                assertNull(part.filename, "$description: part[$i].filename should be null")
             } else {
-                assertEquals("$description: part[$i].filename", exp.get("filename").asString, part.filename)
+                assertEquals(exp.get("filename").asString, part.filename, "$description: part[$i].filename")
             }
         }
         if (exp.has("contentType")) {
-            assertEquals("$description: part[$i].contentType", exp.get("contentType").asString, part.contentType)
+            assertEquals(exp.get("contentType").asString, part.contentType, "$description: part[$i].contentType")
         }
         if (exp.has("body")) {
             assertEquals(
-                "$description: part[$i].body",
                 exp.get("body").asString,
-                String(part.body.readBytes(), Charsets.UTF_8)
+                String(part.body.readBytes(), Charsets.UTF_8),
+                "$description: part[$i].body"
             )
         }
     }

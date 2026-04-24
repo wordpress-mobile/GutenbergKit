@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      Required by the Buildkite Test Engine instrumented-test collector so it
+      can POST results to analytics-api.buildkite.com. Scoped to the test APK
+      so consumers of the library don't inherit this permission.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+</manifest>

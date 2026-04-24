@@ -185,6 +185,7 @@ dist
 local.properties
 /android/build
 /android/.gradle
+/android/buildSrc/.gradle
 /android/.kotlin
 /android/.idea
 wp_com_oauth_credentials.json
