@@ -107,13 +107,32 @@ export function showBlockInserter( sourceRect ) {
 		return;
 	}
 
-	// Send preprocessed sections and patterns to native
-	dispatchToBridge( 'showBlockInserter', {
+	const payload = {
 		sections: window.blockInserter.sections,
 		patterns: window.blockInserter.patterns,
 		patternCategories: window.blockInserter.patternCategories,
 		sourceRect,
-	} );
+	};
+
+	debug( `Bridge event: showBlockInserter`, payload );
+
+	// Not using `dispatchToBridge`: its Android branch flattens `args` with
+	// `Object.values` and passes them as positional parameters. That works
+	// when every value is a primitive, but `@JavascriptInterface` can't
+	// receive arrays or objects — they arrive as `"[object Object]"`.
+	// Instead we stringify for Android (single String arg) and pass the
+	// structured body to iOS, matching the pattern used by openMediaLibrary,
+	// onNetworkRequest, and logException.
+	if ( window.editorDelegate ) {
+		window.editorDelegate.showBlockInserter( JSON.stringify( payload ) );
+	}
+
+	if ( window.webkit ) {
+		window.webkit.messageHandlers.editorDelegate.postMessage( {
+			message: 'showBlockInserter',
+			body: payload,
+		} );
+	}
 }
 
 /**

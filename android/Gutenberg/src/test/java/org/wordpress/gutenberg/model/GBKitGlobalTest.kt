@@ -35,22 +35,38 @@ class GBKitGlobalTest {
         )
     }
 
+    @Suppress("LongParameterList")
     private fun makeConfiguration(
         postId: UInt? = null,
         title: String? = null,
         content: String? = null,
         siteURL: String = TEST_SITE_URL,
         postType: PostTypeDetails = PostTypeDetails.post,
+        postStatus: String = "draft",
         shouldUsePlugins: Boolean = true,
-        shouldUseThemeStyles: Boolean = true
+        shouldUseThemeStyles: Boolean = true,
+        hideTitle: Boolean = false,
+        locale: String? = "en",
+        authHeader: String = "Bearer test-token",
+        siteApiNamespace: Array<String> = arrayOf(),
+        namespaceExcludedPaths: Array<String> = arrayOf(),
+        enableNetworkLogging: Boolean = false,
+        enableNativeBlockInserter: Boolean = false
     ): EditorConfiguration {
         return EditorConfiguration.builder(siteURL, TEST_API_ROOT, postType)
             .setPostId(postId)
             .setTitle(title ?: "")
             .setContent(content ?: "")
+            .setPostStatus(postStatus)
             .setPlugins(shouldUsePlugins)
             .setThemeStyles(shouldUseThemeStyles)
-            .setAuthHeader("Bearer test-token")
+            .setHideTitle(hideTitle)
+            .setLocale(locale)
+            .setAuthHeader(authHeader)
+            .setSiteApiNamespace(siteApiNamespace)
+            .setNamespaceExcludedPaths(namespaceExcludedPaths)
+            .setEnableNetworkLogging(enableNetworkLogging)
+            .setEnableNativeBlockInserter(enableNativeBlockInserter)
             .build()
     }
 
@@ -103,6 +119,84 @@ class GBKitGlobalTest {
 
         assertTrue(globalWith.plugins)
         assertFalse(globalWithout.plugins)
+    }
+
+    @Test
+    fun `maps enableNativeBlockInserter from configuration`() {
+        val withFlag = makeConfiguration(enableNativeBlockInserter = true)
+        val withoutFlag = makeConfiguration(enableNativeBlockInserter = false)
+
+        val globalWith = GBKitGlobal.fromConfiguration(withFlag, makeDependencies())
+        val globalWithout = GBKitGlobal.fromConfiguration(withoutFlag, makeDependencies())
+
+        assertTrue(globalWith.enableNativeBlockInserter)
+        assertFalse(globalWithout.enableNativeBlockInserter)
+    }
+
+    @Test
+    fun `maps hideTitle from configuration`() {
+        val withHideTitle = makeConfiguration(hideTitle = true)
+        val withoutHideTitle = makeConfiguration(hideTitle = false)
+
+        val globalWith = GBKitGlobal.fromConfiguration(withHideTitle, makeDependencies())
+        val globalWithout = GBKitGlobal.fromConfiguration(withoutHideTitle, makeDependencies())
+
+        assertTrue(globalWith.hideTitle)
+        assertFalse(globalWithout.hideTitle)
+    }
+
+    @Test
+    fun `maps enableNetworkLogging from configuration`() {
+        val withLogging = makeConfiguration(enableNetworkLogging = true)
+        val withoutLogging = makeConfiguration(enableNetworkLogging = false)
+
+        val globalWith = GBKitGlobal.fromConfiguration(withLogging, makeDependencies())
+        val globalWithout = GBKitGlobal.fromConfiguration(withoutLogging, makeDependencies())
+
+        assertTrue(globalWith.enableNetworkLogging)
+        assertFalse(globalWithout.enableNetworkLogging)
+    }
+
+    @Test
+    fun `maps locale from configuration`() {
+        val configuration = makeConfiguration(locale = "fr_FR")
+        val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
+        assertEquals("fr_FR", global.locale)
+    }
+
+    @Test
+    fun `defaults locale to en when configuration locale is null`() {
+        val configuration = makeConfiguration(locale = null)
+        val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
+        assertEquals("en", global.locale)
+    }
+
+    @Test
+    fun `maps authHeader from configuration`() {
+        val configuration = makeConfiguration(authHeader = "Bearer my-token")
+        val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
+        assertEquals("Bearer my-token", global.authHeader)
+    }
+
+    @Test
+    fun `maps postStatus from configuration`() {
+        val configuration = makeConfiguration(postStatus = "publish")
+        val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
+        assertEquals("publish", global.post.status)
+    }
+
+    @Test
+    fun `maps siteApiNamespace from configuration`() {
+        val configuration = makeConfiguration(siteApiNamespace = arrayOf("sites/123", "wp/v2"))
+        val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
+        assertEquals(listOf("sites/123", "wp/v2"), global.siteApiNamespace)
+    }
+
+    @Test
+    fun `maps namespaceExcludedPaths from configuration`() {
+        val configuration = makeConfiguration(namespaceExcludedPaths = arrayOf("/oembed", "/batch"))
+        val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
+        assertEquals(listOf("/oembed", "/batch"), global.namespaceExcludedPaths)
     }
 
     @Test
@@ -197,7 +291,14 @@ class GBKitGlobalTest {
 
     @Test
     fun `toJsonString round-trips through serialization`() {
-        val configuration = makeConfiguration(postId = 99u, title = "Round Trip", content = "Test content")
+        val configuration = makeConfiguration(
+            postId = 99u,
+            title = "Round Trip",
+            content = "Test content",
+            hideTitle = true,
+            enableNetworkLogging = true,
+            enableNativeBlockInserter = true
+        )
         val original = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
 
         val jsonString = original.toJsonString()
@@ -208,6 +309,9 @@ class GBKitGlobalTest {
         assertEquals(original.post.title, decoded.post.title)
         assertEquals(original.themeStyles, decoded.themeStyles)
         assertEquals(original.plugins, decoded.plugins)
+        assertEquals(original.hideTitle, decoded.hideTitle)
+        assertEquals(original.enableNetworkLogging, decoded.enableNetworkLogging)
+        assertEquals(original.enableNativeBlockInserter, decoded.enableNativeBlockInserter)
     }
 
     // MARK: - Special Characters

@@ -28,7 +28,14 @@ data class EditorConfiguration(
     val cachedAssetHosts: Set<String> = emptySet(),
     val editorAssetsEndpoint: String? = null,
     val enableNetworkLogging: Boolean = false,
-    var enableOfflineMode: Boolean = false
+    var enableOfflineMode: Boolean = false,
+    /**
+     * When true, the web editor delegates block inserter UI to a native
+     * bottom sheet owned by [org.wordpress.gutenberg.GutenbergView] instead of
+     * showing the built-in Gutenberg inserter. Defaults to false so existing
+     * consumers keep the web-based inserter until they opt in.
+     */
+    val enableNativeBlockInserter: Boolean = false
 ): Parcelable {
 
     /**
@@ -73,6 +80,7 @@ data class EditorConfiguration(
         private var editorAssetsEndpoint: String? = null
         private var enableNetworkLogging: Boolean = false
         private var enableOfflineMode: Boolean = false
+        private var enableNativeBlockInserter: Boolean = false
 
         fun setTitle(title: String) = apply { this.title = title }
         fun setContent(content: String) = apply { this.content = content }
@@ -95,6 +103,9 @@ data class EditorConfiguration(
         fun setEditorAssetsEndpoint(editorAssetsEndpoint: String?) = apply { this.editorAssetsEndpoint = editorAssetsEndpoint }
         fun setEnableNetworkLogging(enableNetworkLogging: Boolean) = apply { this.enableNetworkLogging = enableNetworkLogging }
         fun setEnableOfflineMode(enableOfflineMode: Boolean) = apply { this.enableOfflineMode = enableOfflineMode }
+        fun setEnableNativeBlockInserter(enabled: Boolean) = apply {
+            this.enableNativeBlockInserter = enabled
+        }
 
         fun build(): EditorConfiguration = EditorConfiguration(
             title = title,
@@ -117,7 +128,8 @@ data class EditorConfiguration(
             cachedAssetHosts = cachedAssetHosts,
             editorAssetsEndpoint = editorAssetsEndpoint,
             enableNetworkLogging = enableNetworkLogging,
-            enableOfflineMode = enableOfflineMode
+            enableOfflineMode = enableOfflineMode,
+            enableNativeBlockInserter = enableNativeBlockInserter
         )
     }
 
@@ -145,6 +157,7 @@ data class EditorConfiguration(
         .setEditorAssetsEndpoint(editorAssetsEndpoint)
         .setEnableNetworkLogging(enableNetworkLogging)
         .setEnableOfflineMode(enableOfflineMode)
+        .setEnableNativeBlockInserter(enableNativeBlockInserter)
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -173,6 +186,7 @@ data class EditorConfiguration(
         if (editorAssetsEndpoint != other.editorAssetsEndpoint) return false
         if (enableNetworkLogging != other.enableNetworkLogging) return false
         if (enableOfflineMode != other.enableOfflineMode) return false
+        if (enableNativeBlockInserter != other.enableNativeBlockInserter) return false
         if (siteId != other.siteId) return false
 
         return true
@@ -200,6 +214,7 @@ data class EditorConfiguration(
         result = 31 * result + (editorAssetsEndpoint?.hashCode() ?: 0)
         result = 31 * result + enableNetworkLogging.hashCode()
         result = 31 * result + enableOfflineMode.hashCode()
+        result = 31 * result + enableNativeBlockInserter.hashCode()
         result = 31 * result + siteId.hashCode()
         return result
     }
