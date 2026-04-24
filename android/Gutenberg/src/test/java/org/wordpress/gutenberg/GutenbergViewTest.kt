@@ -27,6 +27,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
+import org.wordpress.gutenberg.model.UserCapabilities
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], manifest = Config.NONE)
@@ -170,8 +171,11 @@ class GutenbergViewTest {
     @Test
     fun `shouldOverrideUrlLoading allows asset path URLs on site domain`() {
         val siteView = GutenbergView(
-            EditorConfiguration.builder("https://example.com", "https://example.com/wp-json/")
-                .build(),
+            EditorConfiguration.builder(
+                siteURL = "https://example.com",
+                siteApiRoot = "https://example.com/wp-json/",
+                userCapabilities = UserCapabilities(uploadFiles = false)
+            ).build(),
             EditorDependencies.empty,
             testScope,
             RuntimeEnvironment.getApplication()
@@ -187,8 +191,11 @@ class GutenbergViewTest {
     @Test
     fun `shouldOverrideUrlLoading blocks non-asset URLs on site domain`() {
         val siteView = GutenbergView(
-            EditorConfiguration.builder("https://example.com", "https://example.com/wp-json/")
-                .build(),
+            EditorConfiguration.builder(
+                siteURL = "https://example.com",
+                siteApiRoot = "https://example.com/wp-json/",
+                userCapabilities = UserCapabilities(uploadFiles = false)
+            ).build(),
             EditorDependencies.empty,
             testScope,
             RuntimeEnvironment.getApplication()

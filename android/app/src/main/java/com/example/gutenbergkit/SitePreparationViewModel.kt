@@ -14,9 +14,11 @@ import org.wordpress.gutenberg.model.EditorCachePolicy
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.model.PostTypeDetails
+import org.wordpress.gutenberg.model.UserCapabilities
 import org.wordpress.gutenberg.services.EditorService
 import rs.wordpress.api.kotlin.WpRequestResult
 import uniffi.wp_api.PostType as WpPostType
+import uniffi.wp_api.UserCapability
 
 data class SitePreparationUiState(
     val enableNativeInserter: Boolean = true,
@@ -211,6 +213,7 @@ class SitePreparationViewModel(
         return EditorConfiguration.builder(
             siteURL = "https://example.com",
             siteApiRoot = "https://example.com",
+            userCapabilities = UserCapabilities(uploadFiles = false),
             postType = PostTypeDetails.post
         )
             .setPlugins(false)
@@ -257,9 +260,12 @@ class SitePreparationViewModel(
             )
         }
 
+        val userCapabilities = loadUserCapabilities(config)
+
         return EditorConfiguration.builder(
             siteURL = config.siteUrl,
             siteApiRoot = siteApiRoot,
+            userCapabilities = userCapabilities,
             postType = defaultPostType
         )
             .setPlugins(capabilities.supportsPlugins)
@@ -317,6 +323,27 @@ class SitePreparationViewModel(
                 )
             }
             .sortedBy { it.postType }
+    }
+
+    /**
+     * Fetches the signed-in user's capabilities so the editor can seed
+     * `canUser` without relying on the REST `Allow` header (which is not
+     * exposed cross-origin by default in core WordPress).
+     */
+    private suspend fun loadUserCapabilities(
+        config: ConfigurationItem.ConfiguredEditor
+    ): UserCapabilities {
+        val app = getApplication<GutenbergKitApplication>()
+        val account = app.accountRepository.all().first { it.id() == config.accountId }
+        val client = app.createApiClient(account)
+
+        val result = client.request { builder ->
+            builder.users().retrieveMeWithEditContext()
+        } as WpRequestResult.Success
+
+        return UserCapabilities(
+            uploadFiles = result.response.data.capabilities[UserCapability.UploadFiles] ?: false
+        )
     }
 
     /**

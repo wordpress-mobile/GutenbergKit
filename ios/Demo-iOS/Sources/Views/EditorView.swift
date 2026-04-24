@@ -324,7 +324,8 @@ extension EditorConfiguration {
     static let bundled = EditorConfigurationBuilder(
         postType: .post,
         siteURL: URL(string: "https://example.com")!,
-        siteApiRoot: URL(string: "https://example.com/wp-json")!
+        siteApiRoot: URL(string: "https://example.com/wp-json")!,
+        userCapabilities: UserCapabilities(uploadFiles: false)
     )
     .setShouldUsePlugins(false)
     .setAuthHeader("")

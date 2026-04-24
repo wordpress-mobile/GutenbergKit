@@ -170,6 +170,22 @@ struct GBKitGlobalTests: MakesTestFixtures {
     #expect(jsonString.contains("\"status\""))
     #expect(jsonString.contains("locale"))
     #expect(jsonString.contains("logLevel"))
+    #expect(jsonString.contains("userCapabilities"))
+  }
+
+  @Test("maps userCapabilities from configuration")
+  func mapsUserCapabilities() throws {
+    let withUpload = makeConfigurationBuilder()
+      .setUserCapabilities(UserCapabilities(uploadFiles: true))
+      .build()
+    let withoutUpload = makeConfiguration()
+
+    let globalWith = try GBKitGlobal(configuration: withUpload, dependencies: makeDependencies())
+    let globalWithout = try GBKitGlobal(
+      configuration: withoutUpload, dependencies: makeDependencies())
+
+    #expect(globalWith.userCapabilities.uploadFiles == true)
+    #expect(globalWithout.userCapabilities.uploadFiles == false)
   }
 
   @Test("toString round-trips through Codable")

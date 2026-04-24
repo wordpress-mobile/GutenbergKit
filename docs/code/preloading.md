@@ -272,7 +272,8 @@ When `EditorConfiguration.networkFallbackMode` is set to `.automatic`, the edito
 let config = EditorConfigurationBuilder(
     postType: .post,
     siteURL: siteURL,
-    siteApiRoot: apiRoot
+    siteApiRoot: apiRoot,
+    userCapabilities: UserCapabilities(uploadFiles: true)
 )
 .setNetworkFallbackMode(.automatic)
 .build()

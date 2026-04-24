@@ -44,7 +44,12 @@ class GBKitGlobalTest {
         shouldUsePlugins: Boolean = true,
         shouldUseThemeStyles: Boolean = true
     ): EditorConfiguration {
-        return EditorConfiguration.builder(siteURL, TEST_API_ROOT, postType)
+        return EditorConfiguration.builder(
+            siteURL = siteURL,
+            siteApiRoot = TEST_API_ROOT,
+            userCapabilities = UserCapabilities(uploadFiles = false),
+            postType = postType
+        )
             .setPostId(postId)
             .setTitle(title ?: "")
             .setContent(content ?: "")
@@ -193,6 +198,24 @@ class GBKitGlobalTest {
         assertTrue(jsonString.contains("post"))
         assertTrue(jsonString.contains("locale"))
         assertTrue(jsonString.contains("logLevel"))
+        assertTrue(jsonString.contains("userCapabilities"))
+    }
+
+    @Test
+    fun `maps userCapabilities from configuration`() {
+        val withUpload = EditorConfiguration.builder(
+            siteURL = TEST_SITE_URL,
+            siteApiRoot = TEST_API_ROOT,
+            userCapabilities = UserCapabilities(uploadFiles = true),
+            postType = PostTypeDetails.post
+        ).build()
+        val withoutUpload = makeConfiguration()
+
+        val globalWith = GBKitGlobal.fromConfiguration(withUpload, makeDependencies())
+        val globalWithout = GBKitGlobal.fromConfiguration(withoutUpload, makeDependencies())
+
+        assertTrue(globalWith.userCapabilities.uploadFiles)
+        assertFalse(globalWithout.userCapabilities.uploadFiles)
     }
 
     @Test

@@ -28,7 +28,8 @@ data class EditorConfiguration(
     val cachedAssetHosts: Set<String> = emptySet(),
     val editorAssetsEndpoint: String? = null,
     val enableNetworkLogging: Boolean = false,
-    var enableOfflineMode: Boolean = false
+    var enableOfflineMode: Boolean = false,
+    val userCapabilities: UserCapabilities
 ): Parcelable {
 
     /**
@@ -46,15 +47,30 @@ data class EditorConfiguration(
     }
     companion object {
         @JvmStatic
-        fun builder(siteURL: String, siteApiRoot: String, postType: PostTypeDetails = PostTypeDetails.post): Builder = Builder(siteURL, siteApiRoot, postType = postType)
+        fun builder(
+            siteURL: String,
+            siteApiRoot: String,
+            userCapabilities: UserCapabilities,
+            postType: PostTypeDetails = PostTypeDetails.post
+        ): Builder = Builder(siteURL, siteApiRoot, userCapabilities, postType = postType)
 
         @JvmStatic
-        fun bundled(): EditorConfiguration = Builder("https://example.com", "https://example.com/wp-json/", PostTypeDetails.post)
+        fun bundled(): EditorConfiguration = Builder(
+            "https://example.com",
+            "https://example.com/wp-json/",
+            UserCapabilities(uploadFiles = false),
+            PostTypeDetails.post
+        )
             .setEnableOfflineMode(true)
             .build()
     }
 
-    class Builder(private var siteURL: String, private var siteApiRoot: String, private var postType: PostTypeDetails) {
+    class Builder(
+        private var siteURL: String,
+        private var siteApiRoot: String,
+        private var userCapabilities: UserCapabilities,
+        private var postType: PostTypeDetails
+    ) {
         private var title: String = ""
         private var content: String = ""
         private var postId: UInt? = null
@@ -95,6 +111,7 @@ data class EditorConfiguration(
         fun setEditorAssetsEndpoint(editorAssetsEndpoint: String?) = apply { this.editorAssetsEndpoint = editorAssetsEndpoint }
         fun setEnableNetworkLogging(enableNetworkLogging: Boolean) = apply { this.enableNetworkLogging = enableNetworkLogging }
         fun setEnableOfflineMode(enableOfflineMode: Boolean) = apply { this.enableOfflineMode = enableOfflineMode }
+        fun setUserCapabilities(userCapabilities: UserCapabilities) = apply { this.userCapabilities = userCapabilities }
 
         fun build(): EditorConfiguration = EditorConfiguration(
             title = title,
@@ -117,7 +134,8 @@ data class EditorConfiguration(
             cachedAssetHosts = cachedAssetHosts,
             editorAssetsEndpoint = editorAssetsEndpoint,
             enableNetworkLogging = enableNetworkLogging,
-            enableOfflineMode = enableOfflineMode
+            enableOfflineMode = enableOfflineMode,
+            userCapabilities = userCapabilities
         )
     }
 
@@ -126,7 +144,7 @@ data class EditorConfiguration(
      *
      * This allows modifying specific fields while preserving others.
      */
-    fun toBuilder(): Builder = Builder(siteURL, siteApiRoot, postType)
+    fun toBuilder(): Builder = Builder(siteURL, siteApiRoot, userCapabilities, postType)
         .setTitle(title)
         .setContent(content)
         .setPostId(postId)
@@ -173,6 +191,7 @@ data class EditorConfiguration(
         if (editorAssetsEndpoint != other.editorAssetsEndpoint) return false
         if (enableNetworkLogging != other.enableNetworkLogging) return false
         if (enableOfflineMode != other.enableOfflineMode) return false
+        if (userCapabilities != other.userCapabilities) return false
         if (siteId != other.siteId) return false
 
         return true
@@ -200,6 +219,7 @@ data class EditorConfiguration(
         result = 31 * result + (editorAssetsEndpoint?.hashCode() ?: 0)
         result = 31 * result + enableNetworkLogging.hashCode()
         result = 31 * result + enableOfflineMode.hashCode()
+        result = 31 * result + userCapabilities.hashCode()
         result = 31 * result + siteId.hashCode()
         return result
     }

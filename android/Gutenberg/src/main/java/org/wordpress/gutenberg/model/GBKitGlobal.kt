@@ -58,6 +58,15 @@ data class GBKitGlobal(
     val logLevel: String = "warn",
     /** Whether to log network requests in the JavaScript console. */
     val enableNetworkLogging: Boolean,
+    /**
+     * Host-declared user capabilities used by the JS editor to preseed
+     * `@wordpress/core-data`'s `canUser` results.
+     *
+     * Non-optional so `window.GBKit.userCapabilities` is always present;
+     * the JS editor can rely on reading it rather than guarding for
+     * absence.
+     */
+    val userCapabilities: UserCapabilities,
     /** The raw editor settings JSON from the WordPress REST API. */
     val editorSettings: JsonElement?,
     /** Pre-fetched API responses JSON for faster editor initialization. */
@@ -121,6 +130,7 @@ data class GBKitGlobal(
                     content = configuration.content.encodeForEditor()
                 ),
                 enableNetworkLogging = configuration.enableNetworkLogging,
+                userCapabilities = configuration.userCapabilities,
                 editorSettings = dependencies?.editorSettings?.jsonValue,
                 preloadData = dependencies?.preloadList?.build(),
                 editorAssets = dependencies?.assetBundle?.let { bundle ->

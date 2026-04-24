@@ -298,7 +298,8 @@ class SitePreparationViewModel {
         EditorConfigurationBuilder(
             postType: .post,
             siteURL: URL(string: account.siteUrl)!,
-            siteApiRoot: URL(string: account.siteApiRoot)!
+            siteApiRoot: URL(string: account.siteApiRoot)!,
+            userCapabilities: UserCapabilities(uploadFiles: false)
         )
         // Optimistically enable theme styles and plugins so that
         // previously-cached assets from an earlier online session can still be
@@ -423,10 +424,13 @@ class SitePreparationViewModel {
             siteApiNamespace = []
         }
 
+        let userCapabilities = try await loadUserCapabilities()
+
         return EditorConfigurationBuilder(
             postType: selectedPostTypeDetails,
             siteURL: URL(string: apiRoot.homeUrlString())!,
-            siteApiRoot: siteApiRoot
+            siteApiRoot: siteApiRoot,
+            userCapabilities: userCapabilities
         )
         .setShouldUseThemeStyles(canUseEditorStyles)
         .setShouldUsePlugins(canUsePlugins)
@@ -434,6 +438,15 @@ class SitePreparationViewModel {
         .setAuthHeader(account.authHeader)
         .setLogLevel(.debug)
         .build()
+    }
+
+    /// Fetches the signed-in user's capabilities so the editor can seed
+    /// `canUser` without relying on the REST `Allow` header (which is not
+    /// exposed cross-origin by default in core WordPress).
+    @MainActor
+    private func loadUserCapabilities() async throws -> UserCapabilities {
+        let user = try await client!.users.retrieveMeWithEditContext().data
+        return UserCapabilities(uploadFiles: user.capabilities[.uploadFiles] ?? false)
     }
 
     /// Extract the numeric WP.com site ID from a WP.com API root URL.

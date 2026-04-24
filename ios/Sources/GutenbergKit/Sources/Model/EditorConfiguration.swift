@@ -63,6 +63,12 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
   public let isOfflineModeEnabled: Bool
   /// Controls whether the editor falls back to the bundled editor on network failure
   public let networkFallbackMode: NetworkFallbackMode
+  /// Host-declared capabilities for the authenticated user.
+  ///
+  /// Injected into the editor as `window.GBKit.userCapabilities` so the JS
+  /// side can preseed `canUser` results without relying on cross-origin
+  /// OPTIONS inference. See `UserCapabilities`.
+  public let userCapabilities: UserCapabilities
   /// A site ID derived from the URL that can be used in file system paths
   let siteId: String
 
@@ -89,7 +95,8 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
     logLevel: EditorLogLevel,
     enableNetworkLogging: Bool = false,
     isOfflineModeEnabled: Bool = false,
-    networkFallbackMode: NetworkFallbackMode = .disabled
+    networkFallbackMode: NetworkFallbackMode = .disabled,
+    userCapabilities: UserCapabilities
   ) {
     self.title = title
     self.content = content
@@ -113,6 +120,7 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
     self.enableNetworkLogging = enableNetworkLogging
     self.isOfflineModeEnabled = isOfflineModeEnabled
     self.networkFallbackMode = networkFallbackMode
+    self.userCapabilities = userCapabilities
 
     // Derived Properties
     self.siteId = self.siteURL.host(percentEncoded: false) ?? UUID().uuidString
@@ -144,7 +152,8 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
       logLevel: logLevel,
       enableNetworkLogging: enableNetworkLogging,
       isOfflineModeEnabled: isOfflineModeEnabled,
-      networkFallbackMode: networkFallbackMode
+      networkFallbackMode: networkFallbackMode,
+      userCapabilities: userCapabilities
     )
   }
 
@@ -191,6 +200,7 @@ public struct EditorConfigurationBuilder {
   private var enableNetworkLogging: Bool
   private var isOfflineModeEnabled: Bool
   private var networkFallbackMode: NetworkFallbackMode
+  private var userCapabilities: UserCapabilities
 
   public init(
     title: String = "",
@@ -214,7 +224,8 @@ public struct EditorConfigurationBuilder {
     logLevel: EditorLogLevel = .error,
     enableNetworkLogging: Bool = false,
     isOfflineModeEnabled: Bool = false,
-    networkFallbackMode: NetworkFallbackMode = .disabled
+    networkFallbackMode: NetworkFallbackMode = .disabled,
+    userCapabilities: UserCapabilities
   ) {
     self.title = title
     self.content = content
@@ -238,6 +249,7 @@ public struct EditorConfigurationBuilder {
     self.enableNetworkLogging = enableNetworkLogging
     self.isOfflineModeEnabled = isOfflineModeEnabled
     self.networkFallbackMode = networkFallbackMode
+    self.userCapabilities = userCapabilities
   }
 
   public func setTitle(_ title: String) -> EditorConfigurationBuilder {
@@ -376,6 +388,13 @@ public struct EditorConfigurationBuilder {
     return copy
   }
 
+  public func setUserCapabilities(_ userCapabilities: UserCapabilities)
+    -> EditorConfigurationBuilder {
+    var copy = self
+    copy.userCapabilities = userCapabilities
+    return copy
+  }
+
   /// Simplify conditionally applying a configuration change
   ///
   /// Sample Code:
@@ -424,7 +443,8 @@ public struct EditorConfigurationBuilder {
       logLevel: logLevel,
       enableNetworkLogging: enableNetworkLogging,
       isOfflineModeEnabled: isOfflineModeEnabled,
-      networkFallbackMode: networkFallbackMode
+      networkFallbackMode: networkFallbackMode,
+      userCapabilities: userCapabilities
     )
   }
 }

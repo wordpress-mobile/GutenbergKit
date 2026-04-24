@@ -15,6 +15,7 @@ import { useHostBridge } from './use-host-bridge';
 import { useEditorReady } from './use-editor-ready';
 import { useHostExceptionLogging } from './use-host-exception-logging';
 import { useEditorSetup } from './use-editor-setup';
+import { useSeededPermissions } from './use-seeded-permissions';
 import { useMediaUpload } from './use-media-upload';
 import TextEditor from '../text-editor';
 import { useSyncFeaturedImage } from './use-sync-featured-image';
@@ -43,6 +44,7 @@ export default function Editor( { post, children, hideTitle } ) {
 	useSyncHistoryControls();
 	useHostExceptionLogging();
 	useEditorSetup( post );
+	useSeededPermissions();
 	useMediaUpload();
 	useDevModeNotice();
 	useAtAutocompleter();

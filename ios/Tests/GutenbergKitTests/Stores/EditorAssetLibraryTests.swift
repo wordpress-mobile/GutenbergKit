@@ -12,6 +12,7 @@ struct EditorAssetLibraryTests {
             postType: .post,
             siteURL: URL(string: "https://example.com")!,
             siteApiRoot: URL(string: "https://example.com/wp-json")!,
+            userCapabilities: UserCapabilities(uploadFiles: false)
         )
         .setShouldUsePlugins(true)
         .setShouldUseThemeStyles(true)
@@ -22,7 +23,8 @@ struct EditorAssetLibraryTests {
         EditorConfigurationBuilder(
             postType: .post,
             siteURL: URL(string: "https://example.com")!,
-            siteApiRoot: URL(string: "https://example.com/wp-json")!
+            siteApiRoot: URL(string: "https://example.com/wp-json")!,
+            userCapabilities: UserCapabilities(uploadFiles: false)
         )
         .setShouldUsePlugins(false)
         .setShouldUseThemeStyles(false)

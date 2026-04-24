@@ -18,7 +18,12 @@ class EditorConfigurationBuilderTest {
         val TEST_POST_TYPE = PostTypeDetails.post
     }
 
-    private fun builder() = EditorConfiguration.builder(TEST_SITE_URL, TEST_API_ROOT, TEST_POST_TYPE)
+    private fun builder() = EditorConfiguration.builder(
+        siteURL = TEST_SITE_URL,
+        siteApiRoot = TEST_API_ROOT,
+        userCapabilities = UserCapabilities(uploadFiles = false),
+        postType = TEST_POST_TYPE
+    )
 
     // MARK: - Default Values Tests
 
@@ -47,6 +52,17 @@ class EditorConfigurationBuilderTest {
         assertNull(config.editorAssetsEndpoint)
         assertFalse(config.enableNetworkLogging)
         assertFalse(config.enableOfflineMode)
+        assertEquals(UserCapabilities(uploadFiles = false), config.userCapabilities)
+        assertFalse(config.userCapabilities.uploadFiles)
+    }
+
+    @Test
+    fun `setUserCapabilities updates userCapabilities`() {
+        val config = builder()
+            .setUserCapabilities(UserCapabilities(uploadFiles = true))
+            .build()
+
+        assertTrue(config.userCapabilities.uploadFiles)
     }
 
     // MARK: - Individual Setter Tests
@@ -421,32 +437,44 @@ class EditorConfigurationBuilderTest {
 
     @Test
     fun `siteId extracts host from siteURL`() {
-        val config = EditorConfiguration.builder("https://example.com/blog", TEST_API_ROOT)
-            .build()
+        val config = EditorConfiguration.builder(
+            siteURL = "https://example.com/blog",
+            siteApiRoot = TEST_API_ROOT,
+            userCapabilities = UserCapabilities(uploadFiles = false)
+        ).build()
 
         assertEquals("example.com", config.siteId)
     }
 
     @Test
     fun `siteId extracts host from siteURL with port`() {
-        val config = EditorConfiguration.builder("https://example.com:8080/blog", TEST_API_ROOT)
-            .build()
+        val config = EditorConfiguration.builder(
+            siteURL = "https://example.com:8080/blog",
+            siteApiRoot = TEST_API_ROOT,
+            userCapabilities = UserCapabilities(uploadFiles = false)
+        ).build()
 
         assertEquals("example.com", config.siteId)
     }
 
     @Test
     fun `siteId extracts subdomain from siteURL`() {
-        val config = EditorConfiguration.builder("https://blog.example.com/posts", TEST_API_ROOT)
-            .build()
+        val config = EditorConfiguration.builder(
+            siteURL = "https://blog.example.com/posts",
+            siteApiRoot = TEST_API_ROOT,
+            userCapabilities = UserCapabilities(uploadFiles = false)
+        ).build()
 
         assertEquals("blog.example.com", config.siteId)
     }
 
     @Test
     fun `siteId returns UUID for empty siteURL`() {
-        val config = EditorConfiguration.builder("", TEST_API_ROOT)
-            .build()
+        val config = EditorConfiguration.builder(
+            siteURL = "",
+            siteApiRoot = TEST_API_ROOT,
+            userCapabilities = UserCapabilities(uploadFiles = false)
+        ).build()
 
         // Should be a valid UUID format (36 characters with hyphens)
         assertTrue(config.siteId.matches(Regex("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}")))
@@ -454,8 +482,11 @@ class EditorConfigurationBuilderTest {
 
     @Test
     fun `siteId returns UUID for invalid URL`() {
-        val config = EditorConfiguration.builder("not a valid url", TEST_API_ROOT)
-            .build()
+        val config = EditorConfiguration.builder(
+            siteURL = "not a valid url",
+            siteApiRoot = TEST_API_ROOT,
+            userCapabilities = UserCapabilities(uploadFiles = false)
+        ).build()
 
         // Should be a valid UUID format
         assertTrue(config.siteId.matches(Regex("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}")))
@@ -492,7 +523,12 @@ class EditorConfigurationTest {
         val TEST_POST_TYPE = PostTypeDetails.post
     }
 
-    private fun builder() = EditorConfiguration.builder(TEST_SITE_URL, TEST_API_ROOT, TEST_POST_TYPE)
+    private fun builder() = EditorConfiguration.builder(
+        siteURL = TEST_SITE_URL,
+        siteApiRoot = TEST_API_ROOT,
+        userCapabilities = UserCapabilities(uploadFiles = false),
+        postType = TEST_POST_TYPE
+    )
 
     // MARK: - Equatable Tests
     // Tests are ordered to match property declaration order in EditorConfiguration
@@ -553,11 +589,19 @@ class EditorConfigurationTest {
 
     @Test
     fun `Configurations with different postType are not equal`() {
-        val config1 = EditorConfiguration.builder(TEST_SITE_URL, TEST_API_ROOT, PostTypeDetails.post)
-            .build()
+        val config1 = EditorConfiguration.builder(
+            siteURL = TEST_SITE_URL,
+            siteApiRoot = TEST_API_ROOT,
+            userCapabilities = UserCapabilities(uploadFiles = false),
+            postType = PostTypeDetails.post
+        ).build()
 
-        val config2 = EditorConfiguration.builder(TEST_SITE_URL, TEST_API_ROOT, PostTypeDetails.page)
-            .build()
+        val config2 = EditorConfiguration.builder(
+            siteURL = TEST_SITE_URL,
+            siteApiRoot = TEST_API_ROOT,
+            userCapabilities = UserCapabilities(uploadFiles = false),
+            postType = PostTypeDetails.page
+        ).build()
 
         assertNotEquals(config1, config2)
     }
@@ -616,22 +660,34 @@ class EditorConfigurationTest {
 
     @Test
     fun `Configurations with different siteURL are not equal`() {
-        val config1 = EditorConfiguration.builder("https://site1.com", TEST_API_ROOT)
-            .build()
+        val config1 = EditorConfiguration.builder(
+            siteURL = "https://site1.com",
+            siteApiRoot = TEST_API_ROOT,
+            userCapabilities = UserCapabilities(uploadFiles = false)
+        ).build()
 
-        val config2 = EditorConfiguration.builder("https://site2.com", TEST_API_ROOT)
-            .build()
+        val config2 = EditorConfiguration.builder(
+            siteURL = "https://site2.com",
+            siteApiRoot = TEST_API_ROOT,
+            userCapabilities = UserCapabilities(uploadFiles = false)
+        ).build()
 
         assertNotEquals(config1, config2)
     }
 
     @Test
     fun `Configurations with different siteApiRoot are not equal`() {
-        val config1 = EditorConfiguration.builder(TEST_SITE_URL, "https://example.com/wp-json/v1")
-            .build()
+        val config1 = EditorConfiguration.builder(
+            siteURL = TEST_SITE_URL,
+            siteApiRoot = "https://example.com/wp-json/v1",
+            userCapabilities = UserCapabilities(uploadFiles = false)
+        ).build()
 
-        val config2 = EditorConfiguration.builder(TEST_SITE_URL, "https://example.com/wp-json/v2")
-            .build()
+        val config2 = EditorConfiguration.builder(
+            siteURL = TEST_SITE_URL,
+            siteApiRoot = "https://example.com/wp-json/v2",
+            userCapabilities = UserCapabilities(uploadFiles = false)
+        ).build()
 
         assertNotEquals(config1, config2)
     }
@@ -782,11 +838,17 @@ class EditorConfigurationTest {
     @Test
     fun `Configurations with different siteId are not equal`() {
         // siteId is derived from siteURL, so different URLs with different hosts produce different siteIds
-        val config1 = EditorConfiguration.builder("https://site1.example.com", TEST_API_ROOT)
-            .build()
+        val config1 = EditorConfiguration.builder(
+            siteURL = "https://site1.example.com",
+            siteApiRoot = TEST_API_ROOT,
+            userCapabilities = UserCapabilities(uploadFiles = false)
+        ).build()
 
-        val config2 = EditorConfiguration.builder("https://site2.example.com", TEST_API_ROOT)
-            .build()
+        val config2 = EditorConfiguration.builder(
+            siteURL = "https://site2.example.com",
+            siteApiRoot = TEST_API_ROOT,
+            userCapabilities = UserCapabilities(uploadFiles = false)
+        ).build()
 
         assertNotEquals(config1.siteId, config2.siteId)
         assertNotEquals(config1, config2)
@@ -850,7 +912,12 @@ class EditorConfigurationTest {
 
     @Test
     fun `test EditorConfiguration builder sets all properties correctly`() {
-        val config = EditorConfiguration.builder("https://example.com", "https://example.com/wp-json", PostTypeDetails.post)
+        val config = EditorConfiguration.builder(
+            siteURL = "https://example.com",
+            siteApiRoot = "https://example.com/wp-json",
+            userCapabilities = UserCapabilities(uploadFiles = false),
+            postType = PostTypeDetails.post
+        )
             .setTitle("Test Title")
             .setContent("Test Content")
             .setPostId(123u)

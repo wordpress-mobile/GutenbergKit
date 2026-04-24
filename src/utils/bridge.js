@@ -203,16 +203,23 @@ export function onNetworkRequest( requestData ) {
 }
 
 /**
+ * @typedef {Object} UserCapabilities
+ *
+ * @property {boolean} [uploadFiles] Whether the user has the `upload_files` capability.
+ */
+
+/**
  * @typedef GBKitConfig
  *
- * @property {boolean}  [themeStyles]            Controls if theme styles are applied to the editor.
- * @property {string}   [siteApiRoot]            The root URL of the site's API.
- * @property {string[]} [siteApiNamespace]       The namespace of the site's API; if multiple namespaces are provided, the first one is used as the default.
- * @property {string[]} [namespaceExcludedPaths] The paths that should not be namespaced.
- * @property {string}   [authHeader]             The authentication header.
- * @property {string}   [hideTitle]              Whether to hide the title.
- * @property {Post}     [post]                   The post data.
- * @property {boolean}  [enableNetworkLogging]   Enables logging of all network requests/responses to the native host via onNetworkRequest bridge method.
+ * @property {boolean}          [themeStyles]            Controls if theme styles are applied to the editor.
+ * @property {string}           [siteApiRoot]            The root URL of the site's API.
+ * @property {string[]}         [siteApiNamespace]       The namespace of the site's API; if multiple namespaces are provided, the first one is used as the default.
+ * @property {string[]}         [namespaceExcludedPaths] The paths that should not be namespaced.
+ * @property {string}           [authHeader]             The authentication header.
+ * @property {string}           [hideTitle]              Whether to hide the title.
+ * @property {Post}             [post]                   The post data.
+ * @property {boolean}          [enableNetworkLogging]   Enables logging of all network requests/responses to the native host via onNetworkRequest bridge method.
+ * @property {UserCapabilities} [userCapabilities]       Host-declared user capabilities used to preseed the core-data store, bypassing cross-origin OPTIONS inference.
  */
 
 /**
