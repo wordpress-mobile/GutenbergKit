@@ -53,10 +53,24 @@ android {
 
         // Buildkite Test Engine: upload per-test results when a token is present in the env.
         // Absent locally → no listener is registered and the collector is fully inert.
+        // Build metadata env vars are forwarded so uploaded results link back to the CI job:
+        // https://github.com/buildkite/test-collector-android/blob/main/CI_CONFIGURATION.md#buildkite
         System.getenv("BUILDKITE_ANALYTICS_TOKEN_ANDROID_E2E")?.takeIf { it.isNotBlank() }?.let { token ->
             testInstrumentationRunnerArguments["listener"] =
                 "com.buildkite.test.collector.android.InstrumentedTestCollector"
             testInstrumentationRunnerArguments["BUILDKITE_ANALYTICS_TOKEN"] = token
+
+            listOf(
+                "BUILDKITE_BUILD_ID",
+                "BUILDKITE_BUILD_URL",
+                "BUILDKITE_BRANCH",
+                "BUILDKITE_COMMIT",
+                "BUILDKITE_BUILD_NUMBER",
+                "BUILDKITE_JOB_ID",
+                "BUILDKITE_MESSAGE",
+            ).forEach { key ->
+                System.getenv(key)?.let { value -> testInstrumentationRunnerArguments[key] = value }
+            }
         }
 
         buildConfigField("String", "WP_ENV_SITE_URL", "\"${wpEnvCredentials["siteUrl"] ?: ""}\"")
