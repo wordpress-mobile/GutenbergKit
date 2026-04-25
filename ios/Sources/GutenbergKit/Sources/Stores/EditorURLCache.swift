@@ -45,7 +45,7 @@ public struct EditorURLCache: Sendable {
         httpMethod: EditorHttpMethod,
         currentDate: Date
     ) throws {
-        let response = CachedURLResponse(
+        let cachedResponse = CachedURLResponse(
             response: HTTPURLResponse(
                 url: url,
                 statusCode: 200,
@@ -59,8 +59,9 @@ public struct EditorURLCache: Sendable {
             storagePolicy: .allowed
         )
 
-        self.cache.storeCachedResponse(response, for: URLRequest(method: httpMethod, url: url))
-        Thread.sleep(forTimeInterval: 0.05)  // Hack to make `URLCache` work
+        let request = URLRequest(method: httpMethod, url: url)
+        self.cache.storeCachedResponse(cachedResponse, for: request)
+        self.__waitForStoreToFlush(request: request, expectedData: cachedResponse.data)
     }
 
     /// Stores the contents of a downloaded file as a cached response for the given URL and HTTP method.
@@ -90,7 +91,7 @@ public struct EditorURLCache: Sendable {
         currentDate: Date
     ) throws {
 
-        let response = CachedURLResponse(
+        let cachedResponse = CachedURLResponse(
             response: HTTPURLResponse(
                 url: url,
                 statusCode: 200,
@@ -104,8 +105,9 @@ public struct EditorURLCache: Sendable {
             storagePolicy: .allowed
         )
 
-        self.cache.storeCachedResponse(response, for: URLRequest(method: httpMethod, url: url))
-        Thread.sleep(forTimeInterval: 0.05)  // Hack to make `URLCache` work
+        let request = URLRequest(method: httpMethod, url: url)
+        self.cache.storeCachedResponse(cachedResponse, for: request)
+        self.__waitForStoreToFlush(request: request, expectedData: cachedResponse.data)
     }
 
     /// Checks whether a cached response exists for the given URL and HTTP method.
@@ -161,7 +163,30 @@ public struct EditorURLCache: Sendable {
     /// - Throws: An error if the cache cannot be cleared.
     public func clear() throws {
         self.cache.removeAllCachedResponses()
-        Thread.sleep(forTimeInterval: 0.2)  // Hack to make `URLCache` work (needs longer than store)
+        Thread.sleep(forTimeInterval: 0.2)  // See store(...) — async flush needs to settle
+    }
+
+    /// Blocks until an async `URLCache.storeCachedResponse(_:for:)` flush has settled.
+    ///
+    /// `URLCache` writes to disk asynchronously. With `memoryCapacity: 0`, every read
+    /// goes to disk, so a read issued right after a write can race the flush and return
+    /// the previous entry. Sleep with exponential backoff (50 ms, 100 ms, 200 ms, ...)
+    /// up to 500 ms total, checking after each sleep whether the just-stored entry is
+    /// visible. Fast hardware exits at the first check; CI disk-I/O contention has
+    /// headroom up to the cap. A flaky 50 ms previously failed under contention.
+    private func __waitForStoreToFlush(request: URLRequest, expectedData: Data) {
+        var delay: TimeInterval = 0.05
+        var elapsed: TimeInterval = 0
+        while elapsed < 0.5 {
+            let step = min(delay, 0.5 - elapsed)
+            Thread.sleep(forTimeInterval: step)
+            elapsed += step
+            if let cached = self.cache.cachedResponse(for: request),
+               cached.data == expectedData {
+                return
+            }
+            delay *= 2
+        }
     }
 
     /// Encodes data to work around a `URLCache` bug with empty data.
