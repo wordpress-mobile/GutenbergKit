@@ -1,6 +1,8 @@
 import Foundation
 import Testing
 import WebKit
+
+#if canImport(UIKit)
 import UIKit
 
 @testable import GutenbergKit
@@ -256,3 +258,5 @@ struct LockdownModeMonitorTests {
         #expect(monitor.isLockdownModeEnabled == true)
     }
 }
+
+#endif
