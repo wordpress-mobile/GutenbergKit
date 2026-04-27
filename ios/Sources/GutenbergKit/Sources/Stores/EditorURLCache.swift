@@ -4,37 +4,48 @@ import OSLog
 
 /// A URL-based cache for storing HTTP responses keyed by URL and HTTP method.
 ///
-/// Responses are stored on disk and survive process termination. Responses are keyed by both URL and HTTP method, so GET and OPTIONS requests to the
-/// same URL are stored independently.
+/// Responses are stored on disk and survive process termination. Responses are keyed
+/// by both URL and HTTP method, so GET and OPTIONS requests to the same URL are
+/// stored independently.
+///
+/// Backed by a synchronous, file-per-entry layout under `cacheRoot`. Each entry is a
+/// single file whose name is the SHA-256 hex digest of `"<METHOD>:<absoluteURL>"` and
+/// whose contents are a small envelope: a 4-byte big-endian metadata length, the
+/// JSON-encoded metadata (storage date + headers), then the raw body bytes. Writes
+/// are atomic (`Data.write(options: .atomic)`), and `clear()` removes the directory
+/// outright — neither operation has the async-flush semantics that `URLCache` does.
 public struct EditorURLCache: Sendable {
-    private let cache: URLCache
+    private let cacheRoot: URL
     private let cachePolicy: EditorCachePolicy
+    private let diskCapacity: Int
     private let performanceMonitor = SignpostMonitor(for: Logger.performance)
 
     /// Creates a new URL cache.
     ///
     /// - Parameters:
     ///   - cacheRoot: The directory where cached responses will be stored.
-    ///     If `nil`, the system default cache directory is used. The cache has a
-    ///     maximum disk capacity of 100 MB.
-    ///   - cachePolicy: The policy that determines when cached responses are considered valid.
-    ///     Use `.ignore` to always fetch fresh data, `.maxAge(_:)` to expire entries after
-    ///     a time interval, or `.always` (the default) to use cached data regardless of age.
-    public init(cacheRoot: URL? = nil, cachePolicy: EditorCachePolicy = .always) {
-        // About enough for 10 sites
-        self.cache = URLCache(memoryCapacity: 0, diskCapacity: 100 * 1024 * 1024, directory: cacheRoot)
+    ///     If `nil`, a default location under the system caches directory is used.
+    ///   - cachePolicy: The policy that determines when cached responses are
+    ///     considered valid.
+    ///   - diskCapacity: Soft cap (in bytes) on the combined size of cache entries.
+    ///     After every successful store, an opportunistic LRU sweep evicts oldest
+    ///     entries (by file mtime) until total entry size is at or below this cap.
+    ///     Pass `0` to disable the sweep entirely.
+    public init(
+        cacheRoot: URL? = nil,
+        cachePolicy: EditorCachePolicy = .always,
+        diskCapacity: Int = 100 * 1024 * 1024
+    ) {
+        self.cacheRoot = cacheRoot ?? URL.cachesDirectory.appending(path: "GutenbergKit-EditorURLCache")
         self.cachePolicy = cachePolicy
+        self.diskCapacity = diskCapacity
+        try? FileManager.default.createDirectory(at: self.cacheRoot, withIntermediateDirectories: true)
     }
 
     /// Stores a response for the given URL and HTTP method.
     ///
-    /// If a response already exists for this URL and method combination, it will be overwritten.
-    ///
-    /// - Parameters:
-    ///   - response: The response to store.
-    ///   - url: The URL to associate with the response.
-    ///   - httpMethod: The HTTP method to associate with the response.
-    /// - Throws: An error if the response cannot be stored.
+    /// If a response already exists for this URL and method combination, it will be
+    /// overwritten.
     public func store(_ response: EditorURLResponse, for url: URL, httpMethod: EditorHttpMethod) throws {
         try self.store(response, for: url, httpMethod: httpMethod, currentDate: .now)
     }
@@ -45,34 +56,17 @@ public struct EditorURLCache: Sendable {
         httpMethod: EditorHttpMethod,
         currentDate: Date
     ) throws {
-        let response = CachedURLResponse(
-            response: HTTPURLResponse(
-                url: url,
-                statusCode: 200,
-                httpVersion: nil,
-                headerFields: response.responseHeaders.dictionaryValue
-            )!,
-            data: __fixEmptyDataBugEncode(response.data),
-            userInfo: [
-                "storageDate": currentDate
-            ],
-            storagePolicy: .allowed
+        try self.writeEntry(
+            body: response.data,
+            headers: response.responseHeaders,
+            url: url,
+            httpMethod: httpMethod,
+            currentDate: currentDate
         )
-
-        self.cache.storeCachedResponse(response, for: URLRequest(method: httpMethod, url: url))
-        Thread.sleep(forTimeInterval: 0.05)  // Hack to make `URLCache` work
     }
 
-    /// Stores the contents of a downloaded file as a cached response for the given URL and HTTP method.
-    ///
-    /// If a response already exists for this URL and method combination, it will be overwritten.
-    ///
-    /// - Parameters:
-    ///   - path: The file URL whose contents should be stored.
-    ///   - headers: The HTTP headers to associate with the response.
-    ///   - url: The URL to associate with the response.
-    ///   - httpMethod: The HTTP method to associate with the response.
-    /// - Throws: An error if the file cannot be read or the response cannot be stored.
+    /// Stores the contents of a downloaded file as a cached response for the given
+    /// URL and HTTP method.
     public func store(
         fileAt path: URL,
         headers: EditorHTTPHeaders,
@@ -89,32 +83,17 @@ public struct EditorURLCache: Sendable {
         httpMethod: EditorHttpMethod,
         currentDate: Date
     ) throws {
-
-        let response = CachedURLResponse(
-            response: HTTPURLResponse(
-                url: url,
-                statusCode: 200,
-                httpVersion: nil,
-                headerFields: headers.dictionaryValue
-            )!,
-            data: __fixEmptyDataBugEncode(try Data(contentsOf: path)),
-            userInfo: [
-                "storageDate": currentDate
-            ],
-            storagePolicy: .allowed
+        let body = try Data(contentsOf: path)
+        try self.writeEntry(
+            body: body,
+            headers: headers,
+            url: url,
+            httpMethod: httpMethod,
+            currentDate: currentDate
         )
-
-        self.cache.storeCachedResponse(response, for: URLRequest(method: httpMethod, url: url))
-        Thread.sleep(forTimeInterval: 0.05)  // Hack to make `URLCache` work
     }
 
     /// Checks whether a cached response exists for the given URL and HTTP method.
-    ///
-    /// - Parameters:
-    ///   - url: The URL to check.
-    ///   - httpMethod: The HTTP method to check.
-    /// - Returns: `true` if a cached response exists, `false` otherwise.
-    /// - Throws: An error if the check cannot be performed.
     public func hasData(for url: URL, httpMethod: EditorHttpMethod) throws -> Bool {
         try self.response(for: url, httpMethod: httpMethod, currentDate: .now) != nil
     }
@@ -124,12 +103,6 @@ public struct EditorURLCache: Sendable {
     }
 
     /// Retrieves the cached response for the given URL and HTTP method.
-    ///
-    /// - Parameters:
-    ///   - url: The URL to look up.
-    ///   - httpMethod: The HTTP method to look up.
-    /// - Returns: The cached response, or `nil` if no response is cached.
-    /// - Throws: An error if the response cannot be retrieved.
     public func response(for url: URL, httpMethod: EditorHttpMethod) throws -> EditorURLResponse? {
         try self.response(for: url, httpMethod: httpMethod, currentDate: .now)
     }
@@ -140,48 +113,118 @@ public struct EditorURLCache: Sendable {
         currentDate: Date
     ) throws -> EditorURLResponse? {
         performanceMonitor.measure { () -> EditorURLResponse? in
-            guard
-                let response = self.cache.cachedResponse(for: URLRequest(method: httpMethod, url: url)),
-                let storageDate = response.userInfo?["storageDate"] as? Date,
-                self.cachePolicy.allowsResponseWith(date: storageDate, currentDate: currentDate)
+            let entryURL = self.entryURL(for: url, httpMethod: httpMethod)
+            guard let envelope = try? Data(contentsOf: entryURL),
+                  let entry = try? Self.decode(envelope),
+                  self.cachePolicy.allowsResponseWith(date: entry.storageDate, currentDate: currentDate)
             else {
                 return nil
             }
-
-            let headers = EditorHTTPHeaders((response.response as! HTTPURLResponse).allHeaderFields)
-            return EditorURLResponse(
-                data: __fixEmptyDataBugDecode(response.data),
-                responseHeaders: headers
-            )
+            return EditorURLResponse(data: entry.body, responseHeaders: entry.headers)
         }
     }
 
     /// Removes all cached responses.
-    ///
-    /// - Throws: An error if the cache cannot be cleared.
     public func clear() throws {
-        self.cache.removeAllCachedResponses()
-        Thread.sleep(forTimeInterval: 0.2)  // Hack to make `URLCache` work (needs longer than store)
+        let fm = FileManager.default
+        try? fm.removeItem(at: self.cacheRoot)
+        try fm.createDirectory(at: self.cacheRoot, withIntermediateDirectories: true)
     }
 
-    /// Encodes data to work around a `URLCache` bug with empty data.
-    ///
-    /// `URLCache` doesn't properly store an empty `Data` object, so we use a sentinel
-    /// value to represent empty data.
-    ///
-    /// - Parameter data: The data to encode.
-    /// - Returns: The encoded data, or a sentinel value if the data is empty.
-    private func __fixEmptyDataBugEncode(_ data: Data) -> Data {
-        guard data.isEmpty else { return data }
-        return Data("__is_empty__".utf8)
+    // MARK: - Private
+
+    private struct Metadata: Codable {
+        let storageDate: Date
+        let headers: EditorHTTPHeaders
     }
 
-    /// Decodes data that was encoded with `__fixEmptyDataBugEncode`.
-    ///
-    /// - Parameter data: The data to decode.
-    /// - Returns: The original data, or empty data if the sentinel value was detected.
-    private func __fixEmptyDataBugDecode(_ data: Data) -> Data {
-        guard data.count == 12, data == Data("__is_empty__".utf8) else { return data }
-        return Data()
+    private struct Entry {
+        let storageDate: Date
+        let headers: EditorHTTPHeaders
+        let body: Data
+    }
+
+    private enum DecodeError: Error { case malformed }
+
+    private func writeEntry(
+        body: Data,
+        headers: EditorHTTPHeaders,
+        url: URL,
+        httpMethod: EditorHttpMethod,
+        currentDate: Date
+    ) throws {
+        let metadata = Metadata(storageDate: currentDate, headers: headers)
+        let envelope = try Self.encode(metadata: metadata, body: body)
+        let entryURL = self.entryURL(for: url, httpMethod: httpMethod)
+        try envelope.write(to: entryURL, options: .atomic)
+        self.sweepIfNeeded()
+    }
+
+    private func entryURL(for url: URL, httpMethod: EditorHttpMethod) -> URL {
+        let key = "\(httpMethod.rawValue):\(url.absoluteString)"
+        let digest = SHA256.hash(data: Data(key.utf8))
+        let hex = digest.map { String(format: "%02x", $0) }.joined()
+        return self.cacheRoot.appending(path: hex)
+    }
+
+    private static func encode(metadata: Metadata, body: Data) throws -> Data {
+        let metadataData = try JSONEncoder().encode(metadata)
+        var envelope = Data(capacity: 4 + metadataData.count + body.count)
+        var lengthBE = UInt32(metadataData.count).bigEndian
+        withUnsafeBytes(of: &lengthBE) { envelope.append(contentsOf: $0) }
+        envelope.append(metadataData)
+        envelope.append(body)
+        return envelope
+    }
+
+    private static func decode(_ envelope: Data) throws -> Entry {
+        guard envelope.count >= 4 else { throw DecodeError.malformed }
+        let lengthBytes = envelope.subdata(in: 0..<4)
+        let metadataLength = Int(lengthBytes.withUnsafeBytes {
+            UInt32(bigEndian: $0.load(as: UInt32.self))
+        })
+        guard envelope.count >= 4 + metadataLength else { throw DecodeError.malformed }
+        let metadataData = envelope.subdata(in: 4..<(4 + metadataLength))
+        let body = envelope.subdata(in: (4 + metadataLength)..<envelope.count)
+        let metadata = try JSONDecoder().decode(Metadata.self, from: metadataData)
+        return Entry(storageDate: metadata.storageDate, headers: metadata.headers, body: body)
+    }
+
+    /// Walks the cache directory and evicts the oldest entries (by mtime) until the
+    /// total size of recognized entry files is at or below `diskCapacity`. Files that
+    /// don't match the 64-char hex key format are ignored, so any foreign files
+    /// in `cacheRoot` are left untouched.
+    private func sweepIfNeeded() {
+        guard self.diskCapacity > 0 else { return }
+        let fm = FileManager.default
+        let keys: Set<URLResourceKey> = [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]
+        guard let urls = try? fm.contentsOfDirectory(
+            at: self.cacheRoot,
+            includingPropertiesForKeys: Array(keys)
+        ) else {
+            return
+        }
+        var attributes = urls.compactMap { url -> (url: URL, size: Int, mtime: Date)? in
+            guard Self.isEntryFilename(url.lastPathComponent),
+                  let values = try? url.resourceValues(forKeys: keys),
+                  values.isRegularFile == true,
+                  let size = values.fileSize,
+                  let mtime = values.contentModificationDate
+            else { return nil }
+            return (url, size, mtime)
+        }
+        var totalSize = attributes.reduce(0) { $0 + $1.size }
+        guard totalSize > self.diskCapacity else { return }
+        attributes.sort { $0.mtime < $1.mtime }
+        for entry in attributes {
+            try? fm.removeItem(at: entry.url)
+            totalSize -= entry.size
+            if totalSize <= self.diskCapacity { return }
+        }
+    }
+
+    private static func isEntryFilename(_ name: String) -> Bool {
+        guard name.count == 64 else { return false }
+        return name.allSatisfy { $0.isHexDigit }
     }
 }

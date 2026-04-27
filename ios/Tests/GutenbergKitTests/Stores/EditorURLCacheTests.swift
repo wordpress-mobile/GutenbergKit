@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 
@@ -142,46 +143,25 @@ struct EditorURLCacheTests {
 
     // MARK: - clear()
 
-    @Test("clear removes all entries", .timeLimit(.minutes(1)))
+    @Test("clear removes all entries")
     func clearRemovesAll() throws {
         try cache.store(makeResponse(), for: testURL, httpMethod: .GET)
         let otherURL = URL(string: "https://example.com/other")!
         try cache.store(makeResponse(), for: otherURL, httpMethod: .GET)
         try cache.clear()
 
-        try waitForClearToTakeEffect(cache: cache, url: testURL)
-
         #expect(try cache.response(for: testURL, httpMethod: .GET) == nil)
         #expect(try cache.response(for: otherURL, httpMethod: .GET) == nil)
     }
 
-    @Test("store succeeds after clear", .timeLimit(.minutes(1)))
+    @Test("store succeeds after clear")
     func storeAfterClear() throws {
         try cache.store(makeResponse(), for: testURL, httpMethod: .GET)
         try cache.clear()
 
-        try waitForClearToTakeEffect(cache: cache, url: testURL)
-
         let newResponse = makeResponse(data: Data("after clear"))
         try cache.store(newResponse, for: testURL, httpMethod: .GET)
         #expect(try cache.response(for: testURL, httpMethod: .GET) == newResponse)
-    }
-
-    /// Polls until `URLCache.removeAllCachedResponses()` has taken effect.
-    ///
-    /// Uses exponential backoff (0.05s, 0.1s, 0.2s, 0.4s, ...) with a 5s total timeout.
-    /// `URLCache` clears asynchronously, so the in-memory layer may still serve
-    /// stale entries for a short window after `clear()` returns. CI environments
-    /// with slower I/O may need the longer timeout.
-    private func waitForClearToTakeEffect(cache: EditorURLCache, url: URL) throws {
-        var delay: TimeInterval = 0.05
-        var elapsed: TimeInterval = 0
-        while elapsed < 5.0 {
-            guard try cache.response(for: url, httpMethod: .GET) != nil else { return }
-            Thread.sleep(forTimeInterval: delay)
-            elapsed += delay
-            delay *= 2
-        }
     }
 
     // MARK: - URLs with query parameters
@@ -208,6 +188,81 @@ struct EditorURLCacheTests {
         try cache.store(response2, for: urlWithoutQuery, httpMethod: .GET)
         #expect(try cache.response(for: urlWithQuery, httpMethod: .GET) == response1)
         #expect(try cache.response(for: urlWithoutQuery, httpMethod: .GET) == response2)
+    }
+
+    // MARK: - HTTP method independence
+
+    @Test("same URL with different HTTP methods are independent entries")
+    func httpMethodsAreIndependent() throws {
+        let getResponse = makeResponse(data: Data("GET body"))
+        let optionsResponse = makeResponse(data: Data("OPTIONS body"))
+        try cache.store(getResponse, for: testURL, httpMethod: .GET)
+        try cache.store(optionsResponse, for: testURL, httpMethod: .OPTIONS)
+
+        #expect(try cache.response(for: testURL, httpMethod: .GET) == getResponse)
+        #expect(try cache.response(for: testURL, httpMethod: .OPTIONS) == optionsResponse)
+    }
+
+    @Test("storing a method does not invalidate other methods for the same URL")
+    func storingOneMethodLeavesOthersIntact() throws {
+        let getResponse = makeResponse(data: Data("GET body"))
+        try cache.store(getResponse, for: testURL, httpMethod: .GET)
+
+        // Overwrite the OPTIONS entry — GET should be unaffected.
+        try cache.store(makeResponse(data: Data("OPTIONS")), for: testURL, httpMethod: .OPTIONS)
+        try cache.store(makeResponse(data: Data("OPTIONS v2")), for: testURL, httpMethod: .OPTIONS)
+
+        #expect(try cache.response(for: testURL, httpMethod: .GET) == getResponse)
+    }
+
+    // MARK: - Persistence across instances
+
+    @Test("entries persist across cache instances against the same root")
+    func persistsAcrossInstances() throws {
+        let root = URL.randomTemporaryDirectory
+        let response = makeResponse(data: Data("durable"))
+
+        let firstInstance = EditorURLCache(cacheRoot: root, cachePolicy: .always)
+        try firstInstance.store(response, for: testURL, httpMethod: .GET)
+
+        let reopened = EditorURLCache(cacheRoot: root, cachePolicy: .always)
+        #expect(try reopened.response(for: testURL, httpMethod: .GET) == response)
+    }
+
+    @Test("clear from one instance is visible to another instance")
+    func clearVisibleAcrossInstances() throws {
+        let root = URL.randomTemporaryDirectory
+        let firstInstance = EditorURLCache(cacheRoot: root, cachePolicy: .always)
+        try firstInstance.store(makeResponse(), for: testURL, httpMethod: .GET)
+
+        let reopened = EditorURLCache(cacheRoot: root, cachePolicy: .always)
+        try reopened.clear()
+
+        #expect(try firstInstance.response(for: testURL, httpMethod: .GET) == nil)
+        #expect(try reopened.response(for: testURL, httpMethod: .GET) == nil)
+    }
+
+    // MARK: - Large body round-trip
+
+    @Test("large body round-trips through the envelope unchanged")
+    func largeBodyRoundTrip() throws {
+        // 256 KB random body — bigger than typical JSON responses and spans multiple
+        // filesystem pages. Filled via `arc4random_buf` (one syscall) and verified
+        // via SHA-256 to keep the assertion cheap in Debug.
+        var body = Data(count: 256 * 1024)
+        body.withUnsafeMutableBytes { buffer in
+            if let base = buffer.baseAddress {
+                arc4random_buf(base, buffer.count)
+            }
+        }
+        let headers: EditorHTTPHeaders = ["Content-Type": "application/octet-stream"]
+        let response = EditorURLResponse(data: body, responseHeaders: headers)
+
+        try cache.store(response, for: testURL, httpMethod: .GET)
+        let retrieved = try #require(try cache.response(for: testURL, httpMethod: .GET))
+        #expect(retrieved.data.count == body.count)
+        #expect(SHA256.hash(data: retrieved.data) == SHA256.hash(data: body))
+        #expect(retrieved.responseHeaders["Content-Type"] == "application/octet-stream")
     }
 }
 
@@ -464,5 +519,102 @@ struct EditorURLCacheAlwaysPolicyTests {
 
         let tenYearsLater = self.referenceDate.addingTimeInterval(10 * 365 * 24 * 60 * 60)
         #expect(try cache.hasData(for: testURL, httpMethod: .GET, currentDate: tenYearsLater) == true)
+    }
+}
+
+// MARK: - LRU Sweep Tests
+
+@Suite("EditorURLCache LRU sweep")
+struct EditorURLCacheLRUSweepTests {
+
+    private func makeResponse(data: Data) -> EditorURLResponse {
+        EditorURLResponse(data: data, responseHeaders: [:])
+    }
+
+    /// Backdates an entry's mtime so sweep ordering is deterministic.
+    private func backdate(cacheRoot: URL, url: URL, by interval: TimeInterval) throws {
+        let key = "GET:\(url.absoluteString)"
+        let digest = SHA256.hash(data: Data(key.utf8))
+        let hex = digest.map { String(format: "%02x", $0) }.joined()
+        let entryURL = cacheRoot.appending(path: hex)
+        var resourceURL = entryURL
+        var values = URLResourceValues()
+        values.contentModificationDate = Date().addingTimeInterval(-interval)
+        try resourceURL.setResourceValues(values)
+    }
+
+    @Test("entries within capacity are not evicted")
+    func underCapacityKeepsAll() throws {
+        let cacheRoot = URL.randomTemporaryDirectory
+        let cache = EditorURLCache(cacheRoot: cacheRoot, cachePolicy: .always, diskCapacity: 10 * 1024)
+        let url1 = URL(string: "https://example.com/a")!
+        let url2 = URL(string: "https://example.com/b")!
+
+        try cache.store(makeResponse(data: Data(repeating: 0xAA, count: 100)), for: url1, httpMethod: .GET)
+        try cache.store(makeResponse(data: Data(repeating: 0xBB, count: 100)), for: url2, httpMethod: .GET)
+
+        #expect(try cache.response(for: url1, httpMethod: .GET) != nil)
+        #expect(try cache.response(for: url2, httpMethod: .GET) != nil)
+    }
+
+    @Test("oldest entry is evicted when capacity is exceeded")
+    func evictsOldestOverCapacity() throws {
+        let cacheRoot = URL.randomTemporaryDirectory
+        // 800-byte cap; each stored entry is ~370 bytes (300-byte body + ~64-byte envelope).
+        // Two entries (~740 bytes) fit under the cap; the third forces eviction of the oldest.
+        let cache = EditorURLCache(cacheRoot: cacheRoot, cachePolicy: .always, diskCapacity: 800)
+        let url1 = URL(string: "https://example.com/oldest")!
+        let url2 = URL(string: "https://example.com/middle")!
+        let url3 = URL(string: "https://example.com/newest")!
+
+        try cache.store(makeResponse(data: Data(repeating: 0x11, count: 300)), for: url1, httpMethod: .GET)
+        try backdate(cacheRoot: cacheRoot, url: url1, by: 200)
+        try cache.store(makeResponse(data: Data(repeating: 0x22, count: 300)), for: url2, httpMethod: .GET)
+        try backdate(cacheRoot: cacheRoot, url: url2, by: 100)
+        try cache.store(makeResponse(data: Data(repeating: 0x33, count: 300)), for: url3, httpMethod: .GET)
+
+        #expect(try cache.response(for: url1, httpMethod: .GET) == nil)
+        #expect(try cache.response(for: url2, httpMethod: .GET) != nil)
+        #expect(try cache.response(for: url3, httpMethod: .GET) != nil)
+    }
+
+    @Test("diskCapacity of 0 disables sweep")
+    func zeroCapacityDisablesSweep() throws {
+        let cacheRoot = URL.randomTemporaryDirectory
+        let cache = EditorURLCache(cacheRoot: cacheRoot, cachePolicy: .always, diskCapacity: 0)
+        let url1 = URL(string: "https://example.com/a")!
+        let url2 = URL(string: "https://example.com/b")!
+
+        try cache.store(makeResponse(data: Data(repeating: 0x11, count: 1024)), for: url1, httpMethod: .GET)
+        try cache.store(makeResponse(data: Data(repeating: 0x22, count: 1024)), for: url2, httpMethod: .GET)
+
+        #expect(try cache.response(for: url1, httpMethod: .GET) != nil)
+        #expect(try cache.response(for: url2, httpMethod: .GET) != nil)
+    }
+
+    @Test("foreign files in the cache directory are ignored by sweep")
+    func sweepIgnoresForeignFiles() throws {
+        let cacheRoot = URL.randomTemporaryDirectory
+        // 400-byte cap fits one ~370-byte entry. With two stored, the oldest is evicted.
+        // The 5,000-byte foreign file would dominate if it counted toward the total —
+        // the test asserts it does not.
+        let cache = EditorURLCache(cacheRoot: cacheRoot, cachePolicy: .always, diskCapacity: 400)
+        try FileManager.default.createDirectory(at: cacheRoot, withIntermediateDirectories: true)
+
+        // A leftover file that doesn't match the 64-char hex key format.
+        let foreignFile = cacheRoot.appending(path: "Cache.db")
+        try Data(repeating: 0x99, count: 5_000).write(to: foreignFile)
+
+        let url1 = URL(string: "https://example.com/a")!
+        let url2 = URL(string: "https://example.com/b")!
+        try cache.store(makeResponse(data: Data(repeating: 0x11, count: 300)), for: url1, httpMethod: .GET)
+        try backdate(cacheRoot: cacheRoot, url: url1, by: 100)
+        try cache.store(makeResponse(data: Data(repeating: 0x22, count: 300)), for: url2, httpMethod: .GET)
+
+        // Foreign file is untouched even though it dominates total directory size.
+        #expect(FileManager.default.fileExists(atPath: foreignFile.path))
+        // Sweep evicts the oldest recognized entry; the newest survives the most-recent store.
+        #expect(try cache.response(for: url1, httpMethod: .GET) == nil)
+        #expect(try cache.response(for: url2, httpMethod: .GET) != nil)
     }
 }
