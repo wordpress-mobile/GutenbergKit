@@ -8,12 +8,9 @@ import OSLog
 /// by both URL and HTTP method, so GET and OPTIONS requests to the same URL are
 /// stored independently.
 ///
-/// Backed by a synchronous, file-per-entry layout under `cacheRoot`. Each entry is a
-/// single file whose name is the SHA-256 hex digest of `"<METHOD>:<absoluteURL>"` and
-/// whose contents are a small envelope: a 4-byte big-endian metadata length, the
-/// JSON-encoded metadata (storage date + headers), then the raw body bytes. Writes
-/// are atomic (`Data.write(options: .atomic)`), and `clear()` removes the directory
-/// outright — neither operation has the async-flush semantics that `URLCache` does.
+/// Operations are synchronous: a value written by `store(_:for:httpMethod:)` is
+/// observable on the next call to `response(for:httpMethod:)`, and entries removed
+/// by `clear()` are immediately gone.
 public struct EditorURLCache: Sendable {
     private let cacheRoot: URL
     private let cachePolicy: EditorCachePolicy
