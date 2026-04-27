@@ -1,6 +1,6 @@
-import CryptoKit
 import Foundation
 import OSLog
+import SQLite3
 
 /// A URL-based cache for storing HTTP responses keyed by URL and HTTP method.
 ///
@@ -11,32 +11,69 @@ import OSLog
 /// Operations are synchronous: a value written by `store(_:for:httpMethod:)` is
 /// observable on the next call to `response(for:httpMethod:)`, and entries removed
 /// by `clear()` are immediately gone.
-public struct EditorURLCache: Sendable {
-    private let cacheRoot: URL
+public final class EditorURLCache: @unchecked Sendable {
+    private let db: OpaquePointer
     private let cachePolicy: EditorCachePolicy
     private let diskCapacity: Int
     private let performanceMonitor = SignpostMonitor(for: Logger.performance)
 
+    /// SQLite expects this sentinel to indicate that bound data should be copied.
+    private static let SQLITE_TRANSIENT = unsafeBitCast(
+        OpaquePointer(bitPattern: -1), to: sqlite3_destructor_type.self
+    )
+
     /// Creates a new URL cache.
     ///
     /// - Parameters:
-    ///   - cacheRoot: The directory where cached responses will be stored.
+    ///   - cacheRoot: The directory where the SQLite database will be stored.
     ///     If `nil`, a default location under the system caches directory is used.
     ///   - cachePolicy: The policy that determines when cached responses are
     ///     considered valid.
-    ///   - diskCapacity: Soft cap (in bytes) on the combined size of cache entries.
-    ///     After every successful store, an opportunistic LRU sweep evicts oldest
-    ///     entries (by file mtime) until total entry size is at or below this cap.
-    ///     Pass `0` to disable the sweep entirely.
+    ///   - diskCapacity: Soft cap (in bytes) on the combined size of cached bodies
+    ///     and headers. After every successful store, oldest entries (by storage
+    ///     date) are evicted until total size is at or below this cap. Pass `0`
+    ///     to disable eviction entirely.
     public init(
         cacheRoot: URL? = nil,
         cachePolicy: EditorCachePolicy = .always,
         diskCapacity: Int = 100 * 1024 * 1024
     ) {
-        self.cacheRoot = cacheRoot ?? URL.cachesDirectory.appending(path: "GutenbergKit-EditorURLCache")
         self.cachePolicy = cachePolicy
         self.diskCapacity = diskCapacity
-        try? FileManager.default.createDirectory(at: self.cacheRoot, withIntermediateDirectories: true)
+        let root = cacheRoot ?? URL.cachesDirectory.appending(path: "GutenbergKit-EditorURLCache")
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let dbPath = root.appending(path: "EditorURLCache.sqlite").path(percentEncoded: false)
+
+        var connection: OpaquePointer?
+        let openResult = sqlite3_open_v2(
+            dbPath,
+            &connection,
+            SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX,
+            nil
+        )
+        if openResult != SQLITE_OK {
+            // Fall back to an in-memory database. This loses persistence but keeps
+            // the cache functional within the process.
+            sqlite3_close(connection)
+            connection = nil
+            sqlite3_open_v2(":memory:", &connection, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil)
+        }
+        self.db = connection!
+
+        sqlite3_exec(self.db, "PRAGMA journal_mode = WAL;", nil, nil, nil)
+        sqlite3_exec(self.db, """
+            CREATE TABLE IF NOT EXISTS entries (
+                key TEXT PRIMARY KEY NOT NULL,
+                storage_date REAL NOT NULL,
+                headers BLOB NOT NULL,
+                body BLOB NOT NULL
+            ) WITHOUT ROWID;
+            CREATE INDEX IF NOT EXISTS entries_storage_date_idx ON entries(storage_date);
+            """, nil, nil, nil)
+    }
+
+    deinit {
+        sqlite3_close(db)
     }
 
     /// Stores a response for the given URL and HTTP method.
@@ -53,7 +90,7 @@ public struct EditorURLCache: Sendable {
         httpMethod: EditorHttpMethod,
         currentDate: Date
     ) throws {
-        try self.writeEntry(
+        try self.upsert(
             body: response.data,
             headers: response.responseHeaders,
             url: url,
@@ -81,7 +118,7 @@ public struct EditorURLCache: Sendable {
         currentDate: Date
     ) throws {
         let body = try Data(contentsOf: path)
-        try self.writeEntry(
+        try self.upsert(
             body: body,
             headers: headers,
             url: url,
@@ -109,119 +146,106 @@ public struct EditorURLCache: Sendable {
         httpMethod: EditorHttpMethod,
         currentDate: Date
     ) throws -> EditorURLResponse? {
-        performanceMonitor.measure { () -> EditorURLResponse? in
-            let entryURL = self.entryURL(for: url, httpMethod: httpMethod)
-            guard let envelope = try? Data(contentsOf: entryURL),
-                  let entry = try? Self.decode(envelope),
-                  self.cachePolicy.allowsResponseWith(date: entry.storageDate, currentDate: currentDate)
-            else {
+        try performanceMonitor.measure { () -> EditorURLResponse? in
+            let key = Self.cacheKey(httpMethod: httpMethod, url: url)
+            var stmt: OpaquePointer?
+            sqlite3_prepare_v2(
+                self.db,
+                "SELECT storage_date, headers, body FROM entries WHERE key = ?1;",
+                -1, &stmt, nil
+            )
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, key, -1, Self.SQLITE_TRANSIENT)
+            guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+
+            let storageDate = Date(timeIntervalSinceReferenceDate: sqlite3_column_double(stmt, 0))
+            guard self.cachePolicy.allowsResponseWith(date: storageDate, currentDate: currentDate) else {
                 return nil
             }
-            return EditorURLResponse(data: entry.body, responseHeaders: entry.headers)
+            let headers = try Self.readHeadersBlob(stmt: stmt, column: 1)
+            let body = Self.readBlobAsData(stmt: stmt, column: 2)
+            return EditorURLResponse(data: body, responseHeaders: headers)
         }
     }
 
     /// Removes all cached responses.
     public func clear() throws {
-        let fm = FileManager.default
-        try? fm.removeItem(at: self.cacheRoot)
-        try fm.createDirectory(at: self.cacheRoot, withIntermediateDirectories: true)
+        sqlite3_exec(self.db, "DELETE FROM entries;", nil, nil, nil)
     }
 
     // MARK: - Private
 
-    private struct Metadata: Codable {
-        let storageDate: Date
-        let headers: EditorHTTPHeaders
-    }
-
-    private struct Entry {
-        let storageDate: Date
-        let headers: EditorHTTPHeaders
-        let body: Data
-    }
-
-    private enum DecodeError: Error { case malformed }
-
-    private func writeEntry(
+    private func upsert(
         body: Data,
         headers: EditorHTTPHeaders,
         url: URL,
         httpMethod: EditorHttpMethod,
         currentDate: Date
     ) throws {
-        let metadata = Metadata(storageDate: currentDate, headers: headers)
-        let envelope = try Self.encode(metadata: metadata, body: body)
-        let entryURL = self.entryURL(for: url, httpMethod: httpMethod)
-        try envelope.write(to: entryURL, options: .atomic)
-        self.sweepIfNeeded()
+        let key = Self.cacheKey(httpMethod: httpMethod, url: url)
+        let headersBlob = try JSONEncoder().encode(headers)
+
+        var stmt: OpaquePointer?
+        sqlite3_prepare_v2(
+            self.db,
+            """
+            INSERT INTO entries (key, storage_date, headers, body)
+            VALUES (?1, ?2, ?3, ?4)
+            ON CONFLICT(key) DO UPDATE SET
+                storage_date = excluded.storage_date,
+                headers = excluded.headers,
+                body = excluded.body;
+            """,
+            -1, &stmt, nil
+        )
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, key, -1, Self.SQLITE_TRANSIENT)
+        sqlite3_bind_double(stmt, 2, currentDate.timeIntervalSinceReferenceDate)
+        _ = headersBlob.withUnsafeBytes {
+            sqlite3_bind_blob(stmt, 3, $0.baseAddress, Int32(headersBlob.count), Self.SQLITE_TRANSIENT)
+        }
+        _ = body.withUnsafeBytes {
+            sqlite3_bind_blob(stmt, 4, $0.baseAddress, Int32(body.count), Self.SQLITE_TRANSIENT)
+        }
+        sqlite3_step(stmt)
+
+        self.evictPastCapacity()
     }
 
-    private func entryURL(for url: URL, httpMethod: EditorHttpMethod) -> URL {
-        let key = "\(httpMethod.rawValue):\(url.absoluteString)"
-        let digest = SHA256.hash(data: Data(key.utf8))
-        let hex = digest.map { String(format: "%02x", $0) }.joined()
-        return self.cacheRoot.appending(path: hex)
-    }
-
-    private static func encode(metadata: Metadata, body: Data) throws -> Data {
-        let metadataData = try JSONEncoder().encode(metadata)
-        var envelope = Data(capacity: 4 + metadataData.count + body.count)
-        var lengthBE = UInt32(metadataData.count).bigEndian
-        withUnsafeBytes(of: &lengthBE) { envelope.append(contentsOf: $0) }
-        envelope.append(metadataData)
-        envelope.append(body)
-        return envelope
-    }
-
-    private static func decode(_ envelope: Data) throws -> Entry {
-        guard envelope.count >= 4 else { throw DecodeError.malformed }
-        let lengthBytes = envelope.subdata(in: 0..<4)
-        let metadataLength = Int(lengthBytes.withUnsafeBytes {
-            UInt32(bigEndian: $0.load(as: UInt32.self))
-        })
-        guard envelope.count >= 4 + metadataLength else { throw DecodeError.malformed }
-        let metadataData = envelope.subdata(in: 4..<(4 + metadataLength))
-        let body = envelope.subdata(in: (4 + metadataLength)..<envelope.count)
-        let metadata = try JSONDecoder().decode(Metadata.self, from: metadataData)
-        return Entry(storageDate: metadata.storageDate, headers: metadata.headers, body: body)
-    }
-
-    /// Walks the cache directory and evicts the oldest entries (by mtime) until the
-    /// total size of recognized entry files is at or below `diskCapacity`. Files that
-    /// don't match the 64-char hex key format are ignored, so any foreign files
-    /// in `cacheRoot` are left untouched.
-    private func sweepIfNeeded() {
+    /// Evicts oldest entries (by storage date) until total stored size is at or
+    /// below `diskCapacity`. Run after every store. Cheap: a single DELETE-with-
+    /// window-function query handled entirely inside SQLite.
+    private func evictPastCapacity() {
         guard self.diskCapacity > 0 else { return }
-        let fm = FileManager.default
-        let keys: Set<URLResourceKey> = [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]
-        guard let urls = try? fm.contentsOfDirectory(
-            at: self.cacheRoot,
-            includingPropertiesForKeys: Array(keys)
-        ) else {
-            return
-        }
-        var attributes = urls.compactMap { url -> (url: URL, size: Int, mtime: Date)? in
-            guard Self.isEntryFilename(url.lastPathComponent),
-                  let values = try? url.resourceValues(forKeys: keys),
-                  values.isRegularFile == true,
-                  let size = values.fileSize,
-                  let mtime = values.contentModificationDate
-            else { return nil }
-            return (url, size, mtime)
-        }
-        var totalSize = attributes.reduce(0) { $0 + $1.size }
-        guard totalSize > self.diskCapacity else { return }
-        attributes.sort { $0.mtime < $1.mtime }
-        for entry in attributes {
-            try? fm.removeItem(at: entry.url)
-            totalSize -= entry.size
-            if totalSize <= self.diskCapacity { return }
-        }
+        sqlite3_exec(
+            self.db,
+            """
+            DELETE FROM entries WHERE key IN (
+                SELECT key FROM (
+                    SELECT key,
+                           SUM(length(body) + length(headers))
+                               OVER (ORDER BY storage_date DESC, key DESC
+                                     ROWS UNBOUNDED PRECEDING) AS running
+                    FROM entries
+                ) WHERE running > \(self.diskCapacity)
+            );
+            """,
+            nil, nil, nil
+        )
     }
 
-    private static func isEntryFilename(_ name: String) -> Bool {
-        guard name.count == 64 else { return false }
-        return name.allSatisfy { $0.isHexDigit }
+    private static func cacheKey(httpMethod: EditorHttpMethod, url: URL) -> String {
+        "\(httpMethod.rawValue):\(url.absoluteString)"
+    }
+
+    private static func readHeadersBlob(stmt: OpaquePointer?, column: Int32) throws -> EditorHTTPHeaders {
+        let blob = readBlobAsData(stmt: stmt, column: column)
+        return try JSONDecoder().decode(EditorHTTPHeaders.self, from: blob)
+    }
+
+    private static func readBlobAsData(stmt: OpaquePointer?, column: Int32) -> Data {
+        guard let bytes = sqlite3_column_blob(stmt, column) else { return Data() }
+        let count = Int(sqlite3_column_bytes(stmt, column))
+        return Data(bytes: bytes, count: count)
     }
 }

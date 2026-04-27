@@ -527,26 +527,15 @@ struct EditorURLCacheAlwaysPolicyTests {
 @Suite("EditorURLCache LRU sweep")
 struct EditorURLCacheLRUSweepTests {
 
+    private let referenceDate = Date(timeIntervalSinceReferenceDate: 0)
+
     private func makeResponse(data: Data) -> EditorURLResponse {
         EditorURLResponse(data: data, responseHeaders: [:])
     }
 
-    /// Backdates an entry's mtime so sweep ordering is deterministic.
-    private func backdate(cacheRoot: URL, url: URL, by interval: TimeInterval) throws {
-        let key = "GET:\(url.absoluteString)"
-        let digest = SHA256.hash(data: Data(key.utf8))
-        let hex = digest.map { String(format: "%02x", $0) }.joined()
-        let entryURL = cacheRoot.appending(path: hex)
-        var resourceURL = entryURL
-        var values = URLResourceValues()
-        values.contentModificationDate = Date().addingTimeInterval(-interval)
-        try resourceURL.setResourceValues(values)
-    }
-
     @Test("entries within capacity are not evicted")
     func underCapacityKeepsAll() throws {
-        let cacheRoot = URL.randomTemporaryDirectory
-        let cache = EditorURLCache(cacheRoot: cacheRoot, cachePolicy: .always, diskCapacity: 10 * 1024)
+        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory, cachePolicy: .always, diskCapacity: 10 * 1024)
         let url1 = URL(string: "https://example.com/a")!
         let url2 = URL(string: "https://example.com/b")!
 
@@ -559,19 +548,17 @@ struct EditorURLCacheLRUSweepTests {
 
     @Test("oldest entry is evicted when capacity is exceeded")
     func evictsOldestOverCapacity() throws {
-        let cacheRoot = URL.randomTemporaryDirectory
-        // 800-byte cap; each stored entry is ~370 bytes (300-byte body + ~64-byte envelope).
-        // Two entries (~740 bytes) fit under the cap; the third forces eviction of the oldest.
-        let cache = EditorURLCache(cacheRoot: cacheRoot, cachePolicy: .always, diskCapacity: 800)
+        // Each entry's stored size is ~314 bytes (300-byte body + ~14-byte empty
+        // headers JSON). 700-byte cap fits two entries (~628 bytes); the third
+        // forces eviction of the oldest by storage_date.
+        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory, cachePolicy: .always, diskCapacity: 700)
         let url1 = URL(string: "https://example.com/oldest")!
         let url2 = URL(string: "https://example.com/middle")!
         let url3 = URL(string: "https://example.com/newest")!
 
-        try cache.store(makeResponse(data: Data(repeating: 0x11, count: 300)), for: url1, httpMethod: .GET)
-        try backdate(cacheRoot: cacheRoot, url: url1, by: 200)
-        try cache.store(makeResponse(data: Data(repeating: 0x22, count: 300)), for: url2, httpMethod: .GET)
-        try backdate(cacheRoot: cacheRoot, url: url2, by: 100)
-        try cache.store(makeResponse(data: Data(repeating: 0x33, count: 300)), for: url3, httpMethod: .GET)
+        try cache.store(makeResponse(data: Data(repeating: 0x11, count: 300)), for: url1, httpMethod: .GET, currentDate: referenceDate)
+        try cache.store(makeResponse(data: Data(repeating: 0x22, count: 300)), for: url2, httpMethod: .GET, currentDate: referenceDate.addingTimeInterval(100))
+        try cache.store(makeResponse(data: Data(repeating: 0x33, count: 300)), for: url3, httpMethod: .GET, currentDate: referenceDate.addingTimeInterval(200))
 
         #expect(try cache.response(for: url1, httpMethod: .GET) == nil)
         #expect(try cache.response(for: url2, httpMethod: .GET) != nil)
@@ -580,8 +567,7 @@ struct EditorURLCacheLRUSweepTests {
 
     @Test("diskCapacity of 0 disables sweep")
     func zeroCapacityDisablesSweep() throws {
-        let cacheRoot = URL.randomTemporaryDirectory
-        let cache = EditorURLCache(cacheRoot: cacheRoot, cachePolicy: .always, diskCapacity: 0)
+        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory, cachePolicy: .always, diskCapacity: 0)
         let url1 = URL(string: "https://example.com/a")!
         let url2 = URL(string: "https://example.com/b")!
 
@@ -589,32 +575,6 @@ struct EditorURLCacheLRUSweepTests {
         try cache.store(makeResponse(data: Data(repeating: 0x22, count: 1024)), for: url2, httpMethod: .GET)
 
         #expect(try cache.response(for: url1, httpMethod: .GET) != nil)
-        #expect(try cache.response(for: url2, httpMethod: .GET) != nil)
-    }
-
-    @Test("foreign files in the cache directory are ignored by sweep")
-    func sweepIgnoresForeignFiles() throws {
-        let cacheRoot = URL.randomTemporaryDirectory
-        // 400-byte cap fits one ~370-byte entry. With two stored, the oldest is evicted.
-        // The 5,000-byte foreign file would dominate if it counted toward the total —
-        // the test asserts it does not.
-        let cache = EditorURLCache(cacheRoot: cacheRoot, cachePolicy: .always, diskCapacity: 400)
-        try FileManager.default.createDirectory(at: cacheRoot, withIntermediateDirectories: true)
-
-        // A leftover file that doesn't match the 64-char hex key format.
-        let foreignFile = cacheRoot.appending(path: "Cache.db")
-        try Data(repeating: 0x99, count: 5_000).write(to: foreignFile)
-
-        let url1 = URL(string: "https://example.com/a")!
-        let url2 = URL(string: "https://example.com/b")!
-        try cache.store(makeResponse(data: Data(repeating: 0x11, count: 300)), for: url1, httpMethod: .GET)
-        try backdate(cacheRoot: cacheRoot, url: url1, by: 100)
-        try cache.store(makeResponse(data: Data(repeating: 0x22, count: 300)), for: url2, httpMethod: .GET)
-
-        // Foreign file is untouched even though it dominates total directory size.
-        #expect(FileManager.default.fileExists(atPath: foreignFile.path))
-        // Sweep evicts the oldest recognized entry; the newest survives the most-recent store.
-        #expect(try cache.response(for: url1, httpMethod: .GET) == nil)
         #expect(try cache.response(for: url2, httpMethod: .GET) != nil)
     }
 }
