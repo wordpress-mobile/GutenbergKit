@@ -28,6 +28,10 @@ extension WKWebView: LockdownModeDetectable {
 ///
 /// This class handles detection of iOS Lockdown Mode in the WebView and manages
 /// the presentation of a warning sheet to inform users about potential editor limitations.
+///
+/// The detection state machine is host-buildable; sheet presentation and foreground
+/// handling live in a UIKit-gated extension below so the state machine can be
+/// exercised by `swift test` on macOS.
 @MainActor
 class LockdownModeMonitor: ObservableObject {
 
