@@ -121,8 +121,9 @@ struct LockdownModeMonitorTests {
 
     // MARK: - State Transition Tests
     //
-    // These tests verify the detection state machine without calling presentSheetIfNeeded,
-    // which would trigger UIViewController.present() and deadlock in CI (no window hierarchy).
+    // The detection state machine is host-buildable, so these tests run on
+    // both the iOS Simulator and macOS via `swift test`. UIKit-dependent
+    // presentation tests live in the `UIKit-Only Tests` section below.
 
     @Test("Disabled-to-enabled transition sets isLockdownModeEnabled")
     func disabledToEnabledTransitionSetsState() {
