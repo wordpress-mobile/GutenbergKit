@@ -57,6 +57,9 @@ class LockdownModeMonitor: ObservableObject {
     }
 
     deinit {
+        // No-op when `setup(presentingViewController:)` never ran (macOS, or an
+        // iOS instance that was created but never set up): `removeObserver(self)`
+        // is safe to call when `self` was never registered as an observer.
         NotificationCenter.default.removeObserver(self)
     }
 
