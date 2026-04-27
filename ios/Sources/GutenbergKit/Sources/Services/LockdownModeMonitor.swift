@@ -5,6 +5,7 @@ import OSLog
 
 #if canImport(UIKit)
 import UIKit
+#endif
 
 /// Protocol for objects that can be checked for Lockdown Mode status.
 ///
@@ -39,8 +40,10 @@ class LockdownModeMonitor: ObservableObject {
     /// Indicates whether we should show the lockdown sheet on next editor load.
     private var shouldShowSheet = false
 
+    #if canImport(UIKit)
     /// Weak reference to the view controller that will present the sheet.
     private weak var presentingViewController: UIViewController?
+    #endif
 
     /// Weak reference to the detectable object for re-checking on foreground.
     private weak var detectable: LockdownModeDetectable?
@@ -77,6 +80,18 @@ class LockdownModeMonitor: ObservableObject {
             shouldShowSheet = false
         }
     }
+
+    /// Resets the monitor state to re-check Lockdown Mode status.
+    ///
+    /// Call this when the app returns from background to re-evaluate Lockdown Mode
+    /// and potentially show the sheet again if it's still enabled.
+    public func resetForForegroundCheck() {
+        hasShownSheet = false
+    }
+}
+
+#if canImport(UIKit)
+extension LockdownModeMonitor {
 
     /// Sets up the monitor with required dependencies and starts observing foreground notifications.
     ///
@@ -155,14 +170,6 @@ class LockdownModeMonitor: ObservableObject {
         return true
     }
 
-    /// Resets the monitor state to re-check Lockdown Mode status.
-    ///
-    /// Call this when the app returns from background to re-evaluate Lockdown Mode
-    /// and potentially show the sheet again if it's still enabled.
-    public func resetForForegroundCheck() {
-        hasShownSheet = false
-    }
-
     /// Dismisses the sheet if it's currently presented.
     ///
     /// - Parameter completion: Optional callback invoked after dismissal completes.
@@ -175,5 +182,4 @@ class LockdownModeMonitor: ObservableObject {
         presentingViewController.dismiss(animated: false, completion: completion)
     }
 }
-
 #endif
