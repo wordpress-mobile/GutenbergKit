@@ -1,0 +1,153 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"$id": "https://github.com/wordpress-mobile/GutenbergKit/schemas/block-inserter-payload.schema.json",
+	"title": "BlockInserterPayload",
+	"description": "Payload delivered to the host app when the web editor requests the native block inserter. Mirrors the Kotlin `BlockInserterPayload` data class at android/Gutenberg/src/main/java/org/wordpress/gutenberg/model/BlockInserter.kt and the formatters at src/utils/blocks.js. Consumed by vitest shape tests; intended for eventual use by cross-language codegen (e.g. quicktype, kotlinx-serialization).",
+	"type": "object",
+	"required": [ "sections", "patterns", "patternCategories" ],
+	"additionalProperties": false,
+	"properties": {
+		"sections": {
+			"type": "array",
+			"items": { "$ref": "#/definitions/BlockInserterSection" }
+		},
+		"patterns": {
+			"type": "array",
+			"items": { "$ref": "#/definitions/BlockPattern" }
+		},
+		"patternCategories": {
+			"type": "array",
+			"items": { "$ref": "#/definitions/BlockPatternCategory" }
+		},
+		"sourceRect": {
+			"anyOf": [
+				{ "type": "null" },
+				{ "$ref": "#/definitions/SourceRect" }
+			]
+		}
+	},
+	"definitions": {
+		"BlockInserterSection": {
+			"type": "object",
+			"required": [ "category", "blocks" ],
+			"additionalProperties": false,
+			"properties": {
+				"category": {
+					"type": "string",
+					"description": "Stable category slug. Synthetic sections use `gbk-`-prefixed values (e.g. `gbk-most-used`)."
+				},
+				"name": {
+					"type": [ "string", "null" ],
+					"description": "Localized display name. Null for synthetic sections that the host renders without a header."
+				},
+				"blocks": {
+					"type": "array",
+					"items": { "$ref": "#/definitions/BlockType" }
+				}
+			}
+		},
+		"BlockType": {
+			"type": "object",
+			"required": [
+				"id",
+				"name",
+				"keywords",
+				"frecency",
+				"isDisabled",
+				"isSearchOnly",
+				"parents"
+			],
+			"additionalProperties": false,
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique identifier for this block variant. NOT the same as `name` — multiple entries can share a `name` but have different `id` values to represent variants with different initial attributes (e.g. `core/embed/youtube`)."
+				},
+				"name": { "type": "string" },
+				"title": { "type": [ "string", "null" ] },
+				"description": { "type": [ "string", "null" ] },
+				"category": { "type": [ "string", "null" ] },
+				"keywords": {
+					"type": "array",
+					"items": { "type": "string" }
+				},
+				"icon": {
+					"type": [ "string", "null" ],
+					"description": "SVG markup as a string, or null when the block has no renderable icon."
+				},
+				"frecency": { "type": "number" },
+				"isDisabled": { "type": "boolean" },
+				"isSearchOnly": { "type": "boolean" },
+				"parents": {
+					"type": "array",
+					"items": { "type": "string" }
+				}
+			}
+		},
+		"BlockPattern": {
+			"type": "object",
+			"required": [
+				"name",
+				"title",
+				"content",
+				"blockTypes",
+				"categories",
+				"description",
+				"keywords",
+				"source",
+				"viewportWidth"
+			],
+			"additionalProperties": false,
+			"properties": {
+				"name": { "type": "string" },
+				"title": { "type": "string" },
+				"content": {
+					"type": "string",
+					"description": "HTML with Gutenberg block delimiters."
+				},
+				"blockTypes": {
+					"type": "array",
+					"items": { "type": "string" }
+				},
+				"categories": {
+					"type": "array",
+					"items": { "type": "string" }
+				},
+				"description": { "type": [ "string", "null" ] },
+				"keywords": {
+					"type": "array",
+					"items": { "type": "string" }
+				},
+				"source": { "type": [ "string", "null" ] },
+				"viewportWidth": { "type": [ "integer", "null" ] }
+			}
+		},
+		"BlockPatternCategory": {
+			"type": "object",
+			"required": [ "name", "label" ],
+			"additionalProperties": false,
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "Category slug (e.g. `gallery`)."
+				},
+				"label": {
+					"type": "string",
+					"description": "Localized display label."
+				}
+			}
+		},
+		"SourceRect": {
+			"type": "object",
+			"required": [ "x", "y", "width", "height" ],
+			"additionalProperties": false,
+			"description": "Position of the UI element that triggered the inserter, in CSS pixels relative to the WebView. Host apps can use this to anchor a popover on tablets.",
+			"properties": {
+				"x": { "type": "number" },
+				"y": { "type": "number" },
+				"width": { "type": "number" },
+				"height": { "type": "number" }
+			}
+		}
+	}
+}
