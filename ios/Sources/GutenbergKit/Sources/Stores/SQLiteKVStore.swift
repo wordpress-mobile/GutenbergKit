@@ -59,10 +59,10 @@ final class SQLiteKVStore: @unchecked Sendable {
     ///     the system caches directory.
     ///   - diskCapacity: Soft cap (in bytes) on the combined size of stored values
     ///     and metadata. After every `put`, oldest entries (by storage date) are
-    ///     evicted until total size is at or below this cap. An entry whose size
-    ///     exceeds the cap on its own is evicted immediately on store, so choose
-    ///     a cap comfortably above the largest expected entry. Pass `0` to
-    ///     disable eviction entirely.
+    ///     evicted until total size is at or below this cap. A `put` for an entry
+    ///     whose own size exceeds the cap is silently dropped — choose a cap
+    ///     comfortably above the largest expected entry. Pass `0` to disable
+    ///     eviction entirely.
     init(
         handle: String,
         directory: URL = URL.cachesDirectory,
@@ -148,6 +148,13 @@ final class SQLiteKVStore: @unchecked Sendable {
     }
 
     func put(key: String, storageDate: Date, metadata: Data, value: Data) {
+        // An entry larger than the cap can't survive the eviction sweep that
+        // runs after this insert, so don't bother writing it to disk in the
+        // first place.
+        if self.diskCapacity > 0 && metadata.count + value.count > self.diskCapacity {
+            return
+        }
+
         var stmt: OpaquePointer?
         sqlite3_prepare_v2(
             self.db,

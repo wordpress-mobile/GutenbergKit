@@ -149,13 +149,17 @@ struct SQLiteKVStoreTests {
         #expect(store.get(key: "newer") != nil)
     }
 
-    @Test("an entry larger than diskCapacity is evicted on store")
-    func oversizedEntryEvictedImmediately() {
-        // The eviction sweep runs after every put. A single entry whose size
-        // exceeds the cap on its own is evicted in the same call.
+    @Test("an entry larger than diskCapacity is silently dropped on store")
+    func oversizedEntryNotStored() {
+        // Such an entry couldn't survive the eviction sweep, so put short-circuits
+        // and skips the write entirely. The observable contract is the same: the
+        // entry is not in the store afterwards. Other entries are unaffected.
         let store = makeStore(diskCapacity: 300)
-        store.put(key: "big", storageDate: referenceDate, metadata: Data(), value: Data(repeating: 0x42, count: 400))
+        store.put(key: "fits", storageDate: referenceDate, metadata: Data(), value: Data("ok"))
+        store.put(key: "big", storageDate: referenceDate.addingTimeInterval(1), metadata: Data(), value: Data(repeating: 0x42, count: 400))
+
         #expect(store.get(key: "big") == nil)
+        #expect(store.get(key: "fits")?.value == Data("ok"))
     }
 
     // MARK: - Key edge cases
