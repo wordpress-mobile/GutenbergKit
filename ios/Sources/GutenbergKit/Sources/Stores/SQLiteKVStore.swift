@@ -55,13 +55,13 @@ final class SQLiteKVStore: @unchecked Sendable {
     ///   - handle: Identifies this store within `directory`. Becomes the database
     ///     filename (`<handle>.sqlite`), so two stores under the same `directory`
     ///     with distinct handles are independent. Must not contain path separators.
-    ///   - directory: The directory where the database file lives. Defaults to a
-    ///     `SQLiteKVStore` subdirectory of the system caches directory.
+    ///   - directory: The directory where the database file lives. Defaults to
+    ///     the system caches directory.
     ///   - diskCapacity: Soft cap (in bytes) on the combined size of stored values
     ///     and metadata. Pass `0` to disable eviction.
     init(
         handle: String,
-        directory: URL = URL.cachesDirectory.appending(path: "SQLiteKVStore"),
+        directory: URL = URL.cachesDirectory,
         diskCapacity: Int
     ) {
         precondition(!handle.contains("/") && !handle.contains(".."), "handle must be a valid filename component")
