@@ -64,7 +64,7 @@ final class SQLiteKVStore: @unchecked Sendable {
         directory: URL = URL.cachesDirectory,
         diskCapacity: Int
     ) {
-        precondition(!handle.contains("/") && !handle.contains(".."), "handle must be a valid filename component")
+        precondition(Self.isValidHandle(handle), "handle must be a valid filename component, not '\(handle)'")
         self.diskCapacity = diskCapacity
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let dbPath = directory.appending(path: "\(handle).sqlite").path(percentEncoded: false)
@@ -102,6 +102,15 @@ final class SQLiteKVStore: @unchecked Sendable {
             ) WITHOUT ROWID;
             CREATE INDEX IF NOT EXISTS entries_storage_date_idx ON entries(storage_date);
             """, nil, nil, nil)
+    }
+
+    /// Whether `handle` is a safe filename component: non-empty, no path
+    /// separators, and not a directory reference (`.` or `..`).
+    static func isValidHandle(_ handle: String) -> Bool {
+        !handle.isEmpty
+            && !handle.contains("/")
+            && handle != "."
+            && handle != ".."
     }
 
     private static func readSchemaVersion(db: OpaquePointer) -> Int32 {

@@ -133,6 +133,29 @@ struct SQLiteKVStoreTests {
         #expect(store.get(key: "b") != nil)
     }
 
+    // MARK: - Handle validation
+
+    @Test("isValidHandle accepts ordinary filename components")
+    func handleValidationAccepts() {
+        #expect(SQLiteKVStore.isValidHandle("EditorURLCache"))
+        #expect(SQLiteKVStore.isValidHandle("HTMLPreviewCache"))
+        #expect(SQLiteKVStore.isValidHandle("foo-bar_baz"))
+        #expect(SQLiteKVStore.isValidHandle("a"))
+        // Dots in the middle are valid filename characters, not traversal.
+        #expect(SQLiteKVStore.isValidHandle("foo..bar"))
+        #expect(SQLiteKVStore.isValidHandle("v1.0"))
+    }
+
+    @Test("isValidHandle rejects path separators and directory references")
+    func handleValidationRejects() {
+        #expect(!SQLiteKVStore.isValidHandle(""))
+        #expect(!SQLiteKVStore.isValidHandle("foo/bar"))
+        #expect(!SQLiteKVStore.isValidHandle("/foo"))
+        #expect(!SQLiteKVStore.isValidHandle("foo/"))
+        #expect(!SQLiteKVStore.isValidHandle("."))
+        #expect(!SQLiteKVStore.isValidHandle(".."))
+    }
+
     // MARK: - Schema mismatch recovery
 
     @Test("opens a database with a mismatched schema version by recreating the table")
