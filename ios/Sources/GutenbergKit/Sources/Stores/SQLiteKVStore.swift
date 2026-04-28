@@ -39,6 +39,11 @@ final class SQLiteKVStore: @unchecked Sendable {
     private let db: OpaquePointer
     private let diskCapacity: Int
 
+    /// Schema version baked into this build. If an existing database is found at a
+    /// different version, the entries table is dropped and recreated. Bump on any
+    /// schema-changing update.
+    private static let schemaVersion: Int32 = 1
+
     /// SQLite expects this sentinel to indicate that bound data should be copied.
     private static let SQLITE_TRANSIENT = unsafeBitCast(
         OpaquePointer(bitPattern: -1), to: sqlite3_destructor_type.self
@@ -66,6 +71,13 @@ final class SQLiteKVStore: @unchecked Sendable {
         }
         self.db = connection!
 
+        // If the on-disk schema version doesn't match what we expect, drop the
+        // entries table — losing cached data is acceptable for a cache, and keeps
+        // schema migrations to a single bump-and-recreate.
+        if Self.readSchemaVersion(db: self.db) != Self.schemaVersion {
+            sqlite3_exec(self.db, "DROP TABLE IF EXISTS entries;", nil, nil, nil)
+            sqlite3_exec(self.db, "PRAGMA user_version = \(Self.schemaVersion);", nil, nil, nil)
+        }
         sqlite3_exec(self.db, """
             CREATE TABLE IF NOT EXISTS entries (
                 key TEXT PRIMARY KEY NOT NULL,
@@ -75,6 +87,14 @@ final class SQLiteKVStore: @unchecked Sendable {
             ) WITHOUT ROWID;
             CREATE INDEX IF NOT EXISTS entries_storage_date_idx ON entries(storage_date);
             """, nil, nil, nil)
+    }
+
+    private static func readSchemaVersion(db: OpaquePointer) -> Int32 {
+        var stmt: OpaquePointer?
+        sqlite3_prepare_v2(db, "PRAGMA user_version;", -1, &stmt, nil)
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return 0 }
+        return sqlite3_column_int(stmt, 0)
     }
 
     deinit {
