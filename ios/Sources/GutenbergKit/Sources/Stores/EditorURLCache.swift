@@ -79,7 +79,6 @@ public final class EditorURLCache: @unchecked Sendable {
         }
         self.db = connection!
 
-        sqlite3_exec(self.db, "PRAGMA journal_mode = WAL;", nil, nil, nil)
         sqlite3_exec(self.db, """
             CREATE TABLE IF NOT EXISTS entries (
                 key TEXT PRIMARY KEY NOT NULL,
