@@ -12,6 +12,25 @@ import SQLite3
 /// observable on the next call to `response(for:httpMethod:)`, and entries removed
 /// by `clear()` are immediately gone.
 public final class EditorURLCache: @unchecked Sendable {
+
+    // MARK: - Debugging
+    //
+    // Backed by a single SQLite database at `<cacheRoot>/EditorURLCache.sqlite`.
+    // Useful queries from a shell:
+    //
+    //     # List entries by recency, with size and date
+    //     sqlite3 EditorURLCache.sqlite \
+    //         "SELECT key, length(body), datetime(storage_date + 978307200, 'unixepoch') \
+    //          FROM entries ORDER BY storage_date DESC"
+    //
+    //     # Export a specific body to a file
+    //     sqlite3 EditorURLCache.sqlite \
+    //         "SELECT writefile('/tmp/body.bin', body) FROM entries \
+    //          WHERE key='GET:https://example.com/...'"
+    //
+    // `storage_date` is `Date.timeIntervalSinceReferenceDate` (seconds since
+    // 2001-01-01); +978307200 shifts to unix epoch for `datetime(..., 'unixepoch')`.
+
     private let db: OpaquePointer
     private let cachePolicy: EditorCachePolicy
     private let diskCapacity: Int
