@@ -1,38 +1,39 @@
 import Foundation
 import SQLite3
 
-/// SQLite-backed persistent KV store for `EditorURLCache`.
+/// A SQLite-backed persistent key-value store for opaque blobs.
 ///
-/// Treats values as opaque blobs; the cache layer is responsible for any
-/// serialization on top. After every `put`, evicts oldest entries (by storage
-/// date) until total stored size is at or below `diskCapacity`.
+/// Each entry is `(key, storageDate, metadata, value)`. Values and metadata are
+/// stored as raw bytes; the caller owns any serialization. After every `put`,
+/// oldest entries (by storage date) are evicted until total stored size is at
+/// or below `diskCapacity`.
 ///
 /// Thread-safe via `SQLITE_OPEN_FULLMUTEX` — concurrent calls from multiple
 /// threads on the same instance are serialized internally by SQLite.
-final class EditorURLCacheBackend: @unchecked Sendable {
+final class SQLiteKVStore: @unchecked Sendable {
 
     // MARK: - Debugging
     //
-    // Backed by a single SQLite database at `<directory>/EditorURLCache.sqlite`.
+    // Backed by a single SQLite database at `<directory>/<filename>`.
     // Useful queries from a shell:
     //
     //     # List entries by recency, with size and date
-    //     sqlite3 EditorURLCache.sqlite \
-    //         "SELECT key, length(body), datetime(storage_date + 978307200, 'unixepoch') \
+    //     sqlite3 Store.sqlite \
+    //         "SELECT key, length(value), datetime(storage_date + 978307200, 'unixepoch') \
     //          FROM entries ORDER BY storage_date DESC"
     //
-    //     # Export a specific body to a file
-    //     sqlite3 EditorURLCache.sqlite \
-    //         "SELECT writefile('/tmp/body.bin', body) FROM entries \
-    //          WHERE key='GET:https://example.com/...'"
+    //     # Export a specific value to a file
+    //     sqlite3 Store.sqlite \
+    //         "SELECT writefile('/tmp/value.bin', value) FROM entries \
+    //          WHERE key='...'"
     //
     // `storage_date` is `Date.timeIntervalSinceReferenceDate` (seconds since
     // 2001-01-01); +978307200 shifts to unix epoch for `datetime(..., 'unixepoch')`.
 
     struct Entry {
         let storageDate: Date
-        let headers: Data
-        let body: Data
+        let metadata: Data
+        let value: Data
     }
 
     private let db: OpaquePointer
@@ -43,10 +44,10 @@ final class EditorURLCacheBackend: @unchecked Sendable {
         OpaquePointer(bitPattern: -1), to: sqlite3_destructor_type.self
     )
 
-    init(directory: URL, diskCapacity: Int) {
+    init(directory: URL, filename: String = "Store.sqlite", diskCapacity: Int) {
         self.diskCapacity = diskCapacity
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let dbPath = directory.appending(path: "EditorURLCache.sqlite").path(percentEncoded: false)
+        let dbPath = directory.appending(path: filename).path(percentEncoded: false)
 
         var connection: OpaquePointer?
         let openResult = sqlite3_open_v2(
@@ -57,7 +58,7 @@ final class EditorURLCacheBackend: @unchecked Sendable {
         )
         if openResult != SQLITE_OK {
             // Fall back to an in-memory database. This loses persistence but keeps
-            // the cache functional within the process.
+            // the store functional within the process.
             sqlite3_close(connection)
             connection = nil
             sqlite3_open_v2(":memory:", &connection,
@@ -69,8 +70,8 @@ final class EditorURLCacheBackend: @unchecked Sendable {
             CREATE TABLE IF NOT EXISTS entries (
                 key TEXT PRIMARY KEY NOT NULL,
                 storage_date REAL NOT NULL,
-                headers BLOB NOT NULL,
-                body BLOB NOT NULL
+                metadata BLOB NOT NULL,
+                value BLOB NOT NULL
             ) WITHOUT ROWID;
             CREATE INDEX IF NOT EXISTS entries_storage_date_idx ON entries(storage_date);
             """, nil, nil, nil)
@@ -84,7 +85,7 @@ final class EditorURLCacheBackend: @unchecked Sendable {
         var stmt: OpaquePointer?
         sqlite3_prepare_v2(
             self.db,
-            "SELECT storage_date, headers, body FROM entries WHERE key = ?1;",
+            "SELECT storage_date, metadata, value FROM entries WHERE key = ?1;",
             -1, &stmt, nil
         )
         defer { sqlite3_finalize(stmt) }
@@ -93,33 +94,33 @@ final class EditorURLCacheBackend: @unchecked Sendable {
 
         return Entry(
             storageDate: Date(timeIntervalSinceReferenceDate: sqlite3_column_double(stmt, 0)),
-            headers: Self.readBlobAsData(stmt: stmt, column: 1),
-            body: Self.readBlobAsData(stmt: stmt, column: 2)
+            metadata: Self.readBlobAsData(stmt: stmt, column: 1),
+            value: Self.readBlobAsData(stmt: stmt, column: 2)
         )
     }
 
-    func put(key: String, storageDate: Date, headers: Data, body: Data) {
+    func put(key: String, storageDate: Date, metadata: Data, value: Data) {
         var stmt: OpaquePointer?
         sqlite3_prepare_v2(
             self.db,
             """
-            INSERT INTO entries (key, storage_date, headers, body)
+            INSERT INTO entries (key, storage_date, metadata, value)
             VALUES (?1, ?2, ?3, ?4)
             ON CONFLICT(key) DO UPDATE SET
                 storage_date = excluded.storage_date,
-                headers = excluded.headers,
-                body = excluded.body;
+                metadata = excluded.metadata,
+                value = excluded.value;
             """,
             -1, &stmt, nil
         )
         defer { sqlite3_finalize(stmt) }
         sqlite3_bind_text(stmt, 1, key, -1, Self.SQLITE_TRANSIENT)
         sqlite3_bind_double(stmt, 2, storageDate.timeIntervalSinceReferenceDate)
-        _ = headers.withUnsafeBytes {
-            sqlite3_bind_blob(stmt, 3, $0.baseAddress, Int32(headers.count), Self.SQLITE_TRANSIENT)
+        _ = metadata.withUnsafeBytes {
+            sqlite3_bind_blob(stmt, 3, $0.baseAddress, Int32(metadata.count), Self.SQLITE_TRANSIENT)
         }
-        _ = body.withUnsafeBytes {
-            sqlite3_bind_blob(stmt, 4, $0.baseAddress, Int32(body.count), Self.SQLITE_TRANSIENT)
+        _ = value.withUnsafeBytes {
+            sqlite3_bind_blob(stmt, 4, $0.baseAddress, Int32(value.count), Self.SQLITE_TRANSIENT)
         }
         sqlite3_step(stmt)
 
@@ -141,7 +142,7 @@ final class EditorURLCacheBackend: @unchecked Sendable {
             DELETE FROM entries WHERE key IN (
                 SELECT key FROM (
                     SELECT key,
-                           SUM(length(body) + length(headers))
+                           SUM(length(value) + length(metadata))
                                OVER (ORDER BY storage_date DESC, key DESC
                                      ROWS UNBOUNDED PRECEDING) AS running
                     FROM entries

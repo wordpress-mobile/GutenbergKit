@@ -11,7 +11,7 @@ import OSLog
 /// observable on the next call to `response(for:httpMethod:)`, and entries removed
 /// by `clear()` are immediately gone.
 public final class EditorURLCache: @unchecked Sendable {
-    private let backend: EditorURLCacheBackend
+    private let kvStore: SQLiteKVStore
     private let cachePolicy: EditorCachePolicy
     private let performanceMonitor = SignpostMonitor(for: Logger.performance)
 
@@ -32,7 +32,7 @@ public final class EditorURLCache: @unchecked Sendable {
         diskCapacity: Int = 100 * 1024 * 1024
     ) {
         let root = cacheRoot ?? URL.cachesDirectory.appending(path: "GutenbergKit-EditorURLCache")
-        self.backend = EditorURLCacheBackend(directory: root, diskCapacity: diskCapacity)
+        self.kvStore = SQLiteKVStore(directory: root, filename: "EditorURLCache.sqlite", diskCapacity: diskCapacity)
         self.cachePolicy = cachePolicy
     }
 
@@ -51,11 +51,11 @@ public final class EditorURLCache: @unchecked Sendable {
         currentDate: Date
     ) throws {
         let headersBlob = try JSONEncoder().encode(response.responseHeaders)
-        self.backend.put(
+        self.kvStore.put(
             key: Self.cacheKey(httpMethod: httpMethod, url: url),
             storageDate: currentDate,
-            headers: headersBlob,
-            body: response.data
+            metadata: headersBlob,
+            value: response.data
         )
     }
 
@@ -79,11 +79,11 @@ public final class EditorURLCache: @unchecked Sendable {
     ) throws {
         let body = try Data(contentsOf: path)
         let headersBlob = try JSONEncoder().encode(headers)
-        self.backend.put(
+        self.kvStore.put(
             key: Self.cacheKey(httpMethod: httpMethod, url: url),
             storageDate: currentDate,
-            headers: headersBlob,
-            body: body
+            metadata: headersBlob,
+            value: body
         )
     }
 
@@ -108,19 +108,19 @@ public final class EditorURLCache: @unchecked Sendable {
     ) throws -> EditorURLResponse? {
         try performanceMonitor.measure { () -> EditorURLResponse? in
             let key = Self.cacheKey(httpMethod: httpMethod, url: url)
-            guard let entry = self.backend.get(key: key),
+            guard let entry = self.kvStore.get(key: key),
                   self.cachePolicy.allowsResponseWith(date: entry.storageDate, currentDate: currentDate)
             else {
                 return nil
             }
-            let headers = try JSONDecoder().decode(EditorHTTPHeaders.self, from: entry.headers)
-            return EditorURLResponse(data: entry.body, responseHeaders: headers)
+            let headers = try JSONDecoder().decode(EditorHTTPHeaders.self, from: entry.metadata)
+            return EditorURLResponse(data: entry.value, responseHeaders: headers)
         }
     }
 
     /// Removes all cached responses.
     public func clear() throws {
-        self.backend.clear()
+        self.kvStore.clear()
     }
 
     private static func cacheKey(httpMethod: EditorHttpMethod, url: URL) -> String {
