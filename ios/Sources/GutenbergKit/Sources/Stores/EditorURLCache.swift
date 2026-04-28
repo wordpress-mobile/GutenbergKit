@@ -32,7 +32,7 @@ public final class EditorURLCache: @unchecked Sendable {
         diskCapacity: Int = 100 * 1024 * 1024
     ) {
         let root = cacheRoot ?? URL.cachesDirectory.appending(path: "GutenbergKit-EditorURLCache")
-        self.kvStore = SQLiteKVStore(directory: root, filename: "EditorURLCache.sqlite", diskCapacity: diskCapacity)
+        self.kvStore = SQLiteKVStore(handle: "EditorURLCache", directory: root, diskCapacity: diskCapacity)
         self.cachePolicy = cachePolicy
     }
 

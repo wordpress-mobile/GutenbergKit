@@ -49,10 +49,25 @@ final class SQLiteKVStore: @unchecked Sendable {
         OpaquePointer(bitPattern: -1), to: sqlite3_destructor_type.self
     )
 
-    init(directory: URL, filename: String = "Store.sqlite", diskCapacity: Int) {
+    /// Creates a new store.
+    ///
+    /// - Parameters:
+    ///   - handle: Identifies this store within `directory`. Becomes the database
+    ///     filename (`<handle>.sqlite`), so two stores under the same `directory`
+    ///     with distinct handles are independent. Must not contain path separators.
+    ///   - directory: The directory where the database file lives. Defaults to a
+    ///     `SQLiteKVStore` subdirectory of the system caches directory.
+    ///   - diskCapacity: Soft cap (in bytes) on the combined size of stored values
+    ///     and metadata. Pass `0` to disable eviction.
+    init(
+        handle: String,
+        directory: URL = URL.cachesDirectory.appending(path: "SQLiteKVStore"),
+        diskCapacity: Int
+    ) {
+        precondition(!handle.contains("/") && !handle.contains(".."), "handle must be a valid filename component")
         self.diskCapacity = diskCapacity
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let dbPath = directory.appending(path: filename).path(percentEncoded: false)
+        let dbPath = directory.appending(path: "\(handle).sqlite").path(percentEncoded: false)
 
         var connection: OpaquePointer?
         let openResult = sqlite3_open_v2(

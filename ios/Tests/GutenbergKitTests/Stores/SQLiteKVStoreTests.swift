@@ -8,7 +8,7 @@ import Testing
 struct SQLiteKVStoreTests {
 
     private func makeStore(diskCapacity: Int = 0) -> SQLiteKVStore {
-        SQLiteKVStore(directory: .randomTemporaryDirectory, diskCapacity: diskCapacity)
+        SQLiteKVStore(handle: "test", directory: .randomTemporaryDirectory, diskCapacity: diskCapacity)
     }
 
     private let referenceDate = Date(timeIntervalSinceReferenceDate: 0)
@@ -74,23 +74,23 @@ struct SQLiteKVStoreTests {
 
     // MARK: - Persistence
 
-    @Test("entries persist across instances against the same directory and filename")
+    @Test("entries persist across instances against the same directory and handle")
     func persistsAcrossInstances() throws {
         let directory = URL.randomTemporaryDirectory
-        let first = SQLiteKVStore(directory: directory, diskCapacity: 0)
+        let first = SQLiteKVStore(handle: "test", directory: directory, diskCapacity: 0)
         first.put(key: "durable", storageDate: referenceDate, metadata: Data("m"), value: Data("v"))
 
-        let reopened = SQLiteKVStore(directory: directory, diskCapacity: 0)
+        let reopened = SQLiteKVStore(handle: "test", directory: directory, diskCapacity: 0)
         let entry = try #require(reopened.get(key: "durable"))
         #expect(entry.value == Data("v"))
         #expect(entry.metadata == Data("m"))
     }
 
-    @Test("different filenames in the same directory are independent stores")
-    func filenamesIndependentInSameDirectory() {
+    @Test("different handles in the same directory are independent stores")
+    func handlesIndependentInSameDirectory() {
         let directory = URL.randomTemporaryDirectory
-        let storeA = SQLiteKVStore(directory: directory, filename: "A.sqlite", diskCapacity: 0)
-        let storeB = SQLiteKVStore(directory: directory, filename: "B.sqlite", diskCapacity: 0)
+        let storeA = SQLiteKVStore(handle: "A", directory: directory, diskCapacity: 0)
+        let storeB = SQLiteKVStore(handle: "B", directory: directory, diskCapacity: 0)
 
         storeA.put(key: "shared-key", storageDate: referenceDate, metadata: Data(), value: Data("from A"))
         storeB.put(key: "shared-key", storageDate: referenceDate, metadata: Data(), value: Data("from B"))
@@ -139,7 +139,7 @@ struct SQLiteKVStoreTests {
     func recoversFromSchemaMismatch() throws {
         let directory = URL.randomTemporaryDirectory
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let dbPath = directory.appending(path: "Store.sqlite").path(percentEncoded: false)
+        let dbPath = directory.appending(path: "test.sqlite").path(percentEncoded: false)
 
         // Set up a database with an incompatible schema and a non-matching version.
         var legacyDb: OpaquePointer?
@@ -154,7 +154,7 @@ struct SQLiteKVStoreTests {
 
         // Open via SQLiteKVStore — should detect the version mismatch, drop the
         // legacy table, and recreate the expected schema.
-        let store = SQLiteKVStore(directory: directory, diskCapacity: 0)
+        let store = SQLiteKVStore(handle: "test", directory: directory, diskCapacity: 0)
 
         // Legacy data is gone.
         #expect(store.get(key: "legacy") == nil)
