@@ -147,10 +147,13 @@ final class SQLiteKVStore: @unchecked Sendable {
         )
     }
 
+    /// Inserts or overwrites the entry at `key`. Runs the LRU eviction sweep
+    /// afterwards so total stored size stays within `diskCapacity`.
+    ///
+    /// A `put` for an entry whose own size exceeds `diskCapacity` is silently
+    /// dropped — the sweep would evict it immediately anyway, so the disk write
+    /// is skipped.
     func put(key: String, storageDate: Date, metadata: Data, value: Data) {
-        // An entry larger than the cap can't survive the eviction sweep that
-        // runs after this insert, so don't bother writing it to disk in the
-        // first place.
         if self.diskCapacity > 0 && metadata.count + value.count > self.diskCapacity {
             return
         }
