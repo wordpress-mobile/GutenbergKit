@@ -58,7 +58,11 @@ final class SQLiteKVStore: @unchecked Sendable {
     ///   - directory: The directory where the database file lives. Defaults to
     ///     the system caches directory.
     ///   - diskCapacity: Soft cap (in bytes) on the combined size of stored values
-    ///     and metadata. Pass `0` to disable eviction.
+    ///     and metadata. After every `put`, oldest entries (by storage date) are
+    ///     evicted until total size is at or below this cap. An entry whose size
+    ///     exceeds the cap on its own is evicted immediately on store, so choose
+    ///     a cap comfortably above the largest expected entry. Pass `0` to
+    ///     disable eviction entirely.
     init(
         handle: String,
         directory: URL = URL.cachesDirectory,

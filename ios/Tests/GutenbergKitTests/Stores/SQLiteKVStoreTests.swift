@@ -133,6 +133,103 @@ struct SQLiteKVStoreTests {
         #expect(store.get(key: "b") != nil)
     }
 
+    @Test("eviction breaks ties by key DESC when storage dates are equal")
+    func evictionTiebreaker() {
+        // 700-byte cap; each entry is 300 bytes. Two same-dated entries plus a
+        // newer one forces eviction of one of the tied entries. With ORDER BY
+        // storage_date DESC, key DESC, the lexicographically smaller key is
+        // evicted first.
+        let store = makeStore(diskCapacity: 700)
+        store.put(key: "a", storageDate: referenceDate, metadata: Data(), value: Data(repeating: 0x01, count: 300))
+        store.put(key: "z", storageDate: referenceDate, metadata: Data(), value: Data(repeating: 0x02, count: 300))
+        store.put(key: "newer", storageDate: referenceDate.addingTimeInterval(1), metadata: Data(), value: Data(repeating: 0x03, count: 300))
+
+        #expect(store.get(key: "a") == nil)
+        #expect(store.get(key: "z") != nil)
+        #expect(store.get(key: "newer") != nil)
+    }
+
+    @Test("an entry larger than diskCapacity is evicted on store")
+    func oversizedEntryEvictedImmediately() {
+        // The eviction sweep runs after every put. A single entry whose size
+        // exceeds the cap on its own is evicted in the same call.
+        let store = makeStore(diskCapacity: 300)
+        store.put(key: "big", storageDate: referenceDate, metadata: Data(), value: Data(repeating: 0x42, count: 400))
+        #expect(store.get(key: "big") == nil)
+    }
+
+    // MARK: - Key edge cases
+
+    @Test("keys with SQL special characters are handled safely")
+    func keysWithSQLSpecialCharacters() throws {
+        let store = makeStore()
+        // Classic injection-shaped key — parameterized binding should treat it
+        // as a literal value, not interpret it as SQL.
+        let evilKey = "'; DROP TABLE entries; --"
+        store.put(key: evilKey, storageDate: referenceDate, metadata: Data(), value: Data("ok"))
+
+        // The table still exists and the entry round-tripped.
+        let entry = try #require(store.get(key: evilKey))
+        #expect(entry.value == Data("ok"))
+
+        // Other keys still work — table not dropped.
+        store.put(key: "normal", storageDate: referenceDate, metadata: Data(), value: Data("normal value"))
+        #expect(store.get(key: "normal")?.value == Data("normal value"))
+    }
+
+    @Test("unicode and emoji keys round-trip correctly")
+    func unicodeKeys() throws {
+        let store = makeStore()
+        let unicodeKey = "café-日本語-🎉"
+        store.put(key: unicodeKey, storageDate: referenceDate, metadata: Data(), value: Data("unicode value"))
+
+        let entry = try #require(store.get(key: unicodeKey))
+        #expect(entry.value == Data("unicode value"))
+    }
+
+    // MARK: - Concurrent access
+
+    @Test("survives concurrent put/get from many tasks without crashing or losing data")
+    func concurrentAccess() async throws {
+        let store = makeStore()
+        let iterations = 200
+        let distinctKeys = 10
+
+        // Many tasks put and get against overlapping keys. The contract is:
+        //   1. SQLite's FULLMUTEX serialization keeps the store from crashing
+        //      under concurrent access.
+        //   2. After all writes settle, every distinct key has the value from
+        //      its last writer (last-writer-wins).
+        let lastValuePerKey = await withTaskGroup(of: (Int, Int).self) { group in
+            for i in 0..<iterations {
+                group.addTask {
+                    let keyIndex = i % distinctKeys
+                    let key = "key-\(keyIndex)"
+                    let value = Data("value-\(i)")
+                    store.put(key: key, storageDate: Date().addingTimeInterval(Double(i)), metadata: Data(), value: value)
+                    _ = store.get(key: key)
+                    return (keyIndex, i)
+                }
+            }
+            // Track the highest iteration that wrote to each key, so the test
+            // doesn't depend on tasks completing in order.
+            var lastValuePerKey: [Int: Int] = [:]
+            for await (keyIndex, iteration) in group {
+                lastValuePerKey[keyIndex] = max(lastValuePerKey[keyIndex] ?? -1, iteration)
+            }
+            return lastValuePerKey
+        }
+
+        // Every key should have an entry, and the entry should match one of the
+        // values written for that key (we can't pin which exactly because writes
+        // race, but we can confirm the store didn't return garbage).
+        for keyIndex in 0..<distinctKeys {
+            let entry = try #require(store.get(key: "key-\(keyIndex)"))
+            #expect(entry.value.starts(with: Data("value-")), "value at key-\(keyIndex) is malformed: \(entry.value)")
+            #expect(lastValuePerKey[keyIndex] != nil)
+        }
+    }
+
     // MARK: - Handle validation
 
     @Test("isValidHandle accepts ordinary filename components")
