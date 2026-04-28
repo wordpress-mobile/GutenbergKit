@@ -40,7 +40,11 @@ import useBlockTypesState from '@wordpress/block-editor/build-module/components/
  * Internal dependencies
  */
 import { debug } from '../../utils/logger';
-import { preprocessBlockTypesForNativeInserter } from '../../utils/blocks';
+import {
+	preprocessBlockTypesForNativeInserter,
+	formatPatternsForNativeInserter,
+	formatPatternCategoriesForNativeInserter,
+} from '../../utils/blocks';
 import { showBlockInserter } from '../../utils/bridge';
 import { unlock } from '../../lock-unlock';
 
@@ -363,28 +367,9 @@ export default function NativeBlockInserterButton( { open, onToggle } ) {
 			categories
 		);
 
-		// Format patterns for native consumption
-		const formattedPatterns =
-			patterns?.map( ( pattern ) => ( {
-				name: pattern.name,
-				title: pattern.title,
-				content: pattern.content,
-				blockTypes: pattern.blockTypes ?? null,
-				categories:
-					pattern.categories?.filter(
-						( cat ) => ! cat.startsWith( '_' )
-					) ?? null,
-				description: pattern.description ?? null,
-				keywords: pattern.keywords ?? null,
-				source: pattern.source ?? null,
-				viewportWidth: pattern.viewportWidth ?? null,
-			} ) ) ?? [];
-
+		const formattedPatterns = formatPatternsForNativeInserter( patterns );
 		const formattedPatternCategories =
-			patternCategories?.map( ( cat ) => ( {
-				name: cat.name,
-				label: cat.label,
-			} ) ) ?? [];
+			formatPatternCategoriesForNativeInserter( patternCategories );
 
 		window.blockInserter = {
 			sections,

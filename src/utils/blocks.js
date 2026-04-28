@@ -332,3 +332,49 @@ export function preprocessBlockTypesForNativeInserter(
 
 	return sections;
 }
+
+/**
+ * Serializes WordPress block patterns into the compact shape expected by the
+ * native block inserter bridge. Array fields default to `[]` (never `null`)
+ * to match the non-nullable `List<String>` contract in the Kotlin
+ * `BlockPattern` model.
+ *
+ * @param {Array} patterns Raw patterns from `__experimentalGetAllowedPatterns`.
+ *
+ * @return {Array} Patterns formatted for the native bridge.
+ */
+export function formatPatternsForNativeInserter( patterns ) {
+	return (
+		patterns?.map( ( pattern ) => ( {
+			name: pattern.name,
+			title: pattern.title,
+			content: pattern.content,
+			blockTypes: pattern.blockTypes ?? [],
+			categories:
+				pattern.categories?.filter(
+					( cat ) => ! cat.startsWith( '_' )
+				) ?? [],
+			description: pattern.description ?? null,
+			keywords: pattern.keywords ?? [],
+			source: pattern.source ?? null,
+			viewportWidth: pattern.viewportWidth ?? null,
+		} ) ) ?? []
+	);
+}
+
+/**
+ * Serializes WordPress block pattern categories into the shape expected by the
+ * native block inserter bridge.
+ *
+ * @param {Array} categories Raw categories from `coreDataStore`.
+ *
+ * @return {Array} Categories formatted for the native bridge.
+ */
+export function formatPatternCategoriesForNativeInserter( categories ) {
+	return (
+		categories?.map( ( cat ) => ( {
+			name: cat.name,
+			label: cat.label,
+		} ) ) ?? []
+	);
+}
