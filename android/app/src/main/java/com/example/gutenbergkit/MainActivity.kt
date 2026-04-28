@@ -36,6 +36,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.ui.platform.LocalContext
+import org.wordpress.gutenberg.GutenbergView
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -167,6 +169,7 @@ fun MainScreen(
     var showDeleteDialog = remember { mutableStateOf<ConfigurationItem.ConfiguredEditor?>(null) }
     var siteUrlInput = remember { mutableStateOf("") }
     var showOverflowMenu = remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -189,6 +192,13 @@ fun MainScreen(
                             onClick = {
                                 showOverflowMenu.value = false
                                 onMediaProxyServer()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Reset Photo Permissions Prompts") },
+                            onClick = {
+                                showOverflowMenu.value = false
+                                GutenbergView.resetBlockPickerPhotoPreferences(context)
                             }
                         )
                     }

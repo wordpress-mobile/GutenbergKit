@@ -37,6 +37,7 @@ import kotlinx.coroutines.launch
 import org.json.JSONException
 import org.json.JSONObject
 import org.wordpress.gutenberg.inserter.BlockPickerDialog
+import org.wordpress.gutenberg.inserter.clearPhotoPreferences
 import org.wordpress.gutenberg.model.BlockInserterPayload
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
@@ -913,6 +914,11 @@ class GutenbergView : FrameLayout {
 
     private fun presentBlockInserter(payload: BlockInserterPayload) {
         blockInserterDialog?.dismiss()
+        // Hide the soft keyboard before showing the bottom sheet — otherwise
+        // the sheet opens above the still-visible keyboard, then visibly
+        // "re-launches" into the freed space once the IME dismisses.
+        (context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+            ?.hideSoftInputFromWindow(webView.windowToken, 0)
         val dialog = BlockPickerDialog(
             context = context,
             payload = payload,
@@ -1090,6 +1096,15 @@ class GutenbergView : FrameLayout {
     }
 
     companion object {
+        /**
+         * Clears the block inserter's photo-library preferences (rationale
+         * rejection + first-prompt tracking). Call from a host-app settings
+         * screen if you want users to re-see the rationale after dismissing it.
+         */
+        fun resetBlockPickerPhotoPreferences(context: Context) {
+            clearPhotoPreferences(context)
+        }
+
         /** Hosts that are safe to serve assets over HTTP (local development only). */
         private val LOCAL_HOSTS = setOf("localhost", "127.0.0.1", "10.0.2.2")
 
