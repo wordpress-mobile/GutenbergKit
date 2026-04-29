@@ -27,7 +27,7 @@ lane :publish_to_s3 do |options|
     key: File.join('gutenbergkit', version, 'GutenbergKitResources.xcframework.zip'),
     file: xcframework_file_path,
     auto_prefix: false,
-    if_exists: :fail
+    if_exists: :replace
   )
 
   upload_to_s3(
@@ -35,7 +35,7 @@ lane :publish_to_s3 do |options|
     key: File.join('gutenbergkit', version, 'GutenbergKitResources.xcframework.zip.checksum.txt'),
     file: xcframework_checksum_file_path,
     auto_prefix: false,
-    if_exists: :fail
+    if_exists: :replace
   )
 end
 
