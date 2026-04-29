@@ -28,6 +28,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.ProgressBar
+import android.widget.Toast
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
 import kotlinx.coroutines.CoroutineScope
@@ -35,6 +36,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.json.JSONException
 import org.json.JSONObject
+import org.wordpress.gutenberg.inserter.BlockInserterDialog
+import org.wordpress.gutenberg.model.BlockInserterPayload
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.model.GBKitGlobal
@@ -119,6 +122,7 @@ class GutenbergView : FrameLayout {
     private var modalDialogStateListener: ModalDialogStateListener? = null
     private var networkRequestListener: NetworkRequestListener? = null
     private var latestContentProvider: LatestContentProvider? = null
+    private var blockInserterDialog: BlockInserterDialog? = null
 
     /**
      * Stores the contextId from the most recent openMediaLibrary call
@@ -865,6 +869,23 @@ class GutenbergView : FrameLayout {
         currentMediaContextId = null
     }
 
+    private fun insertBlock(blockId: String) {
+        if (!isEditorLoaded) return
+        handler.post {
+            webView.evaluateJavascript(
+                "window.blockInserter?.insertBlock(${JSONObject.quote(blockId)});",
+                null,
+            )
+        }
+    }
+
+    private fun dismissBlockInserter() {
+        if (!isEditorLoaded) return
+        handler.post {
+            webView.evaluateJavascript("window.blockInserter?.onClose?.();", null)
+        }
+    }
+
     @JavascriptInterface
     fun onEditorExceptionLogged(exception: String) {
         val parsedException = GutenbergJsException.fromString(exception)
@@ -872,8 +893,39 @@ class GutenbergView : FrameLayout {
     }
 
     @JavascriptInterface
-    fun showBlockPicker() {
-        Log.i("GutenbergView", "BlockPickerShouldShow")
+    fun showBlockInserter(payload: String) {
+        val parsed = try {
+            BlockInserterPayload.fromJson(payload)
+        } catch (e: Exception) {
+            Log.e("GutenbergView", "Failed to parse showBlockInserter payload", e)
+            handler.post {
+                Toast.makeText(
+                    context,
+                    R.string.gbk_block_inserter_failure,
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+            return
+        }
+
+        handler.post { presentBlockInserter(parsed) }
+    }
+
+    private fun presentBlockInserter(payload: BlockInserterPayload) {
+        blockInserterDialog?.dismiss()
+        val dialog = BlockInserterDialog(
+            context = context,
+            payload = payload,
+            onBlockSelected = { block -> insertBlock(block.id) },
+        )
+        dialog.setOnDismissListener {
+            if (blockInserterDialog === dialog) {
+                blockInserterDialog = null
+            }
+            dismissBlockInserter()
+        }
+        blockInserterDialog = dialog
+        dialog.show()
     }
 
     @JavascriptInterface
@@ -986,6 +1038,8 @@ class GutenbergView : FrameLayout {
         networkRequestListener = null
         requestInterceptor = DefaultGutenbergRequestInterceptor()
         latestContentProvider = null
+        blockInserterDialog?.dismiss()
+        blockInserterDialog = null
         handler.removeCallbacksAndMessages(null)
         webView.destroy()
     }

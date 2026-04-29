@@ -9,6 +9,7 @@ plugins {
 android {
     namespace = "org.wordpress.gutenberg"
     compileSdk = 34
+    resourcePrefix = "gbk_"
 
     buildFeatures {
         buildConfig = true
