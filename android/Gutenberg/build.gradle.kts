@@ -3,6 +3,7 @@ import groovy.json.JsonSlurper
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.jetbrains.kotlin.android)
+    alias(libs.plugins.jetbrains.kotlin.compose)
     alias(libs.plugins.jetbrains.kotlin.serialization)
     id("com.automattic.android.publish-to-s3")
     id("kotlin-parcelize")
@@ -91,6 +92,7 @@ android {
 
     buildFeatures {
         buildConfig = true
+        compose = true
     }
 
     defaultConfig {
@@ -163,6 +165,11 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.jsoup)
     implementation(libs.okhttp)
+
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.extended)
 
     testImplementation(libs.junit)
     testImplementation(kotlin("test"))
