@@ -36,7 +36,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.json.JSONException
 import org.json.JSONObject
-import org.wordpress.gutenberg.inserter.BlockInserterDialog
+import org.wordpress.gutenberg.inserter.BlockPickerDialog
 import org.wordpress.gutenberg.model.BlockInserterPayload
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
@@ -122,7 +122,7 @@ class GutenbergView : FrameLayout {
     private var modalDialogStateListener: ModalDialogStateListener? = null
     private var networkRequestListener: NetworkRequestListener? = null
     private var latestContentProvider: LatestContentProvider? = null
-    private var blockInserterDialog: BlockInserterDialog? = null
+    private var blockInserterDialog: BlockPickerDialog? = null
 
     /**
      * Stores the contextId from the most recent openMediaLibrary call
@@ -913,7 +913,7 @@ class GutenbergView : FrameLayout {
 
     private fun presentBlockInserter(payload: BlockInserterPayload) {
         blockInserterDialog?.dismiss()
-        val dialog = BlockInserterDialog(
+        val dialog = BlockPickerDialog(
             context = context,
             payload = payload,
             onBlockSelected = { block -> insertBlock(block.id) },

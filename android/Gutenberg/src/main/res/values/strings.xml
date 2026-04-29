@@ -3,4 +3,15 @@
     <string name="gbk_block_inserter_section_most_used">Most used</string>
     <string name="gbk_block_inserter_section_suggested">Suggested</string>
     <string name="gbk_block_inserter_failure">Unable to display the block inserter.</string>
+    <string name="gbk_block_inserter_search">Search blocks</string>
+    <string name="gbk_block_inserter_title">Add block</string>
+    <string name="gbk_block_inserter_close">Close</string>
+    <string name="gbk_block_inserter_tab_recent">Recent</string>
+    <string name="gbk_block_inserter_tab_text">Text</string>
+    <string name="gbk_block_inserter_tab_media">Media</string>
+    <string name="gbk_block_inserter_tab_design">Design</string>
+    <string name="gbk_block_inserter_tab_widgets">Widgets</string>
+    <string name="gbk_block_inserter_tab_theme">Theme</string>
+    <string name="gbk_block_inserter_tab_embeds">Embeds</string>
+    <string name="gbk_block_inserter_clear_search">Clear search</string>
 </resources>
