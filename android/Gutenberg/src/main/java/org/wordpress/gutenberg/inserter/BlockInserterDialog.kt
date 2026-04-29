@@ -307,12 +307,10 @@ private fun Context.dp(value: Int): Int =
 
 private fun Context.resolveTextColorPrimary(): Int {
     val typed = TypedValue()
-    if (theme.resolveAttribute(android.R.attr.textColorPrimary, typed, true)) {
-        return if (typed.resourceId != 0) {
-            resources.getColorStateList(typed.resourceId, theme).defaultColor
-        } else {
-            typed.data
-        }
+    theme.resolveAttribute(android.R.attr.textColorPrimary, typed, true)
+    return if (typed.resourceId != 0) {
+        resources.getColorStateList(typed.resourceId, theme).defaultColor
+    } else {
+        typed.data
     }
-    return Color.BLACK
 }
