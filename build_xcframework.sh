@@ -158,6 +158,60 @@ copy_resource_bundles() {
     fi
 }
 
+# Slice directory names depend on the architectures actually built — e.g.
+# `ios-arm64-simulator` when only arm64 is built vs `ios-arm64_x86_64-simulator`
+# for a universal slice — so resolve them from the XCFramework rather than
+# hardcoding.
+resolve_slice_dir() {
+    local sdk="$1"
+    local matches=()
+    local dir name
+
+    for dir in "${XCFRAMEWORK_PATH}"/ios-*; do
+        [ -d "${dir}" ] || continue
+        name=$(basename "${dir}")
+        case "${sdk}" in
+            iphoneos)
+                case "${name}" in
+                    *-simulator|*-maccatalyst) continue ;;
+                esac
+                ;;
+            iphonesimulator)
+                case "${name}" in
+                    *-simulator) ;;
+                    *) continue ;;
+                esac
+                ;;
+            *)
+                echo "Error: unknown SDK '${sdk}'" >&2
+                return 1
+                ;;
+        esac
+        matches+=("${name}")
+    done
+
+    if [ ${#matches[@]} -ne 1 ]; then
+        echo "Error: expected exactly one ${sdk} slice in ${XCFRAMEWORK_PATH}, found ${#matches[@]}: ${matches[*]:-<none>}" >&2
+        return 1
+    fi
+
+    echo "${matches[0]}"
+}
+
+copy_dsyms_for_sdk() {
+    local sdk="$1"
+    local dsyms_path="${BUILD_DIR}/${SCHEME}-${sdk}.xcarchive/dSYMs"
+
+    if [ ! -d "${dsyms_path}" ]; then
+        return
+    fi
+
+    local slice
+    slice=$(resolve_slice_dir "${sdk}")
+
+    cp -r "${dsyms_path}" "${XCFRAMEWORK_PATH}/${slice}/"
+}
+
 # Build for both platforms
 build_framework "iphoneos" "generic/platform=iOS"
 copy_resource_bundles "iphoneos"
@@ -179,15 +233,8 @@ xcodebuild -create-xcframework \
     -output "${XCFRAMEWORK_PATH}"
 
 # Copy dSYMs into xcframework slices
-DEVICE_DSYMS="${BUILD_DIR}/${SCHEME}-iphoneos.xcarchive/dSYMs"
-SIM_DSYMS="${BUILD_DIR}/${SCHEME}-iphonesimulator.xcarchive/dSYMs"
-
-if [ -d "${DEVICE_DSYMS}" ]; then
-    cp -r "${DEVICE_DSYMS}" "${XCFRAMEWORK_PATH}/ios-arm64/"
-fi
-if [ -d "${SIM_DSYMS}" ]; then
-    cp -r "${SIM_DSYMS}" "${XCFRAMEWORK_PATH}/ios-arm64_x86_64-simulator/"
-fi
+copy_dsyms_for_sdk "iphoneos"
+copy_dsyms_for_sdk "iphonesimulator"
 
 echo ""
 echo "XCFramework: ${XCFRAMEWORK_PATH}"
