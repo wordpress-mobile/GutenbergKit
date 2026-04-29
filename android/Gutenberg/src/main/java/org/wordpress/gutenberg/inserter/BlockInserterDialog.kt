@@ -85,6 +85,14 @@ private sealed class Row {
     data class Block(val block: BlockType) : Row()
 }
 
+/** Direct references to a row's sub-views — avoids positional `getChildAt` lookups in the ViewHolder. */
+private class BlockRowViews(
+    val container: LinearLayout,
+    val icon: ImageView,
+    val title: TextView,
+    val description: TextView,
+)
+
 private const val TYPE_HEADER = 0
 private const val TYPE_BLOCK = 1
 
@@ -138,15 +146,14 @@ private class HeaderViewHolder(view: View) : RecyclerView.ViewHolder(view) {
 }
 
 private class BlockViewHolder(
-    view: View,
+    views: BlockRowViews,
     private val iconCache: SvgIconCache,
     private val iconTint: Int,
-) : RecyclerView.ViewHolder(view) {
-    private val container = view as LinearLayout
-    private val icon = (container.getChildAt(0) as FrameLayout).getChildAt(0) as ImageView
-    private val textContainer = container.getChildAt(1) as LinearLayout
-    private val title = textContainer.getChildAt(0) as TextView
-    private val description = textContainer.getChildAt(1) as TextView
+) : RecyclerView.ViewHolder(views.container) {
+    private val container = views.container
+    private val icon = views.icon
+    private val title = views.title
+    private val description = views.description
 
     fun bind(block: BlockType, onClicked: (BlockType) -> Unit) {
         title.text = block.title ?: block.name
@@ -186,11 +193,28 @@ private fun buildBlockView(
     iconSizePx: Int,
     chipSizePx: Int,
     iconTint: Int,
-): LinearLayout {
+): BlockRowViews {
     val pad = context.dp(16)
     val iconMargin = context.dp(12)
     val cornerPx = context.dp(ICON_CHIP_CORNER_DP).toFloat()
-    return LinearLayout(context).apply {
+    val icon = ImageView(context).apply {
+        layoutParams = FrameLayout.LayoutParams(iconSizePx, iconSizePx).apply {
+            gravity = Gravity.CENTER
+        }
+        scaleType = ImageView.ScaleType.FIT_CENTER
+    }
+    val title = TextView(context).apply { setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f) }
+    val description = TextView(context).apply {
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+        alpha = 0.7f
+    }
+    val textColumn = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        addView(title)
+        addView(description)
+    }
+    val container = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         layoutParams = ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -205,55 +229,29 @@ private fun buildBlockView(
         )
         isClickable = true
         isFocusable = true
-        addView(buildIconChip(context, iconSizePx, chipSizePx, iconTint, iconMargin, cornerPx))
-        addView(
-            LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                layoutParams = LinearLayout.LayoutParams(
-                    0,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    1f,
-                )
-                addView(
-                    TextView(context).apply {
-                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-                    },
-                )
-                addView(
-                    TextView(context).apply {
-                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                        alpha = 0.7f
-                    },
-                )
-            },
-        )
+        addView(buildIconChip(context, chipSizePx, iconTint, iconMargin, cornerPx, icon))
+        addView(textColumn)
     }
+    return BlockRowViews(container, icon, title, description)
 }
 
 private fun buildIconChip(
     context: Context,
-    iconSizePx: Int,
     chipSizePx: Int,
     iconTint: Int,
-    rightMarginPx: Int,
+    endMarginPx: Int,
     cornerPx: Float,
+    icon: ImageView,
 ): FrameLayout = FrameLayout(context).apply {
     layoutParams = LinearLayout.LayoutParams(chipSizePx, chipSizePx).apply {
-        rightMargin = rightMarginPx
+        marginEnd = endMarginPx
     }
     background = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE
         cornerRadius = cornerPx
         setColor(chipFill(iconTint))
     }
-    addView(
-        ImageView(context).apply {
-            layoutParams = FrameLayout.LayoutParams(iconSizePx, iconSizePx).apply {
-                gravity = Gravity.CENTER
-            }
-            scaleType = ImageView.ScaleType.FIT_CENTER
-        },
-    )
+    addView(icon)
 }
 
 /**
@@ -309,6 +307,12 @@ private fun Context.dp(value: Int): Int =
 
 private fun Context.resolveTextColorPrimary(): Int {
     val typed = TypedValue()
-    theme.resolveAttribute(android.R.attr.textColorPrimary, typed, true)
-    return resources.getColorStateList(typed.resourceId, theme).defaultColor
+    if (theme.resolveAttribute(android.R.attr.textColorPrimary, typed, true)) {
+        return if (typed.resourceId != 0) {
+            resources.getColorStateList(typed.resourceId, theme).defaultColor
+        } else {
+            typed.data
+        }
+    }
+    return Color.BLACK
 }
