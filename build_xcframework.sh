@@ -23,6 +23,16 @@ DERIVED_DATA_PATH="${BUILD_DIR}/DerivedData"
 GIT_SHA="$(git rev-parse HEAD)"
 XCFRAMEWORK_NAME="${SCHEME}-${GIT_SHA}.xcframework"
 
+# Remove prior xcframework artifacts so re-runs are hermetic and downstream
+# tools (signing, packaging) never have to disambiguate between stale and
+# fresh builds.
+mkdir -p "${BUILD_DIR}"
+find "${BUILD_DIR}" -maxdepth 1 \
+    \( -name "*.xcframework" -type d \
+    -o -name "*.xcframework.zip" -type f \
+    -o -name "*.xcframework.zip.checksum.txt" -type f \) \
+    -exec rm -rf {} +
+
 link_dylib() {
     local object_file="$1"
     local output="$2"
