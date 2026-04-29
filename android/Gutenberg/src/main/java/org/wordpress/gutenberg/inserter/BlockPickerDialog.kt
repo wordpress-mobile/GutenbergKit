@@ -69,8 +69,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -143,6 +145,7 @@ private const val BLOCK_TILE_ICON_LABEL_GAP_DP = 8
 private const val BLOCK_TILE_LABEL_SP = 12
 private const val BLOCK_TILE_LABEL_MIN_SP = 9
 private const val BLOCK_TILE_LABEL_LETTER_SPACING_SP = 0.1
+private const val BLOCK_TILE_LABEL_LINE_HEIGHT_RATIO = 1.2f
 
 private const val DISABLED_ALPHA = 0.5f
 
@@ -635,9 +638,16 @@ private fun BlockTile(
 }
 
 /**
- * Label that shrinks the font size (down to [BLOCK_TILE_LABEL_MIN_SP]) until the
- * text fits on a single line, then ellipsizes if even the minimum is too wide.
- * Compose has no built-in autosize Text, so we pre-measure via [rememberTextMeasurer].
+ * Label that wraps multi-word text at whitespace (up to two lines) and shrinks
+ * single-word text to fit on one line, down to [BLOCK_TILE_LABEL_MIN_SP].
+ * Single-word labels never break mid-word: Compose's default soft-wrap will
+ * character-break an overlong single word to satisfy the maxLines budget
+ * (e.g. "Preformatted" → "Preform-" / "atted"), so we measure with
+ * `maxLines = 1` and disable `softWrap` for single-word labels to force the
+ * shrink path instead. The container reserves two lines worth of vertical
+ * space at the resolved size so tile heights stay consistent across the grid.
+ * Compose has no built-in autosize Text, so we pre-measure via
+ * [rememberTextMeasurer].
  */
 @Composable
 private fun AutoShrinkTileLabel(
@@ -648,20 +658,37 @@ private fun AutoShrinkTileLabel(
     val measurer = rememberTextMeasurer()
     BoxWithConstraints(modifier = modifier) {
         val maxWidthPx = constraints.maxWidth
+        // Centre line height around the glyphs and trim the half-leading
+        // above the first / below the last line. Without `Trim.Both` the
+        // default leading shows up as a top gap on a single-line label and
+        // an outsized gap between the two lines on a wrapped one — Material
+        // 3 typography sets this for its presets, but custom sp + lineHeight
+        // doesn't pick it up automatically.
+        val lineHeightStyle = LineHeightStyle(
+            alignment = LineHeightStyle.Alignment.Center,
+            trim = LineHeightStyle.Trim.Both,
+        )
         val style = TextStyle(
             fontWeight = FontWeight.Medium,
             letterSpacing = BLOCK_TILE_LABEL_LETTER_SPACING_SP.sp,
             textAlign = TextAlign.Center,
+            lineHeightStyle = lineHeightStyle,
         )
-        val resolvedSize = remember(text, maxWidthPx) {
+        val canWrap = text.any { it.isWhitespace() }
+        val measureMaxLines = if (canWrap) 2 else 1
+        val resolvedSize = remember(text, maxWidthPx, canWrap) {
             var size = BLOCK_TILE_LABEL_SP
             while (size > BLOCK_TILE_LABEL_MIN_SP) {
                 val result = measurer.measure(
                     text = text,
-                    style = style.copy(fontSize = size.sp),
-                    maxLines = 1,
+                    style = style.copy(
+                        fontSize = size.sp,
+                        lineHeight = (size * BLOCK_TILE_LABEL_LINE_HEIGHT_RATIO).sp,
+                    ),
+                    constraints = Constraints(maxWidth = maxWidthPx),
+                    maxLines = measureMaxLines,
                 )
-                if (result.size.width <= maxWidthPx) break
+                if (!result.didOverflowWidth && !result.didOverflowHeight) break
                 size -= 1
             }
             size
@@ -670,10 +697,14 @@ private fun AutoShrinkTileLabel(
             text = text,
             color = color,
             fontSize = resolvedSize.sp,
+            lineHeight = (resolvedSize * BLOCK_TILE_LABEL_LINE_HEIGHT_RATIO).sp,
             fontWeight = FontWeight.Medium,
             letterSpacing = BLOCK_TILE_LABEL_LETTER_SPACING_SP.sp,
             textAlign = TextAlign.Center,
-            maxLines = 1,
+            style = TextStyle(lineHeightStyle = lineHeightStyle),
+            softWrap = canWrap,
+            minLines = 2,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.fillMaxWidth(),
         )
