@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Color
 import android.os.Build
 import android.view.ViewGroup
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -50,13 +51,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
@@ -70,6 +75,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import kotlin.math.roundToInt
 import org.wordpress.gutenberg.R
 import androidx.compose.ui.graphics.Color as ComposeColor
 import org.wordpress.gutenberg.model.BlockInserterPayload
@@ -129,6 +135,7 @@ private const val GRID_GAP_DP = 8
 private const val BLOCK_TILE_BUTTON_CORNER_DP = 18
 private const val BLOCK_TILE_ICON_SIZE_DP = 56
 private const val BLOCK_TILE_ICON_CORNER_DP = 18
+private const val BLOCK_TILE_ICON_GLYPH_SIZE_DP = 32
 private const val BLOCK_TILE_VERTICAL_PAD_TOP_DP = 10
 private const val BLOCK_TILE_VERTICAL_PAD_BOTTOM_DP = 12
 private const val BLOCK_TILE_HORIZONTAL_PAD_DP = 4
@@ -536,6 +543,7 @@ private fun BlockGridContent(
             }
         }
     }
+    val iconCache = rememberSvgIconCache(chipColor = MaterialTheme.colorScheme.primaryContainer)
     LazyVerticalGrid(
         columns = GridCells.Fixed(5),
         contentPadding = PaddingValues(
@@ -553,19 +561,39 @@ private fun BlockGridContent(
         ) { index ->
             BlockTile(
                 block = blocks[index],
+                iconCache = iconCache,
                 onClick = { onBlockClicked(blocks[index]) },
             )
         }
     }
 }
 
+/**
+ * One cache per grid composition. Keyed on render size and chip colour so a
+ * configuration change (font scale, theme switch) recomputes both the bitmap
+ * pixel size and the contrast surrogate the tinting decision is measured
+ * against — see `SvgIconCache.contrastSurface`.
+ */
+@Composable
+private fun rememberSvgIconCache(chipColor: ComposeColor): SvgIconCache {
+    val density = LocalDensity.current
+    val sizePx = with(density) { BLOCK_TILE_ICON_GLYPH_SIZE_DP.dp.toPx() }.roundToInt()
+    val surfaceArgb = chipColor.toArgb()
+    return remember(sizePx, surfaceArgb) {
+        SvgIconCache(renderSizePx = sizePx, contrastSurface = surfaceArgb)
+    }
+}
+
 @Composable
 private fun BlockTile(
     block: BlockType,
+    iconCache: SvgIconCache,
     onClick: () -> Unit,
 ) {
     val bg = MaterialTheme.colorScheme.primaryContainer
+    val tint = MaterialTheme.colorScheme.onSurface
     val contentAlpha = if (block.isDisabled) DISABLED_ALPHA else 1f
+    val rendered = remember(block.id) { iconCache.renderIcon(block) }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(BLOCK_TILE_ICON_LABEL_GAP_DP.dp),
@@ -581,14 +609,23 @@ private fun BlockTile(
                 bottom = BLOCK_TILE_VERTICAL_PAD_BOTTOM_DP.dp,
             ),
     ) {
-        // Plain tonal placeholder. Real icon rendering lands in #468 (the SVG
-        // icon cache PR); this PR only ships the inserter shell.
         Box(
+            contentAlignment = Alignment.Center,
             modifier = Modifier
                 .size(BLOCK_TILE_ICON_SIZE_DP.dp)
                 .clip(RoundedCornerShape(BLOCK_TILE_ICON_CORNER_DP.dp))
                 .background(bg),
-        )
+        ) {
+            rendered?.let { icon ->
+                Image(
+                    bitmap = icon.bitmap.asImageBitmap(),
+                    contentDescription = null,
+                    alpha = contentAlpha,
+                    colorFilter = if (icon.tintable) ColorFilter.tint(tint) else null,
+                    modifier = Modifier.size(BLOCK_TILE_ICON_GLYPH_SIZE_DP.dp),
+                )
+            }
+        }
         AutoShrinkTileLabel(
             text = block.title ?: block.name,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha),
