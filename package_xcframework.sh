@@ -11,13 +11,18 @@
 
 set -euo pipefail
 
+SCHEME="GutenbergKitResources"
 BUILD_DIR="$(pwd)/build"
 OUTPUT_DIR="${1:-$(pwd)}"
 
-XCFRAMEWORK_PATH=$(find "${BUILD_DIR}" -maxdepth 1 -name "*.xcframework" -type d | head -1)
+# Address the artifact by exact SHA-suffixed name rather than globbing — keeps
+# the packager honest about which xcframework it's shipping even when stale
+# builds linger from prior runs or other branches.
+GIT_SHA="$(git rev-parse HEAD)"
+XCFRAMEWORK_PATH="${BUILD_DIR}/${SCHEME}-${GIT_SHA}.xcframework"
 
-if [ -z "${XCFRAMEWORK_PATH}" ]; then
-    echo "Error: No .xcframework found in ${BUILD_DIR}. Run build_xcframework.sh first." >&2
+if [ ! -d "${XCFRAMEWORK_PATH}" ]; then
+    echo "Error: ${XCFRAMEWORK_PATH} not found. Run build_xcframework.sh first." >&2
     exit 1
 fi
 
