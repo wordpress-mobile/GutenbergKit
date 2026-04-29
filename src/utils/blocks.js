@@ -66,6 +66,29 @@ export function getBlockIcon( item ) {
 }
 
 /**
+ * Extract a block icon's foreground colour. Branded embed icons
+ * (e.g. Pocket Casts, Spotify) declare their brand colour via an
+ * `icon.foreground` property that the web editor applies as CSS
+ * `color`, which paths inside the SVG inherit as `currentColor`.
+ * Native renderers don't see the editor's CSS, so we pass the
+ * colour through explicitly.
+ *
+ * @param {Object} item The block type or inserter item object.
+ *
+ * @return {string|null} Hex/CSS colour string or null.
+ */
+export function getBlockIconForeground( item ) {
+	if (
+		item?.icon &&
+		typeof item.icon === 'object' &&
+		typeof item.icon.foreground === 'string'
+	) {
+		return item.icon.foreground;
+	}
+	return null;
+}
+
+/**
  * Predefined category ordering.
  * Display names will be retrieved from WordPress categories for proper localization.
  */
@@ -225,6 +248,7 @@ export function preprocessBlockTypesForNativeInserter(
 			category: item.category,
 			keywords: item.keywords || [],
 			icon: getBlockIcon( item ),
+			iconForeground: getBlockIconForeground( item ),
 			frecency: item.frecency || 0,
 			isDisabled: item.isDisabled || false,
 			isSearchOnly: item.isSearchOnly || false,
