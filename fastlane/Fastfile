@@ -72,18 +72,40 @@ def xcframework_checksum
 end
 
 def xcframework_checksum_file_path
-  Dir.glob(File.join(PROJECT_ROOT, 'GutenbergKitResources-*.xcframework.zip.checksum.txt')).first \
-    || UI.user_error!('XCFramework checksum file not found. Run package_xcframework.sh first.')
+  require_single_glob_match!(
+    File.join(PROJECT_ROOT, 'GutenbergKitResources-*.xcframework.zip.checksum.txt'),
+    'XCFramework checksum file not found. Run package_xcframework.sh first.'
+  )
 end
 
 def xcframework_dir_path
-  Dir.glob(File.join(PROJECT_ROOT, 'build', 'GutenbergKitResources-*.xcframework')).first \
-    || UI.user_error!('XCFramework not found. Run build_xcframework.sh first.')
+  require_single_glob_match!(
+    File.join(PROJECT_ROOT, 'build', 'GutenbergKitResources-*.xcframework'),
+    'XCFramework not found. Run build_xcframework.sh first.'
+  )
 end
 
 def xcframework_file_path
-  Dir.glob(File.join(PROJECT_ROOT, 'GutenbergKitResources-*.xcframework.zip')).first \
-    || UI.user_error!('XCFramework zip not found. Run package_xcframework.sh first.')
+  require_single_glob_match!(
+    File.join(PROJECT_ROOT, 'GutenbergKitResources-*.xcframework.zip'),
+    'XCFramework zip not found. Run package_xcframework.sh first.'
+  )
+end
+
+def require_single_glob_match!(pattern, not_found_message)
+  matches = Dir.glob(pattern)
+
+  UI.user_error!(not_found_message) if matches.empty?
+
+  if matches.length > 1
+    UI.user_error!(
+      "Multiple artifacts matched pattern `#{pattern}`:\n" \
+      "#{matches.sort.join("\n")}\n" \
+      'Please remove stale artifacts and try again.'
+    )
+  end
+
+  matches.first
 end
 
 def required_version!(options)
