@@ -60,7 +60,9 @@ lane :set_up_signing_release do |readonly: true|
     s3_region: 'us-east-2',
     s3_bucket: 'a8c-fastlane-match',
     readonly: readonly,
-    app_identifier: 'com.automattic.hostmgr',
+    # We don't need provisioning profile, only the certificate.
+    # An empty identifier list does the trick and avoids confusion.
+    app_identifier: [],
     platform: 'macos'
   )
 end
