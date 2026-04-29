@@ -38,8 +38,8 @@ function assertBlockInserterPayloadShape( payload ) {
 	if ( validate( payload ) ) {
 		return;
 	}
-	const { instancePath, message } = validate.errors[ 0 ];
-	throw new Error( `${ instancePath || '/' }: ${ message }` );
+	const { instancePath, dataPath, message } = validate.errors[ 0 ];
+	throw new Error( `${ instancePath || dataPath || '/' }: ${ message }` );
 }
 
 function makeInserterItem( overrides = {} ) {
