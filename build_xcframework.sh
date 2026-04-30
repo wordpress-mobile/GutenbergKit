@@ -156,16 +156,17 @@ copy_resource_bundles() {
 
     echo "--- Copying resource bundles for ${sdk}"
 
-    if [ -d "${bundle_path}" ]; then
-        find "${bundle_path}" -name "*.bundle" -maxdepth 1 -type d -print0 | while IFS= read -r -d '' bundle; do
-            bundle_name=$(basename "${bundle}")
-            echo "  ${bundle_name} -> ${framework_path}/"
-            rm -rf "${framework_path:?}/${bundle_name}"
-            cp -R "${bundle}" "${framework_path}/"
-        done
-    else
-        echo "  Warning: bundle path not found: ${bundle_path}"
+    if [ ! -d "${bundle_path}" ]; then
+        echo "Error: bundle path not found: ${bundle_path}" >&2
+        exit 1
     fi
+
+    find "${bundle_path}" -name "*.bundle" -maxdepth 1 -type d -print0 | while IFS= read -r -d '' bundle; do
+        bundle_name=$(basename "${bundle}")
+        echo "  ${bundle_name} -> ${framework_path}/"
+        rm -rf "${framework_path:?}/${bundle_name}"
+        cp -R "${bundle}" "${framework_path}/"
+    done
 }
 
 # Slice directory names depend on the architectures actually built — e.g.
