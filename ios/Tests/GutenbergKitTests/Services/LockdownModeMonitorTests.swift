@@ -1,7 +1,10 @@
 import Foundation
 import Testing
 import WebKit
+
+#if canImport(UIKit)
 import UIKit
+#endif
 
 @testable import GutenbergKit
 
@@ -39,19 +42,6 @@ struct LockdownModeMonitorTests {
         #expect(monitor.isLockdownModeEnabled == true)
     }
 
-    // MARK: - Setup Tests
-
-    @Test("Setup accepts a presenting view controller")
-    func setupAcceptsPresentingViewController() {
-        let monitor = makeMonitor()
-        let viewController = UIViewController()
-
-        monitor.setup(presentingViewController: viewController)
-
-        // Should not crash or change lockdown state
-        #expect(monitor.isLockdownModeEnabled == false)
-    }
-
     // MARK: - Detection Logic Tests
 
     @Test("detectLockdownMode updates isLockdownModeEnabled property")
@@ -72,43 +62,6 @@ struct LockdownModeMonitorTests {
         monitor.detectLockdownMode(for: webView)
 
         #expect(monitor.isLockdownModeEnabled == webView.configuration.defaultWebpagePreferences.isLockdownModeEnabled)
-    }
-
-    // MARK: - Sheet Presentation Tests
-
-    @Test("presentSheetIfNeeded returns false when not needed")
-    func presentSheetIfNeededReturnsFalseWhenNotNeeded() {
-        let monitor = makeMonitor()
-
-        let result = monitor.presentSheetIfNeeded {}
-
-        #expect(result == false)
-    }
-
-    @Test("presentSheetIfNeeded returns false without presenting view controller")
-    func presentSheetIfNeededReturnsFalseWithoutViewController() {
-        let monitor = makeMonitor()
-
-        let result = monitor.presentSheetIfNeeded {}
-
-        #expect(result == false)
-    }
-
-    // MARK: - Foreground Handling Tests
-
-    @Test("dismissSheetIfPresented calls completion immediately when no sheet")
-    func dismissSheetCallsCompletionImmediatelyWithoutSheet() {
-        let monitor = makeMonitor()
-        let viewController = UIViewController()
-
-        monitor.setup(presentingViewController: viewController)
-
-        var completionCalled = false
-        monitor.dismissSheetIfPresented {
-            completionCalled = true
-        }
-
-        #expect(completionCalled == true)
     }
 
     // MARK: - Scenario Tests
@@ -144,18 +97,6 @@ struct LockdownModeMonitorTests {
         #expect(monitor.isLockdownModeEnabled == webView.configuration.defaultWebpagePreferences.isLockdownModeEnabled)
     }
 
-    @Test("Setup can be called multiple times")
-    func setupCanBeCalledMultipleTimes() {
-        let monitor = makeMonitor()
-        let vc1 = UIViewController()
-        let vc2 = UIViewController()
-
-        monitor.setup(presentingViewController: vc1)
-        monitor.setup(presentingViewController: vc2)
-
-        // Should handle gracefully
-    }
-
     // MARK: - Mock-Based Detection Tests
 
     @Test("Mock detectable with Lockdown Mode enabled updates monitor state")
@@ -180,8 +121,9 @@ struct LockdownModeMonitorTests {
 
     // MARK: - State Transition Tests
     //
-    // These tests verify the detection state machine without calling presentSheetIfNeeded,
-    // which would trigger UIViewController.present() and deadlock in CI (no window hierarchy).
+    // The detection state machine is host-buildable, so these tests run on
+    // both the iOS Simulator and macOS via `swift test`. UIKit-dependent
+    // presentation tests live in the `UIKit-Only Tests` section below.
 
     @Test("Disabled-to-enabled transition sets isLockdownModeEnabled")
     func disabledToEnabledTransitionSetsState() {
@@ -229,19 +171,6 @@ struct LockdownModeMonitorTests {
         #expect(monitor.isLockdownModeEnabled == true)
     }
 
-    @Test("presentSheetIfNeeded returns false without setup even after detection")
-    func presentSheetReturnsFalseWithoutSetup() {
-        let monitor = makeMonitor()
-
-        // Trigger a disabled-to-enabled transition (sets shouldShowSheet)
-        let enabledMock = MockLockdownModeDetectable(isLockdownModeEnabled: true)
-        monitor.detectLockdownMode(for: enabledMock)
-
-        // Without setup(), presentingViewController is nil so this returns false
-        let didPresent = monitor.presentSheetIfNeeded {}
-        #expect(didPresent == false)
-    }
-
     @Test("resetForForegroundCheck allows re-detection")
     func resetForForegroundCheckAllowsRedetection() {
         let monitor = makeMonitor()
@@ -255,4 +184,82 @@ struct LockdownModeMonitorTests {
         // State should still reflect the last detection
         #expect(monitor.isLockdownModeEnabled == true)
     }
+
+    // MARK: - UIKit-Only Tests
+    //
+    // These exercise the UIKit-gated extension on `LockdownModeMonitor`
+    // (`setup(presentingViewController:)`, `presentSheetIfNeeded`,
+    // `dismissSheetIfPresented`). They only build/run on platforms where
+    // UIKit is available.
+
+    #if canImport(UIKit)
+    @Test("Setup accepts a presenting view controller")
+    func setupAcceptsPresentingViewController() {
+        let monitor = makeMonitor()
+        let viewController = UIViewController()
+
+        monitor.setup(presentingViewController: viewController)
+
+        // Should not crash or change lockdown state
+        #expect(monitor.isLockdownModeEnabled == false)
+    }
+
+    @Test("Setup can be called multiple times")
+    func setupCanBeCalledMultipleTimes() {
+        let monitor = makeMonitor()
+        let vc1 = UIViewController()
+        let vc2 = UIViewController()
+
+        monitor.setup(presentingViewController: vc1)
+        monitor.setup(presentingViewController: vc2)
+
+        // Should handle gracefully
+    }
+
+    @Test("presentSheetIfNeeded returns false when not needed")
+    func presentSheetIfNeededReturnsFalseWhenNotNeeded() {
+        let monitor = makeMonitor()
+
+        let result = monitor.presentSheetIfNeeded {}
+
+        #expect(result == false)
+    }
+
+    @Test("presentSheetIfNeeded returns false without presenting view controller")
+    func presentSheetIfNeededReturnsFalseWithoutViewController() {
+        let monitor = makeMonitor()
+
+        let result = monitor.presentSheetIfNeeded {}
+
+        #expect(result == false)
+    }
+
+    @Test("presentSheetIfNeeded returns false without setup even after detection")
+    func presentSheetReturnsFalseWithoutSetup() {
+        let monitor = makeMonitor()
+
+        // Trigger a disabled-to-enabled transition (sets shouldShowSheet)
+        let enabledMock = MockLockdownModeDetectable(isLockdownModeEnabled: true)
+        monitor.detectLockdownMode(for: enabledMock)
+
+        // Without setup(), presentingViewController is nil so this returns false
+        let didPresent = monitor.presentSheetIfNeeded {}
+        #expect(didPresent == false)
+    }
+
+    @Test("dismissSheetIfPresented calls completion immediately when no sheet")
+    func dismissSheetCallsCompletionImmediatelyWithoutSheet() {
+        let monitor = makeMonitor()
+        let viewController = UIViewController()
+
+        monitor.setup(presentingViewController: viewController)
+
+        var completionCalled = false
+        monitor.dismissSheetIfPresented {
+            completionCalled = true
+        }
+
+        #expect(completionCalled == true)
+    }
+    #endif
 }

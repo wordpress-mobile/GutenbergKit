@@ -231,8 +231,12 @@ test-js-watch: npm-dependencies ## Run JavaScript tests in watch mode
 	npm run test:unit:watch
 
 .PHONY: test-swift-package
-test-swift-package: build ## Run Swift package tests
+test-swift-package: build ## Run Swift package tests in the iOS Simulator
 	$(call XCODEBUILD_CMD, test, GutenbergKit-Package)
+
+.PHONY: test-swift-library
+test-swift-library: build ## Run Swift package tests against the host platform via `swift test`
+	swift test
 
 .PHONY: test-ios-e2e
 test-ios-e2e: ## Run iOS E2E tests against the production build

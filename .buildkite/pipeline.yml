@@ -59,12 +59,22 @@ steps:
           queue: android
       plugins: *plugins
 
-    - label: ':swift: Test Swift Package'
+    - label: ':swift: iOS Simulator Tests'
+      key: swift-test-swift-package
       depends_on: build-react
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
           make test-swift-package
+      plugins: *plugins
+
+    - label: ':swift: Library Tests'
+      key: swift-test-library
+      depends_on: build-react
+      command: |
+          buildkite-agent artifact download dist.tar.gz .
+          tar -xzf dist.tar.gz
+          make test-swift-library
       plugins: *plugins
 
     - label: ':ios: Test iOS E2E'
