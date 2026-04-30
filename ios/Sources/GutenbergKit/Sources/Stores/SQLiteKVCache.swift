@@ -672,3 +672,60 @@ extension SQLiteKVCache.Error: CustomStringConvertible, LocalizedError {
 
     var errorDescription: String? { description }
 }
+
+extension SQLiteKVCache {
+
+    /// Convenience initializer that accepts the cap as a
+    /// `Measurement<UnitInformationStorage>` so callers can write
+    /// `Measurement(value: 100, unit: .mebibytes)` instead of an opaque
+    /// `100 * 1024 * 1024`. The measurement is converted to bytes (truncated
+    /// to `Int`) and forwarded to the designated initializer.
+    convenience init(
+        handle: StaticString,
+        directory: URL = URL.cachesDirectory,
+        diskCapacity: Measurement<UnitInformationStorage>
+    ) {
+        self.init(
+            handle: handle,
+            directory: directory,
+            diskCapacity: Int(diskCapacity.converted(to: .bytes).value)
+        )
+    }
+
+    /// JSON-encodes a `Codable` value and stores it. Metadata stays raw `Data`
+    /// — callers that want a structured metadata payload should encode it
+    /// themselves and use the base `put`. The `value:` argument label here is
+    /// shared with the base `put(_:..., value: Data, ...)`; for `Data` values,
+    /// Swift's overload resolution picks the non-generic original.
+    func put<Value: Encodable>(
+        key: String,
+        storageDate: Date,
+        metadata: Data = Data(),
+        value: Value,
+        encoder: JSONEncoder = JSONEncoder()
+    ) throws {
+        try self.put(
+            key: key,
+            storageDate: storageDate,
+            metadata: metadata,
+            value: try encoder.encode(value)
+        )
+    }
+
+    /// Looks up the entry at `key` and JSON-decodes its `value` blob as
+    /// `Value`. Returns `nil` for a genuine miss; throws `Error.readFailed` if
+    /// SQLite rejects the read, or a `DecodingError` if the stored bytes
+    /// don't decode as `Value`. The original `storageDate` and `metadata`
+    /// from the entry are returned alongside the decoded value so callers
+    /// that need cache-freshness metadata don't have to fall back to the
+    /// base `get`.
+    func get<Value: Decodable>(
+        key: String,
+        as valueType: Value.Type,
+        decoder: JSONDecoder = JSONDecoder()
+    ) throws -> (storageDate: Date, metadata: Data, value: Value)? {
+        guard let entry = try self.get(key: key) else { return nil }
+        let value = try decoder.decode(Value.self, from: entry.value)
+        return (entry.storageDate, entry.metadata, value)
+    }
+}

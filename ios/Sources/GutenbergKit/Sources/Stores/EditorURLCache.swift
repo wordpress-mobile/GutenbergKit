@@ -11,7 +11,7 @@ import OSLog
 /// same `cacheRoot` is undefined behavior.
 public struct EditorURLCache: Sendable {
     /// About enough for 10 sites of cached responses.
-    private static let diskCapacity = 100 * 1024 * 1024
+    private static let diskCapacity = Measurement<UnitInformationStorage>(value: 100, unit: .mebibytes)
 
     private let store: SQLiteKVCache
     private let cachePolicy: EditorCachePolicy
@@ -22,7 +22,7 @@ public struct EditorURLCache: Sendable {
     /// - Parameters:
     ///   - cacheRoot: The directory where cached responses will be stored.
     ///     If `nil`, the system default cache directory is used. The cache has a
-    ///     maximum disk capacity of 100 MB.
+    ///     maximum disk capacity of 100 MiB.
     ///   - cachePolicy: The policy that determines when cached responses are considered valid.
     ///     Use `.ignore` to always fetch fresh data, `.maxAge(_:)` to expire entries after
     ///     a time interval, or `.always` (the default) to use cached data regardless of age.
