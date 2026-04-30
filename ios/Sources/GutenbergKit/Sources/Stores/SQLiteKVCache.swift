@@ -692,40 +692,40 @@ extension SQLiteKVCache {
         )
     }
 
-    /// JSON-encodes a `Codable` value and stores it. Metadata stays raw `Data`
-    /// — callers that want a structured metadata payload should encode it
-    /// themselves and use the base `put`. The `value:` argument label here is
-    /// shared with the base `put(_:..., value: Data, ...)`; for `Data` values,
-    /// Swift's overload resolution picks the non-generic original.
-    func put<Value: Encodable>(
+    /// JSON-encodes a `Codable` metadata payload before storing. Cache values
+    /// are already raw `Data` for the typical case (HTTP bodies, downloaded
+    /// blobs) — the boilerplate lives on the metadata side, where callers
+    /// usually want a structured shape (response headers, content-type, etag,
+    /// etc.). The `metadata:` argument label is shared with the base
+    /// `put(_:..., metadata: Data, ...)`; for `Data` metadata, Swift's
+    /// overload resolution picks the non-generic original.
+    func put<Metadata: Encodable>(
         key: String,
         storageDate: Date,
-        metadata: Data = Data(),
-        value: Value,
+        metadata: Metadata,
+        value: Data,
         encoder: JSONEncoder = JSONEncoder()
     ) throws {
         try self.put(
             key: key,
             storageDate: storageDate,
-            metadata: metadata,
-            value: try encoder.encode(value)
+            metadata: try encoder.encode(metadata),
+            value: value
         )
     }
 
-    /// Looks up the entry at `key` and JSON-decodes its `value` blob as
-    /// `Value`. Returns `nil` for a genuine miss; throws `Error.readFailed` if
-    /// SQLite rejects the read, or a `DecodingError` if the stored bytes
-    /// don't decode as `Value`. The original `storageDate` and `metadata`
-    /// from the entry are returned alongside the decoded value so callers
-    /// that need cache-freshness metadata don't have to fall back to the
-    /// base `get`.
-    func get<Value: Decodable>(
+    /// Looks up the entry at `key` and JSON-decodes its `metadata` blob as
+    /// `Metadata`. Returns `nil` for a genuine miss; throws `Error.readFailed`
+    /// if SQLite rejects the read, or a `DecodingError` if the stored bytes
+    /// don't decode as `Metadata`. The raw `value` and original `storageDate`
+    /// are returned alongside the decoded metadata.
+    func get<Metadata: Decodable>(
         key: String,
-        as valueType: Value.Type,
+        metadataAs metadataType: Metadata.Type,
         decoder: JSONDecoder = JSONDecoder()
-    ) throws -> (storageDate: Date, metadata: Data, value: Value)? {
+    ) throws -> (storageDate: Date, metadata: Metadata, value: Data)? {
         guard let entry = try self.get(key: key) else { return nil }
-        let value = try decoder.decode(Value.self, from: entry.value)
-        return (entry.storageDate, entry.metadata, value)
+        let metadata = try decoder.decode(Metadata.self, from: entry.metadata)
+        return (entry.storageDate, metadata, entry.value)
     }
 }

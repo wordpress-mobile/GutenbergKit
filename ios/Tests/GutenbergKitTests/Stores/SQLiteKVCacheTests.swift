@@ -590,66 +590,65 @@ struct SQLiteKVCacheTests {
         #expect(try store.get(key: "too-big") == nil)
     }
 
-    // MARK: - Codable convenience put/get
+    // MARK: - Codable metadata convenience put/get
 
-    private struct Sample: Codable, Equatable {
-        let id: Int
-        let name: String
-        let tags: [String]
+    private struct SampleMeta: Codable, Equatable {
+        let etag: String
+        let contentType: String
     }
 
-    @Test("Codable put/get round-trips a value and preserves storageDate and metadata")
-    func codableRoundTrip() throws {
+    @Test("Codable metadata put/get round-trips a value and preserves storageDate and value")
+    func codableMetadataRoundTrip() throws {
         let store = makeStore()
-        let sample = Sample(id: 42, name: "answer", tags: ["meta", "data"])
-        try store.put(key: "k", storageDate: referenceDate, metadata: Data("m"), value: sample)
+        let meta = SampleMeta(etag: "abc123", contentType: "application/json")
+        try store.put(key: "k", storageDate: referenceDate, metadata: meta, value: Data("body"))
 
-        let entry = try #require(try store.get(key: "k", as: Sample.self))
-        #expect(entry.value == sample)
+        let entry = try #require(try store.get(key: "k", metadataAs: SampleMeta.self))
+        #expect(entry.metadata == meta)
+        #expect(entry.value == Data("body"))
         #expect(entry.storageDate == referenceDate)
-        #expect(entry.metadata == Data("m"))
     }
 
-    @Test("Codable get returns nil for a missing key")
-    func codableGetMissing() throws {
+    @Test("Codable metadata get returns nil for a missing key")
+    func codableMetadataGetMissing() throws {
         let store = makeStore()
-        #expect(try store.get(key: "missing", as: Sample.self) == nil)
+        #expect(try store.get(key: "missing", metadataAs: SampleMeta.self) == nil)
     }
 
-    @Test("Codable get throws DecodingError when stored bytes don't match the type")
-    func codableGetMismatchedType() throws {
-        // Write raw bytes via the base put, then try to decode them as `Sample`.
+    @Test("Codable metadata get throws DecodingError when stored bytes don't match the type")
+    func codableMetadataGetMismatchedType() throws {
+        // Write raw bytes via the base put, then try to decode them as `SampleMeta`.
         // The convenience get should surface the JSONDecoder error rather than
         // silently returning nil.
         let store = makeStore()
-        try store.put(key: "k", storageDate: referenceDate, metadata: Data(), value: Data("not json"))
+        try store.put(key: "k", storageDate: referenceDate, metadata: Data("not json"), value: Data())
         #expect(throws: DecodingError.self) {
-            try store.get(key: "k", as: Sample.self)
+            try store.get(key: "k", metadataAs: SampleMeta.self)
         }
     }
 
-    @Test("Codable put with Data value picks the non-generic overload")
-    func codablePutWithDataPrefersNonGeneric() throws {
+    @Test("Codable metadata put with Data metadata picks the non-generic overload")
+    func codableMetadataPutWithDataPrefersNonGeneric() throws {
         // `Data` conforms to `Encodable`, so the generic overload would also
         // match. Swift prefers the non-generic original, which stores the raw
         // bytes — a JSON-encoded `Data` would be a base64 string instead.
         let store = makeStore()
-        try store.put(key: "k", storageDate: referenceDate, metadata: Data(), value: Data("raw bytes"))
+        try store.put(key: "k", storageDate: referenceDate, metadata: Data("raw"), value: Data("v"))
         let entry = try #require(try store.get(key: "k"))
-        #expect(entry.value == Data("raw bytes"))
+        #expect(entry.metadata == Data("raw"))
     }
 
-    @Test("Codable put accepts a custom encoder")
-    func codablePutWithCustomEncoder() throws {
+    @Test("Codable metadata put accepts a custom encoder")
+    func codableMetadataPutWithCustomEncoder() throws {
         let store = makeStore()
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
-        let sample = Sample(id: 1, name: "x", tags: ["a", "b"])
-        try store.put(key: "k", storageDate: referenceDate, value: sample, encoder: encoder)
+        let meta = SampleMeta(etag: "z", contentType: "text/plain")
+        try store.put(key: "k", storageDate: referenceDate, metadata: meta, value: Data(), encoder: encoder)
 
         // The bytes should be the deterministically-ordered JSON encoding.
         let entry = try #require(try store.get(key: "k"))
-        let expected = try encoder.encode(sample)
-        #expect(entry.value == expected)
+        let expected = try encoder.encode(meta)
+        #expect(entry.metadata == expected)
     }
 }

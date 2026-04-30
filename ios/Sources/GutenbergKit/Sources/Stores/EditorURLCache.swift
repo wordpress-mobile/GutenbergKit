@@ -57,7 +57,7 @@ public struct EditorURLCache: Sendable {
         try self.store.put(
             key: Self.key(url: url, httpMethod: httpMethod),
             storageDate: currentDate,
-            metadata: try JSONEncoder().encode(response.responseHeaders),
+            metadata: response.responseHeaders,
             value: response.data
         )
     }
@@ -91,7 +91,7 @@ public struct EditorURLCache: Sendable {
         try self.store.put(
             key: Self.key(url: url, httpMethod: httpMethod),
             storageDate: currentDate,
-            metadata: try JSONEncoder().encode(headers),
+            metadata: headers,
             value: try Data(contentsOf: path)
         )
     }
@@ -129,13 +129,15 @@ public struct EditorURLCache: Sendable {
     ) throws -> EditorURLResponse? {
         try performanceMonitor.measure { () throws -> EditorURLResponse? in
             guard
-                let entry = try self.store.get(key: Self.key(url: url, httpMethod: httpMethod)),
+                let entry = try self.store.get(
+                    key: Self.key(url: url, httpMethod: httpMethod),
+                    metadataAs: EditorHTTPHeaders.self
+                ),
                 self.cachePolicy.allowsResponseWith(date: entry.storageDate, currentDate: currentDate)
             else {
                 return nil
             }
-            let headers = try JSONDecoder().decode(EditorHTTPHeaders.self, from: entry.metadata)
-            return EditorURLResponse(data: entry.value, responseHeaders: headers)
+            return EditorURLResponse(data: entry.value, responseHeaders: entry.metadata)
         }
     }
 
