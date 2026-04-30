@@ -87,6 +87,16 @@ build_framework() {
     local destination="$2"
     local archive_path="${BUILD_DIR}/${SCHEME}-${sdk}.xcarchive"
 
+    # Pin ARCHS explicitly so the slice contents stay stable as Xcode evolves
+    # its defaults. Keep `x86_64` in the simulator slice while the iOS
+    # deployment target still overlaps with Intel-Mac dev hosts.
+    local archs
+    case "${sdk}" in
+        iphoneos) archs="arm64" ;;
+        iphonesimulator) archs="arm64 x86_64" ;;
+        *) echo "Error: unknown SDK '${sdk}'" >&2; exit 1 ;;
+    esac
+
     echo "--- Building ${SCHEME} for ${sdk}"
 
     rm -rf "${archive_path}"
@@ -97,6 +107,7 @@ build_framework() {
         -derivedDataPath "${DERIVED_DATA_PATH}" \
         -sdk "${sdk}" \
         -destination "${destination}" \
+        ARCHS="${archs}" \
         BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
         INSTALL_PATH='Library/Frameworks' \
         OTHER_SWIFT_FLAGS=-no-verify-emitted-module-interface \
