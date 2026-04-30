@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import OSLog
 
@@ -6,8 +5,15 @@ import OSLog
 ///
 /// Responses are stored on disk and survive process termination. Responses are keyed by both URL and HTTP method, so GET and OPTIONS requests to the
 /// same URL are stored independently.
+///
+/// Backed by `SQLiteKVCache`. The "one instance per backing file" contract from
+/// `SQLiteKVCache` carries over: two `EditorURLCache` instances pointed at the
+/// same `cacheRoot` is undefined behavior.
 public struct EditorURLCache: Sendable {
-    private let cache: URLCache
+    /// About enough for 10 sites of cached responses.
+    private static let diskCapacity = 100 * 1024 * 1024
+
+    private let store: SQLiteKVCache
     private let cachePolicy: EditorCachePolicy
     private let performanceMonitor = SignpostMonitor(for: Logger.performance)
 
@@ -21,8 +27,11 @@ public struct EditorURLCache: Sendable {
     ///     Use `.ignore` to always fetch fresh data, `.maxAge(_:)` to expire entries after
     ///     a time interval, or `.always` (the default) to use cached data regardless of age.
     public init(cacheRoot: URL? = nil, cachePolicy: EditorCachePolicy = .always) {
-        // About enough for 10 sites
-        self.cache = URLCache(memoryCapacity: 0, diskCapacity: 100 * 1024 * 1024, directory: cacheRoot)
+        self.store = SQLiteKVCache(
+            handle: "editorurlcache",
+            directory: cacheRoot ?? URL.cachesDirectory,
+            diskCapacity: Self.diskCapacity
+        )
         self.cachePolicy = cachePolicy
     }
 
@@ -45,22 +54,12 @@ public struct EditorURLCache: Sendable {
         httpMethod: EditorHttpMethod,
         currentDate: Date
     ) throws {
-        let response = CachedURLResponse(
-            response: HTTPURLResponse(
-                url: url,
-                statusCode: 200,
-                httpVersion: nil,
-                headerFields: response.responseHeaders.dictionaryValue
-            )!,
-            data: __fixEmptyDataBugEncode(response.data),
-            userInfo: [
-                "storageDate": currentDate
-            ],
-            storagePolicy: .allowed
+        try self.store.put(
+            key: Self.key(url: url, httpMethod: httpMethod),
+            storageDate: currentDate,
+            metadata: try JSONEncoder().encode(response.responseHeaders),
+            value: response.data
         )
-
-        self.cache.storeCachedResponse(response, for: URLRequest(method: httpMethod, url: url))
-        Thread.sleep(forTimeInterval: 0.05)  // Hack to make `URLCache` work
     }
 
     /// Stores the contents of a downloaded file as a cached response for the given URL and HTTP method.
@@ -89,23 +88,12 @@ public struct EditorURLCache: Sendable {
         httpMethod: EditorHttpMethod,
         currentDate: Date
     ) throws {
-
-        let response = CachedURLResponse(
-            response: HTTPURLResponse(
-                url: url,
-                statusCode: 200,
-                httpVersion: nil,
-                headerFields: headers.dictionaryValue
-            )!,
-            data: __fixEmptyDataBugEncode(try Data(contentsOf: path)),
-            userInfo: [
-                "storageDate": currentDate
-            ],
-            storagePolicy: .allowed
+        try self.store.put(
+            key: Self.key(url: url, httpMethod: httpMethod),
+            storageDate: currentDate,
+            metadata: try JSONEncoder().encode(headers),
+            value: try Data(contentsOf: path)
         )
-
-        self.cache.storeCachedResponse(response, for: URLRequest(method: httpMethod, url: url))
-        Thread.sleep(forTimeInterval: 0.05)  // Hack to make `URLCache` work
     }
 
     /// Checks whether a cached response exists for the given URL and HTTP method.
@@ -139,20 +127,15 @@ public struct EditorURLCache: Sendable {
         httpMethod: EditorHttpMethod,
         currentDate: Date
     ) throws -> EditorURLResponse? {
-        performanceMonitor.measure { () -> EditorURLResponse? in
+        try performanceMonitor.measure { () throws -> EditorURLResponse? in
             guard
-                let response = self.cache.cachedResponse(for: URLRequest(method: httpMethod, url: url)),
-                let storageDate = response.userInfo?["storageDate"] as? Date,
-                self.cachePolicy.allowsResponseWith(date: storageDate, currentDate: currentDate)
+                let entry = try self.store.get(key: Self.key(url: url, httpMethod: httpMethod)),
+                self.cachePolicy.allowsResponseWith(date: entry.storageDate, currentDate: currentDate)
             else {
                 return nil
             }
-
-            let headers = EditorHTTPHeaders((response.response as! HTTPURLResponse).allHeaderFields)
-            return EditorURLResponse(
-                data: __fixEmptyDataBugDecode(response.data),
-                responseHeaders: headers
-            )
+            let headers = try JSONDecoder().decode(EditorHTTPHeaders.self, from: entry.metadata)
+            return EditorURLResponse(data: entry.value, responseHeaders: headers)
         }
     }
 
@@ -160,28 +143,13 @@ public struct EditorURLCache: Sendable {
     ///
     /// - Throws: An error if the cache cannot be cleared.
     public func clear() throws {
-        self.cache.removeAllCachedResponses()
-        Thread.sleep(forTimeInterval: 0.2)  // Hack to make `URLCache` work (needs longer than store)
+        try self.store.clear()
     }
 
-    /// Encodes data to work around a `URLCache` bug with empty data.
-    ///
-    /// `URLCache` doesn't properly store an empty `Data` object, so we use a sentinel
-    /// value to represent empty data.
-    ///
-    /// - Parameter data: The data to encode.
-    /// - Returns: The encoded data, or a sentinel value if the data is empty.
-    private func __fixEmptyDataBugEncode(_ data: Data) -> Data {
-        guard data.isEmpty else { return data }
-        return Data("__is_empty__".utf8)
-    }
-
-    /// Decodes data that was encoded with `__fixEmptyDataBugEncode`.
-    ///
-    /// - Parameter data: The data to decode.
-    /// - Returns: The original data, or empty data if the sentinel value was detected.
-    private func __fixEmptyDataBugDecode(_ data: Data) -> Data {
-        guard data.count == 12, data == Data("__is_empty__".utf8) else { return data }
-        return Data()
+    /// Combines the HTTP method and URL into a single string key. `SQLiteKVCache`
+    /// hashes the key with SHA-256 before binding to SQLite, so length, escaping,
+    /// and encoding aren't concerns here.
+    private static func key(url: URL, httpMethod: EditorHttpMethod) -> String {
+        "\(httpMethod.rawValue) \(url.absoluteString)"
     }
 }
