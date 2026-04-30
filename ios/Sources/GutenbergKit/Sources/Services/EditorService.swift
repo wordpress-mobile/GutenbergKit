@@ -58,8 +58,9 @@ public actor EditorService {
     ///     This policy applies to both API response caching and asset manifest caching.
     ///   - storageRoot: The directory for storing downloaded asset bundles. If `nil`, uses
     ///     a default location based on the site ID.
-    ///   - cacheRoot: The directory for caching API responses. If `nil`, uses a default
-    ///     location based on the site ID.
+    ///   - cacheRoot: The parent directory for caching API responses. The configuration's
+    ///     `siteId` is appended internally so different sites cannot collide. If `nil`,
+    ///     uses `Paths.defaultCacheRoot`.
     public init(
         configuration: EditorConfiguration,
         httpClient: (any EditorHTTPClientProtocol)? = nil,
@@ -79,7 +80,8 @@ public actor EditorService {
             configuration: configuration,
             httpClient: httpClient,
             cache: EditorURLCache(
-                cacheRoot: cacheRoot ?? Paths.cacheRoot(for: configuration),
+                siteId: configuration.siteId,
+                parentDirectory: cacheRoot ?? Paths.defaultCacheRoot,
                 cachePolicy: cachePolicy
             ),
         )

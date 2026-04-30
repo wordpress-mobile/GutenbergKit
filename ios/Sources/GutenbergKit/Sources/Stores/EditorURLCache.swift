@@ -6,9 +6,13 @@ import OSLog
 /// Responses are stored on disk and survive process termination. Responses are keyed by both URL and HTTP method, so GET and OPTIONS requests to the
 /// same URL are stored independently.
 ///
-/// Backed by `SQLiteKVCache`. The "one instance per backing file" contract from
-/// `SQLiteKVCache` carries over: two `EditorURLCache` instances pointed at the
-/// same `cacheRoot` is undefined behavior.
+/// Backed by `SQLiteKVCache`. The cache directory is built as
+/// `<parentDirectory>/<siteId>/`, so two caches with different `siteId`s are
+/// guaranteed-distinct backing files. The "one instance per backing file"
+/// contract from `SQLiteKVCache` still applies for the same `(siteId,
+/// parentDirectory)` pair, but the typical call pattern (one cache per
+/// `EditorService`, one service per editor view) keeps that contract by
+/// construction.
 public struct EditorURLCache: Sendable {
     /// About enough for 10 sites of cached responses.
     private static let diskCapacity = Measurement<UnitInformationStorage>(value: 100, unit: .mebibytes)
@@ -20,16 +24,23 @@ public struct EditorURLCache: Sendable {
     /// Creates a new URL cache.
     ///
     /// - Parameters:
-    ///   - cacheRoot: The directory where cached responses will be stored.
-    ///     If `nil`, the system default cache directory is used. The cache has a
-    ///     maximum disk capacity of 100 MiB.
+    ///   - siteId: The identifier of the site whose responses are being cached.
+    ///     Appended to `parentDirectory` to produce the final cache directory,
+    ///     so different sites cannot collide on the same backing file.
+    ///   - parentDirectory: The directory under which the per-site cache
+    ///     directory is created. Defaults to `Paths.defaultCacheRoot`. Tests
+    ///     pass a unique temporary directory here for isolation.
     ///   - cachePolicy: The policy that determines when cached responses are considered valid.
     ///     Use `.ignore` to always fetch fresh data, `.maxAge(_:)` to expire entries after
     ///     a time interval, or `.always` (the default) to use cached data regardless of age.
-    public init(cacheRoot: URL? = nil, cachePolicy: EditorCachePolicy = .always) {
+    public init(
+        siteId: String,
+        parentDirectory: URL = Paths.defaultCacheRoot,
+        cachePolicy: EditorCachePolicy = .always
+    ) {
         self.store = SQLiteKVCache(
             handle: "editorurlcache",
-            directory: cacheRoot ?? URL.cachesDirectory,
+            directory: parentDirectory.appending(path: siteId),
             diskCapacity: Self.diskCapacity
         )
         self.cachePolicy = cachePolicy

@@ -69,7 +69,7 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
         mockClient.urlResponseHandler = { _ in Data(#"{"styles":[]}"#.utf8) }
 
         let configuration = makeConfiguration()
-        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory)
+        let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory)
         let repository = RESTAPIRepository(
             configuration: configuration,
             httpClient: mockClient,
@@ -102,7 +102,7 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
         mockClient.urlResponseHandler = { _ in Data(rawJSON.utf8) }
 
         let configuration = makeConfiguration()
-        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory)
+        let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory)
         let repository = RESTAPIRepository(
             configuration: configuration,
             httpClient: mockClient,
@@ -139,7 +139,7 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
         mockClient.urlResponseHandler = { _ in Data(#"{"slug":"post"}"#.utf8) }
 
         let configuration = makeConfiguration()
-        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory)
+        let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory)
         let repository = RESTAPIRepository(
             configuration: configuration,
             httpClient: mockClient,
@@ -171,7 +171,7 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
         mockClient.urlResponseHandler = { _ in Data(#"[{"stylesheet":"theme"}]"#.utf8) }
 
         let configuration = makeConfiguration()
-        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory)
+        let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory)
         let repository = RESTAPIRepository(
             configuration: configuration,
             httpClient: mockClient,
@@ -218,7 +218,7 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
         mockClient.urlResponseHandler = { _ in Data(#"{"post":{}}"#.utf8) }
 
         let configuration = makeConfiguration()
-        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory)
+        let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory)
         let repository = RESTAPIRepository(
             configuration: configuration,
             httpClient: mockClient,
@@ -249,7 +249,7 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
         }
 
         let configuration = makeConfiguration()
-        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory)
+        let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory)
         let repository = RESTAPIRepository(
             configuration: configuration,
             httpClient: capturingClient,

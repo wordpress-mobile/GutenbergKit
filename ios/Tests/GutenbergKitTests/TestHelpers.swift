@@ -84,7 +84,7 @@ extension MakesTestFixtures {
     ) -> RESTAPIRepository {
         let config = configuration ?? makeConfiguration()
         let client = httpClient ?? EditorAssetLibraryMockHTTPClient()
-        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory, cachePolicy: .always)
+        let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory, cachePolicy: .always)
 
         return RESTAPIRepository(
             configuration: config,
