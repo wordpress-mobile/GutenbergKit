@@ -56,37 +56,38 @@ public actor EditorService {
     ///     Use `.ignore` to always fetch fresh data, `.maxAge(_:)` to expire entries after
     ///     a time interval, or `.always` (the default) to use cached data regardless of age.
     ///     This policy applies to both API response caching and asset manifest caching.
-    ///   - storageRoot: The directory for storing downloaded asset bundles. If `nil`, uses
-    ///     a default location based on the site ID.
     public init(
         configuration: EditorConfiguration,
         httpClient: (any EditorHTTPClientProtocol)? = nil,
-        cachePolicy: EditorCachePolicy = .always,
-        storageRoot: URL? = nil
+        cachePolicy: EditorCachePolicy = .always
     ) {
         self.init(
             configuration: configuration,
             httpClient: httpClient,
             cachePolicy: cachePolicy,
-            storageRoot: storageRoot,
+            storageRoot: nil,
             cacheRoot: nil
         )
     }
 
-    /// Test-only init that exposes a `cacheRoot` override. Production callers
-    /// have no reason to override this — the parent directory is always
-    /// `Paths.defaultCacheRoot` and the per-site directory is appended
-    /// internally — but tests need to redirect the cache to a temporary
-    /// directory for isolation.
+    /// Test-only init that exposes `storageRoot` and `cacheRoot` overrides for
+    /// per-test directory isolation. Production callers have no reason to
+    /// override these — the parent directories are always
+    /// `Paths.defaultStorageRoot` / `Paths.defaultCacheRoot` and the per-site
+    /// directory is appended internally — but tests need to redirect storage
+    /// and cache to a temporary directory.
     ///
-    /// - Parameter cacheRoot: The parent directory for caching API responses.
-    ///   The configuration's `siteId` is appended internally so different
-    ///   sites cannot collide. If `nil`, uses `Paths.defaultCacheRoot`.
+    /// - Parameters:
+    ///   - storageRoot: The directory for storing downloaded asset bundles.
+    ///     If `nil`, uses a default location based on the site ID.
+    ///   - cacheRoot: The parent directory for caching API responses. The
+    ///     configuration's `siteId` is appended internally so different sites
+    ///     cannot collide. If `nil`, uses `Paths.defaultCacheRoot`.
     init(
         configuration: EditorConfiguration,
         httpClient: (any EditorHTTPClientProtocol)? = nil,
         cachePolicy: EditorCachePolicy = .always,
-        storageRoot: URL? = nil,
+        storageRoot: URL?,
         cacheRoot: URL?
     ) {
         self.configuration = configuration
