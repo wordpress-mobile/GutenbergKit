@@ -596,7 +596,7 @@ private fun BlockTile(
     val bg = MaterialTheme.colorScheme.primaryContainer
     val tint = MaterialTheme.colorScheme.onSurface
     val contentAlpha = if (block.isDisabled) DISABLED_ALPHA else 1f
-    val rendered = remember(block.id) { iconCache.renderIcon(block) }
+    val rendered = remember(block.id, iconCache) { iconCache.renderIcon(block) }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(BLOCK_TILE_ICON_LABEL_GAP_DP.dp),
