@@ -47,8 +47,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
 import com.example.gutenbergkit.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.GutenbergView
 import org.wordpress.gutenberg.RecordedNetworkRequest
@@ -113,9 +115,19 @@ class EditorActivity : ComponentActivity() {
                 intent.getParcelableExtra<EditorConfiguration>(MainActivity.EXTRA_CONFIGURATION)
             } ?: EditorConfiguration.bundled()
 
-        // Read dependencies from disk if a file path was provided
+        // The dependencies blob is on disk; deserialize it off the main thread
+        // and feed the editor once it's ready.
         val dependenciesPath = intent.getStringExtra(EXTRA_DEPENDENCIES_PATH)
-        val dependencies = dependenciesPath?.let { EditorDependenciesSerializer.readFromDisk(it) }
+        val dependenciesState = mutableStateOf<EditorDependencies?>(null)
+        val dependenciesReady = mutableStateOf(dependenciesPath == null)
+        if (dependenciesPath != null) {
+            lifecycleScope.launch {
+                dependenciesState.value = withContext(Dispatchers.IO) {
+                    EditorDependenciesSerializer.readFromDisk(dependenciesPath)
+                }
+                dependenciesReady.value = true
+            }
+        }
 
         // Optional account ID for REST API persistence (set when launched from PostsListActivity)
         val accountId = intent.getLongExtra(EXTRA_ACCOUNT_ID, -1L).takeIf { it >= 0 }?.toULong()
@@ -124,9 +136,10 @@ class EditorActivity : ComponentActivity() {
 
         setContent {
             AppTheme {
+                if (!dependenciesReady.value) return@AppTheme
                 EditorScreen(
                     configuration = configuration,
-                    dependencies = dependencies,
+                    dependencies = dependenciesState.value,
                     accountId = accountId,
                     enableNativeMediaUpload = enableNativeMediaUpload,
                     coroutineScope =  this.lifecycleScope,
