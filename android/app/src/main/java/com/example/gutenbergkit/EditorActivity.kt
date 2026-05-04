@@ -39,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -107,22 +108,7 @@ class EditorActivity : ComponentActivity() {
 
         // The dependencies blob is on disk; deserialize it off the main thread
         // and feed the editor once it's ready.
-        val dependenciesPath = intent.getStringExtra(EXTRA_DEPENDENCIES_PATH)
-        val dependenciesLoad = mutableStateOf<DependenciesLoad>(
-            if (dependenciesPath == null) DependenciesLoad.Ready(null) else DependenciesLoad.Loading
-        )
-        if (dependenciesPath != null) {
-            lifecycleScope.launch {
-                dependenciesLoad.value = try {
-                    val deps = withContext(Dispatchers.IO) {
-                        EditorDependenciesSerializer.readFromDisk(dependenciesPath)
-                    }
-                    DependenciesLoad.Ready(deps)
-                } catch (e: Exception) {
-                    DependenciesLoad.Failed(e.message ?: e::class.java.simpleName)
-                }
-            }
-        }
+        val dependenciesLoad = loadDependenciesFromIntent()
 
         // Optional account ID for REST API persistence (set when launched from PostsListActivity)
         val accountId = intent.getLongExtra(EXTRA_ACCOUNT_ID, -1L).takeIf { it >= 0 }?.toULong()
@@ -155,6 +141,34 @@ class EditorActivity : ComponentActivity() {
         data object Loading : DependenciesLoad
         data class Failed(val message: String) : DependenciesLoad
         data class Ready(val dependencies: EditorDependencies?) : DependenciesLoad
+    }
+
+    /**
+     * Reads [EditorDependencies] from the intent's [EXTRA_DEPENDENCIES_PATH]
+     * off the main thread. Returns a state holder that flips from
+     * [DependenciesLoad.Loading] to [DependenciesLoad.Ready] or
+     * [DependenciesLoad.Failed]. When no path was provided, starts in
+     * [DependenciesLoad.Ready] with null dependencies (the editor will load
+     * from the network).
+     */
+    private fun loadDependenciesFromIntent(): MutableState<DependenciesLoad> {
+        val path = intent.getStringExtra(EXTRA_DEPENDENCIES_PATH)
+        val state = mutableStateOf<DependenciesLoad>(
+            if (path == null) DependenciesLoad.Ready(null) else DependenciesLoad.Loading
+        )
+        if (path != null) {
+            lifecycleScope.launch {
+                val deps = withContext(Dispatchers.IO) {
+                    EditorDependenciesSerializer.readFromDisk(path)
+                }
+                state.value = if (deps != null) {
+                    DependenciesLoad.Ready(deps)
+                } else {
+                    DependenciesLoad.Failed("The editor data file was missing or could not be read.")
+                }
+            }
+        }
+        return state
     }
 
     private fun setupFileChooserListener(view: GutenbergView) {
