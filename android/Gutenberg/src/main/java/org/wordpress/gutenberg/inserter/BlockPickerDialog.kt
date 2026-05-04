@@ -44,6 +44,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,12 +79,15 @@ import androidx.compose.ui.unit.sp
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import org.wordpress.gutenberg.R
 import androidx.compose.ui.graphics.Color as ComposeColor
 import org.wordpress.gutenberg.model.BlockInserterPayload
 import org.wordpress.gutenberg.model.BlockType
 
 private const val SEARCH_ONLY_CATEGORY = "gbk-search-only"
+private const val MOST_USED_CATEGORY = "gbk-most-used"
+private const val SEARCH_DEBOUNCE_MS = 150L
 
 /** WordPress brand navy — seed for the fallback scheme on pre-API-31 devices. */
 private const val BRAND_SEED_ARGB = 0xFF001E57.toInt()
@@ -147,6 +151,10 @@ private const val BLOCK_TILE_LABEL_MIN_SP = 9
 private const val BLOCK_TILE_LABEL_LETTER_SPACING_SP = 0.1
 private const val BLOCK_TILE_LABEL_LINE_HEIGHT_RATIO = 1.2f
 
+private const val EMPTY_STATE_HORIZONTAL_PAD_DP = 12
+private const val EMPTY_STATE_VERTICAL_PAD_DP = 32
+private const val EMPTY_STATE_FONT_SP = 14
+
 private const val DISABLED_ALPHA = 0.5f
 
 /**
@@ -205,16 +213,28 @@ private fun BlockPickerSheet(
     val colorScheme = rememberColorScheme()
     MaterialTheme(colorScheme = colorScheme) {
         val allBlocks = remember(payload) { flattenBlocks(payload) }
+        val recentBlocks = remember(payload, allBlocks) { recentBlocks(payload, allBlocks) }
 
         var selectedTab by remember { mutableStateOf(BlockPickerTab.Recent) }
         var query by remember { mutableStateOf("") }
+        var debounced by remember { mutableStateOf("") }
+        LaunchedEffect(query) {
+            delay(SEARCH_DEBOUNCE_MS)
+            debounced = query.trim()
+        }
+
+        val filtered = remember(selectedTab, debounced, allBlocks, recentBlocks) {
+            val tabBlocks = filterByTab(selectedTab, allBlocks, recentBlocks)
+            if (debounced.isEmpty()) tabBlocks else searchBlocks(debounced, tabBlocks)
+        }
 
         SheetContent(
             selectedTab = selectedTab,
             onSelectTab = { selectedTab = it },
             query = query,
             onQueryChange = { query = it },
-            blocks = allBlocks,
+            debouncedQuery = debounced,
+            blocks = filtered,
             onBlockSelected = onBlockSelected,
             onClose = onClose,
             surface = colorScheme.surfaceContainerLow,
@@ -229,6 +249,7 @@ private fun SheetContent(
     onSelectTab: (BlockPickerTab) -> Unit,
     query: String,
     onQueryChange: (String) -> Unit,
+    debouncedQuery: String,
     blocks: List<BlockType>,
     onBlockSelected: (BlockType) -> Unit,
     onClose: () -> Unit,
@@ -252,6 +273,7 @@ private fun SheetContent(
         SearchField(query = query, onQueryChange = onQueryChange)
         BlockGridContent(
             blocks = blocks,
+            query = debouncedQuery,
             onBlockClicked = onBlockSelected,
             modifier = Modifier
                 .fillMaxWidth()
@@ -266,6 +288,17 @@ private fun flattenBlocks(payload: BlockInserterPayload): List<BlockType> =
             .filter { it.category != SEARCH_ONLY_CATEGORY }
             .flatMap { it.blocks }
     )
+
+private fun recentBlocks(
+    payload: BlockInserterPayload,
+    allBlocks: List<BlockType>,
+): List<BlockType> {
+    val mostUsed = payload.sections
+        .firstOrNull { it.category == MOST_USED_CATEGORY }
+        ?.blocks
+        .orEmpty()
+    return if (mostUsed.isNotEmpty()) dedupeById(mostUsed) else allBlocks
+}
 
 @Composable
 private fun rememberColorScheme(): ColorScheme {
@@ -526,9 +559,14 @@ private fun SearchInput(
 @Composable
 private fun BlockGridContent(
     blocks: List<BlockType>,
+    query: String,
     onBlockClicked: (BlockType) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (blocks.isEmpty()) {
+        EmptyState(query = query, modifier = modifier)
+        return
+    }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     // Snap-dismiss the keyboard on the first user drag — reliable fallback for
@@ -711,21 +749,78 @@ private fun AutoShrinkTileLabel(
     }
 }
 
+@Composable
+private fun EmptyState(query: String, modifier: Modifier = Modifier) {
+    val text = if (query.isNotBlank()) {
+        stringResource(R.string.gbk_block_inserter_no_results_for, query)
+    } else {
+        stringResource(R.string.gbk_block_inserter_no_results)
+    }
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(
+                horizontal = EMPTY_STATE_HORIZONTAL_PAD_DP.dp,
+                vertical = EMPTY_STATE_VERTICAL_PAD_DP.dp,
+            ),
+    ) {
+        Text(
+            text = text,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = EMPTY_STATE_FONT_SP.sp,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
 private fun dedupeById(blocks: List<BlockType>): List<BlockType> {
     val seen = HashSet<String>()
     return blocks.filter { seen.add(it.id) }
 }
 
+private fun filterByTab(
+    tab: BlockPickerTab,
+    allBlocks: List<BlockType>,
+    recentBlocks: List<BlockType>,
+): List<BlockType> {
+    if (tab == BlockPickerTab.Recent) return recentBlocks
+    val ids = tab.blockIds ?: return allBlocks
+    return allBlocks.filter { it.name.substringAfterLast('/') in ids }
+}
+
 /**
- * Hardcoded tab labels from the design handoff. The chips are visible but
- * non-functional in this PR — filtering behavior ships in the follow-up.
+ * Hardcoded block-id groupings from the design handoff. Production will likely
+ * derive these from the payload, but the design freezes the taxonomy shown in
+ * the tabs so we pin it here to match Variation B exactly.
  */
-private enum class BlockPickerTab(val labelRes: Int) {
-    Recent(R.string.gbk_block_inserter_tab_recent),
-    Text(R.string.gbk_block_inserter_tab_text),
-    Media(R.string.gbk_block_inserter_tab_media),
-    Design(R.string.gbk_block_inserter_tab_design),
-    Widgets(R.string.gbk_block_inserter_tab_widgets),
-    Theme(R.string.gbk_block_inserter_tab_theme),
-    Embeds(R.string.gbk_block_inserter_tab_embeds);
+private enum class BlockPickerTab(
+    val labelRes: Int,
+    val blockIds: Set<String>?,
+) {
+    Recent(R.string.gbk_block_inserter_tab_recent, null),
+    Text(
+        R.string.gbk_block_inserter_tab_text,
+        setOf("paragraph", "heading", "list", "quote", "preformatted"),
+    ),
+    Media(
+        R.string.gbk_block_inserter_tab_media,
+        setOf("image", "gallery", "video", "audio", "cover", "file"),
+    ),
+    Design(
+        R.string.gbk_block_inserter_tab_design,
+        setOf("table", "separator", "code", "columns", "button", "buttons"),
+    ),
+    Widgets(
+        R.string.gbk_block_inserter_tab_widgets,
+        setOf("button", "buttons", "separator"),
+    ),
+    Theme(
+        R.string.gbk_block_inserter_tab_theme,
+        setOf("cover", "columns", "gallery"),
+    ),
+    Embeds(
+        R.string.gbk_block_inserter_tab_embeds,
+        setOf("video", "audio", "embed"),
+    );
 }
