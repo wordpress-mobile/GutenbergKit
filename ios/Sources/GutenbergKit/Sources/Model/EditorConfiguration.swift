@@ -331,6 +331,18 @@ public struct EditorConfigurationBuilder {
     return copy
   }
 
+  /// Resolves `locale` against the bundled translations and stores the
+  /// resulting tag for serialization.
+  ///
+  /// Prefer this overload when the locale comes from a platform API
+  /// (`Locale.current`, `Locale.preferredLanguages`, etc.). It runs the
+  /// resolution chain — full tag → language-only tag → `en` — so a device
+  /// configured for `pt_BR` correctly lands on the `pt-br` bundle instead
+  /// of silently falling through to English.
+  public func setLocale(_ locale: Locale) -> EditorConfigurationBuilder {
+    setLocale(LocaleResolver.default.resolve(locale))
+  }
+
   public func setNativeInserterEnabled(_ isNativeInserterEnabled: Bool = true)
     -> EditorConfigurationBuilder {
     var copy = self

@@ -188,6 +188,20 @@ struct EditorConfigurationBuilderTests: MakesTestFixtures {
     #expect(config.locale == "fr_FR")
   }
 
+  @Test("setLocale(Locale) resolves against the shipped translation bundles")
+  func setLocaleResolvesPlatformLocale() {
+    // Smoke test against the real bundle. We can only assert robust
+    // post-conditions because the manifest depends on `make build`
+    // having run, but the resolver always lands on either a shipped
+    // tag or the `en` fallback — never an unresolved regional tag.
+    let config = makeConfigurationBuilder()
+      .setLocale(Locale(identifier: "pt_BR"))
+      .build()
+
+    let lower = config.locale.lowercased()
+    #expect(lower == "pt-br" || lower == "pt" || lower == "en")
+  }
+
   @Test("setNativeInserterEnabled updates isNativeInserterEnabled")
   func setNativeInserterEnabledUpdates() {
     let config = makeConfigurationBuilder()

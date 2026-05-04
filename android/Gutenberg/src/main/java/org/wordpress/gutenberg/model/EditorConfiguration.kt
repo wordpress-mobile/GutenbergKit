@@ -1,9 +1,11 @@
 package org.wordpress.gutenberg.model
 
+import android.content.Context
 import android.os.Parcelable
 import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
 import java.net.URI
+import java.util.Locale
 import java.util.UUID
 
 @Parcelize
@@ -97,6 +99,26 @@ data class EditorConfiguration(
         fun setAuthHeader(authHeader: String) = apply { this.authHeader = authHeader }
         fun setEditorSettings(editorSettings: String?) = apply { this.editorSettings = editorSettings }
         fun setLocale(locale: String?) = apply { this.locale = locale }
+
+        /**
+         * Resolves [locale] against the bundled translations and stores the
+         * resulting tag for serialization.
+         *
+         * Prefer this overload when the locale comes from a platform API
+         * (e.g. [android.content.res.Configuration.getLocales] or the user's
+         * per-app locale). It runs the resolution chain — full tag →
+         * language-only tag → `en` — using the manifest shipped in this
+         * library's assets, so a device configured for `pt_BR` correctly
+         * lands on the `pt-br` bundle instead of silently falling through
+         * to English.
+         *
+         * @param context Used to read the shipped translations manifest
+         *                from this library's assets.
+         * @param locale  The platform locale to resolve.
+         */
+        fun setLocale(context: Context, locale: Locale) = apply {
+            this.locale = LocaleResolver.fromAssets(context).resolve(locale)
+        }
         fun setCookies(cookies: Map<String, String>) = apply { this.cookies = cookies }
         fun setEnableAssetCaching(enableAssetCaching: Boolean) = apply { this.enableAssetCaching = enableAssetCaching }
         fun setCachedAssetHosts(cachedAssetHosts: Set<String>) = apply { this.cachedAssetHosts = cachedAssetHosts }
