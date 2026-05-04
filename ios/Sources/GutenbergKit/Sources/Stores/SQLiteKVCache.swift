@@ -672,3 +672,60 @@ extension SQLiteKVCache.Error: CustomStringConvertible, LocalizedError {
 
     var errorDescription: String? { description }
 }
+
+extension SQLiteKVCache {
+
+    /// Convenience initializer that accepts the cap as a
+    /// `Measurement<UnitInformationStorage>` so callers can write
+    /// `Measurement(value: 100, unit: .mebibytes)` instead of an opaque
+    /// `100 * 1024 * 1024`. The measurement is converted to bytes (truncated
+    /// to `Int`) and forwarded to the designated initializer.
+    convenience init(
+        handle: StaticString,
+        directory: URL = URL.cachesDirectory,
+        diskCapacity: Measurement<UnitInformationStorage>
+    ) {
+        self.init(
+            handle: handle,
+            directory: directory,
+            diskCapacity: Int(diskCapacity.converted(to: .bytes).value)
+        )
+    }
+
+    /// JSON-encodes a `Codable` metadata payload before storing. Cache values
+    /// are already raw `Data` for the typical case (HTTP bodies, downloaded
+    /// blobs) — the boilerplate lives on the metadata side, where callers
+    /// usually want a structured shape (response headers, content-type, etag,
+    /// etc.). The `metadata:` argument label is shared with the base
+    /// `put(_:..., metadata: Data, ...)`; for `Data` metadata, Swift's
+    /// overload resolution picks the non-generic original.
+    func put<Metadata: Encodable>(
+        key: String,
+        storageDate: Date,
+        metadata: Metadata,
+        value: Data,
+        encoder: JSONEncoder = JSONEncoder()
+    ) throws {
+        try self.put(
+            key: key,
+            storageDate: storageDate,
+            metadata: try encoder.encode(metadata),
+            value: value
+        )
+    }
+
+    /// Looks up the entry at `key` and JSON-decodes its `metadata` blob as
+    /// `Metadata`. Returns `nil` for a genuine miss; throws `Error.readFailed`
+    /// if SQLite rejects the read, or a `DecodingError` if the stored bytes
+    /// don't decode as `Metadata`. The raw `value` and original `storageDate`
+    /// are returned alongside the decoded metadata.
+    func get<Metadata: Decodable>(
+        key: String,
+        metadataAs metadataType: Metadata.Type,
+        decoder: JSONDecoder = JSONDecoder()
+    ) throws -> (storageDate: Date, metadata: Metadata, value: Data)? {
+        guard let entry = try self.get(key: key) else { return nil }
+        let metadata = try decoder.decode(Metadata.self, from: entry.metadata)
+        return (entry.storageDate, metadata, entry.value)
+    }
+}

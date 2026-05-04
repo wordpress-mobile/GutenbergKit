@@ -7,7 +7,7 @@ import Testing
 struct EditorURLCacheTests {
     private let testURL = URL(string: "https://example.com/api/posts")!
 
-    let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory, cachePolicy: .always)
+    let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory, cachePolicy: .always)
 
     private func makeResponse(data: Data = .sample, headers: EditorHTTPHeaders = [:])
     -> EditorURLResponse {
@@ -142,46 +142,25 @@ struct EditorURLCacheTests {
 
     // MARK: - clear()
 
-    @Test("clear removes all entries", .timeLimit(.minutes(1)))
+    @Test("clear removes all entries")
     func clearRemovesAll() throws {
         try cache.store(makeResponse(), for: testURL, httpMethod: .GET)
         let otherURL = URL(string: "https://example.com/other")!
         try cache.store(makeResponse(), for: otherURL, httpMethod: .GET)
         try cache.clear()
 
-        try waitForClearToTakeEffect(cache: cache, url: testURL)
-
         #expect(try cache.response(for: testURL, httpMethod: .GET) == nil)
         #expect(try cache.response(for: otherURL, httpMethod: .GET) == nil)
     }
 
-    @Test("store succeeds after clear", .timeLimit(.minutes(1)))
+    @Test("store succeeds after clear")
     func storeAfterClear() throws {
         try cache.store(makeResponse(), for: testURL, httpMethod: .GET)
         try cache.clear()
 
-        try waitForClearToTakeEffect(cache: cache, url: testURL)
-
         let newResponse = makeResponse(data: Data("after clear"))
         try cache.store(newResponse, for: testURL, httpMethod: .GET)
         #expect(try cache.response(for: testURL, httpMethod: .GET) == newResponse)
-    }
-
-    /// Polls until `URLCache.removeAllCachedResponses()` has taken effect.
-    ///
-    /// Uses exponential backoff (0.05s, 0.1s, 0.2s, 0.4s, ...) with a 5s total timeout.
-    /// `URLCache` clears asynchronously, so the in-memory layer may still serve
-    /// stale entries for a short window after `clear()` returns. CI environments
-    /// with slower I/O may need the longer timeout.
-    private func waitForClearToTakeEffect(cache: EditorURLCache, url: URL) throws {
-        var delay: TimeInterval = 0.05
-        var elapsed: TimeInterval = 0
-        while elapsed < 5.0 {
-            guard try cache.response(for: url, httpMethod: .GET) != nil else { return }
-            Thread.sleep(forTimeInterval: delay)
-            elapsed += delay
-            delay *= 2
-        }
     }
 
     // MARK: - URLs with query parameters
@@ -221,7 +200,7 @@ struct EditorURLCacheIgnorePolicyTests {
     private let referenceDate = Date(timeIntervalSinceReferenceDate: 0)
 
     /// A cache configured with the `.ignore` policy, which should never return cached responses.
-    let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory, cachePolicy: .ignore)
+    let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory, cachePolicy: .ignore)
 
     private func makeResponse(data: Data = .sample, headers: EditorHTTPHeaders = [:]) -> EditorURLResponse {
         EditorURLResponse(data: data, responseHeaders: headers)
@@ -278,7 +257,7 @@ struct EditorURLCacheMaxAgePolicyTests {
 
     @Test("maxAge policy: fresh response is returned")
     func maxAgePolicy_freshResponseReturned() throws {
-        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
+        let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
         let response = makeResponse()
 
         // Store at reference date
@@ -290,7 +269,7 @@ struct EditorURLCacheMaxAgePolicyTests {
 
     @Test("maxAge policy: response within interval is returned")
     func maxAgePolicy_responseWithinIntervalReturned() throws {
-        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
+        let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
         let response = makeResponse()
 
         // Store at reference date
@@ -303,7 +282,7 @@ struct EditorURLCacheMaxAgePolicyTests {
 
     @Test("maxAge policy: hasData returns true for fresh response")
     func maxAgePolicy_hasDataTrueForFresh() throws {
-        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
+        let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
 
         try cache.store(makeResponse(), for: testURL, httpMethod: .GET, currentDate: self.referenceDate)
 
@@ -312,7 +291,7 @@ struct EditorURLCacheMaxAgePolicyTests {
 
     @Test("maxAge policy: expired response returns nil")
     func maxAgePolicy_expiredResponseReturnsNil() throws {
-        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
+        let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
         let response = makeResponse()
 
         // Store at reference date
@@ -325,7 +304,7 @@ struct EditorURLCacheMaxAgePolicyTests {
 
     @Test("maxAge policy: hasData returns false for expired response")
     func maxAgePolicy_hasDataFalseForExpired() throws {
-        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
+        let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
 
         try cache.store(makeResponse(), for: testURL, httpMethod: .GET, currentDate: self.referenceDate)
 
@@ -335,7 +314,7 @@ struct EditorURLCacheMaxAgePolicyTests {
 
     @Test("maxAge policy: response at exact boundary is expired")
     func maxAgePolicy_responseAtExactBoundaryIsExpired() throws {
-        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
+        let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
 
         try cache.store(makeResponse(), for: testURL, httpMethod: .GET, currentDate: self.referenceDate)
 
@@ -346,7 +325,7 @@ struct EditorURLCacheMaxAgePolicyTests {
 
     @Test("maxAge policy: response just before boundary is fresh")
     func maxAgePolicy_responseJustBeforeBoundaryIsFresh() throws {
-        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
+        let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
         let response = makeResponse()
 
         try cache.store(response, for: testURL, httpMethod: .GET, currentDate: self.referenceDate)
@@ -358,7 +337,7 @@ struct EditorURLCacheMaxAgePolicyTests {
 
     @Test("maxAge policy: zero interval means immediate expiration")
     func maxAgePolicy_zeroIntervalExpiresImmediately() throws {
-        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory, cachePolicy: .maxAge(0))
+        let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory, cachePolicy: .maxAge(0))
 
         try cache.store(makeResponse(), for: testURL, httpMethod: .GET, currentDate: self.referenceDate)
 
@@ -368,7 +347,7 @@ struct EditorURLCacheMaxAgePolicyTests {
 
     @Test("maxAge policy: re-storing refreshes the expiration")
     func maxAgePolicy_restoreRefreshesExpiration() throws {
-        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
+        let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
 
         // Store initial response at reference date
         try cache.store(makeResponse(data: Data("first")), for: testURL, httpMethod: .GET, currentDate: self.referenceDate)
@@ -385,7 +364,7 @@ struct EditorURLCacheMaxAgePolicyTests {
 
     @Test("maxAge policy: different URLs expire independently")
     func maxAgePolicy_urlsExpireIndependently() throws {
-        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
+        let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
 
         let url1 = URL(string: "https://example.com/posts/1")!
         let url2 = URL(string: "https://example.com/posts/2")!
@@ -410,7 +389,7 @@ struct EditorURLCacheMaxAgePolicyTests {
 
     @Test("maxAge policy: file store respects cache policy")
     func maxAgePolicy_fileStoreRespectsCachePolicy() throws {
-        let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
+        let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory, cachePolicy: .maxAge(60))
         let filePath = Bundle.module.url(forResource: "post-test-case-1", withExtension: "json")!
         let expectedData = try Data(contentsOf: filePath)
 
@@ -432,7 +411,7 @@ struct EditorURLCacheAlwaysPolicyTests {
     /// A fixed reference date for deterministic testing.
     private let referenceDate = Date(timeIntervalSinceReferenceDate: 0)
 
-    let cache = EditorURLCache(cacheRoot: .randomTemporaryDirectory, cachePolicy: .always)
+    let cache = EditorURLCache(siteId: "test", parentDirectory: .randomTemporaryDirectory, cachePolicy: .always)
 
     private func makeResponse(data: Data = .sample, headers: EditorHTTPHeaders = [:]) -> EditorURLResponse {
         EditorURLResponse(data: data, responseHeaders: headers)

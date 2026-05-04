@@ -10,13 +10,13 @@ import Foundation
 ///
 /// ```swift
 /// // Never use cached responses
-/// let cache = EditorURLCache(cachePolicy: .ignore)
+/// let cache = EditorURLCache(siteId: configuration.siteId, cachePolicy: .ignore)
 ///
 /// // Use cached responses if they're less than 1 hour old
-/// let cache = EditorURLCache(cachePolicy: .maxAge(3600))
+/// let cache = EditorURLCache(siteId: configuration.siteId, cachePolicy: .maxAge(3600))
 ///
 /// // Always use cached responses regardless of age
-/// let cache = EditorURLCache(cachePolicy: .always)
+/// let cache = EditorURLCache(siteId: configuration.siteId, cachePolicy: .always)
 /// ```
 ///
 /// ## Choosing a Policy

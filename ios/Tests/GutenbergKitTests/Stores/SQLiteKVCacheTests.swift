@@ -552,4 +552,103 @@ struct SQLiteKVCacheTests {
         guard total > 0 else { return 0 }
         return Double(freelist) / Double(total)
     }
+
+    // MARK: - UnitInformationStorage convenience init
+
+    @Test("Measurement-based init forwards the byte count to the designated init")
+    func unitInformationStorageInit() throws {
+        // 600-byte cap expressed as a Measurement; same eviction behavior as the
+        // designated init's `evictsOldestOverCapacity` test.
+        let store = SQLiteKVCache(
+            handle: "test",
+            directory: .randomTemporaryDirectory,
+            diskCapacity: Measurement(value: 600, unit: .bytes)
+        )
+        try store.put(key: "oldest", storageDate: referenceDate, metadata: Data(), value: Data(repeating: 0x11, count: 300))
+        try store.put(key: "middle", storageDate: referenceDate.addingTimeInterval(100), metadata: Data(), value: Data(repeating: 0x22, count: 300))
+        try store.put(key: "newest", storageDate: referenceDate.addingTimeInterval(200), metadata: Data(), value: Data(repeating: 0x33, count: 300))
+
+        #expect(try store.get(key: "oldest") == nil)
+        #expect(try store.get(key: "middle") != nil)
+        #expect(try store.get(key: "newest") != nil)
+    }
+
+    @Test("Measurement-based init converts non-byte units to bytes")
+    func unitInformationStorageInitConvertsUnits() throws {
+        // 1 kibibyte == 1024 bytes. A 2000-byte value should be silently dropped
+        // (exceeds cap), a 500-byte one should fit. Same short-circuit contract
+        // as `oversizedEntryNotStored` but exercising the unit conversion path.
+        let store = SQLiteKVCache(
+            handle: "test",
+            directory: .randomTemporaryDirectory,
+            diskCapacity: Measurement(value: 1, unit: .kibibytes)
+        )
+        try store.put(key: "fits", storageDate: referenceDate, metadata: Data(), value: Data(repeating: 0x01, count: 500))
+        try store.put(key: "too-big", storageDate: referenceDate.addingTimeInterval(1), metadata: Data(), value: Data(repeating: 0x02, count: 2000))
+
+        #expect(try store.get(key: "fits")?.value.count == 500)
+        #expect(try store.get(key: "too-big") == nil)
+    }
+
+    // MARK: - Codable metadata convenience put/get
+
+    private struct SampleMeta: Codable, Equatable {
+        let etag: String
+        let contentType: String
+    }
+
+    @Test("Codable metadata put/get round-trips a value and preserves storageDate and value")
+    func codableMetadataRoundTrip() throws {
+        let store = makeStore()
+        let meta = SampleMeta(etag: "abc123", contentType: "application/json")
+        try store.put(key: "k", storageDate: referenceDate, metadata: meta, value: Data("body"))
+
+        let entry = try #require(try store.get(key: "k", metadataAs: SampleMeta.self))
+        #expect(entry.metadata == meta)
+        #expect(entry.value == Data("body"))
+        #expect(entry.storageDate == referenceDate)
+    }
+
+    @Test("Codable metadata get returns nil for a missing key")
+    func codableMetadataGetMissing() throws {
+        let store = makeStore()
+        #expect(try store.get(key: "missing", metadataAs: SampleMeta.self) == nil)
+    }
+
+    @Test("Codable metadata get throws DecodingError when stored bytes don't match the type")
+    func codableMetadataGetMismatchedType() throws {
+        // Write raw bytes via the base put, then try to decode them as `SampleMeta`.
+        // The convenience get should surface the JSONDecoder error rather than
+        // silently returning nil.
+        let store = makeStore()
+        try store.put(key: "k", storageDate: referenceDate, metadata: Data("not json"), value: Data())
+        #expect(throws: DecodingError.self) {
+            try store.get(key: "k", metadataAs: SampleMeta.self)
+        }
+    }
+
+    @Test("Codable metadata put with Data metadata picks the non-generic overload")
+    func codableMetadataPutWithDataPrefersNonGeneric() throws {
+        // `Data` conforms to `Encodable`, so the generic overload would also
+        // match. Swift prefers the non-generic original, which stores the raw
+        // bytes — a JSON-encoded `Data` would be a base64 string instead.
+        let store = makeStore()
+        try store.put(key: "k", storageDate: referenceDate, metadata: Data("raw"), value: Data("v"))
+        let entry = try #require(try store.get(key: "k"))
+        #expect(entry.metadata == Data("raw"))
+    }
+
+    @Test("Codable metadata put accepts a custom encoder")
+    func codableMetadataPutWithCustomEncoder() throws {
+        let store = makeStore()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let meta = SampleMeta(etag: "z", contentType: "text/plain")
+        try store.put(key: "k", storageDate: referenceDate, metadata: meta, value: Data(), encoder: encoder)
+
+        // The bytes should be the deterministically-ordered JSON encoding.
+        let entry = try #require(try store.get(key: "k"))
+        let expected = try encoder.encode(meta)
+        #expect(entry.metadata == expected)
+    }
 }
