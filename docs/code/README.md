@@ -19,6 +19,7 @@ This guide is for developers who want to contribute code to GutenbergKit.
 -   [Physical Device Setup](./physical-device-setup.md) - Running on physical devices
 -   [WordPress.com OAuth](./wpcom-oauth.md) - Connecting demo apps to WordPress.com sites
 -   [Demo App Sign-In](./demo-app-login.md) - Signing the demo apps into sites from the command line
+-   [StrictMode (Android demo)](./strictmode.md) - StrictMode configuration for the Android demo app
 
 ## Get Involved
 

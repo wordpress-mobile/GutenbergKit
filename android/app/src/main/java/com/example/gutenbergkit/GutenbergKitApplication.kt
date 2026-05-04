@@ -3,6 +3,7 @@ package com.example.gutenbergkit
 import android.app.Application
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.os.StrictMode
 import rs.wordpress.api.android.KeystorePasswordTransformer
 import rs.wordpress.api.kotlin.NetworkAvailabilityProvider
 import rs.wordpress.api.kotlin.WpApiClient
@@ -26,6 +27,9 @@ class GutenbergKitApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        if (BuildConfig.DEBUG) {
+            enableStrictMode()
+        }
         accountRepository = AccountRepository(
             rootPath = filesDir.resolve("accounts").absolutePath,
             passwordTransformer = KeystorePasswordTransformer("GutenbergKit")
@@ -35,6 +39,21 @@ class GutenbergKitApplication : Application() {
             val capabilities = cm.getNetworkCapabilities(cm.activeNetwork)
             capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
         }
+    }
+
+    private fun enableStrictMode() {
+        StrictMode.setThreadPolicy(
+            StrictMode.ThreadPolicy.Builder()
+                .detectAll()
+                .penaltyLog()
+                .build()
+        )
+        StrictMode.setVmPolicy(
+            StrictMode.VmPolicy.Builder()
+                .detectAll()
+                .penaltyLog()
+                .build()
+        )
     }
 
     /**
