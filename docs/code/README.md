@@ -18,6 +18,7 @@ This guide is for developers who want to contribute code to GutenbergKit.
 -   [Local WordPress](./local-wordpress.md) - Local WordPress environment for testing
 -   [Physical Device Setup](./physical-device-setup.md) - Running on physical devices
 -   [WordPress.com OAuth](./wpcom-oauth.md) - Connecting demo apps to WordPress.com sites
+-   [StrictMode (Android demo)](./strictmode.md) - StrictMode configuration for the Android demo app
 
 ## Get Involved
 
