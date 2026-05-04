@@ -16,10 +16,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
@@ -40,9 +44,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
 import com.example.gutenbergkit.ui.theme.AppTheme
@@ -102,14 +108,19 @@ class EditorActivity : ComponentActivity() {
         // The dependencies blob is on disk; deserialize it off the main thread
         // and feed the editor once it's ready.
         val dependenciesPath = intent.getStringExtra(EXTRA_DEPENDENCIES_PATH)
-        val dependenciesState = mutableStateOf<EditorDependencies?>(null)
-        val dependenciesReady = mutableStateOf(dependenciesPath == null)
+        val dependenciesLoad = mutableStateOf<DependenciesLoad>(
+            if (dependenciesPath == null) DependenciesLoad.Ready(null) else DependenciesLoad.Loading
+        )
         if (dependenciesPath != null) {
             lifecycleScope.launch {
-                dependenciesState.value = withContext(Dispatchers.IO) {
-                    EditorDependenciesSerializer.readFromDisk(dependenciesPath)
+                dependenciesLoad.value = try {
+                    val deps = withContext(Dispatchers.IO) {
+                        EditorDependenciesSerializer.readFromDisk(dependenciesPath)
+                    }
+                    DependenciesLoad.Ready(deps)
+                } catch (e: Exception) {
+                    DependenciesLoad.Failed(e.message ?: e::class.java.simpleName)
                 }
-                dependenciesReady.value = true
             }
         }
 
@@ -118,25 +129,59 @@ class EditorActivity : ComponentActivity() {
 
         setContent {
             AppTheme {
-                if (!dependenciesReady.value) return@AppTheme
-                EditorScreen(
-                    configuration = configuration,
-                    dependencies = dependenciesState.value,
-                    accountId = accountId,
-                    coroutineScope =  this.lifecycleScope,
-                    onClose = { finish() },
-                    onGutenbergViewCreated = { view ->
-                        gutenbergView = view
-                        setupFileChooserListener(view)
-                    }
-                )
+                when (val load = dependenciesLoad.value) {
+                    is DependenciesLoad.Loading -> DependenciesLoadingScreen()
+                    is DependenciesLoad.Failed -> DependenciesErrorScreen(
+                        message = load.message,
+                        onClose = { finish() }
+                    )
+                    is DependenciesLoad.Ready -> EditorScreen(
+                        configuration = configuration,
+                        dependencies = load.dependencies,
+                        accountId = accountId,
+                        coroutineScope =  this.lifecycleScope,
+                        onClose = { finish() },
+                        onGutenbergViewCreated = { view ->
+                            gutenbergView = view
+                            setupFileChooserListener(view)
+                        }
+                    )
+                }
             }
         }
+    }
+
+    private sealed interface DependenciesLoad {
+        data object Loading : DependenciesLoad
+        data class Failed(val message: String) : DependenciesLoad
+        data class Ready(val dependencies: EditorDependencies?) : DependenciesLoad
     }
 
     private fun setupFileChooserListener(view: GutenbergView) {
         view.setOnFileChooserRequestedListener { intent, _ ->
             filePickerLauncher.launch(intent)
+        }
+    }
+}
+
+@Composable
+private fun DependenciesLoadingScreen() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator()
+    }
+}
+
+@Composable
+private fun DependenciesErrorScreen(message: String, onClose: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(24.dp)
+        ) {
+            Text("Couldn't load editor data")
+            Text(message)
+            TextButton(onClick = onClose) { Text("Close") }
         }
     }
 }
