@@ -5,6 +5,10 @@
     <!-- Used by the block inserter media strip to preview recent device photos.
          Host apps that don't need this can opt out via tools:node="remove". -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- Android 14+ partial-access opt-in. Declaring this lets the system offer
+         "Select photos and videos" alongside the all/none choice and lets us
+         detect partial grants so we can surface a "Manage selection" affordance. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />

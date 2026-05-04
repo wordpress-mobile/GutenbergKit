@@ -13,6 +13,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.rememberScrollableState
 import androidx.compose.foundation.gestures.scrollable
@@ -32,6 +34,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.rememberScrollState
@@ -42,11 +45,13 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -196,6 +201,13 @@ private const val EMPTY_STATE_VERTICAL_PAD_DP = 32
 private const val EMPTY_STATE_FONT_SP = 14
 
 private const val DISABLED_ALPHA = 0.5f
+
+/**
+ * Material 3 minimum touch-target. Several visual elements here (rationale
+ * buttons, category chips) sit below this for design reasons; we wrap them in
+ * an outer clickable that meets the minimum without changing the visual size.
+ */
+private const val TOUCH_TARGET_MIN_DP = 48
 
 /**
  * Bottom-sheet block inserter. The outer shell stays a `BottomSheetDialog` so
@@ -454,6 +466,15 @@ private fun MediaStrip() {
     val access = rememberPhotoAccess(limit = RECENT_PHOTO_LIMIT)
     val context = LocalContext.current
     var rejected by remember { mutableStateOf(hasRejectedRationale(context)) }
+    // Clear a prior rejection once the user actually grants the permission.
+    // Without this, a later revocation would leave the user in CompactTiles
+    // with no in-app path back to the rationale.
+    LaunchedEffect(access) {
+        if (access is PhotoAccess.Granted && rejected) {
+            clearRejectedRationale(context)
+            rejected = false
+        }
+    }
     val contentPadding = PaddingValues(
         start = MEDIA_STRIP_CONTENT_HORIZONTAL_PAD_DP.dp,
         end = MEDIA_STRIP_CONTENT_HORIZONTAL_PAD_DP.dp,
@@ -496,26 +517,62 @@ private fun MediaStrip() {
                     modifier = Modifier.fillMaxWidth().padding(contentPadding),
                 )
             }
-            MediaStripView.FullStrip -> {
-                // Granted — thumbnail grid extends past the viewport, so use
-                // horizontalScroll + a zero-consuming vertical relay so vertical
-                // drags still reach BottomSheetBehavior.
-                val scrollState = rememberScrollState()
-                val verticalRelay = rememberScrollableState { 0f }
-                val uris = (access as? PhotoAccess.Granted)?.uris.orEmpty()
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(MEDIA_STRIP_ITEM_GAP_DP.dp),
-                    modifier = Modifier
-                        .horizontalScroll(scrollState)
-                        .scrollable(verticalRelay, Orientation.Vertical)
-                        .padding(contentPadding),
-                ) {
-                    PhotosCameraTile(horizontal = false)
-                    if (uris.isNotEmpty()) MediaThumbnailGrid(uris = uris)
+            MediaStripView.FullStrip -> FullMediaStrip(
+                granted = access as? PhotoAccess.Granted,
+                contentPadding = contentPadding,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FullMediaStrip(granted: PhotoAccess.Granted?, contentPadding: PaddingValues) {
+    // Granted — thumbnail strip extends past the viewport. LazyRow composes
+    // only the visible columns (plus prefetch), so the 64 thumbnails aren't
+    // all decoded into memory upfront. Vertical drags pass through the lazy
+    // list's nested-scroll dispatch up to BottomSheetBehavior; no manual
+    // relay needed.
+    val uris = granted?.uris.orEmpty()
+    val partialAccess = granted?.partialAccess
+    val columns = (uris.size + 1) / 2
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(MEDIA_STRIP_ITEM_GAP_DP.dp),
+        contentPadding = contentPadding,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        item(key = "actions") { PhotosCameraTile(horizontal = false) }
+        if (partialAccess != null) {
+            // Sits right after Photos/Camera so the affordance is visible without
+            // scrolling — partial-access users won't otherwise have any in-app
+            // path to update their selection.
+            item(key = "manage") {
+                ManageSelectionTile(onClick = partialAccess.onManageSelection)
+            }
+        }
+        items(columns, key = { uris[it * 2].toString() }) { col ->
+            Column(verticalArrangement = Arrangement.spacedBy(MEDIA_STRIP_ITEM_GAP_DP.dp)) {
+                RealThumbnail(uri = uris[col * 2])
+                val secondIndex = col * 2 + 1
+                if (secondIndex < uris.size) {
+                    RealThumbnail(uri = uris[secondIndex])
                 }
             }
         }
     }
+}
+
+@Composable
+private fun ManageSelectionTile(onClick: () -> Unit) {
+    MediaActionTile(
+        iconVector = Icons.Filled.Tune,
+        label = stringResource(R.string.gbk_block_inserter_photos_manage),
+        background = MaterialTheme.colorScheme.secondaryContainer,
+        foreground = MaterialTheme.colorScheme.onSecondaryContainer,
+        onClick = onClick,
+        modifier = Modifier
+            .width(MEDIA_STACK_WIDTH_DP.dp)
+            .height(MEDIA_STACK_HEIGHT_DP.dp),
+    )
 }
 
 @Composable
@@ -527,6 +584,12 @@ private fun PhotosCameraTile(
     val context = LocalContext.current
     // System photo picker is permissionless — our READ_MEDIA_IMAGES permission
     // only gates the recent-photos strip, not this launch path.
+    //
+    // The result callbacks below are intentionally inert: the picked URI / camera
+    // capture needs to round-trip through `WebViewAssetLoader` so the JS editor
+    // can `fetch()` it, which is a follow-up. Until that lands, this whole sheet
+    // is gated behind the demo app's "Enable Native Inserter" toggle, so users
+    // outside that opt-in won't see the no-op buttons.
     val photoPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { /* picked uri — hand-off to editor insertion is a follow-up */ }
@@ -601,6 +664,10 @@ private fun PhotosCameraTile(
 private fun createCameraOutputUri(context: Context): Uri {
     val dir = File(context.cacheDir, "camera").apply { mkdirs() }
     val file = File(dir, "capture_${System.currentTimeMillis()}.jpg")
+    // TODO: clean up captured files once the editor hand-off lands. Each Camera
+    // tap creates a fresh file here; with the result callback inert today, every
+    // capture is orphaned in the cache. When we wire up the URI hand-off, delete
+    // on success/cancel and sweep stale files on next entry.
     return FileProvider.getUriForFile(
         context,
         "${context.packageName}.gutenberg.fileprovider",
@@ -641,25 +708,6 @@ private fun MediaActionTile(
 }
 
 @Composable
-private fun MediaThumbnailGrid(uris: List<Uri>) {
-    // Two rows of tiles laid out left-to-right, column-by-column. Only render
-    // as many tiles as we have URIs — empty slots otherwise would render
-    // colorful mock placeholders that flash on the way to the real bitmaps.
-    val columns = (uris.size + 1) / 2
-    Row(horizontalArrangement = Arrangement.spacedBy(MEDIA_STRIP_ITEM_GAP_DP.dp)) {
-        repeat(columns) { col ->
-            Column(verticalArrangement = Arrangement.spacedBy(MEDIA_STRIP_ITEM_GAP_DP.dp)) {
-                RealThumbnail(uri = uris[col * 2])
-                val secondIndex = col * 2 + 1
-                if (secondIndex < uris.size) {
-                    RealThumbnail(uri = uris[secondIndex])
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun PhotoAccessRationale(
     state: PromptState,
     onAllow: () -> Unit,
@@ -680,20 +728,38 @@ private fun PhotoAccessRationale(
     fun RationaleButton(label: String, filled: Boolean, onClick: () -> Unit, modifier: Modifier) {
         val bg = if (filled) MaterialTheme.colorScheme.primary else ComposeColor.Transparent
         val fg = if (filled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+        // Outer wrapper inflates the touch zone to the 48dp minimum; the inner
+        // Box paints the design's 32dp pill. The shared interaction source lets
+        // the outer absorb taps with no indication while the inner draws the
+        // ripple — otherwise a default ripple on the outer would render as a
+        // square halo around the rounded pill.
+        val interactionSource = remember { MutableInteractionSource() }
         Box(
             contentAlignment = Alignment.Center,
             modifier = modifier
-                .height(MEDIA_RATIONALE_BUTTON_HEIGHT_DP.dp)
-                .clip(RoundedCornerShape(MEDIA_RATIONALE_BUTTON_CORNER_DP.dp))
-                .background(bg)
-                .clickable(onClick = onClick),
+                .heightIn(min = TOUCH_TARGET_MIN_DP.dp)
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = onClick,
+                ),
         ) {
-            Text(
-                text = label,
-                color = fg,
-                fontSize = MEDIA_RATIONALE_BUTTON_FONT_SP.sp,
-                fontWeight = FontWeight.Medium,
-            )
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(MEDIA_RATIONALE_BUTTON_HEIGHT_DP.dp)
+                    .clip(RoundedCornerShape(MEDIA_RATIONALE_BUTTON_CORNER_DP.dp))
+                    .background(bg)
+                    .indication(interactionSource, ripple()),
+            ) {
+                Text(
+                    text = label,
+                    color = fg,
+                    fontSize = MEDIA_RATIONALE_BUTTON_FONT_SP.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
         }
     }
     Column(
@@ -816,27 +882,43 @@ private fun CategoryChip(
     } else {
         MaterialTheme.colorScheme.outlineVariant
     }
+    // Outer wrapper takes the click and the 48dp minimum-touch height; the
+    // inner Box keeps the design's 36dp pill with border + background. Shared
+    // interaction source so the ripple draws inside the rounded pill instead
+    // of as a square over the wrapper's rectangular bounds.
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .height(CHIP_HEIGHT_DP.dp)
-            .clip(RoundedCornerShape(CHIP_CORNER_DP.dp))
-            .background(background)
-            .border(
-                width = CHIP_BORDER_WIDTH_DP.dp,
-                color = borderColor,
-                shape = RoundedCornerShape(CHIP_CORNER_DP.dp),
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = CHIP_HORIZONTAL_PAD_DP.dp),
+            .heightIn(min = TOUCH_TARGET_MIN_DP.dp)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            ),
     ) {
-        Text(
-            text = label,
-            color = textColor,
-            fontSize = CHIP_FONT_SP.sp,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = CHIP_LETTER_SPACING_SP.sp,
-        )
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .height(CHIP_HEIGHT_DP.dp)
+                .clip(RoundedCornerShape(CHIP_CORNER_DP.dp))
+                .background(background)
+                .border(
+                    width = CHIP_BORDER_WIDTH_DP.dp,
+                    color = borderColor,
+                    shape = RoundedCornerShape(CHIP_CORNER_DP.dp),
+                )
+                .indication(interactionSource, ripple())
+                .padding(horizontal = CHIP_HORIZONTAL_PAD_DP.dp),
+        ) {
+            Text(
+                text = label,
+                color = textColor,
+                fontSize = CHIP_FONT_SP.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = CHIP_LETTER_SPACING_SP.sp,
+            )
+        }
     }
 }
 

@@ -24,11 +24,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -41,51 +41,74 @@ internal fun rememberPhotoAccess(limit: Int): PhotoAccess {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     var granted by remember { mutableStateOf(hasPhotosPermission(context)) }
+    var partial by remember { mutableStateOf(isPartialPhotoAccess(context)) }
     var promptedBefore by remember { mutableStateOf(hasPromptedForPhotos(context)) }
     var uris by remember { mutableStateOf<List<Uri>>(emptyList()) }
-    // Bumped on every permission result so the rationale state re-evaluates
-    // even when `granted` and `promptedBefore` don't change — without it the
-    // 2nd denial (which transitions Denied → PermanentlyDenied) would be
-    // invisible to recomposition since both flags were already in their
-    // post-deny state, and the "Try Again" button would silently no-op.
-    var permissionTick by remember { mutableStateOf(0) }
+    // `canReprompt` is its own state, recomputed at every permission-relevant
+    // signal (launcher result, lifecycle resume). Compose's snapshot system
+    // can't see the OS-level `shouldShowRequestPermissionRationale` flip from
+    // true → false on the 2nd denial otherwise — `granted` and `promptedBefore`
+    // are already in their post-deny values, so neither would notify Compose
+    // and the rationale would stay stuck on "Try Again".
+    var canReprompt by remember {
+        mutableStateOf(activity?.let { shouldShowRationale(it) } ?: true)
+    }
+    // Bumped after every launcher result. Keys the MediaStore re-query so a
+    // partial-access selection update (granted stays true, uris content changes)
+    // refreshes the strip — `granted`/`limit` alone wouldn't trigger that.
+    var refreshTick by remember { mutableStateOf(0) }
+    val refreshAccessState = {
+        granted = hasPhotosPermission(context)
+        partial = isPartialPhotoAccess(context)
+        canReprompt = activity?.let { shouldShowRationale(it) } ?: true
+    }
     val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { _ ->
         markPromptedForPhotos(context)
         promptedBefore = true
-        granted = isGranted
-        permissionTick++
+        refreshAccessState()
+        refreshTick++
     }
     // Re-read permission on every RESUME so we notice grants made via system
     // Settings (which happen outside the Compose result-callback path).
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
+    // Important: observe the host Activity's lifecycle, not the Compose-default
+    // LocalLifecycleOwner. Inside a BottomSheetDialog the latter resolves to the
+    // dialog's own LifecycleRegistry (per ComponentDialog), which only dispatches
+    // ON_RESUME from `show()` and never refires when the user leaves to system
+    // Settings and returns. The Activity's lifecycle does refire ON_RESUME.
+    val activityLifecycle = (activity as? LifecycleOwner)?.lifecycle
+    DisposableEffect(activityLifecycle) {
+        if (activityLifecycle == null) return@DisposableEffect onDispose { }
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                granted = hasPhotosPermission(context)
-                permissionTick++
-            }
+            if (event == Lifecycle.Event.ON_RESUME) refreshAccessState()
         }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        activityLifecycle.addObserver(observer)
+        onDispose { activityLifecycle.removeObserver(observer) }
     }
-    LaunchedEffect(granted, limit) {
-        if (granted) {
-            uris = withContext(Dispatchers.IO) { queryRecentImages(context, limit) }
+    LaunchedEffect(granted, limit, refreshTick) {
+        uris = if (granted) {
+            withContext(Dispatchers.IO) { queryRecentImages(context, limit) }
+        } else {
+            emptyList()
         }
     }
-    if (granted) return PhotoAccess.Granted(uris)
-    val canReprompt = run {
-        permissionTick // observe the tick so we re-read shouldShowRationale on each result
-        activity?.let { shouldShowRationale(it) } ?: true
+    if (granted) {
+        return PhotoAccess.Granted(
+            uris = uris,
+            partialAccess = if (partial) {
+                PhotoAccess.PartialAccess(
+                    onManageSelection = { launcher.launch(photosPermissions()) },
+                )
+            } else null,
+        )
     }
     val state = resolvePromptState(promptedBefore = promptedBefore, canReprompt = canReprompt)
     return PhotoAccess.NeedsPermission(
         state = state,
         request = {
             if (state == PromptState.PermanentlyDenied) openAppSettings(context)
-            else launcher.launch(photosPermission())
+            else launcher.launch(photosPermissions())
         },
     )
 }
@@ -107,8 +130,50 @@ private fun photosPermission(): String =
         Manifest.permission.READ_EXTERNAL_STORAGE
     }
 
-private fun hasPhotosPermission(context: Context): Boolean =
-    ContextCompat.checkSelfPermission(context, photosPermission()) == PackageManager.PERMISSION_GRANTED
+/**
+ * The permission set to request together. On Android 14+ we ask for both the
+ * full and partial-access permissions in one prompt — the system surfaces the
+ * "Select photos and videos" affordance, and on subsequent calls reopens the
+ * picker so the user can update a partial-access selection without leaving us.
+ */
+private fun photosPermissions(): Array<String> = when {
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> arrayOf(
+        Manifest.permission.READ_MEDIA_IMAGES,
+        Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
+    )
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> arrayOf(
+        Manifest.permission.READ_MEDIA_IMAGES,
+    )
+    else -> arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+}
+
+/** True when either full or partial-access reads are permitted. */
+private fun hasPhotosPermission(context: Context): Boolean {
+    if (ContextCompat.checkSelfPermission(context, photosPermission()) == PackageManager.PERMISSION_GRANTED) {
+        return true
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        return ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+    return false
+}
+
+/** True only when the user picked "Select photos and videos" (Android 14+). */
+private fun isPartialPhotoAccess(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return false
+    val full = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.READ_MEDIA_IMAGES,
+    ) == PackageManager.PERMISSION_GRANTED
+    if (full) return false
+    return ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
+    ) == PackageManager.PERMISSION_GRANTED
+}
 
 private fun shouldShowRationale(activity: Activity): Boolean =
     ActivityCompat.shouldShowRequestPermissionRationale(activity, photosPermission())
@@ -143,6 +208,17 @@ internal fun hasRejectedRationale(context: Context): Boolean =
 internal fun markRationaleRejected(context: Context) {
     context.getSharedPreferences(PHOTO_PREFS, Context.MODE_PRIVATE)
         .edit().putBoolean(KEY_RATIONALE_REJECTED, true).apply()
+}
+
+/**
+ * Clears just the rationale-rejected flag (leaving the prompted-before flag
+ * alone). Called when we observe the photo permission becoming granted, so a
+ * subsequent revocation surfaces the rationale again instead of stranding the
+ * user in CompactTiles with no in-app affordance to re-engage.
+ */
+internal fun clearRejectedRationale(context: Context) {
+    context.getSharedPreferences(PHOTO_PREFS, Context.MODE_PRIVATE)
+        .edit().remove(KEY_RATIONALE_REJECTED).apply()
 }
 
 internal fun clearPhotoPreferences(context: Context) {

@@ -45,6 +45,16 @@ class PhotoAccessStateTest {
     }
 
     @Test
+    fun `partial access still shows full strip`() {
+        val partial = PhotoAccess.Granted(
+            uris = emptyList(),
+            partialAccess = PhotoAccess.PartialAccess(onManageSelection = {}),
+        )
+        assertEquals(MediaStripView.FullStrip, resolveMediaStripView(partial, rejected = false))
+        assertEquals(MediaStripView.FullStrip, resolveMediaStripView(partial, rejected = true))
+    }
+
+    @Test
     fun `needs-permission shows rationale when not rejected`() {
         val needs = needsPermission(PromptState.Denied)
         assertEquals(MediaStripView.Rationale, resolveMediaStripView(needs, rejected = false))
