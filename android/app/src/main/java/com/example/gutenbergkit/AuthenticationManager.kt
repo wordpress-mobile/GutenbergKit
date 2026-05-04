@@ -270,31 +270,9 @@ class AuthenticationManager(
 
                 when (tokenResult) {
                     is WpRequestResult.Success -> {
-                        val tokenResponse = tokenResult.response.data
-                        val blogId = tokenResponse.blogId
-                            ?: throw OAuthException.MissingBlogId()
-                        val discoverySuccess = currentDiscoverySuccess
-                        val siteHost = discoverySuccess?.parsedSiteUrl?.toURL()?.toURI()?.host
-                            ?: throw OAuthException.MissingSiteHost()
-
-                        val siteApiRoot = wordPressComSiteApiRoot(blogId)
-
-                        val account = Account.WpCom(
-                            id = 0u,
-                            username = siteHost,
-                            token = tokenResponse.accessToken,
-                            siteApiRoot = siteApiRoot
-                        )
-
-                        val stored = app.withAccountRepository { repo ->
-                            repo.store(account)
-                            repo.all().last()
-                        }
-
-                        currentOAuthConfig = null
-                        currentOAuthState = null
-                        currentDiscoverySuccess = null
-
+                        val token = tokenResult.response.data
+                        val blogId = token.blogId ?: throw OAuthException.MissingBlogId()
+                        val stored = persistOAuthAccount(blogId, token.accessToken)
                         withContext(Dispatchers.Main) {
                             callback.onAuthenticationSuccess(stored)
                         }
@@ -311,6 +289,35 @@ class AuthenticationManager(
                 }
             }
         }
+    }
+
+    /**
+     * Persists an [Account.WpCom] derived from the given OAuth blogId and
+     * access token via [GutenbergKitApplication.withAccountRepository] (off
+     * the main thread) and clears OAuth scratch state. Returns the stored
+     * [Account].
+     */
+    private suspend fun persistOAuthAccount(blogId: ULong, accessToken: String): Account {
+        val siteHost = currentDiscoverySuccess?.parsedSiteUrl?.toURL()?.toURI()?.host
+            ?: throw OAuthException.MissingSiteHost()
+
+        val account = Account.WpCom(
+            id = 0u,
+            username = siteHost,
+            token = accessToken,
+            siteApiRoot = wordPressComSiteApiRoot(blogId)
+        )
+
+        val stored = app.withAccountRepository { repo ->
+            repo.store(account)
+            repo.all().last()
+        }
+
+        currentOAuthConfig = null
+        currentOAuthState = null
+        currentDiscoverySuccess = null
+
+        return stored
     }
 
     private fun loadOAuthCredentials(): OAuthCredentials? {
