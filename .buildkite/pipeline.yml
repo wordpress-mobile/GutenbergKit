@@ -77,6 +77,36 @@ steps:
           make test-swift-library
       plugins: *plugins
 
+    - label: ':xcode: Build XCFramework'
+      key: build-xcframework
+      depends_on:
+        - build-react
+        - swift-test-library
+      command: |
+          buildkite-agent artifact download dist.tar.gz .
+          tar -xzf dist.tar.gz
+          install_gems
+          bundle exec fastlane set_up_signing_release
+          make build-resources-xcframework
+          bundle exec fastlane xcframework_sign
+          ./package_xcframework.sh
+      artifact_paths:
+          - '*.xcframework.zip'
+          - '*.xcframework.zip.checksum.txt'
+      plugins: *plugins
+
+    - label: ':s3: Publish XCFramework to S3'
+      depends_on: build-xcframework
+      command: |
+          buildkite-agent artifact download '*.xcframework.zip' .
+          buildkite-agent artifact download '*.xcframework.zip.checksum.txt' .
+          install_gems
+          # Version precedence: explicit `NEW_VERSION` override wins, then a
+          # tag build publishes under the tag, otherwise fall back to the
+          # commit SHA so every push gets a stable artifact URL.
+          bundle exec fastlane publish_to_s3 version:${NEW_VERSION:-${BUILDKITE_TAG:-$BUILDKITE_COMMIT}}
+      plugins: *plugins
+
     - label: ':ios: Test iOS E2E'
       depends_on: build-react
       command: |

@@ -1,0 +1,125 @@
+# frozen_string_literal: true
+
+PROJECT_ROOT = File.expand_path('..', __dir__)
+
+APPLE_TEAM_ID = 'PZYM8XX95Q'
+
+ASC_API_KEY_ENV_VARS = %w[
+  APP_STORE_CONNECT_API_KEY_KEY_ID
+  APP_STORE_CONNECT_API_KEY_ISSUER_ID
+  APP_STORE_CONNECT_API_KEY_KEY
+].freeze
+
+CODE_SIGNING_STORAGE_ENV_VARS = %w[
+  MATCH_S3_ACCESS_KEY
+  MATCH_S3_SECRET_ACCESS_KEY
+].freeze
+
+before_all do
+  setup_ci
+end
+
+lane :publish_to_s3 do |options|
+  version = required_version!(options)
+
+  upload_to_s3(
+    bucket: 'a8c-apps-public-artifacts',
+    key: File.join('gutenbergkit', version, 'GutenbergKitResources.xcframework.zip'),
+    file: xcframework_file_path,
+    auto_prefix: false,
+    if_exists: :replace
+  )
+
+  upload_to_s3(
+    bucket: 'a8c-apps-public-artifacts',
+    key: File.join('gutenbergkit', version, 'GutenbergKitResources.xcframework.zip.checksum.txt'),
+    file: xcframework_checksum_file_path,
+    auto_prefix: false,
+    if_exists: :replace
+  )
+end
+
+lane :xcframework_sign do
+  sh(
+    'codesign',
+    '--timestamp',
+    '-s', 'Apple Distribution',
+    xcframework_dir_path
+  )
+end
+
+desc 'Download the release (distribution) signing certificates'
+lane :set_up_signing_release do |readonly: true|
+  require_env_vars!(*ASC_API_KEY_ENV_VARS, *CODE_SIGNING_STORAGE_ENV_VARS)
+
+  sync_code_signing(
+    team_id: APPLE_TEAM_ID,
+    api_key: app_store_connect_api_key,
+    type: 'appstore',
+    storage_mode: 's3',
+    s3_region: 'us-east-2',
+    s3_bucket: 'a8c-fastlane-match',
+    readonly: readonly,
+    # We don't need provisioning profile, only the certificate.
+    # An empty identifier list does the trick and avoids confusion.
+    app_identifier: [],
+    platform: 'macos'
+  )
+end
+
+def xcframework_checksum
+  File.read(xcframework_checksum_file_path).strip
+end
+
+def xcframework_checksum_file_path
+  require_single_glob_match!(
+    File.join(PROJECT_ROOT, 'GutenbergKitResources-*.xcframework.zip.checksum.txt'),
+    'XCFramework checksum file not found. Run package_xcframework.sh first.'
+  )
+end
+
+def xcframework_dir_path
+  require_single_glob_match!(
+    File.join(PROJECT_ROOT, 'build', 'GutenbergKitResources-*.xcframework'),
+    'XCFramework not found. Run build_xcframework.sh first.'
+  )
+end
+
+def xcframework_file_path
+  require_single_glob_match!(
+    File.join(PROJECT_ROOT, 'GutenbergKitResources-*.xcframework.zip'),
+    'XCFramework zip not found. Run package_xcframework.sh first.'
+  )
+end
+
+def require_single_glob_match!(pattern, not_found_message)
+  matches = Dir.glob(pattern)
+
+  UI.user_error!(not_found_message) if matches.empty?
+
+  if matches.length > 1
+    UI.user_error!(
+      "Multiple artifacts matched pattern `#{pattern}`:\n" \
+      "#{matches.sort.join("\n")}\n" \
+      'Please remove stale artifacts and try again.'
+    )
+  end
+
+  matches.first
+end
+
+def required_version!(options)
+  version = options[:version].to_s
+  UI.user_error!('version is required') if version.empty?
+  version
+end
+
+def require_env_vars!(*keys)
+  keys.each { |key| get_required_env!(key) }
+end
+
+def get_required_env!(key)
+  return ENV.fetch(key) if ENV.key?(key)
+
+  UI.user_error!("Environment variable `#{key}` is not set.")
+end

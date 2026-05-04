@@ -122,6 +122,16 @@ copy-dist-android:
 build-swift-package: build ## Build the Swift package for iOS
 	$(call XCODEBUILD_CMD, build, GutenbergKit)
 
+.PHONY: build-resources-xcframework
+build-resources-xcframework: build ## Build GutenbergKitResources XCFramework
+# `build` short-circuits `copy-dist-ios` when `dist/` already exists (e.g. in
+# CI, after extracting an upstream dist tarball), so call it explicitly here
+# to guarantee the XCFramework ships the just-built dist rather than whatever
+# was committed at HEAD.
+	@$(MAKE) copy-dist-ios
+	@echo "--- :swift: Building GutenbergKitResources XCFramework"
+	./build_xcframework.sh
+
 .PHONY: local-android-library
 local-android-library: build ## Build the Android library to local Maven
 	@echo "--- :android: Building Library"
