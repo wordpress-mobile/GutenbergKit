@@ -4,6 +4,7 @@ import android.os.Parcelable
 import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
 import java.net.URI
+import java.util.Locale
 import java.util.UUID
 
 @Parcelize
@@ -96,7 +97,37 @@ data class EditorConfiguration(
         fun setNamespaceExcludedPaths(namespaceExcludedPaths: Array<String>) = apply { this.namespaceExcludedPaths = namespaceExcludedPaths }
         fun setAuthHeader(authHeader: String) = apply { this.authHeader = authHeader }
         fun setEditorSettings(editorSettings: String?) = apply { this.editorSettings = editorSettings }
-        fun setLocale(locale: String?) = apply { this.locale = locale }
+        /**
+         * Stores [locale] verbatim without running the resolver. Reserved for
+         * `toBuilder` round-trip and tests — consumers should always go
+         * through [setLocale] with a [Locale].
+         */
+        @JvmSynthetic
+        internal fun setLocaleTag(locale: String?) = apply { this.locale = locale }
+
+        /**
+         * Resolves [locale] against the bundled translations and stores the
+         * resulting tag for serialization.
+         *
+         * The resolution chain tries, in order:
+         *   1. exact `language-region` (e.g. `pt-BR` → `pt-br`)
+         *   2. `language-<script-implied region>` for macrolanguages we ship
+         *      disjoint regional bundles for (e.g. `zh-Hant-HK` → `zh-tw`)
+         *   3. `language` only (e.g. `fr-CA` → `fr`)
+         *   4. `en`
+         *
+         * Legacy ISO 639-1 codes that Android's `Locale` class still emits
+         * (`iw` for Hebrew, `in` for Indonesian, `no` for Norwegian Bokmål)
+         * are mapped to canonical bundle names before lookup.
+         *
+         * Languages for which no bundle ships at all silently resolve to
+         * `en`. The resolver does not log or signal the fallback — consumers
+         * expecting coverage for a specific language should verify the build
+         * manifest includes it.
+         */
+        fun setLocale(locale: Locale) = apply {
+            this.locale = LocaleResolver.Default.resolve(locale)
+        }
         fun setCookies(cookies: Map<String, String>) = apply { this.cookies = cookies }
         fun setEnableAssetCaching(enableAssetCaching: Boolean) = apply { this.enableAssetCaching = enableAssetCaching }
         fun setCachedAssetHosts(cachedAssetHosts: Set<String>) = apply { this.cachedAssetHosts = cachedAssetHosts }
@@ -150,7 +181,7 @@ data class EditorConfiguration(
         .setNamespaceExcludedPaths(namespaceExcludedPaths)
         .setAuthHeader(authHeader)
         .setEditorSettings(editorSettings)
-        .setLocale(locale)
+        .setLocaleTag(locale)
         .setCookies(cookies)
         .setEnableAssetCaching(enableAssetCaching)
         .setCachedAssetHosts(cachedAssetHosts)
