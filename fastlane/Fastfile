@@ -4,6 +4,9 @@ PROJECT_ROOT = File.expand_path('..', __dir__)
 
 APPLE_TEAM_ID = 'PZYM8XX95Q'
 
+GITHUB_REPO = 'wordpress-mobile/GutenbergKit'
+XCFRAMEWORK_COMMENT_MARKER = '<!-- gutenbergkit-xcframework-build -->'
+
 ASC_API_KEY_ENV_VARS = %w[
   APP_STORE_CONNECT_API_KEY_KEY_ID
   APP_STORE_CONNECT_API_KEY_ISSUER_ID
@@ -37,6 +40,21 @@ lane :publish_to_s3 do |options|
     auto_prefix: false,
     if_exists: :replace
   )
+end
+
+lane :publish_pr_xcframework do |options|
+  pr_number = options[:pr_number].to_s
+  UI.user_error!('pr_number is required') if pr_number.empty?
+
+  branch_name = "pr-build/#{pr_number}"
+  version = "pr-builds/#{pr_number}"
+
+  publish_to_s3(version: version)
+  push_xcframework_snapshot_branch(branch_name: branch_name, version: version, checksum: xcframework_checksum)
+
+  body = xcframework_comment_body(branch_name: branch_name, commit_sha: ENV.fetch('BUILDKITE_COMMIT', nil))
+  upsert_pr_xcframework_comment(pr_number: pr_number, body: body)
+  post_buildkite_annotation(body: body)
 end
 
 lane :xcframework_sign do
@@ -122,4 +140,96 @@ def get_required_env!(key)
   return ENV.fetch(key) if ENV.key?(key)
 
   UI.user_error!("Environment variable `#{key}` is not set.")
+end
+
+def push_xcframework_snapshot_branch(branch_name:, version:, checksum:)
+  package_swift = File.join(PROJECT_ROOT, 'Package.swift')
+  rewrite_resources_mode!(package_swift, version: version, checksum: checksum)
+
+  sh("git checkout -B #{branch_name}")
+  git_commit(path: package_swift, message: "Update Package.swift for #{version}")
+  sh("git push -f origin #{branch_name}")
+end
+
+def rewrite_resources_mode!(package_swift, version:, checksum:)
+  prefix = 'let resourcesMode: DependencyMode ='
+  replacement = %(#{prefix} .release(version: "#{version}", checksum: "#{checksum}")\n)
+
+  lines = File.readlines(package_swift)
+  matches = lines.count { |line| line.start_with?(prefix) }
+  UI.user_error!("Expected exactly one `#{prefix}` line in Package.swift, found #{matches}") unless matches == 1
+
+  rewritten = lines.map { |line| line.start_with?(prefix) ? replacement : line }
+  File.write(package_swift, rewritten.join)
+end
+
+def xcframework_comment_body(branch_name:, commit_sha:)
+  short_sha = (commit_sha || 'unknown')[0, 8]
+  <<~MARKDOWN
+    #{XCFRAMEWORK_COMMENT_MARKER}
+    ## XCFramework Build
+
+    This PR's XCFramework is available for testing. Add to your `Package.swift`:
+
+    ```swift
+    .package(url: "https://github.com/#{GITHUB_REPO}", branch: "#{branch_name}")
+    ```
+
+    <sub>Built from #{short_sha}</sub>
+  MARKDOWN
+end
+
+def upsert_pr_xcframework_comment(pr_number:, body:)
+  github_token = ENV.fetch('GITHUB_TOKEN', nil)
+  unless github_token
+    UI.important('GITHUB_TOKEN not set, skipping PR comment')
+    return
+  end
+
+  existing = find_existing_xcframework_comment(github_token: github_token, pr_number: pr_number)
+  if existing
+    github_api(
+      server_url: 'https://api.github.com',
+      api_token: github_token,
+      http_method: 'PATCH',
+      path: "/repos/#{GITHUB_REPO}/issues/comments/#{existing['id']}",
+      body: { body: body }
+    )
+  else
+    github_api(
+      server_url: 'https://api.github.com',
+      api_token: github_token,
+      http_method: 'POST',
+      path: "/repos/#{GITHUB_REPO}/issues/#{pr_number}/comments",
+      body: { body: body }
+    )
+  end
+end
+
+def find_existing_xcframework_comment(github_token:, pr_number:)
+  page = 1
+  loop do
+    result = github_api(
+      server_url: 'https://api.github.com',
+      api_token: github_token,
+      http_method: 'GET',
+      path: "/repos/#{GITHUB_REPO}/issues/#{pr_number}/comments?per_page=100&page=#{page}"
+    )
+    comments = result[:json] || []
+    return nil if comments.empty?
+
+    found = comments.find { |c| c['body']&.include?(XCFRAMEWORK_COMMENT_MARKER) }
+    return found if found
+    return nil if comments.length < 100
+
+    page += 1
+  end
+end
+
+def post_buildkite_annotation(body:)
+  return unless ENV['BUILDKITE_AGENT_ACCESS_TOKEN']
+
+  IO.popen(['buildkite-agent', 'annotate', '--context', 'xcframework', '--style', 'info'], 'w') do |io|
+    io.write(body)
+  end
 end
