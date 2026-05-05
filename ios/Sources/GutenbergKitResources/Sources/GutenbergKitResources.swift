@@ -27,30 +27,6 @@ public enum GutenbergKitResources {
         return url
     }
 
-    /// Loads the list of locale tags for which the bundle ships translations.
-    ///
-    /// The list is generated at JS build time by scanning `src/translations/`,
-    /// so it is the single source of truth for "what do we actually ship?".
-    /// Returns an empty array when the manifest is missing — callers should
-    /// treat that as "no shipped translations" and fall back to the default
-    /// locale rather than crashing.
-    ///
-    /// - Returns: The shipped locale tags (e.g. `["ar", "de", "pt-br", "zh-cn"]`).
-    public static func loadSupportedLocales() -> [String] {
-        guard let url = Bundle.module.url(
-            forResource: "supported-locales",
-            withExtension: "json",
-            subdirectory: "Gutenberg"
-        ) else {
-            return []
-        }
-        guard let data = try? Data(contentsOf: url),
-              let locales = try? JSONDecoder().decode([String].self, from: data) else {
-            return []
-        }
-        return locales
-    }
-
     /// Loads the Gutenberg CSS from the bundled assets.
     ///
     /// Scans the `Gutenberg/assets/` directory for the Vite-generated

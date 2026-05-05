@@ -118,17 +118,20 @@ struct LocaleResolverTests {
 
   // MARK: - Exhaustive coverage of the shipped manifest
 
-  // The default resolver reads the manifest emitted by `make build`. Tests
-  // run after `make build` (see Makefile), so the list reflects what the
-  // bundle actually ships. Each parameterised case asserts the round-trip
-  // contract: a shipped tag must resolve to itself — no normalisation
-  // tricks, no accidental fallbacks.
+  // `SupportedLocales.all` is generated from the JS build's manifest. Each
+  // parameterised case checks that a shipped tag resolves to itself.
 
-  static let shippedLocales = GutenbergKitResources.loadSupportedLocales()
+  static let shippedLocales = Array(SupportedLocales.all).sorted()
 
-  @Test("Manifest is non-empty (run `make build` first)")
-  func manifestPresent() {
-    #expect(!Self.shippedLocales.isEmpty)
+  @Test("SupportedLocales.all matches the manifest in the resources bundle")
+  func generatedSetMatchesManifest() throws {
+    // Fails when `SupportedLocales.swift` wasn't regenerated after the
+    // translations changed. Run `make build` to fix it.
+    let url = GutenbergKitResources.resourcesDirectoryURL
+      .appending(path: "supported-locales.json")
+    let manifest = try JSONDecoder().decode([String].self, from: Data(contentsOf: url))
+    #expect(!manifest.isEmpty)
+    #expect(Set(manifest) == SupportedLocales.all)
   }
 
   @Test("Every shipped locale resolves to itself", arguments: shippedLocales)
