@@ -179,13 +179,18 @@ struct EditorConfigurationBuilderTests: MakesTestFixtures {
     #expect(config.editorSettings == settings)
   }
 
-  @Test("setLocale updates locale")
-  func setLocaleUpdatesLocale() {
+  @Test("setLocale(Locale) resolves against the shipped translation bundles")
+  func setLocaleResolvesPlatformLocale() {
+    // Smoke test against the real bundle. We can only assert robust
+    // post-conditions because the manifest depends on `make build`
+    // having run, but the resolver always lands on either a shipped
+    // tag or the `en` fallback — never an unresolved regional tag.
     let config = makeConfigurationBuilder()
-      .setLocale("fr_FR")
+      .setLocale(Locale(identifier: "pt_BR"))
       .build()
 
-    #expect(config.locale == "fr_FR")
+    let lower = config.locale.lowercased()
+    #expect(lower == "pt-br" || lower == "pt" || lower == "en")
   }
 
   @Test("setNativeInserterEnabled updates isNativeInserterEnabled")
@@ -250,7 +255,7 @@ struct EditorConfigurationBuilderTests: MakesTestFixtures {
       .setPostID(456)
       .setShouldUsePlugins(true)
       .setShouldUseThemeStyles(true)
-      .setLocale("de_DE")
+      .setLocale(Locale(identifier: "de_DE"))
       .setLogLevel(.info)
       .build()
 
@@ -259,7 +264,7 @@ struct EditorConfigurationBuilderTests: MakesTestFixtures {
     #expect(config.postID == 456)
     #expect(config.shouldUsePlugins == true)
     #expect(config.shouldUseThemeStyles == true)
-    #expect(config.locale == "de_DE")
+    #expect(config.locale == "de" || config.locale == "en")
     #expect(config.logLevel == .info)
   }
 
@@ -342,7 +347,7 @@ struct EditorConfigurationBuilderTests: MakesTestFixtures {
       .setNamespaceExcludedPaths(["/oembed"])
       .setAuthHeader("Bearer abc")
       .setEditorSettings("{}")
-      .setLocale("ja_JP")
+      .setLocale(Locale(identifier: "ja_JP"))
       .setNativeInserterEnabled(true)
       .setLogLevel(.debug)
       .setEnableNetworkLogging(true)
