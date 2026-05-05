@@ -1,5 +1,4 @@
 import Foundation
-import GutenbergKitResources
 import Testing
 
 @testable import GutenbergKit
@@ -118,15 +117,15 @@ struct LocaleResolverTests {
 
   // MARK: - Exhaustive coverage of the shipped manifest
 
-  // The default resolver reads the manifest emitted by `make build`. Tests
-  // run after `make build` (see Makefile), so the list reflects what the
-  // bundle actually ships. Each parameterised case asserts the round-trip
-  // contract: a shipped tag must resolve to itself — no normalisation
-  // tricks, no accidental fallbacks.
+  // `SupportedLocales.all` is generated at build time by
+  // `SupportedLocalesPlugin` from the JS-emitted manifest, so the set
+  // reflects what the bundle actually ships. Each parameterised case
+  // asserts the round-trip contract: a shipped tag must resolve to
+  // itself — no normalisation tricks, no accidental fallbacks.
 
-  static let shippedLocales = GutenbergKitResources.loadSupportedLocales()
+  static let shippedLocales = Array(SupportedLocales.all).sorted()
 
-  @Test("Manifest is non-empty (run `make build` first)")
+  @Test("SupportedLocales.all is non-empty (plugin should fail the build otherwise)")
   func manifestPresent() {
     #expect(!Self.shippedLocales.isEmpty)
   }

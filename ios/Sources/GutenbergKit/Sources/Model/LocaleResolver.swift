@@ -1,5 +1,4 @@
 import Foundation
-import GutenbergKitResources
 
 /// Resolves an arbitrary locale tag to one of the bundles GutenbergKit
 /// actually ships translations for.
@@ -27,16 +26,23 @@ import GutenbergKitResources
 /// (e.g. `de-DE-u-ca-gregory`) are ignored — the editor doesn't vary
 /// translations by calendar or numbering system.
 ///
-/// The supported set is read from a manifest emitted by the JS build, so
-/// it stays in sync with what the bundle actually ships.
+/// The supported set is generated at build time from the JS build manifest
+/// (see `SupportedLocalesPlugin`), so the resolver and the shipped bundles
+/// cannot drift.
 struct LocaleResolver {
     static let `default` = LocaleResolver()
 
     private let supportedLocales: Set<String>
 
     init(supportedLocales: [String]? = nil) {
-        let source = supportedLocales ?? GutenbergKitResources.loadSupportedLocales()
-        self.supportedLocales = Set(source.map { Self.normalize($0) })
+        if let supportedLocales {
+            self.supportedLocales = Set(supportedLocales.map(Self.normalize))
+        } else {
+            // The build-time-generated set is already lowercase-with-dashes
+            // (JS emits the manifest in that form), so no normalisation is
+            // needed for the default path.
+            self.supportedLocales = SupportedLocales.all
+        }
     }
 
     /// Resolves a string locale tag against the shipped translation bundles.
