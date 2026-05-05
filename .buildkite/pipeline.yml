@@ -156,3 +156,8 @@ steps:
           - 'android/Gutenberg/build/outputs/androidTest-results/connected/**/*'
           - 'android/Gutenberg/build/outputs/buildkite-logs/**/*'
           - 'android/Gutenberg/build/outputs/connected_android_test_additional_output/**/*'
+
+    - label: ':wastebasket: Clean up `pr-build/*` branches for closed PRs'
+      if: build.branch == "trunk"
+      command: .buildkite/cleanup-pr-build-branches.sh
+      plugins: *plugins
