@@ -42,10 +42,10 @@ npm-dependencies: ## Install npm dependencies
 .PHONY: prep-translations
 prep-translations: ## Fetch and cache locale string files
 # Skip unless...
-# - src/translations doesn't exist
+# - src/translations doesn't contain any fetched bundles (only `.gitkeep` is committed)
 # - REFRESH_L10N is set to true or 1
 # - prep-translations was invoked directly
-	@if [ ! -d "src/translations" ] || [ "$(REFRESH_L10N)" = "true" ] || [ "$(REFRESH_L10N)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^prep-translations$$"; then \
+	@if [ -z "$$(find src/translations -maxdepth 1 -name '*.json' -print -quit 2>/dev/null)" ] || [ "$(REFRESH_L10N)" = "true" ] || [ "$(REFRESH_L10N)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^prep-translations$$"; then \
 		echo "--- :npm: Preparing Translations"; \
 		if ! npm run prep-translations -- --force; then \
 			if [ "$(STRICT_L10N)" = "true" ] || [ "$(STRICT_L10N)" = "1" ]; then \
@@ -56,7 +56,7 @@ prep-translations: ## Fetch and cache locale string files
 			fi; \
 		fi; \
 	else \
-		echo "--- :white_check_mark: Skipping translations fetch (src/translations already exists). Use REFRESH_L10N=1 to force refresh."; \
+		echo "--- :white_check_mark: Skipping translations fetch (bundles already present in src/translations). Use REFRESH_L10N=1 to force refresh."; \
 	fi
 
 .PHONY: e2e-dependencies
@@ -284,7 +284,7 @@ test-ios-e2e-dev: ## Run iOS E2E tests against the Vite dev server (must be runn
 		| xcbeautify
 
 .PHONY: test-android
-test-android: ## Run Android tests
+test-android: build ## Run Android tests
 	@echo "--- :android: Running Android Tests"
 	./android/gradlew -p ./android :gutenberg:test
 
@@ -345,7 +345,7 @@ test-android-e2e-dev: ## Run Android E2E tests against the Vite dev server (must
 	./android/gradlew -p ./android :app:connectedDebugAndroidTest
 
 .PHONY: test-android-library-e2e
-test-android-library-e2e: ## Run instrumented tests for the Gutenberg Android library module
+test-android-library-e2e: build ## Run instrumented tests for the Gutenberg Android library module
 	$(ENSURE_ANDROID_DEVICE)
 	@echo "--- :android: Running Android Library Instrumented Tests"
 	@mkdir -p android/Gutenberg/build/outputs/buildkite-logs

@@ -11,6 +11,10 @@ import { warn, debug } from './logger';
 
 const DEFAULT_LOCALE = 'en';
 
+// Vite statically enumerates the translation bundles at build time, so the
+// loader map below is always in sync with what we actually ship.
+const TRANSLATION_MODULES = import.meta.glob( '../translations/*.json' );
+
 /**
  * Initializes i18n support for the editor.
  *
@@ -22,7 +26,11 @@ export async function configureLocale() {
 }
 
 /**
- * Loads translations for the specified locale from the downloaded files.
+ * Loads translations for the specified locale from the bundled files.
+ *
+ * The native side is responsible for resolving consumer-supplied locales to a
+ * shipped tag before the value reaches JS. Anything that doesn't match a
+ * bundled translation falls back to English.
  *
  * @param {string} locale The locale to load translations for.
  *
@@ -33,11 +41,17 @@ async function loadTranslations( locale ) {
 		return;
 	}
 
+	const loader = TRANSLATION_MODULES[ `../translations/${ locale }.json` ];
+	if ( ! loader ) {
+		warn(
+			`Translations unavailable for locale "${ locale }". Falling back to English.`
+		);
+		return;
+	}
+
 	try {
 		debug( 'Loading translations for', locale );
-		const { default: translations } = await import(
-			`../translations/${ locale }.json`
-		);
+		const { default: translations } = await loader();
 		setLocaleData( translations );
 	} catch ( err ) {
 		warn(

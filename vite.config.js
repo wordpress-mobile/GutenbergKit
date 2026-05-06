@@ -1,6 +1,9 @@
 /**
  * External dependencies
  */
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import MagicString from 'magic-string';
@@ -30,7 +33,12 @@ export default defineConfig( {
 			'source-map-js': nodeModuleStub,
 		},
 	},
-	plugins: [ react(), wordPressExternals(), reactDevTools() ],
+	plugins: [
+		react(),
+		wordPressExternals(),
+		reactDevTools(),
+		emitSupportedLocalesManifest(),
+	],
 	root: 'src',
 	css: {
 		preprocessorOptions: {
@@ -195,6 +203,46 @@ function wordPressExternals() {
 				code: magicString.toString(),
 				map: magicString.generateMap( { hires: true } ),
 			};
+		},
+	};
+}
+
+/**
+ * Emit `supported-locales.json` to the build output.
+ *
+ * Scans `src/translations/` for `<locale>.json` files at build time and emits
+ * a single manifest listing every shipped locale tag. The native iOS and
+ * Android sides — and the JS-side resolver — all read this manifest so the
+ * "what do we actually ship?" answer has exactly one source of truth.
+ *
+ * @return {Object} Vite plugin configuration.
+ */
+function emitSupportedLocalesManifest() {
+	const translationsDir = path.resolve(
+		path.dirname( fileURLToPath( import.meta.url ) ),
+		'src/translations'
+	);
+
+	function readSupportedLocales() {
+		if ( ! fs.existsSync( translationsDir ) ) {
+			return [];
+		}
+		return fs
+			.readdirSync( translationsDir )
+			.filter( ( f ) => f.endsWith( '.json' ) )
+			.map( ( f ) => f.replace( /\.json$/, '' ) )
+			.sort();
+	}
+
+	return {
+		name: 'emit-supported-locales',
+		apply: 'build',
+		generateBundle() {
+			this.emitFile( {
+				type: 'asset',
+				fileName: 'supported-locales.json',
+				source: JSON.stringify( readSupportedLocales() ),
+			} );
 		},
 	};
 }

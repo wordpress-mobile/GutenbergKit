@@ -203,12 +203,39 @@ class EditorConfigurationBuilderTest {
     }
 
     @Test
-    fun `setLocale updates locale`() {
+    fun `setLocaleTag stores tag verbatim`() {
         val config = builder()
-            .setLocale("fr_FR")
+            .setLocaleTag("fr_FR")
             .build()
 
         assertEquals("fr_FR", config.locale)
+    }
+
+    @Test
+    fun `setLocale runs the resolver against the shipped manifest`() {
+        // Direct match — `pt-br` is shipped.
+        assertEquals(
+            "pt-br",
+            builder().setLocale(java.util.Locale("pt", "BR")).build().locale
+        )
+
+        // Language-only fallback — `fr` ships, `fr-ca` does not.
+        assertEquals(
+            "fr",
+            builder().setLocale(java.util.Locale("fr", "CA")).build().locale
+        )
+
+        // English fallback — `xx` is not a real language and isn't shipped.
+        assertEquals(
+            "en",
+            builder().setLocale(java.util.Locale("xx")).build().locale
+        )
+
+        // Script subtags strip cleanly: `zh-Hans-CN` → `zh-cn`.
+        assertEquals(
+            "zh-cn",
+            builder().setLocale(java.util.Locale.forLanguageTag("zh-Hans-CN")).build().locale
+        )
     }
 
     @Test
@@ -287,7 +314,7 @@ class EditorConfigurationBuilderTest {
             .setPostId(456u)
             .setPlugins(true)
             .setThemeStyles(true)
-            .setLocale("de_DE")
+            .setLocaleTag("de_DE")
             .setEnableNetworkLogging(true)
             .build()
 
@@ -331,7 +358,7 @@ class EditorConfigurationBuilderTest {
             .setNamespaceExcludedPaths(arrayOf("/excluded"))
             .setAuthHeader("Bearer roundtrip")
             .setEditorSettings("""{"roundtrip":true}""")
-            .setLocale("es_ES")
+            .setLocaleTag("es_ES")
             .setCookies(mapOf("roundtrip" to "cookie"))
             .setEnableAssetCaching(true)
             .setCachedAssetHosts(setOf("cdn.example.com"))
@@ -717,11 +744,11 @@ class EditorConfigurationTest {
     @Test
     fun `Configurations with different locale are not equal`() {
         val config1 = builder()
-            .setLocale("en_US")
+            .setLocaleTag("en_US")
             .build()
 
         val config2 = builder()
-            .setLocale("fr_FR")
+            .setLocaleTag("fr_FR")
             .build()
 
         assertNotEquals(config1, config2)
@@ -913,7 +940,7 @@ class EditorConfigurationTest {
             .setNamespaceExcludedPaths(arrayOf("users"))
             .setAuthHeader("Bearer token")
             .setEditorSettings("""{"foo":"bar"}""")
-            .setLocale("fr")
+            .setLocaleTag("fr")
             .setCookies(mapOf("session" to "abc123"))
             .setEnableAssetCaching(true)
             .setCachedAssetHosts(setOf("example.com", "cdn.example.com"))

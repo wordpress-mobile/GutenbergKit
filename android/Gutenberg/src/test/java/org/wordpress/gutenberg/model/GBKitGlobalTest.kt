@@ -61,7 +61,7 @@ class GBKitGlobalTest {
             .setPlugins(shouldUsePlugins)
             .setThemeStyles(shouldUseThemeStyles)
             .setHideTitle(hideTitle)
-            .setLocale(locale)
+            .setLocaleTag(locale)
             .setAuthHeader(authHeader)
             .setSiteApiNamespace(siteApiNamespace)
             .setNamespaceExcludedPaths(namespaceExcludedPaths)
