@@ -18,6 +18,12 @@ CODE_SIGNING_STORAGE_ENV_VARS = %w[
   MATCH_S3_SECRET_ACCESS_KEY
 ].freeze
 
+# Set up the release-toolkit env manager so lanes can read CI metadata
+# (`pull_request_number`, `commit_hash`, etc.) via a single canonical helper.
+# We don't ship a `.env` file; on CI the values come straight from the process
+# environment, and off-CI the manager will warn (not fail) about the missing file.
+Fastlane::Wpmreleasetoolkit::EnvManager.set_up(env_file_name: 'gutenbergkit.env')
+
 before_all do
   setup_ci
 end
@@ -43,9 +49,9 @@ lane :publish_to_s3 do |options|
 end
 
 lane :publish_pr_xcframework do
-  pr_num_str = ENV.fetch('BUILDKITE_PULL_REQUEST', 'false')
-  UI.user_error!('publish_pr_xcframework requires BUILDKITE_PULL_REQUEST to be a PR number') if pr_num_str == 'false'
-  pr_number = Integer(pr_num_str, 10)
+  env = Fastlane::Wpmreleasetoolkit::EnvManager.default!
+  pr_number = env.pull_request_number
+  UI.user_error!('publish_pr_xcframework must run on a PR build (BUILDKITE_PULL_REQUEST is unset or "false")') if pr_number.nil?
 
   branch_name = "pr-build/#{pr_number}"
   version = "pr-builds/#{pr_number}"
@@ -53,7 +59,7 @@ lane :publish_pr_xcframework do
   publish_to_s3(version: version)
   push_xcframework_snapshot_branch(branch_name: branch_name, version: version, checksum: xcframework_checksum)
 
-  body = xcframework_comment_body(branch_name: branch_name, commit_sha: ENV.fetch('BUILDKITE_COMMIT', nil))
+  body = xcframework_comment_body(branch_name: branch_name, commit_sha: env.commit_hash)
   comment_on_pr(
     project: GITHUB_REPO,
     pr_number: pr_number,
