@@ -31,9 +31,9 @@ Make sure the path points to your local GutenbergKit clone relative to your Word
 
 1. Copy `local-builds.gradle-example` to `local-builds.gradle`
 2. Uncomment the `localGutenbergKitPath` line and set it to your local GutenbergKit path:
-   ```groovy
-   localGutenbergKitPath = "../GutenbergKit"
-   ```
+    ```groovy
+    localGutenbergKitPath = "../GutenbergKit"
+    ```
 3. Run Gradle sync — this substitutes the Maven dependency with the local project
 
 ### Git Revision
@@ -72,7 +72,7 @@ CI (Buildkite) publishes builds for PRs to the Maven repository automatically.
 
 **Use case**: Integrating GutenbergKit work into WordPress app trunk before a formal release.
 
-Pre-releases create alpha version tags without creating a GitHub Release. They're useful for getting changes into the WordPress apps' main branches early.
+Pre-releases create alpha version tags with a GitHub Release marked `--prerelease`. They're useful for getting changes into the WordPress apps' main branches early.
 
 #### Creating a Pre-release
 
@@ -89,7 +89,7 @@ Available version types:
 -   `premajor` — increments major and adds alpha suffix (0.13.2 → 1.0.0-alpha.0)
 -   `prerelease` — increments the alpha number (0.13.3-alpha.0 → 0.13.3-alpha.1)
 
-This pushes a git tag (e.g., `v0.13.3-alpha.0`) and CI publishes the Android build to the Maven repository.
+Every trunk push already publishes per-commit artifacts (Android → Maven, iOS → S3 keyed by commit SHA). This bumps the version on `trunk` so the next per-commit publish carries that version, and the follow-up Buildkite build triggered with `NEW_VERSION=v0.13.3-alpha.0` adds the `vX.Y.Z` tag, the binary-target `Package.swift`, and the GitHub prerelease. See [Release Process](./releases.md) for the full flow.
 
 #### iOS
 
@@ -127,7 +127,7 @@ Available version types:
 -   `minor` — new features, backwards compatible (0.13.2 → 0.14.0)
 -   `major` — breaking changes (0.13.2 → 1.0.0)
 
-This creates a GitHub Release with auto-generated notes and CI publishes the Android build to the Maven repository.
+Every trunk push already publishes per-commit artifacts (Android → Maven, iOS → S3 keyed by commit SHA). This bumps the version on `trunk` so the next per-commit publish carries that version, and the follow-up Buildkite build triggered with `NEW_VERSION=v0.13.3` adds the `vX.Y.Z` tag, the binary-target `Package.swift`, and the GitHub Release. See [Release Process](./releases.md) for the full flow.
 
 #### iOS
 
@@ -147,12 +147,12 @@ gutenberg-kit = '0.13.3'
 
 ## Workflow Recommendations
 
-| Scenario                          | Recommended Method |
-| --------------------------------- | ------------------ |
-| Active feature development        | Local Development  |
-| PR review / testing               | Git Revision       |
-| Merging to WordPress app trunk    | Pre-release        |
-| WordPress app release             | Formal Release     |
+| Scenario                       | Recommended Method |
+| ------------------------------ | ------------------ |
+| Active feature development     | Local Development  |
+| PR review / testing            | Git Revision       |
+| Merging to WordPress app trunk | Pre-release        |
+| WordPress app release          | Formal Release     |
 
 ## Platform-Specific Notes
 

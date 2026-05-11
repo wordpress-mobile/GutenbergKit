@@ -79,10 +79,6 @@ check_working_directory() {
 check_dependencies() {
     local missing_deps=()
 
-    if ! command -v gh &> /dev/null; then
-        missing_deps+=("gh (GitHub CLI)")
-    fi
-
     if ! command -v npm &> /dev/null; then
         missing_deps+=("npm")
     fi
@@ -130,20 +126,6 @@ calculate_new_version() {
             echo "$version_type"
             ;;
     esac
-}
-
-# Function to check if a version is a prerelease
-is_prerelease() {
-    local version=$1
-
-    # Use semver to check if the version has prerelease identifiers
-    local result=$(node -p "require('semver').prerelease('$version') !== null")
-
-    if [ "$result" = "true" ]; then
-        return 0  # It is a prerelease
-    else
-        return 1  # It is not a prerelease
-    fi
 }
 
 # Function to validate version type
@@ -262,20 +244,6 @@ commit_changes() {
     print_success "Changes committed with message: chore(release): $version"
 }
 
-# Function to create git tag
-create_tag() {
-    local version=$1
-
-    print_status "Creating git tag: v$version"
-
-    if [ "$DRY_RUN" = "true" ]; then
-        return
-    fi
-
-    git tag "v$version"
-    print_success "Tag created: v$version"
-}
-
 # Function to push changes
 push_changes() {
     local version=$1
@@ -286,22 +254,33 @@ push_changes() {
         return
     fi
 
-    git push origin trunk --tags
+    git push origin trunk
     print_success "Changes pushed successfully"
 }
 
-# Function to create GitHub release
-create_github_release() {
+# Function to print the post-push instructions for kicking off the
+# Buildkite publish build. CI creates the tag and the GitHub release —
+# this script just bumps the version files on trunk.
+print_publish_instructions() {
     local version=$1
+    local sha=$2
+    local tag="v$version"
 
-    print_status "Creating GitHub release: v$version"
-
-    if [ "$DRY_RUN" = "true" ]; then
-        return
-    fi
-
-    gh release create "v$version" --generate-notes --title "$version"
-    print_success "GitHub release created: v$version"
+    echo
+    print_status "Next: trigger the Buildkite publish build."
+    echo
+    echo "  1. Open https://buildkite.com/automattic/gutenbergkit/builds/new"
+    echo "  2. Branch: trunk"
+    echo "  3. Commit: $sha"
+    echo "  4. Environment Variables: NEW_VERSION=$tag"
+    echo
+    echo "Pin the Commit field to the SHA above — otherwise Buildkite resolves"
+    echo "'trunk' to whatever HEAD is at trigger time, and a concurrent merge"
+    echo "would tag the wrong commit."
+    echo
+    echo "The :rocket: 'Publish Swift release' step will build + sign the"
+    echo "XCFramework, upload it to S3, and publish the GitHub Release —"
+    echo "which also creates the $tag tag."
 }
 
 # Main function
@@ -381,34 +360,28 @@ main() {
     commit_changes "$new_version"
     echo
 
-    create_tag "$new_version"
-    echo
-
     push_changes "$new_version"
     echo
 
-    # Only create GitHub release for non-prerelease versions
-    if is_prerelease "$new_version"; then
-        print_status "Skipping GitHub release creation for prerelease version"
+    # Capture the SHA of the just-pushed release commit so the operator can
+    # pin it when triggering the Buildkite publish build (avoids drift if
+    # trunk moves between this push and the build trigger).
+    local pushed_sha
+    if [ "$DRY_RUN" = "true" ]; then
+        pushed_sha="<sha-of-pushed-commit>"
     else
-        create_github_release "$new_version"
+        pushed_sha=$(git rev-parse HEAD)
     fi
-    echo
 
     # Summary
-    print_success "Release process completed successfully!"
+    print_success "Version bump completed successfully!"
     print_status "Version: $current_version -> $new_version"
 
     if [ "$DRY_RUN" = "true" ]; then
         print_warning "This was a dry run. No actual changes were made."
         print_status "To perform the actual release, run: make release VERSION_TYPE=$version_type"
     else
-        if is_prerelease "$new_version"; then
-            print_status "Prerelease tag v$new_version has been created and pushed."
-            print_status "No GitHub release was created for this prerelease version."
-        else
-            print_status "The release is ready for integration into the WordPress app."
-        fi
+        print_publish_instructions "$new_version" "$pushed_sha"
     fi
 }
 

@@ -71,6 +71,94 @@ lane :publish_pr_xcframework do
   post_buildkite_annotation(body: body)
 end
 
+lane :release do |options|
+  version = required_version!(options)
+
+  # Order matters: do every step that can fail BEFORE the tag is cut, so that
+  # if anything blows up the tag never gets created. Consumers only see the
+  # tag, so "tag exists" == "release is real and complete". The validate lane
+  # runs as an earlier Buildkite step (`validate-release`); it's intentionally
+  # not re-invoked here.
+  update_swift_package(version: version)
+  publish_to_s3(version: version)
+  publish_release_to_github(version: version)
+end
+
+lane :validate do |options|
+  version = required_version!(options)
+
+  UI.user_error!("Version #{version.inspect} is not a valid tag name (expected `vMAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH-PRERELEASE`).") \
+    unless version =~ /\Av\d+\.\d+\.\d+(-.+)?\z/
+
+  UI.user_error!("Tag #{version} already exists on the remote.") \
+    if git_tag_exists(tag: version, remote: true, remote_name: 'origin')
+
+  UI.user_error!("Release #{version} already exists on GitHub.") \
+    unless get_github_release(url: GITHUB_REPO, version: version).nil?
+
+  # `get_github_release` populates these lane-context values; clear them so a
+  # later action doesn't see stale state from this probe call.
+  remove_lane_context_values [
+    SharedValues::GITHUB_API_RESPONSE,
+    SharedValues::GITHUB_API_STATUS_CODE,
+    SharedValues::GITHUB_API_JSON
+  ]
+end
+
+lane :update_swift_package do |options|
+  version = required_version!(options)
+
+  rewrite_resources_mode!(
+    File.join(PROJECT_ROOT, 'Package.swift'),
+    version: version,
+    checksum: xcframework_checksum
+  )
+end
+
+lane :publish_release_to_github do |options|
+  version = required_version!(options)
+  staging_branch = "release-staging/#{version}"
+
+  # Commit the rewritten Package.swift on a staging branch and push it.
+  # The branch only exists to make the commit reachable on origin so that
+  # `gh release create --target` can resolve it — we delete the branch at
+  # the end, leaving only the tag ref as the published handle on this
+  # commit (matches the `pr-build/<n>` snapshot-branch shape).
+  sh('git', 'checkout', '-B', staging_branch)
+  git_commit(
+    path: File.join(PROJECT_ROOT, 'Package.swift'),
+    message: "Update Package.swift to use version #{version}"
+  )
+  sh('git', 'push', 'origin', staging_branch)
+
+  # Two-phase publish so the tag is the very last thing created:
+  #   1. Create the release as a draft — uploads the XCFramework + checksum
+  #      assets, but does NOT create the tag yet (GitHub semantics).
+  #   2. Flip `draft=false` — atomic with tag creation. Until this call
+  #      succeeds, no consumer can resolve `version`, so a failure in
+  #      step 1 (or anything earlier) leaves nothing for them to see.
+  create_args = ['gh', 'release', 'create', version,
+                 '--draft',
+                 '--title', version,
+                 '--generate-notes',
+                 '--target', staging_branch]
+  create_args << '--prerelease' if version.include?('-')
+  create_args.push(xcframework_file_path, xcframework_checksum_file_path)
+  sh(*create_args)
+
+  sh('gh', 'release', 'edit', version, '--draft=false')
+
+  # Cleanup is best-effort. The tag ref now holds the commit alive; the
+  # staging branch has done its job. If this fails (network blip), the
+  # branch is harmless — operators can `git push origin --delete` it
+  # later.
+  begin
+    sh('git', 'push', 'origin', '--delete', staging_branch)
+  rescue StandardError
+    UI.important("Failed to delete staging branch #{staging_branch}; clean up manually with `git push origin --delete #{staging_branch}`.")
+  end
+end
+
 lane :xcframework_sign do
   sh(
     'codesign',
