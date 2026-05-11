@@ -25,4 +25,4 @@ echo '--- :rubygems: Setting up Gems'
 install_gems
 
 echo "--- :rocket: Publishing PR build for PR #${BUILDKITE_PULL_REQUEST}"
-bundle exec fastlane publish_pr_xcframework pr_number:"$BUILDKITE_PULL_REQUEST"
+bundle exec fastlane publish_pr_xcframework

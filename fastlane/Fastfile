@@ -5,7 +5,7 @@ PROJECT_ROOT = File.expand_path('..', __dir__)
 APPLE_TEAM_ID = 'PZYM8XX95Q'
 
 GITHUB_REPO = 'wordpress-mobile/GutenbergKit'
-XCFRAMEWORK_COMMENT_MARKER = '<!-- gutenbergkit-xcframework-build -->'
+XCFRAMEWORK_COMMENT_REUSE_ID = 'gutenbergkit-xcframework-build'
 
 ASC_API_KEY_ENV_VARS = %w[
   APP_STORE_CONNECT_API_KEY_KEY_ID
@@ -42,8 +42,10 @@ lane :publish_to_s3 do |options|
   )
 end
 
-lane :publish_pr_xcframework do |options|
-  pr_number = Integer(options[:pr_number].to_s, 10)
+lane :publish_pr_xcframework do
+  pr_num_str = ENV.fetch('BUILDKITE_PULL_REQUEST', 'false')
+  UI.user_error!('publish_pr_xcframework requires BUILDKITE_PULL_REQUEST to be a PR number') if pr_num_str == 'false'
+  pr_number = Integer(pr_num_str, 10)
 
   branch_name = "pr-build/#{pr_number}"
   version = "pr-builds/#{pr_number}"
@@ -52,7 +54,12 @@ lane :publish_pr_xcframework do |options|
   push_xcframework_snapshot_branch(branch_name: branch_name, version: version, checksum: xcframework_checksum)
 
   body = xcframework_comment_body(branch_name: branch_name, commit_sha: ENV.fetch('BUILDKITE_COMMIT', nil))
-  upsert_pr_xcframework_comment(pr_number: pr_number, body: body)
+  comment_on_pr(
+    project: GITHUB_REPO,
+    pr_number: pr_number,
+    body: body,
+    reuse_identifier: XCFRAMEWORK_COMMENT_REUSE_ID
+  )
   post_buildkite_annotation(body: body)
 end
 
@@ -165,7 +172,6 @@ end
 def xcframework_comment_body(branch_name:, commit_sha:)
   short_sha = (commit_sha || 'unknown')[0, 8]
   <<~MARKDOWN
-    #{XCFRAMEWORK_COMMENT_MARKER}
     ## XCFramework Build
 
     This PR's XCFramework is available for testing. Add the following to your `Package.swift`:
@@ -176,53 +182,6 @@ def xcframework_comment_body(branch_name:, commit_sha:)
 
     <sub>Built from #{short_sha}</sub>
   MARKDOWN
-end
-
-def upsert_pr_xcframework_comment(pr_number:, body:)
-  github_token = ENV.fetch('GITHUB_TOKEN', nil)
-  unless github_token
-    UI.important('GITHUB_TOKEN not set, skipping PR comment')
-    return
-  end
-
-  existing = find_existing_xcframework_comment(github_token: github_token, pr_number: pr_number)
-  if existing
-    github_api(
-      server_url: 'https://api.github.com',
-      api_token: github_token,
-      http_method: 'PATCH',
-      path: "/repos/#{GITHUB_REPO}/issues/comments/#{existing['id']}",
-      body: { body: body }
-    )
-  else
-    github_api(
-      server_url: 'https://api.github.com',
-      api_token: github_token,
-      http_method: 'POST',
-      path: "/repos/#{GITHUB_REPO}/issues/#{pr_number}/comments",
-      body: { body: body }
-    )
-  end
-end
-
-def find_existing_xcframework_comment(github_token:, pr_number:)
-  page = 1
-  loop do
-    result = github_api(
-      server_url: 'https://api.github.com',
-      api_token: github_token,
-      http_method: 'GET',
-      path: "/repos/#{GITHUB_REPO}/issues/#{pr_number}/comments?per_page=100&page=#{page}"
-    )
-    comments = result[:json] || []
-    return nil if comments.empty?
-
-    found = comments.find { |c| c['body']&.include?(XCFRAMEWORK_COMMENT_MARKER) }
-    return found if found
-    return nil if comments.length < 100
-
-    page += 1
-  end
 end
 
 def post_buildkite_annotation(body:)
