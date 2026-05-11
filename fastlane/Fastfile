@@ -1,8 +1,13 @@
 # frozen_string_literal: true
 
+require 'fastlane/plugin/wpmreleasetoolkit'
+
 PROJECT_ROOT = File.expand_path('..', __dir__)
 
 APPLE_TEAM_ID = 'PZYM8XX95Q'
+
+GITHUB_REPO = 'wordpress-mobile/GutenbergKit'
+XCFRAMEWORK_COMMENT_REUSE_ID = 'gutenbergkit-xcframework-build'
 
 ASC_API_KEY_ENV_VARS = %w[
   APP_STORE_CONNECT_API_KEY_KEY_ID
@@ -14,6 +19,12 @@ CODE_SIGNING_STORAGE_ENV_VARS = %w[
   MATCH_S3_ACCESS_KEY
   MATCH_S3_SECRET_ACCESS_KEY
 ].freeze
+
+# Set up the release-toolkit env manager so lanes can read CI metadata
+# (`pull_request_number`, `commit_hash`, etc.) via a single canonical helper.
+# We don't ship a `.env` file; on CI the values come straight from the process
+# environment, and off-CI the manager will warn (not fail) about the missing file.
+Fastlane::Wpmreleasetoolkit::EnvManager.set_up(env_file_name: 'gutenbergkit.env')
 
 before_all do
   setup_ci
@@ -37,6 +48,27 @@ lane :publish_to_s3 do |options|
     auto_prefix: false,
     if_exists: :replace
   )
+end
+
+lane :publish_pr_xcframework do
+  env = Fastlane::Wpmreleasetoolkit::EnvManager.default!
+  pr_number = env.pull_request_number
+  UI.user_error!('publish_pr_xcframework must run on a PR build (BUILDKITE_PULL_REQUEST is unset or "false")') if pr_number.nil?
+
+  branch_name = "pr-build/#{pr_number}"
+  version = "pr-builds/#{pr_number}"
+
+  publish_to_s3(version: version)
+  push_xcframework_snapshot_branch(branch_name: branch_name, version: version, checksum: xcframework_checksum)
+
+  body = xcframework_comment_body(branch_name: branch_name, commit_sha: env.commit_hash)
+  comment_on_pr(
+    project: GITHUB_REPO,
+    pr_number: pr_number,
+    body: body,
+    reuse_identifier: XCFRAMEWORK_COMMENT_REUSE_ID
+  )
+  post_buildkite_annotation(body: body)
 end
 
 lane :xcframework_sign do
@@ -122,4 +154,46 @@ def get_required_env!(key)
   return ENV.fetch(key) if ENV.key?(key)
 
   UI.user_error!("Environment variable `#{key}` is not set.")
+end
+
+def push_xcframework_snapshot_branch(branch_name:, version:, checksum:)
+  package_swift = File.join(PROJECT_ROOT, 'Package.swift')
+  rewrite_resources_mode!(package_swift, version: version, checksum: checksum)
+
+  sh("git checkout -B #{branch_name}")
+  git_commit(path: package_swift, message: "Update Package.swift for #{version}")
+  sh("git push -f origin #{branch_name}")
+end
+
+def rewrite_resources_mode!(package_swift, version:, checksum:)
+  prefix = 'let resourcesMode: DependencyMode ='
+  replacement = %(#{prefix} .release(version: "#{version}", checksum: "#{checksum}")\n)
+
+  lines = File.readlines(package_swift)
+  matches = lines.count { |line| line.start_with?(prefix) }
+  UI.user_error!("Expected exactly one `#{prefix}` line in Package.swift, found #{matches}") unless matches == 1
+
+  rewritten = lines.map { |line| line.start_with?(prefix) ? replacement : line }
+  File.write(package_swift, rewritten.join)
+end
+
+def xcframework_comment_body(branch_name:, commit_sha:)
+  short_sha = (commit_sha || 'unknown')[0, 8]
+  <<~MARKDOWN
+    ## XCFramework Build
+
+    This PR's XCFramework is available for testing. Add the following to your `Package.swift`:
+
+    ```swift
+    .package(url: "https://github.com/#{GITHUB_REPO}", branch: "#{branch_name}")
+    ```
+
+    <sub>Built from #{short_sha}</sub>
+  MARKDOWN
+end
+
+def post_buildkite_annotation(body:)
+  return unless ENV['BUILDKITE_AGENT_ACCESS_TOKEN']
+
+  buildkite_annotate(context: 'xcframework', style: 'info', message: body)
 end

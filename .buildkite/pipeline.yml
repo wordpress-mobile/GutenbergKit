@@ -80,8 +80,8 @@ steps:
     - label: ':xcode: Build XCFramework'
       key: build-xcframework
       depends_on:
-        - build-react
-        - swift-test-library
+          - build-react
+          - swift-test-library
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
@@ -97,6 +97,7 @@ steps:
 
     - label: ':s3: Publish XCFramework to S3'
       depends_on: build-xcframework
+      if: build.pull_request.id == null
       command: |
           buildkite-agent artifact download '*.xcframework.zip' .
           buildkite-agent artifact download '*.xcframework.zip.checksum.txt' .
@@ -105,6 +106,12 @@ steps:
           # tag build publishes under the tag, otherwise fall back to the
           # commit SHA so every push gets a stable artifact URL.
           bundle exec fastlane publish_to_s3 version:${NEW_VERSION:-${BUILDKITE_TAG:-$BUILDKITE_COMMIT}}
+      plugins: *plugins
+
+    - label: ':swift: :package: Publish PR XCFramework'
+      depends_on: build-xcframework
+      if: build.pull_request.id != null
+      command: .buildkite/publish-pr-xcframework.sh
       plugins: *plugins
 
     - label: ':ios: Test iOS E2E'
@@ -149,3 +156,8 @@ steps:
           - 'android/Gutenberg/build/outputs/androidTest-results/connected/**/*'
           - 'android/Gutenberg/build/outputs/buildkite-logs/**/*'
           - 'android/Gutenberg/build/outputs/connected_android_test_additional_output/**/*'
+
+    - label: ':wastebasket: Clean up `pr-build/*` branches for closed PRs'
+      if: build.branch == "trunk"
+      command: .buildkite/cleanup-pr-build-branches.sh
+      plugins: *plugins
