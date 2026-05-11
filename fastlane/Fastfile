@@ -169,7 +169,7 @@ def xcframework_comment_body(branch_name:, commit_sha:)
     #{XCFRAMEWORK_COMMENT_MARKER}
     ## XCFramework Build
 
-    This PR's XCFramework is available for testing. Add to your `Package.swift`:
+    This PR's XCFramework is available for testing. Add the following to your `Package.swift`:
 
     ```swift
     .package(url: "https://github.com/#{GITHUB_REPO}", branch: "#{branch_name}")
@@ -229,7 +229,5 @@ end
 def post_buildkite_annotation(body:)
   return unless ENV['BUILDKITE_AGENT_ACCESS_TOKEN']
 
-  IO.popen(['buildkite-agent', 'annotate', '--context', 'xcframework', '--style', 'info'], 'w') do |io|
-    io.write(body)
-  end
+  buildkite_annotate(context: 'xcframework', style: 'info', message: body)
 end
