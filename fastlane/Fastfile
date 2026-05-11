@@ -43,8 +43,7 @@ lane :publish_to_s3 do |options|
 end
 
 lane :publish_pr_xcframework do |options|
-  pr_number = options[:pr_number].to_s
-  UI.user_error!('pr_number is required') if pr_number.empty?
+  pr_number = Integer(options[:pr_number].to_s, 10)
 
   branch_name = "pr-build/#{pr_number}"
   version = "pr-builds/#{pr_number}"

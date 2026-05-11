@@ -14,8 +14,6 @@ if [[ -n "${BUILDKITE_PULL_REQUEST_REPO:-}" ]] \
     exit 0
 fi
 
-PR_NUMBER="$BUILDKITE_PULL_REQUEST"
-
 echo '--- :robot_face: Use bot for Git operations'
 source use-bot-for-git
 
@@ -26,5 +24,5 @@ buildkite-agent artifact download '*.xcframework.zip.checksum.txt' . --step "bui
 echo '--- :rubygems: Setting up Gems'
 install_gems
 
-echo "--- :rocket: Publishing PR build for PR #${PR_NUMBER}"
-bundle exec fastlane publish_pr_xcframework pr_number:"$PR_NUMBER"
+echo "--- :rocket: Publishing PR build for PR #${BUILDKITE_PULL_REQUEST}"
+bundle exec fastlane publish_pr_xcframework pr_number:"$BUILDKITE_PULL_REQUEST"
