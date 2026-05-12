@@ -325,9 +325,24 @@ public struct EditorConfigurationBuilder {
     return copy
   }
 
-  public func setLocale(_ locale: String) -> EditorConfigurationBuilder {
+  /// Resolves `locale` against the bundled translations and stores the
+  /// resulting tag for serialization.
+  ///
+  /// Runs the resolution chain — full tag → script-implied region →
+  /// language-only tag → `en` — against the manifest emitted by the JS
+  /// build, so a device configured for `pt_BR` lands on the `pt-br` bundle
+  /// and `zh-Hant-HK` lands on `zh-tw` instead of silently falling through
+  /// to English.
+  public func setLocale(_ locale: Locale) -> EditorConfigurationBuilder {
+    setLocaleTag(LocaleResolver.default.resolve(locale))
+  }
+
+  /// Stores `tag` verbatim without running the resolver. Reserved for
+  /// `toBuilder` round-trip and tests — consumers should always go
+  /// through `setLocale(_ Locale)`.
+  internal func setLocaleTag(_ tag: String) -> EditorConfigurationBuilder {
     var copy = self
-    copy.locale = locale
+    copy.locale = tag
     return copy
   }
 

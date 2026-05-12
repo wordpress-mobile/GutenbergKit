@@ -30,7 +30,18 @@ let package = Package(
             dependencies: ["SwiftSoup", "SVGView", "GutenbergKitResources"],
             path: "ios/Sources/GutenbergKit",
             exclude: ["Gutenberg"],
-            packageAccess: false
+            packageAccess: false,
+            plugins: ["SupportedLocalesPlugin"]
+        ),
+        .executableTarget(
+            name: "GenerateSupportedLocales",
+            path: "ios/Plugins/GenerateSupportedLocales"
+        ),
+        .plugin(
+            name: "SupportedLocalesPlugin",
+            capability: .buildTool(),
+            dependencies: ["GenerateSupportedLocales"],
+            path: "ios/Plugins/SupportedLocalesPlugin"
         ),
         .target(
             name: "GutenbergKitHTTP",
