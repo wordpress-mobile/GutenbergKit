@@ -75,6 +75,10 @@
 					"type": [ "string", "null" ],
 					"description": "SVG markup as a string, or null when the block has no renderable icon."
 				},
+				"iconForeground": {
+					"type": [ "string", "null" ],
+					"description": "CSS color (hex or rgba) applied to the SVG icon's foreground, or null when the block uses default tinting."
+				},
 				"frecency": { "type": "number" },
 				"isDisabled": { "type": "boolean" },
 				"isSearchOnly": { "type": "boolean" },
