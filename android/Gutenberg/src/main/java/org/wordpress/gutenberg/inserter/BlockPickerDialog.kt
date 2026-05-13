@@ -1,9 +1,17 @@
 package org.wordpress.gutenberg.inserter
 
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.net.Uri
 import android.os.Build
+import android.util.Log
 import android.view.ViewGroup
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,6 +27,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,6 +42,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
@@ -48,12 +59,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.geometry.Offset
@@ -67,6 +80,9 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -76,8 +92,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import java.io.File
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import org.wordpress.gutenberg.R
@@ -112,6 +130,15 @@ private const val HEADER_TITLE_LETTER_SPACING_SP = -0.1
 
 private const val ICON_BUTTON_SIZE_DP = 40
 private const val ICON_SIZE_DP = 20
+
+private const val MEDIA_STRIP_HORIZONTAL_PAD_DP = 20
+private const val MEDIA_STRIP_TOP_PAD_DP = 6
+private const val MEDIA_STRIP_BOTTOM_PAD_DP = 16
+private const val MEDIA_STACK_COMPACT_HEIGHT_DP = 88
+private const val MEDIA_STACK_GAP_DP = 4
+private const val MEDIA_STACK_CORNER_DP = 18
+private const val MEDIA_STACK_ICON_SIZE_DP = 28
+private const val MEDIA_STACK_LABEL_SP = 13
 
 private const val TABS_VERTICAL_PAD_DP = 4
 private const val TABS_BOTTOM_PAD_DP = 6
@@ -269,6 +296,7 @@ private fun SheetContent(
     ) {
         DragHandle()
         Header(onClose = onClose)
+        MediaStrip()
         CategoryTabs(selected = selectedTab, onSelect = onSelectTab)
         SearchField(query = query, onQueryChange = onQueryChange)
         BlockGridContent(
@@ -397,6 +425,133 @@ private fun CloseButton(onClose: () -> Unit) {
             contentDescription = stringResource(R.string.gbk_block_inserter_close),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(ICON_SIZE_DP.dp),
+        )
+    }
+}
+
+// Photos and Camera tiles. Photos uses the permissionless system photo picker;
+// Camera uses ACTION_IMAGE_CAPTURE against a cache-scoped FileProvider URI.
+// Neither requires READ_MEDIA_IMAGES — the recent-photos thumbnail strip that
+// needs it lands in a follow-up and will sit alongside this row.
+@Composable
+private fun MediaStrip() {
+    val context = LocalContext.current
+    // Hide the Camera tile on devices without any camera hardware (tablets,
+    // emulators, e-readers). FEATURE_CAMERA_ANY doesn't require a `<queries>`
+    // manifest entry, unlike resolving ACTION_IMAGE_CAPTURE directly.
+    val hasCamera = remember(context) {
+        context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
+    }
+    // The result callbacks below are intentionally inert: the picked URI / camera
+    // capture needs to round-trip through `WebViewAssetLoader` so the JS editor
+    // can `fetch()` it, which is a follow-up. Until that lands, this whole sheet
+    // is gated behind the demo app's "Enable Native Inserter" toggle, so users
+    // outside that opt-in won't see the no-op buttons.
+    val photoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { /* picked uri — hand-off to editor insertion is a follow-up */ }
+    // Saveable so the URI survives process death while the camera app is in
+    // the foreground; `Uri` is `Parcelable`, which the default saver handles.
+    var pendingCameraUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { /* success:Boolean + pendingCameraUri — hand-off is a follow-up */ }
+    val imageOnly = PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+    val onPhotosClick = { photoPicker.launch(imageOnly) }
+    val cameraUnavailableMessage = stringResource(R.string.gbk_block_inserter_camera_unavailable)
+    val onCameraClick = {
+        val uri = createCameraOutputUri(context)
+        pendingCameraUri = uri
+        try {
+            cameraLauncher.launch(uri)
+        } catch (e: ActivityNotFoundException) {
+            // Defense-in-depth: hasCamera gates the tile, but corp-locked
+            // devices can have camera hardware without any handler for
+            // ACTION_IMAGE_CAPTURE installed.
+            pendingCameraUri = null
+            Log.w("BlockPickerDialog", "No activity to handle ACTION_IMAGE_CAPTURE", e)
+            Toast.makeText(context, cameraUnavailableMessage, Toast.LENGTH_SHORT).show()
+        }
+    }
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(MEDIA_STACK_GAP_DP.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                start = MEDIA_STRIP_HORIZONTAL_PAD_DP.dp,
+                end = MEDIA_STRIP_HORIZONTAL_PAD_DP.dp,
+                top = MEDIA_STRIP_TOP_PAD_DP.dp,
+                bottom = MEDIA_STRIP_BOTTOM_PAD_DP.dp,
+            )
+            .height(MEDIA_STACK_COMPACT_HEIGHT_DP.dp),
+    ) {
+        MediaActionTile(
+            icon = Icons.Filled.PhotoLibrary,
+            label = stringResource(R.string.gbk_block_inserter_photos),
+            background = MaterialTheme.colorScheme.primaryContainer,
+            foreground = MaterialTheme.colorScheme.onPrimaryContainer,
+            onClick = onPhotosClick,
+            modifier = Modifier.fillMaxHeight().weight(1f),
+        )
+        if (hasCamera) {
+            MediaActionTile(
+                icon = Icons.Filled.PhotoCamera,
+                label = stringResource(R.string.gbk_block_inserter_camera),
+                background = MaterialTheme.colorScheme.tertiary,
+                foreground = MaterialTheme.colorScheme.onTertiary,
+                onClick = onCameraClick,
+                modifier = Modifier.fillMaxHeight().weight(1f),
+            )
+        }
+    }
+}
+
+private fun createCameraOutputUri(context: Context): Uri {
+    val dir = File(context.cacheDir, "camera").apply { mkdirs() }
+    val file = File(dir, "capture_${System.currentTimeMillis()}.jpg")
+    // TODO: clean up captured files once the editor hand-off lands. Each Camera
+    // tap creates a fresh file here; with the result callback inert today, every
+    // capture is orphaned in the cache. When we wire up the URI hand-off, delete
+    // on success/cancel and sweep stale files on next entry.
+    return FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.gutenberg.fileprovider",
+        file,
+    )
+}
+
+@Composable
+private fun MediaActionTile(
+    icon: ImageVector,
+    label: String,
+    background: ComposeColor,
+    foreground: ComposeColor,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = modifier
+            .clip(RoundedCornerShape(MEDIA_STACK_CORNER_DP.dp))
+            .background(background)
+            .clickable(onClick = onClick)
+            // Announce as a single button rather than two stops (clickable
+            // Column + inner Text). The Icon is decorative (contentDescription
+            // = null) so the merged label is just the visible Text.
+            .semantics(mergeDescendants = true) { role = Role.Button },
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = foreground,
+            modifier = Modifier.size(MEDIA_STACK_ICON_SIZE_DP.dp),
+        )
+        Text(
+            text = label,
+            color = foreground,
+            fontSize = MEDIA_STACK_LABEL_SP.sp,
+            fontWeight = FontWeight.Medium,
         )
     }
 }
