@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -532,6 +533,7 @@ private fun FullMediaStrip(granted: PhotoAccess.Granted?, contentPadding: Paddin
     // list's nested-scroll dispatch up to BottomSheetBehavior; no manual
     // relay needed.
     val uris = granted?.uris.orEmpty()
+    val partialAccess = granted?.partialAccess
     val columns = (uris.size + 1) / 2
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(MEDIA_STRIP_ITEM_GAP_DP.dp),
@@ -539,6 +541,14 @@ private fun FullMediaStrip(granted: PhotoAccess.Granted?, contentPadding: Paddin
         modifier = Modifier.fillMaxWidth(),
     ) {
         item(key = "actions") { PhotosCameraTile(horizontal = false) }
+        if (partialAccess != null) {
+            // Sits right after Photos/Camera so the affordance is visible without
+            // scrolling — partial-access users won't otherwise have any in-app
+            // path to update their selection.
+            item(key = "manage") {
+                ManageSelectionTile(onClick = partialAccess.onManageSelection)
+            }
+        }
         items(columns, key = { uris[it * 2].toString() }) { col ->
             Column(verticalArrangement = Arrangement.spacedBy(MEDIA_STRIP_ITEM_GAP_DP.dp)) {
                 RealThumbnail(uri = uris[col * 2])
@@ -549,6 +559,20 @@ private fun FullMediaStrip(granted: PhotoAccess.Granted?, contentPadding: Paddin
             }
         }
     }
+}
+
+@Composable
+private fun ManageSelectionTile(onClick: () -> Unit) {
+    MediaActionTile(
+        iconVector = Icons.Filled.Tune,
+        label = stringResource(R.string.gbk_block_inserter_photos_manage),
+        background = MaterialTheme.colorScheme.secondaryContainer,
+        foreground = MaterialTheme.colorScheme.onSecondaryContainer,
+        onClick = onClick,
+        modifier = Modifier
+            .width(MEDIA_STACK_WIDTH_DP.dp)
+            .height(MEDIA_STACK_HEIGHT_DP.dp),
+    )
 }
 
 @Composable
