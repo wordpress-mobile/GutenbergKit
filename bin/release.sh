@@ -265,9 +265,14 @@ print_publish_instructions() {
     local version=$1
     local sha=$2
     local tag="v$version"
+    local prefix=""
+
+    if [ "$DRY_RUN" = "true" ]; then
+        prefix="[DRY RUN] "
+    fi
 
     echo
-    print_status "Next: trigger the Buildkite publish build."
+    print_status "${prefix}Next: trigger the Buildkite publish build."
     echo
     echo "  1. Open https://buildkite.com/automattic/gutenbergkit/builds/new"
     echo "  2. Branch: trunk"
@@ -380,9 +385,9 @@ main() {
     if [ "$DRY_RUN" = "true" ]; then
         print_warning "This was a dry run. No actual changes were made."
         print_status "To perform the actual release, run: make release VERSION_TYPE=$version_type"
-    else
-        print_publish_instructions "$new_version" "$pushed_sha"
     fi
+
+    print_publish_instructions "$new_version" "$pushed_sha"
 }
 
 # Run main function with all arguments

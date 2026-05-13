@@ -64,22 +64,18 @@ The build runs a `:white_check_mark: Validate Swift release` step early on (gate
 
 1. Rewrites `Package.swift` to consume the binary target via `.release(version:, checksum:)`
 1. Uploads the XCFramework to `s3://a8c-apps-public-artifacts/gutenbergkit/vX.Y.Z/`
-1. Commits the rewrite on a `release-staging/vX.Y.Z` branch, pushes it to origin
-1. Creates the GitHub Release **as a draft**, uploading the XCFramework + checksum as assets — at this point no tag exists yet
-1. Flips the release out of draft state, which atomically creates the `vX.Y.Z` tag pointing at the staging-branch commit
-1. Deletes the staging branch (best-effort)
+1. Commits the rewrite on a local `release/vX.Y.Z` branch (never pushed to origin), tags `vX.Y.Z`, and pushes **only the tag** — `git push <tag>` carries the commit along with the tag ref, so the commit becomes reachable on origin via the tag alone
+1. Creates the GitHub Release against the now-existing tag, uploading the XCFramework + checksum as assets (adds `--prerelease` when the version contains `-`)
 
-The two-phase publish means the tag is the last thing created. If anything fails before the draft is flipped — S3 upload, asset upload, staging push — no tag exists and consumers see nothing.
+The tag is pushed before the GitHub Release is created. Once the tag is on origin, SPM consumers pinning `vX.Y.Z` can resolve a `Package.swift` that fetches the prebuilt XCFramework from CDN — the GH Release is metadata and an asset mirror on top of that.
 
-The tag's commit lives off `trunk`'s history (parented on `trunk` but only reachable via the tag), so SPM consumers pinning `vX.Y.Z` resolve a `Package.swift` that fetches the prebuilt XCFramework from CDN rather than rebuilding from local sources.
+The tag's commit lives off `trunk`'s history (parented on `trunk` but only reachable via the tag ref), matching the `pr-build/<n>` snapshot-branch shape but published under a tag instead of a branch.
 
 ### Recovering from a partial publish
 
-The flow is designed so that the tag's existence is the only signal of completion: if `vX.Y.Z` exists, the release is real.
+If the build fails before the tag is pushed (validate, Package.swift rewrite, S3 upload, or local commit/tag), no tag exists and no consumer can resolve `vX.Y.Z`. Re-run Step 2 with the same `NEW_VERSION` once the underlying issue is fixed — `validate` will pass (no tag, no release), and S3 uploads are idempotent (`if_exists: :replace`).
 
-If the build fails before the draft-flip step, no tag was created and no consumer can resolve `vX.Y.Z`. Re-run Step 2 with the same `NEW_VERSION` once the underlying issue is fixed — `validate` will pass (no tag, no release), and S3 uploads are idempotent (`if_exists: :replace`). You may need to manually delete the leftover draft release in the GitHub UI before re-running.
-
-If the build fails specifically on the cleanup step (`git push origin --delete release-staging/vX.Y.Z`), the release is fine — the tag exists and is valid — but the staging branch is left behind. Delete it manually with `git push origin --delete release-staging/vX.Y.Z`.
+If the build fails specifically on `gh release create` (tag pushed, but GH Release missing), the tag is the source of truth: SPM consumers resolving `vX.Y.Z` already work. To create the missing Release page, re-run `gh release create vX.Y.Z --title vX.Y.Z --generate-notes [--prerelease] <xcframework.zip> <checksum.txt>` manually against the existing tag — re-running the full Buildkite step would fail at `validate` because the tag now exists.
 
 ## Release Notes
 

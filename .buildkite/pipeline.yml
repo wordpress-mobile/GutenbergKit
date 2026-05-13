@@ -108,15 +108,19 @@ steps:
 
     - label: ':s3: Publish XCFramework to S3'
       depends_on: build-xcframework
-      # The `:rocket: Publish Swift release` step handles uploads when
-      # `NEW_VERSION` is set, so this step only covers per-commit trunk
-      # uploads keyed by the commit SHA.
-      if: build.pull_request.id == null && build.env("NEW_VERSION") == null
+      # This step only covers per-commit trunk uploads keyed by the commit
+      # SHA. Releases are handled by `:rocket: Publish Swift release` (gated
+      # on `NEW_VERSION`), and tag pushes from that step trigger a separate
+      # tag build whose iOS upload would just duplicate the rocket step's —
+      # the `build.tag == null` clause skips it. Android publish on tag
+      # builds is still load-bearing (produces the `vX.Y.Z` Maven artifact)
+      # and intentionally not gated here.
+      if: build.pull_request.id == null && build.env("NEW_VERSION") == null && build.tag == null
       command: |
           buildkite-agent artifact download '*.xcframework.zip' .
           buildkite-agent artifact download '*.xcframework.zip.checksum.txt' .
           install_gems
-          bundle exec fastlane publish_to_s3 version:${BUILDKITE_TAG:-$BUILDKITE_COMMIT}
+          bundle exec fastlane publish_to_s3 version:$BUILDKITE_COMMIT
       plugins: *plugins
 
     - label: ':swift: :package: Publish PR XCFramework'
