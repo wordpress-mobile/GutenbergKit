@@ -16,4 +16,6 @@
     <string name="gbk_block_inserter_clear_search">Clear search</string>
     <string name="gbk_block_inserter_no_results">No results</string>
     <string name="gbk_block_inserter_no_results_for">No blocks match “%1$s”</string>
+    <string name="gbk_block_inserter_photos">Photos</string>
+    <string name="gbk_block_inserter_camera">Camera</string>
 </resources>
