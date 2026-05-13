@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -570,6 +571,7 @@ private fun FullMediaStrip(granted: PhotoAccess.Granted?, contentPadding: Paddin
     val sourceUris = granted?.uris.orEmpty()
     var failed by remember(granted) { mutableStateOf<Set<Uri>>(emptySet()) }
     val uris = sourceUris.filterNot { it in failed }
+    val partialAccess = granted?.partialAccess
     val columns = (uris.size + 1) / 2
     val onThumbnailFailed: (Uri) -> Unit = { failed = failed + it }
     LazyRow(
@@ -578,6 +580,14 @@ private fun FullMediaStrip(granted: PhotoAccess.Granted?, contentPadding: Paddin
         modifier = Modifier.fillMaxWidth(),
     ) {
         item(key = "actions") { PhotosCameraTile(horizontal = false) }
+        if (partialAccess != null) {
+            // Sits right after Photos/Camera so the affordance is visible without
+            // scrolling — partial-access users won't otherwise have any in-app
+            // path to update their selection.
+            item(key = "manage") {
+                ManageSelectionTile(onClick = partialAccess.onManageSelection)
+            }
+        }
         items(columns, key = { uris[it * 2].toString() }) { col ->
             Column(verticalArrangement = Arrangement.spacedBy(MEDIA_STRIP_ITEM_GAP_DP.dp)) {
                 RealThumbnail(uri = uris[col * 2], onLoadFailed = onThumbnailFailed)
@@ -588,6 +598,20 @@ private fun FullMediaStrip(granted: PhotoAccess.Granted?, contentPadding: Paddin
             }
         }
     }
+}
+
+@Composable
+private fun ManageSelectionTile(onClick: () -> Unit) {
+    MediaActionTile(
+        icon = Icons.Filled.Tune,
+        label = stringResource(R.string.gbk_block_inserter_photos_manage),
+        background = MaterialTheme.colorScheme.secondaryContainer,
+        foreground = MaterialTheme.colorScheme.onSecondaryContainer,
+        onClick = onClick,
+        modifier = Modifier
+            .width(MEDIA_STACK_WIDTH_DP.dp)
+            .height(MEDIA_STACK_HEIGHT_DP.dp),
+    )
 }
 
 // Photos uses the permissionless system photo picker; Camera uses
