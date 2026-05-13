@@ -41,6 +41,7 @@ internal fun rememberPhotoAccess(limit: Int): PhotoAccess {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     var granted by remember { mutableStateOf(hasPhotosPermission(context)) }
+    var partial by remember { mutableStateOf(isPartialPhotoAccess(context)) }
     var promptedBefore by remember { mutableStateOf(hasPromptedForPhotos(context)) }
     var uris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     // `canReprompt` is its own state, recomputed at every permission-relevant
@@ -52,16 +53,22 @@ internal fun rememberPhotoAccess(limit: Int): PhotoAccess {
     var canReprompt by remember {
         mutableStateOf(activity?.let { shouldShowRationale(it) } ?: true)
     }
+    // Bumped after every launcher result. Keys the MediaStore re-query so a
+    // partial-access selection update (granted stays true, uris content changes)
+    // refreshes the strip — `granted`/`limit` alone wouldn't trigger that.
+    var refreshTick by remember { mutableStateOf(0) }
     val refreshAccessState = {
         granted = hasPhotosPermission(context)
+        partial = isPartialPhotoAccess(context)
         canReprompt = activity?.let { shouldShowRationale(it) } ?: true
     }
     val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
+        ActivityResultContracts.RequestMultiplePermissions()
     ) { _ ->
         markPromptedForPhotos(context)
         promptedBefore = true
         refreshAccessState()
+        refreshTick++
     }
     // Re-read permission on every RESUME so we notice grants made via system
     // Settings (which happen outside the Compose result-callback path).
@@ -79,20 +86,29 @@ internal fun rememberPhotoAccess(limit: Int): PhotoAccess {
         activityLifecycle.addObserver(observer)
         onDispose { activityLifecycle.removeObserver(observer) }
     }
-    LaunchedEffect(granted, limit) {
+    LaunchedEffect(granted, limit, refreshTick) {
         uris = if (granted) {
             withContext(Dispatchers.IO) { queryRecentImages(context, limit) }
         } else {
             emptyList()
         }
     }
-    if (granted) return PhotoAccess.Granted(uris)
+    if (granted) {
+        return PhotoAccess.Granted(
+            uris = uris,
+            partialAccess = if (partial) {
+                PhotoAccess.PartialAccess(
+                    onManageSelection = { launcher.launch(photosPermissions()) },
+                )
+            } else null,
+        )
+    }
     val state = resolvePromptState(promptedBefore = promptedBefore, canReprompt = canReprompt)
     return PhotoAccess.NeedsPermission(
         state = state,
         request = {
             if (state == PromptState.PermanentlyDenied) openAppSettings(context)
-            else launcher.launch(photosPermission())
+            else launcher.launch(photosPermissions())
         },
     )
 }
@@ -114,8 +130,50 @@ private fun photosPermission(): String =
         Manifest.permission.READ_EXTERNAL_STORAGE
     }
 
-private fun hasPhotosPermission(context: Context): Boolean =
-    ContextCompat.checkSelfPermission(context, photosPermission()) == PackageManager.PERMISSION_GRANTED
+/**
+ * The permission set to request together. On Android 14+ we ask for both the
+ * full and partial-access permissions in one prompt — the system surfaces the
+ * "Select photos and videos" affordance, and on subsequent calls reopens the
+ * picker so the user can update a partial-access selection without leaving us.
+ */
+private fun photosPermissions(): Array<String> = when {
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> arrayOf(
+        Manifest.permission.READ_MEDIA_IMAGES,
+        Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
+    )
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> arrayOf(
+        Manifest.permission.READ_MEDIA_IMAGES,
+    )
+    else -> arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+}
+
+/** True when either full or partial-access reads are permitted. */
+private fun hasPhotosPermission(context: Context): Boolean {
+    if (ContextCompat.checkSelfPermission(context, photosPermission()) == PackageManager.PERMISSION_GRANTED) {
+        return true
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        return ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+    return false
+}
+
+/** True only when the user picked "Select photos and videos" (Android 14+). */
+private fun isPartialPhotoAccess(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return false
+    val full = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.READ_MEDIA_IMAGES,
+    ) == PackageManager.PERMISSION_GRANTED
+    if (full) return false
+    return ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
+    ) == PackageManager.PERMISSION_GRANTED
+}
 
 private fun shouldShowRationale(activity: Activity): Boolean =
     ActivityCompat.shouldShowRequestPermissionRationale(activity, photosPermission())

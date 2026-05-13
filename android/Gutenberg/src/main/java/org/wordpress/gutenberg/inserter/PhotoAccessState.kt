@@ -9,11 +9,22 @@ import android.net.Uri
  * `shouldShowRequestPermissionRationale` alone can't tell those apart.
  */
 internal sealed interface PhotoAccess {
-    data class Granted(val uris: List<Uri>) : PhotoAccess
+    /**
+     * Permission has been granted. `partialAccess` is non-null on Android 14+
+     * when the user picked "Select photos and videos" rather than full access —
+     * its `onManageSelection` reopens the system picker so the user can update
+     * the selection without leaving the app.
+     */
+    data class Granted(
+        val uris: List<Uri>,
+        val partialAccess: PartialAccess? = null,
+    ) : PhotoAccess
     data class NeedsPermission(
         val state: PromptState,
         val request: () -> Unit,
     ) : PhotoAccess
+
+    data class PartialAccess(val onManageSelection: () -> Unit)
 }
 
 /**
