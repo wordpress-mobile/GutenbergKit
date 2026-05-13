@@ -47,7 +47,9 @@ import com.example.gutenbergkit.ui.dialogs.AddConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DeleteConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DiscoveringSiteDialog
 import com.example.gutenbergkit.ui.theme.AppTheme
+import androidx.compose.ui.platform.LocalContext
 import org.wordpress.gutenberg.BuildConfig
+import org.wordpress.gutenberg.GutenbergView
 import uniffi.wp_mobile.Account
 
 class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCallback {
@@ -167,6 +169,7 @@ fun MainScreen(
     var showDeleteDialog = remember { mutableStateOf<ConfigurationItem.ConfiguredEditor?>(null) }
     var siteUrlInput = remember { mutableStateOf("") }
     var showOverflowMenu = remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -189,6 +192,13 @@ fun MainScreen(
                             onClick = {
                                 showOverflowMenu.value = false
                                 onMediaProxyServer()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Reset Photo Permissions Prompts") },
+                            onClick = {
+                                showOverflowMenu.value = false
+                                GutenbergView.resetBlockPickerPhotoPreferences(context)
                             }
                         )
                     }
