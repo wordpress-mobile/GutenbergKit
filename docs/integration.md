@@ -154,6 +154,31 @@ dependencies {
 
 Include the `android/Gutenberg/` module directly in your project.
 
+### Manifest Permissions
+
+GutenbergKit's `AndroidManifest.xml` declares the following permissions, which are merged into the host app's manifest:
+
+| Permission              | SDK range | Why                                                    |
+| ----------------------- | --------- | ------------------------------------------------------ |
+| `ACCESS_NETWORK_STATE`  | all       | Detects offline state so the editor can react.         |
+| `READ_MEDIA_IMAGES`     | 33+       | Powers the block inserter's recent-photos strip.       |
+| `READ_EXTERNAL_STORAGE` | ≤32       | Pre-Android-13 fallback for the same recent-photos UI. |
+
+The two media permissions show up in your app's Play Store data-safety disclosure and in the OS app-info screen. Hosts that don't render the inserter, don't want the recent-photos strip, or already declare these permissions for their own media flows can opt out via the manifest merger:
+
+```xml
+<uses-permission
+    android:name="android.permission.READ_MEDIA_IMAGES"
+    tools:node="remove" />
+<uses-permission
+    android:name="android.permission.READ_EXTERNAL_STORAGE"
+    tools:node="remove" />
+```
+
+With the media permissions removed, the inserter's Photos and Camera tiles still work (both are permissionless — Photos uses the system photo picker, Camera uses `ACTION_IMAGE_CAPTURE`). Only the recent-photos preview strip is suppressed.
+
+The recent-photos strip itself requires Android 10+ (API 29). On Android 7–9, the inserter automatically falls back to the Photos and Camera tiles and never requests the media permission, regardless of what the merged manifest declares.
+
 ### Basic Setup
 
 Create a `GutenbergView` and start the editor:
