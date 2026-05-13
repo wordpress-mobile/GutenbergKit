@@ -51,6 +51,12 @@ data class BlockType(
     val keywords: List<String> = emptyList(),
     /** SVG markup as a string, or null when the block has no renderable icon. */
     val icon: String? = null,
+    /**
+     * Brand colour declared by the block's icon metadata (e.g. Pocket Casts red).
+     * The web editor applies this as CSS `color`, which paths inside the SVG
+     * pick up via `currentColor`. Null for icons that rely on a theme tint.
+     */
+    val iconForeground: String? = null,
     val frecency: Double = 0.0,
     val isDisabled: Boolean = false,
     val isSearchOnly: Boolean = false,

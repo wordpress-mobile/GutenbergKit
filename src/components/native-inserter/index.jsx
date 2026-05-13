@@ -424,7 +424,11 @@ export default function NativeBlockInserterButton( { open, onToggle } ) {
 			title={ __( 'Add block' ) }
 			icon={ plus }
 			onClick={ () => {
-				onToggle( true );
+				// Skip the redux toggle and present the native inserter
+				// directly. Flipping `isInserterOpened` in editorStore would
+				// briefly render Gutenberg's web inserter behind the native
+				// dialog before it covers, causing a visible flash.
+				prepareAndShowInserter();
 			} }
 			onMouseDown={ ( e ) => {
 				e.preventDefault();
