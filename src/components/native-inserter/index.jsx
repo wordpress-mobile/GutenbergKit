@@ -421,7 +421,7 @@ export default function NativeBlockInserterButton( { open, onToggle } ) {
 	return (
 		<Button
 			ref={ buttonRef }
-			title={ __( 'Add block' ) }
+			label={ __( 'Add block' ) }
 			icon={ plus }
 			onClick={ () => {
 				// Skip the redux toggle and present the native inserter
