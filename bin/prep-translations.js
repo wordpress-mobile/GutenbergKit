@@ -3,12 +3,15 @@
  */
 import fs from 'fs';
 import path from 'path';
-import fetch from 'node-fetch';
 
 /**
  * Internal dependencies
  */
 import { info, error, debug } from '../src/utils/logger.js';
+
+// Uses Node's built-in `fetch` (Node 20, per .nvmrc) so this script can
+// run before `npm ci` has populated `node_modules` — letting CI overlap
+// translation fetching with dependency installation on the critical path.
 
 const TRANSLATIONS_DIR = path.join( process.cwd(), 'src/translations' );
 const SUPPORTED_LOCALES = [

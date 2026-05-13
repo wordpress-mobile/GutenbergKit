@@ -8,7 +8,33 @@ steps:
     - label: ':react: Build React App'
       key: build-react
       command: |
-          make build REFRESH_L10N=1 REFRESH_JS_BUILD=1 STRICT_L10N=1
+          # Fail fast if any step (including the backgrounded
+          # `prep-translations`, surfaced via `wait`) returns non-zero,
+          # rather than continuing into `make build` with partial inputs.
+          set -euo pipefail
+          # `prep-translations` is pure network I/O and no longer depends
+          # on `node_modules` (uses Node's built-in `fetch`), so it can run
+          # in parallel with `npm ci`. Vite reads `src/translations/` when
+          # it emits locale bundles, so we wait for the fetch to complete
+          # before invoking `make build`.
+          #
+          # Background output is redirected to a logfile and replayed
+          # after `wait` returns so its `--- :section:` markers don't
+          # interleave with `npm ci`'s and confuse Buildkite log folding.
+          # The replay happens unconditionally so a failed fetch surfaces
+          # its log before `set -e` aborts the script.
+          make prep-translations STRICT_L10N=1 > prep-translations.log 2>&1 &
+          PREP_PID=$$!
+          make npm-dependencies
+          PREP_STATUS=0
+          wait $$PREP_PID || PREP_STATUS=$$?
+          echo "--- :earth_americas: prep-translations (ran in parallel with npm ci)"
+          cat prep-translations.log
+          rm -f prep-translations.log
+          if [ "$$PREP_STATUS" -ne 0 ]; then
+              exit "$$PREP_STATUS"
+          fi
+          make build REFRESH_JS_BUILD=1
           tar -czf dist.tar.gz dist/
           buildkite-agent artifact upload dist.tar.gz
       plugins: &plugins
@@ -65,7 +91,11 @@ steps:
       plugins: *plugins
 
     - label: ':android: Test Android Library'
-      command: make test-android
+      depends_on: build-react
+      command: |
+          buildkite-agent artifact download dist.tar.gz .
+          tar -xzf dist.tar.gz
+          make test-android
       agents:
           queue: android
       plugins: *plugins
@@ -171,7 +201,10 @@ steps:
           - 'android/app/build/outputs/connected_android_test_additional_output/**/*'
 
     - label: ':android: Test Android Library Instrumented'
+      depends_on: build-react
       command: |
+          buildkite-agent artifact download dist.tar.gz .
+          tar -xzf dist.tar.gz
           echo "--- :robot_face: Starting Android emulator"
           start-android-emulator \
               --system-image "system-images;android-34;google_apis;arm64-v8a" \
