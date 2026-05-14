@@ -458,9 +458,7 @@ private fun MediaStrip() {
     val cameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { /* success:Boolean + pendingCameraUri — hand-off is a follow-up */ }
-    val imageOnly = remember {
-        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-    }
+    val imageOnly = remember { PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly) }
     val onPhotosClick = { photoPicker.launch(imageOnly) }
     val cameraUnavailableMessage = stringResource(R.string.gbk_block_inserter_camera_unavailable)
     val onCameraClick = {
