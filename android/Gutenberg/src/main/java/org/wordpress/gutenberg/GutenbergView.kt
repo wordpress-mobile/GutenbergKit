@@ -38,6 +38,7 @@ import org.json.JSONException
 import org.json.JSONObject
 import org.wordpress.gutenberg.inserter.BlockPickerDialog
 import org.wordpress.gutenberg.inserter.clearPhotoPreferences
+import org.wordpress.gutenberg.inserter.warmupPhotoPrefs
 import org.wordpress.gutenberg.model.BlockInserterPayload
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
@@ -219,6 +220,12 @@ class GutenbergView : FrameLayout {
     constructor(configuration: EditorConfiguration, dependencies: EditorDependencies?, coroutineScope: CoroutineScope, context: Context) : super(context) {
         this.configuration = configuration
         this.coroutineScope = coroutineScope
+
+        // Warm the block-inserter's photo-prefs cache off the main thread now,
+        // well before the user can navigate to the inserter. By the time they
+        // tap `+`, the prefs read in `MediaStrip` is synchronous from the
+        // process-wide cache — no async-load placeholder, no visible flash.
+        warmupPhotoPrefs(context)
 
         // Initialize the asset loader now that context is available
         assetLoader = WebViewAssetLoader.Builder()

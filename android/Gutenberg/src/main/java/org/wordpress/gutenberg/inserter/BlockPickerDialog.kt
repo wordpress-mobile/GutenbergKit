@@ -228,12 +228,17 @@ internal class BlockPickerDialog(
 ) : BottomSheetDialog(context) {
 
     init {
-        // Render at full size regardless of the IME — without this the dialog
-        // opens compressed above an in-flight soft keyboard, then visibly
-        // resizes once the IME dismisses, looking like a "double launch".
+        // `STATE_HIDDEN` dismisses any in-flight soft keyboard on dialog open
+        // — without it the sheet renders compressed above the editor's IME and
+        // then visibly resizes when the IME dismisses, looking like a "double
+        // launch". `ADJUST_RESIZE` lets the sheet shrink back to make room when
+        // the user later taps the search field; previously we paired
+        // `STATE_HIDDEN` with `ADJUST_NOTHING`, which fixed the open-time race
+        // but latched in for the dialog's lifetime — the IME then covered the
+        // search field and the results grid below it.
         window?.setSoftInputMode(
             WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN or
-                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         )
         val composeView = ComposeView(context).apply {
             setContent {
@@ -494,9 +499,22 @@ private fun MediaStrip() {
         }
         return
     }
-    val access = rememberPhotoAccess(limit = RECENT_PHOTO_LIMIT)
     val context = LocalContext.current
-    var rejected by remember { mutableStateOf(hasRejectedRationale(context)) }
+    // SharedPreferences are read async on `Dispatchers.IO` to keep the main
+    // thread IO-free. While loading we render a same-height placeholder so
+    // the strip's vertical rhythm doesn't shift when the real state arrives
+    // a few ms later. After process-warmup (cache hot) this returns
+    // synchronously and no placeholder shows.
+    val prefs = rememberPhotoPrefs(context)
+    if (prefs == null) {
+        Box(modifier = stripFraming.height(MEDIA_STACK_HEIGHT_DP.dp))
+        return
+    }
+    val access = rememberPhotoAccess(
+        limit = RECENT_PHOTO_LIMIT,
+        initialPromptedBefore = prefs.promptedBefore,
+    )
+    var rejected by remember(prefs) { mutableStateOf(prefs.rejected) }
     // Clear a prior rejection once the user actually grants the permission.
     // Without this, a later revocation would leave the user in CompactTiles
     // with no in-app path back to the rationale.
@@ -553,8 +571,16 @@ private fun FullMediaStrip(granted: PhotoAccess.Granted?, contentPadding: Paddin
     // all decoded into memory upfront. Vertical drags pass through the lazy
     // list's nested-scroll dispatch up to BottomSheetBehavior; no manual
     // relay needed.
-    val uris = granted?.uris.orEmpty()
+    //
+    // When a thumbnail fails to load (deleted-mid-scroll URI, partial-grant
+    // denial, OEM MediaStore quirk, offline + cloud-only stub) we drop the
+    // URI from the displayed set. The strip shrinks gracefully — better
+    // than stranding a grey placeholder where a real thumbnail should be.
+    val sourceUris = granted?.uris.orEmpty()
+    var failed by remember(granted) { mutableStateOf<Set<Uri>>(emptySet()) }
+    val uris = sourceUris.filterNot { it in failed }
     val columns = (uris.size + 1) / 2
+    val onThumbnailFailed: (Uri) -> Unit = { failed = failed + it }
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(MEDIA_STRIP_ITEM_GAP_DP.dp),
         contentPadding = contentPadding,
@@ -563,10 +589,10 @@ private fun FullMediaStrip(granted: PhotoAccess.Granted?, contentPadding: Paddin
         item(key = "actions") { PhotosCameraTile(horizontal = false) }
         items(columns, key = { uris[it * 2].toString() }) { col ->
             Column(verticalArrangement = Arrangement.spacedBy(MEDIA_STRIP_ITEM_GAP_DP.dp)) {
-                RealThumbnail(uri = uris[col * 2])
+                RealThumbnail(uri = uris[col * 2], onLoadFailed = onThumbnailFailed)
                 val secondIndex = col * 2 + 1
                 if (secondIndex < uris.size) {
-                    RealThumbnail(uri = uris[secondIndex])
+                    RealThumbnail(uri = uris[secondIndex], onLoadFailed = onThumbnailFailed)
                 }
             }
         }
@@ -823,12 +849,20 @@ private fun PhotoAccessRationale(
 }
 
 @Composable
-private fun RealThumbnail(uri: Uri) {
+private fun RealThumbnail(uri: Uri, onLoadFailed: (Uri) -> Unit) {
     val context = LocalContext.current
     val sizePx = with(LocalDensity.current) { MEDIA_THUMB_SIZE_DP.dp.roundToPx() }
-    var bitmap by remember(uri) { mutableStateOf<ImageBitmap?>(null) }
+    // Seed from the process-wide cache so a scroll-back or dialog-reopen
+    // skips the grey-placeholder flash entirely. On a cache miss the
+    // LaunchedEffect below fetches off-thread and populates the cache;
+    // on a load failure we notify the parent so the URI is dropped from
+    // the displayed set and a pool spare takes its place.
+    var bitmap by remember(uri, sizePx) { mutableStateOf(cachedThumbnail(uri, sizePx)) }
     LaunchedEffect(uri, sizePx) {
-        bitmap = withContext(Dispatchers.IO) { loadThumbnail(context, uri, sizePx) }
+        if (bitmap == null) {
+            val loaded = withContext(Dispatchers.IO) { loadThumbnail(context, uri, sizePx) }
+            if (loaded == null) onLoadFailed(uri) else bitmap = loaded
+        }
     }
     val bmp = bitmap
     if (bmp != null) {
