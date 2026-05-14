@@ -452,11 +452,15 @@ private fun MediaStrip() {
     ) { /* picked uri — hand-off to editor insertion is a follow-up */ }
     // Saveable so the URI survives process death while the camera app is in
     // the foreground; `Uri` is `Parcelable`, which the default saver handles.
+    // Written on each Camera tap so the follow-up `TakePicture` callback can
+    // read back the capture target — unused by the inert callback today.
     var pendingCameraUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     val cameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { /* success:Boolean + pendingCameraUri — hand-off is a follow-up */ }
-    val imageOnly = PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+    val imageOnly = remember {
+        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+    }
     val onPhotosClick = { photoPicker.launch(imageOnly) }
     val cameraUnavailableMessage = stringResource(R.string.gbk_block_inserter_camera_unavailable)
     val onCameraClick = {
