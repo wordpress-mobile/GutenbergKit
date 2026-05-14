@@ -14,12 +14,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.rememberScrollableState
-import androidx.compose.foundation.gestures.scrollable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,7 +32,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -46,9 +40,12 @@ import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SecondaryScrollableTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -80,7 +77,12 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -140,19 +142,12 @@ private const val MEDIA_STACK_CORNER_DP = 18
 private const val MEDIA_STACK_ICON_SIZE_DP = 28
 private const val MEDIA_STACK_LABEL_SP = 13
 
-private const val TABS_VERTICAL_PAD_DP = 4
-private const val TABS_BOTTOM_PAD_DP = 6
-private const val TABS_CONTENT_VERTICAL_PAD_DP = 4
-private const val TABS_CONTENT_HORIZONTAL_PAD_DP = 16
-private const val TABS_GAP_DP = 8
-private const val CHIP_HEIGHT_DP = 36
-private const val CHIP_HORIZONTAL_PAD_DP = 14
-private const val CHIP_CORNER_DP = 18
-private const val CHIP_BORDER_WIDTH_DP = 1
-private const val CHIP_FONT_SP = 13
-private const val CHIP_LETTER_SPACING_SP = 0.2
+// Matches M3's internal `Tab.HorizontalTextPadding` — the horizontal padding
+// applied by `Tab` between its layout bounds and the text label inside.
+// Hardcoded because the upstream constant is `internal`.
+private const val TAB_INTERNAL_TEXT_PAD_DP = 16
 
-private const val SEARCH_TOP_PAD_DP = 8
+private const val SEARCH_TOP_PAD_DP = 12
 private const val SEARCH_HORIZONTAL_PAD_DP = 20
 private const val SEARCH_BOTTOM_PAD_DP = 10
 private const val SEARCH_HEIGHT_DP = 40
@@ -188,7 +183,7 @@ private const val DISABLED_ALPHA = 0.5f
  * Bottom-sheet block inserter. The outer shell stays a `BottomSheetDialog` so
  * `GutenbergView`'s integration surface is unchanged; everything visible is
  * Compose content matching the Variation B design handoff — header row,
- * pill category tabs, rounded search, 5-column tonal tile grid.
+ * scrollable secondary tabs, rounded search, 5-column tonal tile grid.
  *
  * The sheet background and 28dp top corners are drawn by Compose directly; the
  * dialog's default white pill background is cleared so it doesn't fight the
@@ -411,7 +406,9 @@ private fun Header(onClose: () -> Unit) {
             fontSize = HEADER_TITLE_SP.sp,
             fontWeight = FontWeight.Medium,
             letterSpacing = HEADER_TITLE_LETTER_SPACING_SP.sp,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .semantics { heading() },
         )
         CloseButton(onClose = onClose)
     }
@@ -558,81 +555,31 @@ private fun MediaActionTile(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CategoryTabs(
     selected: BlockPickerTab,
     onSelect: (BlockPickerTab) -> Unit,
 ) {
-    val scrollState = rememberScrollState()
-    val verticalRelay = rememberScrollableState { 0f }
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = TABS_VERTICAL_PAD_DP.dp, bottom = TABS_BOTTOM_PAD_DP.dp),
+    val tabs = BlockPickerTab.entries
+    val selectedIndex = tabs.indexOf(selected).coerceAtLeast(0)
+    // Tab labels sit 16dp inside the Tab layout (M3's internal
+    // `HorizontalTextPadding`), so set `edgePadding` to `SEARCH_HORIZONTAL_PAD_DP
+    // - 16` to align the first label's leading edge with the search bar's
+    // outer edge instead of the default 52dp.
+    SecondaryScrollableTabRow(
+        selectedTabIndex = selectedIndex,
+        containerColor = ComposeColor.Transparent,
+        edgePadding = (SEARCH_HORIZONTAL_PAD_DP - TAB_INTERNAL_TEXT_PAD_DP).dp,
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(TABS_GAP_DP.dp),
-            modifier = Modifier
-                .horizontalScroll(scrollState)
-                .scrollable(verticalRelay, Orientation.Vertical)
-                .padding(
-                    horizontal = TABS_CONTENT_HORIZONTAL_PAD_DP.dp,
-                    vertical = TABS_CONTENT_VERTICAL_PAD_DP.dp,
-                ),
-        ) {
-            BlockPickerTab.entries.forEach { tab ->
-                CategoryChip(
-                    label = stringResource(tab.labelRes),
-                    selected = tab == selected,
-                    onClick = { onSelect(tab) },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CategoryChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    val background = if (selected) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        ComposeColor.Transparent
-    }
-    val textColor = if (selected) {
-        MaterialTheme.colorScheme.onPrimary
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-    val borderColor = if (selected) {
-        ComposeColor.Transparent
-    } else {
-        MaterialTheme.colorScheme.outlineVariant
-    }
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .height(CHIP_HEIGHT_DP.dp)
-            .clip(RoundedCornerShape(CHIP_CORNER_DP.dp))
-            .background(background)
-            .border(
-                width = CHIP_BORDER_WIDTH_DP.dp,
-                color = borderColor,
-                shape = RoundedCornerShape(CHIP_CORNER_DP.dp),
+        tabs.forEach { tab ->
+            Tab(
+                selected = tab == selected,
+                onClick = { onSelect(tab) },
+                text = { Text(stringResource(tab.labelRes)) },
             )
-            .clickable(onClick = onClick)
-            .padding(horizontal = CHIP_HORIZONTAL_PAD_DP.dp),
-    ) {
-        Text(
-            text = label,
-            color = textColor,
-            fontSize = CHIP_FONT_SP.sp,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = CHIP_LETTER_SPACING_SP.sp,
-        )
+        }
     }
 }
 
@@ -690,6 +637,13 @@ private fun SearchInput(
     onQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // The placeholder Text inside `decorationBox` is a visual hint, not an
+    // accessible name — without `contentDescription` on the field, focusing
+    // the empty field would announce as "edit box" with no context.
+    // `clearAndSetSemantics {}` on the placeholder hides its own `text`
+    // semantic so TalkBack reads the field's `contentDescription` once
+    // ("Search blocks, edit box") instead of duplicating from the placeholder.
+    val label = stringResource(R.string.gbk_block_inserter_search)
     BasicTextField(
         value = query,
         onValueChange = onQueryChange,
@@ -699,13 +653,14 @@ private fun SearchInput(
             color = MaterialTheme.colorScheme.onSurface,
         ),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-        modifier = modifier,
+        modifier = modifier.semantics { contentDescription = label },
         decorationBox = { inner ->
             if (query.isEmpty()) {
                 Text(
-                    text = stringResource(R.string.gbk_block_inserter_search),
+                    text = label,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = SEARCH_FONT_SP.sp,
+                    modifier = Modifier.clearAndSetSemantics {},
                 )
             }
             inner()
@@ -798,7 +753,11 @@ private fun BlockTile(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(BLOCK_TILE_BUTTON_CORNER_DP.dp))
-            .clickable(enabled = !block.isDisabled, onClick = onClick)
+            .clickable(
+                enabled = !block.isDisabled,
+                role = Role.Button,
+                onClick = onClick,
+            )
             .padding(
                 horizontal = BLOCK_TILE_HORIZONTAL_PAD_DP.dp,
             )
@@ -908,11 +867,21 @@ private fun AutoShrinkTileLabel(
 
 @Composable
 private fun EmptyState(query: String, modifier: Modifier = Modifier) {
-    val text = if (query.isNotBlank()) {
+    val visibleText = if (query.isNotBlank()) {
         stringResource(R.string.gbk_block_inserter_no_results_for, query)
     } else {
         stringResource(R.string.gbk_block_inserter_no_results)
     }
+    val announcedText = stringResource(R.string.gbk_block_inserter_no_results)
+    // `liveRegion` so TalkBack announces the change when search filters the
+    // grid down to no results — otherwise the composition swap is silent.
+    // The visible Text would change on every keystroke that produces no
+    // results, which would queue a fresh announcement each time. Keeping the
+    // box's `contentDescription` constant — and clearing the inner Text's
+    // own semantics — means TalkBack announces "No results" once on the
+    // empty -> empty-results transition. The visible string still shows the
+    // queried term to sighted users; blind users can re-focus the field to
+    // hear the query back via `editableText`.
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
@@ -920,13 +889,18 @@ private fun EmptyState(query: String, modifier: Modifier = Modifier) {
             .padding(
                 horizontal = EMPTY_STATE_HORIZONTAL_PAD_DP.dp,
                 vertical = EMPTY_STATE_VERTICAL_PAD_DP.dp,
-            ),
+            )
+            .semantics {
+                liveRegion = LiveRegionMode.Polite
+                contentDescription = announcedText
+            },
     ) {
         Text(
-            text = text,
+            text = visibleText,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = EMPTY_STATE_FONT_SP.sp,
             textAlign = TextAlign.Center,
+            modifier = Modifier.clearAndSetSemantics {},
         )
     }
 }
