@@ -159,11 +159,13 @@ private fun ResetFlagsCard(onReset: () -> Unit) {
     )
 }
 
-// `revokeSelfPermissionOnKill` + self-kill was the obvious path but Android
-// 16 (and arguably earlier versions per the docs' "may delay the revocation"
-// language) doesn't reliably honor it — the process dies but the OS keeps
-// the grant. System Settings hand-off is deterministic and works on every
-// version, so we route all OS-permission flips through there.
+// Settings hand-off rather than `revokeSelfPermissionOnKill` + self-kill:
+//   - The API is API 33+ only and the demo's minSdk is 24, so we'd need
+//     two code paths regardless.
+//   - Settings gives the user an OS-owned confirmation surface — they
+//     see exactly which permission flipped and when.
+//   - No lifecycle race between an async self-kill and the user landing
+//     back in the demo to verify the new state.
 @Composable
 private fun OpenSettingsCard(state: OsPermissionState, onOpen: () -> Unit) {
     val body = when (state) {
