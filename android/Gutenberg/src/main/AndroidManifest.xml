@@ -3,4 +3,20 @@
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <application>
+        <!-- Exposes a writeable temp-file URI to the camera app so captures can
+             come back to us without the host app having to configure its own
+             FileProvider. Authority is keyed off the host app's applicationId
+             so it won't collide with one a host app already declares. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.gutenberg.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/gbk_file_paths" />
+        </provider>
+    </application>
+
 </manifest>
