@@ -58,8 +58,12 @@ object EditorTestHelpers {
         rule.waitForNodeWithText("Standalone editor")
         rule.onNodeWithText("Standalone editor").performClick()
 
-        // Wait for and tap the "Start" button on the configuration screen.
+        // Wait for the configuration screen to render. The native inserter
+        // toggle defaults to on; turn it off so "Add block" opens the web
+        // Gutenberg dialog (which the WebView-side helpers below assert on)
+        // rather than the native BlockPickerDialog bottom sheet.
         rule.waitForNodeWithText("Start")
+        rule.onNodeWithContentDescription("Enable Native Inserter").performClick()
         rule.onNodeWithText("Start").performClick()
 
         // Block until the editor JS has booted and the bridge API is live.
