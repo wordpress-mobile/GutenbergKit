@@ -121,35 +121,64 @@ internal object MediaFileManager {
     }
 }
 
-@Suppress("ReturnCount", "MagicNumber")
+/** A byte sequence that must appear at a fixed offset in the header. */
+private class Anchor(val offset: Int, val bytes: ByteArray) {
+    fun matchesIn(header: ByteArray, read: Int): Boolean {
+        if (read < offset + bytes.size) return false
+        for (i in bytes.indices) if (header[offset + i] != bytes[i]) return false
+        return true
+    }
+}
+
+/** A MIME type identified by one or more byte anchors in the header. */
+private class MagicSignature(val mime: String, val anchors: List<Anchor>)
+
+private fun bytes(vararg values: Int): ByteArray =
+    ByteArray(values.size) { values[it].toByte() }
+
+private val PREFIX_SIGNATURES: List<MagicSignature> = listOf(
+    MagicSignature("image/jpeg", listOf(Anchor(0, bytes(0xFF, 0xD8, 0xFF)))),
+    MagicSignature("image/png", listOf(Anchor(0, bytes(0x89, 0x50, 0x4E, 0x47)))),
+    MagicSignature("image/gif", listOf(Anchor(0, bytes(0x47, 0x49, 0x46, 0x38)))),
+    MagicSignature(
+        "image/webp",
+        listOf(
+            Anchor(0, bytes(0x52, 0x49, 0x46, 0x46)), // 'RIFF'
+            Anchor(8, bytes(0x57, 0x45, 0x42, 0x50)), // 'WEBP'
+        ),
+    ),
+)
+
+/**
+ * ISO BMFF ftyp brands → MIME. The container has 'ftyp' at bytes 4-7 and the
+ * major brand at bytes 8-11. HEIC has several conformant brands; AVIF has two.
+ * Add brands here rather than touching `mimeFromMagicBytes`.
+ */
+private val FTYP_BRANDS: Map<String, String> = mapOf(
+    "heic" to "image/heic",
+    "heix" to "image/heic",
+    "heim" to "image/heic",
+    "heis" to "image/heic",
+    "mif1" to "image/heic",
+    "msf1" to "image/heic",
+    "avif" to "image/avif",
+    "avis" to "image/avif",
+)
+
+private const val ISO_BMFF_HEADER_BYTES = 12
+
 private fun mimeFromMagicBytes(input: InputStream): String? {
-    val header = ByteArray(12)
+    val header = ByteArray(ISO_BMFF_HEADER_BYTES)
     val read = input.read(header)
     if (read < 4) return null
-    if (matchesAt(header, 0, 0xFF, 0xD8, 0xFF)) return "image/jpeg"
-    if (matchesAt(header, 0, 0x89, 0x50, 0x4E, 0x47)) return "image/png"
-    if (matchesAt(header, 0, 0x47, 0x49, 0x46, 0x38)) return "image/gif"
-    if (read >= 12 &&
-        matchesAt(header, 0, 0x52, 0x49, 0x46, 0x46) &&
-        matchesAt(header, 8, 0x57, 0x45, 0x42, 0x50)
-    ) {
-        return "image/webp"
-    }
-    // ISO BMFF: bytes 4-7 spell 'ftyp', brand at bytes 8-11.
-    if (read >= 12 && asciiAt(header, 4, 4) == "ftyp") {
-        return when (asciiAt(header, 8, 4)) {
-            "heic", "heix", "heim", "heis", "mif1", "msf1" -> "image/heic"
-            "avif", "avis" -> "image/avif"
-            else -> null
-        }
+    PREFIX_SIGNATURES.firstOrNull { sig ->
+        sig.anchors.all { it.matchesIn(header, read) }
+    }?.let { return it.mime }
+    if (read >= ISO_BMFF_HEADER_BYTES && asciiAt(header, 4, 4) == "ftyp") {
+        return FTYP_BRANDS[asciiAt(header, 8, 4)]
     }
     return null
 }
 
 private fun asciiAt(buf: ByteArray, offset: Int, length: Int): String =
     if (buf.size >= offset + length) String(buf, offset, length) else ""
-
-private fun matchesAt(buf: ByteArray, offset: Int, vararg expected: Int): Boolean {
-    if (buf.size < offset + expected.size) return false
-    return expected.indices.all { buf[offset + it] == expected[it].toByte() }
-}
