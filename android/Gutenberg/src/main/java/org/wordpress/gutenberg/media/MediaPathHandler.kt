@@ -7,6 +7,7 @@ import androidx.webkit.WebViewAssetLoader
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
+import java.nio.file.Path
 
 /**
  * Serves files from `MediaFileManager`'s uploads directory under the editor's
@@ -16,24 +17,25 @@ import java.io.IOException
  * Path traversal is rejected outright — only flat `<name>` filenames inside
  * the uploads dir are servable.
  */
-internal class MediaPathHandler(uploadsDir: File) : WebViewAssetLoader.PathHandler {
+internal class MediaPathHandler(private val uploadsDir: File) : WebViewAssetLoader.PathHandler {
 
-    private val uploadsCanonicalPath: String = uploadsDir.canonicalPath
-    private val uploadsRoot: File = uploadsDir
+    private val uploadsRoot: Path = uploadsDir.canonicalFile.toPath()
 
     override fun handle(path: String): WebResourceResponse {
         val name = path.trimStart('/')
         if (name.isEmpty() || name.contains('/') || name.contains("..")) {
             return notFound()
         }
-        val file = File(uploadsRoot, name)
-        val canonical = try {
-            file.canonicalPath
+        val file = File(uploadsDir, name)
+        val resolved = try {
+            file.canonicalFile.toPath()
         } catch (e: IOException) {
             Log.w("MediaPathHandler", "Refusing /media/$name — canonical path resolution failed", e)
             return notFound()
         }
-        if (!canonical.startsWith(uploadsCanonicalPath + File.separator) || !file.isFile) {
+        // Segment-aware containment check via Path.startsWith — refuses
+        // `/foo-evil` matching `/foo` the way naive string-prefix would.
+        if (!resolved.startsWith(uploadsRoot) || !file.isFile) {
             return notFound()
         }
         val mime = MimeTypeMap.getSingleton()
