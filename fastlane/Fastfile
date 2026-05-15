@@ -71,6 +71,104 @@ lane :publish_pr_xcframework do
   post_buildkite_annotation(body: body)
 end
 
+# CI orchestrator — invoked by `.buildkite/release.sh` when a build is
+# triggered with `NEW_VERSION` set. **Don't run this locally**: it pushes a
+# tag to origin, uploads to the public S3 bucket, and creates a real GitHub
+# Release. For local diagnosis, invoke `validate`, `update_swift_package`,
+# `publish_to_s3`, or `publish_release_to_github` individually.
+lane :release do |options|
+  version = required_version!(options)
+  token = github_token!(options)
+
+  # Defense in depth: re-run validate so a misconfigured pipeline (e.g. a
+  # future edit that drops the `validate-release` dep) still fast-fails on
+  # bad input. Cheap no-op when the earlier Buildkite step already passed.
+  validate(version: version, github_token: token)
+
+  # Upload the XCFramework before the tag is pushed: the tag's `Package.swift`
+  # references the S3 URL, so consumers resolving the tag need the artifact
+  # already in place. If S3 upload fails, no tag exists and recovery is a
+  # clean re-run.
+  update_swift_package(version: version)
+  publish_to_s3(version: version)
+  publish_release_to_github(version: version, github_token: token)
+end
+
+lane :validate do |options|
+  version = required_version!(options)
+  token = github_token!(options)
+
+  UI.user_error!("Version #{version.inspect} is not a valid tag name (expected `vMAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH-PRERELEASE`).") \
+    unless version =~ /\Av\d+\.\d+\.\d+(-.+)?\z/
+
+  UI.user_error!("Tag #{version} already exists on the remote.") \
+    if git_tag_exists(tag: version, remote: true, remote_name: 'origin')
+
+  release = get_github_release(url: GITHUB_REPO, version: version, api_token: token)
+
+  # `get_github_release` returns nil for both "no such release" (200 with no
+  # matching tag in the response) AND for any API failure (401, 404, network,
+  # etc.). Check the status code populated in lane context to distinguish
+  # the two — otherwise an auth-misconfigured probe silently green-lights a
+  # publish.
+  status = lane_context[SharedValues::GITHUB_API_STATUS_CODE]
+  UI.user_error!("GitHub API returned status #{status.inspect} probing for release #{version}; cannot determine whether it exists.") \
+    unless status == 200
+
+  UI.user_error!("Release #{version} already exists on GitHub.") unless release.nil?
+
+  # Clear lane-context values populated by `get_github_release` so a later
+  # action doesn't see stale state from this probe call.
+  remove_lane_context_values [
+    SharedValues::GITHUB_API_RESPONSE,
+    SharedValues::GITHUB_API_STATUS_CODE,
+    SharedValues::GITHUB_API_JSON
+  ]
+end
+
+lane :update_swift_package do |options|
+  version = required_version!(options)
+
+  rewrite_resources_mode!(
+    File.join(PROJECT_ROOT, 'Package.swift'),
+    version: version,
+    checksum: xcframework_checksum
+  )
+end
+
+lane :publish_release_to_github do |options|
+  version = required_version!(options)
+  token = github_token!(options)
+
+  # Stage the rewritten Package.swift on a local branch — never pushed to
+  # origin — then tag the commit and push only the tag. `git push <tag>`
+  # uploads the commit along with the tag ref, so the tag's commit becomes
+  # reachable on origin via the tag alone (no branch required). Mirrors the
+  # wordpress-rs release flow.
+  sh('git', 'checkout', '-B', "release/#{version}")
+  git_commit(
+    path: File.join(PROJECT_ROOT, 'Package.swift'),
+    message: "Update Package.swift to use version #{version}"
+  )
+  add_git_tag(tag: version)
+  push_git_tags(remote: 'origin', tag: version)
+
+  # The tag is now live on origin and SPM consumers can resolve `version`
+  # against the prebuilt XCFramework already on S3. The GH Release page is
+  # metadata + an asset mirror — if this call fails the tag is unaffected
+  # and an operator can recreate the Release manually against the existing
+  # tag (see docs/releases.md).
+  set_github_release(
+    api_token: token,
+    repository_name: GITHUB_REPO,
+    name: version,
+    tag_name: version,
+    is_generate_release_notes: true,
+    is_prerelease: version.include?('-'),
+    upload_assets: [xcframework_file_path, xcframework_checksum_file_path]
+  )
+end
+
 lane :xcframework_sign do
   sh(
     'codesign',
@@ -144,6 +242,12 @@ def required_version!(options)
   version = options[:version].to_s
   UI.user_error!('version is required') if version.empty?
   version
+end
+
+def github_token!(options = {})
+  options[:github_token] || ENV.fetch('GITHUB_TOKEN') do
+    UI.user_error!('GITHUB_TOKEN must be set in the environment (or pass `github_token:` to the lane).')
+  end
 end
 
 def require_env_vars!(*keys)

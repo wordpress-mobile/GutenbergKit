@@ -15,15 +15,26 @@ steps:
           - $CI_TOOLKIT_PLUGIN
           - $NVM_PLUGIN
 
+    - label: ':white_check_mark: Validate Swift release ${NEW_VERSION:-(no version)}'
+      key: validate-release
+      if: build.env("NEW_VERSION") != null && build.branch == "trunk" && build.pull_request.id == null
+      command: |
+          install_gems
+          bundle exec fastlane validate "version:$NEW_VERSION"
+      plugins: *plugins
+
     - label: ':eslint: Lint React App'
+      key: lint-js
       command: make lint-js
       plugins: *plugins
 
     - label: ':javascript: Test JavaScript'
+      key: test-js
       command: make test-js
       plugins: *plugins
 
     - label: ':performing_arts: Test Web E2E'
+      key: test-web-e2e
       depends_on: build-react
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -97,15 +108,19 @@ steps:
 
     - label: ':s3: Publish XCFramework to S3'
       depends_on: build-xcframework
-      if: build.pull_request.id == null
+      # This step only covers per-commit trunk uploads keyed by the commit
+      # SHA. Releases are handled by `:rocket: Publish Swift release` (gated
+      # on `NEW_VERSION`), and tag pushes from that step trigger a separate
+      # tag build whose iOS upload would just duplicate the rocket step's —
+      # the `build.tag == null` clause skips it. Android publish on tag
+      # builds is still load-bearing (produces the `vX.Y.Z` Maven artifact)
+      # and intentionally not gated here.
+      if: build.env("NEW_VERSION") == null && build.tag == null && build.pull_request.id == null
       command: |
           buildkite-agent artifact download '*.xcframework.zip' .
           buildkite-agent artifact download '*.xcframework.zip.checksum.txt' .
           install_gems
-          # Version precedence: explicit `NEW_VERSION` override wins, then a
-          # tag build publishes under the tag, otherwise fall back to the
-          # commit SHA so every push gets a stable artifact URL.
-          bundle exec fastlane publish_to_s3 version:${NEW_VERSION:-${BUILDKITE_TAG:-$BUILDKITE_COMMIT}}
+          bundle exec fastlane publish_to_s3 version:$BUILDKITE_COMMIT
       plugins: *plugins
 
     - label: ':swift: :package: Publish PR XCFramework'
@@ -114,7 +129,21 @@ steps:
       command: .buildkite/publish-pr-xcframework.sh
       plugins: *plugins
 
+    - label: ':rocket: Publish Swift release ${NEW_VERSION:-(Error: No version found!)}'
+      depends_on:
+          - validate-release
+          - build-xcframework
+          - swift-test-swift-package
+          - lint-js
+          - test-js
+          - test-web-e2e
+          - test-ios-e2e
+      if: build.env("NEW_VERSION") != null && build.branch == "trunk" && build.pull_request.id == null
+      command: .buildkite/release.sh
+      plugins: *plugins
+
     - label: ':ios: Test iOS E2E'
+      key: test-ios-e2e
       depends_on: build-react
       command: |
           buildkite-agent artifact download dist.tar.gz .

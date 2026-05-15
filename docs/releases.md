@@ -1,6 +1,19 @@
 # GutenbergKit Release Process
 
-Use the provided release script to automate the entire process:
+## How publishing works
+
+Every push to `trunk` publishes both platforms automatically:
+
+-   **Android**: the `:android: Publish Android Library` step pushes a Maven artifact keyed by the commit (consumable via Git revision pins).
+-   **iOS**: the `:s3: Publish XCFramework to S3` step uploads the signed XCFramework under `gutenbergkit/<commit-sha>/`, and `Publish PR XCFramework` does the same on PR builds under a `pr-build/<n>` snapshot branch.
+
+A **tagged release** is a separate, manually-triggered publish flow on top of that: it produces a stable `vX.Y.Z` tag whose `Package.swift` points at the prebuilt XCFramework on CDN, plus a GitHub Release with the XCFramework attached. SPM consumers pin the tag; everything else can pin a commit/branch.
+
+The tagged release happens in two steps: a local script bumps the version on `trunk`, then a CI build creates the tag and the GitHub release.
+
+## Step 1 — Bump versions on trunk
+
+Run the release script:
 
 ```bash
 # Standard version increments
@@ -31,13 +44,38 @@ The script:
 1. Ensures required dependencies are installed
 1. Increments the version number[^1]
 1. Builds the project[^2]
-1. Commits changes
-1. Creates a Git tag
-1. Pushes to `origin/trunk` with tags
-1. Creates a GitHub release
-1. Creates a new release on GitHub: `gh release create vX.X.X --generate-notes --title "X.X.X"`
+1. Commits the version bump as `chore(release): X.Y.Z`
+1. Pushes to `origin/trunk`
 
-After the release is created, it is ready for integration into the WordPress app.
+It does **not** create the git tag or the GitHub release — that's Step 2.
+
+## Step 2 — Publish via Buildkite
+
+Step 1 prints the SHA of the version-bump commit it just pushed. Trigger a new Buildkite build with that SHA pinned:
+
+1. Open <https://buildkite.com/automattic/gutenbergkit/builds/new>
+2. **Branch**: `trunk`
+3. **Commit**: the SHA printed by Step 1
+4. **Environment Variables**: `NEW_VERSION=vX.Y.Z`
+
+Pinning the commit matters — if you leave it blank, Buildkite resolves `trunk` to HEAD at trigger time, and a concurrent merge would tag the wrong commit.
+
+The build runs a `:white_check_mark: Validate Swift release` step early on (gated on `NEW_VERSION`) that fast-fails if the tag name is malformed, or if the tag or GitHub Release already exists. After that, the `:rocket: Publish Swift release` step:
+
+1. Rewrites `Package.swift` to consume the binary target via `.release(version:, checksum:)`
+1. Uploads the XCFramework to `s3://a8c-apps-public-artifacts/gutenbergkit/vX.Y.Z/`
+1. Commits the rewrite on a local `release/vX.Y.Z` branch (never pushed to origin), tags `vX.Y.Z`, and pushes **only the tag** — `git push <tag>` carries the commit along with the tag ref, so the commit becomes reachable on origin via the tag alone
+1. Creates the GitHub Release against the now-existing tag, uploading the XCFramework + checksum as assets (adds `--prerelease` when the version contains `-`)
+
+The tag is pushed before the GitHub Release is created. Once the tag is on origin, SPM consumers pinning `vX.Y.Z` can resolve a `Package.swift` that fetches the prebuilt XCFramework from CDN — the GH Release is metadata and an asset mirror on top of that.
+
+The tag's commit lives off `trunk`'s history (parented on `trunk` but only reachable via the tag ref), matching the `pr-build/<n>` snapshot-branch shape but published under a tag instead of a branch.
+
+### Recovering from a partial publish
+
+If the build fails before the tag is pushed (validate, Package.swift rewrite, S3 upload, or local commit/tag), no tag exists and no consumer can resolve `vX.Y.Z`. Re-run Step 2 with the same `NEW_VERSION` once the underlying issue is fixed — `validate` will pass (no tag, no release), and S3 uploads are idempotent (`if_exists: :replace`).
+
+If the build fails specifically on `gh release create` (tag pushed, but GH Release missing), the tag is the source of truth: SPM consumers resolving `vX.Y.Z` already work. To create the missing Release page, re-run `gh release create vX.Y.Z --title vX.Y.Z --generate-notes [--prerelease] <xcframework.zip> <checksum.txt>` manually against the existing tag — re-running the full Buildkite step would fail at `validate` because the tag now exists.
 
 ## Release Notes
 
