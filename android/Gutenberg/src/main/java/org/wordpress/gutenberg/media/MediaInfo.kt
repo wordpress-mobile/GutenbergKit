@@ -1,7 +1,7 @@
 package org.wordpress.gutenberg.media
 
-import org.json.JSONArray
-import org.json.JSONObject
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
 /**
  * Mirrors `MediaInfo` on iOS — the shape the JS editor's
@@ -11,25 +11,23 @@ import org.json.JSONObject
  * attachment; native-inserter handoffs leave it null and the JS side
  * falls back to URL-fetch-and-transform.
  */
+@Serializable
 internal data class MediaInfo(
     val id: Int? = null,
     val url: String,
-    val type: String?,
+    val type: String? = null,
     val title: String? = null,
     val caption: String? = null,
     val alt: String? = null,
     val metadata: Map<String, String> = emptyMap(),
-) {
-    fun toJson(): JSONObject = JSONObject().apply {
-        if (id != null) put("id", id)
-        put("url", url)
-        if (type != null) put("type", type)
-        if (title != null) put("title", title)
-        if (caption != null) put("caption", caption)
-        if (alt != null) put("alt", alt)
-        put("metadata", JSONObject(metadata as Map<*, *>))
-    }
-}
+)
 
-internal fun List<MediaInfo>.toJsonArray(): JSONArray =
-    JSONArray().also { array -> forEach { array.put(it.toJson()) } }
+/**
+ * - `explicitNulls = false`: a null `id` / `type` / etc. encodes as a missing key, matching iOS Codable.
+ * - `encodeDefaults = true`: keep `metadata` in the output even when it's `emptyMap()`, matching iOS
+ *   (where non-optional `metadata: [String: String]` always encodes) and the JS receiver's expectation.
+ */
+internal val MediaInfoJson: Json = Json {
+    explicitNulls = false
+    encodeDefaults = true
+}

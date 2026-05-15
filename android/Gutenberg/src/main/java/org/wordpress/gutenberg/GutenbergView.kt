@@ -39,10 +39,11 @@ import org.json.JSONObject
 import org.wordpress.gutenberg.inserter.BlockPickerDialog
 import org.wordpress.gutenberg.inserter.clearPhotoPreferences
 import org.wordpress.gutenberg.inserter.warmupPhotoPrefs
+import kotlinx.serialization.encodeToString
 import org.wordpress.gutenberg.media.MediaFileManager
 import org.wordpress.gutenberg.media.MediaInfo
+import org.wordpress.gutenberg.media.MediaInfoJson
 import org.wordpress.gutenberg.media.MediaPathHandler
-import org.wordpress.gutenberg.media.toJsonArray
 import org.wordpress.gutenberg.model.BlockInserterPayload
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
@@ -903,7 +904,7 @@ class GutenbergView : FrameLayout {
      */
     internal fun insertMediaFromInserter(media: List<MediaInfo>) {
         if (!isEditorLoaded || media.isEmpty()) return
-        val payload = media.toJsonArray().toString()
+        val payload = MediaInfoJson.encodeToString(media)
         handler.post {
             webView.evaluateJavascript(
                 "window.blockInserter?.insertMedia($payload);",

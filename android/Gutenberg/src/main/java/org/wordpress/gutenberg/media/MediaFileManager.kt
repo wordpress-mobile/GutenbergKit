@@ -174,7 +174,7 @@ private val FTYP_BRANDS: Map<String, String> = mapOf(
 
 private const val ISO_BMFF_HEADER_BYTES = 12
 
-private fun mimeFromMagicBytes(input: InputStream): String? {
+internal fun mimeFromMagicBytes(input: InputStream): String? {
     val header = ByteArray(ISO_BMFF_HEADER_BYTES)
     val read = input.read(header)
     if (read < 4) return null
