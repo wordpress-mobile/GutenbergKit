@@ -119,7 +119,7 @@ import org.wordpress.gutenberg.R
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.Color as ComposeColor
 import org.wordpress.gutenberg.media.MediaFileManager
-import org.wordpress.gutenberg.media.MediaInfo
+import org.wordpress.gutenberg.media.StoredMedia
 import org.wordpress.gutenberg.model.BlockInserterPayload
 import org.wordpress.gutenberg.model.BlockType
 
@@ -234,7 +234,7 @@ internal class BlockPickerDialog(
     context: Context,
     private val payload: BlockInserterPayload,
     private val onBlockSelected: (BlockType) -> Unit,
-    private val onMediaSelected: (List<MediaInfo>) -> Unit,
+    private val onMediaSelected: (List<StoredMedia>) -> Unit,
 ) : BottomSheetDialog(context) {
 
     init {
@@ -291,7 +291,7 @@ internal class BlockPickerDialog(
  * composable in between.
  */
 private val LocalMediaInsertion =
-    compositionLocalOf<((List<MediaInfo>) -> Unit)> {
+    compositionLocalOf<((List<StoredMedia>) -> Unit)> {
         error("LocalMediaInsertion not provided")
     }
 
@@ -299,7 +299,7 @@ private val LocalMediaInsertion =
 private fun BlockPickerSheet(
     payload: BlockInserterPayload,
     onBlockSelected: (BlockType) -> Unit,
-    onMediaSelected: (List<MediaInfo>) -> Unit,
+    onMediaSelected: (List<StoredMedia>) -> Unit,
     onClose: () -> Unit,
 ) {
     val colorScheme = rememberColorScheme()
@@ -655,7 +655,7 @@ private fun PhotosCameraTile(
     // Saveable so the URI survives process death while the camera app is in
     // the foreground; `Uri` is `Parcelable`, which the default saver handles.
     // Written on each Camera tap, read back when the launcher returns to
-    // resolve the captured file → MediaInfo → editor insertion.
+    // resolve the captured file → StoredMedia → editor insertion.
     var pendingCameraCapture by rememberSaveable { mutableStateOf<CameraCapture?>(null) }
     val cameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
@@ -664,8 +664,8 @@ private fun PhotosCameraTile(
         pendingCameraCapture = null
         if (success && capture != null) {
             // Captured file is already inside MediaFileManager's uploads dir,
-            // so no copy step — hand the MediaInfo straight to the editor.
-            insertMedia(listOf(MediaFileManager.mediaInfoForFile(File(capture.filePath))))
+            // so no copy step — hand the StoredMedia straight to the editor.
+            insertMedia(listOf(MediaFileManager.storedMediaForFile(File(capture.filePath))))
         } else if (capture != null) {
             // Cancellation / failure leaves an empty file behind from the
             // FileProvider grant; sweep it eagerly so it doesn't have to wait
@@ -763,7 +763,7 @@ private fun handlePickedUri(
     scope: CoroutineScope,
     context: Context,
     uri: Uri,
-    insertMedia: (List<MediaInfo>) -> Unit,
+    insertMedia: (List<StoredMedia>) -> Unit,
 ) {
     scope.launch {
         // Import can fail for transient reasons (cloud-only photo without

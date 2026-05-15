@@ -44,6 +44,7 @@ import org.wordpress.gutenberg.media.MediaFileManager
 import org.wordpress.gutenberg.media.MediaInfo
 import org.wordpress.gutenberg.media.MediaInfoJson
 import org.wordpress.gutenberg.media.MediaPathHandler
+import org.wordpress.gutenberg.media.StoredMedia
 import org.wordpress.gutenberg.model.BlockInserterPayload
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
@@ -103,8 +104,9 @@ class GutenbergView : FrameLayout {
     private val webView: WebView
     private var isEditorLoaded = false
     private var didFireEditorLoaded = false
-    private lateinit var assetLoader: WebViewAssetLoader
-    private lateinit var assetDomain: String
+    private var assetLoader: WebViewAssetLoader by writeOnce()
+    private var assetDomain: String by writeOnce()
+    private var assetScheme: String by writeOnce()
     private val configuration: EditorConfiguration
     private lateinit var dependencies: EditorDependencies
 
@@ -232,14 +234,8 @@ class GutenbergView : FrameLayout {
         // process-wide cache — no async-load placeholder, no visible flash.
         warmupPhotoPrefs(context)
 
-        // Initialize the asset loader now that context is available
-        assetLoader = WebViewAssetLoader.Builder()
-            .addPathHandler("/assets/", AssetsPathHandler(context))
-            .addPathHandler(
-                MediaFileManager.MEDIA_PATH_PREFIX,
-                MediaPathHandler(MediaFileManager.uploadsDir(context)),
-            )
-            .build()
+        // The asset loader is built in `loadEditor`, where the configured
+        // `assetDomain` and HTTP-allowance flag are known.
 
         // Create the internal WebView as first child (behind overlays)
         webView = WebView(context).apply {
@@ -559,10 +555,15 @@ class GutenbergView : FrameLayout {
         // avoid accidentally downgrading asset traffic for production sites.
         val siteUri = Uri.parse(configuration.siteURL)
         val isLocalHttpSite = siteUri.scheme == "http" && siteUri.host in LOCAL_HOSTS
+        assetScheme = if (isLocalHttpSite) "http" else "https"
         assetLoader = WebViewAssetLoader.Builder()
             .setDomain(assetDomain)
             .setHttpAllowed(isLocalHttpSite)
             .addPathHandler("/assets/", AssetsPathHandler(this.context))
+            .addPathHandler(
+                MediaFileManager.MEDIA_PATH_PREFIX,
+                MediaPathHandler(MediaFileManager.uploadsDir(this.context)),
+            )
             .build()
 
         // Transition to spinner phase (WebView initialization)
@@ -570,8 +571,7 @@ class GutenbergView : FrameLayout {
 
         initializeWebView()
 
-        val scheme = if (isLocalHttpSite) "http" else "https"
-        val assetUrl = "$scheme://$assetDomain$ASSET_PATH_INDEX"
+        val assetUrl = "$assetScheme://$assetDomain$ASSET_PATH_INDEX"
         val editorUrl = BuildConfig.GUTENBERG_EDITOR_URL.ifEmpty {
             assetUrl
         }
@@ -898,12 +898,17 @@ class GutenbergView : FrameLayout {
 
     /**
      * Hands a list of inserter-sourced media to the JS editor via
-     * `window.blockInserter.insertMedia(...)`. URLs in each MediaInfo must be
-     * loadable by the WebView — the canonical source is `MediaFileManager`,
-     * which produces same-origin URLs under `/media/`.
+     * `window.blockInserter.insertMedia(...)`. URL stamping happens here, not
+     * in `MediaFileManager`, so the URLs match the live `assetDomain` /
+     * `assetScheme` rather than the build-time defaults — keeping the media
+     * same-origin against the editor bundle however the asset loader is
+     * configured.
      */
-    internal fun insertMediaFromInserter(media: List<MediaInfo>) {
-        if (!isEditorLoaded || media.isEmpty()) return
+    internal fun insertMediaFromInserter(stored: List<StoredMedia>) {
+        if (!isEditorLoaded || stored.isEmpty()) return
+        val media = stored.map {
+            MediaInfo(url = mediaUrlFor(assetScheme, assetDomain, it.fileName), type = it.type)
+        }
         val payload = MediaInfoJson.encodeToString(media)
         handler.post {
             webView.evaluateJavascript(
@@ -1214,6 +1219,15 @@ data class Media(
         }
     }
 }
+
+private fun mediaUrlFor(scheme: String, domain: String, fileName: String): String =
+    Uri.Builder()
+        .scheme(scheme)
+        .authority(domain)
+        .appendEncodedPath(MediaFileManager.MEDIA_PATH_PREFIX.trim('/'))
+        .appendPath(fileName)
+        .build()
+        .toString()
 
 enum class MediaType(var label: String) {
     IMAGE("image"),
