@@ -7,41 +7,55 @@ import androidx.webkit.WebViewAssetLoader
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
-import java.nio.file.Path
 
 /**
  * Serves files from `MediaFileManager`'s uploads directory under the editor's
  * asset origin. Registered at `/media/` so JS `fetch()` can read picked /
- * captured media same-origin against `appassets.androidplatform.net`.
+ * captured media same-origin against the asset loader's host.
  *
  * Path traversal is rejected outright — only flat `<name>` filenames inside
  * the uploads dir are servable.
  */
-internal class MediaPathHandler(private val uploadsDir: File) : WebViewAssetLoader.PathHandler {
+internal class MediaPathHandler(uploadsDir: File) : WebViewAssetLoader.PathHandler {
 
-    private val uploadsRoot: Path = uploadsDir.canonicalFile.toPath()
+    private val uploadsRoot: File = uploadsDir.canonicalFile
 
     override fun handle(path: String): WebResourceResponse {
         val name = path.trimStart('/')
         if (name.isEmpty() || name.contains('/') || name.contains("..")) {
             return notFound()
         }
-        val file = File(uploadsDir, name)
+        val file = File(uploadsRoot, name)
         val resolved = try {
-            file.canonicalFile.toPath()
+            file.canonicalFile
         } catch (e: IOException) {
-            Log.w("MediaPathHandler", "Refusing /media/$name — canonical path resolution failed", e)
+            Log.w("MediaPathHandler", "Refusing /media/$name — canonical resolution failed", e)
+            return notFound()
+        } catch (e: SecurityException) {
+            Log.w("MediaPathHandler", "Refusing /media/$name — canonical resolution denied", e)
             return notFound()
         }
-        // Segment-aware containment check via Path.startsWith — refuses
-        // `/foo-evil` matching `/foo` the way naive string-prefix would.
-        if (!resolved.startsWith(uploadsRoot) || !file.isFile) {
+        // Segment-aware containment check: walk `parentFile` from the resolved
+        // candidate up to the filesystem root, accepting only if we pass
+        // through `uploadsRoot`. This refuses `/foo-evil` matching `/foo` the
+        // way a naive string-prefix would, without depending on
+        // `java.nio.file.Path` (API 26+, `minSdk = 24` here).
+        if (!resolved.isWithin(uploadsRoot) || !resolved.isFile) {
             return notFound()
         }
         val mime = MimeTypeMap.getSingleton()
-            .getMimeTypeFromExtension(file.extension.lowercase())
+            .getMimeTypeFromExtension(resolved.extension.lowercase())
             ?: "application/octet-stream"
-        return WebResourceResponse(mime, null, FileInputStream(file))
+        return WebResourceResponse(mime, null, FileInputStream(resolved))
+    }
+
+    private fun File.isWithin(root: File): Boolean {
+        var current: File? = this
+        while (current != null) {
+            if (current == root) return true
+            current = current.parentFile
+        }
+        return false
     }
 
     private fun notFound(): WebResourceResponse =
