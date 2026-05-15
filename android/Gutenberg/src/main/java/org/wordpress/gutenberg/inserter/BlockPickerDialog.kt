@@ -57,7 +57,9 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -104,13 +106,20 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import android.os.Parcelable
 import java.io.File
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.parcelize.Parcelize
 import org.wordpress.gutenberg.R
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.Color as ComposeColor
+import org.wordpress.gutenberg.media.MediaFileManager
+import org.wordpress.gutenberg.media.MediaInfo
 import org.wordpress.gutenberg.model.BlockInserterPayload
 import org.wordpress.gutenberg.model.BlockType
 
@@ -225,6 +234,7 @@ internal class BlockPickerDialog(
     context: Context,
     private val payload: BlockInserterPayload,
     private val onBlockSelected: (BlockType) -> Unit,
+    private val onMediaSelected: (List<MediaInfo>) -> Unit,
 ) : BottomSheetDialog(context) {
 
     init {
@@ -246,6 +256,10 @@ internal class BlockPickerDialog(
                     payload = payload,
                     onBlockSelected = { block ->
                         onBlockSelected(block)
+                        dismiss()
+                    },
+                    onMediaSelected = { media ->
+                        onMediaSelected(media)
                         dismiss()
                     },
                     onClose = { dismiss() },
@@ -270,41 +284,55 @@ internal class BlockPickerDialog(
     }
 }
 
+/**
+ * Ambient handoff for inserter-sourced media. Provided once at the sheet root
+ * so the Photos tile, Camera tile, and recent-photos thumbnails can each fire
+ * a media insertion without prop-drilling the callback through every layout
+ * composable in between.
+ */
+private val LocalMediaInsertion =
+    compositionLocalOf<((List<MediaInfo>) -> Unit)> {
+        error("LocalMediaInsertion not provided")
+    }
+
 @Composable
 private fun BlockPickerSheet(
     payload: BlockInserterPayload,
     onBlockSelected: (BlockType) -> Unit,
+    onMediaSelected: (List<MediaInfo>) -> Unit,
     onClose: () -> Unit,
 ) {
     val colorScheme = rememberColorScheme()
     MaterialTheme(colorScheme = colorScheme) {
-        val allBlocks = remember(payload) { flattenBlocks(payload) }
-        val recentBlocks = remember(payload, allBlocks) { recentBlocks(payload, allBlocks) }
+        CompositionLocalProvider(LocalMediaInsertion provides onMediaSelected) {
+            val allBlocks = remember(payload) { flattenBlocks(payload) }
+            val recentBlocks = remember(payload, allBlocks) { recentBlocks(payload, allBlocks) }
 
-        var selectedTab by remember { mutableStateOf(BlockPickerTab.Recent) }
-        var query by remember { mutableStateOf("") }
-        var debounced by remember { mutableStateOf("") }
-        LaunchedEffect(query) {
-            delay(SEARCH_DEBOUNCE_MS)
-            debounced = query.trim()
+            var selectedTab by remember { mutableStateOf(BlockPickerTab.Recent) }
+            var query by remember { mutableStateOf("") }
+            var debounced by remember { mutableStateOf("") }
+            LaunchedEffect(query) {
+                delay(SEARCH_DEBOUNCE_MS)
+                debounced = query.trim()
+            }
+
+            val filtered = remember(selectedTab, debounced, allBlocks, recentBlocks) {
+                val tabBlocks = filterByTab(selectedTab, allBlocks, recentBlocks)
+                if (debounced.isEmpty()) tabBlocks else searchBlocks(debounced, tabBlocks)
+            }
+
+            SheetContent(
+                selectedTab = selectedTab,
+                onSelectTab = { selectedTab = it },
+                query = query,
+                onQueryChange = { query = it },
+                debouncedQuery = debounced,
+                blocks = filtered,
+                onBlockSelected = onBlockSelected,
+                onClose = onClose,
+                surface = colorScheme.surfaceContainerLow,
+            )
         }
-
-        val filtered = remember(selectedTab, debounced, allBlocks, recentBlocks) {
-            val tabBlocks = filterByTab(selectedTab, allBlocks, recentBlocks)
-            if (debounced.isEmpty()) tabBlocks else searchBlocks(debounced, tabBlocks)
-        }
-
-        SheetContent(
-            selectedTab = selectedTab,
-            onSelectTab = { selectedTab = it },
-            query = query,
-            onQueryChange = { query = it },
-            debouncedQuery = debounced,
-            blocks = filtered,
-            onBlockSelected = onBlockSelected,
-            onClose = onClose,
-            surface = colorScheme.surfaceContainerLow,
-        )
     }
 }
 
@@ -611,41 +639,59 @@ private fun PhotosCameraTile(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val insertMedia = LocalMediaInsertion.current
     // Hide the Camera tile on devices without any camera hardware (tablets,
     // emulators, e-readers). FEATURE_CAMERA_ANY doesn't require a `<queries>`
     // manifest entry, unlike resolving ACTION_IMAGE_CAPTURE directly.
     val hasCamera = remember(context) {
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
     }
-    // The result callbacks below are intentionally inert: the picked URI / camera
-    // capture needs to round-trip through `WebViewAssetLoader` so the JS editor
-    // can `fetch()` it, which is a follow-up. Until that lands, this whole sheet
-    // is gated behind the demo app's "Enable Native Inserter" toggle, so users
-    // outside that opt-in won't see the no-op buttons.
     val photoPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
-    ) { /* picked uri — hand-off to editor insertion is a follow-up */ }
+    ) { uri ->
+        if (uri != null) handlePickedUri(scope, context, uri, insertMedia)
+    }
     // Saveable so the URI survives process death while the camera app is in
     // the foreground; `Uri` is `Parcelable`, which the default saver handles.
-    // Written on each Camera tap so the follow-up `TakePicture` callback can
-    // read back the capture target — unused by the inert callback today.
-    var pendingCameraUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    // Written on each Camera tap, read back when the launcher returns to
+    // resolve the captured file → MediaInfo → editor insertion.
+    var pendingCameraCapture by rememberSaveable { mutableStateOf<CameraCapture?>(null) }
     val cameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
-    ) { /* success:Boolean + pendingCameraUri — hand-off is a follow-up */ }
+    ) { success ->
+        val capture = pendingCameraCapture
+        pendingCameraCapture = null
+        if (success && capture != null) {
+            // Captured file is already inside MediaFileManager's uploads dir,
+            // so no copy step — hand the MediaInfo straight to the editor.
+            insertMedia(listOf(MediaFileManager.mediaInfoForFile(File(capture.filePath))))
+        } else if (capture != null) {
+            // Cancellation / failure leaves an empty file behind from the
+            // FileProvider grant; sweep it eagerly so it doesn't have to wait
+            // for the 2-day TTL cleanup.
+            runCatching { File(capture.filePath).delete() }
+        }
+    }
     val imageOnly = remember { PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly) }
     val onPhotosClick = { photoPicker.launch(imageOnly) }
     val cameraUnavailableMessage = stringResource(R.string.gbk_block_inserter_camera_unavailable)
     val onCameraClick = {
-        val uri = createCameraOutputUri(context)
-        pendingCameraUri = uri
+        val file = MediaFileManager.newCameraOutputFile(context)
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.gutenberg.fileprovider",
+            file,
+        )
+        pendingCameraCapture = CameraCapture(filePath = file.absolutePath)
         try {
             cameraLauncher.launch(uri)
         } catch (e: ActivityNotFoundException) {
             // Defense-in-depth: hasCamera gates the tile, but corp-locked
             // devices can have camera hardware without any handler for
             // ACTION_IMAGE_CAPTURE installed.
-            pendingCameraUri = null
+            pendingCameraCapture = null
+            runCatching { file.delete() }
             Log.w("BlockPickerDialog", "No activity to handle ACTION_IMAGE_CAPTURE", e)
             Toast.makeText(context, cameraUnavailableMessage, Toast.LENGTH_SHORT).show()
         }
@@ -705,18 +751,39 @@ private fun PhotosCameraTile(
     }
 }
 
-private fun createCameraOutputUri(context: Context): Uri {
-    val dir = File(context.cacheDir, "camera").apply { mkdirs() }
-    val file = File(dir, "capture_${System.currentTimeMillis()}.jpg")
-    // TODO: clean up captured files once the editor hand-off lands. Each Camera
-    // tap creates a fresh file here; with the result callback inert today, every
-    // capture is orphaned in the cache. When we wire up the URI hand-off, delete
-    // on success/cancel and sweep stale files on next entry.
-    return FileProvider.getUriForFile(
-        context,
-        "${context.packageName}.gutenberg.fileprovider",
-        file,
-    )
+/**
+ * `Parcelable` payload that lets `rememberSaveable` survive the round-trip to
+ * the camera app. Only the file path matters across process death — the
+ * FileProvider URI is rebuilt by the system on launch.
+ */
+@Parcelize
+internal data class CameraCapture(val filePath: String) : Parcelable
+
+private fun handlePickedUri(
+    scope: CoroutineScope,
+    context: Context,
+    uri: Uri,
+    insertMedia: (List<MediaInfo>) -> Unit,
+) {
+    scope.launch {
+        // Import can fail for transient reasons (cloud-only photo without
+        // network, MediaStore deletion race, SAF provider crash). On failure,
+        // surface a toast and leave the sheet open so the user can pick again.
+        val info = runCatching { MediaFileManager.import(context, uri) }
+            .onFailure { Log.w("BlockPickerDialog", "Failed to import picked URI: $uri", it) }
+            .getOrNull()
+        if (info == null) {
+            withContext(Dispatchers.Main) {
+                Toast.makeText(
+                    context,
+                    R.string.gbk_block_inserter_media_import_failed,
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+            return@launch
+        }
+        insertMedia(listOf(info))
+    }
 }
 
 @Composable
@@ -851,6 +918,8 @@ private fun PhotoAccessRationale(
 @Composable
 private fun RealThumbnail(uri: Uri, onLoadFailed: (Uri) -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val insertMedia = LocalMediaInsertion.current
     val sizePx = with(LocalDensity.current) { MEDIA_THUMB_SIZE_DP.dp.roundToPx() }
     // Seed from the process-wide cache so a scroll-back or dialog-reopen
     // skips the grey-placeholder flash entirely. On a cache miss the
@@ -865,22 +934,23 @@ private fun RealThumbnail(uri: Uri, onLoadFailed: (Uri) -> Unit) {
         }
     }
     val bmp = bitmap
+    val thumbModifier = Modifier
+        .size(MEDIA_THUMB_SIZE_DP.dp)
+        .clip(RoundedCornerShape(MEDIA_THUMB_CORNER_DP.dp))
+        .clickable { handlePickedUri(scope, context, uri, insertMedia) }
+        .semantics { role = Role.Button }
     if (bmp != null) {
         Image(
             bitmap = bmp,
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(MEDIA_THUMB_SIZE_DP.dp)
-                .clip(RoundedCornerShape(MEDIA_THUMB_CORNER_DP.dp)),
+            modifier = thumbModifier,
         )
     } else {
         // Neutral loading box — avoids flashing colorful mock-photo gradients
         // between the URI being known and the bitmap finishing async load.
         Box(
-            modifier = Modifier
-                .size(MEDIA_THUMB_SIZE_DP.dp)
-                .clip(RoundedCornerShape(MEDIA_THUMB_CORNER_DP.dp))
+            modifier = thumbModifier
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh),
         )
     }

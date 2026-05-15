@@ -39,6 +39,10 @@ import org.json.JSONObject
 import org.wordpress.gutenberg.inserter.BlockPickerDialog
 import org.wordpress.gutenberg.inserter.clearPhotoPreferences
 import org.wordpress.gutenberg.inserter.warmupPhotoPrefs
+import org.wordpress.gutenberg.media.MediaFileManager
+import org.wordpress.gutenberg.media.MediaInfo
+import org.wordpress.gutenberg.media.MediaPathHandler
+import org.wordpress.gutenberg.media.toJsonArray
 import org.wordpress.gutenberg.model.BlockInserterPayload
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
@@ -230,6 +234,10 @@ class GutenbergView : FrameLayout {
         // Initialize the asset loader now that context is available
         assetLoader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", AssetsPathHandler(context))
+            .addPathHandler(
+                MediaFileManager.MEDIA_PATH_PREFIX,
+                MediaPathHandler(MediaFileManager.uploadsDir(context)),
+            )
             .build()
 
         // Create the internal WebView as first child (behind overlays)
@@ -887,6 +895,23 @@ class GutenbergView : FrameLayout {
         }
     }
 
+    /**
+     * Hands a list of inserter-sourced media to the JS editor via
+     * `window.blockInserter.insertMedia(...)`. URLs in each MediaInfo must be
+     * loadable by the WebView — the canonical source is `MediaFileManager`,
+     * which produces same-origin URLs under `/media/`.
+     */
+    internal fun insertMediaFromInserter(media: List<MediaInfo>) {
+        if (!isEditorLoaded || media.isEmpty()) return
+        val payload = media.toJsonArray().toString()
+        handler.post {
+            webView.evaluateJavascript(
+                "window.blockInserter?.insertMedia($payload);",
+                null,
+            )
+        }
+    }
+
     private fun dismissBlockInserter() {
         if (!isEditorLoaded) return
         handler.post {
@@ -925,6 +950,7 @@ class GutenbergView : FrameLayout {
             context = context,
             payload = payload,
             onBlockSelected = { block -> insertBlock(block.id) },
+            onMediaSelected = { media -> insertMediaFromInserter(media) },
         )
         dialog.setOnDismissListener {
             if (blockInserterDialog === dialog) {
