@@ -19,6 +19,7 @@
     <string name="gbk_block_inserter_photos">Photos</string>
     <string name="gbk_block_inserter_camera">Camera</string>
     <string name="gbk_block_inserter_camera_unavailable">Camera not available on this device</string>
+    <string name="gbk_block_inserter_media_import_failed">Couldn\'t add that photo. Try another.</string>
     <string name="gbk_block_inserter_photos_rationale">Show your photo library here to quickly insert an image</string>
     <string name="gbk_block_inserter_photos_rationale_denied">Allow access to show your photo library here</string>
     <string name="gbk_block_inserter_photos_rationale_permanent">Enable photo access in Settings to show your library here</string>
