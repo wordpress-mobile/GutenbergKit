@@ -42,6 +42,13 @@ internal object MediaFileManager {
             .build()
             .toString()
 
+    /**
+     * Process-wide latch ensuring the TTL sweep runs at most once per process
+     * lifetime. The first `import` / `newCameraOutputFile` call flips it and
+     * scans for stale files; every subsequent call is a no-op. Cheaper than
+     * scanning the directory on every import, and the 2-day TTL is coarse
+     * enough that one sweep per process is enough.
+     */
     private val cleanupOnce = AtomicBoolean(false)
 
     fun uploadsDir(context: Context): File =
