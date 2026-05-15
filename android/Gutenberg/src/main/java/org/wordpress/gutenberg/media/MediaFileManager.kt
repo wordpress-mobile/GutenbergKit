@@ -25,12 +25,22 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal object MediaFileManager {
     private const val ROOT_DIR = "GutenbergKit"
     private const val UPLOADS_DIR = "Uploads"
+    private const val MEDIA_PATH_SEGMENT = "media"
     private const val FILE_TTL_DAYS = 2L
     private const val FALLBACK_EXT = "bin"
     private const val FALLBACK_MIME = "application/octet-stream"
 
-    const val MEDIA_PATH_PREFIX = "/media/"
-    val mediaUrlPrefix: String = "https://$DEFAULT_ASSET_DOMAIN$MEDIA_PATH_PREFIX"
+    /** WebViewAssetLoader prefix — leading and trailing slash are required by the API. */
+    const val MEDIA_PATH_PREFIX = "/$MEDIA_PATH_SEGMENT/"
+
+    private fun mediaUrlFor(fileName: String): String =
+        Uri.Builder()
+            .scheme("https")
+            .authority(DEFAULT_ASSET_DOMAIN)
+            .appendPath(MEDIA_PATH_SEGMENT)
+            .appendPath(fileName)
+            .build()
+            .toString()
 
     private val cleanupOnce = AtomicBoolean(false)
 
@@ -52,7 +62,7 @@ internal object MediaFileManager {
         input.use { source ->
             dest.outputStream().use { sink -> source.copyTo(sink) }
         }
-        MediaInfo(url = mediaUrlPrefix + fileName, type = mime)
+        MediaInfo(url = mediaUrlFor(fileName), type = mime)
     }
 
     /**
@@ -66,7 +76,7 @@ internal object MediaFileManager {
     }
 
     fun mediaInfoForFile(file: File, mime: String = "image/jpeg"): MediaInfo =
-        MediaInfo(url = mediaUrlPrefix + file.name, type = mime)
+        MediaInfo(url = mediaUrlFor(file.name), type = mime)
 
     private fun ensureCleanup(context: Context) {
         if (!cleanupOnce.compareAndSet(false, true)) return
