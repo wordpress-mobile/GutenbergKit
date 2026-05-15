@@ -1,8 +1,9 @@
 #!/bin/bash
+
 set -euo pipefail
 
 if [[ -z "${NEW_VERSION:-}" ]]; then
-    echo "ERROR: NEW_VERSION is not set or empty." >&2
+    echo "ERROR: NEW_VERSION is not set or is empty." >&2
     echo "Set NEW_VERSION=vX.Y.Z when triggering this build." >&2
     exit 1
 fi

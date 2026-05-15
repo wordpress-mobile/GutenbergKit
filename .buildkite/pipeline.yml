@@ -115,7 +115,7 @@ steps:
       # the `build.tag == null` clause skips it. Android publish on tag
       # builds is still load-bearing (produces the `vX.Y.Z` Maven artifact)
       # and intentionally not gated here.
-      if: build.pull_request.id == null && build.env("NEW_VERSION") == null && build.tag == null
+      if: build.env("NEW_VERSION") == null && build.tag == null && build.pull_request.id == null
       command: |
           buildkite-agent artifact download '*.xcframework.zip' .
           buildkite-agent artifact download '*.xcframework.zip.checksum.txt' .
@@ -129,7 +129,7 @@ steps:
       command: .buildkite/publish-pr-xcframework.sh
       plugins: *plugins
 
-    - label: ':rocket: Publish Swift release ${NEW_VERSION:-(no version)}'
+    - label: ':rocket: Publish Swift release ${NEW_VERSION:-(Error: No version found!)}'
       depends_on:
           - validate-release
           - build-xcframework
