@@ -46,6 +46,7 @@ import org.wordpress.gutenberg.media.MediaFileManager
 import org.wordpress.gutenberg.media.MediaInfo
 import org.wordpress.gutenberg.media.MediaInfoJson
 import org.wordpress.gutenberg.media.MediaPathHandler
+import org.wordpress.gutenberg.media.StoredMedia
 import org.wordpress.gutenberg.model.BlockInserterPayload
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
@@ -116,9 +117,9 @@ class GutenbergView : FrameLayout {
      * over a restored post.
      */
     private var hasAutofocused = false
-    private lateinit var assetLoader: WebViewAssetLoader
-    private lateinit var assetAuthority: String
-    private lateinit var assetScheme: String
+    private var assetLoader: WebViewAssetLoader by writeOnce()
+    private var assetAuthority: String by writeOnce()
+    private var assetScheme: String by writeOnce()
 
     /** The editor document [loadEditor] loaded, the only page given the editor globals. */
     private var editorUri: Uri? = null
@@ -356,14 +357,8 @@ class GutenbergView : FrameLayout {
         // process-wide cache — no async-load placeholder, no visible flash.
         warmupPhotoPrefs(context)
 
-        // Initialize the asset loader now that context is available
-        assetLoader = WebViewAssetLoader.Builder()
-            .addPathHandler("/assets/", AssetsPathHandler(context))
-            .addPathHandler(
-                MediaFileManager.MEDIA_PATH_PREFIX,
-                MediaPathHandler(MediaFileManager.uploadsDir(context)),
-            )
-            .build()
+        // The asset loader is built in `loadEditor`, where the configured
+        // `assetAuthority` and HTTP-allowance flag are known.
 
         // Create the internal WebView as first child (behind overlays)
         webView = WebView(context).apply {
@@ -740,6 +735,10 @@ class GutenbergView : FrameLayout {
             .setDomain(assetAuthority)
             .setHttpAllowed(isLocalHttpSite)
             .addPathHandler("/assets/", AssetsPathHandler(this.context))
+            .addPathHandler(
+                MediaFileManager.MEDIA_PATH_PREFIX,
+                MediaPathHandler(MediaFileManager.uploadsDir(this.context)),
+            )
             .build()
 
         // Transition to spinner phase (WebView initialization)
@@ -1299,12 +1298,17 @@ class GutenbergView : FrameLayout {
 
     /**
      * Hands a list of inserter-sourced media to the JS editor via
-     * `window.blockInserter.insertMedia(...)`. URLs in each MediaInfo must be
-     * loadable by the WebView — the canonical source is `MediaFileManager`,
-     * which produces same-origin URLs under `/media/`.
+     * `window.blockInserter.insertMedia(...)`. URL stamping happens here, not
+     * in `MediaFileManager`, so the URLs match the live `assetAuthority` /
+     * `assetScheme` rather than the build-time defaults — keeping the media
+     * same-origin against the editor bundle however the asset loader is
+     * configured.
      */
-    internal fun insertMediaFromInserter(media: List<MediaInfo>) {
-        if (media.isEmpty()) return
+    internal fun insertMediaFromInserter(stored: List<StoredMedia>) {
+        if (stored.isEmpty()) return
+        val media = stored.map {
+            MediaInfo(url = mediaUrlFor(assetScheme, assetAuthority, it.fileName), type = it.type)
+        }
         val payload = MediaInfoJson.encodeToString(media)
         evaluateIfLoaded("window.blockInserter?.insertMedia($payload);")
     }
@@ -1764,6 +1768,15 @@ data class Media(
         }
     }
 }
+
+private fun mediaUrlFor(scheme: String, authority: String, fileName: String): String =
+    Uri.Builder()
+        .scheme(scheme)
+        .authority(authority)
+        .appendEncodedPath(MediaFileManager.MEDIA_PATH_PREFIX.trim('/'))
+        .appendPath(fileName)
+        .build()
+        .toString()
 
 enum class MediaType(var label: String) {
     IMAGE("image"),

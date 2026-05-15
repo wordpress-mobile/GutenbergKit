@@ -6,7 +6,6 @@ import android.util.Log
 import android.webkit.MimeTypeMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.wordpress.gutenberg.DEFAULT_ASSET_DOMAIN
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -15,12 +14,20 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Imports user-picked / captured media into an app-private uploads directory
- * and produces an editor-loadable URL. Pairs with `MediaPathHandler`, which
- * serves files back to the WebView under the same origin as the editor bundle.
+ * On-disk handle to a file inside `MediaFileManager`'s uploads directory.
+ * URL stamping is intentionally not done here — `GutenbergView` builds the
+ * editor-facing URL with the live `assetDomain` / `assetScheme` so the media
+ * is same-origin against the loaded editor bundle, whatever the host app
+ * configures.
+ */
+internal data class StoredMedia(val fileName: String, val type: String)
+
+/**
+ * Imports user-picked / captured media into an app-private uploads directory.
+ * Pairs with `MediaPathHandler`, which serves files back to the WebView under
+ * the asset-loader origin via `/media/<fileName>`.
  *
- * Mirrors iOS's `MediaFileManager` actor — same 2-day TTL, same on-disk layout,
- * same MediaInfo shape on the wire.
+ * Mirrors iOS's `MediaFileManager` actor — same 2-day TTL, same on-disk layout.
  */
 internal object MediaFileManager {
     private const val ROOT_DIR = "GutenbergKit"
@@ -32,15 +39,6 @@ internal object MediaFileManager {
 
     /** WebViewAssetLoader prefix — leading and trailing slash are required by the API. */
     const val MEDIA_PATH_PREFIX = "/$MEDIA_PATH_SEGMENT/"
-
-    private fun mediaUrlFor(fileName: String): String =
-        Uri.Builder()
-            .scheme("https")
-            .authority(DEFAULT_ASSET_DOMAIN)
-            .appendPath(MEDIA_PATH_SEGMENT)
-            .appendPath(fileName)
-            .build()
-            .toString()
 
     /**
      * Process-wide latch ensuring the TTL sweep runs at most once per process
@@ -55,10 +53,10 @@ internal object MediaFileManager {
         File(File(context.filesDir, ROOT_DIR), UPLOADS_DIR).apply { mkdirs() }
 
     /**
-     * Copies the source URI into uploads and returns a MediaInfo whose `url`
-     * resolves against the editor's asset origin via `MediaPathHandler`.
+     * Copies the source URI into uploads and returns a `StoredMedia` handle
+     * the caller can stamp with the editor's asset origin via `MediaPathHandler`.
      */
-    suspend fun import(context: Context, uri: Uri): MediaInfo = withContext(Dispatchers.IO) {
+    suspend fun import(context: Context, uri: Uri): StoredMedia = withContext(Dispatchers.IO) {
         ensureCleanup(context)
         val mime = resolveMime(context, uri)
         val ext = preferredExtension(mime, uri)
@@ -69,7 +67,7 @@ internal object MediaFileManager {
         input.use { source ->
             dest.outputStream().use { sink -> source.copyTo(sink) }
         }
-        MediaInfo(url = mediaUrlFor(fileName), type = mime)
+        StoredMedia(fileName = fileName, type = mime)
     }
 
     /**
@@ -82,8 +80,8 @@ internal object MediaFileManager {
         return File(uploadsDir(context), "${UUID.randomUUID()}.jpg")
     }
 
-    fun mediaInfoForFile(file: File, mime: String = "image/jpeg"): MediaInfo =
-        MediaInfo(url = mediaUrlFor(file.name), type = mime)
+    fun storedMediaForFile(file: File, mime: String = "image/jpeg"): StoredMedia =
+        StoredMedia(fileName = file.name, type = mime)
 
     private fun ensureCleanup(context: Context) {
         if (!cleanupOnce.compareAndSet(false, true)) return
