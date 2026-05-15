@@ -42,10 +42,10 @@ internal object MediaFileManager {
 
     /**
      * Process-wide latch ensuring the TTL sweep runs at most once per process
-     * lifetime. The first `import` / `newCameraOutputFile` call flips it and
-     * scans for stale files; every subsequent call is a no-op. Cheaper than
-     * scanning the directory on every import, and the 2-day TTL is coarse
-     * enough that one sweep per process is enough.
+     * lifetime. `GutenbergView` flips it on construction via `primeCleanup`,
+     * dispatched off the UI thread. Cheaper than scanning the directory on
+     * every import, and the 2-day TTL is coarse enough that one sweep per
+     * process is enough.
      */
     private val cleanupOnce = AtomicBoolean(false)
 
@@ -57,7 +57,6 @@ internal object MediaFileManager {
      * the caller can stamp with the editor's asset origin via `MediaPathHandler`.
      */
     suspend fun import(context: Context, uri: Uri): StoredMedia = withContext(Dispatchers.IO) {
-        ensureCleanup(context)
         val mime = resolveMime(context, uri)
         val ext = preferredExtension(mime, uri)
         val fileName = "${UUID.randomUUID()}.$ext"
@@ -75,15 +74,21 @@ internal object MediaFileManager {
      * camera writes directly into uploads, so a successful capture is
      * already-imported — no copy step.
      */
-    fun newCameraOutputFile(context: Context): File {
-        ensureCleanup(context)
-        return File(uploadsDir(context), "${UUID.randomUUID()}.jpg")
-    }
+    fun newCameraOutputFile(context: Context): File =
+        File(uploadsDir(context), "${UUID.randomUUID()}.jpg")
 
     fun storedMediaForFile(file: File, mime: String = "image/jpeg"): StoredMedia =
         StoredMedia(fileName = file.name, type = mime)
 
-    private fun ensureCleanup(context: Context) {
+    /**
+     * Runs the TTL sweep synchronously. Idempotent — subsequent calls are
+     * no-ops once the process-wide latch flips. Expected to be dispatched on
+     * `Dispatchers.IO` (or equivalent worker thread) by the caller; doing
+     * `listFiles()` + per-file `delete()` on the UI thread is a StrictMode
+     * violation and would jank the first user-tap that triggered it.
+     */
+    @androidx.annotation.WorkerThread
+    fun primeCleanup(context: Context) {
         if (!cleanupOnce.compareAndSet(false, true)) return
         try {
             sweepStaleFiles(uploadsDir(context))

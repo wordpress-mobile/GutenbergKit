@@ -234,6 +234,16 @@ class GutenbergView : FrameLayout {
         // process-wide cache — no async-load placeholder, no visible flash.
         warmupPhotoPrefs(context)
 
+        // Sweep stale media imports off the UI thread before the inserter can
+        // trigger them — `listFiles()` + per-file `delete()` would otherwise
+        // jank the first Camera tap, where the cleanup latch would flip on
+        // the main thread. Idempotent via `MediaFileManager`'s process-wide
+        // latch, so re-firing across `GutenbergView` instances is harmless.
+        val appContext = context.applicationContext
+        coroutineScope.launch(Dispatchers.IO) {
+            MediaFileManager.primeCleanup(appContext)
+        }
+
         // The asset loader is built in `loadEditor`, where the configured
         // `assetDomain` and HTTP-allowance flag are known.
 
