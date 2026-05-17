@@ -77,7 +77,7 @@ end
 # Release. For local diagnosis, invoke `validate`, `update_swift_package`,
 # `publish_to_s3`, or `publish_release_to_github` individually.
 lane :release do |options|
-  UI.user_error!('This lane must only run in CI. Use individual lanes (validate, update_swift_package, publish_to_s3, publish_release_to_github) for local diagnosis.') unless ENV['CI']
+  UI.user_error!('This lane must only run in CI.') unless ENV['CI']
 
   version = required_version!(options)
   token = github_token!(options)
