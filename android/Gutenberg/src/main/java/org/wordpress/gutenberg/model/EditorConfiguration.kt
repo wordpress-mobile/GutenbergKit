@@ -36,7 +36,14 @@ data class EditorConfiguration(
      * showing the built-in Gutenberg inserter. Defaults to false so existing
      * consumers keep the web-based inserter until they opt in.
      */
-    val enableNativeBlockInserter: Boolean = false
+    val enableNativeBlockInserter: Boolean = false,
+    /**
+     * When true, the native block inserter sheet shows a Photos + Camera media
+     * strip above the category tabs. Defaults to false because the result
+     * callbacks are still inert pending the media hand-off to the JS editor —
+     * consumers should keep this off until that work lands.
+     */
+    val enableInserterMediaStrip: Boolean = false
 ): Parcelable {
 
     /**
@@ -82,6 +89,7 @@ data class EditorConfiguration(
         private var enableNetworkLogging: Boolean = false
         private var enableOfflineMode: Boolean = false
         private var enableNativeBlockInserter: Boolean = false
+        private var enableInserterMediaStrip: Boolean = false
 
         fun setTitle(title: String) = apply { this.title = title }
         fun setContent(content: String) = apply { this.content = content }
@@ -137,6 +145,9 @@ data class EditorConfiguration(
         fun setEnableNativeBlockInserter(enabled: Boolean) = apply {
             this.enableNativeBlockInserter = enabled
         }
+        fun setEnableInserterMediaStrip(enabled: Boolean) = apply {
+            this.enableInserterMediaStrip = enabled
+        }
 
         fun build(): EditorConfiguration = EditorConfiguration(
             title = title,
@@ -160,7 +171,8 @@ data class EditorConfiguration(
             editorAssetsEndpoint = editorAssetsEndpoint,
             enableNetworkLogging = enableNetworkLogging,
             enableOfflineMode = enableOfflineMode,
-            enableNativeBlockInserter = enableNativeBlockInserter
+            enableNativeBlockInserter = enableNativeBlockInserter,
+            enableInserterMediaStrip = enableInserterMediaStrip
         )
     }
 
@@ -189,6 +201,7 @@ data class EditorConfiguration(
         .setEnableNetworkLogging(enableNetworkLogging)
         .setEnableOfflineMode(enableOfflineMode)
         .setEnableNativeBlockInserter(enableNativeBlockInserter)
+        .setEnableInserterMediaStrip(enableInserterMediaStrip)
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -218,6 +231,7 @@ data class EditorConfiguration(
         if (enableNetworkLogging != other.enableNetworkLogging) return false
         if (enableOfflineMode != other.enableOfflineMode) return false
         if (enableNativeBlockInserter != other.enableNativeBlockInserter) return false
+        if (enableInserterMediaStrip != other.enableInserterMediaStrip) return false
         if (siteId != other.siteId) return false
 
         return true
@@ -246,6 +260,7 @@ data class EditorConfiguration(
         result = 31 * result + enableNetworkLogging.hashCode()
         result = 31 * result + enableOfflineMode.hashCode()
         result = 31 * result + enableNativeBlockInserter.hashCode()
+        result = 31 * result + enableInserterMediaStrip.hashCode()
         result = 31 * result + siteId.hashCode()
         return result
     }

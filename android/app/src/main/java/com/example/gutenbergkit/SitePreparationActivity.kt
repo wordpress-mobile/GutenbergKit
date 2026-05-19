@@ -299,6 +299,8 @@ private fun LoadedView(
             FeatureConfigurationCard(
                 enableNativeInserter = uiState.enableNativeInserter,
                 onEnableNativeInserterChange = viewModel::setEnableNativeInserter,
+                enableInserterMediaStrip = uiState.enableInserterMediaStrip,
+                onEnableInserterMediaStripChange = viewModel::setEnableInserterMediaStrip,
                 enableNetworkLogging = uiState.enableNetworkLogging,
                 onEnableNetworkLoggingChange = viewModel::setEnableNetworkLogging,
                 postTypes = uiState.postTypes,
@@ -383,6 +385,8 @@ private fun DependenciesStatusCard(hasDependencies: Boolean) {
 private fun FeatureConfigurationCard(
     enableNativeInserter: Boolean,
     onEnableNativeInserterChange: (Boolean) -> Unit,
+    enableInserterMediaStrip: Boolean,
+    onEnableInserterMediaStripChange: (Boolean) -> Unit,
     enableNetworkLogging: Boolean,
     onEnableNetworkLoggingChange: (Boolean) -> Unit,
     postTypes: List<PostTypeDetails>,
@@ -409,6 +413,22 @@ private fun FeatureConfigurationCard(
                 Switch(
                     checked = enableNativeInserter,
                     onCheckedChange = onEnableNativeInserterChange
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // Enable Inserter Media Strip Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Enable Inserter Media Strip")
+                Switch(
+                    checked = enableInserterMediaStrip,
+                    onCheckedChange = onEnableInserterMediaStripChange,
+                    enabled = enableNativeInserter
                 )
             }
 

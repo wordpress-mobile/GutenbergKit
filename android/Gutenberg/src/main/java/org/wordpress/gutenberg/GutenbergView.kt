@@ -916,6 +916,7 @@ class GutenbergView : FrameLayout {
         val dialog = BlockPickerDialog(
             context = context,
             payload = payload,
+            showMediaStrip = configuration.enableInserterMediaStrip,
             onBlockSelected = { block -> insertBlock(block.id) },
         )
         dialog.setOnDismissListener {
