@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.util.Log
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -15,6 +16,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,6 +33,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,6 +51,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SecondaryScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -62,14 +67,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -99,7 +106,9 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import java.io.File
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import org.wordpress.gutenberg.R
 import androidx.compose.ui.graphics.Color as ComposeColor
 import org.wordpress.gutenberg.model.BlockInserterPayload
@@ -133,14 +142,30 @@ private const val HEADER_TITLE_LETTER_SPACING_SP = -0.1
 private const val ICON_BUTTON_SIZE_DP = 40
 private const val ICON_SIZE_DP = 20
 
-private const val MEDIA_STRIP_HORIZONTAL_PAD_DP = 20
-private const val MEDIA_STRIP_TOP_PAD_DP = 6
-private const val MEDIA_STRIP_BOTTOM_PAD_DP = 16
+private const val MEDIA_STRIP_TOP_PAD_DP = 4
+private const val MEDIA_STRIP_BOTTOM_PAD_DP = 10
+private const val MEDIA_STRIP_CONTENT_HORIZONTAL_PAD_DP = 20
+private const val MEDIA_STRIP_CONTENT_TOP_PAD_DP = 2
+private const val MEDIA_STRIP_CONTENT_BOTTOM_PAD_DP = 6
+private const val MEDIA_STRIP_ITEM_GAP_DP = 8
+private const val MEDIA_STACK_WIDTH_DP = 72
+private const val MEDIA_STACK_HEIGHT_DP = 136
 private const val MEDIA_STACK_COMPACT_HEIGHT_DP = 88
 private const val MEDIA_STACK_GAP_DP = 4
 private const val MEDIA_STACK_CORNER_DP = 18
 private const val MEDIA_STACK_ICON_SIZE_DP = 28
 private const val MEDIA_STACK_LABEL_SP = 13
+private const val MEDIA_THUMB_SIZE_DP = 64
+private const val MEDIA_THUMB_CORNER_DP = 16
+private const val RECENT_PHOTO_LIMIT = 64
+
+private const val MEDIA_RATIONALE_PAD_DP = 14
+private const val MEDIA_RATIONALE_FONT_SP = 13
+private const val MEDIA_RATIONALE_LINE_HEIGHT_SP = 18
+private const val MEDIA_RATIONALE_BUTTON_GAP_DP = 6
+private const val MEDIA_RATIONALE_BUTTON_HEIGHT_DP = 32
+private const val MEDIA_RATIONALE_BUTTON_CORNER_DP = 16
+private const val MEDIA_RATIONALE_BUTTON_FONT_SP = 12
 
 // Matches M3's internal `Tab.HorizontalTextPadding` — the horizontal padding
 // applied by `Tab` between its layout bounds and the text label inside.
@@ -180,10 +205,17 @@ private const val EMPTY_STATE_FONT_SP = 14
 private const val DISABLED_ALPHA = 0.5f
 
 /**
+ * Material 3 minimum touch-target. The rationale buttons sit below this for
+ * design reasons; we wrap them in an outer clickable that meets the minimum
+ * without changing the visual size.
+ */
+private const val TOUCH_TARGET_MIN_DP = 48
+
+/**
  * Bottom-sheet block inserter. The outer shell stays a `BottomSheetDialog` so
  * `GutenbergView`'s integration surface is unchanged; everything visible is
- * Compose content matching the Variation B design handoff — header row,
- * scrollable secondary tabs, rounded search, 5-column tonal tile grid.
+ * Compose content matching the Variation B design handoff — header row, recent
+ * media strip, scrollable secondary tabs, rounded search, 5-column tonal tile grid.
  *
  * The sheet background and 28dp top corners are drawn by Compose directly; the
  * dialog's default white pill background is cleared so it doesn't fight the
@@ -196,6 +228,18 @@ internal class BlockPickerDialog(
 ) : BottomSheetDialog(context) {
 
     init {
+        // `STATE_HIDDEN` dismisses any in-flight soft keyboard on dialog open
+        // — without it the sheet renders compressed above the editor's IME and
+        // then visibly resizes when the IME dismisses, looking like a "double
+        // launch". `ADJUST_RESIZE` lets the sheet shrink back to make room when
+        // the user later taps the search field; previously we paired
+        // `STATE_HIDDEN` with `ADJUST_NOTHING`, which fixed the open-time race
+        // but latched in for the dialog's lifetime — the IME then covered the
+        // search field and the results grid below it.
+        window?.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN or
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        )
         val composeView = ComposeView(context).apply {
             setContent {
                 BlockPickerSheet(
@@ -426,12 +470,146 @@ private fun CloseButton(onClose: () -> Unit) {
     }
 }
 
-// Photos and Camera tiles. Photos uses the permissionless system photo picker;
-// Camera uses ACTION_IMAGE_CAPTURE against a cache-scoped FileProvider URI.
-// Neither requires READ_MEDIA_IMAGES — the recent-photos thumbnail strip that
-// needs it lands in a follow-up and will sit alongside this row.
 @Composable
+@Suppress("LongMethod")
 private fun MediaStrip() {
+    val contentPadding = PaddingValues(
+        start = MEDIA_STRIP_CONTENT_HORIZONTAL_PAD_DP.dp,
+        end = MEDIA_STRIP_CONTENT_HORIZONTAL_PAD_DP.dp,
+        top = MEDIA_STRIP_CONTENT_TOP_PAD_DP.dp,
+        bottom = MEDIA_STRIP_CONTENT_BOTTOM_PAD_DP.dp,
+    )
+    val stripFraming = Modifier
+        .fillMaxWidth()
+        .padding(top = MEDIA_STRIP_TOP_PAD_DP.dp, bottom = MEDIA_STRIP_BOTTOM_PAD_DP.dp)
+    // Pre-Q (Android 7-9, API 24-28): `ContentResolver.loadThumbnail` is
+    // API 29+ and we don't ship a `BitmapFactory.decodeStream` fallback —
+    // full-resolution decodes on the slowest hardware in our minSdk range
+    // would be worse UX than not showing the strip. Skip the permission
+    // prompt entirely and render only the permissionless Photos/Camera
+    // tiles. The user gets a working media-insert path (system picker +
+    // camera) and we don't burn their trust asking for a permission we
+    // can't deliver on.
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+        Box(modifier = stripFraming) {
+            PhotosCameraTile(
+                horizontal = true,
+                modifier = Modifier.fillMaxWidth().padding(contentPadding),
+            )
+        }
+        return
+    }
+    val context = LocalContext.current
+    // SharedPreferences are read async on `Dispatchers.IO` to keep the main
+    // thread IO-free. While loading we render a same-height placeholder so
+    // the strip's vertical rhythm doesn't shift when the real state arrives
+    // a few ms later. After process-warmup (cache hot) this returns
+    // synchronously and no placeholder shows.
+    val prefs = rememberPhotoPrefs(context)
+    if (prefs == null) {
+        Box(modifier = stripFraming.height(MEDIA_STACK_HEIGHT_DP.dp))
+        return
+    }
+    val access = rememberPhotoAccess(
+        limit = RECENT_PHOTO_LIMIT,
+        initialPromptedBefore = prefs.promptedBefore,
+    )
+    var rejected by remember(prefs) { mutableStateOf(prefs.rejected) }
+    // Clear a prior rejection once the user actually grants the permission.
+    // Without this, a later revocation would leave the user in CompactTiles
+    // with no in-app path back to the rationale.
+    LaunchedEffect(access) {
+        if (access is PhotoAccess.Granted && rejected) {
+            clearRejectedRationale(context)
+            rejected = false
+        }
+    }
+    Box(modifier = stripFraming) {
+        when (resolveMediaStripView(access, rejected)) {
+            MediaStripView.Rationale -> {
+                val needs = access as PhotoAccess.NeedsPermission
+                // Rationale fills the remaining width next to the Photos/Camera
+                // column — no horizontal scroll needed since nothing extends past
+                // the viewport.
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(MEDIA_STRIP_ITEM_GAP_DP.dp),
+                    modifier = Modifier.fillMaxWidth().padding(contentPadding),
+                ) {
+                    PhotosCameraTile(horizontal = false)
+                    PhotoAccessRationale(
+                        state = needs.state,
+                        onAllow = needs.request,
+                        onReject = {
+                            markRationaleRejected(context)
+                            rejected = true
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            MediaStripView.CompactTiles -> {
+                // Rationale dismissed — keep the Photos/Camera buttons accessible
+                // but flatten them into a single full-width row. Picker and camera
+                // don't need the photo permission; only the recent-photo strip does.
+                PhotosCameraTile(
+                    horizontal = true,
+                    modifier = Modifier.fillMaxWidth().padding(contentPadding),
+                )
+            }
+            MediaStripView.FullStrip -> FullMediaStrip(
+                granted = access as? PhotoAccess.Granted,
+                contentPadding = contentPadding,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FullMediaStrip(granted: PhotoAccess.Granted?, contentPadding: PaddingValues) {
+    // Granted — thumbnail strip extends past the viewport. LazyRow composes
+    // only the visible columns (plus prefetch), so the 64 thumbnails aren't
+    // all decoded into memory upfront. Vertical drags pass through the lazy
+    // list's nested-scroll dispatch up to BottomSheetBehavior; no manual
+    // relay needed.
+    //
+    // When a thumbnail fails to load (deleted-mid-scroll URI, partial-grant
+    // denial, OEM MediaStore quirk, offline + cloud-only stub) we drop the
+    // URI from the displayed set. The strip shrinks gracefully — better
+    // than stranding a grey placeholder where a real thumbnail should be.
+    val sourceUris = granted?.uris.orEmpty()
+    var failed by remember(granted) { mutableStateOf<Set<Uri>>(emptySet()) }
+    val uris = sourceUris.filterNot { it in failed }
+    val columns = (uris.size + 1) / 2
+    val onThumbnailFailed: (Uri) -> Unit = { failed = failed + it }
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(MEDIA_STRIP_ITEM_GAP_DP.dp),
+        contentPadding = contentPadding,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        item(key = "actions") { PhotosCameraTile(horizontal = false) }
+        items(columns, key = { uris[it * 2].toString() }) { col ->
+            Column(verticalArrangement = Arrangement.spacedBy(MEDIA_STRIP_ITEM_GAP_DP.dp)) {
+                RealThumbnail(uri = uris[col * 2], onLoadFailed = onThumbnailFailed)
+                val secondIndex = col * 2 + 1
+                if (secondIndex < uris.size) {
+                    RealThumbnail(uri = uris[secondIndex], onLoadFailed = onThumbnailFailed)
+                }
+            }
+        }
+    }
+}
+
+// Photos uses the permissionless system photo picker; Camera uses
+// ACTION_IMAGE_CAPTURE against a cache-scoped FileProvider URI — no CAMERA
+// permission required since we delegate to the system camera app. The
+// recent-photos strip (READ_MEDIA_IMAGES-gated) sits alongside this row when
+// granted; otherwise this tile pair is the only media affordance.
+@Composable
+@Suppress("LongMethod")
+private fun PhotosCameraTile(
+    horizontal: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     // Hide the Camera tile on devices without any camera hardware (tablets,
     // emulators, e-readers). FEATURE_CAMERA_ANY doesn't require a `<queries>`
@@ -472,35 +650,57 @@ private fun MediaStrip() {
             Toast.makeText(context, cameraUnavailableMessage, Toast.LENGTH_SHORT).show()
         }
     }
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(MEDIA_STACK_GAP_DP.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                start = MEDIA_STRIP_HORIZONTAL_PAD_DP.dp,
-                end = MEDIA_STRIP_HORIZONTAL_PAD_DP.dp,
-                top = MEDIA_STRIP_TOP_PAD_DP.dp,
-                bottom = MEDIA_STRIP_BOTTOM_PAD_DP.dp,
-            )
-            .height(MEDIA_STACK_COMPACT_HEIGHT_DP.dp),
-    ) {
-        MediaActionTile(
-            icon = Icons.Filled.PhotoLibrary,
-            label = stringResource(R.string.gbk_block_inserter_photos),
-            background = MaterialTheme.colorScheme.primaryContainer,
-            foreground = MaterialTheme.colorScheme.onPrimaryContainer,
-            onClick = onPhotosClick,
-            modifier = Modifier.fillMaxHeight().weight(1f),
-        )
-        if (hasCamera) {
+    val photosLabel = stringResource(R.string.gbk_block_inserter_photos)
+    val cameraLabel = stringResource(R.string.gbk_block_inserter_camera)
+    if (horizontal) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(MEDIA_STACK_GAP_DP.dp),
+            modifier = modifier.height(MEDIA_STACK_COMPACT_HEIGHT_DP.dp),
+        ) {
             MediaActionTile(
-                icon = Icons.Filled.PhotoCamera,
-                label = stringResource(R.string.gbk_block_inserter_camera),
-                background = MaterialTheme.colorScheme.tertiary,
-                foreground = MaterialTheme.colorScheme.onTertiary,
-                onClick = onCameraClick,
+                icon = Icons.Filled.PhotoLibrary,
+                label = photosLabel,
+                background = MaterialTheme.colorScheme.primaryContainer,
+                foreground = MaterialTheme.colorScheme.onPrimaryContainer,
+                onClick = onPhotosClick,
                 modifier = Modifier.fillMaxHeight().weight(1f),
             )
+            if (hasCamera) {
+                MediaActionTile(
+                    icon = Icons.Filled.PhotoCamera,
+                    label = cameraLabel,
+                    background = MaterialTheme.colorScheme.tertiary,
+                    foreground = MaterialTheme.colorScheme.onTertiary,
+                    onClick = onCameraClick,
+                    modifier = Modifier.fillMaxHeight().weight(1f),
+                )
+            }
+        }
+    } else {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(MEDIA_STACK_GAP_DP.dp),
+            modifier = modifier
+                .width(MEDIA_STACK_WIDTH_DP.dp)
+                .height(MEDIA_STACK_HEIGHT_DP.dp),
+        ) {
+            MediaActionTile(
+                icon = Icons.Filled.PhotoLibrary,
+                label = photosLabel,
+                background = MaterialTheme.colorScheme.primaryContainer,
+                foreground = MaterialTheme.colorScheme.onPrimaryContainer,
+                onClick = onPhotosClick,
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            )
+            if (hasCamera) {
+                MediaActionTile(
+                    icon = Icons.Filled.PhotoCamera,
+                    label = cameraLabel,
+                    background = MaterialTheme.colorScheme.tertiary,
+                    foreground = MaterialTheme.colorScheme.onTertiary,
+                    onClick = onCameraClick,
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                )
+            }
         }
     }
 }
@@ -551,6 +751,136 @@ private fun MediaActionTile(
             color = foreground,
             fontSize = MEDIA_STACK_LABEL_SP.sp,
             fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+@Composable
+private fun PhotoAccessRationale(
+    state: PromptState,
+    onAllow: () -> Unit,
+    onReject: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val bodyRes = when (state) {
+        PromptState.Unasked -> R.string.gbk_block_inserter_photos_rationale
+        PromptState.Denied -> R.string.gbk_block_inserter_photos_rationale_denied
+        PromptState.PermanentlyDenied -> R.string.gbk_block_inserter_photos_rationale_permanent
+    }
+    val primaryLabelRes = when (state) {
+        PromptState.Unasked -> R.string.gbk_block_inserter_photos_allow
+        PromptState.Denied -> R.string.gbk_block_inserter_photos_try_again
+        PromptState.PermanentlyDenied -> R.string.gbk_block_inserter_photos_open_settings
+    }
+    @Composable
+    fun RationaleButton(label: String, filled: Boolean, onClick: () -> Unit, modifier: Modifier) {
+        val bg = if (filled) MaterialTheme.colorScheme.primary else ComposeColor.Transparent
+        val fg = if (filled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+        // Outer wrapper inflates the touch zone to the 48dp minimum; the inner
+        // Box paints the design's 32dp pill. The shared interaction source lets
+        // the outer absorb taps with no indication while the inner draws the
+        // ripple — otherwise a default ripple on the outer would render as a
+        // square halo around the rounded pill.
+        val interactionSource = remember { MutableInteractionSource() }
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = modifier
+                .heightIn(min = TOUCH_TARGET_MIN_DP.dp)
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    role = Role.Button,
+                    onClick = onClick,
+                ),
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(MEDIA_RATIONALE_BUTTON_HEIGHT_DP.dp)
+                    .clip(RoundedCornerShape(MEDIA_RATIONALE_BUTTON_CORNER_DP.dp))
+                    .background(bg)
+                    .indication(interactionSource, ripple()),
+            ) {
+                Text(
+                    text = label,
+                    color = fg,
+                    fontSize = MEDIA_RATIONALE_BUTTON_FONT_SP.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+        }
+    }
+    Column(
+        verticalArrangement = Arrangement.SpaceBetween,
+        modifier = modifier
+            .height(MEDIA_STACK_HEIGHT_DP.dp)
+            .clip(RoundedCornerShape(MEDIA_STACK_CORNER_DP.dp))
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .padding(MEDIA_RATIONALE_PAD_DP.dp),
+    ) {
+        Text(
+            text = stringResource(bodyRes),
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            fontSize = MEDIA_RATIONALE_FONT_SP.sp,
+            lineHeight = MEDIA_RATIONALE_LINE_HEIGHT_SP.sp,
+            fontWeight = FontWeight.Medium,
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(MEDIA_RATIONALE_BUTTON_GAP_DP.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            RationaleButton(
+                label = stringResource(primaryLabelRes),
+                filled = true,
+                onClick = onAllow,
+                modifier = Modifier.weight(1f),
+            )
+            RationaleButton(
+                label = stringResource(R.string.gbk_block_inserter_photos_reject),
+                filled = false,
+                onClick = onReject,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun RealThumbnail(uri: Uri, onLoadFailed: (Uri) -> Unit) {
+    val context = LocalContext.current
+    val sizePx = with(LocalDensity.current) { MEDIA_THUMB_SIZE_DP.dp.roundToPx() }
+    // Seed from the process-wide cache so a scroll-back or dialog-reopen
+    // skips the grey-placeholder flash entirely. On a cache miss the
+    // LaunchedEffect below fetches off-thread and populates the cache;
+    // on a load failure we notify the parent so the URI is dropped from
+    // the displayed set and a pool spare takes its place.
+    var bitmap by remember(uri, sizePx) { mutableStateOf(cachedThumbnail(uri, sizePx)) }
+    LaunchedEffect(uri, sizePx) {
+        if (bitmap == null) {
+            val loaded = withContext(Dispatchers.IO) { loadThumbnail(context, uri, sizePx) }
+            if (loaded == null) onLoadFailed(uri) else bitmap = loaded
+        }
+    }
+    val bmp = bitmap
+    if (bmp != null) {
+        Image(
+            bitmap = bmp,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(MEDIA_THUMB_SIZE_DP.dp)
+                .clip(RoundedCornerShape(MEDIA_THUMB_CORNER_DP.dp)),
+        )
+    } else {
+        // Neutral loading box — avoids flashing colorful mock-photo gradients
+        // between the URI being known and the bitmap finishing async load.
+        Box(
+            modifier = Modifier
+                .size(MEDIA_THUMB_SIZE_DP.dp)
+                .clip(RoundedCornerShape(MEDIA_THUMB_CORNER_DP.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
         )
     }
 }

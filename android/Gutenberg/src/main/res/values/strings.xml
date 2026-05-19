@@ -19,4 +19,11 @@
     <string name="gbk_block_inserter_photos">Photos</string>
     <string name="gbk_block_inserter_camera">Camera</string>
     <string name="gbk_block_inserter_camera_unavailable">Camera not available on this device</string>
+    <string name="gbk_block_inserter_photos_rationale">Show your photo library here to quickly insert an image</string>
+    <string name="gbk_block_inserter_photos_rationale_denied">Allow access to show your photo library here</string>
+    <string name="gbk_block_inserter_photos_rationale_permanent">Enable photo access in Settings to show your library here</string>
+    <string name="gbk_block_inserter_photos_allow">Allow</string>
+    <string name="gbk_block_inserter_photos_try_again">Try Again</string>
+    <string name="gbk_block_inserter_photos_reject">Reject</string>
+    <string name="gbk_block_inserter_photos_open_settings">Open Settings</string>
 </resources>

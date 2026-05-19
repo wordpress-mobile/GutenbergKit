@@ -58,6 +58,9 @@
         <activity
             android:name=".MediaProxyServerActivity"
             android:exported="true" />
+        <activity
+            android:name=".ManagePermissionsActivity"
+            android:exported="false" />
     </application>
     <uses-permission android:name="android.permission.INTERNET"/>
 </manifest>
