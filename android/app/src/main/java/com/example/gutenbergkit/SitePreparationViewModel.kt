@@ -20,6 +20,7 @@ import uniffi.wp_api.PostType as WpPostType
 
 data class SitePreparationUiState(
     val enableNativeInserter: Boolean = false,
+    val enableInserterMediaStrip: Boolean = false,
     val enableNetworkLogging: Boolean = false,
     /** All viewable post types fetched from the site, or empty while loading. */
     val postTypes: List<PostTypeDetails> = emptyList(),
@@ -83,6 +84,10 @@ class SitePreparationViewModel(
 
     fun setEnableNativeInserter(enabled: Boolean) {
         _uiState.update { it.copy(enableNativeInserter = enabled) }
+    }
+
+    fun setEnableInserterMediaStrip(enabled: Boolean) {
+        _uiState.update { it.copy(enableInserterMediaStrip = enabled) }
     }
 
     fun setEnableNetworkLogging(enabled: Boolean) {
@@ -337,6 +342,7 @@ class SitePreparationViewModel(
         return baseConfig.toBuilder()
             .setEnableNetworkLogging(_uiState.value.enableNetworkLogging)
             .setEnableNativeBlockInserter(_uiState.value.enableNativeInserter)
+            .setEnableInserterMediaStrip(_uiState.value.enableInserterMediaStrip)
             .setPostType(selectedPostType)
             .build()
     }

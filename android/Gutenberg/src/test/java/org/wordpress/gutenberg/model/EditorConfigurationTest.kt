@@ -48,6 +48,7 @@ class EditorConfigurationBuilderTest {
         assertFalse(config.enableNetworkLogging)
         assertFalse(config.enableOfflineMode)
         assertFalse(config.enableNativeBlockInserter)
+        assertFalse(config.enableInserterMediaStrip)
     }
 
     // MARK: - Individual Setter Tests
@@ -304,6 +305,15 @@ class EditorConfigurationBuilderTest {
         assertTrue(config.enableNativeBlockInserter)
     }
 
+    @Test
+    fun `setEnableInserterMediaStrip updates enableInserterMediaStrip`() {
+        val config = builder()
+            .setEnableInserterMediaStrip(true)
+            .build()
+
+        assertTrue(config.enableInserterMediaStrip)
+    }
+
     // MARK: - Method Chaining Tests
 
     @Test
@@ -366,12 +376,14 @@ class EditorConfigurationBuilderTest {
             .setEnableNetworkLogging(true)
             .setEnableOfflineMode(true)
             .setEnableNativeBlockInserter(true)
+            .setEnableInserterMediaStrip(true)
             .build()
 
         val rebuilt = original.toBuilder().build()
 
         assertEquals(original, rebuilt)
         assertTrue(rebuilt.enableNativeBlockInserter)
+        assertTrue(rebuilt.enableInserterMediaStrip)
     }
 
     @Test
@@ -854,6 +866,20 @@ class EditorConfigurationTest {
     }
 
     @Test
+    fun `Configurations with different enableInserterMediaStrip are not equal`() {
+        val config1 = builder()
+            .setEnableInserterMediaStrip(true)
+            .build()
+
+        val config2 = builder()
+            .setEnableInserterMediaStrip(false)
+            .build()
+
+        assertNotEquals(config1, config2)
+        assertNotEquals(config1.hashCode(), config2.hashCode())
+    }
+
+    @Test
     fun `Configurations with different siteId are not equal`() {
         // siteId is derived from siteURL, so different URLs with different hosts produce different siteIds
         val config1 = EditorConfiguration.builder("https://site1.example.com", TEST_API_ROOT)
@@ -948,6 +974,7 @@ class EditorConfigurationTest {
             .setEnableNetworkLogging(true)
             .setEnableOfflineMode(false)
             .setEnableNativeBlockInserter(true)
+            .setEnableInserterMediaStrip(true)
             .build()
 
         assertEquals("Test Title", config.title)
@@ -972,5 +999,6 @@ class EditorConfigurationTest {
         assertTrue(config.enableNetworkLogging)
         assertFalse(config.enableOfflineMode)
         assertTrue(config.enableNativeBlockInserter)
+        assertTrue(config.enableInserterMediaStrip)
     }
 }

@@ -192,6 +192,7 @@ private const val DISABLED_ALPHA = 0.5f
 internal class BlockPickerDialog(
     context: Context,
     private val payload: BlockInserterPayload,
+    private val showMediaStrip: Boolean,
     private val onBlockSelected: (BlockType) -> Unit,
 ) : BottomSheetDialog(context) {
 
@@ -200,6 +201,7 @@ internal class BlockPickerDialog(
             setContent {
                 BlockPickerSheet(
                     payload = payload,
+                    showMediaStrip = showMediaStrip,
                     onBlockSelected = { block ->
                         onBlockSelected(block)
                         dismiss()
@@ -229,6 +231,7 @@ internal class BlockPickerDialog(
 @Composable
 private fun BlockPickerSheet(
     payload: BlockInserterPayload,
+    showMediaStrip: Boolean,
     onBlockSelected: (BlockType) -> Unit,
     onClose: () -> Unit,
 ) {
@@ -257,6 +260,7 @@ private fun BlockPickerSheet(
             onQueryChange = { query = it },
             debouncedQuery = debounced,
             blocks = filtered,
+            showMediaStrip = showMediaStrip,
             onBlockSelected = onBlockSelected,
             onClose = onClose,
             surface = colorScheme.surfaceContainerLow,
@@ -273,6 +277,7 @@ private fun SheetContent(
     onQueryChange: (String) -> Unit,
     debouncedQuery: String,
     blocks: List<BlockType>,
+    showMediaStrip: Boolean,
     onBlockSelected: (BlockType) -> Unit,
     onClose: () -> Unit,
     surface: ComposeColor,
@@ -291,7 +296,9 @@ private fun SheetContent(
     ) {
         DragHandle()
         Header(onClose = onClose)
-        MediaStrip()
+        if (showMediaStrip) {
+            MediaStrip()
+        }
         CategoryTabs(selected = selectedTab, onSelect = onSelectTab)
         SearchField(query = query, onQueryChange = onQueryChange)
         BlockGridContent(
