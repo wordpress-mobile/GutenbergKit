@@ -8,8 +8,8 @@ GEM
     artifactory (3.0.17)
     atomos (0.1.3)
     aws-eventstream (1.4.0)
-    aws-partitions (1.1246.0)
-    aws-sdk-core (3.246.0)
+    aws-partitions (1.1249.0)
+    aws-sdk-core (3.247.0)
       aws-eventstream (~> 1, >= 1.3.0)
       aws-partitions (~> 1, >= 1.992.0)
       aws-sigv4 (~> 1.9)
@@ -17,11 +17,11 @@ GEM
       bigdecimal
       jmespath (~> 1, >= 1.6.1)
       logger
-    aws-sdk-kms (1.124.0)
-      aws-sdk-core (~> 3, >= 3.244.0)
+    aws-sdk-kms (1.125.0)
+      aws-sdk-core (~> 3, >= 3.247.0)
       aws-sigv4 (~> 1.5)
-    aws-sdk-s3 (1.221.0)
-      aws-sdk-core (~> 3, >= 3.244.0)
+    aws-sdk-s3 (1.222.0)
+      aws-sdk-core (~> 3, >= 3.247.0)
       aws-sdk-kms (~> 1)
       aws-sigv4 (~> 1.5)
     aws-sigv4 (1.12.1)
@@ -127,7 +127,7 @@ GEM
       xcodeproj (>= 1.13.0, < 2.0.0)
       xcpretty (~> 0.4.1)
       xcpretty-travis-formatter (>= 0.0.3, < 2.0.0)
-    fastlane-plugin-wpmreleasetoolkit (14.4.1)
+    fastlane-plugin-wpmreleasetoolkit (14.6.0)
       buildkit (~> 1.5)
       chroma (= 0.2.0)
       diffy (~> 3.3)
@@ -180,7 +180,7 @@ GEM
     google-cloud-env (2.1.1)
       faraday (>= 1.0, < 3.a)
     google-cloud-errors (1.6.0)
-    google-cloud-storage (1.59.0)
+    google-cloud-storage (1.60.0)
       addressable (~> 2.8)
       digest-crc (~> 0.4)
       google-apis-core (>= 0.18, < 2)
@@ -228,7 +228,7 @@ GEM
     optparse (0.8.1)
     os (1.1.4)
     ostruct (0.6.3)
-    parallel (1.27.0)
+    parallel (1.28.0)
     plist (3.7.2)
     prime (0.1.4)
       forwardable
@@ -293,7 +293,7 @@ PLATFORMS
 
 DEPENDENCIES
   fastlane (~> 2.234)
-  fastlane-plugin-wpmreleasetoolkit (~> 14.4)
+  fastlane-plugin-wpmreleasetoolkit (~> 14.6)
 
 CHECKSUMS
   CFPropertyList (3.0.8) sha256=2c99d0d980536d3d7ab252f7bd59ac8be50fbdd1ff487c98c949bb66bb114261
@@ -302,16 +302,17 @@ CHECKSUMS
   artifactory (3.0.17) sha256=3023d5c964c31674090d655a516f38ca75665c15084140c08b7f2841131af263
   atomos (0.1.3) sha256=7d43b22f2454a36bace5532d30785b06de3711399cb1c6bf932573eda536789f
   aws-eventstream (1.4.0) sha256=116bf85c436200d1060811e6f5d2d40c88f65448f2125bc77ffce5121e6e183b
-  aws-partitions (1.1246.0) sha256=809cd7d38b7ba4ea651c9879248ecf9fd0f8289412e76f26478d2b37064faa1d
-  aws-sdk-core (3.246.0) sha256=393864ec8948560e69fcccc2e4d256b40c7028eb98930608dd295279e3c4ddcc
-  aws-sdk-kms (1.124.0) sha256=40d00ab706d7e49fd620270bd0dcb546f266295abdd49b54fec2611e2a41f37c
-  aws-sdk-s3 (1.221.0) sha256=a05488eab2083a1e90b02e18479d8f65e401081d671b2d138992a2c5fef85491
+  aws-partitions (1.1249.0) sha256=f0bed070aba353e6ffe439953d6c354b3f51d16770386d2b198e71d34612f2e9
+  aws-sdk-core (3.247.0) sha256=789864594ce8cef05ee3d81fa8ed506099280bda6ea12a7612b8b7c5e5e62851
+  aws-sdk-kms (1.125.0) sha256=23f81bc0838ae6ec2e8de3eae88af521d0e29d3a59b6c9dbb4b21343ba476bc8
+  aws-sdk-s3 (1.222.0) sha256=bae4b06fccf0b81b8d77e7abfc56e5e2146590d43c4ab58db0cee3ff5bbfb7f1
   aws-sigv4 (1.12.1) sha256=6973ff95cb0fd0dc58ba26e90e9510a2219525d07620c8babeb70ef831826c00
   babosa (1.0.4) sha256=18dea450f595462ed7cb80595abd76b2e535db8c91b350f6c4b3d73986c5bc99
   base64 (0.3.0) sha256=27337aeabad6ffae05c265c450490628ef3ebd4b67be58257393227588f5a97b
   benchmark (0.5.0) sha256=465df122341aedcb81a2a24b4d3bd19b6c67c1530713fd533f3ff034e419236c
   bigdecimal (4.1.2) sha256=53d217666027eab4280346fba98e7d5b66baaae1b9c3c1c0ffe89d48188a3fbd
   buildkit (1.6.1) sha256=e0e51c0ce3334654c356bdef3410cba5c9b36b336d0d6542f3ecfb477c5fa97c
+  bundler (4.0.11) sha256=5bcec0fb78302e48d02ee46f10ee6e6942be647ba5b44a6d1ddfda9a240ce785
   chroma (0.2.0) sha256=64bdcd36a4765fbcd45adc64960cc153101300b4918f90ffdd89f4e2eb954b54
   claide (1.1.0) sha256=6d3c5c089dde904d96aa30e73306d0d4bd444b1accb9b3125ce14a3c0183f82e
   colored (1.2) sha256=9d82b47ac589ce7f6cab64b1f194a2009e9fd00c326a5357321f44afab2c1d2c
@@ -341,7 +342,7 @@ CHECKSUMS
   faraday_middleware (1.2.1) sha256=d45b78c8ee864c4783fbc276f845243d4a7918a67301c052647bacabec0529e9
   fastimage (2.4.1) sha256=c64bebd46b6fd8943ab70c1e6e85ff728f970f2e48f92ecd249b6bc3a540ad20
   fastlane (2.234.0) sha256=b74835681ad9a8e9c0931a5727dad1bab433895ac534c864a1ed5749625d26e9
-  fastlane-plugin-wpmreleasetoolkit (14.4.1) sha256=0ccf3f0577be4f60feb36f5267c9998b2ed476eaac138d123ef2f000b08caff7
+  fastlane-plugin-wpmreleasetoolkit (14.6.0) sha256=33d32d117ae1a71c46b89c797c49c6722f5d2ef088330f89e996c879f1803f46
   fastlane-sirp (1.1.0) sha256=10bc94f9682efd8e1badfb31452a76dd8981f1f3a33717c765fde6d75b54d847
   fiddle (1.1.8) sha256=7fa8ee3627271497f3add5503acdbc3f40b32f610fc1cf49634f083ef3f32eee
   forwardable (1.4.0) sha256=f1cd40cc9812937980e1c76f1aa053660990a7c9b6a98fc37d945468afcce838
@@ -356,7 +357,7 @@ CHECKSUMS
   google-cloud-core (1.8.0) sha256=e572edcbf189cfcab16590628a516cec3f4f63454b730e59f0b36575120281cf
   google-cloud-env (2.1.1) sha256=cf4bb8c7d517ee1ea692baedf06e0b56ce68007549d8d5a66481aa9f97f46999
   google-cloud-errors (1.6.0) sha256=1da8476dd706ad04b9d32e3c4b90d07d3463b37d6407cb56d41342ea7647d0a1
-  google-cloud-storage (1.59.0) sha256=b8c9a5661d775d65ccb279bb1d6be07fd8152576eb0146c2026bd023c4b186b9
+  google-cloud-storage (1.60.0) sha256=b21b752d37945d678a4533be5ef4303f15d33a964d8bc709c7c41c3600f650db
   googleauth (1.11.2) sha256=7e6bacaeed7aea3dd66dcea985266839816af6633e9f5983c3c2e0e40a44731e
   highline (2.0.3) sha256=2ddd5c127d4692721486f91737307236fe005352d12a4202e26c48614f719479
   http-cookie (1.0.8) sha256=b14fe0445cf24bf9ae098633e9b8d42e4c07c3c1f700672b09fbfe32ffd41aa6
@@ -382,7 +383,7 @@ CHECKSUMS
   optparse (0.8.1) sha256=42bea10d53907ccff4f080a69991441d611fbf8733b60ed1ce9ee365ce03bd1a
   os (1.1.4) sha256=57816d6a334e7bd6aed048f4b0308226c5fb027433b67d90a9ab435f35108d3f
   ostruct (0.6.3) sha256=95a2ed4a4bd1d190784e666b47b2d3f078e4a9efda2fccf18f84ddc6538ed912
-  parallel (1.27.0) sha256=4ac151e1806b755fb4e2dc2332cbf0e54f2e24ba821ff2d3dcf86bf6dc4ae130
+  parallel (1.28.0) sha256=33e6de1484baf2524792d178b0913fc8eb94c628d6cfe45599ad4458c638c970
   plist (3.7.2) sha256=d37a4527cc1116064393df4b40e1dbbc94c65fa9ca2eec52edf9a13616718a42
   prime (0.1.4) sha256=4d755ebf7c2994a6f3a3fee0d072063be3fff2d4042ebff6cd5eebd4747a225e
   progress_bar (1.3.4) sha256=adb10e040275e08eadfbe405749584e4b01fd15e8e692fdcb4b1969e9c071c8c
