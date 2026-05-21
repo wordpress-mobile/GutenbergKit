@@ -47,24 +47,24 @@ npm-dependencies: ## Install npm dependencies
 
 .PHONY: prep-translations
 prep-translations: ## Fetch and cache locale string files
-# Skip when `dist/` already exists *and* `src/translations/` is
-# populated — translations are baked into the bundle at JS build time,
-# so there is nothing for a downstream consumer to refresh until the
-# bundle itself is rebuilt. This matters on CI agents that download
-# `dist.tar.gz` from an upstream job: without it, every downstream
-# `make` target that depends on `build` would re-fetch all ~50 locales
-# from translate.wordpress.org.
+# Skip when `dist/` already exists — translations are baked into the
+# bundle at JS build time, so there is nothing for a downstream
+# consumer to refresh until the bundle itself is rebuilt. This matters
+# on CI agents that download `dist.tar.gz` from an upstream job:
+# without it, every downstream `make` target that depends on `build`
+# would re-fetch all ~50 locales from translate.wordpress.org only to
+# discard the result when `build`'s recipe short-circuits.
 #
-# We also require `src/translations/` to be populated so that a stale
-# `dist/` paired with an empty `src/translations/` doesn't silently
-# produce a no-translations rebuild when `REFRESH_JS_BUILD=1` or a
-# direct `make build` triggers JS rebuilding against empty inputs.
+# Use `REFRESH_L10N=1` (which still forces the fetch) for the explicit
+# "I want fresh translations on disk" workflow — `rm -rf
+# src/translations && make build` alone will not refetch, since `dist/`
+# being present is read as "translations already shipped".
 #
 # Otherwise, skip unless...
 # - src/translations doesn't contain any fetched bundles (only `.gitkeep` is committed)
 # - REFRESH_L10N is set to true or 1
 # - prep-translations was invoked directly
-	@if [ -d "dist" ] && [ -n "$$(find src/translations -maxdepth 1 -name '*.json' -print -quit 2>/dev/null)" ] && [ "$(REFRESH_L10N)" != "true" ] && [ "$(REFRESH_L10N)" != "1" ] && ! echo "$(MAKECMDGOALS)" | grep -q "^prep-translations$$"; then \
+	@if [ -d "dist" ] && [ "$(REFRESH_L10N)" != "true" ] && [ "$(REFRESH_L10N)" != "1" ] && ! echo "$(MAKECMDGOALS)" | grep -q "^prep-translations$$"; then \
 		echo "--- :white_check_mark: Skipping translations fetch (dist/ already built, translations baked in). Use REFRESH_L10N=1 to force refresh."; \
 	elif [ -z "$$(find src/translations -maxdepth 1 -name '*.json' -print -quit 2>/dev/null)" ] || [ "$(REFRESH_L10N)" = "true" ] || [ "$(REFRESH_L10N)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^prep-translations$$"; then \
 		echo "--- :npm: Preparing Translations"; \
