@@ -31,8 +31,14 @@ npm-dependencies: ## Install npm dependencies
 # Skip unless...
 # - node_modules doesn't exist
 # - REFRESH_DEPS is set to true or 1
-# - npm-dependencies was invoked directly
-	@if [ ! -d "node_modules" ] || [ "$(REFRESH_DEPS)" = "true" ] || [ "$(REFRESH_DEPS)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^npm-dependencies$$"; then \
+# - npm-dependencies was invoked directly (not from a recursive `$(MAKE)`)
+#
+# `build`'s rebuild branch invokes this as `$(MAKE) _RECURSIVE_INVOKE=1
+# npm-dependencies`, which sets MAKECMDGOALS=npm-dependencies in the
+# child make. Without the sentinel, that recursive call would treat
+# itself as a "direct invocation" and re-run `npm ci` every time `build`
+# rebuilds — even when node_modules is already populated.
+	@if [ ! -d "node_modules" ] || [ "$(REFRESH_DEPS)" = "true" ] || [ "$(REFRESH_DEPS)" = "1" ] || { [ -z "$(_RECURSIVE_INVOKE)" ] && echo "$(MAKECMDGOALS)" | grep -q "^npm-dependencies$$"; }; then \
 		echo "--- :npm: Installing NPM Dependencies"; \
 		npm ci; \
 	else \
@@ -41,11 +47,26 @@ npm-dependencies: ## Install npm dependencies
 
 .PHONY: prep-translations
 prep-translations: ## Fetch and cache locale string files
-# Skip unless...
+# Skip when `dist/` already exists — translations are baked into the
+# bundle at JS build time, so there is nothing for a downstream
+# consumer to refresh until the bundle itself is rebuilt. This matters
+# on CI agents that download `dist.tar.gz` from an upstream job:
+# without it, every downstream `make` target that depends on `build`
+# would re-fetch all ~50 locales from translate.wordpress.org only to
+# discard the result when `build`'s recipe short-circuits.
+#
+# Use `REFRESH_L10N=1` (which still forces the fetch) for the explicit
+# "I want fresh translations on disk" workflow — `rm -rf
+# src/translations && make build` alone will not refetch, since `dist/`
+# being present is read as "translations already shipped".
+#
+# Otherwise, skip unless...
 # - src/translations doesn't contain any fetched bundles (only `.gitkeep` is committed)
 # - REFRESH_L10N is set to true or 1
 # - prep-translations was invoked directly
-	@if [ -z "$$(find src/translations -maxdepth 1 -name '*.json' -print -quit 2>/dev/null)" ] || [ "$(REFRESH_L10N)" = "true" ] || [ "$(REFRESH_L10N)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^prep-translations$$"; then \
+	@if [ -d "dist" ] && [ "$(REFRESH_L10N)" != "true" ] && [ "$(REFRESH_L10N)" != "1" ] && ! echo "$(MAKECMDGOALS)" | grep -q "^prep-translations$$"; then \
+		echo "--- :white_check_mark: Skipping translations fetch (dist/ already built, translations baked in). Use REFRESH_L10N=1 to force refresh."; \
+	elif [ -z "$$(find src/translations -maxdepth 1 -name '*.json' -print -quit 2>/dev/null)" ] || [ "$(REFRESH_L10N)" = "true" ] || [ "$(REFRESH_L10N)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^prep-translations$$"; then \
 		echo "--- :npm: Preparing Translations"; \
 		if ! npm run prep-translations -- --force; then \
 			if [ "$(STRICT_L10N)" = "true" ] || [ "$(STRICT_L10N)" = "1" ]; then \
@@ -91,16 +112,28 @@ clean: ## Remove build artifacts and translation string files
 ################################################################################
 
 .PHONY: build
-build: npm-dependencies prep-translations ## Build the project for all platforms (iOS, Android, web)
+build: prep-translations ## Build the project for all platforms (iOS, Android, web)
 # Skip unless...
 # - dist doesn't exist
 # - REFRESH_JS_BUILD is set to true or 1
 # - build was invoked directly
+#
+# `npm-dependencies` is invoked from inside the rebuild branch rather
+# than declared as a Make prereq so that downstream targets which
+# depend on `build` (`test-android`, `test-swift-library`, etc.) don't
+# trigger an `npm ci` they don't actually need when `dist/` is already
+# populated — e.g. on CI agents that just extracted an upstream
+# `dist.tar.gz` and only intend to run gradle/xcodebuild/swift.
+#
+# Targets that legitimately use node_modules (`test-e2e` via
+# `e2e-dependencies`, `lint-js`, `test-js`, etc.) declare
+# `npm-dependencies` as their own prereq.
 	@if [ ! -d "dist" ] || [ "$(REFRESH_JS_BUILD)" = "true" ] || [ "$(REFRESH_JS_BUILD)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^build$$"; then \
-		echo "--- :node: Building Gutenberg"; \
-		npm run build; \
-		echo "--- :open_file_folder: Copying Build Products into place"; \
-		$(MAKE) copy-dist-ios; \
+		$(MAKE) _RECURSIVE_INVOKE=1 npm-dependencies && \
+		echo "--- :node: Building Gutenberg" && \
+		npm run build && \
+		echo "--- :open_file_folder: Copying Build Products into place" && \
+		$(MAKE) copy-dist-ios && \
 		$(MAKE) copy-dist-android; \
 	else \
 		echo "--- :white_check_mark: Skipping JS build (dist already exists). Use REFRESH_JS_BUILD=1 to force refresh."; \
@@ -285,6 +318,13 @@ test-ios-e2e-dev: ## Run iOS E2E tests against the Vite dev server (must be runn
 
 .PHONY: test-android
 test-android: build ## Run Android tests
+# `build` short-circuits `copy-dist-android` when `dist/` already exists
+# (e.g. in CI, after extracting an upstream `dist.tar.gz`), so copy
+# explicitly here to guarantee the tests run against the current dist
+# rather than whatever was committed at HEAD.
+	@echo "--- :open_file_folder: Copying build into Android bundle"
+	@rm -rf ./android/Gutenberg/src/main/assets/
+	@cp -r ./dist/. ./android/Gutenberg/src/main/assets
 	@echo "--- :android: Running Android Tests"
 	./android/gradlew -p ./android :gutenberg:test
 
@@ -346,6 +386,13 @@ test-android-e2e-dev: ## Run Android E2E tests against the Vite dev server (must
 
 .PHONY: test-android-library-e2e
 test-android-library-e2e: build ## Run instrumented tests for the Gutenberg Android library module
+# `build` short-circuits `copy-dist-android` when `dist/` already exists
+# (e.g. in CI, after extracting an upstream `dist.tar.gz`), so copy
+# explicitly here to guarantee the instrumented tests run against the
+# current dist rather than whatever was committed at HEAD.
+	@echo "--- :open_file_folder: Copying build into Android bundle"
+	@rm -rf ./android/Gutenberg/src/main/assets/
+	@cp -r ./dist/. ./android/Gutenberg/src/main/assets
 	$(ENSURE_ANDROID_DEVICE)
 	@echo "--- :android: Running Android Library Instrumented Tests"
 	@mkdir -p android/Gutenberg/build/outputs/buildkite-logs
