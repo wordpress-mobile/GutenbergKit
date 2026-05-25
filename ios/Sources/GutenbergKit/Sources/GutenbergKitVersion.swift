@@ -4,5 +4,5 @@
 /// GutenbergKit version information.
 public enum GutenbergKitVersion {
     /// The current version of GutenbergKit.
-    public static let version = "0.16.0"
+    public static let version = "0.17.0"
 }
