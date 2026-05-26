@@ -22,7 +22,12 @@ echo '--- :robot_face: Use bot for Git operations'
 source use-bot-for-git
 
 echo "--- :mag: Listing pr-build/* branches on origin"
-mapfile -t branches < <(
+# `mapfile` is Bash 4+; macOS CI agents ship Bash 3.2, so use a portable
+# `while read` loop instead.
+branches=()
+while IFS= read -r branch; do
+    branches+=("$branch")
+done < <(
     git ls-remote --heads origin 'refs/heads/pr-build/*' \
         | awk '{print $2}' \
         | sed 's|^refs/heads/||'
