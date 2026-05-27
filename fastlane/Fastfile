@@ -121,11 +121,11 @@ lane :validate do |options|
 
   # Clear lane-context values populated by `get_github_release` so a later
   # action doesn't see stale state from this probe call.
-  remove_lane_context_values [
+  [
     SharedValues::GITHUB_API_RESPONSE,
     SharedValues::GITHUB_API_STATUS_CODE,
     SharedValues::GITHUB_API_JSON
-  ]
+  ].each { |key| lane_context.delete(key) }
 end
 
 lane :update_swift_package do |options|
