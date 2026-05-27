@@ -169,6 +169,12 @@ steps:
           - test-web-e2e
           - test-ios-e2e
       if: build.env("NEW_VERSION") != null && build.branch == "trunk" && build.pull_request.id == null
+      # Build-level env vars (passed via API/UI when triggering the build) are
+      # available to YAML interpolation at pipeline-upload time, but the
+      # `queue: mac` agents don't expose them as runtime env vars to job
+      # shells. Re-pass `NEW_VERSION` here so `release.sh` can read it.
+      env:
+          NEW_VERSION: $NEW_VERSION
       command: .buildkite/release.sh
       plugins: *plugins
 
