@@ -2,9 +2,10 @@
 
 set -euo pipefail
 
-if [[ -z "${NEW_VERSION:-}" ]]; then
-    echo "ERROR: NEW_VERSION is not set or is empty." >&2
-    echo "Set NEW_VERSION=vX.Y.Z when triggering this build." >&2
+NEW_VERSION="${1:-}"
+if [[ -z "$NEW_VERSION" ]]; then
+    echo "ERROR: version argument is required." >&2
+    echo "Usage: $0 vX.Y.Z" >&2
     exit 1
 fi
 
