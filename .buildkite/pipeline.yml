@@ -169,7 +169,11 @@ steps:
           - test-web-e2e
           - test-ios-e2e
       if: build.env("NEW_VERSION") != null && build.branch == "trunk" && build.pull_request.id == null
-      command: .buildkite/release.sh
+      # Pass NEW_VERSION as an argument: build-level env vars set when
+      # triggering aren't exposed to job runtime shells on `queue: mac`, but
+      # `$NEW_VERSION` here gets YAML-interpolated at pipeline-upload time
+      # so the literal version lands in the command line.
+      command: .buildkite/release.sh "$NEW_VERSION"
       plugins: *plugins
 
     - label: ':ios: Test iOS E2E'
