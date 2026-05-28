@@ -105,8 +105,6 @@ import androidx.compose.ui.graphics.Color as ComposeColor
 import org.wordpress.gutenberg.model.BlockInserterPayload
 import org.wordpress.gutenberg.model.BlockType
 
-private const val SEARCH_ONLY_CATEGORY = "gbk-search-only"
-private const val MOST_USED_CATEGORY = "gbk-most-used"
 private const val SEARCH_DEBOUNCE_MS = 150L
 
 /** WordPress brand navy — seed for the fallback scheme on pre-API-31 devices. */
@@ -237,10 +235,12 @@ private fun BlockPickerSheet(
 ) {
     val colorScheme = rememberColorScheme()
     MaterialTheme(colorScheme = colorScheme) {
-        val allBlocks = remember(payload) { flattenBlocks(payload) }
+        val sections = remember(payload) { browsableSections(payload) }
+        val tabs = remember(sections) { buildTabs(sections) }
+        val allBlocks = remember(sections) { allBrowsableBlocks(sections) }
         val recentBlocks = remember(payload, allBlocks) { recentBlocks(payload, allBlocks) }
 
-        var selectedTab by remember { mutableStateOf(BlockPickerTab.Recent) }
+        var selectedTab by remember { mutableStateOf<BlockPickerTab>(BlockPickerTab.Recent) }
         var query by remember { mutableStateOf("") }
         var debounced by remember { mutableStateOf("") }
         LaunchedEffect(query) {
@@ -248,12 +248,13 @@ private fun BlockPickerSheet(
             debounced = query.trim()
         }
 
-        val filtered = remember(selectedTab, debounced, allBlocks, recentBlocks) {
-            val tabBlocks = filterByTab(selectedTab, allBlocks, recentBlocks)
+        val filtered = remember(selectedTab, debounced, recentBlocks) {
+            val tabBlocks = blocksForTab(selectedTab, recentBlocks)
             if (debounced.isEmpty()) tabBlocks else searchBlocks(debounced, tabBlocks)
         }
 
         SheetContent(
+            tabs = tabs,
             selectedTab = selectedTab,
             onSelectTab = { selectedTab = it },
             query = query,
@@ -271,6 +272,7 @@ private fun BlockPickerSheet(
 @Composable
 @Suppress("LongParameterList")
 private fun SheetContent(
+    tabs: List<BlockPickerTab>,
     selectedTab: BlockPickerTab,
     onSelectTab: (BlockPickerTab) -> Unit,
     query: String,
@@ -299,7 +301,7 @@ private fun SheetContent(
         if (showMediaStrip) {
             MediaStrip()
         }
-        CategoryTabs(selected = selectedTab, onSelect = onSelectTab)
+        CategoryTabs(tabs = tabs, selected = selectedTab, onSelect = onSelectTab)
         SearchField(query = query, onQueryChange = onQueryChange)
         BlockGridContent(
             blocks = blocks,
@@ -310,24 +312,6 @@ private fun SheetContent(
                 .weight(1f, fill = true),
         )
     }
-}
-
-private fun flattenBlocks(payload: BlockInserterPayload): List<BlockType> =
-    dedupeById(
-        payload.sections
-            .filter { it.category != SEARCH_ONLY_CATEGORY }
-            .flatMap { it.blocks }
-    )
-
-private fun recentBlocks(
-    payload: BlockInserterPayload,
-    allBlocks: List<BlockType>,
-): List<BlockType> {
-    val mostUsed = payload.sections
-        .firstOrNull { it.category == MOST_USED_CATEGORY }
-        ?.blocks
-        .orEmpty()
-    return if (mostUsed.isNotEmpty()) dedupeById(mostUsed) else allBlocks
 }
 
 @Composable
@@ -565,10 +549,10 @@ private fun MediaActionTile(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CategoryTabs(
+    tabs: List<BlockPickerTab>,
     selected: BlockPickerTab,
     onSelect: (BlockPickerTab) -> Unit,
 ) {
-    val tabs = BlockPickerTab.entries
     val selectedIndex = tabs.indexOf(selected).coerceAtLeast(0)
     // Tab labels sit 16dp inside the Tab layout (M3's internal
     // `HorizontalTextPadding`), so set `edgePadding` to `SEARCH_HORIZONTAL_PAD_DP
@@ -584,10 +568,16 @@ private fun CategoryTabs(
             Tab(
                 selected = tab == selected,
                 onClick = { onSelect(tab) },
-                text = { Text(stringResource(tab.labelRes)) },
+                text = { Text(tabLabel(tab)) },
             )
         }
     }
+}
+
+@Composable
+private fun tabLabel(tab: BlockPickerTab): String = when (tab) {
+    BlockPickerTab.Recent -> stringResource(R.string.gbk_block_inserter_tab_recent)
+    is BlockPickerTab.Category -> tab.section.name ?: tab.section.category
 }
 
 @Composable
@@ -912,53 +902,3 @@ private fun EmptyState(query: String, modifier: Modifier = Modifier) {
     }
 }
 
-private fun dedupeById(blocks: List<BlockType>): List<BlockType> {
-    val seen = HashSet<String>()
-    return blocks.filter { seen.add(it.id) }
-}
-
-private fun filterByTab(
-    tab: BlockPickerTab,
-    allBlocks: List<BlockType>,
-    recentBlocks: List<BlockType>,
-): List<BlockType> {
-    if (tab == BlockPickerTab.Recent) return recentBlocks
-    val ids = tab.blockIds ?: return allBlocks
-    return allBlocks.filter { it.name.substringAfterLast('/') in ids }
-}
-
-/**
- * Hardcoded block-id groupings from the design handoff. Production will likely
- * derive these from the payload, but the design freezes the taxonomy shown in
- * the tabs so we pin it here to match Variation B exactly.
- */
-private enum class BlockPickerTab(
-    val labelRes: Int,
-    val blockIds: Set<String>?,
-) {
-    Recent(R.string.gbk_block_inserter_tab_recent, null),
-    Text(
-        R.string.gbk_block_inserter_tab_text,
-        setOf("paragraph", "heading", "list", "quote", "preformatted"),
-    ),
-    Media(
-        R.string.gbk_block_inserter_tab_media,
-        setOf("image", "gallery", "video", "audio", "cover", "file"),
-    ),
-    Design(
-        R.string.gbk_block_inserter_tab_design,
-        setOf("table", "separator", "code", "columns", "button", "buttons"),
-    ),
-    Widgets(
-        R.string.gbk_block_inserter_tab_widgets,
-        setOf("button", "buttons", "separator"),
-    ),
-    Theme(
-        R.string.gbk_block_inserter_tab_theme,
-        setOf("cover", "columns", "gallery"),
-    ),
-    Embeds(
-        R.string.gbk_block_inserter_tab_embeds,
-        setOf("video", "audio", "embed"),
-    );
-}
