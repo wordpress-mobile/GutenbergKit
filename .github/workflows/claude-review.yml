@@ -15,7 +15,7 @@ jobs:
             id-token: write # Required by claude-code-action for GitHub App token exchange.
         steps:
             # issue_comment payloads identify PR comments, but do not include the PR
-            # head repo. Query the PR before allowing Claude to run on fork PRs.
+            # head repo. Query the PR and only run Claude when the head repo matches this repository (skip forks/external PRs).
             - name: Check PR origin
               id: pr-origin
               env:
