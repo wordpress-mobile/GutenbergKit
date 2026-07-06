@@ -30,6 +30,64 @@ let cachedEditorSettings = null;
 /** Cached editor assets — fetched once and reused across all tests. */
 let cachedEditorAssets = null;
 
+const MAX_FETCH_ATTEMPTS = 5;
+const FETCH_RETRY_DELAY_MS = 1000;
+
+const delay = ( ms ) => new Promise( ( resolve ) => setTimeout( resolve, ms ) );
+
+/**
+ * Fetch and parse JSON from a wp-env REST endpoint, retrying on transient
+ * failures.
+ *
+ * During warm-up the Playground/wp-env instance can briefly return a 5xx or
+ * leak a PHP notice into the body, which corrupts the JSON. Both surface here
+ * as errors we retry, and the last failure carries a snippet of the body so a
+ * genuine leak is diagnosable instead of an opaque "Unexpected token '<'".
+ *
+ * @param {string} url   Fully-qualified REST URL.
+ * @param {Object} creds Credentials object from readCredentials().
+ * @param {string} label Human-readable resource name for error messages.
+ * @return {Promise<Object>} The parsed JSON response.
+ */
+async function fetchJson( url, creds, label ) {
+	let lastError;
+
+	for ( let attempt = 1; attempt <= MAX_FETCH_ATTEMPTS; attempt++ ) {
+		try {
+			const response = await fetch( url, {
+				headers: { Authorization: creds.authHeader },
+			} );
+
+			const body = await response.text();
+
+			if ( ! response.ok ) {
+				throw new Error(
+					`HTTP ${ response.status } ${
+						response.statusText
+					} — ${ body.slice( 0, 200 ) }`
+				);
+			}
+
+			try {
+				return JSON.parse( body );
+			} catch {
+				throw new Error(
+					`response was not valid JSON — ${ body.slice( 0, 200 ) }`
+				);
+			}
+		} catch ( error ) {
+			lastError = error;
+			if ( attempt < MAX_FETCH_ATTEMPTS ) {
+				await delay( FETCH_RETRY_DELAY_MS );
+			}
+		}
+	}
+
+	throw new Error(
+		`Failed to fetch ${ label } after ${ MAX_FETCH_ATTEMPTS } attempts: ${ lastError.message }`
+	);
+}
+
 /**
  * Fetch editor settings from the wp-env WordPress instance.
  *
@@ -44,20 +102,11 @@ async function fetchEditorSettings( creds ) {
 		return cachedEditorSettings;
 	}
 
-	const response = await fetch(
+	cachedEditorSettings = await fetchJson(
 		`${ creds.siteApiRoot }wp-block-editor/v1/settings`,
-		{
-			headers: { Authorization: creds.authHeader },
-		}
+		creds,
+		'editor settings'
 	);
-
-	if ( ! response.ok ) {
-		throw new Error(
-			`Failed to fetch editor settings: ${ response.status } ${ response.statusText }`
-		);
-	}
-
-	cachedEditorSettings = await response.json();
 	return cachedEditorSettings;
 }
 
@@ -75,17 +124,11 @@ async function fetchEditorAssets( creds ) {
 	const url = new URL( `${ creds.siteApiRoot }wpcom/v2/editor-assets` );
 	url.searchParams.set( 'exclude', 'core,gutenberg' );
 
-	const response = await fetch( url.toString(), {
-		headers: { Authorization: creds.authHeader },
-	} );
-
-	if ( ! response.ok ) {
-		throw new Error(
-			`Failed to fetch editor assets: ${ response.status } ${ response.statusText }`
-		);
-	}
-
-	cachedEditorAssets = await response.json();
+	cachedEditorAssets = await fetchJson(
+		url.toString(),
+		creds,
+		'editor assets'
+	);
 	return cachedEditorAssets;
 }
 
