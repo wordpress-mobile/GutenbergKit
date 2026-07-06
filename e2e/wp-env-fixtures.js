@@ -30,8 +30,8 @@ let cachedEditorSettings = null;
 /** Cached editor assets — fetched once and reused across all tests. */
 let cachedEditorAssets = null;
 
-const MAX_FETCH_ATTEMPTS = 5;
-const FETCH_RETRY_DELAY_MS = 1000;
+const MAX_FETCH_ATTEMPTS = 15;
+const FETCH_RETRY_DELAY_MS = 2000;
 
 const delay = ( ms ) => new Promise( ( resolve ) => setTimeout( resolve, ms ) );
 
