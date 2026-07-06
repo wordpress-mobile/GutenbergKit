@@ -4,25 +4,17 @@ agents:
 env:
     IMAGE_ID: $IMAGE_ID
 
+# TEMPORARY soak pipeline — do not merge.
+# Runs only the React build and the Web E2E step, the latter with
+# `parallelism` so a single build produces many independent E2E runs
+# (each against a freshly provisioned wp-env). Used to confirm the
+# wp-env warm-up flakiness fixed on `mokagio/fix-e2e-wp-env-flaky` is
+# gone. Revert to the full pipeline before this branch could ever merge.
 steps:
     - label: ':react: Build React App'
       key: build-react
       command: |
-          # Fail fast if any step (including the backgrounded
-          # `prep-translations`, surfaced via `wait`) returns non-zero,
-          # rather than continuing into `make build` with partial inputs.
           set -euo pipefail
-          # `prep-translations` is pure network I/O and no longer depends
-          # on `node_modules` (uses Node's built-in `fetch`), so it can run
-          # in parallel with `npm ci`. Vite reads `src/translations/` when
-          # it emits locale bundles, so we wait for the fetch to complete
-          # before invoking `make build`.
-          #
-          # Background output is redirected to a logfile and replayed
-          # after `wait` returns so its `--- :section:` markers don't
-          # interleave with `npm ci`'s and confuse Buildkite log folding.
-          # The replay happens unconditionally so a failed fetch surfaces
-          # its log before `set -e` aborts the script.
           make prep-translations STRICT_L10N=1 > prep-translations.log 2>&1 &
           PREP_PID=$$!
           make npm-dependencies
@@ -41,27 +33,10 @@ steps:
           - $CI_TOOLKIT_PLUGIN
           - $NVM_PLUGIN
 
-    - label: ':white_check_mark: Validate Swift release ${NEW_VERSION:-(no version)}'
-      key: validate-release
-      if: build.env("NEW_VERSION") != null && build.branch == "trunk" && build.pull_request.id == null
-      command: |
-          install_gems
-          bundle exec fastlane validate "version:$NEW_VERSION"
-      plugins: *plugins
-
-    - label: ':eslint: Lint React App'
-      key: lint-js
-      command: make lint-js
-      plugins: *plugins
-
-    - label: ':javascript: Test JavaScript'
-      key: test-js
-      command: make test-js
-      plugins: *plugins
-
     - label: ':performing_arts: Test Web E2E'
       key: test-web-e2e
       depends_on: build-react
+      parallelism: 10
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
@@ -69,161 +44,4 @@ steps:
           make wp-env-start
           echo "--- :performing_arts: Running E2E tests"
           make test-e2e
-      plugins: *plugins
-
-    - label: ':android: Publish Android Library'
-      depends_on: build-react
-      command: |
-          buildkite-agent artifact download dist.tar.gz .
-          tar -xzf dist.tar.gz
-          rm -rf ./android/Gutenberg/src/main/assets/
-          cp -r ./dist/. ./android/Gutenberg/src/main/assets
-          echo "--- :android: Publishing Android Library"
-          ./android/gradlew -p ./android :gutenberg:prepareToPublishToS3 $(prepare_to_publish_to_s3_params) :gutenberg:publish
-      agents:
-          queue: android
-      plugins: *plugins
-
-    - label: ':android: Lint Android'
-      command: make lint-android
-      agents:
-          queue: android
-      plugins: *plugins
-
-    - label: ':android: Test Android Library'
-      depends_on: build-react
-      command: |
-          buildkite-agent artifact download dist.tar.gz .
-          tar -xzf dist.tar.gz
-          make test-android
-      agents:
-          queue: android
-      plugins: *plugins
-
-    - label: ':swift: iOS Simulator Tests'
-      key: swift-test-swift-package
-      depends_on: build-react
-      command: |
-          buildkite-agent artifact download dist.tar.gz .
-          tar -xzf dist.tar.gz
-          make test-swift-package
-      plugins: *plugins
-
-    - label: ':swift: Library Tests'
-      key: swift-test-library
-      depends_on: build-react
-      command: |
-          buildkite-agent artifact download dist.tar.gz .
-          tar -xzf dist.tar.gz
-          make test-swift-library
-      plugins: *plugins
-
-    - label: ':xcode: Build XCFramework'
-      key: build-xcframework
-      depends_on:
-          - build-react
-          - swift-test-library
-      command: |
-          buildkite-agent artifact download dist.tar.gz .
-          tar -xzf dist.tar.gz
-          install_gems
-          bundle exec fastlane set_up_signing_release
-          make build-resources-xcframework
-          bundle exec fastlane xcframework_sign
-          ./package_xcframework.sh
-      artifact_paths:
-          - '*.xcframework.zip'
-          - '*.xcframework.zip.checksum.txt'
-      plugins: *plugins
-
-    - label: ':s3: Publish XCFramework to S3'
-      depends_on: build-xcframework
-      # This step only covers per-commit trunk uploads keyed by the commit
-      # SHA. Releases are handled by `:rocket: Publish Swift release` (gated
-      # on `NEW_VERSION`), and tag pushes from that step trigger a separate
-      # tag build whose iOS upload would just duplicate the rocket step's —
-      # the `build.tag == null` clause skips it. Android publish on tag
-      # builds is still load-bearing (produces the `vX.Y.Z` Maven artifact)
-      # and intentionally not gated here.
-      if: build.env("NEW_VERSION") == null && build.tag == null && build.pull_request.id == null
-      command: |
-          buildkite-agent artifact download '*.xcframework.zip' .
-          buildkite-agent artifact download '*.xcframework.zip.checksum.txt' .
-          install_gems
-          bundle exec fastlane publish_to_s3 version:$BUILDKITE_COMMIT
-      plugins: *plugins
-
-    - label: ':swift: :package: Publish PR XCFramework'
-      depends_on: build-xcframework
-      if: build.pull_request.id != null
-      command: .buildkite/publish-pr-xcframework.sh
-      plugins: *plugins
-
-    - label: ':rocket: Publish Swift release ${NEW_VERSION:-(Error: No version found!)}'
-      depends_on:
-          - validate-release
-          - build-xcframework
-          - swift-test-swift-package
-          - lint-js
-          - test-js
-          - test-web-e2e
-          - test-ios-e2e
-      if: build.env("NEW_VERSION") != null && build.branch == "trunk" && build.pull_request.id == null
-      # Pass NEW_VERSION as an argument: build-level env vars set when
-      # triggering aren't exposed to job runtime shells on `queue: mac`, but
-      # `$NEW_VERSION` here gets YAML-interpolated at pipeline-upload time
-      # so the literal version lands in the command line.
-      command: .buildkite/release.sh "$NEW_VERSION"
-      plugins: *plugins
-
-    - label: ':ios: Test iOS E2E'
-      key: test-ios-e2e
-      depends_on: build-react
-      command: |
-          buildkite-agent artifact download dist.tar.gz .
-          tar -xzf dist.tar.gz
-          make test-ios-e2e
-      plugins: *plugins
-
-    - label: ':android: Test Android E2E'
-      depends_on: build-react
-      command: |
-          buildkite-agent artifact download dist.tar.gz .
-          tar -xzf dist.tar.gz
-          echo "--- :robot_face: Starting Android emulator"
-          start-android-emulator \
-              --system-image "system-images;android-34;google_apis;arm64-v8a" \
-              --device "pixel_5"
-          echo "--- :android: Running Android instrumented tests"
-          make test-android-e2e
-      agents:
-          queue: mac-metal
-      plugins: *plugins
-      artifact_paths:
-          - 'android/app/build/reports/androidTests/connected/**/*'
-          - 'android/app/build/outputs/androidTest-results/connected/**/*'
-          - 'android/app/build/outputs/connected_android_test_additional_output/**/*'
-
-    - label: ':android: Test Android Library Instrumented'
-      depends_on: build-react
-      command: |
-          buildkite-agent artifact download dist.tar.gz .
-          tar -xzf dist.tar.gz
-          echo "--- :robot_face: Starting Android emulator"
-          start-android-emulator \
-              --system-image "system-images;android-34;google_apis;arm64-v8a" \
-              --device "pixel_5"
-          make test-android-library-e2e
-      agents:
-          queue: mac-metal
-      plugins: *plugins
-      artifact_paths:
-          - 'android/Gutenberg/build/reports/androidTests/connected/**/*'
-          - 'android/Gutenberg/build/outputs/androidTest-results/connected/**/*'
-          - 'android/Gutenberg/build/outputs/buildkite-logs/**/*'
-          - 'android/Gutenberg/build/outputs/connected_android_test_additional_output/**/*'
-
-    - label: ':wastebasket: Clean up `pr-build/*` branches for closed PRs'
-      if: build.branch == "trunk"
-      command: .buildkite/cleanup-pr-build-branches.sh
       plugins: *plugins
