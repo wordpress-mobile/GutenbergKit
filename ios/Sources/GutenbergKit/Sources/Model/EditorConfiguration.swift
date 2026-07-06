@@ -57,7 +57,10 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
   public let editorAssetsEndpoint: URL?
   /// Logs emitted at or above this level will be printed to the debug console
   public let logLevel: EditorLogLevel
-  /// Enables logging of all network requests/responses to the native host
+  /// Enables the JavaScript editor to surface network request/response details
+  /// to the native host app (via the bridge). This does **not** control the
+  /// native `EditorHTTPClient`'s own debug logging, which always runs at the
+  /// platform debug level and is stripped from release builds.
   public let enableNetworkLogging: Bool
   /// Don't make HTTP requests
   public let isOfflineModeEnabled: Bool
