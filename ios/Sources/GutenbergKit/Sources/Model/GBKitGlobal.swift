@@ -93,6 +93,18 @@ public struct GBKitGlobal: Sendable, Codable {
     /// Pre-fetched editor assets (scripts, styles, allowed block types) for plugin loading.
     let editorAssets: JSON?
 
+    /// Connection details for the native loopback network proxy.
+    ///
+    /// When present, REST API requests that fail in the web view (e.g. under
+    /// iOS Lockdown Mode, which breaks CORS for `file://` pages) are retried
+    /// through `http://127.0.0.1:<port>` with the given bearer token.
+    public struct NetworkProxy: Sendable, Codable {
+        let port: Int
+        let token: String
+    }
+
+    let networkProxy: NetworkProxy?
+
     /// Creates a global configuration from an editor configuration and dependencies.
     ///
     /// - Parameters:
@@ -100,11 +112,13 @@ public struct GBKitGlobal: Sendable, Codable {
     ///   - dependencies: The pre-fetched editor dependencies (unused but reserved for future use).
     ///   - nativeUploadPort: Port of the local upload server, or nil if not running.
     ///   - nativeUploadToken: Auth token for the local upload server, or nil if not running.
+    ///   - networkProxy: Loopback proxy connection details, when the proxy is running.
     public init(
         configuration: EditorConfiguration,
         dependencies: EditorDependencies,
         nativeUploadPort: Int? = nil,
-        nativeUploadToken: String? = nil
+        nativeUploadToken: String? = nil,
+        networkProxy: NetworkProxy? = nil
     ) throws {
         self.siteURL = configuration.isOfflineModeEnabled ? nil : configuration.siteURL
         self.siteApiRoot = configuration.isOfflineModeEnabled ? nil : configuration.siteApiRoot
@@ -132,6 +146,7 @@ public struct GBKitGlobal: Sendable, Codable {
         self.editorSettings = dependencies.editorSettings.jsonValue
         self.preloadData = try dependencies.preloadList?.build()
         self.editorAssets = Self.buildEditorAssets(from: dependencies.assetBundle)
+        self.networkProxy = networkProxy
     }
 
     private static func buildEditorAssets(from bundle: EditorAssetBundle) -> JSON? {

@@ -9,7 +9,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import { getGBKit, POST_FALLBACKS } from './bridge';
-import { info, error as logError } from './logger';
+import { debug, info, error as logError } from './logger';
 
 /**
  * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
@@ -26,6 +26,9 @@ const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
 export function configureApiFetch() {
 	const { siteApiRoot = '', preloadData = null } = getGBKit();
 
+	// Registered first so it runs innermost (after all option transforms),
+	// where it can retry the fully-built request through the native proxy.
+	apiFetch.use( networkProxyFallbackMiddleware );
 	apiFetch.use( apiFetch.createRootURLMiddleware( siteApiRoot ) );
 	apiFetch.use( corsMiddleware );
 	apiFetch.use( apiPathModifierMiddleware );
@@ -37,6 +40,138 @@ export function configureApiFetch() {
 	apiFetch.use(
 		apiFetch.createPreloadingMiddleware( preloadData ?? defaultPreloadData )
 	);
+}
+
+/**
+ * Tracks whether the native network proxy successfully served a request.
+ * Once it has, subsequent requests go straight to the proxy instead of
+ * paying for a doomed direct attempt first.
+ */
+let isNetworkProxyPreferred = false;
+
+/**
+ * Middleware that retries failed requests through the native loopback proxy.
+ *
+ * Under iOS Lockdown Mode the editor's `file://` page loses its CORS
+ * exemption and WordPress sanitizes its `Origin: file://` into an empty
+ * `Access-Control-Allow-Origin`, so every REST request rejects with
+ * api-fetch's generic `fetch_error`. When the native host provides a
+ * loopback proxy (`GBKit.networkProxy`), such failures are retried through
+ * it: the proxy forwards the request to the site's REST API natively and
+ * responds with CORS headers the web view accepts.
+ *
+ * This middleware must run innermost so `options` carries the final
+ * request (absolute `url`, headers, body) built by the other middleware.
+ *
+ * @type {APIFetchMiddleware}
+ */
+function networkProxyFallbackMiddleware( options, next ) {
+	const { networkProxy } = getGBKit();
+
+	if ( ! networkProxy ) {
+		return next( options );
+	}
+
+	if ( isNetworkProxyPreferred ) {
+		return proxyFetch( options, networkProxy );
+	}
+
+	return next( options ).catch( ( fetchError ) => {
+		if ( fetchError?.code !== 'fetch_error' ) {
+			throw fetchError;
+		}
+
+		debug(
+			'api-fetch: direct request failed, retrying through the native network proxy'
+		);
+		return proxyFetch( options, networkProxy ).then( ( result ) => {
+			isNetworkProxyPreferred = true;
+			return result;
+		} );
+	} );
+}
+
+/**
+ * Performs a request through the native loopback proxy.
+ *
+ * The absolute upstream URL travels in the `X-GBK-Upstream-URL` header and
+ * the per-session proxy token in `Relay-Authorization` (`Proxy-*` headers
+ * are stripped by `fetch()`). The upstream `Authorization` header is
+ * injected natively, so any value present here is dropped.
+ *
+ * @param {Object} options            Fully-transformed api-fetch options.
+ * @param {Object} networkProxy       Proxy connection details.
+ * @param {number} networkProxy.port  Loopback port.
+ * @param {string} networkProxy.token Per-session bearer token.
+ * @return {Promise<any>} The parsed response, mirroring api-fetch semantics.
+ */
+async function proxyFetch( options, networkProxy ) {
+	const upstreamUrl = options.url ?? options.path;
+	const headers = { ...( options.headers || {} ) };
+	delete headers.Authorization;
+	headers[ 'Relay-Authorization' ] = `Bearer ${ networkProxy.token }`;
+	headers[ 'X-GBK-Upstream-URL' ] = upstreamUrl;
+
+	let response;
+	try {
+		response = await window.fetch(
+			`http://127.0.0.1:${ networkProxy.port }/proxy`,
+			{
+				method: options.method || 'GET',
+				headers,
+				body: options.body,
+			}
+		);
+	} catch ( proxyError ) {
+		logError(
+			'api-fetch: native network proxy request failed',
+			proxyError
+		);
+		throw {
+			code: 'fetch_error',
+			message: 'Could not get a valid response from the server.',
+		};
+	}
+
+	return parseProxyResponse( response, options.parse ?? true );
+}
+
+/**
+ * Parses a proxied response, mirroring api-fetch's default handler:
+ * unparsed requests get the raw `Response`, 204s resolve to `null`,
+ * error statuses throw the decoded JSON body.
+ *
+ * @param {Response} response    The proxy response.
+ * @param {boolean}  shouldParse Whether the caller requested parsing.
+ * @return {Promise<any>} The parsed body or raw response.
+ */
+async function parseProxyResponse( response, shouldParse ) {
+	if ( ! shouldParse ) {
+		if ( ! response.ok ) {
+			throw response;
+		}
+		return response;
+	}
+
+	if ( response.status === 204 ) {
+		return null;
+	}
+
+	let json;
+	try {
+		json = await response.json();
+	} catch {
+		throw {
+			code: 'invalid_json',
+			message: 'The response is not a valid JSON response.',
+		};
+	}
+
+	if ( ! response.ok ) {
+		throw json;
+	}
+
+	return json;
 }
 
 /**

@@ -160,6 +160,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let lockdownModeMonitor: LockdownModeMonitor
     private var uploadServer: MediaUploadServer?
 
+    /// Loopback proxy that relays REST API requests through native networking
+    /// when the web view is subject to Lockdown Mode. See `EditorNetworkProxy`.
+    private var networkProxy: EditorNetworkProxy?
+
     // MARK: - Private Properties (UI)
 
     /// Progress bar shown during async dependency fetching ("No Dependencies" flow).
@@ -229,6 +233,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let config = WKWebViewConfiguration()
         config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
+
+        // Debug hook: force Lockdown Mode on this web view so its restrictions
+        // can be reproduced in the Simulator, where the system-wide setting is
+        // unavailable.
+        if ProcessInfo.processInfo.environment["GUTENBERG_FORCE_LOCKDOWN_MODE"] == "1" {
+            config.defaultWebpagePreferences.isLockdownModeEnabled = true
+        }
 
         // Set-up communications with the editor.
         config.userContentController.add(controller, name: "editorDelegate")
@@ -396,6 +407,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // Start the local upload server for native media processing
         await startUploadServer()
 
+        // Start the loopback REST relay when Lockdown Mode requires it
+        await startNetworkProxyIfNeeded()
+
         // Build and inject editor configuration as window.GBKit
         let editorConfig = try buildEditorConfiguration(dependencies: dependencies)
         webView.configuration.userContentController.addUserScript(editorConfig)
@@ -406,6 +420,30 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         } else {
             let indexURL = GutenbergKitResources.editorIndexURL
             webView.loadFileURL(indexURL, allowingReadAccessTo: GutenbergKitResources.resourcesDirectoryURL)
+        }
+    }
+
+    /// Starts the loopback network proxy when the web view is subject to
+    /// Lockdown Mode, so the editor's REST API requests can be relayed through
+    /// native networking (Lockdown Mode breaks CORS for `file://` pages).
+    ///
+    /// No-op when Lockdown Mode is off, offline mode is enabled, or the proxy
+    /// is already running. Failures are logged but never block the editor —
+    /// the web view simply keeps its direct (possibly broken) network path.
+    @MainActor
+    private func startNetworkProxyIfNeeded() async {
+        guard networkProxy == nil,
+              !configuration.isOfflineModeEnabled,
+              webView.configuration.defaultWebpagePreferences.isLockdownModeEnabled else {
+            return
+        }
+
+        do {
+            let proxy = EditorNetworkProxy()
+            try await proxy.start(configuration: configuration)
+            self.networkProxy = proxy
+        } catch {
+            Logger.networkProxy.error("Failed to start editor network proxy: \(error.localizedDescription)")
         }
     }
 
@@ -428,11 +466,15 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// when it initializes.
     ///
     private func buildEditorConfiguration(dependencies: EditorDependencies) throws -> WKUserScript {
+        let networkProxyGlobal = networkProxy?.info.map {
+            GBKitGlobal.NetworkProxy(port: Int($0.port), token: $0.token)
+        }
         let gbkitGlobal = try GBKitGlobal(
             configuration: self.configuration,
             dependencies: dependencies,
             nativeUploadPort: uploadServer.map { Int($0.port) },
-            nativeUploadToken: uploadServer?.token
+            nativeUploadToken: uploadServer?.token,
+            networkProxy: networkProxyGlobal
         )
         let stringValue = try gbkitGlobal.toString()
 
