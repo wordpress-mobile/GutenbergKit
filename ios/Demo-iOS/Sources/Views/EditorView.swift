@@ -129,7 +129,7 @@ private struct _EditorView: UIViewControllerRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(viewModel: viewModel)
+        Coordinator(viewModel: viewModel, configuration: configuration)
     }
 
     func makeUIViewController(context: Context) -> EditorViewController {
@@ -139,6 +139,17 @@ private struct _EditorView: UIViewControllerRepresentable {
             viewController.mediaUploadDelegate = context.coordinator
         }
         viewController.webView.isInspectable = true
+        context.coordinator.editorViewController = viewController
+
+        // Debug automation: if the editor never reports ready (which can
+        // happen under Lockdown Mode), run the upload probe anyway after a
+        // grace period.
+        if ProcessInfo.processInfo.environment["GUTENBERG_UPLOAD_PROBE"] == "1" {
+            Task { @MainActor [weak coordinator = context.coordinator] in
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                coordinator?.runUploadProbeIfRequested(trigger: "timeout")
+            }
+        }
 
         viewModel.perform = { [weak viewController] in
             switch $0 {
@@ -191,15 +202,90 @@ private struct _EditorView: UIViewControllerRepresentable {
     @MainActor
     class Coordinator: NSObject, EditorViewControllerDelegate, MediaUploadDelegate {
         let viewModel: EditorViewModel
+        let configuration: EditorConfiguration
+        weak var editorViewController: EditorViewController?
+        private var didRunUploadProbe = false
 
-        init(viewModel: EditorViewModel) {
+        init(viewModel: EditorViewModel, configuration: EditorConfiguration) {
             self.viewModel = viewModel
+            self.configuration = configuration
+        }
+
+        // MARK: - Lockdown Mode Upload Probe (debug automation)
+
+        /// Runs a JS capability + upload probe inside the editor web view and
+        /// prints the results to stdout. Enabled with GUTENBERG_UPLOAD_PROBE=1.
+        func runUploadProbeIfRequested(trigger: String) {
+            guard ProcessInfo.processInfo.environment["GUTENBERG_UPLOAD_PROBE"] == "1",
+                  !didRunUploadProbe,
+                  let editorViewController else { return }
+            didRunUploadProbe = true
+
+            let webView = editorViewController.webView
+            let lockdown = webView.configuration.defaultWebpagePreferences.isLockdownModeEnabled
+            print("LOCKDOWN_PROBE_START trigger=\(trigger) isLockdownModeEnabled=\(lockdown)")
+
+            let probeJS = """
+            const out = {};
+            const S = (e) => (e && e.name ? (e.name + ': ' + e.message) : String(e));
+            const T = (ms) => AbortSignal.timeout(ms || 10000);
+            const race = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej({name: 'ProbeTimeout', message: (ms || 30000) + 'ms elapsed'}), ms || 30000))]);
+            const makeFile = () => {
+                const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='), c => c.charCodeAt(0));
+                return new File([bytes], 'lockdown-probe.png', {type: 'image/png'});
+            };
+            out.href = location.href.split('?')[0];
+            out.origin = location.origin;
+            out.typeof_FileReader = typeof FileReader;
+            out.typeof_WebAssembly = typeof WebAssembly;
+            out.typeof_apiFetch = typeof (window.wp && window.wp.apiFetch);
+            out.gbk_nativeUploadPort = !!(window.GBKit && window.GBKit.nativeUploadPort);
+            out.gbk_networkProxy = !!(window.GBKit && window.GBKit.networkProxy);
+            const ECHO = 'http://192.168.0.57:8890';
+            try { const r = await fetch(ECHO + '/star/get', {signal: T()}); out.echo_star_get = r.status; } catch (e) { out.echo_star_get = 'REJECT ' + S(e); }
+            try { const fdE = new FormData(); fdE.append('probe', 'x'); const r = await fetch(ECHO + '/star/fd', {method: 'POST', body: fdE, signal: T()}); out.echo_star_post_formdata = r.status; } catch (e) { out.echo_star_post_formdata = 'REJECT ' + S(e); }
+            try { const r = await fetch(apiRoot, {method: 'GET', signal: T()}); out.site_get_direct = r.status; } catch (e) { out.site_get_direct = 'REJECT ' + S(e); }
+            try {
+                const fd1 = new FormData();
+                fd1.append('file', makeFile());
+                const r = await fetch(apiRoot + 'wp/v2/media', {method: 'POST', headers: {Authorization: authHeader}, body: fd1, signal: T()});
+                out.site_post_media_direct = r.status;
+            } catch (e) { out.site_post_media_direct = 'REJECT ' + S(e); }
+            try {
+                const fd = new FormData();
+                fd.append('file', makeFile());
+                const res = await race(window.wp.apiFetch({ path: '/wp/v2/media', method: 'POST', body: fd }), 45000);
+                out.apiFetch_post_media = 'ok id=' + res.id;
+            } catch (e) { out.apiFetch_post_media = 'FAIL ' + S(e) + ' code=' + (e && e.code); }
+            try {
+                const res = await race(window.wp.apiFetch({ path: '/wp/v2/categories?per_page=1' }), 30000);
+                out.apiFetch_get_categories = 'ok count=' + res.length;
+            } catch (e) { out.apiFetch_get_categories = 'FAIL ' + S(e) + ' code=' + (e && e.code); }
+            return JSON.stringify(out, null, 1);
+            """
+
+            Task { @MainActor in
+                do {
+                    let result = try await webView.callAsyncJavaScript(
+                        probeJS,
+                        arguments: [
+                            "apiRoot": configuration.siteApiRoot.absoluteString,
+                            "authHeader": configuration.authHeader
+                        ],
+                        contentWorld: .page
+                    )
+                    print("LOCKDOWN_PROBE_RESULT \(result ?? "nil")")
+                } catch {
+                    print("LOCKDOWN_PROBE_ERROR \(error)")
+                }
+            }
         }
 
         // MARK: - EditorViewControllerDelegate
 
         func editorDidLoad(_ viewContoller: EditorViewController) {
             viewModel.isEditorReady = true
+            runUploadProbeIfRequested(trigger: "editorDidLoad")
         }
 
         func editor(_ viewContoller: EditorViewController, didDisplayInitialContent content: String) {

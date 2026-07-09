@@ -160,9 +160,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let lockdownModeMonitor: LockdownModeMonitor
     private var uploadServer: MediaUploadServer?
 
-    /// Loopback proxy that relays REST API requests through native networking
-    /// when the web view is subject to Lockdown Mode. See `EditorNetworkProxy`.
-    private var networkProxy: EditorNetworkProxy?
+    /// Whether `uploadServer` also hosts the Lockdown Mode REST relay.
+    /// See `RestRelay` and `startUploadServer()`.
+    private var isRestRelayEnabled = false
 
     // MARK: - Private Properties (UI)
 
@@ -404,11 +404,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // Set asset bundle for the URL scheme handler to serve cached plugin/theme assets
         self.bundleProvider.set(bundle: dependencies.assetBundle)
 
-        // Start the local upload server for native media processing
+        // Start the local server for native media processing and, under
+        // Lockdown Mode, the REST relay
         await startUploadServer()
-
-        // Start the loopback REST relay when Lockdown Mode requires it
-        await startNetworkProxyIfNeeded()
 
         // Build and inject editor configuration as window.GBKit
         let editorConfig = try buildEditorConfiguration(dependencies: dependencies)
@@ -424,29 +422,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     /// Starts the loopback network proxy when the web view is subject to
-    /// Lockdown Mode, so the editor's REST API requests can be relayed through
-    /// native networking (Lockdown Mode breaks CORS for `file://` pages).
-    ///
-    /// No-op when Lockdown Mode is off, offline mode is enabled, or the proxy
-    /// is already running. Failures are logged but never block the editor —
-    /// the web view simply keeps its direct (possibly broken) network path.
-    @MainActor
-    private func startNetworkProxyIfNeeded() async {
-        guard networkProxy == nil,
-              !configuration.isOfflineModeEnabled,
-              webView.configuration.defaultWebpagePreferences.isLockdownModeEnabled else {
-            return
-        }
-
-        do {
-            let proxy = EditorNetworkProxy()
-            try await proxy.start(configuration: configuration)
-            self.networkProxy = proxy
-        } catch {
-            Logger.networkProxy.error("Failed to start editor network proxy: \(error.localizedDescription)")
-        }
-    }
-
     /// Loads the editor HTML without any dependencies (warmup mode only).
     ///
     /// This method is used exclusively by the warmup mechanism to preload editor resources
@@ -466,14 +441,19 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// when it initializes.
     ///
     private func buildEditorConfiguration(dependencies: EditorDependencies) throws -> WKUserScript {
-        let networkProxyGlobal = networkProxy?.info.map {
+        // The upload pipeline and the REST relay share one local server, but
+        // each is advertised to JavaScript only when its feature is active:
+        // `nativeUploadPort` requires a delegate to process uploads, and
+        // `networkProxy` is only useful under Lockdown Mode.
+        let hasUploadPipeline = mediaUploadDelegate != nil
+        let networkProxyGlobal = isRestRelayEnabled ? uploadServer.map {
             GBKitGlobal.NetworkProxy(port: Int($0.port), token: $0.token)
-        }
+        } : nil
         let gbkitGlobal = try GBKitGlobal(
             configuration: self.configuration,
             dependencies: dependencies,
-            nativeUploadPort: uploadServer.map { Int($0.port) },
-            nativeUploadToken: uploadServer?.token,
+            nativeUploadPort: hasUploadPipeline ? uploadServer.map { Int($0.port) } : nil,
+            nativeUploadToken: hasUploadPipeline ? uploadServer?.token : nil,
             networkProxy: networkProxyGlobal
         )
         let stringValue = try gbkitGlobal.toString()
@@ -492,6 +472,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// The server binds to localhost on a random port. If it fails to start, the editor
     /// falls back to Gutenberg's default upload behavior (the JS override won't activate
     /// because `nativeUploadPort` will be nil in GBKit).
+    ///
+    /// The same server hosts the Lockdown Mode REST relay: when the web view
+    /// is subject to Lockdown Mode, its `file://` page loses the CORS
+    /// exemption and WordPress rejects its `Origin: file://`, so REST requests
+    /// that fail in the web view are retried through this server (see
+    /// `RestRelay`). Relay failures never block the editor — the web view
+    /// simply keeps its direct (possibly broken) network path.
     private func startUploadServer() async {
         // A delegate that was provided but is already nil here was deallocated before
         // the editor finished loading — the host didn't hold a strong reference to it.
@@ -501,31 +488,33 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             "mediaUploadDelegate was released before the editor loaded — hold a strong reference to it."
         )
 
-        guard mediaUploadDelegate != nil else {
-            return
-        }
-
         // The native upload server relays through DefaultMediaUploader, which needs a
         // site root and an auth header (every host provides one — the editor injects
         // it because the WebView has no auth cookies). Without both there is nothing
-        // to upload through, so leave the server down and let uploads fall to the
-        // default WebView path rather than start a server that could only fail.
-        guard !configuration.authHeader.isEmpty else {
+        // to upload through, so leave the upload pipeline down and let uploads fall
+        // to the default WebView path rather than start a pipeline that could only fail.
+        let needsUploadPipeline = mediaUploadDelegate != nil && !configuration.authHeader.isEmpty
+        isRestRelayEnabled = webView.configuration.defaultWebpagePreferences.isLockdownModeEnabled
+            && !configuration.isOfflineModeEnabled
+
+        guard needsUploadPipeline || isRestRelayEnabled else {
             return
         }
 
-        let defaultUploader = DefaultMediaUploader(
+        let defaultUploader = needsUploadPipeline ? DefaultMediaUploader(
             httpClient: httpClient.uploadClient(),
             siteApiRoot: configuration.siteApiRoot,
             siteApiNamespace: configuration.siteApiNamespace
-        )
+        ) : nil
 
         do {
             self.uploadServer = try await MediaUploadServer.start(
                 uploadDelegate: mediaUploadDelegate,
-                defaultUploader: defaultUploader
+                defaultUploader: defaultUploader,
+                restRelay: isRestRelayEnabled ? RestRelay(configuration: configuration) : nil
             )
         } catch {
+            isRestRelayEnabled = false
             Logger.uploadServer.error("Failed to start upload server: \(error). Falling back to default upload behavior.")
         }
     }

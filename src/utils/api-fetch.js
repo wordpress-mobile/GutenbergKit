@@ -94,10 +94,12 @@ function networkProxyFallbackMiddleware( options, next ) {
 /**
  * Performs a request through the native loopback proxy.
  *
- * The absolute upstream URL travels in the `X-GBK-Upstream-URL` header and
- * the per-session proxy token in `Relay-Authorization` (`Proxy-*` headers
- * are stripped by `fetch()`). The upstream `Authorization` header is
- * injected natively, so any value present here is dropped.
+ * The absolute upstream URL travels in the `url` query parameter (a query
+ * parameter rather than a custom header, so the local server's stock CORS
+ * policy covers the preflight) and the per-session proxy token in
+ * `Relay-Authorization` (`Proxy-*` headers are stripped by `fetch()`). The
+ * upstream `Authorization` header is injected natively, so any value present
+ * here is dropped.
  *
  * @param {Object} options            Fully-transformed api-fetch options.
  * @param {Object} networkProxy       Proxy connection details.
@@ -110,12 +112,13 @@ async function proxyFetch( options, networkProxy ) {
 	const headers = { ...( options.headers || {} ) };
 	delete headers.Authorization;
 	headers[ 'Relay-Authorization' ] = `Bearer ${ networkProxy.token }`;
-	headers[ 'X-GBK-Upstream-URL' ] = upstreamUrl;
 
 	let response;
 	try {
 		response = await window.fetch(
-			`http://127.0.0.1:${ networkProxy.port }/proxy`,
+			`http://127.0.0.1:${
+				networkProxy.port
+			}/proxy?url=${ encodeURIComponent( upstreamUrl ) }`,
 			{
 				method: options.method || 'GET',
 				headers,
