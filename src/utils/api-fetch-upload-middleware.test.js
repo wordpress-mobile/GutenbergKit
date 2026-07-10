@@ -15,6 +15,7 @@ vi.mock( './bridge', () => ( {
 
 vi.mock( './logger', () => ( {
 	info: vi.fn(),
+	warn: vi.fn(),
 	error: vi.fn(),
 } ) );
 
@@ -299,22 +300,49 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		} );
 	} );
 
-	it( 'throws on fetch network error', async () => {
+	it( 'falls back to the default upload path when the local server is unreachable', async () => {
 		getGBKit.mockReturnValue( {
 			nativeUploadPort: 8080,
 			nativeUploadToken: 'token',
 		} );
+		const next = makeNext();
 
+		// A connection-level failure (server never started, restarted on a new
+		// port, or torn down) rejects `fetch` with a TypeError.
 		global.fetch = vi.fn( () =>
-			Promise.reject( new Error( 'Failed to fetch' ) )
+			Promise.reject( new TypeError( 'Failed to fetch' ) )
 		);
+
+		const result = await nativeMediaUploadMiddleware(
+			makePostMediaOptions( makeFile() ),
+			next
+		);
+
+		// The upload is not failed — it degrades to the default upload path.
+		expect( next ).toHaveBeenCalledOnce();
+		expect( result ).toEqual( { passthrough: true } );
+	} );
+
+	it( 'propagates an abort instead of falling back', async () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'token',
+		} );
+		const next = makeNext();
+
+		const abortError = new Error( 'The operation was aborted.' );
+		abortError.name = 'AbortError';
+		global.fetch = vi.fn( () => Promise.reject( abortError ) );
 
 		await expect(
 			nativeMediaUploadMiddleware(
 				makePostMediaOptions( makeFile() ),
-				makeNext()
+				next
 			)
-		).rejects.toBeDefined();
+		).rejects.toMatchObject( { name: 'AbortError' } );
+
+		// An explicit cancellation must not be retried via the default path.
+		expect( next ).not.toHaveBeenCalled();
 	} );
 
 	// MARK: - Signal forwarding

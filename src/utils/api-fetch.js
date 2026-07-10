@@ -8,7 +8,7 @@ import { getQueryArg } from '@wordpress/url';
  * Internal dependencies
  */
 import { getGBKit, POST_FALLBACKS } from './bridge';
-import { info, error as logError } from './logger';
+import { info, warn, error as logError } from './logger';
 
 /**
  * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
@@ -205,6 +205,9 @@ export function nativeMediaUploadMiddleware( options, next ) {
 	const formData = new FormData();
 	formData.append( 'file', file, file.name );
 
+	// Use the two-argument form of `.then()` so the rejection handler catches
+	// *only* a connection-level failure of the `fetch()` itself — not errors
+	// thrown while handling a response (those must surface as real failures).
 	return fetch( `http://localhost:${ nativeUploadPort }/upload`, {
 		method: 'POST',
 		headers: {
@@ -212,8 +215,8 @@ export function nativeMediaUploadMiddleware( options, next ) {
 		},
 		body: formData,
 		signal: options.signal,
-	} )
-		.then( ( response ) => {
+	} ).then(
+		( response ) => {
 			if ( ! response.ok ) {
 				return response.text().then( ( body ) => {
 					const error = new Error(
@@ -222,39 +225,52 @@ export function nativeMediaUploadMiddleware( options, next ) {
 						}`
 					);
 					error.code = 'upload_failed';
+					logError( 'Native upload failed', error );
 					throw error;
 				} );
 			}
-			return response.json();
-		} )
-		.then( ( result ) => {
-			// Transform native server response into WordPress REST API
-			// attachment shape expected by @wordpress/media-utils.
-			return {
-				id: result.id,
-				source_url: result.url,
-				alt_text: result.alt || '',
-				caption: {
-					raw: result.caption || '',
-					rendered: result.caption || '',
-				},
-				title: {
-					raw: result.title || '',
-					rendered: result.title || '',
-				},
-				mime_type: result.mime,
-				media_type: result.type,
-				media_details: {
-					width: result.width || 0,
-					height: result.height || 0,
-				},
-				link: result.url,
-			};
-		} )
-		.catch( ( err ) => {
-			logError( 'Native upload failed', err );
-			throw err;
-		} );
+			return response.json().then( ( result ) => {
+				// Transform native server response into WordPress REST API
+				// attachment shape expected by @wordpress/media-utils.
+				return {
+					id: result.id,
+					source_url: result.url,
+					alt_text: result.alt || '',
+					caption: {
+						raw: result.caption || '',
+						rendered: result.caption || '',
+					},
+					title: {
+						raw: result.title || '',
+						rendered: result.title || '',
+					},
+					mime_type: result.mime,
+					media_type: result.type,
+					media_details: {
+						width: result.width || 0,
+						height: result.height || 0,
+					},
+					link: result.url,
+				};
+			} );
+		},
+		( connectionError ) => {
+			// Respect an explicit cancellation rather than retrying the upload.
+			if ( connectionError.name === 'AbortError' ) {
+				throw connectionError;
+			}
+			// The native upload server is unreachable — it may never have
+			// started, been restarted on a new port, or been torn down while
+			// the editor was backgrounded. Fall back to the default upload path
+			// so the file still reaches WordPress (unprocessed) rather than
+			// failing the upload outright.
+			warn(
+				`Native upload server unreachable on port ${ nativeUploadPort }; falling back to default upload`,
+				connectionError
+			);
+			return next( options );
+		}
+	);
 }
 
 /**
