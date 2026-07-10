@@ -298,9 +298,9 @@ private struct _EditorView: UIViewControllerRepresentable {
         // MARK: - MediaUploadDelegate
 
         /// Resizes images to a maximum dimension of 2000px before upload.
-        nonisolated func processFile(at url: URL, mimeType: String) async throws -> URL {
+        nonisolated func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
             guard mimeType.hasPrefix("image/"), mimeType != "image/gif" else {
-                return url
+                return .original
             }
 
             let maxDimension: CGFloat = 2000
@@ -309,12 +309,12 @@ private struct _EditorView: UIViewControllerRepresentable {
                   let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
                   let width = properties[kCGImagePropertyPixelWidth] as? CGFloat,
                   let height = properties[kCGImagePropertyPixelHeight] as? CGFloat else {
-                return url
+                return .original
             }
 
             let longestSide = max(width, height)
             guard longestSide > maxDimension else {
-                return url
+                return .original
             }
 
             let options: [CFString: Any] = [
@@ -324,7 +324,7 @@ private struct _EditorView: UIViewControllerRepresentable {
             ]
 
             guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
-                return url
+                return .original
             }
 
             let outputURL = url.deletingLastPathComponent()
@@ -337,16 +337,17 @@ private struct _EditorView: UIViewControllerRepresentable {
                 1,
                 nil
             ) else {
-                return url
+                return .original
             }
 
             CGImageDestinationAddImage(destination, thumbnail, nil)
             guard CGImageDestinationFinalize(destination) else {
-                return url
+                return .original
             }
 
             Logger.demo.info("Resized image from \(Int(width))x\(Int(height)) to fit \(Int(maxDimension))px")
-            return outputURL
+            // Same format, so the original mimeType/filename carry over.
+            return .processed(outputURL, mimeType: mimeType, filename: filename)
         }
 
     }

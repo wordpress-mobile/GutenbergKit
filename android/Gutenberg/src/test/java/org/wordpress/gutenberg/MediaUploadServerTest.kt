@@ -134,6 +134,33 @@ class MediaUploadServerTest {
         assertEquals("image", json.get("media_type").asString)
     }
 
+    @Test
+    fun `forwards the delegate's processed metadata to the uploader`() {
+        val delegate = TranscodingDelegate()
+        val mockUploader = MockDefaultUploader()
+        server.stop()
+        server = MediaUploadServer(uploadDelegate = delegate, defaultUploader = mockUploader, cacheDir = tempFolder.root)
+
+        val boundary = "test-boundary-meta"
+        val body = buildMultipartBody(boundary, "clip.mov", "video/quicktime", "movie".toByteArray())
+
+        sendRawRequest(
+            method = "POST",
+            path = "/upload",
+            headers = mapOf(
+                "Relay-Authorization" to "Bearer ${server.token}",
+                "Content-Type" to "multipart/form-data; boundary=$boundary"
+            ),
+            body = body
+        )
+
+        // The delegate changed the format, so the uploader must receive the new
+        // metadata — not the original video/quicktime + clip.mov.
+        assertTrue(mockUploader.uploadCalled)
+        assertEquals("video/mp4", mockUploader.lastUploadMimeType)
+        assertEquals("clip.mp4", mockUploader.lastUploadFilename)
+    }
+
     // MARK: - Fallback to default uploader
 
     @Test
@@ -405,10 +432,10 @@ class MediaUploadServerTest {
         @Volatile var lastMimeType: String? = null
         @Volatile var lastFilename: String? = null
 
-        override suspend fun processFile(file: File, mimeType: String): File {
+        override suspend fun processFile(file: File, mimeType: String, filename: String): ProcessedProxyFile {
             processFileCalled = true
             lastMimeType = mimeType
-            return file
+            return ProcessedProxyFile.Original
         }
 
         override suspend fun uploadFile(file: File, mimeType: String, filename: String): MediaUploadResponse? {
@@ -422,9 +449,18 @@ class MediaUploadServerTest {
     private class ProcessOnlyDelegate : MediaUploadDelegate {
         @Volatile var processFileCalled = false
 
-        override suspend fun processFile(file: File, mimeType: String): File {
+        override suspend fun processFile(file: File, mimeType: String, filename: String): ProcessedProxyFile {
             processFileCalled = true
-            return file
+            return ProcessedProxyFile.Original
+        }
+    }
+
+    /** A delegate that produces a new file with changed metadata (e.g. a transcode). */
+    private class TranscodingDelegate : MediaUploadDelegate {
+        override suspend fun processFile(file: File, mimeType: String, filename: String): ProcessedProxyFile {
+            val newFile = File(file.parentFile, "processed-${file.name}")
+            newFile.writeBytes("processed".toByteArray())
+            return ProcessedProxyFile.Processed(newFile, "video/mp4", "clip.mp4")
         }
     }
 
@@ -435,12 +471,16 @@ class MediaUploadServerTest {
     ) {
         @Volatile var uploadCalled = false
         @Volatile var passthroughUploadCalled = false
+        @Volatile var lastUploadMimeType: String? = null
+        @Volatile var lastUploadFilename: String? = null
 
         override suspend fun upload(
             file: File, mimeType: String, filename: String,
             extraParts: List<org.wordpress.gutenberg.http.MultipartPart>, query: String
         ): MediaUploadResponse {
             uploadCalled = true
+            lastUploadMimeType = mimeType
+            lastUploadFilename = filename
             return mockResponse()
         }
 

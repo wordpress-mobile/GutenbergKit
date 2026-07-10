@@ -6,6 +6,7 @@ import android.graphics.Matrix
 import android.media.ExifInterface
 import android.util.Log
 import org.wordpress.gutenberg.MediaUploadDelegate
+import org.wordpress.gutenberg.ProcessedProxyFile
 import java.io.File
 import java.io.IOException
 
@@ -19,9 +20,9 @@ class DemoMediaUploadDelegate : MediaUploadDelegate {
         private const val TAG = "DemoMediaUploadDelegate"
     }
 
-    override suspend fun processFile(file: File, mimeType: String): File {
+    override suspend fun processFile(file: File, mimeType: String, filename: String): ProcessedProxyFile {
         if (!mimeType.startsWith("image/") || mimeType == "image/gif") {
-            return file
+            return ProcessedProxyFile.Original
         }
 
         val maxDimension = 2000
@@ -33,17 +34,17 @@ class DemoMediaUploadDelegate : MediaUploadDelegate {
 
         val width = options.outWidth
         val height = options.outHeight
-        if (width <= 0 || height <= 0) return file
+        if (width <= 0 || height <= 0) return ProcessedProxyFile.Original
 
         val longestSide = maxOf(width, height)
-        if (longestSide <= maxDimension) return file
+        if (longestSide <= maxDimension) return ProcessedProxyFile.Original
 
         // Calculate sample size for memory-efficient decoding
         val sampleSize = Integer.highestOneBit(longestSide / maxDimension)
         val decodeOptions = BitmapFactory.Options().apply {
             inSampleSize = sampleSize
         }
-        val sampled = BitmapFactory.decodeFile(file.absolutePath, decodeOptions) ?: return file
+        val sampled = BitmapFactory.decodeFile(file.absolutePath, decodeOptions) ?: return ProcessedProxyFile.Original
 
         // Scale to exact target dimensions
         val scale = maxDimension.toFloat() / longestSide.toFloat()
@@ -67,7 +68,8 @@ class DemoMediaUploadDelegate : MediaUploadDelegate {
         oriented.recycle()
 
         Log.d(TAG, "Resized image from ${width}×${height} to ${targetWidth}×${targetHeight}")
-        return outputFile
+        // Same format, so the original mimeType/filename carry over.
+        return ProcessedProxyFile.Processed(outputFile, mimeType, filename)
     }
 
     private fun applyExifOrientation(bitmap: Bitmap, sourceFile: File): Bitmap {

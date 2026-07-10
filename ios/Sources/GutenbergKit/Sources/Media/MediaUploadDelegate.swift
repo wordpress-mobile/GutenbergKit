@@ -21,6 +21,19 @@ public struct MediaUploadResponse: Sendable {
     }
 }
 
+/// The result of a delegate's ``MediaUploadDelegate/processFile(at:mimeType:filename:)``.
+public enum ProcessedProxyFile: Sendable {
+    /// The delegate did not modify the file; the original upload is forwarded
+    /// to WordPress unchanged.
+    case original
+
+    /// The delegate produced a file to upload, along with its MIME type and
+    /// filename. Both are used verbatim, so a format change (e.g. transcoding
+    /// MOV to MP4, or an in-place EXIF strip) must report the resulting type and
+    /// filename for WordPress to store the file correctly.
+    case processed(URL, mimeType: String, filename: String)
+}
+
 /// Protocol for customizing media upload behavior.
 ///
 /// The native host app can provide an implementation to resize images,
@@ -28,8 +41,12 @@ public struct MediaUploadResponse: Sendable {
 /// pass files through unchanged and upload via the WordPress REST API.
 public protocol MediaUploadDelegate: AnyObject, Sendable {
     /// Process a file before upload (e.g., resize image, transcode video).
-    /// Return the URL of the processed file, or the original URL for passthrough.
-    func processFile(at url: URL, mimeType: String) async throws -> URL
+    ///
+    /// Return ``ProcessedProxyFile/original`` to upload the file unchanged, or
+    /// ``ProcessedProxyFile/processed(_:mimeType:filename:)`` with the processed
+    /// file and its metadata. When the format changes, report the new mimeType
+    /// and filename so WordPress stores it with the correct extension and type.
+    func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile
 
     /// Upload a processed file to the remote WordPress site.
     ///
@@ -42,8 +59,8 @@ public protocol MediaUploadDelegate: AnyObject, Sendable {
 
 /// Default implementations.
 extension MediaUploadDelegate {
-    public func processFile(at url: URL, mimeType: String) async throws -> URL {
-        url
+    public func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
+        .original
     }
 
     public func uploadFile(at url: URL, mimeType: String, filename: String) async throws -> MediaUploadResponse? {

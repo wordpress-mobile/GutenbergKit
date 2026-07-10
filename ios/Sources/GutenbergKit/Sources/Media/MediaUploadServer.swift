@@ -189,33 +189,49 @@ final class MediaUploadServer: Sendable {
         extraParts: [MultipartPart], query: String, context: UploadContext
     ) async throws -> UploadResult {
         // Step 1: Process (resize, transcode, etc.)
-        let processedURL: URL
+        let processed: ProcessedProxyFile
         if let delegate = context.uploadDelegate {
-            processedURL = try await delegate.processFile(at: fileURL, mimeType: mimeType)
+            processed = try await delegate.processFile(at: fileURL, mimeType: mimeType, filename: filename)
         } else {
-            processedURL = fileURL
+            processed = .original
+        }
+
+        // Resolve the file to upload and its metadata. `.processed` uses the
+        // delegate's values verbatim, so a format change is reported to WordPress.
+        let uploadURL: URL
+        let uploadMimeType: String
+        let uploadFilename: String
+        switch processed {
+        case .original:
+            uploadURL = fileURL
+            uploadMimeType = mimeType
+            uploadFilename = filename
+        case let .processed(url, processedMimeType, processedFilename):
+            uploadURL = url
+            uploadMimeType = processedMimeType
+            uploadFilename = processedFilename
         }
 
         // The processed file (if the delegate produced a new one) is ours to
         // clean up — on success it has been uploaded, on failure it is abandoned.
         // Cleaning up here rather than in the caller covers the throw paths too.
         defer {
-            if processedURL != fileURL {
-                try? FileManager.default.removeItem(at: processedURL)
+            if uploadURL != fileURL {
+                try? FileManager.default.removeItem(at: uploadURL)
             }
         }
 
         // Step 2: Upload to remote WordPress
         if let delegate = context.uploadDelegate,
-           let result = try await delegate.uploadFile(at: processedURL, mimeType: mimeType, filename: filename) {
+           let result = try await delegate.uploadFile(at: uploadURL, mimeType: uploadMimeType, filename: uploadFilename) {
             return .uploaded(result)
         } else if let defaultUploader = context.defaultUploader {
-            // If the delegate didn't modify the file, the original request
-            // body can be forwarded directly — skip multipart re-encoding.
-            if processedURL == fileURL {
+            // Unmodified — forward the original request body directly, skipping
+            // multipart re-encoding.
+            if case .original = processed {
                 return .passthrough
             }
-            let result = try await defaultUploader.upload(fileURL: processedURL, mimeType: mimeType, filename: filename, extraParts: extraParts, query: query)
+            let result = try await defaultUploader.upload(fileURL: uploadURL, mimeType: uploadMimeType, filename: uploadFilename, extraParts: extraParts, query: query)
             return .uploaded(result)
         } else {
             throw UploadError.noUploader

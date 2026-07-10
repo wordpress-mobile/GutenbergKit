@@ -167,6 +167,32 @@ struct MediaUploadServerTests {
     #expect(json["id"] as? Int == 99)
   }
 
+  @Test("forwards the delegate's processed metadata to the uploader")
+  func processedMetadataForwarded() async throws {
+    let delegate = ResizingDelegate()
+    let mockUploader = MockDefaultUploader()
+    let server = try await MediaUploadServer.start(uploadDelegate: delegate, defaultUploader: mockUploader)
+    defer { server.stop() }
+
+    let boundary = UUID().uuidString
+    let body = buildMultipartBody(boundary: boundary, filename: "clip.mov", mimeType: "video/quicktime", data: Data("movie".utf8))
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    request.httpBody = body
+
+    _ = try await URLSession.shared.data(for: request)
+
+    // The delegate changed the format, so the uploader must receive the new
+    // metadata — not the original video/quicktime + clip.mov.
+    #expect(mockUploader.uploadCalled)
+    #expect(mockUploader.lastUploadMimeType == "video/mp4")
+    #expect(mockUploader.lastUploadFilename == "clip.mp4")
+  }
+
   @Test("returns 413 with CORS headers when request body exceeds max size")
   func oversizedUploadReturns413WithCORSHeaders() async throws {
     let server = try await MediaUploadServer.start(maxRequestBodySize: 1024)
@@ -316,12 +342,12 @@ private final class MockUploadDelegate: MediaUploadDelegate, @unchecked Sendable
   var lastMimeType: String? { lock.withLock { _lastMimeType } }
   var lastFilename: String? { lock.withLock { _lastFilename } }
 
-  func processFile(at url: URL, mimeType: String) async throws -> URL {
+  func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
     lock.withLock {
       _processFileCalled = true
       _lastMimeType = mimeType
     }
-    return url
+    return .original
   }
 
   func uploadFile(at url: URL, mimeType: String, filename: String) async throws -> MediaUploadResponse? {
@@ -340,9 +366,18 @@ private final class ProcessOnlyDelegate: MediaUploadDelegate, @unchecked Sendabl
 
   var processFileCalled: Bool { lock.withLock { _processFileCalled } }
 
-  func processFile(at url: URL, mimeType: String) async throws -> URL {
+  func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
     lock.withLock { _processFileCalled = true }
-    return url
+    return .original
+  }
+}
+
+/// A delegate that produces a new file with changed metadata (e.g. a transcode).
+private final class ResizingDelegate: MediaUploadDelegate, @unchecked Sendable {
+  func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
+    let newURL = url.deletingLastPathComponent().appending(component: "processed-\(UUID().uuidString)")
+    try Data("processed".utf8).write(to: newURL)
+    return .processed(newURL, mimeType: "video/mp4", filename: "clip.mp4")
   }
 }
 
@@ -350,16 +385,24 @@ private final class MockDefaultUploader: DefaultMediaUploader, @unchecked Sendab
   private let lock = NSLock()
   private var _uploadCalled = false
   private var _passthroughUploadCalled = false
+  private var _lastUploadMimeType: String?
+  private var _lastUploadFilename: String?
 
   var uploadCalled: Bool { lock.withLock { _uploadCalled } }
   var passthroughUploadCalled: Bool { lock.withLock { _passthroughUploadCalled } }
+  var lastUploadMimeType: String? { lock.withLock { _lastUploadMimeType } }
+  var lastUploadFilename: String? { lock.withLock { _lastUploadFilename } }
 
   init() {
     super.init(httpClient: MockHTTPClient(), siteApiRoot: URL(string: "https://example.com/wp-json/")!)
   }
 
   override func upload(fileURL: URL, mimeType: String, filename: String, extraParts: [MultipartPart], query: String) async throws -> MediaUploadResponse {
-    lock.withLock { _uploadCalled = true }
+    lock.withLock {
+      _uploadCalled = true
+      _lastUploadMimeType = mimeType
+      _lastUploadFilename = filename
+    }
     return mockResponse()
   }
 

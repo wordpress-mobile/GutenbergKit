@@ -32,6 +32,22 @@ class MediaUploadResponse(
 )
 
 /**
+ * The result of a delegate's [MediaUploadDelegate.processFile].
+ */
+sealed class ProcessedProxyFile {
+    /** The delegate did not modify the file; the original upload is forwarded unchanged. */
+    data object Original : ProcessedProxyFile()
+
+    /**
+     * The delegate produced a file to upload, along with its MIME type and
+     * filename. Both are used verbatim, so a format change (e.g. transcoding MOV
+     * to MP4, or an in-place EXIF strip) must report the resulting type and
+     * filename for WordPress to store the file correctly.
+     */
+    data class Processed(val file: File, val mimeType: String, val filename: String) : ProcessedProxyFile()
+}
+
+/**
  * Interface for customizing media upload behavior.
  *
  * The native host app can provide an implementation to resize images,
@@ -40,9 +56,13 @@ class MediaUploadResponse(
 interface MediaUploadDelegate {
     /**
      * Process a file before upload (e.g., resize image, transcode video).
-     * Return the path of the processed file, or the original path for passthrough.
+     *
+     * Return [ProcessedProxyFile.Original] to upload the file unchanged, or
+     * [ProcessedProxyFile.Processed] with the processed file and its metadata.
+     * When the format changes, report the new mimeType and filename so WordPress
+     * stores it with the correct extension and type.
      */
-    suspend fun processFile(file: File, mimeType: String): File = file
+    suspend fun processFile(file: File, mimeType: String, filename: String): ProcessedProxyFile = ProcessedProxyFile.Original
 
     /**
      * Upload a processed file to the remote WordPress site.
@@ -272,27 +292,46 @@ internal class MediaUploadServer(
         file: File, mimeType: String, filename: String,
         extraParts: List<MultipartPart>, query: String
     ): UploadResult {
-        val processedFile = uploadDelegate?.processFile(file, mimeType) ?: file
+        val processed = uploadDelegate?.processFile(file, mimeType, filename) ?: ProcessedProxyFile.Original
+
+        // Resolve the file to upload and its metadata. Processed uses the
+        // delegate's values verbatim, so a format change is reported to WordPress.
+        val targetFile: File
+        val targetMimeType: String
+        val targetFilename: String
+        when (processed) {
+            is ProcessedProxyFile.Original -> {
+                targetFile = file
+                targetMimeType = mimeType
+                targetFilename = filename
+            }
+            is ProcessedProxyFile.Processed -> {
+                targetFile = processed.file
+                targetMimeType = processed.mimeType
+                targetFilename = processed.filename
+            }
+        }
+
         try {
             // If the delegate provided its own upload, use that.
-            uploadDelegate?.uploadFile(processedFile, mimeType, filename)?.let {
+            uploadDelegate?.uploadFile(targetFile, targetMimeType, targetFilename)?.let {
                 return UploadResult.Uploaded(it)
             }
 
-            // If the delegate didn't modify the file, the original request
-            // body can be forwarded directly — skip multipart re-encoding.
-            if (processedFile == file) {
+            // Unmodified — forward the original request body directly, skipping
+            // multipart re-encoding.
+            if (processed is ProcessedProxyFile.Original) {
                 return UploadResult.Passthrough
             }
 
-            val result = defaultUploader?.upload(processedFile, mimeType, filename, extraParts, query)
+            val result = defaultUploader?.upload(targetFile, targetMimeType, targetFilename, extraParts, query)
                 ?: error("No upload delegate or default uploader configured")
             return UploadResult.Uploaded(result)
         } finally {
             // The processed file (if the delegate produced a new one) is ours to
             // clean up — covers the success and throw paths alike.
-            if (processedFile != file) {
-                processedFile.delete()
+            if (targetFile != file) {
+                targetFile.delete()
             }
         }
     }
