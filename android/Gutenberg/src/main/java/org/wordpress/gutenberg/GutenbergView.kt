@@ -613,6 +613,31 @@ class GutenbergView : FrameLayout {
         webView.evaluateJavascript(gbKitConfig, null)
     }
 
+    /**
+     * Pushes the current upload server's port and token into the already-loaded
+     * page.
+     *
+     * The initial injection is handled by [setGlobalJavaScriptVariables] from
+     * `onPageStarted`. This is needed when the server is (re)started *after* the
+     * page has loaded — e.g. when [mediaUploadDelegate] is assigned or replaced,
+     * which binds a new port and mints a new token. Without this, JS keeps
+     * fetching the old (now-dead) port and every upload fails.
+     *
+     * The `window.GBKit` guard makes this a no-op before the page has loaded, so
+     * it is safe to call on the initial start too.
+     */
+    private fun updateUploadServerJavaScriptVariables() {
+        val port = uploadServer?.port ?: return
+        val token = uploadServer?.token ?: return
+        val js = """
+            if (window.GBKit) {
+                window.GBKit.nativeUploadPort = $port;
+                window.GBKit.nativeUploadToken = ${JSONObject.quote(token)};
+                localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
+            }
+        """.trimIndent()
+        webView.evaluateJavascript(js, null)
+    }
 
     private fun startUploadServer() {
         if (configuration.siteApiRoot.isEmpty() || configuration.authHeader.isEmpty()) return
@@ -629,6 +654,11 @@ class GutenbergView : FrameLayout {
                 defaultUploader = defaultUploader,
                 cacheDir = context.cacheDir
             )
+            // Re-advertise the (new) port/token to the live page. No-ops before
+            // the page has loaded (onPageStarted handles the initial injection);
+            // on a delegate-driven restart after load it re-syncs JS onto the new
+            // port so uploads keep working.
+            updateUploadServerJavaScriptVariables()
         } catch (e: Exception) {
             Log.w(TAG, "Failed to start upload server", e)
         }
