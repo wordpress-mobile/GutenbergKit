@@ -169,6 +169,7 @@ internal class MediaUploadServer(
         }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun processAndRespond(
         request: HttpRequest, tempFile: File, filePart: MultipartPart
     ): HttpResponse {
@@ -193,6 +194,17 @@ internal class MediaUploadServer(
             return successResponse(media)
         } catch (e: MediaUploadException) {
             Log.e(TAG, "Upload processing failed", e)
+            return errorResponse(500, e.message ?: "Upload failed")
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e // Never swallow coroutine cancellation.
+        } catch (e: Exception) {
+            // Any other failure — IOException from the upload call, JSON parse
+            // errors, a throwing host delegate, or "no uploader configured" —
+            // must still be answered WITH CORS headers. Otherwise it escapes to
+            // HttpServer's header-less 500 fallback and the browser rejects the
+            // preflighted cross-origin fetch with an opaque "Failed to fetch",
+            // hiding the real error from the editor (mirrors the iOS catch-all).
+            Log.e(TAG, "Upload failed", e)
             return errorResponse(500, e.message ?: "Upload failed")
         } finally {
             tempFile.delete()
