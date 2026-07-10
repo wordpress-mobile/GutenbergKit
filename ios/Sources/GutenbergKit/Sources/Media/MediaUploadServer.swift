@@ -376,7 +376,9 @@ class DefaultMediaUploader: @unchecked Sendable {
     init(httpClient: EditorHTTPClientProtocol, siteApiRoot: URL, siteApiNamespace: [String] = []) {
         self.httpClient = httpClient
         self.siteApiRoot = siteApiRoot
-        self.siteApiNamespace = siteApiNamespace.first
+        // Normalize the namespace to a trailing slash (matching RESTAPIRepository)
+        // so it joins cleanly before "media", e.g. "sites/123" -> "sites/123/".
+        self.siteApiNamespace = siteApiNamespace.first.map { $0.hasSuffix("/") ? $0 : $0 + "/" }
     }
 
     /// The WordPress media endpoint URL, accounting for site API namespaces and

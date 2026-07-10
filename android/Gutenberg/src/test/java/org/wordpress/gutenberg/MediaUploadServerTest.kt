@@ -233,6 +233,28 @@ class MediaUploadServerTest {
     }
 
     @Test
+    fun `DefaultMediaUploader normalizes an unslashed root and namespace`() {
+        val mockWpServer = MockWebServer()
+        mockWpServer.enqueue(MockResponse().setResponseCode(201).setBody("{}"))
+        mockWpServer.start()
+
+        val uploader = DefaultMediaUploader(
+            httpClient = okhttp3.OkHttpClient(),
+            siteApiRoot = mockWpServer.url("/wp-json").toString(), // no trailing slash
+            authHeader = "Bearer test-token",
+            siteApiNamespace = listOf("sites/123") // no trailing slash
+        )
+        val file = tempFolder.newFile("image.jpg")
+        file.writeBytes("x".toByteArray())
+
+        runBlocking { uploader.upload(file, "image/jpeg", "image.jpg", emptyList(), "") }
+
+        assertEquals("/wp-json/wp/v2/sites/123/media", mockWpServer.takeRequest().path)
+
+        mockWpServer.shutdown()
+    }
+
+    @Test
     fun `DefaultMediaUploader re-encode preserves extra parts and query`() {
         val mockWpServer = MockWebServer()
         mockWpServer.enqueue(MockResponse().setResponseCode(201).setBody("{}"))

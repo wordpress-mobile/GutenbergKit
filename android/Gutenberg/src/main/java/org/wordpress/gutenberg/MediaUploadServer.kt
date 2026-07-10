@@ -358,8 +358,12 @@ internal open class DefaultMediaUploader(
      * carrying the original request query (e.g. `?_embed`) through to WordPress.
      */
     private fun mediaEndpointUrl(query: String): String {
-        val namespace = siteApiNamespace.firstOrNull() ?: ""
-        return "${siteApiRoot}wp/v2/${namespace}media$query"
+        // Normalize the root and namespace the way RESTAPIRepository does, so an
+        // unslashed siteApiRoot or namespace still joins cleanly (no "...wp-jsonwp/v2"
+        // or ".../v2/sites/123media").
+        val root = siteApiRoot.trimEnd('/')
+        val namespace = siteApiNamespace.firstOrNull()?.let { it.trimEnd('/') + "/" } ?: ""
+        return "$root/wp/v2/${namespace}media$query"
     }
 
     open suspend fun upload(
