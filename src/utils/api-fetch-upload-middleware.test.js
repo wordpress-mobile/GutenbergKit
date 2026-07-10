@@ -203,6 +203,42 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		expect( options.body ).toBeInstanceOf( FormData );
 	} );
 
+	it( 'forwards the original body and query to the native server', async () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 12345,
+			nativeUploadToken: 'test-token',
+		} );
+
+		global.fetch = vi.fn( () =>
+			Promise.resolve( {
+				ok: true,
+				json: () => Promise.resolve( { id: 1 } ),
+			} )
+		);
+
+		const body = new FormData();
+		body.append( 'file', makeFile(), 'photo.jpg' );
+		body.append( 'post', '123' );
+
+		await nativeMediaUploadMiddleware(
+			{
+				method: 'POST',
+				path: '/wp/v2/media?_embed=wp:featuredmedia',
+				body,
+			},
+			makeNext()
+		);
+
+		const [ url, fetchOptions ] = global.fetch.mock.calls[ 0 ];
+		// The original query is appended so ?_embed reaches WordPress.
+		expect( url ).toBe(
+			'http://localhost:12345/upload?_embed=wp:featuredmedia'
+		);
+		// The original body is forwarded verbatim, so `post` survives.
+		expect( fetchOptions.body ).toBe( body );
+		expect( fetchOptions.body.get( 'post' ) ).toBe( '123' );
+	} );
+
 	it( 'returns the relayed WordPress attachment unchanged', async () => {
 		getGBKit.mockReturnValue( {
 			nativeUploadPort: 8080,

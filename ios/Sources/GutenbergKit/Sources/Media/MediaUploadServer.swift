@@ -102,6 +102,13 @@ final class MediaUploadServer: Sendable {
             return errorResponse(status: 400, message: "No file found in request")
         }
 
+        // The non-file parts (post, additionalData) and the original query
+        // (e.g. ?_embed) must reach WordPress too — relay them alongside the file.
+        let extraParts = parts.filter { $0.filename == nil }
+        let query = request.parsed.target.firstIndex(of: "?").map {
+            String(request.parsed.target[$0...])
+        } ?? ""
+
         // Write part body to a dedicated temp file for the delegate.
         //
         // The library's RequestBody may be a byte-range slice of a larger temp
@@ -129,7 +136,8 @@ final class MediaUploadServer: Sendable {
         var processedURL: URL?
         do {
             let uploadResult = try await processAndUpload(
-                fileURL: fileURL, mimeType: mimeType, filename: filePart.filename ?? "upload", context: context
+                fileURL: fileURL, mimeType: mimeType, filename: filePart.filename ?? "upload",
+                extraParts: extraParts, query: query, context: context
             )
             switch uploadResult {
             case .uploaded(let response, let processed):
@@ -146,7 +154,7 @@ final class MediaUploadServer: Sendable {
                     result = .failure(UploadError.noUploader)
                     break
                 }
-                let response = try await defaultUploader.passthroughUpload(body: body, contentType: contentType)
+                let response = try await defaultUploader.passthroughUpload(body: body, contentType: contentType, query: query)
                 result = .success(response)
             }
         } catch {
@@ -187,7 +195,8 @@ final class MediaUploadServer: Sendable {
     }
 
     private static func processAndUpload(
-        fileURL: URL, mimeType: String, filename: String, context: UploadContext
+        fileURL: URL, mimeType: String, filename: String,
+        extraParts: [MultipartPart], query: String, context: UploadContext
     ) async throws -> UploadResult {
         // Step 1: Process (resize, transcode, etc.)
         let processedURL: URL
@@ -207,7 +216,7 @@ final class MediaUploadServer: Sendable {
             if processedURL == fileURL {
                 return .passthrough
             }
-            let result = try await defaultUploader.upload(fileURL: processedURL, mimeType: mimeType, filename: filename)
+            let result = try await defaultUploader.upload(fileURL: processedURL, mimeType: mimeType, filename: filename, extraParts: extraParts, query: query)
             return .uploaded(result, processedURL: processedURL)
         } else {
             throw UploadError.noUploader
@@ -346,24 +355,36 @@ class DefaultMediaUploader: @unchecked Sendable {
         self.siteApiNamespace = siteApiNamespace.first
     }
 
-    /// The WordPress media endpoint URL, accounting for site API namespaces.
-    private var mediaEndpointURL: URL {
+    /// The WordPress media endpoint URL, accounting for site API namespaces and
+    /// carrying the original request query (e.g. `?_embed`) through to WordPress.
+    private func mediaEndpointURL(query: String) -> URL {
         let mediaPath = if let siteApiNamespace {
             "wp/v2/\(siteApiNamespace)media"
         } else {
             "wp/v2/media"
         }
-        return siteApiRoot.appending(path: mediaPath)
+        let base = siteApiRoot.appending(path: mediaPath)
+        guard !query.isEmpty, let url = URL(string: base.absoluteString + query) else {
+            return base
+        }
+        return url
     }
 
-    func upload(fileURL: URL, mimeType: String, filename: String) async throws -> MediaUploadResponse {
+    func upload(fileURL: URL, mimeType: String, filename: String, extraParts: [MultipartPart], query: String) async throws -> MediaUploadResponse {
         let boundary = UUID().uuidString
 
+        // Read the (small, text) non-file parts up front so the body builder
+        // stays synchronous — the file itself is still streamed from disk.
+        var extraFields: [(name: String, value: Data)] = []
+        for part in extraParts {
+            extraFields.append((part.name, try await part.body.data))
+        }
+
         let (bodyStream, contentLength) = try Self.multipartBodyStream(
-            fileURL: fileURL, boundary: boundary, filename: filename, mimeType: mimeType
+            fileURL: fileURL, boundary: boundary, filename: filename, mimeType: mimeType, extraFields: extraFields
         )
 
-        var request = URLRequest(url: mediaEndpointURL)
+        var request = URLRequest(url: mediaEndpointURL(query: query))
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.setValue("\(contentLength)", forHTTPHeaderField: "Content-Length")
@@ -376,8 +397,8 @@ class DefaultMediaUploader: @unchecked Sendable {
     ///
     /// Used when the delegate's `processFile` returned the file unchanged —
     /// the incoming multipart body is already valid for WordPress.
-    func passthroughUpload(body: RequestBody, contentType: String) async throws -> MediaUploadResponse {
-        var request = URLRequest(url: mediaEndpointURL)
+    func passthroughUpload(body: RequestBody, contentType: String, query: String) async throws -> MediaUploadResponse {
+        var request = URLRequest(url: mediaEndpointURL(query: query))
         request.httpMethod = "POST"
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         request.setValue("\(body.count)", forHTTPHeaderField: "Content-Length")
@@ -407,13 +428,23 @@ class DefaultMediaUploader: @unchecked Sendable {
         fileURL: URL,
         boundary: String,
         filename: String,
-        mimeType: String
+        mimeType: String,
+        extraFields: [(name: String, value: Data)]
     ) throws -> (InputStream, Int) {
-        let preamble = Data(
-            ("--\(boundary)\r\n"
-            + "Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n"
-            + "Content-Type: \(mimeType)\r\n\r\n").utf8
-        )
+        // Serialize the non-file parts (post, additionalData) into the preamble
+        // ahead of the streamed file. They are small text fields, so keeping them
+        // in memory is fine; `contentLength` counts them via `preamble.count`.
+        var header = ""
+        for field in extraFields {
+            let value = String(data: field.value, encoding: .utf8) ?? ""
+            header += "--\(boundary)\r\n"
+            header += "Content-Disposition: form-data; name=\"\(field.name)\"\r\n\r\n"
+            header += "\(value)\r\n"
+        }
+        header += "--\(boundary)\r\n"
+        header += "Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n"
+        header += "Content-Type: \(mimeType)\r\n\r\n"
+        let preamble = Data(header.utf8)
         let epilogue = Data("\r\n--\(boundary)--\r\n".utf8)
 
         guard let fileSize = try FileManager.default.attributesOfItem(atPath: fileURL.path(percentEncoded: false))[.size] as? Int else {

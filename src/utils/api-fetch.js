@@ -202,18 +202,22 @@ export function nativeMediaUploadMiddleware( options, next ) {
 		`Routing upload of ${ file.name } through native server on port ${ nativeUploadPort }`
 	);
 
-	const formData = new FormData();
-	formData.append( 'file', file, file.name );
+	// Forward the original request body — the file plus every sibling field
+	// (`post`, additionalData) — and the original query string (e.g. `?_embed`)
+	// so the native server can relay them to WordPress unchanged. Rebuilding the
+	// body with only `file` would drop the post association and additionalData.
+	const queryIndex = options.path.indexOf( '?' );
+	const query = queryIndex === -1 ? '' : options.path.slice( queryIndex );
 
 	// Use the two-argument form of `.then()` so the rejection handler catches
 	// *only* a connection-level failure of the `fetch()` itself — not errors
 	// thrown while handling a response (those must surface as real failures).
-	return fetch( `http://localhost:${ nativeUploadPort }/upload`, {
+	return fetch( `http://localhost:${ nativeUploadPort }/upload${ query }`, {
 		method: 'POST',
 		headers: {
 			'Relay-Authorization': `Bearer ${ nativeUploadToken }`,
 		},
-		body: formData,
+		body: options.body,
 		signal: options.signal,
 	} ).then(
 		( response ) => {

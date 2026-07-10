@@ -124,21 +124,29 @@ internal class MediaUploadServer(
     }
 
     private suspend fun handleUpload(request: HttpRequest): HttpResponse {
-        val filePart = parseFilePart(request)
+        val parts = parseParts(request)
             ?: return errorResponse(400, "Expected multipart/form-data with a file")
+        val filePart = parts.firstOrNull { it.filename != null }
+            ?: return errorResponse(400, "Expected multipart/form-data with a file")
+
+        // The non-file parts (post, additionalData) and the original query
+        // (e.g. ?_embed) must reach WordPress too — relay them alongside the file.
+        val extraParts = parts.filter { it.filename == null }
+        val queryValue = request.target.substringAfter('?', "")
+        val query = if (queryValue.isEmpty()) "" else "?$queryValue"
 
         val tempFile = writePartToTempFile(filePart)
             ?: return errorResponse(500, "Failed to save file")
 
-        return processAndRespond(request, tempFile, filePart)
+        return processAndRespond(request, tempFile, filePart, extraParts, query)
     }
 
-    private fun parseFilePart(request: HttpRequest): MultipartPart? {
+    private fun parseParts(request: HttpRequest): List<MultipartPart>? {
         val contentType = request.header("Content-Type") ?: return null
         val boundary = HeaderValue.extractParameter("boundary", contentType) ?: return null
         val body = request.body ?: return null
 
-        val parts = try {
+        return try {
             val inMemory = body.inMemoryData
             if (inMemory != null) {
                 MultipartPart.parse(body, inMemory, 0L, boundary)
@@ -151,10 +159,8 @@ internal class MediaUploadServer(
             }
         } catch (e: MultipartParseException) {
             Log.e(TAG, "Multipart parse failed", e)
-            return null
+            null
         }
-
-        return parts.firstOrNull { it.filename != null }
     }
 
     private fun writePartToTempFile(filePart: MultipartPart): File? {
@@ -177,12 +183,13 @@ internal class MediaUploadServer(
 
     @Suppress("TooGenericExceptionCaught")
     private suspend fun processAndRespond(
-        request: HttpRequest, tempFile: File, filePart: MultipartPart
+        request: HttpRequest, tempFile: File, filePart: MultipartPart,
+        extraParts: List<MultipartPart>, query: String
     ): HttpResponse {
         var processedFile: File? = null
         try {
             val uploadResult = processAndUpload(
-                tempFile, filePart.contentType, filePart.filename ?: "upload"
+                tempFile, filePart.contentType, filePart.filename ?: "upload", extraParts, query
             )
             val response = when (uploadResult) {
                 is UploadResult.Uploaded -> {
@@ -194,7 +201,7 @@ internal class MediaUploadServer(
                     // Delegate didn't modify the file — forward the original
                     // request body to WordPress without re-encoding.
                     Log.d(TAG, "Passthrough: forwarding original request body to WordPress")
-                    performPassthroughUpload(request)
+                    performPassthroughUpload(request, query)
                 }
             }
             // Relay WordPress's exact status and body to the editor so it sees
@@ -231,18 +238,19 @@ internal class MediaUploadServer(
         data object Passthrough : UploadResult()
     }
 
-    private suspend fun performPassthroughUpload(request: HttpRequest): MediaUploadResponse {
+    private suspend fun performPassthroughUpload(request: HttpRequest, query: String): MediaUploadResponse {
         val body = request.body
         val contentType = request.header("Content-Type")
         val uploader = defaultUploader
         if (body == null || contentType == null || uploader == null) {
             throw MediaUploadException("Passthrough upload requires a request body, Content-Type, and default uploader")
         }
-        return uploader.passthroughUpload(body, contentType)
+        return uploader.passthroughUpload(body, contentType, query)
     }
 
     private suspend fun processAndUpload(
-        file: File, mimeType: String, filename: String
+        file: File, mimeType: String, filename: String,
+        extraParts: List<MultipartPart>, query: String
     ): UploadResult {
         val processedFile = uploadDelegate?.processFile(file, mimeType) ?: file
 
@@ -257,7 +265,7 @@ internal class MediaUploadServer(
             return UploadResult.Passthrough
         }
 
-        val result = defaultUploader?.upload(processedFile, mimeType, filename)
+        val result = defaultUploader?.upload(processedFile, mimeType, filename, extraParts, query)
             ?: error("No upload delegate or default uploader configured")
         return UploadResult.Uploaded(result, processedFile)
     }
@@ -318,24 +326,31 @@ internal open class DefaultMediaUploader(
     private val authHeader: String,
     private val siteApiNamespace: List<String> = emptyList()
 ) {
-    /** The WordPress media endpoint URL, accounting for site API namespaces. */
-    private val mediaEndpointUrl: String
-        get() {
-            val namespace = siteApiNamespace.firstOrNull() ?: ""
-            return "${siteApiRoot}wp/v2/${namespace}media"
-        }
+    /**
+     * The WordPress media endpoint URL, accounting for site API namespaces and
+     * carrying the original request query (e.g. `?_embed`) through to WordPress.
+     */
+    private fun mediaEndpointUrl(query: String): String {
+        val namespace = siteApiNamespace.firstOrNull() ?: ""
+        return "${siteApiRoot}wp/v2/${namespace}media$query"
+    }
 
-    open suspend fun upload(file: File, mimeType: String, filename: String): MediaUploadResponse {
+    open suspend fun upload(
+        file: File, mimeType: String, filename: String,
+        extraParts: List<MultipartPart>, query: String
+    ): MediaUploadResponse {
         val mediaType = mimeType.toMediaType()
-        val requestBody = okhttp3.MultipartBody.Builder()
-            .setType(okhttp3.MultipartBody.FORM)
-            .addFormDataPart("file", filename, file.asRequestBody(mediaType))
-            .build()
+        val builder = okhttp3.MultipartBody.Builder().setType(okhttp3.MultipartBody.FORM)
+        // Preserve the non-file parts (post, additionalData) through the re-encode.
+        for (part in extraParts) {
+            builder.addFormDataPart(part.name, String(part.body.readBytes(), Charsets.UTF_8))
+        }
+        builder.addFormDataPart("file", filename, file.asRequestBody(mediaType))
 
         val request = okhttp3.Request.Builder()
-            .url(mediaEndpointUrl)
+            .url(mediaEndpointUrl(query))
             .addHeader("Authorization", authHeader)
-            .post(requestBody)
+            .post(builder.build())
             .build()
 
         return performUpload(request)
@@ -349,7 +364,8 @@ internal open class DefaultMediaUploader(
      */
     open suspend fun passthroughUpload(
         body: org.wordpress.gutenberg.http.RequestBody,
-        contentType: String
+        contentType: String,
+        query: String
     ): MediaUploadResponse {
         val streamBody = object : okhttp3.RequestBody() {
             override fun contentType() = contentType.toMediaType()
@@ -360,7 +376,7 @@ internal open class DefaultMediaUploader(
         }
 
         val request = okhttp3.Request.Builder()
-            .url(mediaEndpointUrl)
+            .url(mediaEndpointUrl(query))
             .addHeader("Authorization", authHeader)
             .post(streamBody)
             .build()

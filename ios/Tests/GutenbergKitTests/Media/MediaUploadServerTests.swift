@@ -229,12 +229,40 @@ struct MultipartBodyStreamTests {
 
     // Build streaming output.
     let (stream, contentLength) = try DefaultMediaUploader.multipartBodyStream(
-      fileURL: tempFile, boundary: boundary, filename: filename, mimeType: mimeType
+      fileURL: tempFile, boundary: boundary, filename: filename, mimeType: mimeType, extraFields: []
     )
     #expect(contentLength == expected.count)
 
     let result = readAllFromStream(stream)
     #expect(result == expected)
+  }
+
+  @Test("includes non-file parts (e.g. post) ahead of the file")
+  func multipartBodyIncludesExtraParts() throws {
+    let boundary = "boundary"
+    let filename = "photo.jpg"
+    let mimeType = "image/jpeg"
+    let fileContent = Data("image bytes".utf8)
+    let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("stream-extra-\(UUID().uuidString)")
+    try fileContent.write(to: tempFile)
+    defer { try? FileManager.default.removeItem(at: tempFile) }
+
+    var expected = Data()
+    expected.append(Data("--\(boundary)\r\n".utf8))
+    expected.append(Data("Content-Disposition: form-data; name=\"post\"\r\n\r\n".utf8))
+    expected.append(Data("123\r\n".utf8))
+    expected.append(Data("--\(boundary)\r\n".utf8))
+    expected.append(Data("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".utf8))
+    expected.append(Data("Content-Type: \(mimeType)\r\n\r\n".utf8))
+    expected.append(fileContent)
+    expected.append(Data("\r\n--\(boundary)--\r\n".utf8))
+
+    let (stream, contentLength) = try DefaultMediaUploader.multipartBodyStream(
+      fileURL: tempFile, boundary: boundary, filename: filename, mimeType: mimeType,
+      extraFields: [("post", Data("123".utf8))]
+    )
+    #expect(contentLength == expected.count)
+    #expect(readAllFromStream(stream) == expected)
   }
 
   @Test("content length matches actual stream output for larger files")
@@ -245,7 +273,7 @@ struct MultipartBodyStreamTests {
     defer { try? FileManager.default.removeItem(at: tempFile) }
 
     let (stream, contentLength) = try DefaultMediaUploader.multipartBodyStream(
-      fileURL: tempFile, boundary: "boundary", filename: "big.bin", mimeType: "application/octet-stream"
+      fileURL: tempFile, boundary: "boundary", filename: "big.bin", mimeType: "application/octet-stream", extraFields: []
     )
 
     let result = readAllFromStream(stream)
@@ -330,12 +358,12 @@ private final class MockDefaultUploader: DefaultMediaUploader, @unchecked Sendab
     super.init(httpClient: MockHTTPClient(), siteApiRoot: URL(string: "https://example.com/wp-json/")!)
   }
 
-  override func upload(fileURL: URL, mimeType: String, filename: String) async throws -> MediaUploadResponse {
+  override func upload(fileURL: URL, mimeType: String, filename: String, extraParts: [MultipartPart], query: String) async throws -> MediaUploadResponse {
     lock.withLock { _uploadCalled = true }
     return mockResponse()
   }
 
-  override func passthroughUpload(body: RequestBody, contentType: String) async throws -> MediaUploadResponse {
+  override func passthroughUpload(body: RequestBody, contentType: String, query: String) async throws -> MediaUploadResponse {
     lock.withLock { _passthroughUploadCalled = true }
     return mockResponse()
   }

@@ -192,7 +192,7 @@ class MediaUploadServerTest {
         val file = tempFolder.newFile("image.jpg")
         file.writeBytes("fake image".toByteArray())
 
-        val response = runBlocking { uploader.upload(file, "image/jpeg", "image.jpg") }
+        val response = runBlocking { uploader.upload(file, "image/jpeg", "image.jpg", emptyList(), "") }
 
         // The uploader relays WordPress's exact status and body — no parsing.
         assertEquals(201, response.statusCode)
@@ -225,9 +225,44 @@ class MediaUploadServerTest {
 
         // WordPress's error status + body flow through to the editor, which
         // surfaces the real message — the uploader does not throw.
-        val response = runBlocking { uploader.upload(file, "image/jpeg", "fail.jpg") }
+        val response = runBlocking { uploader.upload(file, "image/jpeg", "fail.jpg", emptyList(), "") }
         assertEquals(500, response.statusCode)
         assertEquals("Internal error", String(response.body))
+
+        mockWpServer.shutdown()
+    }
+
+    @Test
+    fun `DefaultMediaUploader re-encode preserves extra parts and query`() {
+        val mockWpServer = MockWebServer()
+        mockWpServer.enqueue(MockResponse().setResponseCode(201).setBody("{}"))
+        mockWpServer.start()
+
+        val uploader = DefaultMediaUploader(
+            httpClient = okhttp3.OkHttpClient(),
+            siteApiRoot = mockWpServer.url("/wp-json/").toString(),
+            authHeader = "Bearer test-token"
+        )
+        val file = tempFolder.newFile("image.jpg")
+        file.writeBytes("fake image".toByteArray())
+
+        val postPart = org.wordpress.gutenberg.http.MultipartPart(
+            name = "post",
+            filename = null,
+            contentType = "text/plain",
+            body = org.wordpress.gutenberg.http.RequestBody.InMemory("123".toByteArray())
+        )
+
+        runBlocking {
+            uploader.upload(file, "image/jpeg", "image.jpg", listOf(postPart), "?_embed=wp:featuredmedia")
+        }
+
+        val request = mockWpServer.takeRequest()
+        // The query and the non-file part must both reach WordPress.
+        assertTrue(request.path!!.contains("_embed"))
+        val bodyText = request.body.readUtf8()
+        assertTrue("Expected post field in multipart body", bodyText.contains("name=\"post\""))
+        assertTrue(bodyText.contains("123"))
 
         mockWpServer.shutdown()
     }
@@ -379,14 +414,18 @@ class MediaUploadServerTest {
         @Volatile var uploadCalled = false
         @Volatile var passthroughUploadCalled = false
 
-        override suspend fun upload(file: File, mimeType: String, filename: String): MediaUploadResponse {
+        override suspend fun upload(
+            file: File, mimeType: String, filename: String,
+            extraParts: List<org.wordpress.gutenberg.http.MultipartPart>, query: String
+        ): MediaUploadResponse {
             uploadCalled = true
             return mockResponse()
         }
 
         override suspend fun passthroughUpload(
             body: org.wordpress.gutenberg.http.RequestBody,
-            contentType: String
+            contentType: String,
+            query: String
         ): MediaUploadResponse {
             passthroughUploadCalled = true
             return mockResponse()
