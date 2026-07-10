@@ -653,15 +653,27 @@ class GutenbergView : FrameLayout {
     }
 
     private fun startUploadServer() {
-        if (configuration.siteApiRoot.isEmpty() || configuration.authHeader.isEmpty()) return
+        // The default REST-API uploader needs a site root and an auth header, but
+        // a cookie-auth host (empty authHeader by design) can still process and
+        // upload through a delegate that implements uploadFile. So build the
+        // default uploader only when we can, and start the server as long as a
+        // delegate can handle uploads — rather than refusing to start and
+        // silently forcing every upload down the unprocessed WebView path.
+        val canBuildDefaultUploader =
+            configuration.siteApiRoot.isNotEmpty() && configuration.authHeader.isNotEmpty()
+        if (mediaUploadDelegate == null && !canBuildDefaultUploader) return
 
         try {
-            val defaultUploader = DefaultMediaUploader(
-                httpClient = uploadHttpClient,
-                siteApiRoot = configuration.siteApiRoot,
-                authHeader = configuration.authHeader,
-                siteApiNamespace = configuration.siteApiNamespace.toList()
-            )
+            val defaultUploader = if (canBuildDefaultUploader) {
+                DefaultMediaUploader(
+                    httpClient = uploadHttpClient,
+                    siteApiRoot = configuration.siteApiRoot,
+                    authHeader = configuration.authHeader,
+                    siteApiNamespace = configuration.siteApiNamespace.toList()
+                )
+            } else {
+                null
+            }
             uploadServer = MediaUploadServer(
                 uploadDelegate = mediaUploadDelegate,
                 defaultUploader = defaultUploader,
