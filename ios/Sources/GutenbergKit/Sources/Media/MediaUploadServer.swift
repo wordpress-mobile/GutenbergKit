@@ -322,19 +322,21 @@ final class MediaUploadServer: Sendable {
         }
     }
 
-    // MARK: - Errors
+}
 
-    enum UploadError: Error, LocalizedError {
-        case noUploader
-        case streamReadFailed
-        case streamWriteFailed
+// MARK: - Errors
 
-        var errorDescription: String? {
-            switch self {
-            case .noUploader: "No upload delegate or default uploader configured"
-            case .streamReadFailed: "Failed to read upload stream"
-            case .streamWriteFailed: "Failed to write upload to disk"
-            }
+/// Errors from the native media upload pipeline.
+enum UploadError: Error, LocalizedError {
+    case noUploader
+    case streamReadFailed
+    case streamWriteFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .noUploader: "No upload delegate or default uploader configured"
+        case .streamReadFailed: "Failed to read upload stream"
+        case .streamWriteFailed: "Failed to write upload to disk"
         }
     }
 }
@@ -470,7 +472,7 @@ class DefaultMediaUploader: @unchecked Sendable {
         let epilogue = Data("\r\n--\(boundary)--\r\n".utf8)
 
         guard let fileSize = try FileManager.default.attributesOfItem(atPath: fileURL.path(percentEncoded: false))[.size] as? Int else {
-            throw MediaUploadError.streamReadFailed
+            throw UploadError.streamReadFailed
         }
         let contentLength = preamble.count + fileSize + epilogue.count
 
@@ -482,7 +484,7 @@ class DefaultMediaUploader: @unchecked Sendable {
 
         guard let inputStream = readStream, let outputStream = writeStream else {
             try? fileHandle.close()
-            throw MediaUploadError.streamReadFailed
+            throw UploadError.streamReadFailed
         }
 
         outputStream.open()
@@ -534,33 +536,3 @@ class DefaultMediaUploader: @unchecked Sendable {
     }
 }
 
-/// Errors specific to the native media upload pipeline.
-enum MediaUploadError: Error, LocalizedError {
-    /// The WordPress REST API returned a non-success HTTP status code.
-    case uploadFailed(statusCode: Int, preview: String)
-
-    /// The WordPress REST API returned a non-JSON response (e.g. HTML error page).
-    case unexpectedResponse(preview: String, underlyingError: Error)
-
-    /// Failed to read the file for streaming upload.
-    case streamReadFailed
-
-    var errorDescription: String? {
-        switch self {
-        case .uploadFailed(let statusCode, let preview):
-            return "Upload failed (\(statusCode)): \(preview)"
-        case .unexpectedResponse(let preview, _):
-            return "WordPress returned an unexpected response: \(preview)"
-        case .streamReadFailed:
-            return "Failed to read file for upload"
-        }
-    }
-}
-
-// MARK: - Helpers
-
-private extension Data {
-    mutating func append(_ string: String) {
-        append(Data(string.utf8))
-    }
-}
