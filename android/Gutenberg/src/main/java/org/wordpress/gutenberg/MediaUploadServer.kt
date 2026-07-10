@@ -80,7 +80,15 @@ internal class MediaUploadServer(
 
     private val server: HttpServer
 
+    /**
+     * Directory for staging uploaded files, under the injected cache dir (with a
+     * system-temp fallback) so orphans share the app's managed cache lifecycle.
+     */
+    private val uploadsTempDir: File =
+        File(cacheDir ?: File(System.getProperty("java.io.tmpdir")), "gutenbergkit-uploads")
+
     init {
+        cleanOrphanedUploads()
         server = HttpServer(
             name = "media-upload",
             externallyAccessible = false,
@@ -94,6 +102,20 @@ internal class MediaUploadServer(
     /** Stops the server and releases resources. */
     fun stop() {
         server.stop()
+    }
+
+    /**
+     * Deletes upload temp files left behind by a prior crash. Files still in
+     * flight (only seconds old) are preserved by the age threshold, so this is
+     * safe even if another editor instance is mid-upload.
+     */
+    private fun cleanOrphanedUploads() {
+        val cutoff = System.currentTimeMillis() - 60 * 60 * 1000L // 1 hour
+        uploadsTempDir.listFiles()?.forEach { file ->
+            if (file.lastModified() < cutoff) {
+                file.delete()
+            }
+        }
     }
 
     // MARK: - Request Handling
@@ -165,8 +187,8 @@ internal class MediaUploadServer(
 
     private fun writePartToTempFile(filePart: MultipartPart): File? {
         val filename = sanitizeFilename(filePart.filename ?: "upload")
-        val tempDir = File(System.getProperty("java.io.tmpdir"), "gutenbergkit-uploads").apply { mkdirs() }
-        val tempFile = File(tempDir, "${UUID.randomUUID()}-$filename")
+        uploadsTempDir.mkdirs()
+        val tempFile = File(uploadsTempDir, "${UUID.randomUUID()}-$filename")
 
         return try {
             filePart.body.inputStream().use { input ->
@@ -176,6 +198,7 @@ internal class MediaUploadServer(
             }
             tempFile
         } catch (e: IOException) {
+            tempFile.delete()
             Log.e(TAG, "Failed to write upload to disk", e)
             null
         }
@@ -186,14 +209,12 @@ internal class MediaUploadServer(
         request: HttpRequest, tempFile: File, filePart: MultipartPart,
         extraParts: List<MultipartPart>, query: String
     ): HttpResponse {
-        var processedFile: File? = null
         try {
             val uploadResult = processAndUpload(
                 tempFile, filePart.contentType, filePart.filename ?: "upload", extraParts, query
             )
             val response = when (uploadResult) {
                 is UploadResult.Uploaded -> {
-                    processedFile = uploadResult.processedFile
                     Log.d(TAG, "Uploaded file to WordPress")
                     uploadResult.response
                 }
@@ -227,14 +248,13 @@ internal class MediaUploadServer(
             return errorResponse(500, e.message ?: "Upload failed")
         } finally {
             tempFile.delete()
-            processedFile?.let { if (it != tempFile) it.delete() }
         }
     }
 
     // MARK: - Delegate Pipeline
 
     private sealed class UploadResult {
-        data class Uploaded(val response: MediaUploadResponse, val processedFile: File) : UploadResult()
+        data class Uploaded(val response: MediaUploadResponse) : UploadResult()
         data object Passthrough : UploadResult()
     }
 
@@ -253,21 +273,28 @@ internal class MediaUploadServer(
         extraParts: List<MultipartPart>, query: String
     ): UploadResult {
         val processedFile = uploadDelegate?.processFile(file, mimeType) ?: file
+        try {
+            // If the delegate provided its own upload, use that.
+            uploadDelegate?.uploadFile(processedFile, mimeType, filename)?.let {
+                return UploadResult.Uploaded(it)
+            }
 
-        // If the delegate provided its own upload, use that.
-        uploadDelegate?.uploadFile(processedFile, mimeType, filename)?.let {
-            return UploadResult.Uploaded(it, processedFile)
+            // If the delegate didn't modify the file, the original request
+            // body can be forwarded directly — skip multipart re-encoding.
+            if (processedFile == file) {
+                return UploadResult.Passthrough
+            }
+
+            val result = defaultUploader?.upload(processedFile, mimeType, filename, extraParts, query)
+                ?: error("No upload delegate or default uploader configured")
+            return UploadResult.Uploaded(result)
+        } finally {
+            // The processed file (if the delegate produced a new one) is ours to
+            // clean up — covers the success and throw paths alike.
+            if (processedFile != file) {
+                processedFile.delete()
+            }
         }
-
-        // If the delegate didn't modify the file, the original request
-        // body can be forwarded directly — skip multipart re-encoding.
-        if (processedFile == file) {
-            return UploadResult.Passthrough
-        }
-
-        val result = defaultUploader?.upload(processedFile, mimeType, filename, extraParts, query)
-            ?: error("No upload delegate or default uploader configured")
-        return UploadResult.Uploaded(result, processedFile)
     }
 
     // MARK: - Response Building

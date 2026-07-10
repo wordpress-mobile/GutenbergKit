@@ -34,6 +34,9 @@ final class MediaUploadServer: Sendable {
         defaultUploader: DefaultMediaUploader? = nil,
         maxRequestBodySize: Int64 = HTTPRequestParser.defaultMaxBodySize
     ) async throws -> MediaUploadServer {
+        // Sweep temp files orphaned by a prior crash before starting.
+        cleanOrphanedUploads()
+
         let context = UploadContext(uploadDelegate: uploadDelegate, defaultUploader: defaultUploader)
 
         let server = try await HTTPServer.start(
@@ -117,8 +120,7 @@ final class MediaUploadServer: Sendable {
         let filename = sanitizeFilename(filePart.filename ?? "upload")
         let mimeType = filePart.contentType
 
-        let tempDir = FileManager.default.temporaryDirectory
-            .appending(component: "GutenbergKit-uploads", directoryHint: .isDirectory)
+        let tempDir = uploadsTempDirectory
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
         let fileURL = tempDir.appending(component: "\(UUID().uuidString)-\(filename)")
@@ -126,24 +128,26 @@ final class MediaUploadServer: Sendable {
             let inputStream = try filePart.body.makeInputStream()
             try writeStream(inputStream, to: fileURL)
         } catch {
+            try? FileManager.default.removeItem(at: fileURL)
             Logger.uploadServer.error("Failed to write upload to disk: \(error)")
             return errorResponse(status: 500, message: "Failed to save file")
         }
 
-        // Process and upload through the delegate pipeline. The result is the
-        // raw WordPress response, which we relay to the editor unchanged.
-        let result: Result<MediaUploadResponse, Error>
-        var processedURL: URL?
+        // From here on always clean up the original temp file. The processed
+        // file (if the delegate produced a new one) is cleaned up inside
+        // processAndUpload so its throw paths are covered too.
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
         do {
             let uploadResult = try await processAndUpload(
                 fileURL: fileURL, mimeType: mimeType, filename: filePart.filename ?? "upload",
                 extraParts: extraParts, query: query, context: context
             )
+            let response: MediaUploadResponse
             switch uploadResult {
-            case .uploaded(let response, let processed):
-                processedURL = processed
+            case .uploaded(let uploaded):
                 Logger.uploadServer.debug("Uploaded file to WordPress")
-                result = .success(response)
+                response = uploaded
             case .passthrough:
                 // Delegate didn't modify the file — forward the original
                 // request body to WordPress without re-encoding.
@@ -151,24 +155,10 @@ final class MediaUploadServer: Sendable {
                 guard let body = request.parsed.body,
                       let contentType = request.parsed.header("Content-Type"),
                       let defaultUploader = context.defaultUploader else {
-                    result = .failure(UploadError.noUploader)
-                    break
+                    return errorResponse(status: 500, message: UploadError.noUploader.localizedDescription)
                 }
-                let response = try await defaultUploader.passthroughUpload(body: body, contentType: contentType, query: query)
-                result = .success(response)
+                response = try await defaultUploader.passthroughUpload(body: body, contentType: contentType, query: query)
             }
-        } catch {
-            result = .failure(error)
-        }
-
-        // Clean up temp files (success or failure).
-        try? FileManager.default.removeItem(at: fileURL)
-        if let processedURL, processedURL != fileURL {
-            try? FileManager.default.removeItem(at: processedURL)
-        }
-
-        switch result {
-        case .success(let response):
             // Relay WordPress's exact status and body to the editor so it sees
             // the same attachment object (or error) as a direct upload.
             return HTTPResponse(
@@ -176,7 +166,7 @@ final class MediaUploadServer: Sendable {
                 headers: corsHeaders + [("Content-Type", "application/json")],
                 body: response.body
             )
-        case .failure(let error):
+        } catch {
             Logger.uploadServer.error("Upload processing failed: \(error)")
             return errorResponse(status: 500, message: error.localizedDescription)
         }
@@ -188,7 +178,7 @@ final class MediaUploadServer: Sendable {
     private enum UploadResult {
         /// The delegate (or default uploader) completed the upload; carries the
         /// raw WordPress response to relay.
-        case uploaded(MediaUploadResponse, processedURL: URL)
+        case uploaded(MediaUploadResponse)
         /// The delegate didn't modify the file and `uploadFile` returned nil.
         /// The caller should forward the original request body to WordPress.
         case passthrough
@@ -206,10 +196,19 @@ final class MediaUploadServer: Sendable {
             processedURL = fileURL
         }
 
+        // The processed file (if the delegate produced a new one) is ours to
+        // clean up — on success it has been uploaded, on failure it is abandoned.
+        // Cleaning up here rather than in the caller covers the throw paths too.
+        defer {
+            if processedURL != fileURL {
+                try? FileManager.default.removeItem(at: processedURL)
+            }
+        }
+
         // Step 2: Upload to remote WordPress
         if let delegate = context.uploadDelegate,
            let result = try await delegate.uploadFile(at: processedURL, mimeType: mimeType, filename: filename) {
-            return .uploaded(result, processedURL: processedURL)
+            return .uploaded(result)
         } else if let defaultUploader = context.defaultUploader {
             // If the delegate didn't modify the file, the original request
             // body can be forwarded directly — skip multipart re-encoding.
@@ -217,7 +216,7 @@ final class MediaUploadServer: Sendable {
                 return .passthrough
             }
             let result = try await defaultUploader.upload(fileURL: processedURL, mimeType: mimeType, filename: filename, extraParts: extraParts, query: query)
-            return .uploaded(result, processedURL: processedURL)
+            return .uploaded(result)
         } else {
             throw UploadError.noUploader
         }
@@ -256,6 +255,29 @@ final class MediaUploadServer: Sendable {
     }
 
     // MARK: - Helpers
+
+    /// Directory for staging uploaded files, under the system temp dir.
+    private static var uploadsTempDirectory: URL {
+        FileManager.default.temporaryDirectory
+            .appending(component: "GutenbergKit-uploads", directoryHint: .isDirectory)
+    }
+
+    /// Deletes upload temp files left behind by a prior crash. Files still in
+    /// flight (only seconds old) are preserved by the age threshold, so this is
+    /// safe even if another editor instance is mid-upload.
+    private static func cleanOrphanedUploads() {
+        let cutoff = Date(timeIntervalSinceNow: -3600) // 1 hour ago
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: uploadsTempDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey]
+        ) else { return }
+        for file in files {
+            let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            if let modified, modified < cutoff {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+    }
 
     /// Sanitizes a filename to prevent path traversal.
     private static func sanitizeFilename(_ name: String) -> String {
