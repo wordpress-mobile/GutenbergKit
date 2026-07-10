@@ -121,16 +121,17 @@ class MediaUploadServerTest {
             body = body
         )
 
-        assertTrue("Expected 200 but got: ${response.statusLine}", response.statusLine.contains("200"))
+        assertTrue("Expected 201 but got: ${response.statusLine}", response.statusLine.contains("201"))
         assertTrue(delegate.processFileCalled)
         assertTrue(delegate.uploadFileCalled)
         assertEquals("image/jpeg", delegate.lastMimeType)
         assertEquals("photo.jpg", delegate.lastFilename)
 
+        // The server relays WordPress's raw response body verbatim.
         val json = JsonParser.parseString(response.body).asJsonObject
         assertEquals(42, json.get("id").asInt)
-        assertEquals("https://example.com/photo.jpg", json.get("url").asString)
-        assertEquals("image", json.get("type").asString)
+        assertEquals("https://example.com/photo.jpg", json.get("source_url").asString)
+        assertEquals("image", json.get("media_type").asString)
     }
 
     // MARK: - Fallback to default uploader
@@ -156,7 +157,7 @@ class MediaUploadServerTest {
             body = body
         )
 
-        assertTrue("Expected 200 but got: ${response.statusLine}", response.statusLine.contains("200"))
+        assertTrue("Expected 201 but got: ${response.statusLine}", response.statusLine.contains("201"))
         assertTrue(delegate.processFileCalled)
         // Passthrough: original body forwarded directly, not re-encoded.
         assertTrue(mockUploader.passthroughUploadCalled)
@@ -169,20 +170,15 @@ class MediaUploadServerTest {
     // MARK: - DefaultMediaUploader
 
     @Test
-    fun `DefaultMediaUploader sends correct request to WP REST API`() {
+    fun `DefaultMediaUploader relays the WordPress response`() {
         val mockWpServer = MockWebServer()
-        // DefaultMediaUploader uses org.json.JSONObject internally which is
-        // stubbed in JVM unit tests — so we only verify the outgoing request
-        // format, not the response parsing.
+        val wpBody =
+            """{"id":1,"source_url":"https://example.com/u.jpg","media_type":"image"}"""
         mockWpServer.enqueue(
             MockResponse()
-                .setResponseCode(200)
+                .setResponseCode(201)
                 .setHeader("Content-Type", "application/json")
-                .setBody(
-                    """{"id":1,"source_url":"u","alt_text":"",""" +
-                        """"caption":{"rendered":""},"title":{"rendered":"t"},""" +
-                        """"mime_type":"image/jpeg","media_type":"image"}"""
-                )
+                .setBody(wpBody)
         )
         mockWpServer.start()
 
@@ -196,13 +192,11 @@ class MediaUploadServerTest {
         val file = tempFolder.newFile("image.jpg")
         file.writeBytes("fake image".toByteArray())
 
-        // The upload call will fail at org.json parsing in JVM tests, but we
-        // can still verify the request was sent correctly.
-        try {
-            runBlocking { uploader.upload(file, "image/jpeg", "image.jpg") }
-        } catch (_: Exception) {
-            // Expected — org.json stubs return defaults in JVM tests
-        }
+        val response = runBlocking { uploader.upload(file, "image/jpeg", "image.jpg") }
+
+        // The uploader relays WordPress's exact status and body — no parsing.
+        assertEquals(201, response.statusCode)
+        assertEquals(wpBody, String(response.body))
 
         val request = mockWpServer.takeRequest()
         assertEquals("POST", request.method)
@@ -214,7 +208,7 @@ class MediaUploadServerTest {
     }
 
     @Test
-    fun `DefaultMediaUploader throws on server error`() {
+    fun `DefaultMediaUploader relays a WordPress error response instead of throwing`() {
         val mockWpServer = MockWebServer()
         mockWpServer.enqueue(MockResponse().setResponseCode(500).setBody("Internal error"))
         mockWpServer.start()
@@ -229,12 +223,11 @@ class MediaUploadServerTest {
         val file = tempFolder.newFile("fail.jpg")
         file.writeBytes("data".toByteArray())
 
-        try {
-            runBlocking { uploader.upload(file, "image/jpeg", "fail.jpg") }
-            throw AssertionError("Expected exception")
-        } catch (e: MediaUploadException) {
-            assertTrue(e.message!!.contains("Internal error"))
-        }
+        // WordPress's error status + body flow through to the editor, which
+        // surfaces the real message — the uploader does not throw.
+        val response = runBlocking { uploader.upload(file, "image/jpeg", "fail.jpg") }
+        assertEquals(500, response.statusCode)
+        assertEquals("Internal error", String(response.body))
 
         mockWpServer.shutdown()
     }
@@ -361,16 +354,11 @@ class MediaUploadServerTest {
             return file
         }
 
-        override suspend fun uploadFile(file: File, mimeType: String, filename: String): MediaUploadResult? {
+        override suspend fun uploadFile(file: File, mimeType: String, filename: String): MediaUploadResponse? {
             uploadFileCalled = true
             lastFilename = filename
-            return MediaUploadResult(
-                id = 42,
-                url = "https://example.com/photo.jpg",
-                title = "photo",
-                mime = "image/jpeg",
-                type = "image"
-            )
+            val json = """{"id":42,"source_url":"https://example.com/photo.jpg","media_type":"image"}"""
+            return MediaUploadResponse(201, json.toByteArray())
         }
     }
 
@@ -391,25 +379,22 @@ class MediaUploadServerTest {
         @Volatile var uploadCalled = false
         @Volatile var passthroughUploadCalled = false
 
-        override suspend fun upload(file: File, mimeType: String, filename: String): MediaUploadResult {
+        override suspend fun upload(file: File, mimeType: String, filename: String): MediaUploadResponse {
             uploadCalled = true
-            return mockResult()
+            return mockResponse()
         }
 
         override suspend fun passthroughUpload(
             body: org.wordpress.gutenberg.http.RequestBody,
             contentType: String
-        ): MediaUploadResult {
+        ): MediaUploadResponse {
             passthroughUploadCalled = true
-            return mockResult()
+            return mockResponse()
         }
 
-        private fun mockResult() = MediaUploadResult(
-            id = 99,
-            url = "https://example.com/doc.pdf",
-            title = "doc",
-            mime = "application/pdf",
-            type = "file"
+        private fun mockResponse() = MediaUploadResponse(
+            201,
+            """{"id":99,"source_url":"https://example.com/doc.pdf","media_type":"file"}""".toByteArray()
         )
     }
 

@@ -203,25 +203,39 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		expect( options.body ).toBeInstanceOf( FormData );
 	} );
 
-	it( 'transforms native response to WordPress REST API shape', async () => {
+	it( 'returns the relayed WordPress attachment unchanged', async () => {
 		getGBKit.mockReturnValue( {
 			nativeUploadPort: 8080,
 			nativeUploadToken: 'token',
 		} );
 
+		// The native server relays WordPress's raw attachment response; the
+		// middleware must return it verbatim, not reshape it — so consumers get
+		// the real media_details.sizes, link, and raw/rendered fields.
+		const attachment = {
+			id: 77,
+			source_url: 'https://example.com/image.jpg',
+			alt_text: 'alt text',
+			caption: { raw: 'a caption', rendered: 'a caption' },
+			title: { raw: 'image', rendered: 'image' },
+			mime_type: 'image/jpeg',
+			media_type: 'image',
+			media_details: {
+				width: 4032,
+				height: 3024,
+				sizes: {
+					large: {
+						source_url: 'https://example.com/image-1024x768.jpg',
+					},
+				},
+			},
+			link: 'https://example.com/image/',
+		};
+
 		global.fetch = vi.fn( () =>
 			Promise.resolve( {
 				ok: true,
-				json: () =>
-					Promise.resolve( {
-						id: 77,
-						url: 'https://example.com/image.jpg',
-						alt: 'alt text',
-						caption: 'a caption',
-						title: 'image',
-						mime: 'image/jpeg',
-						type: 'image',
-					} ),
+				json: () => Promise.resolve( attachment ),
 			} )
 		);
 
@@ -230,62 +244,30 @@ describe( 'nativeMediaUploadMiddleware', () => {
 			makeNext()
 		);
 
-		expect( result ).toEqual( {
-			id: 77,
-			source_url: 'https://example.com/image.jpg',
-			alt_text: 'alt text',
-			caption: { raw: 'a caption', rendered: 'a caption' },
-			title: { raw: 'image', rendered: 'image' },
-			mime_type: 'image/jpeg',
-			media_type: 'image',
-			media_details: { width: 0, height: 0 },
-			link: 'https://example.com/image.jpg',
-		} );
-	} );
-
-	it( 'handles missing optional fields in native response', async () => {
-		getGBKit.mockReturnValue( {
-			nativeUploadPort: 8080,
-			nativeUploadToken: 'token',
-		} );
-
-		global.fetch = vi.fn( () =>
-			Promise.resolve( {
-				ok: true,
-				json: () =>
-					Promise.resolve( {
-						id: 1,
-						url: 'https://example.com/file.pdf',
-						title: 'file',
-						mime: 'application/pdf',
-						type: 'application',
-					} ),
-			} )
-		);
-
-		const result = await nativeMediaUploadMiddleware(
-			makePostMediaOptions( makeFile( 'file.pdf', 'application/pdf' ) ),
-			makeNext()
-		);
-
-		expect( result.alt_text ).toBe( '' );
-		expect( result.caption ).toEqual( { raw: '', rendered: '' } );
+		expect( result ).toEqual( attachment );
 	} );
 
 	// MARK: - Error handling
 
-	it( 'throws on non-ok response from local server', async () => {
+	it( 'rejects with the WordPress error body on a non-ok response', async () => {
 		getGBKit.mockReturnValue( {
 			nativeUploadPort: 8080,
 			nativeUploadToken: 'token',
 		} );
 
+		// The native server relays WordPress's error status + JSON body; the
+		// middleware rejects with that body as-is (like @wordpress/api-fetch) so
+		// media-utils surfaces WordPress's real message.
 		global.fetch = vi.fn( () =>
 			Promise.resolve( {
 				ok: false,
-				status: 500,
-				statusText: 'Internal Server Error',
-				text: () => Promise.resolve( 'Server crashed' ),
+				status: 403,
+				json: () =>
+					Promise.resolve( {
+						code: 'rest_cannot_create',
+						message:
+							'Sorry, you are not allowed to upload this file type.',
+					} ),
 			} )
 		);
 
@@ -295,9 +277,32 @@ describe( 'nativeMediaUploadMiddleware', () => {
 				makeNext()
 			)
 		).rejects.toMatchObject( {
-			code: 'upload_failed',
-			message: expect.stringContaining( '500' ),
+			code: 'rest_cannot_create',
+			message: expect.stringContaining( 'not allowed' ),
 		} );
+	} );
+
+	it( 'rejects with invalid_json when the error body is not JSON', async () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'token',
+		} );
+
+		global.fetch = vi.fn( () =>
+			Promise.resolve( {
+				ok: false,
+				status: 502,
+				json: () =>
+					Promise.reject( new SyntaxError( 'Unexpected token' ) ),
+			} )
+		);
+
+		await expect(
+			nativeMediaUploadMiddleware(
+				makePostMediaOptions( makeFile() ),
+				makeNext()
+			)
+		).rejects.toMatchObject( { code: 'invalid_json' } );
 	} );
 
 	it( 'falls back to the default upload path when the local server is unreachable', async () => {

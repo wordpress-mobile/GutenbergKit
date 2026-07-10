@@ -217,42 +217,26 @@ export function nativeMediaUploadMiddleware( options, next ) {
 		signal: options.signal,
 	} ).then(
 		( response ) => {
+			// The native server relays WordPress's response verbatim. On a
+			// non-2xx, mirror @wordpress/api-fetch: reject with the parsed WP
+			// error body ({ code, message, data }) so @wordpress/media-utils
+			// surfaces WordPress's real message. On success, return WordPress's
+			// attachment object unchanged so every consumer behaves exactly as
+			// it would for a non-native upload.
 			if ( ! response.ok ) {
-				return response.text().then( ( body ) => {
-					const error = new Error(
-						`Upload failed (${ response.status }): ${
-							body || response.statusText
-						}`
-					);
-					error.code = 'upload_failed';
-					logError( 'Native upload failed', error );
-					throw error;
-				} );
+				return response
+					.json()
+					.catch( () => ( {
+						code: 'invalid_json',
+						message:
+							'The upload server returned an invalid response.',
+					} ) )
+					.then( ( body ) => {
+						logError( 'Native upload failed', body );
+						throw body;
+					} );
 			}
-			return response.json().then( ( result ) => {
-				// Transform native server response into WordPress REST API
-				// attachment shape expected by @wordpress/media-utils.
-				return {
-					id: result.id,
-					source_url: result.url,
-					alt_text: result.alt || '',
-					caption: {
-						raw: result.caption || '',
-						rendered: result.caption || '',
-					},
-					title: {
-						raw: result.title || '',
-						rendered: result.title || '',
-					},
-					mime_type: result.mime,
-					media_type: result.type,
-					media_details: {
-						width: result.width || 0,
-						height: result.height || 0,
-					},
-					link: result.url,
-				};
-			} );
+			return response.json();
 		},
 		( connectionError ) => {
 			// Respect an explicit cancellation rather than retrying the upload.

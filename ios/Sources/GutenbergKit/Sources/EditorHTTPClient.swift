@@ -4,7 +4,22 @@ import OSLog
 /// A protocol for making authenticated HTTP requests to the WordPress REST API.
 public protocol EditorHTTPClientProtocol: Sendable {
     func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse)
+
+    /// Like ``perform(_:)`` but does **not** throw on a non-2xx status — returns
+    /// the raw response so the caller can relay WordPress's exact status and body.
+    /// Used by the media upload server, which forwards WordPress's response (and
+    /// its errors) to the editor unchanged.
+    func performRaw(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse)
+
     func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse)
+}
+
+public extension EditorHTTPClientProtocol {
+    /// Default implementation validates the status like ``perform(_:)``. Only
+    /// clients that need to relay non-2xx responses override this.
+    func performRaw(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        try await perform(urlRequest)
+    }
 }
 
 /// A delegate for observing HTTP requests made by the editor.
@@ -97,6 +112,13 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
         }
 
         return (data, httpResponse)
+    }
+
+    public func performRaw(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let configuredRequest = self.configureRequest(urlRequest)
+        let (data, response) = try await self.urlSession.data(for: configuredRequest)
+        self.delegate?.didPerformRequest(configuredRequest, response: response, data: .bytes(data))
+        return (data, response as! HTTPURLResponse)
     }
 
     public func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse) {

@@ -119,17 +119,19 @@ struct MediaUploadServerTests {
 
     let (data, response) = try await URLSession.shared.data(for: request)
     let httpResponse = try #require(response as? HTTPURLResponse)
-    #expect(httpResponse.statusCode == 200)
+    #expect(httpResponse.statusCode == 201)
 
     #expect(delegate.processFileCalled)
     #expect(delegate.uploadFileCalled)
     #expect(delegate.lastMimeType == "image/jpeg")
     #expect(delegate.lastFilename == "photo.jpg")
 
-    let result = try JSONDecoder().decode(MediaUploadResult.self, from: data)
-    #expect(result.id == 42)
-    #expect(result.url == "https://example.com/photo.jpg")
-    #expect(result.type == "image")
+    // The server relays WordPress's raw response body verbatim.
+    let object = try JSONSerialization.jsonObject(with: data)
+    let json = try #require(object as? [String: Any])
+    #expect(json["id"] as? Int == 42)
+    #expect(json["source_url"] as? String == "https://example.com/photo.jpg")
+    #expect(json["media_type"] as? String == "image")
   }
 
   @Test("uses passthrough when delegate does not modify file")
@@ -152,15 +154,17 @@ struct MediaUploadServerTests {
 
     let (data, response) = try await URLSession.shared.data(for: request)
     let httpResponse = try #require(response as? HTTPURLResponse)
-    #expect(httpResponse.statusCode == 200)
+    #expect(httpResponse.statusCode == 201)
 
     #expect(delegate.processFileCalled)
     // Passthrough: original body forwarded directly, not re-encoded.
     #expect(mockUploader.passthroughUploadCalled)
     #expect(!mockUploader.uploadCalled)
 
-    let result = try JSONDecoder().decode(MediaUploadResult.self, from: data)
-    #expect(result.id == 99)
+    // The server relays WordPress's raw response body verbatim.
+    let object = try JSONSerialization.jsonObject(with: data)
+    let json = try #require(object as? [String: Any])
+    #expect(json["id"] as? Int == 99)
   }
 
   @Test("returns 413 with CORS headers when request body exceeds max size")
@@ -292,18 +296,13 @@ private final class MockUploadDelegate: MediaUploadDelegate, @unchecked Sendable
     return url
   }
 
-  func uploadFile(at url: URL, mimeType: String, filename: String) async throws -> MediaUploadResult? {
+  func uploadFile(at url: URL, mimeType: String, filename: String) async throws -> MediaUploadResponse? {
     lock.withLock {
       _uploadFileCalled = true
       _lastFilename = filename
     }
-    return MediaUploadResult(
-      id: 42,
-      url: "https://example.com/photo.jpg",
-      title: "photo",
-      mime: "image/jpeg",
-      type: "image"
-    )
+    let json = #"{"id":42,"source_url":"https://example.com/photo.jpg","media_type":"image"}"#
+    return MediaUploadResponse(statusCode: 201, body: Data(json.utf8))
   }
 }
 
@@ -331,24 +330,19 @@ private final class MockDefaultUploader: DefaultMediaUploader, @unchecked Sendab
     super.init(httpClient: MockHTTPClient(), siteApiRoot: URL(string: "https://example.com/wp-json/")!)
   }
 
-  override func upload(fileURL: URL, mimeType: String, filename: String) async throws -> MediaUploadResult {
+  override func upload(fileURL: URL, mimeType: String, filename: String) async throws -> MediaUploadResponse {
     lock.withLock { _uploadCalled = true }
-    return mockResult()
+    return mockResponse()
   }
 
-  override func passthroughUpload(body: RequestBody, contentType: String) async throws -> MediaUploadResult {
+  override func passthroughUpload(body: RequestBody, contentType: String) async throws -> MediaUploadResponse {
     lock.withLock { _passthroughUploadCalled = true }
-    return mockResult()
+    return mockResponse()
   }
 
-  private func mockResult() -> MediaUploadResult {
-    MediaUploadResult(
-      id: 99,
-      url: "https://example.com/doc.pdf",
-      title: "doc",
-      mime: "application/pdf",
-      type: "file"
-    )
+  private func mockResponse() -> MediaUploadResponse {
+    let json = #"{"id":99,"source_url":"https://example.com/doc.pdf","media_type":"file"}"#
+    return MediaUploadResponse(statusCode: 201, body: Data(json.utf8))
   }
 }
 
