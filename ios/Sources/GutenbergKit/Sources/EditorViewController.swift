@@ -272,7 +272,17 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     public override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         self.dependencyTaskHandle?.cancel()
-        self.uploadServer?.stop()
+    }
+
+    deinit {
+        // Stop the upload server when the editor is permanently torn down.
+        //
+        // This deliberately does NOT happen in `viewDidDisappear`, which also
+        // fires when another view controller is merely pushed or presented over
+        // the editor. `HTTPServer.stop()` cancels the `NWListener`, which is
+        // terminal and has no restart path — stopping on disappear left uploads
+        // permanently broken once the user returned to the editor.
+        uploadServer?.stop()
     }
 
     /// Fetches all required dependencies and then loads the editor.

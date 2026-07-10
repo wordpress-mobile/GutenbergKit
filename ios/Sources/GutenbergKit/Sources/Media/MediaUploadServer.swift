@@ -305,11 +305,26 @@ final class MediaUploadServer: Sendable {
 
 // MARK: - Upload Context
 
-/// Thread-safe container for the upload delegate and default uploader,
-/// captured by the HTTPServer handler closure.
-private struct UploadContext: Sendable {
-    let uploadDelegate: (any MediaUploadDelegate)?
+/// Container for the upload delegate and default uploader, captured by the
+/// HTTPServer handler closure and re-read on each request.
+///
+/// The delegate is held **weakly**. `EditorViewController.mediaUploadDelegate` is
+/// declared `weak` — the host owns the delegate's lifetime. Capturing it strongly
+/// here would silently defeat that contract and, worse, risk a retain cycle
+/// (`EditorViewController → uploadServer → HTTPServer → handler → UploadContext →
+/// delegate → EditorViewController`) that would keep the view controller — and
+/// therefore the server — alive forever, so `deinit` would never stop it.
+///
+/// `@unchecked Sendable`: `uploadDelegate` is assigned once at init and only read
+/// afterwards; weak-reference reads are thread-safe at runtime.
+private final class UploadContext: @unchecked Sendable {
+    weak var uploadDelegate: (any MediaUploadDelegate)?
     let defaultUploader: DefaultMediaUploader?
+
+    init(uploadDelegate: (any MediaUploadDelegate)?, defaultUploader: DefaultMediaUploader?) {
+        self.uploadDelegate = uploadDelegate
+        self.defaultUploader = defaultUploader
+    }
 }
 
 // MARK: - Default Media Uploader
