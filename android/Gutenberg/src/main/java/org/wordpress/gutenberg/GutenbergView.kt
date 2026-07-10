@@ -128,7 +128,20 @@ class GutenbergView : FrameLayout {
         }
 
     private var uploadServer: MediaUploadServer? = null
-    private val uploadHttpClient: okhttp3.OkHttpClient by lazy { okhttp3.OkHttpClient() }
+    private val uploadHttpClient: okhttp3.OkHttpClient by lazy {
+        // Match EditorHTTPClient's 60s policy. The bare OkHttpClient() default is
+        // a 10s read timeout, which routinely fires while WordPress generates
+        // image sub-sizes synchronously inside POST /wp/v2/media. Because the
+        // attachment row is created before sub-size generation completes, a
+        // client-side timeout orphans the attachment server-side and duplicates
+        // it on retry.
+        okhttp3.OkHttpClient.Builder()
+            .callTimeout(UPLOAD_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+            .connectTimeout(UPLOAD_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(UPLOAD_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(UPLOAD_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+    }
 
     private var onFileChooserRequested: ((Intent, Int) -> Unit)? = null
     private var contentChangeListener: ContentChangeListener? = null
@@ -1173,6 +1186,9 @@ class GutenbergView : FrameLayout {
         private val LOCAL_HOSTS = setOf("localhost", "127.0.0.1", "10.0.2.2")
 
         private const val ASSET_LOADING_TIMEOUT_MS = 5000L
+
+        /** Timeout for media uploads, matching [EditorHTTPClient]'s default policy. */
+        private const val UPLOAD_TIMEOUT_SECONDS = 60L
 
         // Warmup state management
         private var warmupHandler: Handler? = null
