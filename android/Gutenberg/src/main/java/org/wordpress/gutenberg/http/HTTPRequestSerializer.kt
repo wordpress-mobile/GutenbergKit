@@ -7,25 +7,43 @@ enum class HTTPRequestParseError(
     /** The HTTP status code that should be sent for this error. */
     val httpStatus: Int,
     /** A camelCase identifier matching the Swift error case names and JSON fixture keys. */
-    val errorId: String
+    val errorId: String,
+    /**
+     * Whether this error aborts the connection ([Disposition.FATAL], thrown so the
+     * handler never runs) or is surfaced to the handler via `pendingParseError`
+     * ([Disposition.RECOVERABLE]) so it can build a response. Only genuinely
+     * recoverable errors — request line and headers well-formed — may be
+     * RECOVERABLE; anything smuggling-relevant (framing, Content-Length) must stay
+     * FATAL so the request never reaches the handler.
+     */
+    val disposition: Disposition
 ) {
-    EMPTY_HEADER_SECTION(400, "emptyHeaderSection"),
-    MALFORMED_REQUEST_LINE(400, "malformedRequestLine"),
-    OBS_FOLD_DETECTED(400, "obsFoldDetected"),
-    WHITESPACE_BEFORE_COLON(400, "whitespaceBeforeColon"),
-    INVALID_CONTENT_LENGTH(400, "invalidContentLength"),
-    CONFLICTING_CONTENT_LENGTH(400, "conflictingContentLength"),
-    UNSUPPORTED_TRANSFER_ENCODING(400, "unsupportedTransferEncoding"),
-    INVALID_HTTP_VERSION(400, "invalidHTTPVersion"),
-    INVALID_FIELD_NAME(400, "invalidFieldName"),
-    INVALID_FIELD_VALUE(400, "invalidFieldValue"),
-    MISSING_HOST_HEADER(400, "missingHostHeader"),
-    MULTIPLE_HOST_HEADERS(400, "multipleHostHeaders"),
-    PAYLOAD_TOO_LARGE(413, "payloadTooLarge"),
-    HEADERS_TOO_LARGE(431, "headersTooLarge"),
-    TOO_MANY_HEADERS(431, "tooManyHeaders"),
-    INVALID_ENCODING(400, "invalidEncoding"),
-    BUFFER_IO_ERROR(500, "bufferIOError");
+    EMPTY_HEADER_SECTION(400, "emptyHeaderSection", Disposition.FATAL),
+    MALFORMED_REQUEST_LINE(400, "malformedRequestLine", Disposition.FATAL),
+    OBS_FOLD_DETECTED(400, "obsFoldDetected", Disposition.FATAL),
+    WHITESPACE_BEFORE_COLON(400, "whitespaceBeforeColon", Disposition.FATAL),
+    INVALID_CONTENT_LENGTH(400, "invalidContentLength", Disposition.FATAL),
+    CONFLICTING_CONTENT_LENGTH(400, "conflictingContentLength", Disposition.FATAL),
+    UNSUPPORTED_TRANSFER_ENCODING(400, "unsupportedTransferEncoding", Disposition.FATAL),
+    INVALID_HTTP_VERSION(400, "invalidHTTPVersion", Disposition.FATAL),
+    INVALID_FIELD_NAME(400, "invalidFieldName", Disposition.FATAL),
+    INVALID_FIELD_VALUE(400, "invalidFieldValue", Disposition.FATAL),
+    MISSING_HOST_HEADER(400, "missingHostHeader", Disposition.FATAL),
+    MULTIPLE_HOST_HEADERS(400, "multipleHostHeaders", Disposition.FATAL),
+    PAYLOAD_TOO_LARGE(413, "payloadTooLarge", Disposition.RECOVERABLE),
+    HEADERS_TOO_LARGE(431, "headersTooLarge", Disposition.FATAL),
+    TOO_MANY_HEADERS(431, "tooManyHeaders", Disposition.FATAL),
+    INVALID_ENCODING(400, "invalidEncoding", Disposition.FATAL),
+    BUFFER_IO_ERROR(500, "bufferIOError", Disposition.FATAL);
+
+    /** How the parser disposes of a parse error. */
+    enum class Disposition {
+        /** Abort the connection; the malformed request never reaches the handler. */
+        FATAL,
+
+        /** Surface to the handler via `pendingParseError` so it can build a response. */
+        RECOVERABLE
+    }
 }
 
 /**

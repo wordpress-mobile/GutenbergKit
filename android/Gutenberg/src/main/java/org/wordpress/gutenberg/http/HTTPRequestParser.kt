@@ -229,11 +229,13 @@ class HTTPRequestParser(
     fun parseRequest(): ParsedHTTPRequest? = synchronized(lock) {
         if (!_state.hasHeaders) return null
 
-        // Payload-too-large means "valid headers, rejected body" — let
-        // the caller access the parsed headers so the handler can build
-        // a response (e.g., with CORS headers). Other parse errors
-        // indicate genuinely malformed requests and are still thrown.
-        parseError?.let { if (it != HTTPRequestParseError.PAYLOAD_TOO_LARGE) throw HTTPRequestParseException(it) }
+        // Recoverable errors (e.g. payloadTooLarge — valid headers, rejected
+        // body) are surfaced to the caller so the handler can build a response.
+        // Fatal errors indicate genuinely malformed requests and are thrown,
+        // closing the connection before the handler runs.
+        parseError?.let {
+            if (it.disposition == HTTPRequestParseError.Disposition.FATAL) throw HTTPRequestParseException(it)
+        }
 
         if (parsedHeaders == null) {
             val headerData = buffer.read(0, minOf(bytesWritten, MAX_HEADER_SIZE.toLong()).toInt())

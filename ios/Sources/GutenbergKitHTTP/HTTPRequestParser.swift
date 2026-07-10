@@ -137,11 +137,11 @@ public final class HTTPRequestParser: @unchecked Sendable {
         try lock.withLock {
             guard _state.hasHeaders else { return nil }
 
-            // Payload-too-large means "valid headers, rejected body" — let
-            // the caller access the parsed headers so the handler can build
-            // a response (e.g., with CORS headers). Other parse errors
-            // indicate genuinely malformed requests and are still thrown.
-            if let error = _parseError, error != .payloadTooLarge {
+            // Recoverable errors (e.g. payloadTooLarge — valid headers, rejected
+            // body) are surfaced to the caller so the handler can build a
+            // response. Fatal errors indicate genuinely malformed requests and
+            // are thrown, closing the connection before the handler runs.
+            if let error = _parseError, error.disposition == .fatal {
                 throw error
             }
 

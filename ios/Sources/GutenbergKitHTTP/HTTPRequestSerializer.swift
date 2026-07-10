@@ -1,7 +1,7 @@
 import Foundation
 
 /// Errors thrown when parsing an HTTP/1.1 request fails due to RFC 7230/9112 violations.
-public enum HTTPRequestParseError: Error, Sendable, Equatable, LocalizedError {
+public enum HTTPRequestParseError: Error, Sendable, Equatable, LocalizedError, CaseIterable {
     /// The header section before `\r\n\r\n` is empty (e.g., `\r\n\r\n` with no request line).
     case emptyHeaderSection
     /// The request line does not contain at least a method and target (RFC 9112 §3).
@@ -36,6 +36,34 @@ public enum HTTPRequestParseError: Error, Sendable, Equatable, LocalizedError {
     case invalidEncoding
     /// An I/O error occurred while buffering the request (e.g. disk full).
     case bufferIOError
+
+    /// How the parser disposes of a parse error.
+    public enum Disposition: Sendable {
+        /// Abort the connection; the malformed request never reaches the handler.
+        case fatal
+        /// Surface to the handler via ``HTTPRequestParser/parseError`` so it can
+        /// build a response.
+        case recoverable
+    }
+
+    /// Whether this error aborts the connection (``Disposition/fatal``) or is
+    /// surfaced to the handler (``Disposition/recoverable``).
+    ///
+    /// Only genuinely recoverable errors — where the request line and headers are
+    /// well-formed — may be recoverable; anything smuggling-relevant (framing,
+    /// Content-Length) must stay fatal so the request never reaches the handler.
+    public var disposition: Disposition {
+        switch self {
+        case .payloadTooLarge:
+            return .recoverable
+        case .emptyHeaderSection, .malformedRequestLine, .obsFoldDetected,
+             .whitespaceBeforeColon, .invalidContentLength, .conflictingContentLength,
+             .unsupportedTransferEncoding, .invalidHTTPVersion, .invalidFieldName,
+             .invalidFieldValue, .missingHostHeader, .multipleHostHeaders,
+             .headersTooLarge, .tooManyHeaders, .invalidEncoding, .bufferIOError:
+            return .fatal
+        }
+    }
 
     /// The HTTP status code that should be sent for this error.
     public var httpStatus: Int {

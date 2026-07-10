@@ -15,6 +15,21 @@ import org.junit.Test
  */
 class HTTPRequestParserTests {
 
+    // MARK: - Error Disposition
+
+    /**
+     * Locks the fatal/recoverable classification so a refactor can't silently
+     * make a smuggling-relevant error recoverable — which would let a malformed
+     * request reach the handler before auth.
+     */
+    @Test
+    fun `only payloadTooLarge is recoverable`() {
+        val recoverable = HTTPRequestParseError.entries.filter {
+            it.disposition == HTTPRequestParseError.Disposition.RECOVERABLE
+        }
+        assertEquals(listOf(HTTPRequestParseError.PAYLOAD_TOO_LARGE), recoverable)
+    }
+
     // MARK: - Duplicate Header Key Casing (Internal Dict Representation)
 
     @Test
