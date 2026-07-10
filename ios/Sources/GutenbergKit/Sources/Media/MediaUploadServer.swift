@@ -43,6 +43,7 @@ final class MediaUploadServer: Sendable {
             name: "media-upload",
             requiresAuthentication: true,
             maxRequestBodySize: maxRequestBodySize,
+            cors: .permissive,
             handler: { request in
                 await Self.handleRequest(request, context: context)
             }
@@ -77,13 +78,8 @@ final class MediaUploadServer: Sendable {
             return errorResponse(status: serverError.httpStatus, message: message)
         }
 
-        // CORS preflight — the library exempts OPTIONS from auth, so this is
-        // reached without a token.
-        if parsed.method.uppercased() == "OPTIONS" {
-            return corsPreflightResponse()
-        }
-
-        // Route: only POST /upload is handled.
+        // Route: only POST /upload is handled. (OPTIONS preflight is answered by
+        // the HTTP library under its permissive CORS policy.)
         guard parsed.method.uppercased() == "POST", parsed.target == "/upload" else {
             return errorResponse(status: 404, message: "Not found")
         }
@@ -163,7 +159,7 @@ final class MediaUploadServer: Sendable {
             // the same attachment object (or error) as a direct upload.
             return HTTPResponse(
                 status: response.statusCode,
-                headers: corsHeaders + [("Content-Type", "application/json")],
+                headers: [("Content-Type", "application/json")],
                 body: response.body
             )
         } catch {
@@ -238,24 +234,6 @@ final class MediaUploadServer: Sendable {
         }
     }
 
-    // MARK: - CORS
-
-    private static let corsHeaders: [(String, String)] = [
-        ("Access-Control-Allow-Origin", "*"),
-        ("Access-Control-Allow-Headers", "Relay-Authorization, Content-Type"),
-    ]
-
-    private static func corsPreflightResponse() -> HTTPResponse {
-        HTTPResponse(
-            status: 204,
-            headers: corsHeaders + [
-                ("Access-Control-Allow-Methods", "POST, OPTIONS"),
-                ("Access-Control-Max-Age", "86400"),
-            ],
-            body: Data()
-        )
-    }
-
     private static func errorResponse(status: Int, message: String) -> HTTPResponse {
         // Emit a WordPress-REST-style error object so the JS middleware normalizes
         // it (and surfaces `message`) the same way it does a relayed WordPress
@@ -265,7 +243,7 @@ final class MediaUploadServer: Sendable {
             ?? Data(#"{"code":"upload_error","message":"Upload failed"}"#.utf8)
         return HTTPResponse(
             status: status,
-            headers: corsHeaders + [("Content-Type", "application/json")],
+            headers: [("Content-Type", "application/json")],
             body: body
         )
     }

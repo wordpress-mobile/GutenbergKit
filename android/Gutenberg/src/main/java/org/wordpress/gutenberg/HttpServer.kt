@@ -71,6 +71,45 @@ data class HttpResponse(
     val body: ByteArray = ByteArray(0)
 )
 
+/** CORS behavior for an [HttpServer]. */
+enum class CorsPolicy {
+    /** No CORS headers are added (the default). */
+    None,
+
+    /**
+     * Permissive CORS for a loopback-only server serving a WebView: allows any
+     * origin and the methods/headers this library's clients use. The server
+     * answers OPTIONS preflight requests itself and stamps these headers on every
+     * response — including ones it generates internally (timeouts, parse errors)
+     * that never reach the handler.
+     */
+    Permissive;
+
+    /** Headers added to every response under this policy. */
+    val responseHeaders: Map<String, String>
+        get() = when (this) {
+            None -> emptyMap()
+            Permissive -> mapOf(
+                "Access-Control-Allow-Origin" to "*",
+                "Access-Control-Allow-Methods" to "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers" to "Authorization, Relay-Authorization, Content-Type",
+                "Access-Control-Max-Age" to "86400"
+            )
+        }
+}
+
+/**
+ * Returns a copy with [newHeaders] added, skipping any whose name
+ * (case-insensitive) is already present.
+ */
+private fun HttpResponse.addingHeadersIfAbsent(newHeaders: Map<String, String>): HttpResponse {
+    if (newHeaders.isEmpty()) return this
+    val existing = headers.keys.map { it.lowercase() }.toSet()
+    val toAdd = newHeaders.filterKeys { it.lowercase() !in existing }
+    if (toAdd.isEmpty()) return this
+    return copy(headers = headers + toAdd)
+}
+
 /**
  * A lightweight local HTTP/1.1 server.
  *
@@ -144,6 +183,7 @@ data class HttpResponse(
  * server.stop()
  * ```
  */
+@Suppress("LongParameterList")
 class HttpServer(
     val name: String,
     private val requestedPort: Int = 0,
@@ -154,6 +194,7 @@ class HttpServer(
     private val readTimeoutMs: Int = DEFAULT_READ_TIMEOUT_MS,
     private val idleTimeoutMs: Int = DEFAULT_IDLE_TIMEOUT_MS,
     private val cacheDir: File? = null,
+    private val cors: CorsPolicy = CorsPolicy.None,
     private val handler: suspend (HttpRequest) -> HttpResponse
 ) {
     @Volatile
@@ -412,15 +453,7 @@ class HttpServer(
                     body = parsed.body,
                     parseDurationMs = parseDurationMs
                 )
-                val response = try {
-                    handler(request)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Handler threw", e)
-                    HttpResponse(
-                        status = 500,
-                        body = "Internal Server Error".toByteArray()
-                    )
-                }
+                val response = resolveResponse(request)
                 sendResponse(socket, response)
                 Log.d(TAG, "${parsed.method} ${parsed.target} → ${response.status} (${"%.1f".format(parseDurationMs)}ms)")
             }
@@ -445,9 +478,27 @@ class HttpServer(
         }
     }
 
+    /**
+     * Resolves the response for a request: the CORS preflight (under a permissive
+     * policy) or the handler's response. Kept separate from [handleRequest] so
+     * that already-complex function doesn't grow.
+     */
+    private suspend fun resolveResponse(request: HttpRequest): HttpResponse {
+        if (cors == CorsPolicy.Permissive && request.method.uppercase() == "OPTIONS") {
+            return HttpResponse(status = 204, body = ByteArray(0))
+        }
+        return try {
+            handler(request)
+        } catch (e: Exception) {
+            Log.e(TAG, "Handler threw", e)
+            HttpResponse(status = 500, body = "Internal Server Error".toByteArray())
+        }
+    }
+
     private fun sendResponse(socket: Socket, response: HttpResponse) {
+        val decorated = response.addingHeadersIfAbsent(cors.responseHeaders)
         val output = socket.getOutputStream()
-        output.write(serializeResponse(response))
+        output.write(serializeResponse(decorated))
         output.flush()
     }
 

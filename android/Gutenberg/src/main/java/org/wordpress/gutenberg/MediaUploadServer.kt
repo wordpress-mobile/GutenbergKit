@@ -114,6 +114,7 @@ internal class MediaUploadServer(
             externallyAccessible = false,
             requiresAuthentication = true,
             cacheDir = cacheDir,
+            cors = CorsPolicy.Permissive,
             handler = { request -> handleRequest(request) }
         )
         server.start()
@@ -151,13 +152,8 @@ internal class MediaUploadServer(
             return errorResponse(error.httpStatus, message)
         }
 
-        // CORS preflight — the library exempts OPTIONS from auth, so this is
-        // reached without a token.
-        if (request.method.uppercase() == "OPTIONS") {
-            return corsPreflightResponse()
-        }
-
-        // Route: only POST /upload is handled.
+        // Route: only POST /upload is handled. (OPTIONS preflight is answered by
+        // the HTTP library under its permissive CORS policy.)
         if (request.method.uppercase() != "POST" || request.target != "/upload") {
             return errorResponse(404, "Not found")
         }
@@ -249,7 +245,7 @@ internal class MediaUploadServer(
             // the same attachment object (or error) as a direct upload.
             return HttpResponse(
                 status = response.statusCode,
-                headers = corsHeaders + mapOf("Content-Type" to "application/json"),
+                headers = mapOf("Content-Type" to "application/json"),
                 body = response.body
             )
         } catch (e: MediaUploadException) {
@@ -338,20 +334,6 @@ internal class MediaUploadServer(
 
     // MARK: - Response Building
 
-    private val corsHeaders: Map<String, String> = mapOf(
-        "Access-Control-Allow-Origin" to "*",
-        "Access-Control-Allow-Headers" to "Relay-Authorization, Content-Type"
-    )
-
-    private fun corsPreflightResponse(): HttpResponse = HttpResponse(
-        status = 204,
-        headers = corsHeaders + mapOf(
-            "Access-Control-Allow-Methods" to "POST, OPTIONS",
-            "Access-Control-Max-Age" to "86400"
-        ),
-        body = ByteArray(0)
-    )
-
     private fun errorResponse(status: Int, message: String): HttpResponse {
         // Emit a WordPress-REST-style error object so the JS middleware normalizes
         // it (and surfaces `message`) the same way it does a relayed WordPress
@@ -362,7 +344,7 @@ internal class MediaUploadServer(
             .toString()
         return HttpResponse(
             status = status,
-            headers = corsHeaders + mapOf("Content-Type" to "application/json"),
+            headers = mapOf("Content-Type" to "application/json"),
             body = json.toByteArray()
         )
     }
