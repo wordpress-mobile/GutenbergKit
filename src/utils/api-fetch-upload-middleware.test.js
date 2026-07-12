@@ -15,7 +15,6 @@ vi.mock( './bridge', () => ( {
 
 vi.mock( './logger', () => ( {
 	info: vi.fn(),
-	warn: vi.fn(),
 	error: vi.fn(),
 } ) );
 
@@ -341,27 +340,54 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		).rejects.toMatchObject( { code: 'invalid_json' } );
 	} );
 
-	it( 'falls back to the default upload path when the local server is unreachable', async () => {
+	it( 'rejects with invalid_json when a 2xx response body is not JSON', async () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'token',
+		} );
+
+		// A successful status but a non-JSON body (e.g. an HTML error page from
+		// an intermediary). json() rejects; the middleware must normalize it, not
+		// surface a raw SyntaxError.
+		global.fetch = vi.fn( () =>
+			Promise.resolve( {
+				ok: true,
+				json: () =>
+					Promise.reject( new SyntaxError( 'Unexpected token' ) ),
+			} )
+		);
+
+		await expect(
+			nativeMediaUploadMiddleware(
+				makePostMediaOptions( makeFile() ),
+				makeNext()
+			)
+		).rejects.toMatchObject( { code: 'invalid_json' } );
+	} );
+
+	it( 'surfaces a transport failure instead of retrying (no silent duplicate)', async () => {
 		getGBKit.mockReturnValue( {
 			nativeUploadPort: 8080,
 			nativeUploadToken: 'token',
 		} );
 		const next = makeNext();
 
-		// A connection-level failure (server never started, restarted on a new
-		// port, or torn down) rejects `fetch` with a TypeError.
-		global.fetch = vi.fn( () =>
-			Promise.reject( new TypeError( 'Failed to fetch' ) )
-		);
+		// A connection-level failure — the loopback server died out-of-band after
+		// a valid start (reachability is otherwise gated proactively upstream, so
+		// an unreachable server never advertises a port to fetch).
+		const connectionError = new TypeError( 'Failed to fetch' );
+		global.fetch = vi.fn( () => Promise.reject( connectionError ) );
 
-		const result = await nativeMediaUploadMiddleware(
-			makePostMediaOptions( makeFile() ),
-			next
-		);
+		await expect(
+			nativeMediaUploadMiddleware(
+				makePostMediaOptions( makeFile() ),
+				next
+			)
+		).rejects.toBe( connectionError );
 
-		// The upload is not failed — it degrades to the default upload path.
-		expect( next ).toHaveBeenCalledOnce();
-		expect( result ).toEqual( { passthrough: true } );
+		// No silent fallback to a direct re-upload — retrying a non-idempotent
+		// POST could duplicate the attachment.
+		expect( next ).not.toHaveBeenCalled();
 	} );
 
 	it( 'propagates an abort instead of falling back', async () => {
@@ -371,18 +397,50 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		} );
 		const next = makeNext();
 
-		const abortError = new Error( 'The operation was aborted.' );
-		abortError.name = 'AbortError';
-		global.fetch = vi.fn( () => Promise.reject( abortError ) );
+		// A real aborted signal — `fetch` rejects with the signal's reason.
+		const controller = new AbortController();
+		controller.abort();
+		const options = {
+			...makePostMediaOptions( makeFile() ),
+			signal: controller.signal,
+		};
+		global.fetch = vi.fn( () =>
+			Promise.reject( controller.signal.reason )
+		);
 
+		// The middleware rethrows the signal's canonical reason (not the fetch
+		// rejection) and does not retry.
 		await expect(
-			nativeMediaUploadMiddleware(
-				makePostMediaOptions( makeFile() ),
-				next
-			)
-		).rejects.toMatchObject( { name: 'AbortError' } );
+			nativeMediaUploadMiddleware( options, next )
+		).rejects.toBe( controller.signal.reason );
 
 		// An explicit cancellation must not be retried via the default path.
+		expect( next ).not.toHaveBeenCalled();
+	} );
+
+	it( 'propagates a timeout cancellation (aborted signal, non-AbortError) instead of falling back', async () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'token',
+		} );
+		const next = makeNext();
+
+		// `AbortSignal.timeout()` aborts its signal and rejects with a
+		// TimeoutError (not an AbortError). A `name === 'AbortError'` check would
+		// miss it and wrongly fall back; keying off `signal.aborted` catches it.
+		const timeoutError = new Error( 'The operation timed out.' );
+		timeoutError.name = 'TimeoutError';
+		const options = {
+			...makePostMediaOptions( makeFile() ),
+			signal: { aborted: true, reason: timeoutError },
+		};
+		global.fetch = vi.fn( () => Promise.reject( timeoutError ) );
+
+		await expect(
+			nativeMediaUploadMiddleware( options, next )
+		).rejects.toBe( timeoutError );
+
+		// A timeout is a cancellation, not an unreachable server — do not retry.
 		expect( next ).not.toHaveBeenCalled();
 	} );
 

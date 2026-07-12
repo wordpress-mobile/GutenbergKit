@@ -8,7 +8,7 @@ import { getQueryArg } from '@wordpress/url';
  * Internal dependencies
  */
 import { getGBKit, POST_FALLBACKS } from './bridge';
-import { info, warn, error as logError } from './logger';
+import { info, error as logError } from './logger';
 
 /**
  * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
@@ -230,35 +230,66 @@ export function nativeMediaUploadMiddleware( options, next ) {
 			if ( ! response.ok ) {
 				return response
 					.json()
-					.catch( () => ( {
-						code: 'invalid_json',
-						message:
-							'The upload server returned an invalid response.',
-					} ) )
+					.catch( invalidUploadResponseError )
 					.then( ( body ) => {
 						logError( 'Native upload failed', body );
 						throw body;
 					} );
 			}
-			return response.json();
+			// A 2xx with a non-JSON body (e.g. an HTML error page injected by an
+			// intermediary) rejects json(); normalize it the same way as the
+			// non-ok path rather than surfacing a raw SyntaxError.
+			return response.json().catch( () => {
+				const error = invalidUploadResponseError();
+				logError( 'Native upload returned an invalid response', error );
+				throw error;
+			} );
 		},
 		( connectionError ) => {
-			// Respect an explicit cancellation rather than retrying the upload.
-			if ( connectionError.name === 'AbortError' ) {
-				throw connectionError;
+			// A caller-initiated cancellation must propagate as the cancellation,
+			// never be retried. Detect it via `signal.aborted` — the cancellation
+			// *state* — rather than `connectionError.name === 'AbortError'`: the
+			// state check also catches `AbortSignal.timeout()` (which rejects with
+			// a TimeoutError, not an AbortError) and custom abort reasons, which a
+			// name match would miss and wrongly fall back on. Rethrow the signal's
+			// `reason` (the canonical abort error), not `connectionError`: if a
+			// network failure and the abort race, `fetch` can reject with a network
+			// TypeError even though the signal aborted, and rethrowing that would
+			// make upstream treat a cancelled upload as a real failure — surfacing
+			// a spurious error notice instead of a silent cancel.
+			if ( options.signal?.aborted ) {
+				throw options.signal.reason;
 			}
-			// The native upload server is unreachable — it may never have
-			// started, been restarted on a new port, or been torn down while
-			// the editor was backgrounded. Fall back to the default upload path
-			// so the file still reaches WordPress (unprocessed) rather than
-			// failing the upload outright.
-			warn(
-				`Native upload server unreachable on port ${ nativeUploadPort }; falling back to default upload`,
+			// Otherwise the loopback upload server is unreachable at the transport
+			// layer. We deliberately do NOT fall back to a direct re-upload:
+			// reachability is gated proactively upstream — this middleware's guard
+			// skips the native path when no port is advertised, and the native side
+			// only advertises a port the WebView can actually reach (server running
+			// + cleartext-to-localhost permitted, cleared on stop). So reaching here
+			// means the server died out-of-band after a valid start; retrying a
+			// non-idempotent POST /wp/v2/media could duplicate the attachment if the
+			// native server had already relayed it to WordPress.
+			logError(
+				'Native upload failed at the transport layer',
 				connectionError
 			);
-			return next( options );
+			throw connectionError;
 		}
 	);
+}
+
+/**
+ * The error rejected when the upload server's response body can't be parsed as
+ * JSON. Shaped like a WordPress REST error so `@wordpress/media-utils` surfaces
+ * it the same way as a real one, on both the non-2xx and 2xx paths.
+ *
+ * @return {{ code: string, message: string }} The normalized error.
+ */
+function invalidUploadResponseError() {
+	return {
+		code: 'invalid_json',
+		message: 'The upload server returned an invalid response.',
+	};
 }
 
 /**
