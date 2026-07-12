@@ -58,18 +58,26 @@ class DemoMediaUploadDelegate : MediaUploadDelegate {
         // an orientation tag) would upload rotated.
         val oriented = applyExifOrientation(scaled, file)
 
-        val outputFile = File(file.parent, "resized-${file.name}")
-        val format = if (mimeType == "image/png") Bitmap.CompressFormat.PNG
-                     else Bitmap.CompressFormat.JPEG
+        // Re-encoding normalizes everything but PNG to JPEG (Bitmap.compress can't
+        // round-trip WebP/HEIC/etc.), so report the ACTUAL output type and extension.
+        // Otherwise a WebP/HEIC upload would be JPEG bytes labeled image/webp, and
+        // WordPress would reject the content/extension mismatch.
+        val (format, outputMimeType, outputExtension) =
+            if (mimeType == "image/png") {
+                Triple(Bitmap.CompressFormat.PNG, "image/png", "png")
+            } else {
+                Triple(Bitmap.CompressFormat.JPEG, "image/jpeg", "jpg")
+            }
 
+        val outputFile = File(file.parent, "resized-${file.name}")
         outputFile.outputStream().use { out ->
             oriented.compress(format, 85, out)
         }
         oriented.recycle()
 
+        val outputFilename = filename.substringBeforeLast('.', filename) + ".$outputExtension"
         Log.d(TAG, "Resized image from ${width}×${height} to ${targetWidth}×${targetHeight}")
-        // Same format, so the original mimeType/filename carry over.
-        return ProcessedProxyFile.Processed(outputFile, mimeType, filename)
+        return ProcessedProxyFile.Processed(outputFile, outputMimeType, outputFilename)
     }
 
     private fun applyExifOrientation(bitmap: Bitmap, sourceFile: File): Bitmap {
