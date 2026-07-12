@@ -34,60 +34,28 @@ public struct RESTAPIRepository: Sendable {
         if let customEndpoint = configuration.editorSettingsEndpoint {
             self.editorSettingsUrl = customEndpoint
         } else {
-            self.editorSettingsUrl = Self.buildNamespacedURL(
+            self.editorSettingsUrl = WordPressRESTURL.namespaced(
                 apiRoot: apiRoot,
                 path: Constants.API.editorSettingsPath,
                 namespace: configuration.siteApiNamespace.first
             )
         }
 
-        self.activeThemeUrl = Self.buildNamespacedURL(
+        self.activeThemeUrl = WordPressRESTURL.namespaced(
             apiRoot: apiRoot,
             path: Constants.API.activeThemePath,
             namespace: configuration.siteApiNamespace.first
         )
-        self.siteSettingsUrl = Self.buildNamespacedURL(
+        self.siteSettingsUrl = WordPressRESTURL.namespaced(
             apiRoot: apiRoot,
             path: Constants.API.siteSettingsPath,
             namespace: configuration.siteApiNamespace.first
         )
-        self.postTypesUrl = Self.buildNamespacedURL(
+        self.postTypesUrl = WordPressRESTURL.namespaced(
             apiRoot: apiRoot,
             path: Constants.API.postTypesPath,
             namespace: configuration.siteApiNamespace.first
         )
-    }
-
-    /// Builds a URL by inserting the namespace after the version segment of the path.
-    /// For example: `/wp/v2/posts` with namespace `sites/123/` becomes `/wp/v2/sites/123/posts`
-    private static func buildNamespacedURL(apiRoot: URL, path: String, namespace: String?) -> URL {
-        guard let rawNamespace = namespace else {
-            return apiRoot.appending(rawPath: path)
-        }
-
-        let namespace = rawNamespace.hasSuffix("/") ? rawNamespace : rawNamespace + "/"
-
-        // Parse the path to find where to insert the namespace
-        // Path format is typically: /prefix/version/endpoint (e.g., /wp/v2/posts or /wp-block-editor/v1/settings)
-        let components = path.split(separator: "/", omittingEmptySubsequences: true)
-        guard components.count >= 2 else {
-            return apiRoot.appending(rawPath: path)
-        }
-
-        // Insert namespace after the version segment (second component)
-        // e.g., /wp-block-editor/v1/settings -> /wp-block-editor/v1/sites/123/settings
-        let prefix = components[0]
-        let version = components[1]
-        let remainder = components.dropFirst(2).joined(separator: "/")
-
-        let namespacedPath: String
-        if remainder.isEmpty {
-            namespacedPath = "/\(prefix)/\(version)/\(namespace)"
-        } else {
-            namespacedPath = "/\(prefix)/\(version)/\(namespace)\(remainder)"
-        }
-
-        return apiRoot.appending(rawPath: namespacedPath)
     }
 
     /// Clears all cached API responses.
@@ -110,7 +78,7 @@ public struct RESTAPIRepository: Sendable {
     private func buildPostUrl(id: Int) -> URL {
         let restNamespace = configuration.postType.restNamespace
         let restBase = configuration.postType.restBase
-        return Self.buildNamespacedURL(
+        return WordPressRESTURL.namespaced(
             apiRoot: configuration.siteApiRoot,
             path: "/\(restNamespace)/\(restBase)/\(id)",
             namespace: configuration.siteApiNamespace.first
@@ -155,7 +123,7 @@ public struct RESTAPIRepository: Sendable {
     }
 
     private func buildPostTypeUrl(type: String) -> URL {
-        Self.buildNamespacedURL(
+        WordPressRESTURL.namespaced(
             apiRoot: configuration.siteApiRoot,
             path: "/wp/v2/types/\(type)",
             namespace: configuration.siteApiNamespace.first
