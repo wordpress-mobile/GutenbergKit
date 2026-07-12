@@ -1,6 +1,11 @@
 package org.wordpress.gutenberg
 
 import android.util.Log
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import org.wordpress.gutenberg.http.HeaderValue
 import org.wordpress.gutenberg.http.MultipartPart
 import org.wordpress.gutenberg.http.HTTPRequestParseError
@@ -10,6 +15,7 @@ import java.io.IOException
 import java.util.UUID
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import okio.source
 
 /**
@@ -90,7 +96,9 @@ interface MediaUploadDelegate {
 internal class MediaUploadServer(
     private val uploadDelegate: MediaUploadDelegate?,
     private val defaultUploader: DefaultMediaUploader?,
-    cacheDir: File? = null
+    cacheDir: File? = null,
+    scope: CoroutineScope = CoroutineScope(Dispatchers.IO),
+    ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     /** The port the server is listening on. */
     val port: Int get() = server.port
@@ -107,8 +115,21 @@ internal class MediaUploadServer(
     private val uploadsTempDir: File =
         File(cacheDir ?: File(System.getProperty("java.io.tmpdir")), "gutenbergkit-uploads")
 
+    /**
+     * Sweeps crash-orphaned temp files off the caller's thread. Exposed so tests
+     * can await it; injecting `Dispatchers.Unconfined` for [ioDispatcher] runs the
+     * sweep synchronously.
+     */
+    @Suppress("TooGenericExceptionCaught")
+    val cleanupJob: Job = scope.launch(ioDispatcher) {
+        try {
+            cleanOrphanedUploads()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to sweep orphaned uploads", e)
+        }
+    }
+
     init {
-        cleanOrphanedUploads()
         server = HttpServer(
             name = "media-upload",
             externallyAccessible = false,
@@ -122,6 +143,7 @@ internal class MediaUploadServer(
 
     /** Stops the server and releases resources. */
     fun stop() {
+        cleanupJob.cancel()
         server.stop()
     }
 
@@ -375,17 +397,12 @@ internal open class DefaultMediaUploader(
     private val siteApiNamespace: List<String> = emptyList()
 ) {
     /**
-     * The WordPress media endpoint URL, accounting for site API namespaces and
-     * carrying the original request query (e.g. `?_embed`) through to WordPress.
+     * The WordPress media endpoint URL, built through the shared [RestUrlBuilder]
+     * namespacing (so it matches every other REST URL) and carrying the original
+     * request query (e.g. `?_embed`) through to WordPress.
      */
-    private fun mediaEndpointUrl(query: String): String {
-        // Normalize the root and namespace the way RESTAPIRepository does, so an
-        // unslashed siteApiRoot or namespace still joins cleanly (no "...wp-jsonwp/v2"
-        // or ".../v2/sites/123media").
-        val root = siteApiRoot.trimEnd('/')
-        val namespace = siteApiNamespace.firstOrNull()?.let { it.trimEnd('/') + "/" } ?: ""
-        return "$root/wp/v2/${namespace}media$query"
-    }
+    private fun mediaEndpointUrl(query: String): String =
+        RestUrlBuilder.namespaced(siteApiRoot, siteApiNamespace.firstOrNull(), "/wp/v2/media") + query
 
     open suspend fun upload(
         file: File, mimeType: String, filename: String,
@@ -394,8 +411,11 @@ internal open class DefaultMediaUploader(
         val mediaType = mimeType.toMediaType()
         val builder = okhttp3.MultipartBody.Builder().setType(okhttp3.MultipartBody.FORM)
         // Preserve the non-file parts (post, additionalData) through the re-encode.
+        // Append each field's raw bytes (not via String) so a non-UTF-8 value is
+        // forwarded verbatim rather than coerced. filename=null makes it a plain
+        // field, matching okhttp's String overload byte-for-byte.
         for (part in extraParts) {
-            builder.addFormDataPart(part.name, String(part.body.readBytes(), Charsets.UTF_8))
+            builder.addFormDataPart(part.name, null, part.body.readBytes().toRequestBody())
         }
         builder.addFormDataPart("file", filename, file.asRequestBody(mediaType))
 

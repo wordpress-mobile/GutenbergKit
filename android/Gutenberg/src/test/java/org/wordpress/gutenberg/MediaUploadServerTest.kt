@@ -1,6 +1,7 @@
 package org.wordpress.gutenberg
 
 import com.google.gson.JsonParser
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -161,6 +162,59 @@ class MediaUploadServerTest {
         assertEquals("clip.mp4", mockUploader.lastUploadFilename)
     }
 
+    @Test
+    fun `deletes the delegate's processed file after upload`() {
+        val delegate = TranscodingDelegate()
+        val mockUploader = MockDefaultUploader()
+        server.stop()
+        server = MediaUploadServer(uploadDelegate = delegate, defaultUploader = mockUploader, cacheDir = tempFolder.root)
+
+        val boundary = "test-boundary-cleanup"
+        val body = buildMultipartBody(boundary, "clip.mov", "video/quicktime", "movie".toByteArray())
+
+        sendRawRequest(
+            method = "POST",
+            path = "/upload",
+            headers = mapOf(
+                "Relay-Authorization" to "Bearer ${server.token}",
+                "Content-Type" to "multipart/form-data; boundary=$boundary"
+            ),
+            body = body
+        )
+
+        // The server owns the file the delegate produced and must delete it once the
+        // upload finishes — the finally in processAndUpload covers success and throw
+        // paths alike. A leaked processed file is a full-size temp per upload.
+        val processed = requireNotNull(delegate.producedFile) { "processFile was not called" }
+        assertFalse("Processed temp file should be deleted after upload", processed.exists())
+    }
+
+    @Test
+    fun `startup sweep deletes stale upload temps but preserves fresh ones`() {
+        val uploadsDir = File(tempFolder.root, "gutenbergkit-uploads").apply { mkdirs() }
+        val stale = File(uploadsDir, "stale.tmp").apply { writeText("x") }
+        val fresh = File(uploadsDir, "fresh.tmp").apply { writeText("y") }
+        // Backdate the stale file well past the 1-hour cutoff.
+        assertTrue(
+            "Could not backdate the stale file",
+            stale.setLastModified(System.currentTimeMillis() - 2 * 60 * 60 * 1000L)
+        )
+
+        // The sweep runs via the injected dispatcher; Unconfined runs it synchronously
+        // so we can assert immediately. It must delete the aged file and keep the fresh
+        // one — a flipped comparison would do the opposite and wipe an in-flight upload.
+        server.stop()
+        server = MediaUploadServer(
+            uploadDelegate = null,
+            defaultUploader = null,
+            cacheDir = tempFolder.root,
+            ioDispatcher = Dispatchers.Unconfined
+        )
+
+        assertFalse("Stale temp should have been swept", stale.exists())
+        assertTrue("Fresh temp should be preserved", fresh.exists())
+    }
+
     // MARK: - Fallback to default uploader
 
     @Test
@@ -316,6 +370,41 @@ class MediaUploadServerTest {
         mockWpServer.shutdown()
     }
 
+    @Test
+    fun `re-encode forwards a non-UTF-8 field value verbatim`() {
+        val mockWpServer = MockWebServer()
+        mockWpServer.enqueue(MockResponse().setResponseCode(201).setBody("{}"))
+        mockWpServer.start()
+
+        val uploader = DefaultMediaUploader(
+            httpClient = okhttp3.OkHttpClient(),
+            siteApiRoot = mockWpServer.url("/wp-json/").toString(),
+            authHeader = "Bearer test-token"
+        )
+        val file = tempFolder.newFile("image.jpg")
+        file.writeBytes("fake image".toByteArray())
+
+        // A value that is not valid UTF-8 (a lone 0xFF byte between two ASCII bytes).
+        val binaryValue = byteArrayOf(0x61, 0xFF.toByte(), 0x62)
+        val blobPart = org.wordpress.gutenberg.http.MultipartPart(
+            name = "blob",
+            filename = null,
+            contentType = "application/octet-stream",
+            body = org.wordpress.gutenberg.http.RequestBody.InMemory(binaryValue)
+        )
+
+        runBlocking {
+            uploader.upload(file, "image/jpeg", "image.jpg", listOf(blobPart), "")
+        }
+
+        // The raw 0xFF byte survives verbatim — not coerced to a replacement char.
+        val bodyBytes = mockWpServer.takeRequest().body.readByteArray()
+        val found = bodyBytes.toList().windowed(binaryValue.size).any { it == binaryValue.toList() }
+        assertTrue("Non-UTF-8 field value should pass through verbatim", found)
+
+        mockWpServer.shutdown()
+    }
+
     // MARK: - Bad request handling
 
     @Test
@@ -457,9 +546,13 @@ class MediaUploadServerTest {
 
     /** A delegate that produces a new file with changed metadata (e.g. a transcode). */
     private class TranscodingDelegate : MediaUploadDelegate {
+        /** The processed file this delegate wrote, for cleanup assertions. */
+        @Volatile var producedFile: File? = null
+
         override suspend fun processFile(file: File, mimeType: String, filename: String): ProcessedProxyFile {
             val newFile = File(file.parentFile, "processed-${file.name}")
             newFile.writeBytes("processed".toByteArray())
+            producedFile = newFile
             return ProcessedProxyFile.Processed(newFile, "video/mp4", "clip.mp4")
         }
     }

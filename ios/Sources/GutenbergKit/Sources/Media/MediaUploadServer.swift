@@ -370,24 +370,21 @@ class DefaultMediaUploader: @unchecked Sendable {
     init(httpClient: EditorHTTPClientProtocol, siteApiRoot: URL, siteApiNamespace: [String] = []) {
         self.httpClient = httpClient
         self.siteApiRoot = siteApiRoot
-        // Normalize the namespace to a trailing slash (matching RESTAPIRepository)
-        // so it joins cleanly before "media", e.g. "sites/123" -> "sites/123/".
-        self.siteApiNamespace = siteApiNamespace.first.map { $0.hasSuffix("/") ? $0 : $0 + "/" }
+        self.siteApiNamespace = siteApiNamespace.first
     }
 
-    /// The WordPress media endpoint URL, accounting for site API namespaces and
+    /// The WordPress media endpoint URL, built through the shared
+    /// ``WordPressRESTURL`` namespacing (so it matches every other REST URL) and
     /// carrying the original request query (e.g. `?_embed`) through to WordPress.
     private func mediaEndpointURL(query: String) -> URL {
-        let mediaPath = if let siteApiNamespace {
-            "wp/v2/\(siteApiNamespace)media"
-        } else {
-            "wp/v2/media"
-        }
-        let base = siteApiRoot.appending(path: mediaPath)
-        guard !query.isEmpty, let url = URL(string: base.absoluteString + query) else {
-            return base
-        }
-        return url
+        let base = WordPressRESTURL.namespaced(apiRoot: siteApiRoot, path: "/wp/v2/media", namespace: siteApiNamespace)
+        guard !query.isEmpty else { return base }
+        // `query` is the raw request query in wire form (leading "?"). Set it via
+        // `percentEncodedQuery` so a value that isn't URL-safe can't make
+        // `URL(string:)` return nil and silently drop the query.
+        var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
+        components?.percentEncodedQuery = String(query.dropFirst())
+        return components?.url ?? base
     }
 
     func upload(fileURL: URL, mimeType: String, filename: String, extraParts: [MultipartPart], query: String) async throws -> MediaUploadResponse {
@@ -452,19 +449,20 @@ class DefaultMediaUploader: @unchecked Sendable {
         extraFields: [(name: String, value: Data)]
     ) throws -> (InputStream, Int) {
         // Serialize the non-file parts (post, additionalData) into the preamble
-        // ahead of the streamed file. They are small text fields, so keeping them
-        // in memory is fine; `contentLength` counts them via `preamble.count`.
-        var header = ""
+        // ahead of the streamed file. They are small, so keeping them in memory is
+        // fine; `contentLength` counts them via `preamble.count`. Field values are
+        // appended as raw bytes (not through String) so a non-UTF-8 value is
+        // forwarded verbatim rather than coerced to empty.
+        var preamble = Data()
         for field in extraFields {
-            let value = String(data: field.value, encoding: .utf8) ?? ""
-            header += "--\(boundary)\r\n"
-            header += "Content-Disposition: form-data; name=\"\(field.name)\"\r\n\r\n"
-            header += "\(value)\r\n"
+            preamble.append(Data("--\(boundary)\r\n".utf8))
+            preamble.append(Data("Content-Disposition: form-data; name=\"\(field.name)\"\r\n\r\n".utf8))
+            preamble.append(field.value)
+            preamble.append(Data("\r\n".utf8))
         }
-        header += "--\(boundary)\r\n"
-        header += "Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n"
-        header += "Content-Type: \(mimeType)\r\n\r\n"
-        let preamble = Data(header.utf8)
+        preamble.append(Data("--\(boundary)\r\n".utf8))
+        preamble.append(Data("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".utf8))
+        preamble.append(Data("Content-Type: \(mimeType)\r\n\r\n".utf8))
         let epilogue = Data("\r\n--\(boundary)--\r\n".utf8)
 
         guard let fileSize = try FileManager.default.attributesOfItem(atPath: fileURL.path(percentEncoded: false))[.size] as? Int else {
