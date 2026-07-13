@@ -241,7 +241,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             do {
                 try self.loadEditor(dependencies: dependencies)
             } catch {
-                self.error = error
+                self.failToLoad(error)
             }
         } else {
             // ASYNC FLOW: No dependencies - fetch them asynchronously
@@ -286,9 +286,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             // Continue to the shared loading path
             try self.loadEditor(dependencies: dependencies)
         } catch {
-            // Display error view - this sets self.error which triggers displayError()
-            self.error = error
+            self.failToLoad(error)
         }
+    }
+
+    private func failToLoad(_ error: Error) {
+        self.error = error
+        self.delegate?.editor(self, didFailToLoad: error)
     }
 
     // MARK: - Shared Loading Path: Load Editor into WebView

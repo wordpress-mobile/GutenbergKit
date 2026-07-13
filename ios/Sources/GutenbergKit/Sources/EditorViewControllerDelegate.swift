@@ -16,6 +16,9 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// - warning: Make sure not to update user content if that happens (it shouldn't)
     func editor(_ viewContoller: EditorViewController, didEncounterCriticalError error: Error)
 
+    /// Called after an error that prevents the editor from loading is displayed.
+    func editor(_ viewController: EditorViewController, didFailToLoad error: Error)
+
     /// Notifies the client about the new edits.
     ///
     /// - note: To get the latest content, call ``EditorViewController/getTitleAndContent()``.
@@ -72,6 +75,10 @@ public protocol EditorViewControllerDelegate: AnyObject {
     ///
     /// - Returns: A tuple of (title, content), or nil if no persisted content is available.
     func editorDidRequestLatestContent(_ controller: EditorViewController) -> (title: String, content: String)?
+}
+
+extension EditorViewControllerDelegate {
+    public func editor(_ viewController: EditorViewController, didFailToLoad error: Error) {}
 }
 
 #endif

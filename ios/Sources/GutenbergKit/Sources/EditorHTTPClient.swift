@@ -20,9 +20,9 @@ public enum EditorResponseData {
 }
 
 /// A WordPress REST API error response.
-struct WPError: Decodable {
-    let code: String
-    let message: String
+public struct WPError: Decodable, Sendable {
+    public let code: String
+    public let message: String
 }
 
 /// An HTTP client for making authenticated requests to the WordPress REST API.
@@ -32,13 +32,13 @@ struct WPError: Decodable {
 public actor EditorHTTPClient: EditorHTTPClientProtocol {
 
     /// Errors that can occur during HTTP requests.
-    enum ClientError: Error {
+    public enum ClientError: Error, Sendable {
         /// The server returned a WordPress-formatted error response.
-        case wpError(WPError)
+        case wpError(WPError, requestURL: URL)
         /// A file download failed with the given HTTP status code.
-        case downloadFailed(statusCode: Int)
+        case downloadFailed(statusCode: Int, requestURL: URL)
         /// An unexpected error occurred with the given response data and status code.
-        case unknown(response: Data, statusCode: Int)
+        case unknown(response: Data, statusCode: Int, requestURL: URL)
     }
 
     /// The base user agent string identifying the platform.
@@ -79,13 +79,18 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
         let httpResponse = response as! HTTPURLResponse
 
         guard 200...299 ~= httpResponse.statusCode else {
-            Logger.http.error("📡 HTTP error fetching \(configuredRequest.url!.absoluteString): \(httpResponse.statusCode)")
+            let requestURL = configuredRequest.url!
+            Logger.http.error("📡 HTTP error fetching \(requestURL.absoluteString): \(httpResponse.statusCode)")
 
             if let wpError = try? JSONDecoder().decode(WPError.self, from: data) {
-                throw ClientError.wpError(wpError)
+                throw ClientError.wpError(wpError, requestURL: requestURL)
             }
 
-            throw ClientError.unknown(response: data, statusCode: httpResponse.statusCode)
+            throw ClientError.unknown(
+                response: data,
+                statusCode: httpResponse.statusCode,
+                requestURL: requestURL
+            )
         }
 
         return (data, httpResponse)
@@ -100,9 +105,13 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
         let httpResponse = response as! HTTPURLResponse
 
         guard 200...299 ~= httpResponse.statusCode else {
-            Logger.http.error("📡 HTTP error fetching \(configuredRequest.url!.absoluteString): \(httpResponse.statusCode)")
+            let requestURL = configuredRequest.url!
+            Logger.http.error("📡 HTTP error fetching \(requestURL.absoluteString): \(httpResponse.statusCode)")
 
-            throw ClientError.downloadFailed(statusCode: httpResponse.statusCode)
+            throw ClientError.downloadFailed(
+                statusCode: httpResponse.statusCode,
+                requestURL: requestURL
+            )
         }
 
         return (url, response as! HTTPURLResponse)
