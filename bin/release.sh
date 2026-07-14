@@ -274,7 +274,7 @@ print_publish_instructions() {
     echo
     print_status "${prefix}Next: trigger the Buildkite publish build."
     echo
-    echo "  1. Open https://buildkite.com/automattic/gutenbergkit/builds/new"
+    echo "  1. Open https://buildkite.com/organizations/automattic/pipelines/gutenbergkit/builds/new"
     echo "  2. Branch: trunk"
     echo "  3. Commit: $sha"
     echo "  4. Environment Variables: NEW_VERSION=$tag"
