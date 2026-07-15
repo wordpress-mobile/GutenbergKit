@@ -53,7 +53,7 @@ It does **not** create the git tag or the GitHub release — that's Step 2.
 
 Step 1 prints the SHA of the version-bump commit it just pushed. Trigger a new Buildkite build with that SHA pinned:
 
-1. Open <https://buildkite.com/automattic/gutenbergkit/builds/new>
+1. Open <https://buildkite.com/organizations/automattic/pipelines/gutenbergkit/builds/new>
 2. **Branch**: `trunk`
 3. **Commit**: the SHA printed by Step 1
 4. **Environment Variables**: `NEW_VERSION=vX.Y.Z`
