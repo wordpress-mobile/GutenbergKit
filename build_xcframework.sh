@@ -26,16 +26,17 @@ if [[ -z "${MINIMUM_IOS_VERSION}" ]]; then
     exit 1
 fi
 # Marketing version stamped into the framework's Info.plist, sourced from
-# package.json so it always tracks the release. Fail closed rather than
-# stamping a placeholder: a silently-wrong version is exactly the drift we
-# want to prevent. App Store Connect rejects any embedded framework whose
-# Info.plist lacks CFBundleShortVersionString.
-# The `|| ''` collapses a missing/empty/undefined `version` to the empty
-# string so the guard below catches it — `node -p` would otherwise print the
-# literal "undefined" and stamp it as the version, the exact drift we prevent.
-MARKETING_VERSION="$(node -p "require('./package.json').version || ''" 2>/dev/null || true)"
+# package.json so it always tracks the release. Read with jq (already required
+# above) so this script needs no separate Node dependency and both version
+# reads stay consistent. Fail closed rather than stamping a placeholder: a
+# silently-wrong version is exactly the drift we want to prevent. App Store
+# Connect rejects any embedded framework whose Info.plist lacks
+# CFBundleShortVersionString.
+# `.version // empty` collapses a missing/null/empty `version` to empty output
+# so the guard below catches it, rather than stamping a literal "null".
+MARKETING_VERSION="$(jq -er '.version // empty' package.json 2>/dev/null || true)"
 if [[ -z "${MARKETING_VERSION}" ]]; then
-    echo "Error: could not read the version field from package.json (is node on PATH, and is this the repo root?)" >&2
+    echo "Error: could not read the version field from package.json (is 'jq' installed and is this the repo root?)" >&2
     exit 1
 fi
 BUILD_DIR="$(pwd)/build"
