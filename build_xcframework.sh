@@ -16,7 +16,28 @@
 set -euo pipefail
 
 SCHEME="GutenbergKitResources"
-MINIMUM_IOS_VERSION="17.0"
+# Minimum iOS version, read from Package.swift's declared platform so the
+# framework's MinimumOSVersion (and the dylib link target below) can't drift
+# from the package. SwiftPM normalizes `.v17` to "17.0" — the exact format
+# App Store Connect expects for MinimumOSVersion.
+MINIMUM_IOS_VERSION="$(swift package dump-package | jq -er '.platforms[] | select(.platformName == "ios") | .version' 2>/dev/null || true)"
+if [[ -z "${MINIMUM_IOS_VERSION}" ]]; then
+    echo "Error: could not read the iOS deployment target from Package.swift (is 'jq' installed and the Swift toolchain configured? check DEVELOPER_DIR / xcode-select -p)" >&2
+    exit 1
+fi
+# Marketing version stamped into the framework's Info.plist, sourced from
+# package.json so it always tracks the release. Fail closed rather than
+# stamping a placeholder: a silently-wrong version is exactly the drift we
+# want to prevent. App Store Connect rejects any embedded framework whose
+# Info.plist lacks CFBundleShortVersionString.
+# The `|| ''` collapses a missing/empty/undefined `version` to the empty
+# string so the guard below catches it — `node -p` would otherwise print the
+# literal "undefined" and stamp it as the version, the exact drift we prevent.
+MARKETING_VERSION="$(node -p "require('./package.json').version || ''" 2>/dev/null || true)"
+if [[ -z "${MARKETING_VERSION}" ]]; then
+    echo "Error: could not read the version field from package.json (is node on PATH, and is this the repo root?)" >&2
+    exit 1
+fi
 BUILD_DIR="$(pwd)/build"
 DERIVED_DATA_PATH="${BUILD_DIR}/DerivedData"
 
@@ -130,7 +151,9 @@ build_framework() {
     cp "${generated_maps}/${SCHEME}.modulemap" "${framework_path}/Modules/module.modulemap"
     cp "${generated_maps}/${SCHEME}-Swift.h" "${framework_path}/Headers/${SCHEME}-Swift.h"
 
-    # Minimal Info.plist
+    # Framework Info.plist. CFBundleShortVersionString, CFBundleVersion, and
+    # MinimumOSVersion are required by App Store Connect for any framework
+    # embedded in a submitted app — altool rejects the upload without them.
     cat > "${framework_path}/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -140,10 +163,18 @@ build_framework() {
     <string>${SCHEME}</string>
     <key>CFBundleIdentifier</key>
     <string>org.wordpress.GutenbergKitResources</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
     <key>CFBundleName</key>
     <string>${SCHEME}</string>
     <key>CFBundlePackageType</key>
     <string>FMWK</string>
+    <key>CFBundleShortVersionString</key>
+    <string>${MARKETING_VERSION}</string>
+    <key>CFBundleVersion</key>
+    <string>${MARKETING_VERSION}</string>
+    <key>MinimumOSVersion</key>
+    <string>${MINIMUM_IOS_VERSION}</string>
 </dict>
 </plist>
 PLIST
@@ -223,6 +254,42 @@ copy_dsyms_for_sdk() {
     cp -r "${dsyms_path}" "${XCFRAMEWORK_PATH}/${slice}/"
 }
 
+# Reads a top-level Info.plist value, printing empty string if the key is
+# absent so callers can distinguish "missing" from a real value.
+plist_value() {
+    plutil -extract "$1" raw -o - "$2" 2>/dev/null || true
+}
+
+# Guards against the framework's Info.plist drifting out of sync with the
+# rest of the release. Runs against the actual shipped slice so a dropped or
+# stale key fails GutenbergKit's own CI here, rather than a consumer's App
+# Store upload three hops downstream (see altool errors 90057 / 90360).
+verify_framework_plist() {
+    local plist="$1"
+
+    plutil -lint "${plist}" >/dev/null
+
+    local short_version bundle_version min_os
+    short_version="$(plist_value CFBundleShortVersionString "${plist}")"
+    bundle_version="$(plist_value CFBundleVersion "${plist}")"
+    min_os="$(plist_value MinimumOSVersion "${plist}")"
+
+    if [[ "${short_version}" != "${MARKETING_VERSION}" ]]; then
+        echo "Error: ${plist}: CFBundleShortVersionString='${short_version}' does not match package.json version '${MARKETING_VERSION}'" >&2
+        exit 1
+    fi
+    if [[ "${bundle_version}" != "${MARKETING_VERSION}" ]]; then
+        echo "Error: ${plist}: CFBundleVersion='${bundle_version}' does not match package.json version '${MARKETING_VERSION}'" >&2
+        exit 1
+    fi
+    if [[ "${min_os}" != "${MINIMUM_IOS_VERSION}" ]]; then
+        echo "Error: ${plist}: MinimumOSVersion='${min_os}' does not match expected '${MINIMUM_IOS_VERSION}'" >&2
+        exit 1
+    fi
+
+    echo "  OK: ${plist} (v${short_version}, min iOS ${min_os})"
+}
+
 # Build for both platforms
 build_framework "iphoneos" "generic/platform=iOS"
 copy_resource_bundles "iphoneos"
@@ -246,6 +313,22 @@ xcodebuild -create-xcframework \
 # Copy dSYMs into xcframework slices
 copy_dsyms_for_sdk "iphoneos"
 copy_dsyms_for_sdk "iphonesimulator"
+
+# Verify every slice's framework Info.plist before the artifact leaves this step
+echo "--- Verifying framework Info.plist"
+verified_count=0
+for slice_dir in "${XCFRAMEWORK_PATH}"/ios-*; do
+    [ -d "${slice_dir}" ] || continue
+    verify_framework_plist "${slice_dir}/${SCHEME}.framework/Info.plist"
+    verified_count=$((verified_count + 1))
+done
+# Fail closed if the glob matched nothing: without nullglob the loop above
+# would run zero iterations and exit 0, letting an empty or malformed
+# XCFramework pass the very gate meant to catch it.
+if [[ "${verified_count}" -eq 0 ]]; then
+    echo "Error: no framework slices found to verify in ${XCFRAMEWORK_PATH}" >&2
+    exit 1
+fi
 
 echo ""
 echo "XCFramework: ${XCFRAMEWORK_PATH}"
