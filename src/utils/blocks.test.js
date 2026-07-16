@@ -198,6 +198,33 @@ describe( 'formatPatternsForNativeInserter', () => {
 		expect( pattern.categories ).toEqual( [ 'gallery', 'query' ] );
 	} );
 
+	it( 'drops non-string categories without throwing', () => {
+		// User/synced patterns can momentarily expose raw numeric term IDs
+		// (instead of slug strings) while core-data resolves the id→slug
+		// lookup table. Those must not reach `startsWith`.
+		expect( () =>
+			formatPatternsForNativeInserter( [
+				{
+					name: 'core/block/42',
+					title: 'Synced',
+					content: '',
+					categories: [ 'gallery', 7, '_internal', null ],
+				},
+			] )
+		).not.toThrow();
+
+		const [ pattern ] = formatPatternsForNativeInserter( [
+			{
+				name: 'core/block/42',
+				title: 'Synced',
+				content: '',
+				categories: [ 'gallery', 7, '_internal', null ],
+			},
+		] );
+
+		expect( pattern.categories ).toEqual( [ 'gallery' ] );
+	} );
+
 	it( 'produces patterns that conform to the Pattern shape', () => {
 		const patterns = formatPatternsForNativeInserter( [
 			{
