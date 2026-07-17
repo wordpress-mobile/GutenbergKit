@@ -48,6 +48,25 @@ lane :publish_to_s3 do |options|
     auto_prefix: false,
     if_exists: :replace
   )
+
+  # Publish the JS source maps alongside the XCFramework so host apps can fetch
+  # them (by GutenbergKit version) and upload them to Sentry for exception
+  # symbolication. The maps are NOT bundled inside the XCFramework — SwiftPM
+  # binary-target consumers don't surface sibling files to the host build — so
+  # they ship as a separate object under the same versioned key prefix.
+  # Optional: older builds (or a build that emitted no maps) simply skip this.
+  sourcemaps = sourcemaps_file_path
+  if sourcemaps
+    upload_to_s3(
+      bucket: 'a8c-apps-public-artifacts',
+      key: File.join('gutenbergkit', version, 'GutenbergKitSourceMaps.zip'),
+      file: sourcemaps,
+      auto_prefix: false,
+      if_exists: :replace
+    )
+  else
+    UI.important('No GutenbergKitSourceMaps.zip found; skipping source-map upload.')
+  end
 end
 
 lane :publish_pr_xcframework do
@@ -222,6 +241,15 @@ def xcframework_file_path
     File.join(PROJECT_ROOT, 'GutenbergKitResources-*.xcframework.zip'),
     'XCFramework zip not found. Run package_xcframework.sh first.'
   )
+end
+
+# Locate the source-map bundle produced by the `build-react` CI step. Returns
+# nil when absent (rather than failing) so `publish_to_s3` can treat source-map
+# publishing as optional — a build that emitted no maps still publishes the
+# XCFramework.
+def sourcemaps_file_path
+  path = File.join(PROJECT_ROOT, 'GutenbergKitSourceMaps.zip')
+  File.exist?(path) ? path : nil
 end
 
 def require_single_glob_match!(pattern, not_found_message)

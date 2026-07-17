@@ -35,6 +35,17 @@ steps:
               exit "$$PREP_STATUS"
           fi
           make build REFRESH_JS_BUILD=1
+          # Vite emits `.map` files into `dist/` for Sentry symbolication.
+          # Zip them (preserving the `assets/` layout the host uploads under),
+          # then strip them from `dist/` BEFORE tarring: the source maps must
+          # never ship inside the app bundles, and some downstream steps (e.g.
+          # the Android publish) copy `dist/` directly rather than through the
+          # map-stripping Makefile targets. Stripping here makes `dist.tar.gz`
+          # map-free for every consumer.
+          echo "--- :sentry: Packaging source maps"
+          ( cd dist && zip -r -q ../GutenbergKitSourceMaps.zip . -i '*.map' )
+          buildkite-agent artifact upload GutenbergKitSourceMaps.zip
+          find dist -name '*.map' -delete
           tar -czf dist.tar.gz dist/
           buildkite-agent artifact upload dist.tar.gz
       plugins: &plugins
@@ -149,6 +160,9 @@ steps:
       command: |
           buildkite-agent artifact download '*.xcframework.zip' .
           buildkite-agent artifact download '*.xcframework.zip.checksum.txt' .
+          # Source maps are optional: `publish_to_s3` skips the upload when the
+          # zip is absent, so don't fail the step if the artifact isn't found.
+          buildkite-agent artifact download GutenbergKitSourceMaps.zip . || true
           install_gems
           bundle exec fastlane publish_to_s3 version:$BUILDKITE_COMMIT
       plugins: *plugins
