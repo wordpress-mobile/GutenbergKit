@@ -139,17 +139,26 @@ build: prep-translations ## Build the project for all platforms (iOS, Android, w
 		echo "--- :white_check_mark: Skipping JS build (dist already exists). Use REFRESH_JS_BUILD=1 to force refresh."; \
 	fi
 
+# The `find ... -delete` after each copy strips source maps from the native
+# bundles. Maps are emitted into `dist/` (see `vite.config.js`) so build tooling
+# can deliver them to Sentry, but they must NOT ship inside the app: they'd bloat
+# the binary and expose de-minified source. `dist/` itself keeps its maps for the
+# upload step. Stripping here (rather than only in CI) covers every consumer of
+# these targets — local `make build`, CI, and `bin/release.sh` (which commits the
+# iOS bundle via `git add .`).
 .PHONY: copy-dist-ios
 copy-dist-ios:
 	@rm -rf ./ios/Sources/GutenbergKitResources/Gutenberg/
 	@mkdir -p ./ios/Sources/GutenbergKitResources/Gutenberg
 	@cp -r ./dist/. ./ios/Sources/GutenbergKitResources/Gutenberg/
+	@find ./ios/Sources/GutenbergKitResources/Gutenberg -name '*.map' -delete
 	@touch ./ios/Sources/GutenbergKitResources/Gutenberg/.gitkeep
 
 .PHONY: copy-dist-android
 copy-dist-android:
 	@rm -rf ./android/Gutenberg/src/main/assets/
 	@cp -r ./dist/. ./android/Gutenberg/src/main/assets
+	@find ./android/Gutenberg/src/main/assets -name '*.map' -delete
 
 .PHONY: build-swift-package
 build-swift-package: build ## Build the Swift package for iOS
