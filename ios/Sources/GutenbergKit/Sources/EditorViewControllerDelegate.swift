@@ -102,6 +102,9 @@ public struct GutenbergJSException {
     public let tags: [String: String]
     public let isHandled: Bool
     public let handledBy: String
+    /// Source-map Debug IDs for the files in the stack trace, used to symbolicate
+    /// the exception in Sentry regardless of the on-device file paths.
+    public let debugImages: [DebugImage]
 
     public struct StacktraceLine {
         public let filename: String?
@@ -117,6 +120,22 @@ public struct GutenbergJSException {
             self.function = function
             self.lineno = dict["lineno"] as? NSNumber
             self.colno = dict["colno"] as? NSNumber
+        }
+    }
+
+    /// Pairs a minified file with the Debug ID that identifies its source map.
+    public struct DebugImage {
+        public let codeFile: String
+        public let debugID: String
+
+        init?(from dict: [AnyHashable: Any]) {
+            guard let codeFile = dict["code_file"] as? String,
+                  let debugID = dict["debug_id"] as? String
+            else {
+                return nil
+            }
+            self.codeFile = codeFile
+            self.debugID = debugID
         }
     }
 
@@ -139,6 +158,9 @@ public struct GutenbergJSException {
         self.tags = tags
         self.isHandled = isHandled
         self.handledBy = handledBy
+        // Optional: absent in payloads from builds without Debug IDs.
+        let rawDebugImages = dict["debug_images"] as? [[AnyHashable: Any]] ?? []
+        self.debugImages = rawDebugImages.compactMap { DebugImage(from: $0) }
     }
 }
 
