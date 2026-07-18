@@ -433,6 +433,7 @@
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = PZYM8XX95Q;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = GutenbergKit;
 				INFOPLIST_KEY_CFBundleURLTypes = "$(INFOPLIST_KEY_CFBundleURLTypes)";
 				INFOPLIST_KEY_NSCameraUsageDescription = "The app needs access to your camera to capture photos and videos for your content.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -467,6 +468,7 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = GutenbergKit;
 				INFOPLIST_KEY_CFBundleURLTypes = "$(INFOPLIST_KEY_CFBundleURLTypes)";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
