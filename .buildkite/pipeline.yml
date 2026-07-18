@@ -43,7 +43,11 @@ steps:
           # map-stripping Makefile targets. Stripping here makes `dist.tar.gz`
           # map-free for every consumer.
           echo "--- :sentry: Packaging source maps"
-          ( cd dist && zip -r -q ../GutenbergKitSourceMaps.zip . -i '*.map' )
+          # Include both the minified `.js` and their `.map` files: Sentry's
+          # Debug ID symbolication needs the minified source alongside the map
+          # (uploading only maps yields `js_no_source`/`missing_source`). Both
+          # carry the same injected Debug ID.
+          ( cd dist && zip -r -q ../GutenbergKitSourceMaps.zip . -i '*.js' '*.map' )
           buildkite-agent artifact upload GutenbergKitSourceMaps.zip
           find dist -name '*.map' -delete
           tar -czf dist.tar.gz dist/
