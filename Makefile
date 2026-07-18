@@ -132,12 +132,29 @@ build: prep-translations ## Build the project for all platforms (iOS, Android, w
 		$(MAKE) _RECURSIVE_INVOKE=1 npm-dependencies && \
 		echo "--- :node: Building Gutenberg" && \
 		npm run build && \
+		$(MAKE) inject-sourcemap-debug-ids && \
 		echo "--- :open_file_folder: Copying Build Products into place" && \
 		$(MAKE) copy-dist-ios && \
 		$(MAKE) copy-dist-android; \
 	else \
 		echo "--- :white_check_mark: Skipping JS build (dist already exists). Use REFRESH_JS_BUILD=1 to force refresh."; \
 	fi
+
+# Inject Sentry Debug IDs into the built JS and its source maps. This runs
+# BETWEEN `npm run build` and the `copy-dist-*` targets so the `//# debugId=`
+# comment lands in `dist/` and is copied into the shipped bundles, while the
+# matching `debug_id` is written into the `.map` files that get uploaded to
+# Sentry. Debug IDs let Sentry match maps to events regardless of the (unstable,
+# per-install) on-device file paths — the only reliable approach for GutenbergKit's
+# WebView, where path-based matching fails.
+#
+# `@sentry/cli sourcemaps inject` only rewrites files with adjacent maps; it needs
+# no auth token (uploading, which does, stays host-side). The injected UUIDs are
+# deterministic (content-hashed), so builds remain reproducible.
+.PHONY: inject-sourcemap-debug-ids
+inject-sourcemap-debug-ids:
+	@echo "--- :sentry: Injecting source map Debug IDs"
+	@npx sentry-cli sourcemaps inject dist
 
 # The `find ... -delete` after each copy strips source maps from the native
 # bundles. Maps are emitted into `dist/` (see `vite.config.js`) so build tooling
