@@ -374,9 +374,13 @@ export function formatPatternsForNativeInserter( patterns ) {
 			title: pattern.title,
 			content: pattern.content,
 			blockTypes: pattern.blockTypes ?? [],
+			// User/synced patterns can momentarily expose numeric term IDs
+			// instead of slug strings, so filter to strings before calling
+			// `startsWith`.
 			categories:
 				pattern.categories?.filter(
-					( cat ) => ! cat.startsWith( '_' )
+					( cat ) =>
+						typeof cat === 'string' && ! cat.startsWith( '_' )
 				) ?? [],
 			description: pattern.description ?? null,
 			keywords: pattern.keywords ?? [],
