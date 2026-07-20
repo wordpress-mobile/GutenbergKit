@@ -10,6 +10,9 @@ const url = isCI ? 'http://localhost:4173' : 'http://localhost:5173';
 
 export default defineConfig( {
 	testDir: './e2e',
+	// Narrower than the default, which also claims `*.test.js` — those belong to
+	// Vitest, which covers the non-spec helpers in this directory.
+	testMatch: '**/*.spec.js',
 	outputDir: './e2e/test-results',
 	fullyParallel: true,
 	workers: isCI ? 1 : undefined,
