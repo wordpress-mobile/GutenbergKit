@@ -175,8 +175,10 @@ internal class MediaUploadServer(
         }
 
         // Route: only POST /upload is handled. (OPTIONS preflight is answered by
-        // the HTTP library under its permissive CORS policy.)
-        if (request.method.uppercase() != "POST" || request.target != "/upload") {
+        // the HTTP library under its permissive CORS policy.) Match on the path
+        // alone — the target carries a query string (e.g. `?_embed`) that the
+        // upload handler relays on to WordPress.
+        if (request.method.uppercase() != "POST" || request.path != "/upload") {
             return errorResponse(404, "Not found")
         }
 
@@ -192,8 +194,7 @@ internal class MediaUploadServer(
         // The non-file parts (post, additionalData) and the original query
         // (e.g. ?_embed) must reach WordPress too — relay them alongside the file.
         val extraParts = parts.filter { it.filename == null }
-        val queryValue = request.target.substringAfter('?', "")
-        val query = if (queryValue.isEmpty()) "" else "?$queryValue"
+        val query = request.query
 
         val tempFile = writePartToTempFile(filePart)
             ?: return errorResponse(500, "Failed to save file")
