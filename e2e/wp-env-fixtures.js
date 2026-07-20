@@ -4,6 +4,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+/**
+ * Internal dependencies
+ */
+import { fetchJson } from './fetch-json';
+
 const CREDENTIALS_PATH = path.resolve(
 	import.meta.dirname,
 	'../.wp-env.credentials.json'
@@ -44,20 +49,11 @@ async function fetchEditorSettings( creds ) {
 		return cachedEditorSettings;
 	}
 
-	const response = await fetch(
+	cachedEditorSettings = await fetchJson(
 		`${ creds.siteApiRoot }wp-block-editor/v1/settings`,
-		{
-			headers: { Authorization: creds.authHeader },
-		}
+		creds,
+		'editor settings'
 	);
-
-	if ( ! response.ok ) {
-		throw new Error(
-			`Failed to fetch editor settings: ${ response.status } ${ response.statusText }`
-		);
-	}
-
-	cachedEditorSettings = await response.json();
 	return cachedEditorSettings;
 }
 
@@ -75,17 +71,11 @@ async function fetchEditorAssets( creds ) {
 	const url = new URL( `${ creds.siteApiRoot }wpcom/v2/editor-assets` );
 	url.searchParams.set( 'exclude', 'core,gutenberg' );
 
-	const response = await fetch( url.toString(), {
-		headers: { Authorization: creds.authHeader },
-	} );
-
-	if ( ! response.ok ) {
-		throw new Error(
-			`Failed to fetch editor assets: ${ response.status } ${ response.statusText }`
-		);
-	}
-
-	cachedEditorAssets = await response.json();
+	cachedEditorAssets = await fetchJson(
+		url.toString(),
+		creds,
+		'editor assets'
+	);
 	return cachedEditorAssets;
 }
 

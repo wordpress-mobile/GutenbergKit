@@ -169,3 +169,40 @@ cat > "$CREDENTIALS_FILE" <<EOF
 EOF
 
 echo "Credentials written to $CREDENTIALS_FILE"
+
+# ---------------------------------------------------------------------------
+# Wait until WordPress is fully provisioned
+#
+# The Playground runtime keeps installing plugins (Blueprint steps) after it
+# starts accepting requests. During those installs WordPress drops a
+# `.maintenance` file and serves a 503, and there is a brief race where the
+# file is removed mid-request and PHP fatals. Both corrupt the first editor
+# REST call, so we gate here until the settings endpoint returns valid JSON.
+# ---------------------------------------------------------------------------
+
+echo "Waiting for the editor settings endpoint to be ready..."
+
+SETTINGS_URL="$SITE_URL/?rest_route=/wp-block-editor/v1/settings"
+READY_MAX_RETRIES=45
+READY_RETRY_INTERVAL=2
+
+for attempt in $(seq 1 $READY_MAX_RETRIES); do
+    if curl -s -H "Authorization: $AUTH_HEADER" "$SETTINGS_URL" | node -e "
+        let data = '';
+        process.stdin.on('data', chunk => data += chunk);
+        process.stdin.on('end', () => {
+            try { JSON.parse(data); }
+            catch { process.exit(1); }
+        });
+    "; then
+        echo "Editor settings endpoint is ready."
+        break
+    fi
+
+    if [ "$attempt" -eq "$READY_MAX_RETRIES" ]; then
+        echo "Error: editor settings endpoint did not return valid JSON after $((READY_MAX_RETRIES * READY_RETRY_INTERVAL)) seconds."
+        exit 1
+    fi
+
+    sleep $READY_RETRY_INTERVAL
+done
