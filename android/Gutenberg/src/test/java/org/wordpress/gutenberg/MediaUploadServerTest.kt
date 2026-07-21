@@ -125,6 +125,11 @@ class MediaUploadServerTest {
         )
 
         assertTrue("Expected 201 but got: ${response.statusLine}", response.statusLine.contains("201"))
+        // The delegate returns Original, so this is the passthrough branch.
+        // Pin which branch ran — `lastQuery` is recorded by both, so without this
+        // the query assertion would pass even if routing collapsed onto one path.
+        assertTrue(mockUploader.passthroughUploadCalled)
+        assertFalse(mockUploader.uploadCalled)
         assertEquals("?_embed=wp:featuredmedia", mockUploader.lastQuery)
     }
 

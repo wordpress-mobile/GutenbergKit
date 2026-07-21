@@ -123,6 +123,11 @@ struct MediaUploadServerTests {
     let (_, response) = try await URLSession.shared.data(for: request)
     let httpResponse = try #require(response as? HTTPURLResponse)
     #expect(httpResponse.statusCode == 201)
+    // The delegate returns `.original`, so this is the passthrough branch.
+    // Pin which branch ran — `lastQuery` is recorded by both, so without this
+    // the query assertion would pass even if routing collapsed onto one path.
+    #expect(mockUploader.passthroughUploadCalled)
+    #expect(!mockUploader.uploadCalled)
     #expect(mockUploader.lastQuery == "?_embed=wp:featuredmedia")
   }
 
