@@ -79,8 +79,10 @@ final class MediaUploadServer: Sendable {
         }
 
         // Route: only POST /upload is handled. (OPTIONS preflight is answered by
-        // the HTTP library under its permissive CORS policy.)
-        guard parsed.method.uppercased() == "POST", parsed.target == "/upload" else {
+        // the HTTP library under its permissive CORS policy.) Match on the path
+        // alone — the target carries a query string (e.g. `?_embed`) that the
+        // upload handler relays on to WordPress.
+        guard parsed.method.uppercased() == "POST", parsed.path == "/upload" else {
             return errorResponse(status: 404, message: "Not found")
         }
 
@@ -104,9 +106,7 @@ final class MediaUploadServer: Sendable {
         // The non-file parts (post, additionalData) and the original query
         // (e.g. ?_embed) must reach WordPress too — relay them alongside the file.
         let extraParts = parts.filter { $0.filename == nil }
-        let query = request.parsed.target.firstIndex(of: "?").map {
-            String(request.parsed.target[$0...])
-        } ?? ""
+        let query = request.parsed.query
 
         // Write part body to a dedicated temp file for the delegate.
         //

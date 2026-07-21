@@ -206,8 +206,7 @@ export function nativeMediaUploadMiddleware( options, next ) {
 	// (`post`, additionalData) — and the original query string (e.g. `?_embed`)
 	// so the native server can relay them to WordPress unchanged. Rebuilding the
 	// body with only `file` would drop the post association and additionalData.
-	const queryIndex = options.path.indexOf( '?' );
-	const query = queryIndex === -1 ? '' : options.path.slice( queryIndex );
+	const query = requestQuery( options.path );
 
 	// Use the two-argument form of `.then()` so the rejection handler catches
 	// *only* a connection-level failure of the `fetch()` itself — not errors
@@ -276,6 +275,28 @@ export function nativeMediaUploadMiddleware( options, next ) {
 			throw connectionError;
 		}
 	);
+}
+
+/**
+ * The query component of a request path, including the leading `?`, or an empty
+ * string when there is no query.
+ *
+ * Mirrors the `query` accessors on the native request types (`HttpRequest` on
+ * Android, `ParsedHTTPRequest` on iOS): the split is on the first `?`, and a
+ * bare trailing `?` carries no parameters so it yields an empty string. Keeping
+ * the three in agreement means the value can be appended to an upstream URL
+ * unconditionally, whichever side derived it.
+ *
+ * @param {string} path The request path, e.g. `/wp/v2/media?_embed`.
+ * @return {string} The query, e.g. `?_embed`, or `''`.
+ */
+function requestQuery( path ) {
+	const separator = path.indexOf( '?' );
+	if ( separator === -1 ) {
+		return '';
+	}
+	const value = path.slice( separator + 1 );
+	return value ? `?${ value }` : '';
 }
 
 /**

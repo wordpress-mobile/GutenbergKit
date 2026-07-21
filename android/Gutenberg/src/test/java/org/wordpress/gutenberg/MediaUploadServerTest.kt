@@ -101,6 +101,38 @@ class MediaUploadServerTest {
         assertTrue(response.statusLine.contains("404"))
     }
 
+    @Test
+    fun `routes upload with a query string and relays the query`() {
+        val delegate = ProcessOnlyDelegate()
+        val mockUploader = MockDefaultUploader()
+        server.stop()
+        server = MediaUploadServer(uploadDelegate = delegate, defaultUploader = mockUploader, cacheDir = tempFolder.root)
+
+        // `@wordpress/media-utils` uploads to `/wp/v2/media?_embed=wp:featuredmedia`,
+        // so the middleware forwards that query on to the native server. Routing must
+        // match on the path alone, and the query must reach WordPress unchanged.
+        val boundary = "test-boundary-query"
+        val body = buildMultipartBody(boundary, "photo.jpg", "image/jpeg", "fake image data".toByteArray())
+
+        val response = sendRawRequest(
+            method = "POST",
+            path = "/upload?_embed=wp:featuredmedia",
+            headers = mapOf(
+                "Relay-Authorization" to "Bearer ${server.token}",
+                "Content-Type" to "multipart/form-data; boundary=$boundary"
+            ),
+            body = body
+        )
+
+        assertTrue("Expected 201 but got: ${response.statusLine}", response.statusLine.contains("201"))
+        // The delegate returns Original, so this is the passthrough branch.
+        // Pin which branch ran — `lastQuery` is recorded by both, so without this
+        // the query assertion would pass even if routing collapsed onto one path.
+        assertTrue(mockUploader.passthroughUploadCalled)
+        assertFalse(mockUploader.uploadCalled)
+        assertEquals("?_embed=wp:featuredmedia", mockUploader.lastQuery)
+    }
+
     // MARK: - Upload with delegate
 
     @Test
@@ -566,6 +598,7 @@ class MediaUploadServerTest {
         @Volatile var passthroughUploadCalled = false
         @Volatile var lastUploadMimeType: String? = null
         @Volatile var lastUploadFilename: String? = null
+        @Volatile var lastQuery: String? = null
 
         override suspend fun upload(
             file: File, mimeType: String, filename: String,
@@ -574,6 +607,7 @@ class MediaUploadServerTest {
             uploadCalled = true
             lastUploadMimeType = mimeType
             lastUploadFilename = filename
+            lastQuery = query
             return mockResponse()
         }
 
@@ -583,6 +617,7 @@ class MediaUploadServerTest {
             query: String
         ): MediaUploadResponse {
             passthroughUploadCalled = true
+            lastQuery = query
             return mockResponse()
         }
 

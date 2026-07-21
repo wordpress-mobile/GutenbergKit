@@ -100,6 +100,37 @@ struct MediaUploadServerTests {
     #expect(httpResponse.statusCode == 404)
   }
 
+  @Test("routes /upload with a query string and relays the query")
+  func uploadWithQueryString() async throws {
+    let delegate = ProcessOnlyDelegate()
+    let mockUploader = MockDefaultUploader()
+    let server = try await MediaUploadServer.start(uploadDelegate: delegate, defaultUploader: mockUploader)
+    defer { server.stop() }
+
+    // `@wordpress/media-utils` uploads to `/wp/v2/media?_embed=wp:featuredmedia`,
+    // so the middleware forwards that query on to the native server. Routing must
+    // match on the path alone, and the query must reach WordPress unchanged.
+    let boundary = UUID().uuidString
+    let body = buildMultipartBody(boundary: boundary, filename: "photo.jpg", mimeType: "image/jpeg", data: Data("fake image data".utf8))
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload?_embed=wp:featuredmedia")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    request.httpBody = body
+
+    let (_, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+    #expect(httpResponse.statusCode == 201)
+    // The delegate returns `.original`, so this is the passthrough branch.
+    // Pin which branch ran — `lastQuery` is recorded by both, so without this
+    // the query assertion would pass even if routing collapsed onto one path.
+    #expect(mockUploader.passthroughUploadCalled)
+    #expect(!mockUploader.uploadCalled)
+    #expect(mockUploader.lastQuery == "?_embed=wp:featuredmedia")
+  }
+
   @Test("calls delegate and returns upload result")
   func delegateProcessAndUpload() async throws {
     let delegate = MockUploadDelegate()
@@ -599,11 +630,13 @@ private final class MockDefaultUploader: DefaultMediaUploader, @unchecked Sendab
   private var _passthroughUploadCalled = false
   private var _lastUploadMimeType: String?
   private var _lastUploadFilename: String?
+  private var _lastQuery: String?
 
   var uploadCalled: Bool { lock.withLock { _uploadCalled } }
   var passthroughUploadCalled: Bool { lock.withLock { _passthroughUploadCalled } }
   var lastUploadMimeType: String? { lock.withLock { _lastUploadMimeType } }
   var lastUploadFilename: String? { lock.withLock { _lastUploadFilename } }
+  var lastQuery: String? { lock.withLock { _lastQuery } }
 
   init() {
     super.init(httpClient: MockHTTPClient(), siteApiRoot: URL(string: "https://example.com/wp-json/")!)
@@ -614,12 +647,16 @@ private final class MockDefaultUploader: DefaultMediaUploader, @unchecked Sendab
       _uploadCalled = true
       _lastUploadMimeType = mimeType
       _lastUploadFilename = filename
+      _lastQuery = query
     }
     return mockResponse()
   }
 
   override func passthroughUpload(body: RequestBody, contentType: String, query: String) async throws -> MediaUploadResponse {
-    lock.withLock { _passthroughUploadCalled = true }
+    lock.withLock {
+      _passthroughUploadCalled = true
+      _lastQuery = query
+    }
     return mockResponse()
   }
 

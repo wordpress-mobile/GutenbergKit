@@ -46,6 +46,23 @@ data class HttpRequest(
     val serverError: org.wordpress.gutenberg.http.HTTPRequestParseError? = null
 ) {
     /**
+     * The path portion of [target], without the query component
+     * (e.g., "/wp/v2/posts" for "/wp/v2/posts?per_page=10").
+     *
+     * Use this for routing — matching against [target] fails as soon as a
+     * client appends a query string.
+     */
+    val path: String
+        get() = target.substringBefore('?')
+
+    /**
+     * The query component of [target], including the leading "?"
+     * (e.g., "?per_page=10"), or an empty string when there is no query.
+     */
+    val query: String
+        get() = target.substringAfter('?', "").let { if (it.isEmpty()) "" else "?$it" }
+
+    /**
      * Returns the value of the first header matching the given name (case-insensitive).
      */
     fun header(name: String): String? {
