@@ -34,7 +34,6 @@
 		0CE8E7842C339B0600B9DC67 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		0CE8E7872C339B0600B9DC67 /* GutenbergApp.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GutenbergApp.swift; sourceTree = "<group>"; };
 		0CE8E7892C339B0600B9DC67 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
-		0CE8E7922C339B1B00B9DC67 /* GutenbergKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = GutenbergKit; path = ../..; sourceTree = "<group>"; };
 		246852682EAACCA100ED1F09 /* AuthenticationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationManager.swift; sourceTree = "<group>"; };
 		246852692EAACCA100ED1F09 /* ConfigurationStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationStorage.swift; sourceTree = "<group>"; };
 		AA0000012F00000000000001 /* GutenbergUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GutenbergUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -69,7 +68,6 @@
 		0C4F59822BEFF4970028BD96 = {
 			isa = PBXGroup;
 			children = (
-				0CE8E7922C339B1B00B9DC67 /* GutenbergKit */,
 				0CE8E7882C339B0600B9DC67 /* Sources */,
 				0C83424D2C339B7F00CAA762 /* Resources */,
 				0CE8E78A2C339B0600B9DC67 /* PreviewContent */,
@@ -212,6 +210,7 @@
 			mainGroup = 0C4F59822BEFF4970028BD96;
 			packageReferences = (
 				0C4F59A02BEFF4980028BD96 /* XCRemoteSwiftPackageReference "wordpress-rs" */,
+				245D6BE52EDFCD640076D742 /* XCLocalSwiftPackageReference "../.." */,
 			);
 			productRefGroup = 0C4F598C2BEFF4970028BD96 /* Products */;
 			projectDirPath = "";
@@ -557,6 +556,13 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		245D6BE52EDFCD640076D742 /* XCLocalSwiftPackageReference "../.." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../..;
+		};
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
 		0C4F59A02BEFF4980028BD96 /* XCRemoteSwiftPackageReference "wordpress-rs" */ = {
