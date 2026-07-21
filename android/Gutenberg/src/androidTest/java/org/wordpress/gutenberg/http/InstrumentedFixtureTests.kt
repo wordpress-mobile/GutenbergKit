@@ -160,6 +160,11 @@ class InstrumentedFixtureTests {
                         pendingError.errorId,
                         "$description: expected $expectedError but got ${pendingError.errorId}"
                     )
+                    assertEquals(
+                        HTTPRequestParseError.Disposition.RECOVERABLE,
+                        pendingError.disposition,
+                        "$description: ${pendingError.errorId} surfaced via pendingParseError but is not RECOVERABLE"
+                    )
                 } else {
                     fail("$description: expected error $expectedError but parsing succeeded")
                 }
@@ -168,6 +173,11 @@ class InstrumentedFixtureTests {
                     expectedError,
                     e.error.errorId,
                     "$description: expected $expectedError but got ${e.error.errorId}"
+                )
+                assertEquals(
+                    HTTPRequestParseError.Disposition.FATAL,
+                    e.error.disposition,
+                    "$description: ${e.error.errorId} was thrown but is not FATAL"
                 )
             }
         }

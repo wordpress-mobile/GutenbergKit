@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.security.NetworkSecurityPolicy
 import android.util.Log
 import android.view.Gravity
 import android.view.inputmethod.InputMethodManager
@@ -119,16 +120,49 @@ class GutenbergView : FrameLayout {
             // Stop any previously running server before starting a new one.
             uploadServer?.stop()
             uploadServer = null
-            // (Re)start the upload server so it captures the delegate.
-            // This handles the common case where the delegate is set after
+            // (Re)start the upload server so it captures the delegate. This
+            // handles the common case where the delegate is set after
             // construction but before the editor finishes loading.
             if (value != null) {
                 startUploadServer()
             }
+            // Reflect the resulting server state in the page: advertise a freshly
+            // (re)started server, or clear the port when the server did NOT
+            // (re)start (delegate cleared, auth missing, or cleartext-to-localhost
+            // blocked) so the JS upload middleware routes to the default path
+            // instead of fetching a now-dead port.
+            syncUploadServerJavaScriptVariables()
         }
 
     private var uploadServer: MediaUploadServer? = null
-    private val uploadHttpClient: okhttp3.OkHttpClient by lazy { okhttp3.OkHttpClient() }
+    private val uploadHttpClient: okhttp3.OkHttpClient by lazy {
+        // The read/write inactivity timeouts mirror URLSession's 60s
+        // timeoutIntervalForRequest default — an inactivity timer that resets on
+        // progress — so the iOS and Android upload clients behave the same. Like
+        // URLSession, which governs uploads with that inactivity timer rather than a
+        // total-duration cap, there is deliberately NO callTimeout here (unlike the
+        // sibling EditorHTTPClient, which caps total call duration — fine for small
+        // REST payloads, wrong for uploads): because each timeout resets on progress,
+        // a large upload is never failed on total duration, only on a genuine 60s
+        // stall in the active direction.
+        //
+        //  - writeTimeout (upload): a transient loss of connectivity during the upload
+        //    fails within ~60s so it surfaces and can be retried, rather than hanging.
+        //  - readTimeout (download): gives WordPress time to generate image sub-sizes
+        //    synchronously inside POST /wp/v2/media, during which it sends no response
+        //    bytes. The bare OkHttpClient() 10s default fired mid-resize — and since the
+        //    attachment row exists before resizing finishes, that orphaned it
+        //    server-side and duplicated it on retry.
+        //  - connectTimeout: a much shorter 15s — establishing a socket should be
+        //    quick, so this fails fast on an unreachable host instead of making the
+        //    user wait out the full window. (URLSession has no separate connect dial;
+        //    it folds connection setup into the same 60s request timer.)
+        okhttp3.OkHttpClient.Builder()
+            .connectTimeout(CONNECT_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(UPLOAD_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(UPLOAD_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+    }
 
     private var onFileChooserRequested: ((Intent, Int) -> Unit)? = null
     private var contentChangeListener: ContentChangeListener? = null
@@ -613,9 +647,60 @@ class GutenbergView : FrameLayout {
         webView.evaluateJavascript(gbKitConfig, null)
     }
 
+    /**
+     * Syncs the current upload server's port and token into the already-loaded
+     * page.
+     *
+     * Advertises a running server so JS uploads route through it, and clears them
+     * (to `null`) when the server is stopped or was never started — so the JS
+     * upload middleware routes to the default path instead of fetching a now-dead
+     * port. The initial injection is handled by [setGlobalJavaScriptVariables]
+     * from `onPageStarted`; this keeps JS in sync when the server (re)starts or
+     * stops *after* the page has loaded (e.g. when [mediaUploadDelegate] is
+     * assigned, replaced, or cleared).
+     *
+     * The `window.GBKit` guard makes this a no-op before the page has loaded, so
+     * it is safe to call on the initial start too.
+     */
+    private fun syncUploadServerJavaScriptVariables() {
+        val portJs = uploadServer?.port?.toString() ?: "null"
+        val tokenJs = uploadServer?.token?.let { JSONObject.quote(it) } ?: "null"
+        val js = """
+            if (window.GBKit) {
+                window.GBKit.nativeUploadPort = $portJs;
+                window.GBKit.nativeUploadToken = $tokenJs;
+                localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
+            }
+        """.trimIndent()
+        // evaluateJavascript must run on the WebView's (UI) thread; post it so a
+        // delegate set from a background thread doesn't throw thread-affinity.
+        webView.post { webView.evaluateJavascript(js, null) }
+    }
 
     private fun startUploadServer() {
+        // The native upload server relays through DefaultMediaUploader, which needs a
+        // site root and an auth header (every host provides one — the editor injects
+        // it because the WebView has no auth cookies). Without both there is nothing
+        // to upload through, so leave the server down and let uploads fall to the
+        // default WebView path rather than start a server that could only fail.
         if (configuration.siteApiRoot.isEmpty() || configuration.authHeader.isEmpty()) return
+
+        // The editor reaches the loopback server over cleartext http://localhost. If
+        // the host app's network-security config doesn't permit cleartext to
+        // localhost, the WebView blocks every upload fetch (ERR_CLEARTEXT_NOT_PERMITTED)
+        // before it leaves the page. Detect that here and don't start the server, so
+        // the JS middleware routes uploads down the default path instead of a server
+        // it can never reach. Hosts that want native media processing must permit
+        // cleartext to localhost (see the demo's res/xml/network_security_config.xml).
+        if (!NetworkSecurityPolicy.getInstance().isCleartextTrafficPermitted(LOOPBACK_HOST)) {
+            Log.w(
+                TAG,
+                "Cleartext to $LOOPBACK_HOST is not permitted, so the native media upload " +
+                    "server can't be reached from the WebView. Permit cleartext to $LOOPBACK_HOST " +
+                    "in the app's network security config to enable native media processing."
+            )
+            return
+        }
 
         try {
             val defaultUploader = DefaultMediaUploader(
@@ -627,8 +712,10 @@ class GutenbergView : FrameLayout {
             uploadServer = MediaUploadServer(
                 uploadDelegate = mediaUploadDelegate,
                 defaultUploader = defaultUploader,
-                cacheDir = context.cacheDir
+                cacheDir = context.cacheDir,
+                scope = coroutineScope
             )
+            // JS is synced by the mediaUploadDelegate setter after this returns.
         } catch (e: Exception) {
             Log.w(TAG, "Failed to start upload server", e)
         }
@@ -1143,6 +1230,18 @@ class GutenbergView : FrameLayout {
         private val LOCAL_HOSTS = setOf("localhost", "127.0.0.1", "10.0.2.2")
 
         private const val ASSET_LOADING_TIMEOUT_MS = 5000L
+
+        /**
+         * Read/write inactivity timeout for media uploads, matching URLSession's
+         * 60s `timeoutIntervalForRequest` default. See [uploadHttpClient].
+         */
+        private const val UPLOAD_TIMEOUT_SECONDS = 60L
+
+        /** Connection-setup timeout for media uploads — short, to fail fast on an unreachable host. */
+        private const val CONNECT_TIMEOUT_SECONDS = 15L
+
+        /** Host the WebView uses to reach the loopback upload server (must match the JS fetch host). */
+        private const val LOOPBACK_HOST = "localhost"
 
         // Warmup state management
         private var warmupHandler: Handler? = null

@@ -5,6 +5,17 @@ import Testing
 @Suite("HTTPRequestParser")
 struct HTTPRequestParserTests {
 
+    // MARK: - Error Disposition
+
+    /// Locks the fatal/recoverable classification so a refactor can't silently
+    /// make a smuggling-relevant error recoverable — which would let a malformed
+    /// request reach the handler before auth.
+    @Test("only payloadTooLarge is recoverable")
+    func onlyPayloadTooLargeIsRecoverable() {
+        let recoverable = HTTPRequestParseError.allCases.filter { $0.disposition == .recoverable }
+        #expect(recoverable == [.payloadTooLarge])
+    }
+
     // MARK: - Basic Request Parsing
 
     @Test("parses a simple GET request")

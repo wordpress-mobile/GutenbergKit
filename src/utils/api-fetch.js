@@ -202,59 +202,115 @@ export function nativeMediaUploadMiddleware( options, next ) {
 		`Routing upload of ${ file.name } through native server on port ${ nativeUploadPort }`
 	);
 
-	const formData = new FormData();
-	formData.append( 'file', file, file.name );
+	// Forward the original request body — the file plus every sibling field
+	// (`post`, additionalData) — and the original query string (e.g. `?_embed`)
+	// so the native server can relay them to WordPress unchanged. Rebuilding the
+	// body with only `file` would drop the post association and additionalData.
+	const query = requestQuery( options.path );
 
-	return fetch( `http://localhost:${ nativeUploadPort }/upload`, {
+	// Use the two-argument form of `.then()` so the rejection handler catches
+	// *only* a connection-level failure of the `fetch()` itself — not errors
+	// thrown while handling a response (those must surface as real failures).
+	return fetch( `http://localhost:${ nativeUploadPort }/upload${ query }`, {
 		method: 'POST',
 		headers: {
 			'Relay-Authorization': `Bearer ${ nativeUploadToken }`,
 		},
-		body: formData,
+		body: options.body,
 		signal: options.signal,
-	} )
-		.then( ( response ) => {
+	} ).then(
+		( response ) => {
+			// The native server relays WordPress's response verbatim. On a
+			// non-2xx, mirror @wordpress/api-fetch: reject with the parsed WP
+			// error body ({ code, message, data }) so @wordpress/media-utils
+			// surfaces WordPress's real message. On success, return WordPress's
+			// attachment object unchanged so every consumer behaves exactly as
+			// it would for a non-native upload.
 			if ( ! response.ok ) {
-				return response.text().then( ( body ) => {
-					const error = new Error(
-						`Upload failed (${ response.status }): ${
-							body || response.statusText
-						}`
-					);
-					error.code = 'upload_failed';
-					throw error;
-				} );
+				return response
+					.json()
+					.catch( invalidUploadResponseError )
+					.then( ( body ) => {
+						logError( 'Native upload failed', body );
+						throw body;
+					} );
 			}
-			return response.json();
-		} )
-		.then( ( result ) => {
-			// Transform native server response into WordPress REST API
-			// attachment shape expected by @wordpress/media-utils.
-			return {
-				id: result.id,
-				source_url: result.url,
-				alt_text: result.alt || '',
-				caption: {
-					raw: result.caption || '',
-					rendered: result.caption || '',
-				},
-				title: {
-					raw: result.title || '',
-					rendered: result.title || '',
-				},
-				mime_type: result.mime,
-				media_type: result.type,
-				media_details: {
-					width: result.width || 0,
-					height: result.height || 0,
-				},
-				link: result.url,
-			};
-		} )
-		.catch( ( err ) => {
-			logError( 'Native upload failed', err );
-			throw err;
-		} );
+			// A 2xx with a non-JSON body (e.g. an HTML error page injected by an
+			// intermediary) rejects json(); normalize it the same way as the
+			// non-ok path rather than surfacing a raw SyntaxError.
+			return response.json().catch( () => {
+				const error = invalidUploadResponseError();
+				logError( 'Native upload returned an invalid response', error );
+				throw error;
+			} );
+		},
+		( connectionError ) => {
+			// A caller-initiated cancellation must propagate as the cancellation,
+			// never be retried. Detect it via `signal.aborted` — the cancellation
+			// *state* — rather than `connectionError.name === 'AbortError'`: the
+			// state check also catches `AbortSignal.timeout()` (which rejects with
+			// a TimeoutError, not an AbortError) and custom abort reasons, which a
+			// name match would miss and wrongly fall back on. Rethrow the signal's
+			// `reason` (the canonical abort error), not `connectionError`: if a
+			// network failure and the abort race, `fetch` can reject with a network
+			// TypeError even though the signal aborted, and rethrowing that would
+			// make upstream treat a cancelled upload as a real failure — surfacing
+			// a spurious error notice instead of a silent cancel.
+			if ( options.signal?.aborted ) {
+				throw options.signal.reason;
+			}
+			// Otherwise the loopback upload server is unreachable at the transport
+			// layer. We deliberately do NOT fall back to a direct re-upload:
+			// reachability is gated proactively upstream — this middleware's guard
+			// skips the native path when no port is advertised, and the native side
+			// only advertises a port the WebView can actually reach (server running
+			// + cleartext-to-localhost permitted, cleared on stop). So reaching here
+			// means the server died out-of-band after a valid start; retrying a
+			// non-idempotent POST /wp/v2/media could duplicate the attachment if the
+			// native server had already relayed it to WordPress.
+			logError(
+				'Native upload failed at the transport layer',
+				connectionError
+			);
+			throw connectionError;
+		}
+	);
+}
+
+/**
+ * The query component of a request path, including the leading `?`, or an empty
+ * string when there is no query.
+ *
+ * Mirrors the `query` accessors on the native request types (`HttpRequest` on
+ * Android, `ParsedHTTPRequest` on iOS): the split is on the first `?`, and a
+ * bare trailing `?` carries no parameters so it yields an empty string. Keeping
+ * the three in agreement means the value can be appended to an upstream URL
+ * unconditionally, whichever side derived it.
+ *
+ * @param {string} path The request path, e.g. `/wp/v2/media?_embed`.
+ * @return {string} The query, e.g. `?_embed`, or `''`.
+ */
+function requestQuery( path ) {
+	const separator = path.indexOf( '?' );
+	if ( separator === -1 ) {
+		return '';
+	}
+	const value = path.slice( separator + 1 );
+	return value ? `?${ value }` : '';
+}
+
+/**
+ * The error rejected when the upload server's response body can't be parsed as
+ * JSON. Shaped like a WordPress REST error so `@wordpress/media-utils` surfaces
+ * it the same way as a real one, on both the non-2xx and 2xx paths.
+ *
+ * @return {{ code: string, message: string }} The normalized error.
+ */
+function invalidUploadResponseError() {
+	return {
+		code: 'invalid_json',
+		message: 'The upload server returned an invalid response.',
+	};
 }
 
 /**

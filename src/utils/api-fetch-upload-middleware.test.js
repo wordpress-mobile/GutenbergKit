@@ -202,25 +202,106 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		expect( options.body ).toBeInstanceOf( FormData );
 	} );
 
-	it( 'transforms native response to WordPress REST API shape', async () => {
+	it( 'forwards the original body and query to the native server', async () => {
 		getGBKit.mockReturnValue( {
-			nativeUploadPort: 8080,
-			nativeUploadToken: 'token',
+			nativeUploadPort: 12345,
+			nativeUploadToken: 'test-token',
 		} );
 
 		global.fetch = vi.fn( () =>
 			Promise.resolve( {
 				ok: true,
-				json: () =>
-					Promise.resolve( {
-						id: 77,
-						url: 'https://example.com/image.jpg',
-						alt: 'alt text',
-						caption: 'a caption',
-						title: 'image',
-						mime: 'image/jpeg',
-						type: 'image',
-					} ),
+				json: () => Promise.resolve( { id: 1 } ),
+			} )
+		);
+
+		const body = new FormData();
+		body.append( 'file', makeFile(), 'photo.jpg' );
+		body.append( 'post', '123' );
+
+		await nativeMediaUploadMiddleware(
+			{
+				method: 'POST',
+				path: '/wp/v2/media?_embed=wp:featuredmedia',
+				body,
+			},
+			makeNext()
+		);
+
+		const [ url, fetchOptions ] = global.fetch.mock.calls[ 0 ];
+		// The original query is appended so ?_embed reaches WordPress.
+		expect( url ).toBe(
+			'http://localhost:12345/upload?_embed=wp:featuredmedia'
+		);
+		// The original body is forwarded verbatim, so `post` survives.
+		expect( fetchOptions.body ).toBe( body );
+		expect( fetchOptions.body.get( 'post' ) ).toBe( '123' );
+	} );
+
+	it.each( [
+		// A bare trailing `?` carries no parameters. The native `query`
+		// accessors normalize it away, so this side must too — otherwise the
+		// upload server receives a `?` the two platforms agree cannot exist.
+		[ '/wp/v2/media?', 'http://localhost:12345/upload' ],
+		[ '/wp/v2/media', 'http://localhost:12345/upload' ],
+	] )( 'normalizes the query of %s to %s', async ( path, expectedUrl ) => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 12345,
+			nativeUploadToken: 'test-token',
+		} );
+
+		global.fetch = vi.fn( () =>
+			Promise.resolve( {
+				ok: true,
+				json: () => Promise.resolve( { id: 1 } ),
+			} )
+		);
+
+		const body = new FormData();
+		body.append( 'file', makeFile(), 'photo.jpg' );
+
+		await nativeMediaUploadMiddleware(
+			{ method: 'POST', path, body },
+			makeNext()
+		);
+
+		const [ url ] = global.fetch.mock.calls[ 0 ];
+		expect( url ).toBe( expectedUrl );
+	} );
+
+	it( 'returns the relayed WordPress attachment unchanged', async () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'token',
+		} );
+
+		// The native server relays WordPress's raw attachment response; the
+		// middleware must return it verbatim, not reshape it — so consumers get
+		// the real media_details.sizes, link, and raw/rendered fields.
+		const attachment = {
+			id: 77,
+			source_url: 'https://example.com/image.jpg',
+			alt_text: 'alt text',
+			caption: { raw: 'a caption', rendered: 'a caption' },
+			title: { raw: 'image', rendered: 'image' },
+			mime_type: 'image/jpeg',
+			media_type: 'image',
+			media_details: {
+				width: 4032,
+				height: 3024,
+				sizes: {
+					large: {
+						source_url: 'https://example.com/image-1024x768.jpg',
+					},
+				},
+			},
+			link: 'https://example.com/image/',
+		};
+
+		global.fetch = vi.fn( () =>
+			Promise.resolve( {
+				ok: true,
+				json: () => Promise.resolve( attachment ),
 			} )
 		);
 
@@ -229,62 +310,30 @@ describe( 'nativeMediaUploadMiddleware', () => {
 			makeNext()
 		);
 
-		expect( result ).toEqual( {
-			id: 77,
-			source_url: 'https://example.com/image.jpg',
-			alt_text: 'alt text',
-			caption: { raw: 'a caption', rendered: 'a caption' },
-			title: { raw: 'image', rendered: 'image' },
-			mime_type: 'image/jpeg',
-			media_type: 'image',
-			media_details: { width: 0, height: 0 },
-			link: 'https://example.com/image.jpg',
-		} );
-	} );
-
-	it( 'handles missing optional fields in native response', async () => {
-		getGBKit.mockReturnValue( {
-			nativeUploadPort: 8080,
-			nativeUploadToken: 'token',
-		} );
-
-		global.fetch = vi.fn( () =>
-			Promise.resolve( {
-				ok: true,
-				json: () =>
-					Promise.resolve( {
-						id: 1,
-						url: 'https://example.com/file.pdf',
-						title: 'file',
-						mime: 'application/pdf',
-						type: 'application',
-					} ),
-			} )
-		);
-
-		const result = await nativeMediaUploadMiddleware(
-			makePostMediaOptions( makeFile( 'file.pdf', 'application/pdf' ) ),
-			makeNext()
-		);
-
-		expect( result.alt_text ).toBe( '' );
-		expect( result.caption ).toEqual( { raw: '', rendered: '' } );
+		expect( result ).toEqual( attachment );
 	} );
 
 	// MARK: - Error handling
 
-	it( 'throws on non-ok response from local server', async () => {
+	it( 'rejects with the WordPress error body on a non-ok response', async () => {
 		getGBKit.mockReturnValue( {
 			nativeUploadPort: 8080,
 			nativeUploadToken: 'token',
 		} );
 
+		// The native server relays WordPress's error status + JSON body; the
+		// middleware rejects with that body as-is (like @wordpress/api-fetch) so
+		// media-utils surfaces WordPress's real message.
 		global.fetch = vi.fn( () =>
 			Promise.resolve( {
 				ok: false,
-				status: 500,
-				statusText: 'Internal Server Error',
-				text: () => Promise.resolve( 'Server crashed' ),
+				status: 403,
+				json: () =>
+					Promise.resolve( {
+						code: 'rest_cannot_create',
+						message:
+							'Sorry, you are not allowed to upload this file type.',
+					} ),
 			} )
 		);
 
@@ -294,19 +343,24 @@ describe( 'nativeMediaUploadMiddleware', () => {
 				makeNext()
 			)
 		).rejects.toMatchObject( {
-			code: 'upload_failed',
-			message: expect.stringContaining( '500' ),
+			code: 'rest_cannot_create',
+			message: expect.stringContaining( 'not allowed' ),
 		} );
 	} );
 
-	it( 'throws on fetch network error', async () => {
+	it( 'rejects with invalid_json when the error body is not JSON', async () => {
 		getGBKit.mockReturnValue( {
 			nativeUploadPort: 8080,
 			nativeUploadToken: 'token',
 		} );
 
 		global.fetch = vi.fn( () =>
-			Promise.reject( new Error( 'Failed to fetch' ) )
+			Promise.resolve( {
+				ok: false,
+				status: 502,
+				json: () =>
+					Promise.reject( new SyntaxError( 'Unexpected token' ) ),
+			} )
 		);
 
 		await expect(
@@ -314,7 +368,111 @@ describe( 'nativeMediaUploadMiddleware', () => {
 				makePostMediaOptions( makeFile() ),
 				makeNext()
 			)
-		).rejects.toBeDefined();
+		).rejects.toMatchObject( { code: 'invalid_json' } );
+	} );
+
+	it( 'rejects with invalid_json when a 2xx response body is not JSON', async () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'token',
+		} );
+
+		// A successful status but a non-JSON body (e.g. an HTML error page from
+		// an intermediary). json() rejects; the middleware must normalize it, not
+		// surface a raw SyntaxError.
+		global.fetch = vi.fn( () =>
+			Promise.resolve( {
+				ok: true,
+				json: () =>
+					Promise.reject( new SyntaxError( 'Unexpected token' ) ),
+			} )
+		);
+
+		await expect(
+			nativeMediaUploadMiddleware(
+				makePostMediaOptions( makeFile() ),
+				makeNext()
+			)
+		).rejects.toMatchObject( { code: 'invalid_json' } );
+	} );
+
+	it( 'surfaces a transport failure instead of retrying (no silent duplicate)', async () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'token',
+		} );
+		const next = makeNext();
+
+		// A connection-level failure — the loopback server died out-of-band after
+		// a valid start (reachability is otherwise gated proactively upstream, so
+		// an unreachable server never advertises a port to fetch).
+		const connectionError = new TypeError( 'Failed to fetch' );
+		global.fetch = vi.fn( () => Promise.reject( connectionError ) );
+
+		await expect(
+			nativeMediaUploadMiddleware(
+				makePostMediaOptions( makeFile() ),
+				next
+			)
+		).rejects.toBe( connectionError );
+
+		// No silent fallback to a direct re-upload — retrying a non-idempotent
+		// POST could duplicate the attachment.
+		expect( next ).not.toHaveBeenCalled();
+	} );
+
+	it( 'propagates an abort instead of falling back', async () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'token',
+		} );
+		const next = makeNext();
+
+		// A real aborted signal — `fetch` rejects with the signal's reason.
+		const controller = new AbortController();
+		controller.abort();
+		const options = {
+			...makePostMediaOptions( makeFile() ),
+			signal: controller.signal,
+		};
+		global.fetch = vi.fn( () =>
+			Promise.reject( controller.signal.reason )
+		);
+
+		// The middleware rethrows the signal's canonical reason (not the fetch
+		// rejection) and does not retry.
+		await expect(
+			nativeMediaUploadMiddleware( options, next )
+		).rejects.toBe( controller.signal.reason );
+
+		// An explicit cancellation must not be retried via the default path.
+		expect( next ).not.toHaveBeenCalled();
+	} );
+
+	it( 'propagates a timeout cancellation (aborted signal, non-AbortError) instead of falling back', async () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'token',
+		} );
+		const next = makeNext();
+
+		// `AbortSignal.timeout()` aborts its signal and rejects with a
+		// TimeoutError (not an AbortError). A `name === 'AbortError'` check would
+		// miss it and wrongly fall back; keying off `signal.aborted` catches it.
+		const timeoutError = new Error( 'The operation timed out.' );
+		timeoutError.name = 'TimeoutError';
+		const options = {
+			...makePostMediaOptions( makeFile() ),
+			signal: { aborted: true, reason: timeoutError },
+		};
+		global.fetch = vi.fn( () => Promise.reject( timeoutError ) );
+
+		await expect(
+			nativeMediaUploadMiddleware( options, next )
+		).rejects.toBe( timeoutError );
+
+		// A timeout is a cancellation, not an unreachable server — do not retry.
+		expect( next ).not.toHaveBeenCalled();
 	} );
 
 	// MARK: - Signal forwarding

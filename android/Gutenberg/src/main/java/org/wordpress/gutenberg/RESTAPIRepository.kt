@@ -23,10 +23,6 @@ class RESTAPIRepository(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    private val apiRoot = configuration.siteApiRoot.trimEnd('/')
-    private val namespace = configuration.siteApiNamespace.firstOrNull()?.let {
-        it.trimEnd('/') + "/"
-    }
     private val editorSettingsUrl = buildNamespacedUrl(EDITOR_SETTINGS_PATH)
     private val activeThemeUrl = buildNamespacedUrl(ACTIVE_THEME_PATH)
     private val siteSettingsUrl = buildNamespacedUrl(SITE_SETTINGS_PATH)
@@ -217,25 +213,13 @@ class RESTAPIRepository(
         return urlResponse
     }
 
-    /**
-     * Builds a URL from the API root and path, inserting the site API namespace
-     * after the version segment if one is configured.
-     *
-     * For example, with namespace `sites/123/` and path `/wp/v2/types`:
-     * the result is `$apiRoot/wp/v2/sites/123/types`.
-     */
-    private fun buildNamespacedUrl(path: String): String {
-        if (namespace == null) {
-            return "$apiRoot$path"
-        }
-
-        val parts = path.removePrefix("/").split("/", limit = 3)
-        if (parts.size < 3) {
-            return "$apiRoot$path"
-        }
-
-        return "$apiRoot/${parts[0]}/${parts[1]}/$namespace${parts[2]}"
-    }
+    /** Builds a namespaced REST URL via the shared [RestUrlBuilder]. */
+    private fun buildNamespacedUrl(path: String): String =
+        RestUrlBuilder.namespaced(
+            configuration.siteApiRoot,
+            configuration.siteApiNamespace.firstOrNull(),
+            path
+        )
 
     companion object {
         private const val EDITOR_SETTINGS_PATH = "/wp-block-editor/v1/settings"
