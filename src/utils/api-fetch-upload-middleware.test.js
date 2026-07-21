@@ -238,6 +238,37 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		expect( fetchOptions.body.get( 'post' ) ).toBe( '123' );
 	} );
 
+	it.each( [
+		// A bare trailing `?` carries no parameters. The native `query`
+		// accessors normalize it away, so this side must too — otherwise the
+		// upload server receives a `?` the two platforms agree cannot exist.
+		[ '/wp/v2/media?', 'http://localhost:12345/upload' ],
+		[ '/wp/v2/media', 'http://localhost:12345/upload' ],
+	] )( 'normalizes the query of %s to %s', async ( path, expectedUrl ) => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 12345,
+			nativeUploadToken: 'test-token',
+		} );
+
+		global.fetch = vi.fn( () =>
+			Promise.resolve( {
+				ok: true,
+				json: () => Promise.resolve( { id: 1 } ),
+			} )
+		);
+
+		const body = new FormData();
+		body.append( 'file', makeFile(), 'photo.jpg' );
+
+		await nativeMediaUploadMiddleware(
+			{ method: 'POST', path, body },
+			makeNext()
+		);
+
+		const [ url ] = global.fetch.mock.calls[ 0 ];
+		expect( url ).toBe( expectedUrl );
+	} );
+
 	it( 'returns the relayed WordPress attachment unchanged', async () => {
 		getGBKit.mockReturnValue( {
 			nativeUploadPort: 8080,
