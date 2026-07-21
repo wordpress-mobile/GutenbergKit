@@ -40,7 +40,7 @@ extension ParsedHTTPRequest {
     public var path: String {
         let target = target
         guard let separator = target.firstIndex(of: "?") else { return target }
-        return String(target[target.startIndex..<separator])
+        return String(target.prefix(upTo: separator))
     }
 
     /// The query component of ``target``, including the leading "?"
