@@ -230,7 +230,14 @@ export function nativeMediaUploadMiddleware( options, next ) {
 			if ( ! response.ok ) {
 				return response
 					.json()
-					.catch( invalidUploadResponseError )
+					.catch( () => {
+						// An abort during the body read rejects json() too; surface
+						// the cancellation, not an "invalid response" error.
+						if ( options.signal?.aborted ) {
+							throw uploadAbortError( options.signal );
+						}
+						return invalidUploadResponseError();
+					} )
 					.then( ( body ) => {
 						logError( 'Native upload failed', body );
 						throw body;
@@ -240,6 +247,11 @@ export function nativeMediaUploadMiddleware( options, next ) {
 			// intermediary) rejects json(); normalize it the same way as the
 			// non-ok path rather than surfacing a raw SyntaxError.
 			return response.json().catch( () => {
+				// An abort during the body read rejects json(); surface the
+				// cancellation rather than an "invalid response" error notice.
+				if ( options.signal?.aborted ) {
+					throw uploadAbortError( options.signal );
+				}
 				const error = invalidUploadResponseError();
 				logError( 'Native upload returned an invalid response', error );
 				throw error;
@@ -258,13 +270,7 @@ export function nativeMediaUploadMiddleware( options, next ) {
 			// make upstream treat a cancelled upload as a real failure — surfacing
 			// a spurious error notice instead of a silent cancel.
 			if ( options.signal?.aborted ) {
-				// Some engines abort without populating `reason`; fall back to a
-				// canonical AbortError so upstream recognizes the cancellation
-				// rather than a thrown `undefined`.
-				throw (
-					options.signal.reason ??
-					new DOMException( 'The upload was aborted.', 'AbortError' )
-				);
+				throw uploadAbortError( options.signal );
 			}
 			// Otherwise the loopback upload server is unreachable at the transport
 			// layer. We deliberately do NOT fall back to a direct re-upload:
@@ -318,6 +324,26 @@ function invalidUploadResponseError() {
 		code: 'invalid_json',
 		message: 'The upload server returned an invalid response.',
 	};
+}
+
+/**
+ * The error to surface for a cancelled upload.
+ *
+ * Returns the signal's `reason` (the canonical abort error), falling back to a
+ * canonical `AbortError` for engines that abort without populating `reason`.
+ * Callers gate this behind `signal.aborted` (the cancellation *state*) rather
+ * than an error's `name`, so a body-read rejection or a network error that
+ * races the abort still surfaces as a silent cancel — not a spurious failure
+ * notice.
+ *
+ * @param {AbortSignal} signal The aborted signal.
+ * @return {Error} The error representing the cancellation.
+ */
+function uploadAbortError( signal ) {
+	return (
+		signal.reason ??
+		new DOMException( 'The upload was aborted.', 'AbortError' )
+	);
 }
 
 /**

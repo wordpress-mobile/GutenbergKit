@@ -406,6 +406,63 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		).rejects.toMatchObject( { code: 'invalid_json' } );
 	} );
 
+	it( 'propagates an abort during the 2xx response body read instead of invalid_json', async () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'token',
+		} );
+		const next = makeNext();
+
+		// Headers arrive (fetch resolves), but the user aborts before the body
+		// finishes streaming — json() rejects while the signal is now aborted. The
+		// middleware must surface the cancellation, not an "invalid response".
+		const abortError = new DOMException( 'Aborted', 'AbortError' );
+		const signal = { aborted: false, reason: undefined };
+		const options = { ...makePostMediaOptions( makeFile() ), signal };
+		global.fetch = vi.fn( () =>
+			Promise.resolve( {
+				ok: true,
+				json: () => {
+					signal.aborted = true;
+					signal.reason = abortError;
+					return Promise.reject( abortError );
+				},
+			} )
+		);
+
+		await expect(
+			nativeMediaUploadMiddleware( options, next )
+		).rejects.toBe( abortError );
+		expect( next ).not.toHaveBeenCalled();
+	} );
+
+	it( 'propagates an abort during a non-2xx response body read instead of invalid_json', async () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'token',
+		} );
+		const next = makeNext();
+
+		const abortError = new DOMException( 'Aborted', 'AbortError' );
+		const signal = { aborted: false, reason: undefined };
+		const options = { ...makePostMediaOptions( makeFile() ), signal };
+		global.fetch = vi.fn( () =>
+			Promise.resolve( {
+				ok: false,
+				json: () => {
+					signal.aborted = true;
+					signal.reason = abortError;
+					return Promise.reject( abortError );
+				},
+			} )
+		);
+
+		await expect(
+			nativeMediaUploadMiddleware( options, next )
+		).rejects.toBe( abortError );
+		expect( next ).not.toHaveBeenCalled();
+	} );
+
 	it( 'surfaces a transport failure instead of retrying (no silent duplicate)', async () => {
 		getGBKit.mockReturnValue( {
 			nativeUploadPort: 8080,
