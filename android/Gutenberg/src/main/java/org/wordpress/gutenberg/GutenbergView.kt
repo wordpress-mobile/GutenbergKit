@@ -112,37 +112,33 @@ class GutenbergView : FrameLayout {
 
     var requestInterceptor: GutenbergRequestInterceptor = DefaultGutenbergRequestInterceptor()
 
-    /** Optional delegate for customizing media upload behavior (resize, transcode, custom upload). */
+    /**
+     * Optional delegate for customizing media upload behavior (resize, transcode,
+     * custom upload).
+     *
+     * Provide this **before the editor loads** — typically right after
+     * construction (e.g. in the `AndroidView` factory). It is captured once, when
+     * the page begins loading, and advertised to the page then; setting it
+     * afterward has no effect, so the setter throws to surface the mistake.
+     */
     var mediaUploadDelegate: MediaUploadDelegate? = null
         set(value) {
-            if (field === value) return
-            field = value
-            // Stop any previously running server before starting a new one.
-            uploadServer?.stop()
-            uploadServer = null
-            // (Re)start the upload server so it captures the delegate. This
-            // handles the common case where the delegate is set after
-            // construction but before the editor finishes loading.
-            if (value != null) {
-                startUploadServer()
+            check(!hasStartedLoading) {
+                "mediaUploadDelegate must be set before the editor loads (e.g. right " +
+                    "after construction). It is captured when the page begins loading; " +
+                    "setting it afterward has no effect."
             }
-            // Reflect the resulting server state in the page: advertise a freshly
-            // (re)started server, or clear the port when the server did NOT
-            // (re)start (delegate cleared, auth missing, or cleartext-to-localhost
-            // blocked) so the JS upload middleware routes to the default path
-            // instead of fetching a now-dead port.
-            syncUploadServerJavaScriptVariables()
+            field = value
         }
 
     @Volatile private var uploadServer: MediaUploadServer? = null
 
     /**
-     * True once the view has been detached from its window. [onDetachedFromWindow]
-     * stops the upload server and won't fire again, so [startUploadServer] must not
-     * resurrect one (e.g. from a delegate set after detach) — that would leak its
-     * socket and accept-loop coroutine. Reset on re-attach.
+     * True once the editor page has begun loading and the upload server's
+     * configuration has been captured. After this the [mediaUploadDelegate] can no
+     * longer take effect, so its setter throws.
      */
-    @Volatile private var isTornDown = false
+    @Volatile private var hasStartedLoading = false
 
     private val uploadHttpClient: okhttp3.OkHttpClient by lazy {
         // The read/write inactivity timeouts mirror URLSession's 60s
@@ -414,7 +410,7 @@ class GutenbergView : FrameLayout {
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
-                setGlobalJavaScriptVariables()
+                onEditorPageStarted()
             }
 
             override fun shouldInterceptRequest(
@@ -640,6 +636,24 @@ class GutenbergView : FrameLayout {
         }
     }
 
+    /**
+     * Invoked when the editor page begins loading. Starts the upload server once —
+     * capturing the [mediaUploadDelegate] provided before load — then advertises
+     * the editor globals (including the server's port and token) to the page.
+     *
+     * Starting the server here, on the UI thread, rather than from the
+     * [mediaUploadDelegate] setter keeps its whole lifecycle — start here, stop in
+     * [onDetachedFromWindow] — on the UI thread, so it can't race a
+     * background-thread delegate assignment.
+     */
+    private fun onEditorPageStarted() {
+        if (!hasStartedLoading) {
+            hasStartedLoading = true
+            startUploadServer()
+        }
+        setGlobalJavaScriptVariables()
+    }
+
     private fun setGlobalJavaScriptVariables() {
         val gbKit = GBKitGlobal.fromConfiguration(
             configuration,
@@ -656,42 +670,11 @@ class GutenbergView : FrameLayout {
         webView.evaluateJavascript(gbKitConfig, null)
     }
 
-    /**
-     * Syncs the current upload server's port and token into the already-loaded
-     * page.
-     *
-     * Advertises a running server so JS uploads route through it, and clears them
-     * (to `null`) when the server is stopped or was never started — so the JS
-     * upload middleware routes to the default path instead of fetching a now-dead
-     * port. The initial injection is handled by [setGlobalJavaScriptVariables]
-     * from `onPageStarted`; this keeps JS in sync when the server (re)starts or
-     * stops *after* the page has loaded (e.g. when [mediaUploadDelegate] is
-     * assigned, replaced, or cleared).
-     *
-     * The `window.GBKit` guard makes this a no-op before the page has loaded, so
-     * it is safe to call on the initial start too.
-     */
-    private fun syncUploadServerJavaScriptVariables() {
-        val portJs = uploadServer?.port?.toString() ?: "null"
-        val tokenJs = uploadServer?.token?.let { JSONObject.quote(it) } ?: "null"
-        val js = """
-            if (window.GBKit) {
-                window.GBKit.nativeUploadPort = $portJs;
-                window.GBKit.nativeUploadToken = $tokenJs;
-                localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
-            }
-        """.trimIndent()
-        // evaluateJavascript must run on the WebView's (UI) thread; post it so a
-        // delegate set from a background thread doesn't throw thread-affinity.
-        webView.post { webView.evaluateJavascript(js, null) }
-    }
-
     private fun startUploadServer() {
-        // Don't (re)start on a detached view: onDetachedFromWindow has already torn
-        // the server down and won't fire again, so a server started here (e.g. from a
-        // delegate assigned after detach) would leak its socket and accept-loop
-        // coroutine with nothing left to stop it.
-        if (isTornDown) return
+        // No delegate means nothing wants to customize uploads, so there's no reason
+        // to route them through the native server — leave it down and let uploads
+        // fall to the default WebView path. (Matches iOS.)
+        if (mediaUploadDelegate == null) return
 
         // The native upload server relays through DefaultMediaUploader, which needs a
         // site root and an auth header (every host provides one — the editor injects
@@ -730,7 +713,8 @@ class GutenbergView : FrameLayout {
                 cacheDir = context.cacheDir,
                 scope = coroutineScope
             )
-            // JS is synced by the mediaUploadDelegate setter after this returns.
+            // The page globals (including the server's port/token) are injected by
+            // onEditorPageStarted after this returns.
         } catch (e: Exception) {
             Log.w(TAG, "Failed to start upload server", e)
         }
@@ -1158,13 +1142,11 @@ class GutenbergView : FrameLayout {
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        isTornDown = false
         startNetworkMonitoring()
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        isTornDown = true
         stopNetworkMonitoring()
         uploadServer?.stop()
         uploadServer = null

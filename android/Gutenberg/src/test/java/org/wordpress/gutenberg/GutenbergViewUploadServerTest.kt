@@ -5,6 +5,7 @@ import android.view.View
 import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mockito.mock
@@ -40,6 +41,17 @@ class GutenbergViewUploadServerTest {
         return field.get(view)
     }
 
+    /**
+     * Invokes the private `onEditorPageStarted` hook (fired from the WebViewClient's
+     * `onPageStarted`) to simulate the editor page beginning to load — the point at
+     * which the delegate is captured and the upload server starts.
+     */
+    private fun startLoading(view: GutenbergView) {
+        val method = GutenbergView::class.java.getDeclaredMethod("onEditorPageStarted")
+        method.isAccessible = true
+        method.invoke(view)
+    }
+
     /** Invokes the protected `onDetachedFromWindow` lifecycle callback. */
     private fun detach(view: GutenbergView) {
         val method = View::class.java.getDeclaredMethod("onDetachedFromWindow")
@@ -50,35 +62,66 @@ class GutenbergViewUploadServerTest {
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
     @Test
-    fun `setting the delegate on a live view starts the upload server (baseline)`() {
+    fun `the upload server starts when the page begins loading, capturing the delegate`() {
         val view = makeView()
         try {
+            // A delegate provided before load is captured when the page starts.
             view.mediaUploadDelegate = mock(MediaUploadDelegate::class.java)
+            startLoading(view)
             idle()
             assertNotNull(
-                "a live view with a valid config should start the upload server",
+                "a delegate provided before load should bring up the upload server",
                 uploadServerOf(view)
             )
         } finally {
-            // Release the bound socket.
-            view.mediaUploadDelegate = null
+            detach(view) // stops the server, releasing the bound socket
         }
     }
 
     @Test
-    fun `setting the delegate after detach does not start a leaked server`() {
+    fun `no delegate means no upload server`() {
         val view = makeView()
+        try {
+            // No delegate provided — uploads should use the default WebView path.
+            startLoading(view)
+            idle()
+            assertNull(
+                "with no delegate, no upload server should be started",
+                uploadServerOf(view)
+            )
+        } finally {
+            detach(view)
+        }
+    }
 
-        // onDetachedFromWindow stops any server and won't fire again.
+    @Test
+    fun `setting the delegate after the page has started loading throws`() {
+        val view = makeView()
+        try {
+            startLoading(view)
+            idle()
+            // The delegate is captured at load; a later assignment is a programmer
+            // error and must surface loudly rather than silently do nothing.
+            assertThrows(IllegalStateException::class.java) {
+                view.mediaUploadDelegate = mock(MediaUploadDelegate::class.java)
+            }
+        } finally {
+            detach(view)
+        }
+    }
+
+    @Test
+    fun `detaching the view stops and clears the upload server`() {
+        val view = makeView()
+        view.mediaUploadDelegate = mock(MediaUploadDelegate::class.java)
+        startLoading(view)
+        idle()
+        assertNotNull(uploadServerOf(view))
+
         detach(view)
 
-        // A delegate assigned after detach must not resurrect a server that nothing
-        // would ever stop (bound socket + accept-loop coroutine).
-        view.mediaUploadDelegate = mock(MediaUploadDelegate::class.java)
-        idle()
-
         assertNull(
-            "no upload server should be started once the view is detached",
+            "detaching the view should stop and clear the upload server",
             uploadServerOf(view)
         )
     }
