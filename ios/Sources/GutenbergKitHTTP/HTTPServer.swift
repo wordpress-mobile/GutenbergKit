@@ -435,7 +435,30 @@ public final class HTTPServer: Sendable {
                 if cors == .permissive, request.method.uppercased() == "OPTIONS" {
                     response = HTTPResponse(status: 204)
                 } else {
-                    response = await handler(Request(parsed: request, parseDuration: duration, serverError: parser.parseError))
+                    // Run the handler, but race it against the peer closing the
+                    // connection. Once the request has been fully read, no bytes
+                    // flow on this connection until the response is sent, so a
+                    // handler that awaits slow outbound work — the media-upload
+                    // relay awaiting `POST /wp/v2/media` — leaves the connection
+                    // idle. If the client (the editor WebView) aborts the upload
+                    // during that window, nothing here would otherwise notice, and
+                    // the outbound request would run to completion, creating an
+                    // orphaned attachment that a retry then duplicates. Watching for
+                    // the close and cancelling the handler propagates cancellation
+                    // through structured concurrency to the outbound URLSession
+                    // task, so a cancelled upload is actually cancelled.
+                    switch await Self.runHandler(
+                        handler,
+                        Request(parsed: request, parseDuration: duration, serverError: parser.parseError),
+                        racingCloseOf: connection
+                    ) {
+                    case .completed(let handlerResponse):
+                        response = handlerResponse
+                    case .clientDisconnected:
+                        Logger.httpServer.debug("\(request.method) \(request.target) → client disconnected before response; cancelled in-flight handler")
+                        connection.cancel()
+                        return
+                    }
                 }
                 await send(response, on: connection, cors: cors)
                 let (sec, atto) = duration.components
@@ -598,6 +621,123 @@ public final class HTTPServer: Sendable {
             if _value { return false }
             _value = true
             return true
+        }
+    }
+
+    /// The result of racing a request handler against the connection's peer
+    /// closing it. See ``runHandler(_:_:racingCloseOf:)``.
+    private enum HandlerOutcome: Sendable {
+        case completed(HTTPResponse)
+        case clientDisconnected
+    }
+
+    /// Runs `handler`, racing it against the connection's peer closing it.
+    ///
+    /// Between the end of the request and the start of the response a
+    /// well-behaved HTTP/1.1 client sends nothing, so a receive posted now can
+    /// only complete when the peer closes the connection (EOF) or it fails —
+    /// i.e. the client went away (an aborted `fetch`). If that wins the race, the
+    /// handler task is cancelled, which propagates through structured concurrency
+    /// to any outbound work the handler is awaiting, and the caller skips the
+    /// (doomed) send. If the handler wins, the watcher is cancelled *without*
+    /// cancelling the connection, so the response can still be sent.
+    private static func runHandler(
+        _ handler: @escaping @Sendable (HTTPServer.Request) async -> HTTPResponse,
+        _ request: HTTPServer.Request,
+        racingCloseOf connection: NWConnection
+    ) async -> HandlerOutcome {
+        await withTaskGroup(of: HandlerOutcome.self) { group in
+            group.addTask {
+                .completed(await handler(request))
+            }
+            group.addTask {
+                await waitForConnectionClose(on: connection)
+                return .clientDisconnected
+            }
+            let outcome = await group.next()!
+            group.cancelAll()
+            return outcome
+        }
+    }
+
+    /// Suspends until the connection's peer closes it (EOF) or it fails, by
+    /// posting a receive whose bytes are discarded (it never feeds the parser).
+    /// A well-behaved client sends nothing before the response, so in the common
+    /// case the receive simply stays pending until the peer closes.
+    ///
+    /// If the surrounding task is cancelled first (the handler finished), this
+    /// returns *without* cancelling the connection, so the caller can still use
+    /// it to send the response.
+    private static func waitForConnectionClose(on connection: NWConnection) async {
+        let watcher = ConnectionCloseWatcher()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                guard watcher.store(continuation) else { return }
+                watchForClose(on: connection, watcher: watcher)
+            }
+        } onCancel: {
+            watcher.cancel()
+        }
+    }
+
+    /// Posts a receive that wakes the watcher when the peer closes the
+    /// connection. Re-issues on a spurious wake or on unexpected pre-response
+    /// bytes (both are discarded); a normal idle connection never invokes the
+    /// callback until the peer actually closes.
+    private static func watchForClose(on connection: NWConnection, watcher: ConnectionCloseWatcher) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: readChunkSize) { _, _, isComplete, error in
+            if error != nil || isComplete {
+                watcher.resume()
+            } else {
+                watchForClose(on: connection, watcher: watcher)
+            }
+        }
+    }
+
+    /// Resumes ``waitForConnectionClose``'s continuation exactly once, whether
+    /// the wake comes from the peer closing the connection or from the
+    /// surrounding task being cancelled. Cancellation never touches the
+    /// connection itself.
+    private final class ConnectionCloseWatcher: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Void, Never>?
+        private var resumed = false
+        private var cancelled = false
+
+        /// Stores the continuation. Returns `false` — and resumes immediately —
+        /// if cancellation already arrived, so the caller skips posting a receive.
+        func store(_ continuation: CheckedContinuation<Void, Never>) -> Bool {
+            lock.lock()
+            if cancelled {
+                resumed = true
+                lock.unlock()
+                continuation.resume()
+                return false
+            }
+            self.continuation = continuation
+            lock.unlock()
+            return true
+        }
+
+        /// The peer closed the connection.
+        func resume() {
+            lock.lock()
+            guard !resumed, let continuation else { lock.unlock(); return }
+            resumed = true
+            self.continuation = nil
+            lock.unlock()
+            continuation.resume()
+        }
+
+        /// The surrounding task was cancelled (the handler finished first).
+        func cancel() {
+            lock.lock()
+            cancelled = true
+            guard !resumed, let continuation else { lock.unlock(); return }
+            resumed = true
+            self.continuation = nil
+            lock.unlock()
+            continuation.resume()
         }
     }
 
