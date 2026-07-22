@@ -447,6 +447,19 @@ class DefaultMediaUploader: @unchecked Sendable {
         return try await performUpload(request)
     }
 
+    /// Sends the assembled upload request to WordPress and relays the response.
+    ///
+    /// The request body is a **one-shot** stream (a bound-pair pipe for the
+    /// multipart re-encode and file-slice paths), so it can't be replayed. That
+    /// only matters if URLSession has to resend the body — i.e. a `307`/`308`
+    /// redirect that preserves the `POST`. `301`/`302`/`303` downgrade to a
+    /// bodyless GET, and a Bearer-token `401` doesn't trigger a resend, so those
+    /// never replay the stream. WordPress core never redirects `POST /wp/v2/media`;
+    /// if a proxy or misconfiguration did, the resend would read the now-exhausted
+    /// stream and send an empty body, which WordPress rejects — a clean failure,
+    /// not a truncated attachment (the stream is consumed, never rewound). We
+    /// intentionally don't implement `needNewBodyStream`, or buffer the body to a
+    /// replayable file, for that rare case.
     private func performUpload(_ request: URLRequest) async throws -> MediaUploadResponse {
         // The body may be fed by a background writer thread via a bound stream pair
         // (multipartBodyStream, or RequestBody.makeInputStream for file slices). If
