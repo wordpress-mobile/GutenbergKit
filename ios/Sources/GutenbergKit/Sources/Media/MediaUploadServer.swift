@@ -47,10 +47,19 @@ final class MediaUploadServer: Sendable {
 
         let context = UploadContext(uploadDelegate: uploadDelegate, defaultUploader: defaultUploader)
 
+        // A generous ceiling for receiving the upload body. The body read is
+        // primarily bounded by the per-read idle timeout (which reaps a stalled
+        // connection in seconds); this absolute backstop ensures a slow-but-steady
+        // client can't hold a connection slot indefinitely. Ten minutes is far
+        // beyond any realistic media upload over loopback while still bounding a
+        // wedged one.
+        let bodyReadTimeout: Duration = .seconds(600)
+
         let server = try await HTTPServer.start(
             name: "media-upload",
             requiresAuthentication: true,
             maxRequestBodySize: maxRequestBodySize,
+            bodyReadTimeout: bodyReadTimeout,
             cors: .permissive,
             handler: { request in
                 await Self.handleRequest(request, context: context)

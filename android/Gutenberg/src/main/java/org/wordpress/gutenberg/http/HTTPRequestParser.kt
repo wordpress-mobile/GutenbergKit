@@ -82,6 +82,12 @@ class HTTPRequestParser(
     /** The current buffering state. */
     val state: State get() = synchronized(lock) { _state }
 
+    /** The expected body length from `Content-Length`, available once headers have been received. */
+    val expectedBodyLength: Long?
+        get() = synchronized(lock) {
+            if (!_state.hasHeaders) null else expectedContentLength
+        }
+
     /**
      * The parse error detected during buffering, if any.
      *

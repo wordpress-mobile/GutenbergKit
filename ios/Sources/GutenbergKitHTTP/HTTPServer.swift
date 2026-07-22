@@ -151,8 +151,15 @@ public final class HTTPServer: Sendable {
     ///     Requests exceeding this limit receive a 413 response. Defaults to 4 GB.
     ///   - maxConnections: The maximum number of concurrent connections. New connections
     ///     beyond this limit are immediately closed. Defaults to 5.
-    ///   - readTimeout: The maximum time to wait for a complete request before closing
-    ///     the connection. Defaults to 30 seconds.
+    ///   - readTimeout: The maximum time to wait for the pre-body phase of a request —
+    ///     receiving the headers and draining any oversized body — before closing the
+    ///     connection. This bounds the unauthenticated-reachable portion of the request.
+    ///     Defaults to 30 seconds.
+    ///   - bodyReadTimeout: The maximum total time to wait for an accepted (authenticated)
+    ///     request body, as a backstop above the per-read `idleTimeout`. A large body that
+    ///     streams steadily is bounded by this ceiling rather than by `readTimeout`, so it
+    ///     is not aborted mid-transfer. Pass `nil` (the default) to reuse `readTimeout`;
+    ///     consumers expecting large uploads should pass a generous value.
     ///   - idleTimeout: The maximum time to wait between consecutive reads before closing
     ///     the connection. Prevents slow-loris attacks. Defaults to 5 seconds.
     ///   - startTimeout: The maximum time to wait for the listener to become ready
@@ -171,6 +178,7 @@ public final class HTTPServer: Sendable {
         maxRequestBodySize: Int64 = HTTPRequestParser.defaultMaxBodySize,
         maxConnections: Int = HTTPServer.defaultMaxConnections,
         readTimeout: Duration = HTTPServer.defaultReadTimeout,
+        bodyReadTimeout: Duration? = nil,
         idleTimeout: Duration = HTTPServer.defaultIdleTimeout,
         startTimeout: Duration = HTTPServer.defaultStartTimeout,
         cors: CORSPolicy = .none,
@@ -207,6 +215,9 @@ public final class HTTPServer: Sendable {
         let queue = DispatchQueue(label: "com.gutenbergkit.http-server.\(safeName)")
 
         let requiresAuth = requiresAuthentication
+        // Falls back to `readTimeout` so consumers that don't distinguish the two
+        // keep the prior whole-request behavior.
+        let resolvedBodyReadTimeout = bodyReadTimeout ?? readTimeout
         listener.newConnectionHandler = { connection in
             guard connectionCounter.tryIncrement() else {
                 Logger.httpServer.warning("Connection limit reached, rejecting connection")
@@ -217,6 +228,7 @@ public final class HTTPServer: Sendable {
                 connection, queue: queue, token: token,
                 requiresAuthentication: requiresAuth,
                 maxRequestBodySize: maxRequestBodySize, readTimeout: readTimeout,
+                bodyReadTimeout: resolvedBodyReadTimeout,
                 idleTimeout: idleTimeout, cors: cors, tempDirectory: tempDirectory,
                 connectionCounter: connectionCounter, connectionTasks: connectionTasks, handler: handler
             )
@@ -321,6 +333,7 @@ public final class HTTPServer: Sendable {
         requiresAuthentication: Bool,
         maxRequestBodySize: Int64,
         readTimeout: Duration,
+        bodyReadTimeout: Duration,
         idleTimeout: Duration,
         cors: CORSPolicy,
         tempDirectory: URL,
@@ -340,69 +353,80 @@ public final class HTTPServer: Sendable {
                 let parser = HTTPRequestParser(maxBodySize: maxRequestBodySize, tempDirectory: tempDirectory)
                 var request: ParsedHTTPRequest!
                 let duration = try await ContinuousClock().measure {
-                    request = try await withThrowingTaskGroup(of: ParsedHTTPRequest.self) { group in
-                        group.addTask {
-                            // Phase 1: receive headers only.
-                            try await Self.receiveUntil(\.hasHeaders, parser: parser, on: connection, idleTimeout: idleTimeout)
+                    // Phase 1 (pre-body): receive and validate headers, authenticate,
+                    // and drain any oversized body — all bounded by `readTimeout`. This is
+                    // the unauthenticated-reachable portion of the request, so it keeps a
+                    // strict total-duration cap.
+                    let partial = try await Self.withReadTimeout(readTimeout) { () -> ParsedHTTPRequest in
+                        // Receive headers only.
+                        try await Self.receiveUntil(\.hasHeaders, parser: parser, on: connection, idleTimeout: idleTimeout)
 
-                            // Validate headers (triggers full RFC validation).
-                            guard let partial = try parser.parseRequest() else {
-                                throw HTTPServerError.connectionClosed
-                            }
-
-                            // Check auth on headers alone, before draining or
-                            // consuming any body bytes — an unauthenticated client
-                            // must not be able to make the server read (and
-                            // discard) an arbitrarily large body, and the handler
-                            // must never see an unauthenticated request.
-                            // OPTIONS is exempt because CORS preflight requests
-                            // never include credentials (Fetch spec §3.3.5).
-                            if requiresAuthentication && partial.method.uppercased() != "OPTIONS" {
-                                guard authenticate(partial, token: token) else {
-                                    throw HTTPServerError.authenticationFailed
-                                }
-                            }
-
-                            // Drain the oversized body before responding so the
-                            // (authenticated) client receives the 413 instead of
-                            // a connection reset (RFC 9110 §15.5.14).
-                            if parser.state == .draining {
-                                try await Self.receiveUntil(\.isComplete, parser: parser, on: connection, idleTimeout: idleTimeout)
-                            }
-
-                            // If the parser detected a non-fatal error (e.g.,
-                            // payload too large after drain), return the partial
-                            // request so the handler can build the response.
-                            if parser.parseError != nil {
-                                return partial
-                            }
-
-                            // Reject body-bearing methods without Content-Length.
-                            // We don't support Transfer-Encoding: chunked, so
-                            // Content-Length is the only way to determine body size.
-                            let upperMethod = partial.method.uppercased()
-                            if ["POST", "PUT", "PATCH"].contains(upperMethod) && partial.header("Content-Length") == nil {
-                                throw HTTPServerError.lengthRequired
-                            }
-
-                            // Phase 2: receive body (skipped if already complete).
-                            if !parser.state.isComplete {
-                                try await Self.receiveUntil(\.isComplete, parser: parser, on: connection, idleTimeout: idleTimeout)
-                            }
-
-                            guard let complete = try parser.parseRequest(), complete.isComplete else {
-                                throw HTTPServerError.connectionClosed
-                            }
-                            return complete
+                        // Validate headers (triggers full RFC validation).
+                        guard let partial = try parser.parseRequest() else {
+                            throw HTTPServerError.connectionClosed
                         }
-                        group.addTask {
-                            try await Task.sleep(for: readTimeout)
-                            throw HTTPServerError.readTimeout
+
+                        // Check auth on headers alone, before draining or consuming any
+                        // body bytes — an unauthenticated client must not be able to make
+                        // the server read (and discard) an arbitrarily large body, and the
+                        // handler must never see an unauthenticated request. OPTIONS is
+                        // exempt because CORS preflight requests never include credentials
+                        // (Fetch spec §3.3.5).
+                        if requiresAuthentication && partial.method.uppercased() != "OPTIONS" {
+                            guard authenticate(partial, token: token) else {
+                                throw HTTPServerError.authenticationFailed
+                            }
                         }
-                        let result = try await group.next()!
-                        group.cancelAll()
-                        return result
+
+                        // Reject auth-exempt OPTIONS that carry a body. Real CORS preflight
+                        // requests are bodyless; a body on the auth-exempt path would
+                        // otherwise be read/drained without authentication — and the
+                        // accepted-body read below is bounded only by the idle timeout.
+                        if partial.method.uppercased() == "OPTIONS", (parser.expectedBodyLength ?? 0) > 0 {
+                            throw HTTPServerError.unexpectedBody
+                        }
+
+                        // Drain the oversized body before responding so the (authenticated)
+                        // client receives the 413 instead of a connection reset
+                        // (RFC 9110 §15.5.14). Still bounded by `readTimeout`.
+                        if parser.state == .draining {
+                            try await Self.receiveUntil(\.isComplete, parser: parser, on: connection, idleTimeout: idleTimeout)
+                        }
+
+                        return partial
                     }
+
+                    // If the parser detected a non-fatal error (e.g., payload too large
+                    // after drain), hand the partial request to the handler so it can
+                    // build the response.
+                    if parser.parseError != nil {
+                        request = partial
+                        return
+                    }
+
+                    // Reject body-bearing methods without Content-Length. We don't support
+                    // Transfer-Encoding: chunked, so Content-Length is the only way to
+                    // determine body size.
+                    let upperMethod = partial.method.uppercased()
+                    if ["POST", "PUT", "PATCH"].contains(upperMethod) && partial.header("Content-Length") == nil {
+                        throw HTTPServerError.lengthRequired
+                    }
+
+                    // Phase 2 (accepted body): the client is authenticated, so read the body
+                    // bounded by `bodyReadTimeout` (a generous backstop) plus the per-read
+                    // `idleTimeout`. A large upload that streams steadily is never failed on
+                    // total duration — only a genuine stall (idle) or the generous ceiling
+                    // ends it.
+                    if !parser.state.isComplete {
+                        try await Self.withReadTimeout(bodyReadTimeout) {
+                            try await Self.receiveUntil(\.isComplete, parser: parser, on: connection, idleTimeout: idleTimeout)
+                        }
+                    }
+
+                    guard let complete = try parser.parseRequest(), complete.isComplete else {
+                        throw HTTPServerError.connectionClosed
+                    }
+                    request = complete
                 }
 
                 // Under a permissive CORS policy the library answers the OPTIONS
@@ -421,6 +445,9 @@ public final class HTTPServer: Sendable {
                 await send(HTTPResponse(status: 407, headers: [("Content-Type", "text/plain"), ("Proxy-Authenticate", "Bearer")]), on: connection, cors: cors)
             } catch HTTPServerError.lengthRequired {
                 await send(HTTPResponse(status: 411, statusText: "Length Required", body: Data("Length Required".utf8)), on: connection, cors: cors)
+            } catch HTTPServerError.unexpectedBody {
+                Logger.httpServer.warning("Rejected auth-exempt request carrying a body")
+                await send(HTTPResponse(status: 400, statusText: "Bad Request", body: Data("Unexpected request body".utf8)), on: connection, cors: cors)
             } catch is CancellationError {
                 Logger.httpServer.debug("Connection cancelled during shutdown")
                 connection.cancel()
@@ -442,6 +469,28 @@ public final class HTTPServer: Sendable {
             }
         }
         connectionTasks.track(taskID, task)
+    }
+
+    /// Runs `operation` under a total-duration timeout, racing it against a sleep
+    /// task. Used to bound one phase of the request read (pre-body vs. accepted
+    /// body). The per-read `idleTimeout` inside `operation` still applies
+    /// independently, and cancellation of the enclosing task cancels both children.
+    private static func withReadTimeout<T: Sendable>(
+        _ timeout: Duration,
+        _ operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            group.addTask {
+                try await Task.sleep(for: timeout)
+                throw HTTPServerError.readTimeout
+            }
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
     }
 
     /// Feeds data from the connection into the parser until the given state

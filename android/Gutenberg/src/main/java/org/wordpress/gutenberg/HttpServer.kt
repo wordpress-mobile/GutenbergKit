@@ -19,10 +19,13 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.Semaphore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
 /**
@@ -208,7 +211,14 @@ class HttpServer(
     private val requiresAuthentication: Boolean = true,
     private val maxConnections: Int = DEFAULT_MAX_CONNECTIONS,
     private val maxBodySize: Long = DEFAULT_MAX_BODY_SIZE,
+    // Bounds the pre-body phase — receiving headers and draining an oversized
+    // body — i.e. the unauthenticated-reachable portion of the request.
     private val readTimeoutMs: Int = DEFAULT_READ_TIMEOUT_MS,
+    // Total-duration backstop for an accepted (authenticated) body, above the
+    // per-read idle timeout. Defaults to readTimeoutMs; consumers expecting large
+    // uploads should pass a generous value so a steadily-streamed body isn't
+    // aborted mid-transfer.
+    private val bodyReadTimeoutMs: Int = readTimeoutMs,
     private val idleTimeoutMs: Int = DEFAULT_IDLE_TIMEOUT_MS,
     private val cacheDir: File? = null,
     private val cors: CorsPolicy = CorsPolicy.None,
@@ -317,6 +327,9 @@ class HttpServer(
                 } catch (_: Exception) {
                     // Best-effort — socket may already be broken.
                 }
+            } catch (e: CancellationException) {
+                // Propagate cancellation (e.g. from stop()) — don't swallow it.
+                throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Connection error", e)
             }
@@ -329,17 +342,21 @@ class HttpServer(
         val parser = HTTPRequestParser(maxBodySize = maxBodySize, cacheDir = cacheDir, tempSubdir = tempSubdir)
         parser.use {
             val parseStart = System.nanoTime()
+            // Bounds the pre-body phase (headers + oversized drain) — the
+            // unauthenticated-reachable portion of the request. The accepted body gets
+            // its own, more generous deadline below.
+            //
             // Note: the deadline is checked between reads, not during a blocking
             // read. Since each read can block for up to idleTimeoutMs (soTimeout),
             // the effective maximum time is readTimeoutMs + idleTimeoutMs. This is
             // a bounded imprecision — slow-loris protection is still effective
             // because the attacker must send data to keep the connection alive,
             // and each time data arrives the loop iterates and checks the deadline.
-            val deadlineNanos = parseStart + readTimeoutMs * 1_000_000L
+            val headerDeadlineNanos = parseStart + readTimeoutMs * 1_000_000L
             val buffer = ByteArray(READ_CHUNK_SIZE)
 
             // Phase 1: receive headers only.
-            readUntil(parser, input, buffer, deadlineNanos) { it.hasHeaders }
+            readUntil(parser, input, buffer, headerDeadlineNanos) { it.hasHeaders }
 
             // Validate headers (triggers full RFC validation).
             val partial = try {
@@ -385,11 +402,23 @@ class HttpServer(
                 }
             }
 
+            // Reject auth-exempt OPTIONS that carry a body. Real CORS preflight
+            // requests are bodyless; a body on the auth-exempt path would otherwise
+            // be read/drained without authentication — and the accepted-body read
+            // below is bounded only by the idle timeout.
+            if (partial.method.uppercase() == "OPTIONS" && (parser.expectedBodyLength ?: 0L) > 0L) {
+                sendResponse(socket, HttpResponse(
+                    status = 400,
+                    body = "Unexpected request body".toByteArray()
+                ))
+                return
+            }
+
             // Drain the oversized body before responding so the (authenticated)
             // client receives the 413 instead of a connection reset
-            // (RFC 9110 §15.5.14).
+            // (RFC 9110 §15.5.14). Still bounded by the pre-body deadline.
             if (parser.state == HTTPRequestParser.State.DRAINING) {
-                readUntil(parser, input, buffer, deadlineNanos) { it.isComplete }
+                readUntil(parser, input, buffer, headerDeadlineNanos) { it.isComplete }
             }
 
             // If the parser detected a non-fatal error (e.g., payload too
@@ -429,8 +458,12 @@ class HttpServer(
                 return
             }
 
-            // Phase 2: receive body (skipped if already complete).
-            readUntil(parser, input, buffer, deadlineNanos) { it.isComplete }
+            // Phase 2 (accepted body): now that the client is authenticated, give the
+            // body its own generous deadline. A large upload that streams steadily is
+            // bounded by bodyReadTimeoutMs + the per-read idle timeout, not by the
+            // pre-body readTimeoutMs — so it isn't aborted mid-transfer.
+            val bodyDeadlineNanos = System.nanoTime() + bodyReadTimeoutMs * 1_000_000L
+            readUntil(parser, input, buffer, bodyDeadlineNanos) { it.isComplete }
 
             // Final parse with body.
             val parsed = try {
@@ -481,7 +514,7 @@ class HttpServer(
     }
 
     /** Reads data into the parser until [condition] is satisfied or the connection closes. */
-    private fun readUntil(
+    private suspend fun readUntil(
         parser: HTTPRequestParser,
         input: BufferedInputStream,
         buffer: ByteArray,
@@ -489,6 +522,11 @@ class HttpServer(
         condition: (HTTPRequestParser.State) -> Boolean
     ) {
         while (!condition(parser.state)) {
+            // Cooperative cancellation: stop() cancels the connection's coroutine
+            // scope, but a blocking read isn't interruptible — checking between reads
+            // lets a steadily-streaming connection be torn down promptly on shutdown
+            // (an idle connection is already bounded by soTimeout).
+            currentCoroutineContext().ensureActive()
             if (System.nanoTime() > deadlineNanos) {
                 throw SocketTimeoutException("Read deadline exceeded")
             }

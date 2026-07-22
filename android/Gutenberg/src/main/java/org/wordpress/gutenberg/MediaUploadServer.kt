@@ -134,6 +134,7 @@ internal class MediaUploadServer(
             name = "media-upload",
             externallyAccessible = false,
             requiresAuthentication = true,
+            bodyReadTimeoutMs = UPLOAD_BODY_READ_TIMEOUT_MS,
             cacheDir = cacheDir,
             cors = CorsPolicy.Permissive,
             handler = { request -> handleRequest(request) }
@@ -382,6 +383,16 @@ internal class MediaUploadServer(
 
     companion object {
         private const val TAG = "MediaUploadServer"
+
+        /**
+         * A generous ceiling for receiving the upload body. The body read is
+         * primarily bounded by the per-read idle timeout (which reaps a stalled
+         * connection in seconds); this absolute backstop ensures a slow-but-steady
+         * client can't hold a connection slot indefinitely. Ten minutes is far
+         * beyond any realistic media upload over loopback while still bounding a
+         * wedged one.
+         */
+        private const val UPLOAD_BODY_READ_TIMEOUT_MS: Int = 10 * 60 * 1000
     }
 }
 

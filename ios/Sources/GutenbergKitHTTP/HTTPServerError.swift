@@ -15,6 +15,9 @@ public enum HTTPServerError: Error, LocalizedError, Sendable {
     case authenticationFailed
     /// The request method requires a Content-Length header but none was provided.
     case lengthRequired
+    /// An auth-exempt request (OPTIONS) carried a body. CORS preflights are
+    /// bodyless, so a body on the auth-exempt path is rejected rather than read.
+    case unexpectedBody
     /// A network-level error occurred on the connection.
     case networkError(NWError)
 
@@ -25,6 +28,7 @@ public enum HTTPServerError: Error, LocalizedError, Sendable {
         case .readTimeout: "Read timeout expired before request was complete"
         case .authenticationFailed: "Request failed authentication"
         case .lengthRequired: "Content-Length header is required for this method"
+        case .unexpectedBody: "Request method must not carry a body"
         case .networkError(let error): "Network error: \(error.localizedDescription)"
         }
     }
