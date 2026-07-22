@@ -250,8 +250,16 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
 
         if let dependencies {
-            // FAST PATH: Dependencies were provided at init() - load immediately
-            self.dependencyTaskHandle = Task(priority: .userInitiated) { [weak self] in
+            // FAST PATH: Dependencies were provided at init() - load immediately.
+            //
+            // Deliberately NOT tracked in `dependencyTaskHandle`: `viewDidDisappear`
+            // cancels that handle to abort the async dependency *fetch*, but the
+            // fast path is cheap local work that must run to completion — a
+            // transient disappearance (e.g. a modal presented over the editor)
+            // cancelling it mid `startUploadServer()` silently disabled native
+            // uploads for the session. `[weak self]` still makes it a no-op once
+            // the controller is torn down.
+            Task(priority: .userInitiated) { [weak self] in
                 do {
                     try await self?.loadEditor(dependencies: dependencies)
                 } catch {
