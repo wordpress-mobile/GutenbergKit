@@ -22,6 +22,10 @@ final class MediaUploadServer: Sendable {
 
     private let server: HTTPServer
 
+    /// Sweeps crash-orphaned upload temp files off the editor-startup path.
+    /// Exposed so tests can await completion. (Mirrors Android's `cleanupJob`.)
+    let cleanupTask: Task<Void, Never>
+
     /// Creates and starts a new upload server.
     ///
     /// - Parameters:
@@ -34,8 +38,12 @@ final class MediaUploadServer: Sendable {
         defaultUploader: DefaultMediaUploader? = nil,
         maxRequestBodySize: Int64 = HTTPRequestParser.defaultMaxBodySize
     ) async throws -> MediaUploadServer {
-        // Sweep temp files orphaned by a prior crash before starting.
-        cleanOrphanedUploads()
+        // Sweep temp files orphaned by a prior crash, off the editor-startup
+        // path — the sweep only deletes stale files (>1 hour old), so it cannot
+        // race this server's own in-flight uploads and nothing below depends on it.
+        let cleanupTask = Task.detached(priority: .utility) {
+            cleanOrphanedUploads()
+        }
 
         let context = UploadContext(uploadDelegate: uploadDelegate, defaultUploader: defaultUploader)
 
@@ -49,13 +57,14 @@ final class MediaUploadServer: Sendable {
             }
         )
 
-        return MediaUploadServer(server: server)
+        return MediaUploadServer(server: server, cleanupTask: cleanupTask)
     }
 
-    private init(server: HTTPServer) {
+    private init(server: HTTPServer, cleanupTask: Task<Void, Never>) {
         self.server = server
         self.port = server.port
         self.token = server.token
+        self.cleanupTask = cleanupTask
     }
 
     /// Stops the server and releases resources.

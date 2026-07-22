@@ -320,10 +320,11 @@ struct MediaUploadServerTests {
       ofItemAtPath: stale.path(percentEncoded: false)
     )
 
-    // start() runs cleanOrphanedUploads(). The sweep must delete the aged file and
-    // keep the fresh one — a flipped comparison would do the opposite and wipe an
-    // in-flight upload.
+    // start() kicks off cleanOrphanedUploads() off the editor-startup path.
+    // The sweep must delete the aged file and keep the fresh one — a flipped
+    // comparison would do the opposite and wipe an in-flight upload.
     let server = try await MediaUploadServer.start()
+    await server.cleanupTask.value
     server.stop()
 
     #expect(!FileManager.default.fileExists(atPath: stale.path(percentEncoded: false)))

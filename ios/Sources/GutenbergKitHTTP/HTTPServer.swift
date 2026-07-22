@@ -102,12 +102,17 @@ public final class HTTPServer: Sendable {
     private let queue: DispatchQueue
     private let connectionTasks: ConnectionTasks
 
-    private init(listener: NWListener, port: UInt16, queue: DispatchQueue, token: String, connectionTasks: ConnectionTasks) {
+    /// Sweeps crash-orphaned temp files off the caller's startup path.
+    /// Exposed so tests can await completion.
+    let cleanupTask: Task<Void, Never>
+
+    private init(listener: NWListener, port: UInt16, queue: DispatchQueue, token: String, connectionTasks: ConnectionTasks, cleanupTask: Task<Void, Never>) {
         self.listener = listener
         self.port = port
         self.queue = queue
         self.token = token
         self.connectionTasks = connectionTasks
+        self.cleanupTask = cleanupTask
     }
 
     /// The default maximum number of concurrent connections.
@@ -180,10 +185,14 @@ public final class HTTPServer: Sendable {
         let tempDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("GutenbergKitHTTP-\(safeName)")
 
-        // Clean up temp files left behind by previous runs (e.g., crash or process kill).
-        // Swift's ARC guarantees deterministic cleanup during normal operation, but a
-        // crash can leave orphaned files in the system temp directory.
-        cleanOrphanedTempFiles(in: tempDirectory)
+        // Clean up temp files left behind by previous runs (e.g., crash or process
+        // kill), off the caller's startup path. Swift's ARC guarantees deterministic
+        // cleanup during normal operation, but a crash can leave orphaned files in
+        // the system temp directory. The sweep's one-hour age threshold means it
+        // cannot race temp files written by this (or any live) server instance.
+        let cleanupTask = Task.detached(priority: .utility) {
+            cleanOrphanedTempFiles(in: tempDirectory)
+        }
         try? FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
 
         let parameters = NWParameters.tcp
@@ -239,7 +248,7 @@ public final class HTTPServer: Sendable {
                 listener.cancel()
                 throw HTTPServerError.failedToStart
             }
-            let server = HTTPServer(listener: listener, port: p.rawValue, queue: queue, token: token, connectionTasks: connectionTasks)
+            let server = HTTPServer(listener: listener, port: p.rawValue, queue: queue, token: token, connectionTasks: connectionTasks, cleanupTask: cleanupTask)
             Logger.httpServer.info("HTTP server started on port \(p.rawValue)")
             return server
         case .failed(let error):
@@ -636,19 +645,24 @@ public final class HTTPServer: Sendable {
     /// to a single server instance and will not affect files belonging to other
     /// servers running concurrently.
     ///
-    /// **Important:** Two server instances with the same `name` must not run
-    /// concurrently. On startup, this method deletes **all** files in the
-    /// server's temp subdirectory. If another instance with the same name is
-    /// still handling requests, its in-flight temp files will be removed,
-    /// causing `bufferIOError` failures. Callers must ensure each running
-    /// server uses a unique name, or that the previous instance is fully
-    /// stopped before starting a new one.
+    /// Only files older than one hour are deleted. Fresh files are preserved so
+    /// the sweep — which runs detached from `start()` — cannot race in-flight
+    /// temp files, whether they belong to this instance or another live server
+    /// sharing the same `name`.
     private static func cleanOrphanedTempFiles(in directory: URL) {
+        // Only delete files past the age threshold. Fresh files may belong to a
+        // live server instance — the sweep runs detached from start(), so
+        // without the threshold it could race and delete an in-flight
+        // request's temp buffer.
+        let cutoff = Date(timeIntervalSinceNow: -3600) // 1 hour ago
         guard let contents = try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: nil
+            at: directory, includingPropertiesForKeys: [.contentModificationDateKey]
         ) else { return }
         for url in contents {
-            try? FileManager.default.removeItem(at: url)
+            let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            if let modified, modified < cutoff {
+                try? FileManager.default.removeItem(at: url)
+            }
         }
     }
 }
