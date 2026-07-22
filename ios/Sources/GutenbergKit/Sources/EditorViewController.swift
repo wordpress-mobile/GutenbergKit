@@ -399,6 +399,15 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             return
         }
 
+        // The native upload server relays through DefaultMediaUploader, which needs a
+        // site root and an auth header (every host provides one — the editor injects
+        // it because the WebView has no auth cookies). Without both there is nothing
+        // to upload through, so leave the server down and let uploads fall to the
+        // default WebView path rather than start a server that could only fail.
+        guard !configuration.authHeader.isEmpty else {
+            return
+        }
+
         let defaultUploader = DefaultMediaUploader(
             httpClient: httpClient,
             siteApiRoot: configuration.siteApiRoot,
