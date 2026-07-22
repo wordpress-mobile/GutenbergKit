@@ -537,32 +537,62 @@ class DefaultMediaUploader: @unchecked Sendable {
         // writer thread — only the thread accesses it after this point.
         nonisolated(unsafe) let output = outputStream
 
-        Thread.detachNewThread {
+        Thread.detachNewThread { [preamble] in
             defer {
                 output.close()
                 try? fileHandle.close()
             }
-
-            // Write preamble (multipart headers).
-            guard Self.writeAll(preamble, to: output) else { return }
-
-            // Stream file content in chunks.
-            var remaining = fileSize
-            while remaining > 0 {
-                let chunkSize = min(65_536, remaining)
-                guard let chunk = try? fileHandle.read(upToCount: chunkSize),
-                      !chunk.isEmpty else {
-                    break
-                }
-                guard Self.writeAll(chunk, to: output) else { return }
-                remaining -= chunk.count
-            }
-
-            // Write epilogue (closing boundary).
-            _ = Self.writeAll(epilogue, to: output)
+            _ = Self.writeMultipartBody(
+                fileHandle: fileHandle, fileSize: fileSize,
+                preamble: preamble, epilogue: epilogue, to: output
+            )
         }
 
         return (inputStream, contentLength)
+    }
+
+    /// Writes the multipart body — preamble, then the file's bytes, then the
+    /// closing boundary — to `output`, returning `true` only if all of it was
+    /// written.
+    ///
+    /// Returns `false` **without** writing the closing boundary if the file can't
+    /// be fully read: a mid-stream read error, or the file ending short of the
+    /// `fileSize` the caller measured (it shrank since). The request's
+    /// Content-Length reflects that measured size, so a short body can't be
+    /// dressed up as a complete multipart — it fails the upload rather than
+    /// silently corrupting it, and the real cause is logged instead of swallowed.
+    /// (`false` is also returned on a write failure — e.g. the consumer closing
+    /// the stream — matching the preamble/chunk write checks.)
+    static func writeMultipartBody(
+        fileHandle: FileHandle,
+        fileSize: Int,
+        preamble: Data,
+        epilogue: Data,
+        to output: OutputStream
+    ) -> Bool {
+        guard writeAll(preamble, to: output) else { return false }
+
+        var remaining = fileSize
+        while remaining > 0 {
+            let chunkSize = min(65_536, remaining)
+            let chunk: Data
+            do {
+                chunk = try fileHandle.read(upToCount: chunkSize) ?? Data()
+            } catch {
+                Logger.uploadServer.error("Reading the upload file failed mid-stream: \(error)")
+                return false
+            }
+            guard !chunk.isEmpty else {
+                // The file ended before `fileSize` bytes — it shrank since we
+                // measured it. Abort rather than emit a truncated multipart.
+                Logger.uploadServer.error("Upload file ended \(remaining) bytes short of its measured size")
+                return false
+            }
+            guard writeAll(chunk, to: output) else { return false }
+            remaining -= chunk.count
+        }
+
+        return writeAll(epilogue, to: output)
     }
 
     /// Escapes a client-supplied value for a quoted `Content-Disposition`

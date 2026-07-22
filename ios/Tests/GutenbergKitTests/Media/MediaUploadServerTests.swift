@@ -492,6 +492,61 @@ struct MultipartBodyStreamTests {
     let result = readAllFromStream(stream)
     #expect(result.count == contentLength)
   }
+
+  @Test("writeMultipartBody streams the full body and closing boundary when the file reads cleanly")
+  func writeMultipartBodyWritesFullBody() throws {
+    let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("wmb-\(UUID().uuidString)")
+    let fileContent = Data("the file bytes".utf8)
+    try fileContent.write(to: tempFile)
+    defer { try? FileManager.default.removeItem(at: tempFile) }
+
+    let fileHandle = try FileHandle(forReadingFrom: tempFile)
+    defer { try? fileHandle.close() }
+
+    let output = OutputStream.toMemory()
+    output.open()
+    defer { output.close() }
+
+    let preamble = Data("PREAMBLE".utf8)
+    let epilogue = Data("EPILOGUE".utf8)
+    let ok = DefaultMediaUploader.writeMultipartBody(
+      fileHandle: fileHandle, fileSize: fileContent.count,
+      preamble: preamble, epilogue: epilogue, to: output
+    )
+
+    #expect(ok)
+    let written = output.property(forKey: .dataWrittenToMemoryStreamKey) as? Data
+    #expect(written == preamble + fileContent + epilogue)
+  }
+
+  @Test("writeMultipartBody aborts without the closing boundary when the file is shorter than measured")
+  func writeMultipartBodyAbortsOnShortFile() throws {
+    let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("wmb-short-\(UUID().uuidString)")
+    let fileContent = Data("only ten!!".utf8) // 10 bytes
+    try fileContent.write(to: tempFile)
+    defer { try? FileManager.default.removeItem(at: tempFile) }
+
+    let fileHandle = try FileHandle(forReadingFrom: tempFile)
+    defer { try? fileHandle.close() }
+
+    let output = OutputStream.toMemory()
+    output.open()
+    defer { output.close() }
+
+    let preamble = Data("PREAMBLE".utf8)
+    let epilogue = Data("EPILOGUE".utf8)
+    // Claim the file is larger than it is, as if it shrank after being measured.
+    let ok = DefaultMediaUploader.writeMultipartBody(
+      fileHandle: fileHandle, fileSize: fileContent.count + 100,
+      preamble: preamble, epilogue: epilogue, to: output
+    )
+
+    #expect(!ok)
+    // The preamble and the real file bytes were written, but NOT the closing
+    // boundary — a short body must not masquerade as a complete multipart.
+    let written = (output.property(forKey: .dataWrittenToMemoryStreamKey) as? Data) ?? Data()
+    #expect(written == preamble + fileContent)
+  }
 }
 
 // MARK: - DefaultMediaUploader Relay Tests
