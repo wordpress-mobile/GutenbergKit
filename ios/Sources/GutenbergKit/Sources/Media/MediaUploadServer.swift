@@ -286,7 +286,13 @@ final class MediaUploadServer: Sendable {
         inputStream.open()
         defer { inputStream.close() }
 
-        let outputStream = OutputStream(url: url, append: false)!
+        // `OutputStream(url:append:)` returns nil if the file can't be opened for
+        // writing (e.g. the uploads directory was removed after it was created, or
+        // a permissions/sandbox failure). Throw rather than force-unwrap so the
+        // caller returns a clean 500 instead of trapping the process.
+        guard let outputStream = OutputStream(url: url, append: false) else {
+            throw UploadError.streamWriteFailed
+        }
         outputStream.open()
         defer { outputStream.close() }
 
