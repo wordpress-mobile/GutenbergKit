@@ -122,6 +122,38 @@ struct HTTPServerTimeoutTests {
         #expect(response.hasPrefix("HTTP/1.1 200"))
     }
 
+    // MARK: - Start timeout
+
+    @Test("the start-readiness wait fails with .startTimeout instead of hanging")
+    func startTimeoutFiresOnStuckBind() async {
+        // `withStartTimeout` bounds `HTTPServer.start`'s wait for the listener to
+        // become ready. If the readiness wait never completes (a listener stuck in
+        // a non-terminal state), it must fail near the deadline — not hang the
+        // caller (the editor load awaits this) for the whole operation.
+        let clock = ContinuousClock()
+        let start = clock.now
+        do {
+            _ = try await HTTPServer.withStartTimeout(.milliseconds(100)) {
+                try await Task.sleep(for: .seconds(60)) // stands in for a stuck bind
+                return 0
+            }
+            Issue.record("expected withStartTimeout to throw .startTimeout")
+        } catch HTTPServerError.startTimeout {
+            // Expected: the timeout won the race.
+        } catch {
+            Issue.record("expected .startTimeout, got \(error)")
+        }
+        #expect(clock.now - start < .seconds(2))
+    }
+
+    @Test("the start-readiness wait returns the bound server when it's ready in time")
+    func startTimeoutPassesValueThroughWhenReady() async throws {
+        // The common case: readiness completes well within the deadline, so the
+        // timeout is inert and the operation's value flows through unchanged.
+        let value = try await HTTPServer.withStartTimeout(.seconds(5)) { 42 }
+        #expect(value == 42)
+    }
+
     // MARK: - Helpers
 
     /// Sends `header` then each element of `chunks`, pausing `gap` before every

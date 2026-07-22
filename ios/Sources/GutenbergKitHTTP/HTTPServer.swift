@@ -125,10 +125,9 @@ public final class HTTPServer: Sendable {
     /// If no data arrives within this interval, the connection is closed with a 408 response.
     public static let defaultIdleTimeout: Duration = .seconds(5)
 
-    /// The default maximum time to wait for the listener to become ready (5 seconds).
-    /// Binding to loopback normally completes in milliseconds; the bound exists so a
-    /// listener stuck in the `.waiting` state (which emits no further updates)
-    /// cannot suspend its caller indefinitely.
+    /// The default ceiling on waiting for the listener to become ready (5 seconds).
+    /// A loopback bind completes near-instantly; this only bounds a pathological
+    /// listener stuck in a non-terminal state so the caller isn't hung forever.
     public static let defaultStartTimeout: Duration = .seconds(5)
 
     /// The maximum number of bytes to read from the network in a single receive call.
@@ -242,70 +241,64 @@ public final class HTTPServer: Sendable {
         }
         listener.start(queue: queue)
 
-        guard let terminalState = await firstTerminalState(in: states, timeout: startTimeout) else {
-            // No terminal state within the timeout: the listener is stuck in
-            // `.setup` or `.waiting` (which emit no further state updates), or
-            // the surrounding task was cancelled. Cancel the half-started
-            // listener so it doesn't leak.
-            listener.stateUpdateHandler = nil
-            listener.cancel()
-            Logger.httpServer.error("Listener not ready within \(startTimeout); giving up")
-            throw HTTPServerError.failedToStart
-        }
-
-        listener.stateUpdateHandler = nil
-        switch terminalState {
-        case .ready:
-            guard let p = listener.port else {
-                listener.cancel()
-                throw HTTPServerError.failedToStart
-            }
-            let server = HTTPServer(listener: listener, port: p.rawValue, queue: queue, token: token, connectionTasks: connectionTasks, cleanupTask: cleanupTask)
-            Logger.httpServer.info("HTTP server started on port \(p.rawValue)")
-            return server
-        case .failed(let error):
-            Logger.httpServer.error("Listener failed: \(error)")
-            listener.cancel()
-            throw HTTPServerError.failedToStart
-        default: // .cancelled
-            throw HTTPServerError.failedToStart
-        }
-    }
-
-    /// Awaits the first terminal listener state (`.ready`, `.failed`, or
-    /// `.cancelled`) on `states`, skipping non-terminal states (`.setup`,
-    /// `.waiting`), or returns nil once `timeout` elapses without one.
-    ///
-    /// Internal for testability: a listener stuck in `.waiting` cannot be
-    /// reproduced deterministically with a real `NWListener`, but the wait's
-    /// behavior can be verified by feeding this a hand-built state stream.
-    static func firstTerminalState(
-        in states: AsyncStream<NWListener.State>,
-        timeout: Duration
-    ) async -> NWListener.State? {
-        await withTaskGroup(of: NWListener.State?.self) { group in
-            group.addTask {
+        // Bound the wait for readiness. The listener can sit in a non-terminal
+        // state (e.g. `.waiting` when it can't establish an endpoint) indefinitely;
+        // since callers await this — the editor load awaits the upload server's
+        // bind — an unbounded wait would hang the caller, not just fail the server.
+        // Race the readiness wait against a timeout, and tear the listener down on
+        // any failure path so its socket isn't leaked. On `.ready` the group
+        // returns the server without throwing, so a successfully-started server
+        // never has its listener cancelled out from under it.
+        do {
+            return try await withStartTimeout(startTimeout) {
                 for await state in states {
                     switch state {
-                    case .ready, .failed, .cancelled:
-                        return state
+                    case .ready:
+                        listener.stateUpdateHandler = nil
+                        guard let p = listener.port else {
+                            throw HTTPServerError.failedToStart
+                        }
+                        let server = HTTPServer(listener: listener, port: p.rawValue, queue: queue, token: token, connectionTasks: connectionTasks, cleanupTask: cleanupTask)
+                        Logger.httpServer.info("HTTP server started on port \(p.rawValue)")
+                        return server
+                    case .failed(let error):
+                        Logger.httpServer.error("Listener failed: \(error)")
+                        throw HTTPServerError.failedToStart
+                    case .cancelled:
+                        throw HTTPServerError.failedToStart
                     default:
                         continue
                     }
                 }
-                // The stream finished (or the task was cancelled) without a
-                // terminal state.
-                return nil
+                throw HTTPServerError.failedToStart
+            }
+        } catch {
+            // Failure or timeout: the listener may still be started, so cancel it
+            // to release the socket. (On success the returned server owns it.)
+            listener.cancel()
+            throw error
+        }
+    }
+
+    /// Races `operation` against `timeout`, throwing ``HTTPServerError/startTimeout``
+    /// if the timeout wins. Used to bound the wait for the listener to become ready
+    /// so a caller — such as the editor load awaiting the upload server's bind —
+    /// isn't hung on a listener stuck in a non-terminal state.
+    static func withStartTimeout<T: Sendable>(
+        _ timeout: Duration,
+        _ operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
             }
             group.addTask {
-                try? await Task.sleep(for: timeout)
-                return nil
+                try await Task.sleep(for: timeout)
+                throw HTTPServerError.startTimeout
             }
-            // First child to finish wins: a terminal state, or nil on timeout.
-            // `next()` yields a double optional (`State??`); flatten it to `State?`.
-            let first = (await group.next()).flatMap { $0 }
+            let result = try await group.next()!
             group.cancelAll()
-            return first
+            return result
         }
     }
 
