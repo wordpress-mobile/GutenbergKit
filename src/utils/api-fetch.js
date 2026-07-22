@@ -258,7 +258,13 @@ export function nativeMediaUploadMiddleware( options, next ) {
 			// make upstream treat a cancelled upload as a real failure — surfacing
 			// a spurious error notice instead of a silent cancel.
 			if ( options.signal?.aborted ) {
-				throw options.signal.reason;
+				// Some engines abort without populating `reason`; fall back to a
+				// canonical AbortError so upstream recognizes the cancellation
+				// rather than a thrown `undefined`.
+				throw (
+					options.signal.reason ??
+					new DOMException( 'The upload was aborted.', 'AbortError' )
+				);
 			}
 			// Otherwise the loopback upload server is unreachable at the transport
 			// layer. We deliberately do NOT fall back to a direct re-upload:

@@ -491,6 +491,32 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		expect( next ).not.toHaveBeenCalled();
 	} );
 
+	it( 'throws a canonical AbortError when an aborted signal has no reason', async () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'token',
+		} );
+		const next = makeNext();
+
+		// Some engines mark the signal aborted without populating `reason`. The
+		// middleware must still reject with a real AbortError, not a thrown
+		// `undefined` that upstream would surface as a spurious failure.
+		const options = {
+			...makePostMediaOptions( makeFile() ),
+			signal: { aborted: true, reason: undefined },
+		};
+		global.fetch = vi.fn( () =>
+			Promise.reject( new TypeError( 'Failed to fetch' ) )
+		);
+
+		const error = await nativeMediaUploadMiddleware( options, next ).catch(
+			( thrown ) => thrown
+		);
+		expect( error ).not.toBeUndefined();
+		expect( error?.name ).toBe( 'AbortError' );
+		expect( next ).not.toHaveBeenCalled();
+	} );
+
 	// MARK: - Signal forwarding
 
 	it( 'forwards abort signal to fetch', async () => {
