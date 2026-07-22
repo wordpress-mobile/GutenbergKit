@@ -282,15 +282,29 @@ public final class HTTPServer: Sendable {
                             // Phase 1: receive headers only.
                             try await Self.receiveUntil(\.hasHeaders, parser: parser, on: connection, idleTimeout: idleTimeout)
 
-                            // Drain oversized body before throwing so the
-                            // client receives the 413 (RFC 9110 §15.5.14).
-                            if parser.state == .draining {
-                                try await Self.receiveUntil(\.isComplete, parser: parser, on: connection, idleTimeout: idleTimeout)
-                            }
-
                             // Validate headers (triggers full RFC validation).
                             guard let partial = try parser.parseRequest() else {
                                 throw HTTPServerError.connectionClosed
+                            }
+
+                            // Check auth on headers alone, before draining or
+                            // consuming any body bytes — an unauthenticated client
+                            // must not be able to make the server read (and
+                            // discard) an arbitrarily large body, and the handler
+                            // must never see an unauthenticated request.
+                            // OPTIONS is exempt because CORS preflight requests
+                            // never include credentials (Fetch spec §3.3.5).
+                            if requiresAuthentication && partial.method.uppercased() != "OPTIONS" {
+                                guard authenticate(partial, token: token) else {
+                                    throw HTTPServerError.authenticationFailed
+                                }
+                            }
+
+                            // Drain the oversized body before responding so the
+                            // (authenticated) client receives the 413 instead of
+                            // a connection reset (RFC 9110 §15.5.14).
+                            if parser.state == .draining {
+                                try await Self.receiveUntil(\.isComplete, parser: parser, on: connection, idleTimeout: idleTimeout)
                             }
 
                             // If the parser detected a non-fatal error (e.g.,
@@ -298,16 +312,6 @@ public final class HTTPServer: Sendable {
                             // request so the handler can build the response.
                             if parser.parseError != nil {
                                 return partial
-                            }
-
-                            // Check auth before consuming body to avoid buffering
-                            // up to maxRequestBodySize for unauthenticated clients.
-                            // OPTIONS is exempt because CORS preflight requests
-                            // never include credentials (Fetch spec §3.3.5).
-                            if requiresAuthentication && partial.method.uppercased() != "OPTIONS" {
-                                guard authenticate(partial, token: token) else {
-                                    throw HTTPServerError.authenticationFailed
-                                }
                             }
 
                             // Reject body-bearing methods without Content-Length.

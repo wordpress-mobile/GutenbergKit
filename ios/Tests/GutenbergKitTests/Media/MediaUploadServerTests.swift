@@ -275,6 +275,31 @@ struct MediaUploadServerTests {
     #expect(responseBody.contains("too large"))
   }
 
+  @Test("unauthenticated oversized request returns 407, not 413 (auth precedes drain)")
+  func oversizedUploadWithoutTokenReturns407() async throws {
+    let server = try await MediaUploadServer.start(maxRequestBodySize: 1024)
+    defer { server.stop() }
+
+    let boundary = UUID().uuidString
+    let oversizedData = Data(repeating: 0x42, count: 2048)
+    let body = buildMultipartBody(boundary: boundary, filename: "big.bin", mimeType: "application/octet-stream", data: oversizedData)
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    // Deliberately no Relay-Authorization header.
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    request.httpBody = body
+
+    // Auth is checked on headers alone, before the oversized body is drained
+    // or the handler runs — so the request is rejected with 407, not answered
+    // with the handler's 413. An unauthenticated client must not be able to
+    // make the server read (and discard) an arbitrarily large body.
+    let (_, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+    #expect(httpResponse.statusCode == 407)
+  }
+
   @Test("startup sweep deletes stale upload temps but preserves fresh ones")
   func cleanOrphanedUploadsAgeThreshold() async throws {
     let dir = FileManager.default.temporaryDirectory

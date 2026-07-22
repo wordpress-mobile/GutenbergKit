@@ -341,12 +341,6 @@ class HttpServer(
             // Phase 1: receive headers only.
             readUntil(parser, input, buffer, deadlineNanos) { it.hasHeaders }
 
-            // Drain oversized body before throwing so the
-            // client receives the 413 (RFC 9110 §15.5.14).
-            if (parser.state == HTTPRequestParser.State.DRAINING) {
-                readUntil(parser, input, buffer, deadlineNanos) { it.isComplete }
-            }
-
             // Validate headers (triggers full RFC validation).
             val partial = try {
                 parser.parseRequest()
@@ -373,6 +367,31 @@ class HttpServer(
                 return
             }
 
+            // Check auth on headers alone, before draining or consuming any
+            // body bytes — an unauthenticated client must not be able to make
+            // the server read (and discard) an arbitrarily large body, and the
+            // handler must never see an unauthenticated request.
+            // OPTIONS is exempt because CORS preflight requests
+            // never include credentials (Fetch spec §3.3.5).
+            if (requiresAuthentication && partial.method.uppercase() != "OPTIONS") {
+                val proxyAuth = partial.header("Proxy-Authorization")
+                    ?: partial.header("Relay-Authorization")
+                if (!authenticate(proxyAuth, token)) {
+                    sendResponse(socket, HttpResponse(
+                        status = 407,
+                        headers = mapOf("Content-Type" to "text/plain", "Proxy-Authenticate" to "Bearer")
+                    ))
+                    return
+                }
+            }
+
+            // Drain the oversized body before responding so the (authenticated)
+            // client receives the 413 instead of a connection reset
+            // (RFC 9110 §15.5.14).
+            if (parser.state == HTTPRequestParser.State.DRAINING) {
+                readUntil(parser, input, buffer, deadlineNanos) { it.isComplete }
+            }
+
             // If the parser detected a non-fatal error (e.g., payload too
             // large after drain), let the handler build the response.
             parser.pendingParseError?.let { error ->
@@ -396,22 +415,6 @@ class HttpServer(
                 sendResponse(socket, response)
                 Log.d(TAG, "${partial.method} ${partial.target} → ${response.status} (${"%.1f".format(parseDurationMs)}ms)")
                 return
-            }
-
-            // Check auth before consuming body to avoid buffering up to
-            // maxBodySize for unauthenticated clients.
-            // OPTIONS is exempt because CORS preflight requests
-            // never include credentials (Fetch spec §3.3.5).
-            if (requiresAuthentication && partial.method.uppercase() != "OPTIONS") {
-                val proxyAuth = partial.header("Proxy-Authorization")
-                    ?: partial.header("Relay-Authorization")
-                if (!authenticate(proxyAuth, token)) {
-                    sendResponse(socket, HttpResponse(
-                        status = 407,
-                        headers = mapOf("Content-Type" to "text/plain", "Proxy-Authenticate" to "Bearer")
-                    ))
-                    return
-                }
             }
 
             // Reject body-bearing methods without Content-Length.

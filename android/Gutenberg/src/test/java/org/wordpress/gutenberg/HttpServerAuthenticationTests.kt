@@ -255,6 +255,76 @@ class HttpServerAuthenticationTests {
         }
     }
 
+    // Oversized Payloads (auth precedes drain)
+
+    @Test
+    fun `oversized request without token returns 407, not 413`() {
+        val smallServer = oversizedTestServer()
+        try {
+            val conn = oversizedPost(smallServer)
+            try {
+                // Auth is checked on headers alone, before the oversized body is
+                // drained or the handler runs — so the request is rejected with
+                // 407, not answered with the handler's 413. An unauthenticated
+                // client must not be able to make the server read (and discard)
+                // an arbitrarily large body.
+                assertEquals(407, conn.responseCode)
+            } finally {
+                conn.disconnect()
+            }
+        } finally {
+            smallServer.stop()
+        }
+    }
+
+    @Test
+    fun `oversized request with valid token reaches handler as serverError 413`() {
+        val smallServer = oversizedTestServer()
+        try {
+            val conn = oversizedPost(smallServer) {
+                it.setRequestProperty("Proxy-Authorization", "Bearer ${smallServer.token}")
+            }
+            try {
+                assertEquals(413, conn.responseCode)
+            } finally {
+                conn.disconnect()
+            }
+        } finally {
+            smallServer.stop()
+        }
+    }
+
+    /** A server whose 1 KB body limit lets a 2 KB POST exercise the drain path. */
+    private fun oversizedTestServer(): HttpServer {
+        val smallServer = HttpServer(
+            name = "auth-drain-test",
+            externallyAccessible = false,
+            requiresAuthentication = true,
+            maxBodySize = 1024L,
+            handler = { request ->
+                request.serverError?.let { error ->
+                    HttpResponse(status = error.httpStatus, body = "too large".toByteArray())
+                } ?: HttpResponse(body = "OK\n".toByteArray())
+            }
+        )
+        smallServer.start()
+        return smallServer
+    }
+
+    /** Sends a 2 KB POST to [smallServer], applying [configure] before writing the body. */
+    private fun oversizedPost(
+        smallServer: HttpServer,
+        configure: (HttpURLConnection) -> Unit = {}
+    ): HttpURLConnection {
+        val conn = URL("http://127.0.0.1:${smallServer.port}/test").openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        configure(conn)
+        conn.doOutput = true
+        conn.setFixedLengthStreamingMode(OVERSIZED_BODY_SIZE)
+        conn.outputStream.use { it.write(ByteArray(OVERSIZED_BODY_SIZE)) }
+        return conn
+    }
+
     // Auth Disabled
 
     @Test
@@ -278,5 +348,10 @@ class HttpServerAuthenticationTests {
         } finally {
             noAuthServer.stop()
         }
+    }
+
+    companion object {
+        /** Twice the oversized test server's 1 KB `maxBodySize`. */
+        private const val OVERSIZED_BODY_SIZE = 2048
     }
 }
