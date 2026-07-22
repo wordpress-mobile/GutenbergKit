@@ -199,15 +199,6 @@ export function nativeMediaUploadMiddleware( options, next ) {
 		return next( options );
 	}
 
-	// Strip the `post` field when it's the auto-draft sentinel (`-1`), matching
-	// `mediaUploadMiddleware`. WordPress rejects attaching media to post `-1`, and
-	// because this middleware short-circuits (never calls `next()`),
-	// `mediaUploadMiddleware` would otherwise not run and the sentinel would reach
-	// WordPress verbatim through the relay.
-	if ( options.body.get( 'post' ) === '-1' ) {
-		options.body.delete( 'post' );
-	}
-
 	info(
 		`Routing upload of ${ file.name } through native server on port ${ nativeUploadPort }`
 	);
