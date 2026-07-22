@@ -438,16 +438,19 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		} );
 		const next = makeNext();
 
-		// A real aborted signal — `fetch` rejects with the signal's reason.
+		// The race the middleware guards against: the signal is aborted, but
+		// `fetch` rejects with a *distinct* network error (a TypeError can win the
+		// race with the abort). The middleware must rethrow the signal's canonical
+		// reason, NOT the fetch rejection — otherwise a cancelled upload surfaces a
+		// spurious transport-failure notice.
 		const controller = new AbortController();
 		controller.abort();
 		const options = {
 			...makePostMediaOptions( makeFile() ),
 			signal: controller.signal,
 		};
-		global.fetch = vi.fn( () =>
-			Promise.reject( controller.signal.reason )
-		);
+		const networkError = new TypeError( 'Failed to fetch' );
+		global.fetch = vi.fn( () => Promise.reject( networkError ) );
 
 		// The middleware rethrows the signal's canonical reason (not the fetch
 		// rejection) and does not retry.
@@ -466,16 +469,19 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		} );
 		const next = makeNext();
 
-		// `AbortSignal.timeout()` aborts its signal and rejects with a
-		// TimeoutError (not an AbortError). A `name === 'AbortError'` check would
-		// miss it and wrongly fall back; keying off `signal.aborted` catches it.
+		// `AbortSignal.timeout()` aborts its signal and rejects with a TimeoutError
+		// (not an AbortError). A `name === 'AbortError'` check would miss it and
+		// wrongly fall back; keying off `signal.aborted` catches it. As with a
+		// plain abort, `fetch` may reject with a distinct network error that races
+		// the timeout, so the middleware must still rethrow the signal's reason.
 		const timeoutError = new Error( 'The operation timed out.' );
 		timeoutError.name = 'TimeoutError';
 		const options = {
 			...makePostMediaOptions( makeFile() ),
 			signal: { aborted: true, reason: timeoutError },
 		};
-		global.fetch = vi.fn( () => Promise.reject( timeoutError ) );
+		const networkError = new TypeError( 'Failed to fetch' );
+		global.fetch = vi.fn( () => Promise.reject( networkError ) );
 
 		await expect(
 			nativeMediaUploadMiddleware( options, next )
