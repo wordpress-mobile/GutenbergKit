@@ -437,6 +437,8 @@ class HttpServer(
                 )
                 val response = try {
                     handler(request)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Log.e(TAG, "Handler threw", e)
                     HttpResponse(
@@ -554,6 +556,11 @@ class HttpServer(
         }
         return try {
             handler(request)
+        } catch (e: CancellationException) {
+            // Never swallow cooperative cancellation (e.g. from stop()/detach):
+            // rethrow so handleConnection unwinds cleanly instead of writing a 500
+            // to a connection that's being torn down.
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Handler threw", e)
             HttpResponse(status = 500, body = "Internal Server Error".toByteArray())

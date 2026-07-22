@@ -74,6 +74,51 @@ class HttpServerCancellationTests {
     }
 
     @Test
+    fun `stopping the server mid-handler closes the connection without sending a response`() {
+        val handlerStarted = CountDownLatch(1)
+
+        val server = HttpServer(
+            name = "cancel-on-stop",
+            externallyAccessible = false,
+            requiresAuthentication = true,
+            handler = {
+                handlerStarted.countDown()
+                delay(10_000) // cancelled by stop(); throws CancellationException
+                HttpResponse(body = "OK\n".toByteArray())
+            }
+        )
+        server.start()
+        try {
+            val sock = Socket("127.0.0.1", server.port)
+            sock.soTimeout = 30_000
+            val request = "POST /upload HTTP/1.1\r\nHost: 127.0.0.1\r\n" +
+                "Proxy-Authorization: Bearer ${server.token}\r\n" +
+                "Content-Length: 0\r\n\r\n"
+            sock.getOutputStream().write(request.toByteArray())
+            sock.getOutputStream().flush()
+
+            // Once the handler is running, stop the server — this cancels the
+            // in-flight connection coroutine.
+            assertTrue("handler never started", handlerStarted.await(5, TimeUnit.SECONDS))
+            server.stop()
+
+            // The client must see the connection close (EOF/reset), not a 500
+            // written to a connection being torn down.
+            val statusLine = try {
+                sock.getInputStream().bufferedReader().readLine()
+            } catch (_: java.io.IOException) {
+                null
+            }
+            assertTrue(
+                "expected no HTTP response, got: $statusLine",
+                statusLine == null || !statusLine.startsWith("HTTP/")
+            )
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
     fun `handler that finishes first still sends its response despite the watcher`() {
         // The close watcher must not interfere with the normal path: a handler
         // that completes before any close still produces a response on the live
