@@ -7,6 +7,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import org.wordpress.gutenberg.http.HeaderValue
 import org.wordpress.gutenberg.http.MultipartPart
 import org.wordpress.gutenberg.http.HTTPRequestParseError
@@ -479,12 +482,34 @@ internal open class DefaultMediaUploader(
         return performUpload(request)
     }
 
-    private fun performUpload(request: okhttp3.Request): MediaUploadResponse {
+    private suspend fun performUpload(request: okhttp3.Request): MediaUploadResponse {
         // Relay WordPress's response verbatim — including non-2xx statuses — so
         // the editor sees WordPress's real status and error body, exactly as a
         // direct upload would.
-        return httpClient.newCall(request).execute().use { response ->
-            MediaUploadResponse(response.code, response.body?.bytes() ?: ByteArray(0))
+        //
+        // Enqueue rather than execute() so coroutine cancellation can tear down
+        // the outbound call: when the editor aborts the upload the server cancels
+        // this handler, and the in-flight POST /wp/v2/media must be cancelled
+        // rather than run to completion and orphan an attachment that a retry
+        // then duplicates.
+        val call = httpClient.newCall(request)
+        return suspendCancellableCoroutine { continuation ->
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : okhttp3.Callback {
+                override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                    val result = response.use {
+                        MediaUploadResponse(it.code, it.body?.bytes() ?: ByteArray(0))
+                    }
+                    continuation.resume(result)
+                }
+
+                override fun onFailure(call: okhttp3.Call, e: IOException) {
+                    // A cancelled call also surfaces here; the continuation is
+                    // already resumed via cancellation, so don't resume again.
+                    if (continuation.isCancelled) return
+                    continuation.resumeWithException(e)
+                }
+            })
         }
     }
 }

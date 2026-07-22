@@ -23,10 +23,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 
 /**
  * A received HTTP request.
@@ -506,9 +509,13 @@ class HttpServer(
                     body = parsed.body,
                     parseDurationMs = parseDurationMs
                 )
-                val response = resolveResponse(request)
-                sendResponse(socket, response)
-                Log.d(TAG, "${parsed.method} ${parsed.target} → ${response.status} (${"%.1f".format(parseDurationMs)}ms)")
+                val response = resolveResponseRacingClose(request, socket, input)
+                if (response != null) {
+                    sendResponse(socket, response)
+                    Log.d(TAG, "${parsed.method} ${parsed.target} → ${response.status} (${"%.1f".format(parseDurationMs)}ms)")
+                } else {
+                    Log.d(TAG, "${parsed.method} ${parsed.target} → client disconnected before response; cancelled in-flight handler")
+                }
             }
         }
     }
@@ -550,6 +557,74 @@ class HttpServer(
         } catch (e: Exception) {
             Log.e(TAG, "Handler threw", e)
             HttpResponse(status = 500, body = "Internal Server Error".toByteArray())
+        }
+    }
+
+    /**
+     * Runs [resolveResponse], racing it against the connection's peer closing.
+     *
+     * Once the request has been fully read no bytes flow on the connection until
+     * the response is sent, so a read posted now can only return EOF (the client
+     * closed) or fail — i.e. the client went away, which is what the editor
+     * WebView does when it aborts an upload. A media-upload handler awaits a slow
+     * outbound `POST /wp/v2/media`; if the client aborts during that window,
+     * cancelling the handler cancels the outbound call instead of letting it run
+     * to completion and orphan an attachment that a retry then duplicates.
+     *
+     * Returns null if the peer closed before the handler produced a response, in
+     * which case the caller skips the (doomed) send.
+     */
+    private suspend fun resolveResponseRacingClose(
+        request: HttpRequest,
+        socket: Socket,
+        input: BufferedInputStream
+    ): HttpResponse? = coroutineScope {
+        val handlerJob = async { resolveResponse(request) }
+        val watcherJob = async { awaitPeerClose(input) }
+
+        val response = select {
+            handlerJob.onAwait { it }
+            watcherJob.onAwait { null }
+        }
+
+        if (response != null) {
+            // The handler won. Stop watching and unblock the watcher's pending
+            // blocking read (soTimeout would otherwise hold it for a full idle
+            // interval) so this scope can join it promptly. shutdownInput closes
+            // only the receive half — the response can still be written.
+            watcherJob.cancel()
+            try {
+                socket.shutdownInput()
+            } catch (_: Exception) {
+                // Best-effort — the socket may already be closed.
+            }
+        } else {
+            // The peer closed first. Cancel the in-flight handler, which cancels
+            // the outbound relay call via its continuation's cancellation.
+            handlerJob.cancel()
+        }
+        response
+    }
+
+    /**
+     * Suspends until the connection's peer closes it (EOF) or it fails. A
+     * well-behaved client sends nothing before the response, so the read blocks
+     * until the peer closes; the per-read idle timeout ([Socket.setSoTimeout])
+     * just makes it loop. Any unexpected pre-response bytes are discarded — this
+     * never feeds the parser.
+     */
+    private suspend fun awaitPeerClose(input: BufferedInputStream) {
+        while (true) {
+            currentCoroutineContext().ensureActive()
+            val byte = try {
+                input.read()
+            } catch (_: SocketTimeoutException) {
+                continue // idle window elapsed; the connection is still open
+            } catch (_: java.io.IOException) {
+                return // reset/closed (incl. shutdownInput on the handler-win path)
+            }
+            if (byte == -1) return // clean EOF — the peer closed
+            // Otherwise an unexpected pre-response byte; discard and keep watching.
         }
     }
 
