@@ -688,31 +688,23 @@ public final class HTTPServer: Sendable {
     ///
     /// The parser creates temp files in a server-specific subdirectory under the
     /// system temp directory (e.g., `GutenbergKitHTTP-media-proxy/`). Under normal
-    /// operation, `TempFileOwner.deinit` deletes them via ARC. After a crash, these
+    /// operation, `Buffer`/`TempFileOwner` delete them via ARC. After a crash these
     /// files survive — this method cleans them up on the next server start.
     ///
-    /// Because each server `name` maps to its own subdirectory, cleanup is scoped
-    /// to a single server instance and will not affect files belonging to other
-    /// servers running concurrently.
-    ///
-    /// Only files older than one hour are deleted. Fresh files are preserved so
-    /// the sweep — which runs detached from `start()` — cannot race in-flight
-    /// temp files, whether they belong to this instance or another live server
-    /// sharing the same `name`.
-    private static func cleanOrphanedTempFiles(in directory: URL) {
-        // Only delete files past the age threshold. Fresh files may belong to a
-        // live server instance — the sweep runs detached from start(), so
-        // without the threshold it could race and delete an in-flight
-        // request's temp buffer.
-        let cutoff = Date(timeIntervalSinceNow: -3600) // 1 hour ago
+    /// Files currently backing an in-flight request are registered in
+    /// ``ActiveTempFiles`` and skipped, so a server instance that shares a
+    /// directory with a concurrently-running instance of the same name (e.g. two
+    /// editors open at once, or one being torn down as another starts) does not
+    /// delete the other's live buffers. Files not in the registry have no live
+    /// owner in this process — they are crash orphans and are removed. The sweep
+    /// runs detached from `start()` (see `cleanupTask`), off the caller's startup
+    /// path; the registry keeps it safe regardless of when it runs.
+    static func cleanOrphanedTempFiles(in directory: URL) {
         guard let contents = try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: [.contentModificationDateKey]
+            at: directory, includingPropertiesForKeys: nil
         ) else { return }
-        for url in contents {
-            let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-            if let modified, modified < cutoff {
-                try? FileManager.default.removeItem(at: url)
-            }
+        for url in contents where !ActiveTempFiles.contains(url.lastPathComponent) {
+            try? FileManager.default.removeItem(at: url)
         }
     }
 }
