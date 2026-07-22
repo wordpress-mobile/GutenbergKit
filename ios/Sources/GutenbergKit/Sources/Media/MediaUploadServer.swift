@@ -489,13 +489,17 @@ class DefaultMediaUploader: @unchecked Sendable {
         var preamble = Data()
         for field in extraFields {
             preamble.append(Data("--\(boundary)\r\n".utf8))
-            preamble.append(Data("Content-Disposition: form-data; name=\"\(field.name)\"\r\n\r\n".utf8))
+            preamble.append(Data("Content-Disposition: form-data; name=\"\(escapeQuotedParameter(field.name))\"\r\n\r\n".utf8))
             preamble.append(field.value)
             preamble.append(Data("\r\n".utf8))
         }
         preamble.append(Data("--\(boundary)\r\n".utf8))
-        preamble.append(Data("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".utf8))
-        preamble.append(Data("Content-Type: \(mimeType)\r\n\r\n".utf8))
+        preamble.append(Data("Content-Disposition: form-data; name=\"file\"; filename=\"\(escapeQuotedParameter(filename))\"\r\n".utf8))
+        // `mimeType` is a client-supplied Content-Type value; strip CR/LF so a
+        // crafted value can't inject additional headers. (Quotes are legal in
+        // Content-Type parameters, so they're left intact.)
+        let safeMimeType = mimeType.replacingOccurrences(of: "\r", with: "").replacingOccurrences(of: "\n", with: "")
+        preamble.append(Data("Content-Type: \(safeMimeType)\r\n\r\n".utf8))
         let epilogue = Data("\r\n--\(boundary)--\r\n".utf8)
 
         guard let fileSize = try FileManager.default.attributesOfItem(atPath: fileURL.path(percentEncoded: false))[.size] as? Int else {
@@ -546,6 +550,17 @@ class DefaultMediaUploader: @unchecked Sendable {
         }
 
         return (inputStream, contentLength)
+    }
+
+    /// Escapes a client-supplied value for a quoted `Content-Disposition`
+    /// parameter (`name`/`filename`). Percent-encodes CR, LF, and `"` so a crafted
+    /// filename or field name can't break the header line or inject an extra
+    /// multipart part — matching WHATWG's `multipart/form-data` field serialization.
+    private static func escapeQuotedParameter(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\r", with: "%0D")
+            .replacingOccurrences(of: "\n", with: "%0A")
+            .replacingOccurrences(of: "\"", with: "%22")
     }
 
     /// Writes all bytes of `data` to the output stream, handling partial writes.

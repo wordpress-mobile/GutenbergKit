@@ -394,6 +394,29 @@ struct MultipartBodyStreamTests {
     #expect(result == expected)
   }
 
+  @Test("escapes CR/LF and quotes so a crafted filename can't inject headers or parts")
+  func escapesHeaderInjection() throws {
+    let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("stream-test-\(UUID().uuidString)")
+    try Data("file-bytes".utf8).write(to: tempFile)
+    defer { try? FileManager.default.removeItem(at: tempFile) }
+
+    // Craft a filename, field name, and MIME type that each try to smuggle a CRLF
+    // and a fake header into the body relayed to WordPress.
+    let (stream, _) = try DefaultMediaUploader.multipartBodyStream(
+      fileURL: tempFile,
+      boundary: "boundary",
+      filename: "evil\"\r\nX-Injected-File: 1.jpg",
+      mimeType: "image/jpeg\r\nX-Injected-Type: 1",
+      extraFields: [("field\"\r\nX-Injected-Name: 1", Data("v".utf8))]
+    )
+    let text = String(decoding: readAllFromStream(stream), as: UTF8.self)
+
+    // None of the crafted CRLF sequences may survive as a real header break.
+    #expect(!text.contains("\r\nX-Injected-File:"))
+    #expect(!text.contains("\r\nX-Injected-Type:"))
+    #expect(!text.contains("\r\nX-Injected-Name:"))
+  }
+
   @Test("includes non-file parts (e.g. post) ahead of the file")
   func multipartBodyIncludesExtraParts() throws {
     let boundary = "boundary"
