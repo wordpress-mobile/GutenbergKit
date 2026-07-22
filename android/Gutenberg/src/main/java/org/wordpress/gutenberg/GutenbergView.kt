@@ -134,7 +134,16 @@ class GutenbergView : FrameLayout {
             syncUploadServerJavaScriptVariables()
         }
 
-    private var uploadServer: MediaUploadServer? = null
+    @Volatile private var uploadServer: MediaUploadServer? = null
+
+    /**
+     * True once the view has been detached from its window. [onDetachedFromWindow]
+     * stops the upload server and won't fire again, so [startUploadServer] must not
+     * resurrect one (e.g. from a delegate set after detach) — that would leak its
+     * socket and accept-loop coroutine. Reset on re-attach.
+     */
+    @Volatile private var isTornDown = false
+
     private val uploadHttpClient: okhttp3.OkHttpClient by lazy {
         // The read/write inactivity timeouts mirror URLSession's 60s
         // timeoutIntervalForRequest default — an inactivity timer that resets on
@@ -678,6 +687,12 @@ class GutenbergView : FrameLayout {
     }
 
     private fun startUploadServer() {
+        // Don't (re)start on a detached view: onDetachedFromWindow has already torn
+        // the server down and won't fire again, so a server started here (e.g. from a
+        // delegate assigned after detach) would leak its socket and accept-loop
+        // coroutine with nothing left to stop it.
+        if (isTornDown) return
+
         // The native upload server relays through DefaultMediaUploader, which needs a
         // site root and an auth header (every host provides one — the editor injects
         // it because the WebView has no auth cookies). Without both there is nothing
@@ -1143,11 +1158,13 @@ class GutenbergView : FrameLayout {
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        isTornDown = false
         startNetworkMonitoring()
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        isTornDown = true
         stopNetworkMonitoring()
         uploadServer?.stop()
         uploadServer = null
