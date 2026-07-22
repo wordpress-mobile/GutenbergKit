@@ -104,8 +104,40 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Used by `EditorViewController.warmup()` to reduce first-render latency.
     private let isWarmupMode: Bool
 
+    /// Set once the editor has begun loading and captured its configuration
+    /// (including ``mediaUploadDelegate``). After this, that delegate can no longer
+    /// take effect, so its setter traps if written.
+    private var hasStartedLoading = false
+
+    /// Whether a non-nil ``mediaUploadDelegate`` was ever assigned. Lets the load
+    /// path tell "the delegate was released before load" (a retention mistake to
+    /// trap) apart from "no delegate was configured" (a valid opt-out).
+    private var mediaUploadDelegateWasAssigned = false
+
     /// Delegate for customizing media file processing and upload behavior.
-    public weak var mediaUploadDelegate: (any MediaUploadDelegate)?
+    ///
+    /// Provide this **before the editor loads** — typically right after `init`, the
+    /// same way the rest of the editor configuration is supplied. It is captured
+    /// once, when the editor begins loading, and injected into the page's initial
+    /// configuration; setting it afterward has no effect, so the setter traps.
+    ///
+    /// - Important: This is a `weak` reference — you must hold a strong reference to
+    ///   your delegate until the editor has loaded, or native uploads are silently
+    ///   disabled. To surface that mistake, the editor traps at load time if a
+    ///   delegate that was assigned here has already been deallocated.
+    public weak var mediaUploadDelegate: (any MediaUploadDelegate)? {
+        didSet {
+            // Record whether a delegate was provided so the load path can tell a
+            // premature deallocation apart from a deliberate opt-out (see
+            // `startUploadServer`).
+            mediaUploadDelegateWasAssigned = mediaUploadDelegate != nil
+            precondition(
+                !hasStartedLoading,
+                "mediaUploadDelegate must be set before the editor loads (e.g. right after init). "
+                    + "It is captured into the editor configuration at load; setting it afterward has no effect."
+            )
+        }
+    }
 
     // MARK: - Private Properties (Services)
     private let editorService: EditorService
@@ -340,6 +372,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     @MainActor
     private func loadEditor(dependencies: EditorDependencies) async throws {
+        // From here on the editor configuration — including `mediaUploadDelegate` —
+        // is captured, so the delegate setter traps if written after this point.
+        self.hasStartedLoading = true
+
         self.displayActivityView()
 
         // Set asset bundle for the URL scheme handler to serve cached plugin/theme assets
@@ -403,6 +439,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// falls back to Gutenberg's default upload behavior (the JS override won't activate
     /// because `nativeUploadPort` will be nil in GBKit).
     private func startUploadServer() async {
+        // A delegate that was provided but is already nil here was deallocated before
+        // the editor finished loading — the host didn't hold a strong reference to it.
+        // That silently disables native uploads, so trap loudly instead.
+        precondition(
+            !(mediaUploadDelegateWasAssigned && mediaUploadDelegate == nil),
+            "mediaUploadDelegate was released before the editor loaded — hold a strong reference to it."
+        )
+
         guard mediaUploadDelegate != nil else {
             return
         }
