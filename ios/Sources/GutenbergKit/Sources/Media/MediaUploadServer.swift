@@ -448,6 +448,16 @@ class DefaultMediaUploader: @unchecked Sendable {
     }
 
     private func performUpload(_ request: URLRequest) async throws -> MediaUploadResponse {
+        // The body may be fed by a background writer thread via a bound stream pair
+        // (multipartBodyStream, or RequestBody.makeInputStream for file slices). If
+        // the request is cancelled or fails, URLSession may abandon the stream
+        // without draining it, leaving that writer blocked forever on a full buffer
+        // — leaking the thread and its open file handle. Closing the input stream on
+        // every exit breaks the pair so the writer's write() fails and it unwinds.
+        // (For in-memory/whole-file bodies there is no writer thread and this is a
+        // harmless no-op.)
+        defer { request.httpBodyStream?.close() }
+
         // Relay WordPress's response verbatim — including non-2xx statuses — so
         // the editor sees WordPress's real status and error body, exactly as a
         // direct upload would. `performRaw` does not throw on non-2xx.
