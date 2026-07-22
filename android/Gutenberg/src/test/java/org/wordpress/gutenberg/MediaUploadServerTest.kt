@@ -1,13 +1,18 @@
 package org.wordpress.gutenberg
 
 import com.google.gson.JsonParser
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -39,6 +44,37 @@ class MediaUploadServerTest {
     fun `starts and provides a port and token`() {
         assertTrue(server.port > 0)
         assertTrue(server.token.isNotEmpty())
+    }
+
+    @Test
+    fun `stop cancels an internally-created scope but leaves a caller-supplied one alone`() {
+        // No scope supplied → the server owns one, which stop() must cancel.
+        val owningServer =
+            MediaUploadServer(uploadDelegate = null, defaultUploader = null, cacheDir = tempFolder.root)
+        val ownedScope = ownedScopeOf(owningServer)
+        assertNotNull("server should own a scope when none is supplied", ownedScope)
+        assertTrue(ownedScope!!.isActive)
+        owningServer.stop()
+        assertFalse("stop() must cancel the scope it created", ownedScope.isActive)
+
+        // A caller-supplied scope belongs to the caller — stop() must not cancel it.
+        val callerScope = CoroutineScope(Dispatchers.IO)
+        val borrowingServer = MediaUploadServer(
+            uploadDelegate = null,
+            defaultUploader = null,
+            cacheDir = tempFolder.root,
+            scope = callerScope
+        )
+        assertNull("server must not own a caller-supplied scope", ownedScopeOf(borrowingServer))
+        borrowingServer.stop()
+        assertTrue("stop() must not cancel a caller-supplied scope", callerScope.isActive)
+        callerScope.cancel()
+    }
+
+    private fun ownedScopeOf(uploadServer: MediaUploadServer): CoroutineScope? {
+        val field = MediaUploadServer::class.java.getDeclaredField("ownedScope")
+        field.isAccessible = true
+        return field.get(uploadServer) as CoroutineScope?
     }
 
     // MARK: - Auth validation

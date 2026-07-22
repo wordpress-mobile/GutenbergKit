@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.wordpress.gutenberg.http.HeaderValue
 import org.wordpress.gutenberg.http.MultipartPart
@@ -97,7 +98,7 @@ internal class MediaUploadServer(
     private val uploadDelegate: MediaUploadDelegate?,
     private val defaultUploader: DefaultMediaUploader?,
     cacheDir: File? = null,
-    scope: CoroutineScope = CoroutineScope(Dispatchers.IO),
+    scope: CoroutineScope? = null,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     /** The port the server is listening on. */
@@ -116,12 +117,20 @@ internal class MediaUploadServer(
         File(cacheDir ?: File(System.getProperty("java.io.tmpdir")), "gutenbergkit-uploads")
 
     /**
+     * The scope MediaUploadServer created itself because the caller supplied none.
+     * It is cancelled in [stop]; a caller-supplied scope is left to the caller's
+     * lifecycle (cancelling it here would tear down state the caller still owns).
+     */
+    private val ownedScope: CoroutineScope? =
+        if (scope == null) CoroutineScope(Dispatchers.IO) else null
+
+    /**
      * Sweeps crash-orphaned temp files off the caller's thread. Exposed so tests
      * can await it; injecting `Dispatchers.Unconfined` for [ioDispatcher] runs the
      * sweep synchronously.
      */
     @Suppress("TooGenericExceptionCaught")
-    val cleanupJob: Job = scope.launch(ioDispatcher) {
+    val cleanupJob: Job = (scope ?: ownedScope!!).launch(ioDispatcher) {
         try {
             cleanOrphanedUploads()
         } catch (e: Exception) {
@@ -146,6 +155,8 @@ internal class MediaUploadServer(
     fun stop() {
         cleanupJob.cancel()
         server.stop()
+        // Cancel the scope only if we created it; a caller-supplied scope is theirs.
+        ownedScope?.cancel()
     }
 
     /**
