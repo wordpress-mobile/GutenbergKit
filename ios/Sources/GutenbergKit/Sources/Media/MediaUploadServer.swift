@@ -181,7 +181,15 @@ final class MediaUploadServer: Sendable {
                 body: response.body
             )
         } catch {
-            Logger.uploadServer.error("Upload processing failed: \(error)")
+            // A cancelled connection task (editor abort / server stop) surfaces
+            // here too — as CancellationError or URLError.cancelled. It's not a
+            // failure, and the server closes the connection without sending this
+            // response (see HTTPServer's cancellation check), so log it quietly.
+            if Task.isCancelled {
+                Logger.uploadServer.debug("Upload cancelled")
+            } else {
+                Logger.uploadServer.error("Upload processing failed: \(error)")
+            }
             return errorResponse(status: 500, message: error.localizedDescription)
         }
     }

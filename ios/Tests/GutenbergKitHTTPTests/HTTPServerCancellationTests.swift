@@ -58,6 +58,47 @@ struct HTTPServerCancellationTests {
         #expect(!signals.didFinishNormally)
     }
 
+    @Test("stopping the server mid-handler closes the connection without sending a response")
+    func serverStopMidHandlerSendsNoResponse() async throws {
+        let signals = HandlerSignals()
+
+        let server = try await HTTPServer.start(
+            name: "cancel-on-stop",
+            requiresAuthentication: true
+        ) { _ in
+            signals.markStarted()
+            do {
+                try await Task.sleep(for: .seconds(10))
+            } catch {
+                signals.markCancelled()
+            }
+            // The handler is non-throwing, so it still returns a response after
+            // being cancelled — the server must NOT write it to the dying
+            // connection.
+            return HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+
+        let connection = NWConnection(
+            host: .ipv4(.loopback),
+            port: NWEndpoint.Port(rawValue: server.port)!,
+            using: .tcp
+        )
+        try await waitUntilReady(connection)
+        let request = "POST /upload HTTP/1.1\r\nHost: 127.0.0.1\r\nProxy-Authorization: Bearer \(server.token)\r\nContent-Length: 0\r\n\r\n"
+        try await send(Data(request.utf8), on: connection)
+
+        // Once the handler is running, stop the server — this cancels the
+        // in-flight connection task.
+        try await signals.waitUntilStarted()
+        server.stop()
+
+        // The client must see the connection close (EOF/reset), not an HTTP
+        // response written to a connection being torn down.
+        let received = (try? await receiveResponse(connection)) ?? ""
+        #expect(!received.hasPrefix("HTTP/1.1"))
+        connection.cancel()
+    }
+
     @Test("handler that finishes first still sends its response despite the watcher")
     func handlerFinishesFirstStillResponds() async throws {
         // The close watcher must not interfere with the normal path: a handler
@@ -101,6 +142,20 @@ struct HTTPServerCancellationTests {
             connection.send(content: data, completion: .contentProcessed { error in
                 if let error { cont.resume(throwing: error) } else { cont.resume() }
             })
+        }
+    }
+
+    /// Reads one chunk from the connection, returning it as a string (empty on a
+    /// clean EOF). Throws if the connection errors (e.g. reset).
+    private func receiveResponse(_ connection: NWConnection) async throws -> String {
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<String, any Swift.Error>) in
+            connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { data, _, _, error in
+                if let error {
+                    cont.resume(throwing: error)
+                } else {
+                    cont.resume(returning: String(data: data ?? Data(), encoding: .utf8) ?? "")
+                }
+            }
         }
     }
 

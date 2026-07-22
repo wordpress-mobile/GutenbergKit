@@ -453,6 +453,11 @@ public final class HTTPServer: Sendable {
                         return
                     }
                 }
+                // The handler type is non-throwing and maps cancellation to a 500,
+                // so if the connection task was cancelled while it ran (server stop /
+                // editor teardown), honor that here rather than writing a doomed
+                // response: propagate so the outer handler just closes the connection.
+                try Task.checkCancellation()
                 await send(response, on: connection, cors: cors)
                 let (sec, atto) = duration.components
                 let ms = Double(sec) * 1000.0 + Double(atto) / 1_000_000_000_000_000.0
