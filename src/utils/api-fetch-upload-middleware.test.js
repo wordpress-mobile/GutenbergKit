@@ -238,6 +238,45 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		expect( fetchOptions.body.get( 'post' ) ).toBe( '123' );
 	} );
 
+	it( 'strips the auto-draft sentinel `post` value of -1 before forwarding', async () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 12345,
+			nativeUploadToken: 'test-token',
+		} );
+
+		global.fetch = vi.fn( () =>
+			Promise.resolve( {
+				ok: true,
+				json: () => Promise.resolve( { id: 1 } ),
+			} )
+		);
+
+		const body = new FormData();
+		body.append( 'file', makeFile(), 'photo.jpg' );
+		body.append( 'post', '-1' );
+
+		await nativeMediaUploadMiddleware(
+			{ method: 'POST', path: '/wp/v2/media', body },
+			makeNext()
+		);
+
+		// WordPress rejects attaching media to post `-1`. Because this
+		// middleware short-circuits, `mediaUploadMiddleware` never runs, so the
+		// stripping must happen here or the sentinel reaches WordPress.
+		const [ , fetchOptions ] = global.fetch.mock.calls[ 0 ];
+		expect( fetchOptions.body.get( 'post' ) ).toBeNull();
+	} );
+
+	it( 'passes through when nativeUploadToken is not configured', () => {
+		getGBKit.mockReturnValue( { nativeUploadPort: 8080 } );
+		const next = makeNext();
+
+		nativeMediaUploadMiddleware( makePostMediaOptions( makeFile() ), next );
+
+		expect( next ).toHaveBeenCalled();
+		expect( global.fetch ).not.toHaveBeenCalled();
+	} );
+
 	it.each( [
 		// A bare trailing `?` carries no parameters. The native `query`
 		// accessors normalize it away, so this side must too — otherwise the
