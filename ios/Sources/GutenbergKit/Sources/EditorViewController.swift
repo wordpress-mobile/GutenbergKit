@@ -461,7 +461,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
 
         let defaultUploader = DefaultMediaUploader(
-            httpClient: httpClient,
+            httpClient: httpClient.uploadClient(),
             siteApiRoot: configuration.siteApiRoot,
             siteApiNamespace: configuration.siteApiNamespace
         )
