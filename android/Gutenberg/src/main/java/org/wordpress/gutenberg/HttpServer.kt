@@ -111,6 +111,17 @@ enum class CorsPolicy {
         get() = when (this) {
             None -> emptyMap()
             Permissive -> mapOf(
+                // `*` (any origin) rather than echoing a specific origin is
+                // deliberate, and safe here — not an oversight to tighten. The
+                // server is loopback-only, and every non-OPTIONS request is gated
+                // by a per-session random bearer token stored only in the editor
+                // origin's localStorage/window.GBKit, which is origin-scoped and
+                // unreadable by any other origin — so no cross-origin can obtain
+                // it. `*` only governs whether a *token-holding* origin may read
+                // the response, and the sole token-holder is the editor itself, the
+                // legitimate client. Echoing the origin isn't viable anyway: the
+                // editor loads from file:// (Origin null), which can't be cleanly
+                // allowlisted.
                 "Access-Control-Allow-Origin" to "*",
                 "Access-Control-Allow-Methods" to "GET, POST, PUT, DELETE, OPTIONS",
                 "Access-Control-Allow-Headers" to "Authorization, Relay-Authorization, Content-Type",
