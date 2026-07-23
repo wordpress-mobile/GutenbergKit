@@ -17,28 +17,59 @@ const hiddenElementsByDepth = [];
 
 /**
  * Hides all elements in the body element from screen-readers except
- * the provided element and elements that should not be hidden from
- * screen-readers.
+ * the provided elements, their ancestors, and elements that should not be
+ * hidden from screen-readers.
+ *
+ * Elements are hidden by walking from each modal element up to the body and
+ * hiding the other children of every ancestor along the way. Hiding only the
+ * body's children would be insufficient, as a modal element is not
+ * necessarily a body child—popovers render into slots nested within
+ * body-level containers.
  *
  * The reason we do this is because `aria-modal="true"` currently is bugged
  * in Safari, and support is spotty in other browsers overall. In the future
  * we should consider removing these helper functions in favor of
  * `aria-modal="true"`.
  *
- * @param {Element} modalElement The element that should not be hidden.
+ * @param {...Element} modalElements The elements that should not be hidden.
  */
-export function modalize( modalElement ) {
-	const elements = Array.from( document.body.children );
+export function modalize( ...modalElements ) {
 	const hiddenElements = [];
 	hiddenElementsByDepth.push( hiddenElements );
-	for ( const element of elements ) {
-		if ( element === modalElement ) {
-			continue;
-		}
 
-		if ( elementShouldBeHidden( element ) ) {
-			element.setAttribute( 'aria-hidden', 'true' );
-			hiddenElements.push( element );
+	const elements = modalElements.filter(
+		( element ) => element?.isConnected
+	);
+	// Ancestors of a modal element must stay accessible, otherwise the modal
+	// element is hidden along with them.
+	const visibleElements = new Set();
+	for ( const modalElement of elements ) {
+		for (
+			let element = modalElement;
+			element && element !== document.body;
+			element = element.parentElement
+		) {
+			visibleElements.add( element );
+		}
+	}
+
+	for ( const modalElement of elements ) {
+		for (
+			let element = modalElement;
+			element?.parentElement && element !== document.body;
+			element = element.parentElement
+		) {
+			for ( const sibling of element.parentElement.children ) {
+				if (
+					visibleElements.has( sibling ) ||
+					! elementShouldBeHidden( sibling )
+				) {
+					continue;
+				}
+
+				sibling.setAttribute( 'aria-hidden', 'true' );
+				hiddenElements.push( sibling );
+			}
 		}
 	}
 }
