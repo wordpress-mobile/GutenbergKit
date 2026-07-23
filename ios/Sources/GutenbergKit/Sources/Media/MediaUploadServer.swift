@@ -61,6 +61,7 @@ final class MediaUploadServer: Sendable {
             maxRequestBodySize: maxRequestBodySize,
             bodyReadTimeout: bodyReadTimeout,
             cors: .permissive,
+            delegate: ServerDelegate(),
             handler: { request in
                 await Self.handleRequest(request, context: context)
             }
@@ -85,16 +86,6 @@ final class MediaUploadServer: Sendable {
 
     private static func handleRequest(_ request: HTTPServer.Request, context: UploadContext) async -> HTTPResponse {
         let parsed = request.parsed
-
-        // Server-detected error (e.g., payload too large) — build the
-        // error response here so it includes CORS headers.
-        if let serverError = request.serverError {
-            let message: String = switch serverError {
-            case .payloadTooLarge: "The file is too large to upload in the editor."
-            default: "\(serverError.httpStatusText)"
-            }
-            return errorResponse(status: serverError.httpStatus, message: message)
-        }
 
         // Route: only POST /upload is handled. (OPTIONS preflight is answered by
         // the HTTP library under its permissive CORS policy.) Match on the path
@@ -301,6 +292,20 @@ final class MediaUploadServer: Sendable {
             headers: [("Content-Type", "application/json")],
             body: body
         )
+    }
+
+    /// Answers the server's recoverable parse errors (e.g. an over-limit body)
+    /// with the same JSON `{code, message}` shape the editor expects, so the
+    /// middleware surfaces a real message ("The file is too large…") instead of a
+    /// generic parse-failure. A leaf object — the HTTP server retains it.
+    private final class ServerDelegate: HTTPServerDelegate {
+        func response(forRecoverableParseError error: HTTPRequestParseError) -> HTTPResponse {
+            let message: String = switch error {
+            case .payloadTooLarge: "The file is too large to upload in the editor."
+            default: "\(error.httpStatusText)"
+            }
+            return MediaUploadServer.errorResponse(status: error.httpStatus, message: message)
+        }
     }
 
     // MARK: - Helpers

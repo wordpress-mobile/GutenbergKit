@@ -75,15 +75,10 @@ public final class HTTPServer: Sendable {
         public let parsed: ParsedHTTPRequest
         /// Time spent receiving and parsing the request.
         public let parseDuration: Duration
-        /// A server-detected error that occurred after headers were parsed
-        /// (e.g., payload too large). When set, the handler is responsible
-        /// for building an appropriate error response.
-        public let serverError: HTTPRequestParseError?
 
-        init(parsed: ParsedHTTPRequest, parseDuration: Duration, serverError: HTTPRequestParseError? = nil) {
+        init(parsed: ParsedHTTPRequest, parseDuration: Duration) {
             self.parsed = parsed
             self.parseDuration = parseDuration
-            self.serverError = serverError
         }
     }
 
@@ -181,6 +176,7 @@ public final class HTTPServer: Sendable {
         idleTimeout: Duration = HTTPServer.defaultIdleTimeout,
         startTimeout: Duration = HTTPServer.defaultStartTimeout,
         cors: CORSPolicy = .none,
+        delegate: HTTPServerDelegate? = nil,
         handler: @escaping @Sendable (HTTPServer.Request) async -> HTTPResponse
     ) async throws -> HTTPServer {
         // Sanitize to prevent path traversal — only allow safe filename characters.
@@ -229,7 +225,8 @@ public final class HTTPServer: Sendable {
                 maxRequestBodySize: maxRequestBodySize, readTimeout: readTimeout,
                 bodyReadTimeout: resolvedBodyReadTimeout,
                 idleTimeout: idleTimeout, cors: cors, tempDirectory: tempDirectory,
-                connectionCounter: connectionCounter, connectionTasks: connectionTasks, handler: handler
+                connectionCounter: connectionCounter, connectionTasks: connectionTasks,
+                delegate: delegate, handler: handler
             )
         }
 
@@ -317,6 +314,16 @@ public final class HTTPServer: Sendable {
         connectionTasks.cancelAll()
     }
 
+    /// The library's default response for a parse error: the mapped status code
+    /// with a plain-text body echoing the RFC reason phrase (e.g. 413 "Content Too
+    /// Large"). This is what fatal errors always use, what a recoverable error uses
+    /// when no delegate customizes it, and what an ``HTTPServerDelegate`` can
+    /// delegate back to for cases it doesn't handle.
+    public static func defaultErrorResponse(for error: HTTPRequestParseError) -> HTTPResponse {
+        let statusText = String(error.httpStatusText)
+        return HTTPResponse(status: error.httpStatus, statusText: statusText, body: Data(statusText.utf8))
+    }
+
     // MARK: - Connection Handling
 
     private static func handleConnection(
@@ -332,6 +339,7 @@ public final class HTTPServer: Sendable {
         tempDirectory: URL,
         connectionCounter: ConnectionCounter,
         connectionTasks: ConnectionTasks,
+        delegate: HTTPServerDelegate?,
         handler: @escaping @Sendable (HTTPServer.Request) async -> HTTPResponse
     ) {
         connection.start(queue: queue)
@@ -389,9 +397,10 @@ public final class HTTPServer: Sendable {
                         return partial
                     }
 
-                    // If the parser detected a non-fatal error (e.g., payload too large
-                    // after drain), hand the partial request to the handler so it can
-                    // build the response.
+                    // If the parser detected a recoverable error (e.g. payload too
+                    // large, drained above), stop reading and let the post-measure
+                    // branch answer it via the delegate. `request` is the body-less
+                    // partial; the main handler is never invoked for it.
                     if parser.parseError != nil {
                         request = partial
                         return
@@ -422,10 +431,17 @@ public final class HTTPServer: Sendable {
                     request = complete
                 }
 
-                // Under a permissive CORS policy the library answers the OPTIONS
-                // preflight itself; the send layer stamps the CORS headers.
+                // A recoverable parse error (payload too large, drained above): the
+                // request was never fully read, so it must not reach the handler.
+                // The library owns the response — the delegate customizes the body if
+                // it wants, otherwise a correct generic error. `send` stamps CORS.
                 let response: HTTPResponse
-                if cors == .permissive, request.method.uppercased() == "OPTIONS" {
+                if let parseError = parser.parseError {
+                    response = delegate?.response(forRecoverableParseError: parseError)
+                        ?? Self.defaultErrorResponse(for: parseError)
+                } else if cors == .permissive, request.method.uppercased() == "OPTIONS" {
+                    // Under a permissive CORS policy the library answers the OPTIONS
+                    // preflight itself; the send layer stamps the CORS headers.
                     response = HTTPResponse(status: 204)
                 } else {
                     // Run the handler, but race it against the peer closing the
@@ -442,7 +458,7 @@ public final class HTTPServer: Sendable {
                     // task, so a cancelled upload is actually cancelled.
                     switch await Self.runHandler(
                         handler,
-                        Request(parsed: request, parseDuration: duration, serverError: parser.parseError),
+                        Request(parsed: request, parseDuration: duration),
                         racingCloseOf: connection
                     ) {
                     case .completed(let handlerResponse):
@@ -476,14 +492,10 @@ public final class HTTPServer: Sendable {
                 Logger.httpServer.warning("Read timeout, closing connection")
                 await send(HTTPResponse(status: 408, statusText: "Request Timeout", body: Data("Request Timeout".utf8)), on: connection, cors: cors)
             } catch let error as HTTPRequestParseError {
+                // Fatal parse error (malformed framing, smuggling-relevant, etc.):
+                // always answered by the library, never routed to the delegate.
                 Logger.httpServer.error("Parse error: \(error)")
-                let statusText = String(error.httpStatusText)
-                let response = HTTPResponse(
-                    status: error.httpStatus,
-                    statusText: statusText,
-                    body: Data(statusText.utf8)
-                )
-                await send(response, on: connection, cors: cors)
+                await send(Self.defaultErrorResponse(for: error), on: connection, cors: cors)
             } catch {
                 Logger.httpServer.error("Unexpected error: \(error)")
                 await send(HTTPResponse(status: 400, statusText: "Bad Request", body: Data("Malformed HTTP request".utf8)), on: connection, cors: cors)

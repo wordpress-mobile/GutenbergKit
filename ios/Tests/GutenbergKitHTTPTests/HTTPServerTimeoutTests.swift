@@ -154,6 +154,49 @@ struct HTTPServerTimeoutTests {
         #expect(value == 42)
     }
 
+    // MARK: - Recoverable parse errors
+
+    @Test("a recoverable parse error is answered by the library and never reaches the handler")
+    func recoverableErrorBypassesHandler() async throws {
+        let handlerCalled = CallFlag()
+        let server = try await HTTPServer.start(
+            name: "recoverable-default",
+            requiresAuthentication: false,
+            maxRequestBodySize: 16
+        ) { _ in
+            handlerCalled.mark()
+            return HTTPResponse(status: 200, body: Data("OK".utf8))
+        }
+        defer { server.stop() }
+
+        // A 100-byte body far exceeds the 16-byte limit → payloadTooLarge, a
+        // recoverable error. With no delegate, the library answers a generic 413.
+        let header = "POST /test HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 100\r\n\r\n"
+        let response = try await sendChunked(header, chunks: [Data(repeating: 0x61, count: 100)], gap: .zero, toPort: server.port)
+
+        #expect(response.hasPrefix("HTTP/1.1 413"))
+        #expect(!handlerCalled.wasCalled)  // a rejected request must never reach the handler
+    }
+
+    @Test("a delegate customizes the recoverable-error response")
+    func delegateCustomizesRecoverableError() async throws {
+        let server = try await HTTPServer.start(
+            name: "recoverable-delegate",
+            requiresAuthentication: false,
+            maxRequestBodySize: 16,
+            delegate: CustomErrorDelegate()
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK".utf8))
+        }
+        defer { server.stop() }
+
+        let header = "POST /test HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 100\r\n\r\n"
+        let response = try await sendChunked(header, chunks: [Data(repeating: 0x61, count: 100)], gap: .zero, toPort: server.port)
+
+        #expect(response.hasPrefix("HTTP/1.1 413"))
+        #expect(response.contains("custom-error-body"))  // the delegate's body, not the generic one
+    }
+
     // MARK: - Helpers
 
     /// Sends `header` then each element of `chunks`, pausing `gap` before every
@@ -213,6 +256,21 @@ struct HTTPServerTimeoutTests {
     /// Sends a raw HTTP request over TCP and returns the response string.
     private func sendRaw(_ request: String, toPort port: UInt16) async throws -> String {
         try await sendChunked(request, chunks: [], gap: .zero, toPort: port)
+    }
+}
+
+/// A thread-safe one-way flag for asserting whether a handler ran.
+private final class CallFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+    func mark() { lock.lock(); value = true; lock.unlock() }
+    var wasCalled: Bool { lock.lock(); defer { lock.unlock() }; return value }
+}
+
+/// A delegate that returns a recognizable body for a recoverable parse error.
+private final class CustomErrorDelegate: HTTPServerDelegate {
+    func response(forRecoverableParseError error: HTTPRequestParseError) -> HTTPResponse {
+        HTTPResponse(status: error.httpStatus, body: Data("custom-error-body".utf8))
     }
 }
 
