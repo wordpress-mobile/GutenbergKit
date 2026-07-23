@@ -131,6 +131,18 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             // premature deallocation apart from a deliberate opt-out (see
             // `startUploadServer`).
             mediaUploadDelegateWasAssigned = mediaUploadDelegate != nil
+            // Deliberate fail-fast, not a defensive check. The delegate is captured
+            // into the page's initial configuration when the editor begins loading,
+            // so a delegate assigned afterward would silently never take effect;
+            // trapping surfaces that misuse loudly instead of failing quietly.
+            //
+            // `hasStartedLoading` flips at the start of the async load (see
+            // `loadEditor`), which runs at or after `viewDidLoad` — so this only
+            // *widens* the safe window versus a synchronous flip. A host that
+            // follows the documented contract (set right after `init`, before
+            // presenting) can never race it; the trap fires only on a genuinely
+            // late assignment. Do not soften this to a no-op or a log — silently
+            // dropping the delegate is exactly the failure this is here to catch.
             precondition(
                 !hasStartedLoading,
                 "mediaUploadDelegate must be set before the editor loads (e.g. right after init). "
