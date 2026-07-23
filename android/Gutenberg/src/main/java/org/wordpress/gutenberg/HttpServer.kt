@@ -21,6 +21,7 @@ import java.util.TimeZone
 import java.util.concurrent.Semaphore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
@@ -276,7 +277,16 @@ class HttpServer(
                             socket.close()
                             continue
                         }
-                        launch {
+                        // Start ATOMIC, not DEFAULT: the permit has been acquired and
+                        // the socket accepted, but stop() can cancel this scope in the
+                        // window before the child is dispatched. With DEFAULT, a child
+                        // cancelled before it starts skips its body entirely — so
+                        // neither `finally` (release the permit) nor handleConnection's
+                        // `socket.use` (close the fd) would run, leaking the accepted
+                        // socket. ATOMIC guarantees the body begins: it enters
+                        // `socket.use` and hits readUntil's first `ensureActive()`,
+                        // which throws and unwinds cleanly through both.
+                        launch(start = CoroutineStart.ATOMIC) {
                             try {
                                 handleConnection(socket)
                             } finally {
