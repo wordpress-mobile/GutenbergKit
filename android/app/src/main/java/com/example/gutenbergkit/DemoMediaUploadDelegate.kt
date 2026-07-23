@@ -20,6 +20,13 @@ class DemoMediaUploadDelegate : MediaUploadDelegate {
         private const val TAG = "DemoMediaUploadDelegate"
     }
 
+    // Only non-GIF images are ever resized (see processFile), so decline
+    // everything else by metadata — the server then skips copying a file this
+    // delegate would only pass through.
+    override fun handlesFile(mimeType: String, filename: String): Boolean {
+        return mimeType.startsWith("image/") && mimeType != "image/gif"
+    }
+
     override suspend fun processFile(file: File, mimeType: String, filename: String): ProcessedProxyFile {
         if (!mimeType.startsWith("image/") || mimeType == "image/gif") {
             return ProcessedProxyFile.Original

@@ -316,6 +316,35 @@ class MediaUploadServerTest {
         assertEquals(99, json.get("id").asInt)
     }
 
+    @Test
+    fun `skips processing and the temp copy when the delegate declines by metadata`() {
+        val delegate = DeclineByMetadataDelegate()
+        val mockUploader = MockDefaultUploader()
+
+        server.stop()
+        server = MediaUploadServer(uploadDelegate = delegate, defaultUploader = mockUploader, cacheDir = tempFolder.root)
+
+        val boundary = "test-boundary-decline"
+        val body = buildMultipartBody(boundary, "clip.mov", "video/quicktime", "fake movie".toByteArray())
+
+        val response = sendRawRequest(
+            method = "POST",
+            path = "/upload",
+            headers = mapOf(
+                "Relay-Authorization" to "Bearer ${server.token}",
+                "Content-Type" to "multipart/form-data; boundary=$boundary"
+            ),
+            body = body
+        )
+
+        assertTrue("Expected 201 but got: ${response.statusLine}", response.statusLine.contains("201"))
+        // Declined by metadata → the delegate is never asked to process (so the
+        // file was never materialized), and the upload is passed through directly.
+        assertFalse(delegate.processFileCalled)
+        assertTrue(mockUploader.passthroughUploadCalled)
+        assertFalse(mockUploader.uploadCalled)
+    }
+
     // MARK: - DefaultMediaUploader
 
     @Test
@@ -605,6 +634,21 @@ class MediaUploadServerTest {
 
     private class ProcessOnlyDelegate : MediaUploadDelegate {
         @Volatile var processFileCalled = false
+
+        override suspend fun processFile(file: File, mimeType: String, filename: String): ProcessedProxyFile {
+            processFileCalled = true
+            return ProcessedProxyFile.Original
+        }
+    }
+
+    /**
+     * Declines every file by metadata via [handlesFile], so the server must pass
+     * through without materializing the file or calling [processFile].
+     */
+    private class DeclineByMetadataDelegate : MediaUploadDelegate {
+        @Volatile var processFileCalled = false
+
+        override fun handlesFile(mimeType: String, filename: String): Boolean = false
 
         override suspend fun processFile(file: File, mimeType: String, filename: String): ProcessedProxyFile {
             processFileCalled = true

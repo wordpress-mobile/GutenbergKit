@@ -65,6 +65,24 @@ sealed class ProcessedProxyFile {
  */
 interface MediaUploadDelegate {
     /**
+     * Whether this delegate might handle a file with the given metadata — either
+     * processing it ([processFile]) or uploading it itself ([uploadFile]).
+     *
+     * A cheap, metadata-only gate the server consults *before* materializing the
+     * upload to a temp file. Return false to decline a file by type — e.g. an
+     * image-only delegate returning false for a video — so the server forwards
+     * the original upload to WordPress without first copying a file the delegate
+     * won't touch. Because it gates the temp-file copy needed by *both*
+     * [processFile] and [uploadFile], return true for any file the delegate will
+     * either process or upload itself.
+     *
+     * Defaults to true: every file is materialized and the full pipeline runs. A
+     * true here is not a commitment — [processFile] may still return
+     * [ProcessedProxyFile.Original] after inspecting the file's contents.
+     */
+    fun handlesFile(mimeType: String, filename: String): Boolean = true
+
+    /**
      * Process a file before upload (e.g., resize image, transcode video).
      *
      * Return [ProcessedProxyFile.Original] to upload the file unchanged, or
@@ -210,11 +228,46 @@ internal class MediaUploadServer(
         // (e.g. ?_embed) must reach WordPress too — relay them alongside the file.
         val extraParts = parts.filter { it.filename == null }
         val query = request.query
+        val mimeType = filePart.contentType
+        val filename = filePart.filename ?: "upload"
+
+        // Ask the delegate — from metadata alone — whether it will touch a file
+        // like this. If not, forward the original upload to WordPress directly,
+        // skipping a full temp-file copy of a file the delegate won't process or
+        // upload (e.g. a video handed to an image-only delegate).
+        if (uploadDelegate?.handlesFile(mimeType, filename) != true) {
+            return passthroughResponse(request, query)
+        }
 
         val tempFile = writePartToTempFile(filePart)
             ?: return errorResponse(500, "Failed to save file")
 
         return processAndRespond(request, tempFile, filePart, extraParts, query)
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    private suspend fun passthroughResponse(request: HttpRequest, query: String): HttpResponse {
+        return try {
+            Log.d(TAG, "Passthrough: forwarding original request body to WordPress")
+            relayResponse(performPassthroughUpload(request, query))
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e // Never swallow coroutine cancellation.
+        } catch (e: Exception) {
+            Log.e(TAG, "Passthrough upload failed", e)
+            errorResponse(500, e.message ?: "Upload failed")
+        }
+    }
+
+    /**
+     * Relays WordPress's exact status and body to the editor so it sees the same
+     * attachment object (or error) as a direct upload.
+     */
+    private fun relayResponse(response: MediaUploadResponse): HttpResponse {
+        return HttpResponse(
+            status = response.statusCode,
+            headers = mapOf("Content-Type" to "application/json"),
+            body = response.body
+        )
     }
 
     private fun parseParts(request: HttpRequest): List<MultipartPart>? {
@@ -279,13 +332,7 @@ internal class MediaUploadServer(
                     performPassthroughUpload(request, query)
                 }
             }
-            // Relay WordPress's exact status and body to the editor so it sees
-            // the same attachment object (or error) as a direct upload.
-            return HttpResponse(
-                status = response.statusCode,
-                headers = mapOf("Content-Type" to "application/json"),
-                body = response.body
-            )
+            return relayResponse(response)
         } catch (e: MediaUploadException) {
             Log.e(TAG, "Upload processing failed", e)
             return errorResponse(500, e.message ?: "Upload failed")
