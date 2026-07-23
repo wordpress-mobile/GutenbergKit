@@ -1,6 +1,7 @@
 package org.wordpress.gutenberg
 
 import android.util.Log
+import org.wordpress.gutenberg.http.HTTPRequestParseError
 import org.wordpress.gutenberg.http.HTTPRequestParser
 import org.wordpress.gutenberg.http.HTTPRequestParseException
 import org.wordpress.gutenberg.http.TempFileOwner
@@ -46,11 +47,7 @@ data class HttpRequest(
     val target: String,
     val headers: Map<String, String>,
     val body: org.wordpress.gutenberg.http.RequestBody? = null,
-    val parseDurationMs: Double = 0.0,
-    /** A server-detected error that occurred after headers were parsed
-     *  (e.g., payload too large). When set, the handler is responsible
-     *  for building an appropriate error response. */
-    val serverError: org.wordpress.gutenberg.http.HTTPRequestParseError? = null
+    val parseDurationMs: Double = 0.0
 ) {
     /**
      * The path portion of [target], without the query component
@@ -226,6 +223,7 @@ class HttpServer(
     private val idleTimeoutMs: Int = DEFAULT_IDLE_TIMEOUT_MS,
     private val cacheDir: File? = null,
     private val cors: CorsPolicy = CorsPolicy.None,
+    private val delegate: HttpServerDelegate? = null,
     private val handler: suspend (HttpRequest) -> HttpResponse
 ) {
     @Volatile
@@ -375,11 +373,9 @@ class HttpServer(
             val partial = try {
                 parser.parseRequest()
             } catch (e: HTTPRequestParseException) {
-                val statusText = STATUS_TEXT[e.error.httpStatus] ?: "Bad Request"
-                sendResponse(socket, HttpResponse(
-                    status = e.error.httpStatus,
-                    body = statusText.toByteArray()
-                ))
+                // Fatal parse error (malformed framing, smuggling-relevant, etc.):
+                // always answered by the library, never routed to the delegate.
+                sendResponse(socket, defaultErrorResponse(e.error))
                 return
             } catch (_: java.io.IOException) {
                 sendResponse(socket, HttpResponse(
@@ -434,28 +430,14 @@ class HttpServer(
                 readUntil(parser, input, buffer, headerDeadlineNanos) { it.isComplete }
             }
 
-            // If the parser detected a non-fatal error (e.g., payload too
-            // large after drain), let the handler build the response.
+            // A recoverable parse error (payload too large, drained above): the
+            // request was never fully read, so it must not reach the handler. The
+            // library owns the response — the delegate customizes the body if it
+            // wants, otherwise a correct generic error. sendResponse stamps CORS.
             parser.pendingParseError?.let { error ->
                 val parseDurationMs = (System.nanoTime() - parseStart) / 1_000_000.0
-                val request = HttpRequest(
-                    method = partial.method,
-                    target = partial.target,
-                    headers = partial.headers,
-                    parseDurationMs = parseDurationMs,
-                    serverError = error
-                )
-                val response = try {
-                    handler(request)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.e(TAG, "Handler threw", e)
-                    HttpResponse(
-                        status = error.httpStatus,
-                        body = (STATUS_TEXT[error.httpStatus] ?: "Error").toByteArray()
-                    )
-                }
+                val response = delegate?.responseForRecoverableParseError(error)
+                    ?: defaultErrorResponse(error)
                 sendResponse(socket, response)
                 Log.d(TAG, "${partial.method} ${partial.target} → ${response.status} (${"%.1f".format(parseDurationMs)}ms)")
                 return
@@ -484,11 +466,9 @@ class HttpServer(
             val parsed = try {
                 parser.parseRequest()
             } catch (e: HTTPRequestParseException) {
-                val statusText = STATUS_TEXT[e.error.httpStatus] ?: "Bad Request"
-                sendResponse(socket, HttpResponse(
-                    status = e.error.httpStatus,
-                    body = statusText.toByteArray()
-                ))
+                // Fatal parse error (malformed framing, smuggling-relevant, etc.):
+                // always answered by the library, never routed to the delegate.
+                sendResponse(socket, defaultErrorResponse(e.error))
                 return
             } catch (_: java.io.IOException) {
                 sendResponse(socket, HttpResponse(
@@ -653,6 +633,18 @@ class HttpServer(
     }
 
     companion object {
+        /**
+         * The library's default response for a parse error: the mapped status code
+         * with a plain-text body echoing the reason phrase (e.g. 413 "Content Too
+         * Large"). This is what fatal errors always use, what a recoverable error
+         * uses when no delegate customizes it, and what an [HttpServerDelegate] can
+         * delegate back to for cases it doesn't handle.
+         */
+        fun defaultErrorResponse(error: HTTPRequestParseError): HttpResponse {
+            val statusText = STATUS_TEXT[error.httpStatus] ?: "Error"
+            return HttpResponse(status = error.httpStatus, body = statusText.toByteArray())
+        }
+
         /** Default maximum number of concurrent connections. */
         const val DEFAULT_MAX_CONNECTIONS: Int = 5
 

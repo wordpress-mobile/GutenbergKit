@@ -121,7 +121,7 @@ internal class MediaUploadServer(
     cacheDir: File? = null,
     scope: CoroutineScope? = null,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO
-) {
+) : HttpServerDelegate {
     /** The port the server is listening on. */
     val port: Int get() = server.port
 
@@ -167,6 +167,7 @@ internal class MediaUploadServer(
             bodyReadTimeoutMs = UPLOAD_BODY_READ_TIMEOUT_MS,
             cacheDir = cacheDir,
             cors = CorsPolicy.Permissive,
+            delegate = this,
             handler = { request -> handleRequest(request) }
         )
         server.start()
@@ -196,17 +197,21 @@ internal class MediaUploadServer(
 
     // MARK: - Request Handling
 
-    private suspend fun handleRequest(request: HttpRequest): HttpResponse {
-        // Server-detected error (e.g., payload too large) — build the
-        // error response here so it includes CORS headers.
-        request.serverError?.let { error ->
-            val message = when (error) {
-                HTTPRequestParseError.PAYLOAD_TOO_LARGE -> "The file is too large to upload in the editor."
-                else -> error.errorId
-            }
-            return errorResponse(error.httpStatus, message)
+    /**
+     * Answers the server's recoverable parse errors (e.g. an over-limit body) with
+     * the same JSON `{code, message}` shape the editor expects, so the middleware
+     * surfaces a real message ("The file is too large…") instead of a generic
+     * parse-failure. See [HttpServerDelegate].
+     */
+    override fun responseForRecoverableParseError(error: HTTPRequestParseError): HttpResponse {
+        val message = when (error) {
+            HTTPRequestParseError.PAYLOAD_TOO_LARGE -> "The file is too large to upload in the editor."
+            else -> error.errorId
         }
+        return errorResponse(error.httpStatus, message)
+    }
 
+    private suspend fun handleRequest(request: HttpRequest): HttpResponse {
         // Route: only POST /upload is handled. (OPTIONS preflight is answered by
         // the HTTP library under its permissive CORS policy.) Match on the path
         // alone — the target carries a query string (e.g. `?_embed`) that the

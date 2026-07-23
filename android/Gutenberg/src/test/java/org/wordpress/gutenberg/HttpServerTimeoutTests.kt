@@ -1,9 +1,12 @@
 package org.wordpress.gutenberg
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.Socket
+import java.util.concurrent.atomic.AtomicBoolean
+import org.wordpress.gutenberg.http.HTTPRequestParseError
 
 /**
  * Covers the split read-timeout model: the pre-body phase (headers + drain) is
@@ -136,6 +139,69 @@ class HttpServerTimeoutTests {
                 sock.getOutputStream().flush()
                 val statusLine = sock.getInputStream().bufferedReader().readLine()
                 assertTrue("expected 400, got: $statusLine", statusLine!!.startsWith("HTTP/1.1 400"))
+            }
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun `a recoverable parse error is answered by the library and never reaches the handler`() {
+        val handlerCalled = AtomicBoolean(false)
+        val server = HttpServer(
+            name = "recoverable-default",
+            externallyAccessible = false,
+            requiresAuthentication = false,
+            maxBodySize = 16L,
+            handler = {
+                handlerCalled.set(true)
+                HttpResponse(body = "OK\n".toByteArray())
+            }
+        )
+        server.start()
+        try {
+            Socket("127.0.0.1", server.port).use { sock ->
+                sock.soTimeout = 30_000
+                // A 100-byte body far exceeds the 16-byte limit → payloadTooLarge, a
+                // recoverable error. With no delegate, the library answers 413.
+                val header = "POST /test HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 100\r\n\r\n"
+                sock.getOutputStream().write(header.toByteArray())
+                sock.getOutputStream().write(ByteArray(100) { 0x61 })
+                sock.getOutputStream().flush()
+                val statusLine = sock.getInputStream().bufferedReader().readLine()
+                assertTrue("expected 413, got: $statusLine", statusLine!!.startsWith("HTTP/1.1 413"))
+            }
+            assertFalse("a rejected request must never reach the handler", handlerCalled.get())
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun `a delegate customizes the recoverable-error response`() {
+        val delegate = object : HttpServerDelegate {
+            override fun responseForRecoverableParseError(error: HTTPRequestParseError): HttpResponse =
+                HttpResponse(status = error.httpStatus, body = "custom-error-body".toByteArray())
+        }
+        val server = HttpServer(
+            name = "recoverable-delegate",
+            externallyAccessible = false,
+            requiresAuthentication = false,
+            maxBodySize = 16L,
+            delegate = delegate,
+            handler = { HttpResponse(body = "OK\n".toByteArray()) }
+        )
+        server.start()
+        try {
+            Socket("127.0.0.1", server.port).use { sock ->
+                sock.soTimeout = 30_000
+                val header = "POST /test HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 100\r\n\r\n"
+                sock.getOutputStream().write(header.toByteArray())
+                sock.getOutputStream().write(ByteArray(100) { 0x61 })
+                sock.getOutputStream().flush()
+                val response = sock.getInputStream().bufferedReader().readText()
+                assertTrue("expected 413, got: $response", response.startsWith("HTTP/1.1 413"))
+                assertTrue("expected the delegate's body, got: $response", response.contains("custom-error-body"))
             }
         } finally {
             server.stop()

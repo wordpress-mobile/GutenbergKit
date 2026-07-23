@@ -265,7 +265,7 @@ class HttpServerAuthenticationTests {
             try {
                 // Auth is checked on headers alone, before the oversized body is
                 // drained or the handler runs — so the request is rejected with
-                // 407, not answered with the handler's 413. An unauthenticated
+                // 407, not answered with the library's 413. An unauthenticated
                 // client must not be able to make the server read (and discard)
                 // an arbitrarily large body.
                 assertEquals(407, conn.responseCode)
@@ -278,13 +278,16 @@ class HttpServerAuthenticationTests {
     }
 
     @Test
-    fun `oversized request with valid token reaches handler as serverError 413`() {
+    fun `oversized request with valid token is answered 413 by the library, bypassing the handler`() {
         val smallServer = oversizedTestServer()
         try {
             val conn = oversizedPost(smallServer) {
                 it.setRequestProperty("Proxy-Authorization", "Bearer ${smallServer.token}")
             }
             try {
+                // The library answers a recoverable parse error itself; the handler
+                // (which would return 200 "OK") is never invoked for a rejected
+                // request.
                 assertEquals(413, conn.responseCode)
             } finally {
                 conn.disconnect()
@@ -294,18 +297,16 @@ class HttpServerAuthenticationTests {
         }
     }
 
-    /** A server whose 1 KB body limit lets a 2 KB POST exercise the drain path. */
+    /** A server whose 1 KB body limit lets a 2 KB POST exercise the drain path. Its
+     *  handler only ever answers valid requests — a rejected (oversized) request is
+     *  answered by the library, not here. */
     private fun oversizedTestServer(): HttpServer {
         val smallServer = HttpServer(
             name = "auth-drain-test",
             externallyAccessible = false,
             requiresAuthentication = true,
             maxBodySize = 1024L,
-            handler = { request ->
-                request.serverError?.let { error ->
-                    HttpResponse(status = error.httpStatus, body = "too large".toByteArray())
-                } ?: HttpResponse(body = "OK\n".toByteArray())
-            }
+            handler = { HttpResponse(body = "OK\n".toByteArray()) }
         )
         smallServer.start()
         return smallServer
