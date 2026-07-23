@@ -463,7 +463,7 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		expect( next ).not.toHaveBeenCalled();
 	} );
 
-	it( 'surfaces a transport failure instead of retrying (no silent duplicate)', async () => {
+	it( 'normalizes a transport failure to api-fetch’s error shape without retrying', async () => {
 		getGBKit.mockReturnValue( {
 			nativeUploadPort: 8080,
 			nativeUploadToken: 'token',
@@ -476,16 +476,49 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		const connectionError = new TypeError( 'Failed to fetch' );
 		global.fetch = vi.fn( () => Promise.reject( connectionError ) );
 
-		await expect(
-			nativeMediaUploadMiddleware(
-				makePostMediaOptions( makeFile() ),
-				next
-			)
-		).rejects.toBe( connectionError );
+		const error = await nativeMediaUploadMiddleware(
+			makePostMediaOptions( makeFile() ),
+			next
+		).catch( ( e ) => e );
+
+		// Normalized to api-fetch's { code, message } shape (online → fetch_error),
+		// not surfaced as the raw code-less TypeError, so consumers keying off
+		// error.code behave the same as for a direct upload.
+		expect( error ).not.toBe( connectionError );
+		expect( error.code ).toBe( 'fetch_error' );
+		expect( typeof error.message ).toBe( 'string' );
+		expect( error.message.length ).toBeGreaterThan( 0 );
 
 		// No silent fallback to a direct re-upload — retrying a non-idempotent
 		// POST could duplicate the attachment.
 		expect( next ).not.toHaveBeenCalled();
+	} );
+
+	it( 'normalizes an offline transport failure to offline_error', async () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'token',
+		} );
+		const next = makeNext();
+
+		const onLineSpy = vi
+			.spyOn( globalThis.navigator, 'onLine', 'get' )
+			.mockReturnValue( false );
+		try {
+			global.fetch = vi.fn( () =>
+				Promise.reject( new TypeError( 'Failed to fetch' ) )
+			);
+
+			const error = await nativeMediaUploadMiddleware(
+				makePostMediaOptions( makeFile() ),
+				next
+			).catch( ( e ) => e );
+
+			expect( error.code ).toBe( 'offline_error' );
+			expect( next ).not.toHaveBeenCalled();
+		} finally {
+			onLineSpy.mockRestore();
+		}
 	} );
 
 	it( 'propagates an abort instead of falling back', async () => {

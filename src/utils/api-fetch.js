@@ -3,6 +3,7 @@
  */
 import apiFetch from '@wordpress/api-fetch';
 import { getQueryArg } from '@wordpress/url';
+import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
@@ -285,7 +286,27 @@ export function nativeMediaUploadMiddleware( options, next ) {
 				'Native upload failed at the transport layer',
 				connectionError
 			);
-			throw connectionError;
+			// Normalize to the same `{ code, message }` shape
+			// `@wordpress/api-fetch`'s default handler produces for a failed fetch,
+			// so a native-upload transport failure surfaces to consumers (which key
+			// off `error.code` and show `error.message`) exactly like a direct
+			// upload's would — not as a raw, code-less TypeError with an
+			// untranslated message. Same codes and strings as api-fetch, so the
+			// existing translations apply.
+			if ( ! globalThis.navigator.onLine ) {
+				throw {
+					code: 'offline_error',
+					message: __(
+						'Unable to connect. Please check your Internet connection.'
+					),
+				};
+			}
+			throw {
+				code: 'fetch_error',
+				message: __(
+					'Could not get a valid response from the server.'
+				),
+			};
 		}
 	);
 }
