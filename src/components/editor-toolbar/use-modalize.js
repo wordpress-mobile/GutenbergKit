@@ -38,6 +38,16 @@ const popoverFallbackContainerRef = { current: null };
  * `popoverFallbackContainerRef`. It then returns an object with the current
  * `popoverFallbackContainerRef`.
  *
+ * This relies on popovers rendering into Gutenberg's default fallback
+ * container, which is a direct child of the body and a sibling of `#root`.
+ * `modalize` hides every other body child from screen readers while keeping
+ * this container—and thus the active popover—accessible. Do not relocate
+ * popovers into a `Popover.Slot` inside the editor: a slot within `#root`
+ * would place popovers under an element that `modalize` marks inert, hiding
+ * their contents. This is also why the body clips popover overflow (with
+ * `.gutenberg-kit-root` owning vertical scroll) rather than the editor
+ * container. See `../../index.scss`.
+ *
  * @return {Object} An object containing the current `popoverFallbackContainerRef`.
  */
 function defaultPopover() {

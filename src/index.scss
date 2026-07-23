@@ -28,10 +28,42 @@ body.gutenberg-kit:not(.is-ios) .block-editor-block-list__layout::selection {
 	background-color: revert;
 }
 
+// Prevent dropdown menus and other popovers from causing horizontal overflow
+// of the document. Popovers (e.g. the block toolbar's "Options" menu) render
+// into a fallback container appended to the body and are positioned relative to
+// the viewport. When anchored near the right edge—such as after scrolling the
+// block toolbar—they can extend past the viewport, growing the scrollable width
+// of the root element and letting the canvas be swiped horizontally to reveal
+// the empty background behind it.
+//
+// `contain: paint` clips this overflow at the body (which fills the viewport).
+// The popover lives in the fallback container—a direct child of the body—so
+// clipping must happen at the body; `overflow-x` on the body does not clip it
+// (the value propagates to the viewport rather than clipping out-of-flow
+// descendants), and clipping on `#root` misses it entirely since the fallback
+// container is a sibling of `#root`, not a descendant.
+//
+// We clip here rather than moving popovers into a `Popover.Slot` inside the
+// editor. Popovers must remain in the default fallback container so the
+// modalize helper can mark every other body child inert while keeping the
+// active popover accessible when the block inspector or inserter is open. See
+// `editor-toolbar/use-modalize.js` and `editor-toolbar/aria-helper.js`. A slot
+// inside `#root` would place popovers under an element that gets marked inert,
+// hiding their contents from screen readers.
+body.gutenberg-kit {
+	contain: paint;
+}
+
 .gutenberg-kit-root {
 	display: flex;
 	flex-direction: column;
 	height: 100vh;
+
+	// `contain: paint` on the body would otherwise clip content taller than the
+	// viewport instead of letting it scroll. Give this fixed-height container
+	// its own vertical scroll so that overflowing editor content scrolls here
+	// rather than relying on the (now paint-contained) document to scroll.
+	overflow-y: auto;
 }
 
 .gutenberg-kit {
