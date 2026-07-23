@@ -40,6 +40,23 @@ public enum ProcessedProxyFile: Sendable {
 /// transcode video, or use its own upload service. Default implementations
 /// pass files through unchanged and upload via the WordPress REST API.
 public protocol MediaUploadDelegate: AnyObject, Sendable {
+    /// Whether this delegate might handle a file with the given metadata — either
+    /// processing it (``processFile(at:mimeType:filename:)``) or uploading it
+    /// itself (``uploadFile(at:mimeType:filename:)``).
+    ///
+    /// A cheap, metadata-only gate the server consults *before* materializing the
+    /// upload to a temp file. Return `false` to decline a file by type — e.g. an
+    /// image-only delegate returning `false` for a video — so the server forwards
+    /// the original upload to WordPress without first copying a file the delegate
+    /// won't touch. Because it gates the temp-file copy needed by *both*
+    /// `processFile` and `uploadFile`, return `true` for any file the delegate
+    /// will either process or upload itself.
+    ///
+    /// Defaults to `true`: every file is materialized and the full pipeline runs.
+    /// A `true` here is not a commitment — `processFile` may still return
+    /// `.original` after inspecting the file's contents.
+    func handlesFile(ofType mimeType: String, named filename: String) -> Bool
+
     /// Process a file before upload (e.g., resize image, transcode video).
     ///
     /// Return ``ProcessedProxyFile/original`` to upload the file unchanged, or
@@ -59,6 +76,10 @@ public protocol MediaUploadDelegate: AnyObject, Sendable {
 
 /// Default implementations.
 extension MediaUploadDelegate {
+    public func handlesFile(ofType mimeType: String, named filename: String) -> Bool {
+        true
+    }
+
     public func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
         .original
     }

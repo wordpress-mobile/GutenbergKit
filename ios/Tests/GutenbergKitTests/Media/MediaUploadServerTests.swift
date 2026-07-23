@@ -198,6 +198,34 @@ struct MediaUploadServerTests {
     #expect(json["id"] as? Int == 99)
   }
 
+  @Test("skips processing and the temp copy when the delegate declines by metadata")
+  func delegateDeclinesByMetadata() async throws {
+    let delegate = DeclineByMetadataDelegate()
+    let mockUploader = MockDefaultUploader()
+    let server = try await MediaUploadServer.start(uploadDelegate: delegate, defaultUploader: mockUploader)
+    defer { server.stop() }
+
+    let boundary = UUID().uuidString
+    let body = buildMultipartBody(boundary: boundary, filename: "clip.mov", mimeType: "video/quicktime", data: Data("movie".utf8))
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    request.httpBody = body
+
+    let (_, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+    #expect(httpResponse.statusCode == 201)
+
+    // Declined by metadata → the delegate is never asked to process (so the file
+    // was never materialized), and the upload is passed through directly.
+    #expect(!delegate.processFileCalled)
+    #expect(mockUploader.passthroughUploadCalled)
+    #expect(!mockUploader.uploadCalled)
+  }
+
   @Test("forwards the delegate's processed metadata to the uploader")
   func processedMetadataForwarded() async throws {
     let delegate = ResizingDelegate()
@@ -705,6 +733,23 @@ private final class ProcessOnlyDelegate: MediaUploadDelegate, @unchecked Sendabl
   private var _processFileCalled = false
 
   var processFileCalled: Bool { lock.withLock { _processFileCalled } }
+
+  func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
+    lock.withLock { _processFileCalled = true }
+    return .original
+  }
+}
+
+/// A delegate that declines every file by metadata via `handlesFile`, so the
+/// server must pass through without ever materializing the file or calling
+/// `processFile`.
+private final class DeclineByMetadataDelegate: MediaUploadDelegate, @unchecked Sendable {
+  private let lock = NSLock()
+  private var _processFileCalled = false
+
+  var processFileCalled: Bool { lock.withLock { _processFileCalled } }
+
+  func handlesFile(ofType mimeType: String, named filename: String) -> Bool { false }
 
   func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
     lock.withLock { _processFileCalled = true }

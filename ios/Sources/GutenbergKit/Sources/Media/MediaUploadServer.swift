@@ -126,18 +126,29 @@ final class MediaUploadServer: Sendable {
         let extraParts = parts.filter { $0.filename == nil }
         let query = request.parsed.query
 
-        // Write part body to a dedicated temp file for the delegate.
-        //
-        // The library's RequestBody may be a byte-range slice of a larger temp
-        // file whose lifecycle is tied to ARC. The delegate needs a standalone
-        // file that outlives the handler return, so we stream to our own file.
-        let filename = sanitizeFilename(filePart.filename ?? "upload")
+        let filename = filePart.filename ?? "upload"
         let mimeType = filePart.contentType
 
+        // Ask the delegate — from metadata alone — whether it will touch a file
+        // like this. If not, forward the original upload to WordPress directly,
+        // skipping a full temp-file copy of a file the delegate won't process or
+        // upload (e.g. a video handed to an image-only delegate).
+        guard context.uploadDelegate?.handlesFile(ofType: mimeType, named: filename) ?? false else {
+            do {
+                return try await passthroughResponse(request, query: query, context: context)
+            } catch {
+                return uploadErrorResponse(error)
+            }
+        }
+
+        // The delegate wants the file. Stream the part body to a dedicated temp
+        // file for it — the library's RequestBody may be a byte-range slice of a
+        // larger temp file whose lifecycle is tied to ARC, so the delegate needs a
+        // standalone file that outlives the handler return.
         let tempDir = uploadsTempDirectory
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
-        let fileURL = tempDir.appending(component: "\(UUID().uuidString)-\(filename)")
+        let fileURL = tempDir.appending(component: "\(UUID().uuidString)-\(sanitizeFilename(filename))")
         do {
             let inputStream = try filePart.body.makeInputStream()
             try writeStream(inputStream, to: fileURL)
@@ -154,44 +165,62 @@ final class MediaUploadServer: Sendable {
 
         do {
             let uploadResult = try await processAndUpload(
-                fileURL: fileURL, mimeType: mimeType, filename: filePart.filename ?? "upload",
+                fileURL: fileURL, mimeType: mimeType, filename: filename,
                 extraParts: extraParts, query: query, context: context
             )
-            let response: MediaUploadResponse
             switch uploadResult {
             case .uploaded(let uploaded):
                 Logger.uploadServer.debug("Uploaded file to WordPress")
-                response = uploaded
+                return relayResponse(uploaded)
             case .passthrough:
-                // Delegate didn't modify the file — forward the original
-                // request body to WordPress without re-encoding.
-                Logger.uploadServer.debug("Passthrough: forwarding original request body to WordPress")
-                guard let body = request.parsed.body,
-                      let contentType = request.parsed.header("Content-Type"),
-                      let defaultUploader = context.defaultUploader else {
-                    return errorResponse(status: 500, message: UploadError.noUploader.localizedDescription)
-                }
-                response = try await defaultUploader.passthroughUpload(body: body, contentType: contentType, query: query)
+                // Delegate didn't modify the file — forward the original request
+                // body to WordPress without re-encoding.
+                return try await passthroughResponse(request, query: query, context: context)
             }
-            // Relay WordPress's exact status and body to the editor so it sees
-            // the same attachment object (or error) as a direct upload.
-            return HTTPResponse(
-                status: response.statusCode,
-                headers: [("Content-Type", "application/json")],
-                body: response.body
-            )
         } catch {
-            // A cancelled connection task (editor abort / server stop) surfaces
-            // here too — as CancellationError or URLError.cancelled. It's not a
-            // failure, and the server closes the connection without sending this
-            // response (see HTTPServer's cancellation check), so log it quietly.
-            if Task.isCancelled {
-                Logger.uploadServer.debug("Upload cancelled")
-            } else {
-                Logger.uploadServer.error("Upload processing failed: \(error)")
-            }
-            return errorResponse(status: 500, message: error.localizedDescription)
+            return uploadErrorResponse(error)
         }
+    }
+
+    /// Forwards the original request body to WordPress unchanged (no multipart
+    /// re-encoding) and relays the response. Used when the delegate won't touch
+    /// the file — it declined by metadata (`handlesFile` returned false) or
+    /// `processFile` returned `.original`.
+    private static func passthroughResponse(
+        _ request: HTTPServer.Request, query: String, context: UploadContext
+    ) async throws -> HTTPResponse {
+        Logger.uploadServer.debug("Passthrough: forwarding original request body to WordPress")
+        guard let body = request.parsed.body,
+              let contentType = request.parsed.header("Content-Type"),
+              let defaultUploader = context.defaultUploader else {
+            return errorResponse(status: 500, message: UploadError.noUploader.localizedDescription)
+        }
+        let response = try await defaultUploader.passthroughUpload(body: body, contentType: contentType, query: query)
+        return relayResponse(response)
+    }
+
+    /// Relays WordPress's exact status and body to the editor so it sees the same
+    /// attachment object (or error) as a direct upload.
+    private static func relayResponse(_ response: MediaUploadResponse) -> HTTPResponse {
+        HTTPResponse(
+            status: response.statusCode,
+            headers: [("Content-Type", "application/json")],
+            body: response.body
+        )
+    }
+
+    /// Builds the 500 response for a failed upload. A cancelled connection task
+    /// (editor abort / server stop) surfaces here too — as CancellationError or
+    /// URLError.cancelled — but isn't a failure and the server closes the
+    /// connection without sending this response (see HTTPServer's cancellation
+    /// check), so log that quietly.
+    private static func uploadErrorResponse(_ error: any Error) -> HTTPResponse {
+        if Task.isCancelled {
+            Logger.uploadServer.debug("Upload cancelled")
+        } else {
+            Logger.uploadServer.error("Upload processing failed: \(error)")
+        }
+        return errorResponse(status: 500, message: error.localizedDescription)
     }
 
     // MARK: - Delegate Pipeline
