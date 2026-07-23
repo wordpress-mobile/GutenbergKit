@@ -1,0 +1,29 @@
+// Clips popovers to the viewport so they cannot grow the document's
+// scrollable width. `position: fixed` takes the container out of flow, which
+// both sizes it to the viewport and keeps it from contributing to the
+// document's scrollable size—leaving the document as the scroll container.
+//
+// `overflow-x` on the body or the root element does not clip popovers: the
+// value propagates to the viewport rather than clipping out-of-flow
+// descendants. Clipping on `#root` misses them entirely, as popovers render
+// into a sibling of `#root` rather than a descendant.
+#popover-clip-container {
+	inset: 0;
+	overflow: hidden;
+	position: fixed;
+	// The container spans the viewport, so it must not intercept touches
+	// intended for the editor. Popovers within it restore pointer events.
+	pointer-events: none;
+	z-index: 1000000; // Mirrors Gutenberg's `.components-popover` z-index
+}
+
+#popover-clip-container .components-popover {
+	pointer-events: auto;
+}
+
+// Popovers that must not be clipped—see `./index.jsx`. Left out of flow by its
+// popovers alone, which are positioned absolutely or fixed.
+#popover-overlay-container {
+	position: relative;
+	z-index: 1000000; // Mirrors Gutenberg's `.components-popover` z-index
+}
