@@ -160,6 +160,24 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		expect( global.fetch ).not.toHaveBeenCalled();
 	} );
 
+	it( 'passes through when the file field is not a File (e.g. a string)', () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'token',
+		} );
+		const next = makeNext();
+		const body = new FormData();
+		body.append( 'file', 'not-a-file' );
+
+		nativeMediaUploadMiddleware(
+			{ method: 'POST', path: '/wp/v2/media', body },
+			next
+		);
+
+		expect( next ).toHaveBeenCalled();
+		expect( global.fetch ).not.toHaveBeenCalled();
+	} );
+
 	// MARK: - Interception
 
 	it( 'intercepts POST /wp/v2/media with file and fetches to local server', async () => {

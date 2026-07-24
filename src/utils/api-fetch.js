@@ -195,8 +195,13 @@ export function nativeMediaUploadMiddleware( options, next ) {
 		return next( options );
 	}
 
+	// Only intercept a genuine file upload. `FormData.get('file')` returns a
+	// `File`, a string (a non-file field that happens to be named `file`), or
+	// `null` (no such field). The `instanceof File` check covers all the
+	// non-file cases at once — a missing field and a wrong-typed value both fall
+	// through to the default path — and guarantees `file.name` below is safe.
 	const file = options.body.get( 'file' );
-	if ( ! file ) {
+	if ( ! ( file instanceof File ) ) {
 		return next( options );
 	}
 
@@ -241,6 +246,12 @@ export function nativeMediaUploadMiddleware( options, next ) {
 					} )
 					.then( ( body ) => {
 						logError( 'Native upload failed', body );
+						// Throw the parsed body verbatim, even if it isn't the usual
+						// WordPress `{ code, message, data }` shape. This is
+						// deliberate: it mirrors `@wordpress/api-fetch`'s
+						// `parseAndThrowError`, so a native-relayed error reaches
+						// consumers identically to a direct upload's. We intentionally
+						// don't reshape or second-guess a non-standard error body.
 						throw body;
 					} );
 			}
