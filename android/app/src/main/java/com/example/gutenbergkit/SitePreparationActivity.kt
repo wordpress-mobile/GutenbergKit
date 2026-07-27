@@ -47,9 +47,13 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -57,8 +61,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.gutenbergkit.ui.theme.AppTheme
+import java.util.Locale
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.model.EditorDependenciesSerializer
@@ -209,11 +217,18 @@ fun SitePreparationScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
+    // Re-read on resume so returning from the system language picker is
+    // noticed. Changing the per-app language does not always recreate this
+    // activity — when the picker is another app's task, this one is merely
+    // stopped and resumed — so without this the composition never re-reads the
+    // locale and the screen keeps showing the previous one.
+    val locale = rememberLocaleOnResume()
+
     // Keyed on the locale so changing the per-app language rebuilds the
-    // configuration. The system recreates the activity on a locale change, but
-    // the view model survives it, so keying on `Unit` would keep serving the
+    // configuration. Where the system does recreate the activity, the view
+    // model survives it, so keying on `Unit` would keep serving the
     // configuration built with the previous locale.
-    LaunchedEffect(DemoAppLocale.current(context)) {
+    LaunchedEffect(locale) {
         viewModel.startLoading()
     }
 
@@ -528,6 +543,33 @@ private fun EditorConfigurationDetailsCard(configuration: EditorConfiguration) {
             EditorLocaleRow(locale = configuration.locale)
         }
     }
+}
+
+/**
+ * The app's current locale, re-read every time the activity resumes.
+ *
+ * Returning from the system language picker does not reliably recreate this
+ * activity — the picker belongs to another task, so this one is often just
+ * stopped and resumed — and a plain read during composition would never see
+ * the new value. Observing `ON_RESUME` covers both cases.
+ */
+@Composable
+private fun rememberLocaleOnResume(): Locale {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var locale by remember { mutableStateOf(DemoAppLocale.current(context)) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                locale = DemoAppLocale.current(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    return locale
 }
 
 /**
