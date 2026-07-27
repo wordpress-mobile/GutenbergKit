@@ -2,11 +2,15 @@ package com.example.gutenbergkit
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import org.json.JSONObject
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,6 +53,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -202,8 +207,13 @@ fun SitePreparationScreen(
     onBrowsePosts: (EditorConfiguration, EditorDependencies?, PostTypeDetails) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
 
-    LaunchedEffect(Unit) {
+    // Keyed on the locale so changing the per-app language rebuilds the
+    // configuration. The system recreates the activity on a locale change, but
+    // the view model survives it, so keying on `Unit` would keep serving the
+    // configuration built with the previous locale.
+    LaunchedEffect(DemoAppLocale.current(context)) {
         viewModel.startLoading()
     }
 
@@ -515,7 +525,55 @@ private fun EditorConfigurationDetailsCard(configuration: EditorConfiguration) {
             KeyValueRow(key = "API Root", value = configuration.siteApiRoot)
             KeyValueBooleanRow(key = "Supports Block Assets", value = configuration.plugins)
             KeyValueBooleanRow(key = "Supports Theme Styles", value = configuration.themeStyles)
+            EditorLocaleRow(locale = configuration.locale)
         }
+    }
+}
+
+/**
+ * Shows the locale the editor will use, linking to the system's per-app
+ * language picker where one exists.
+ *
+ * The value is what the library resolved the app's language to, not the
+ * language itself — a locale with no bundled translations resolves to `en`,
+ * which is otherwise indistinguishable from the selection being ignored.
+ *
+ * The link is omitted below Android 13 (API 33), which has no per-app language
+ * screen to open. `AppCompatDelegate` still honors a per-app locale there, but
+ * only the app itself can set it.
+ */
+@Composable
+private fun EditorLocaleRow(locale: String?) {
+    val context = LocalContext.current
+    val resolved = locale ?: "en"
+    val canOpenSettings = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+
+    if (!canOpenSettings) {
+        KeyValueRow(key = "Editor Locale", value = resolved)
+        return
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                context.startActivity(
+                    Intent(
+                        Settings.ACTION_APP_LOCALE_SETTINGS,
+                        Uri.fromParts("package", context.packageName, null)
+                    )
+                )
+            }
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        KeyValueRow(key = "Editor Locale", value = resolved)
+        Text(
+            text = "Change",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary
+        )
     }
 }
 

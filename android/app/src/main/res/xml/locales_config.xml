@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Languages offered by the system's per-app language picker
+    (Settings > Apps > GutenbergKit > Language).
+
+    This is a deliberately curated subset of the ~49 locales the editor ships
+    translations for, chosen so each entry exercises a distinct rendering path:
+
+      en     left-to-right baseline
+      es/fr  Latin translations, accented characters
+      ar     right-to-left, cursive script with contextual letter shaping
+      he     right-to-left, non-cursive — catches shaping bugs `ar` alone hides
+      ja     CJK: Han glyph selection driven by `lang`, wide glyphs, different
+             line-breaking rules
+      pt-BR  the only regional bundle here, so it exercises the library
+             resolver's `language-region` step rather than the bare-language
+             fallback
+
+    Add entries as needed; anything listed must have a matching
+    `src/translations/<tag>.json` or the editor silently falls back to English.
+
+    Only read on Android 13 (API 33) and above. Older versions ignore this file
+    and the app's language follows the device.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="es" />
+    <locale android:name="fr" />
+    <locale android:name="ar" />
+    <locale android:name="he" />
+    <locale android:name="ja" />
+    <locale android:name="pt-BR" />
+</locale-config>
