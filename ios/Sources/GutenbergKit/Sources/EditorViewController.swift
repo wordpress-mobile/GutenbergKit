@@ -484,7 +484,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 onClose: { [weak self] in self?.notifyInserterClosed() }
             )
             .environmentObject(htmlPreviewManager)
+            .environment(\.locale, Locale(identifier: configuration.locale))
         })
+
+        // The web content declares its language via `documentElement.lang`.
+        // This is a separate accessibility tree showing the same UI in the same
+        // locale, so it has to declare the language itself.
+        host.view.accessibilityLanguage = configuration.locale
 
         context.viewController = host
 
