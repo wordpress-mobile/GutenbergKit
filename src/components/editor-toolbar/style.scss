@@ -147,7 +147,7 @@ $scroll-indicator-elevation: 32;
 
 // Style the add block button with rounded black background
 .gutenberg-kit-editor-toolbar .gutenberg-kit-add-block-button {
-	margin-left: 8px;
+	margin-inline-start: 8px;
 
 	svg {
 		background: #eae9ec;

@@ -30,7 +30,7 @@ $baseline-interactive-font-size: 17px;
 	/* Popover */
 
 	.components-popover__header-title {
-		padding-left: 20px;
+		padding-inline-start: 20px;
 	}
 
 	.components-popover.is-expanded .components-popover__content {
@@ -129,7 +129,7 @@ $baseline-interactive-font-size: 17px;
 	.block-editor-inserter__panel-title {
 		font-size: 15px;
 		font-weight: 600;
-		margin-left: 12px;
+		margin-inline-start: 12px;
 	}
 
 	.components-draggable-drag-component-root {
