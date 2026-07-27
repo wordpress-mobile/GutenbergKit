@@ -27,10 +27,6 @@ import Foundation
 ///   already merged in #493. It exists only because the iOS half is frozen.
 ///   When that lands, delete this type and pass `Locale.current` to
 ///   `setLocale(_:)` directly — the library will do the resolving.
-///
-/// - Note: This is not a view. It lives under `Views/` because that is the
-///   only `PBXFileSystemSynchronizedRootGroup` in the demo app's project, so
-///   files added there are compiled without hand-editing `project.pbxproj`.
 enum DemoAppLocale {
 
     /// The editor locale matching the language the app is running in.
