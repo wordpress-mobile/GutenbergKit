@@ -23,6 +23,7 @@ import { configureLocale } from './localization.js';
 import { configureApiFetch } from './api-fetch.js';
 import { initializeEditor } from './editor.jsx';
 import { initializeFetchInterceptor } from './fetch-interceptor.js';
+import { injectEditorStyles } from './editor-styles.js';
 
 vi.mock( './bridge.js' );
 vi.mock( './fetch-interceptor.js' );
@@ -45,6 +46,7 @@ vi.mock( './editor-loader.js', () => ( {
 
 vi.mock( './localization.js', () => ( {
 	configureLocale: vi.fn(),
+	isRTLLocale: vi.fn( () => false ),
 } ) );
 
 vi.mock( './api-fetch.js', () => ( {
@@ -91,6 +93,10 @@ describe( 'setUpEditorEnvironment', () => {
 			return Promise.resolve();
 		} );
 
+		injectEditorStyles.mockImplementation( () => {
+			callOrder.push( 'injectEditorStyles' );
+		} );
+
 		initializeWordPressGlobals.mockImplementation( () => {
 			callOrder.push( 'loadRemainingGlobals' );
 		} );
@@ -117,6 +123,9 @@ describe( 'setUpEditorEnvironment', () => {
 			'awaitGBKitGlobal',
 			'initializeFetchInterceptor',
 			'configureLocale',
+			// Styles depend on the direction `configureLocale` resolves, and
+			// must be injected before the editor renders.
+			'injectEditorStyles',
 			'loadRemainingGlobals',
 			'configureApiFetch',
 			'configureAjax',

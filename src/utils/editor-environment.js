@@ -7,7 +7,7 @@ import {
 	getGBKit,
 	logException,
 } from './bridge';
-import { configureLocale } from './localization';
+import { configureLocale, isRTLLocale } from './localization';
 import { loadEditorAssets } from './editor-loader';
 import { configureAjax } from './ajax';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge';
@@ -16,7 +16,7 @@ import EditorLoadError from '../components/editor-load-error';
 import { setLogLevel, error } from './logger';
 import { setUpGlobalErrorHandlers } from './global-error-handler';
 import { Platform } from './platform';
-import './editor-styles';
+import { injectEditorStyles } from './editor-styles';
 
 /**
  * Initialize the bundled editor by loading assets and configuring modules
@@ -32,6 +32,9 @@ export async function setUpEditorEnvironment() {
 		setLogLevelFromGBKit();
 		initializeFetchInterceptor();
 		await configureLocale();
+		// Depends on the text direction `configureLocale` resolves, and must
+		// precede the editor render below.
+		injectEditorStyles( isRTLLocale( getGBKit().locale ) );
 		await initializeWordPressGlobals();
 		await configureApiFetch();
 		const pluginLoadResult = await loadPluginsIfEnabled();
