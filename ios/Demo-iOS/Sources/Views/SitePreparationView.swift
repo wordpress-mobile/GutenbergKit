@@ -123,8 +123,16 @@ struct SitePreparationView: View {
             return resolved
         }
 
-        if requested.replacingOccurrences(of: "_", with: "-").lowercased() == resolved {
+        let normalized = requested.replacingOccurrences(of: "_", with: "-").lowercased()
+        if normalized == resolved {
             return resolved
+        }
+
+        // English ships no bundle of its own — it is the editor's source
+        // language — so describe it as the language being used rather than as
+        // a fallback from something else.
+        if resolved == DemoAppLocale.defaultLocale, normalized.hasPrefix(DemoAppLocale.defaultLocale) {
+            return "\(resolved) — \(requested)"
         }
 
         let outcome = resolved == DemoAppLocale.defaultLocale

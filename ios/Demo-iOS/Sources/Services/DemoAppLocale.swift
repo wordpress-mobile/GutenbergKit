@@ -46,8 +46,23 @@ enum DemoAppLocale {
             if let match = resolve(language: language, supportedLocales: supportedLocales) {
                 return match
             }
+
+            // English is the editor's source language, so no `en` bundle ships
+            // and the lookup above cannot match it. Stop rather than falling
+            // through to the next preferred language: the user asked for
+            // English, and English is what the editor renders without a bundle.
+            // Regional variants that do ship — `en-gb`, `en-au` — match above.
+            if isEnglish(language) {
+                return defaultLocale
+            }
         }
         return defaultLocale
+    }
+
+    private static func isEnglish(_ language: String) -> Bool {
+        let normalized = language.replacingOccurrences(of: "_", with: "-")
+        return Locale.Components(identifier: normalized)
+            .languageComponents.languageCode?.identifier.lowercased() == defaultLocale
     }
 
     /// Resolution chain for a single tag, mirroring the Android `LocaleResolver`:
