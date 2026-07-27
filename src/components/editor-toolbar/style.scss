@@ -93,7 +93,7 @@ $scroll-indicator-elevation: 32;
 }
 
 .gutenberg-kit-editor-toolbar .components-toolbar-group {
-	border-right-color: $border-color;
+	border-inline-end-color: $border-color;
 	min-height: $min-touch-target-size;
 	// Reset Gutenberg's negative margin that oddly create a gap at the top/bottom
 	// of the toolbar, rather than extending the button height as intended in
