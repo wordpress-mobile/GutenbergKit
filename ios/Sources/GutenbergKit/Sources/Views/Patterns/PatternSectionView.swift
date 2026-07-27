@@ -29,7 +29,7 @@ struct PatternGridSection: View {
                             .fontWeight(.semibold)
                             .foregroundStyle(Color.primary)
 
-                        Text("\(section.patterns.count) patterns")
+                        Text(EditorLocalization[.patternsCount(section.patterns.count)])
                             .font(.subheadline)
                             .foregroundStyle(Color.secondary)
                     }

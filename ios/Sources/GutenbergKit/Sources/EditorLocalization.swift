@@ -17,6 +17,7 @@ public enum EditorLocalizableString {
     case insertPattern
     case patternsCategoryUncategorized
     case patternsCategoryAll
+    case patternsCount(Int)
 
     // MARK: - Editor Loading
     case loadingEditor
@@ -51,6 +52,7 @@ public final class EditorLocalization {
         case .insertPattern: "Insert Pattern"
         case .patternsCategoryUncategorized: "Uncategorized"
         case .patternsCategoryAll: "All"
+        case .patternsCount(let count): count == 1 ? "1 pattern" : "\(count) patterns"
         case .loadingEditor: "Loading Editor"
         case .editorError: "Editor Error"
         case .lockdownModeTitle: "Lockdown Mode Detected"
