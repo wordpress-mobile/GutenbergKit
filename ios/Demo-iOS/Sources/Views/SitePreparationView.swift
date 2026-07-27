@@ -306,9 +306,6 @@ class SitePreparationViewModel {
     private static func applyDemoAppDefaults(to configuration: EditorConfiguration) -> EditorConfiguration {
         configuration.toBuilder()
             .setNativeInserterEnabled(true)
-            // Forwards Xcode's *App Language* selection to the editor so
-            // localization — including right-to-left — can be exercised
-            // without code changes.
             .setLocale(DemoAppLocale.current)
             .build()
     }

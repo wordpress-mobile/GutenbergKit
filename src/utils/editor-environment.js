@@ -32,8 +32,6 @@ export async function setUpEditorEnvironment() {
 		setLogLevelFromGBKit();
 		initializeFetchInterceptor();
 		await configureLocale();
-		// Depends on the text direction `configureLocale` resolves, and must
-		// precede the editor render below.
 		injectEditorStyles( isRTLLocale( getGBKit().locale ) );
 		await initializeWordPressGlobals();
 		await configureApiFetch();

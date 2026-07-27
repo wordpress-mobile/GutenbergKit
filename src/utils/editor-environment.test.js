@@ -123,8 +123,6 @@ describe( 'setUpEditorEnvironment', () => {
 			'awaitGBKitGlobal',
 			'initializeFetchInterceptor',
 			'configureLocale',
-			// Styles depend on the direction `configureLocale` resolves, and
-			// must be injected before the editor renders.
 			'injectEditorStyles',
 			'loadRemainingGlobals',
 			'configureApiFetch',

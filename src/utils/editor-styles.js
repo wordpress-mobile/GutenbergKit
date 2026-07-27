@@ -15,8 +15,6 @@ import blockLibraryEditorStylesRTL from '@wordpress/block-library/build-style/ed
 import formatLibraryStylesRTL from '@wordpress/format-library/build-style/style-rtl.css?inline';
 import editorStylesRTL from '@wordpress/editor/build-style/style-rtl.css?inline';
 
-// Order is significant — it mirrors the cascade the stylesheets relied upon
-// when they were imported for their side effects.
 const LTR_STYLES = [
 	componentsStyles,
 	blockEditorStyles,

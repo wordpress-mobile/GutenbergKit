@@ -45,11 +45,6 @@ const {
 	useLayoutStyles,
 } = unlock( blockEditorPrivateApis );
 
-// Canvas styles, in cascade order, per text direction. Only one set is passed
-// to the iframe: the `-rtl` bundles are full rewrites rather than overrides,
-// so including both would let source order decide the winner. The iframe
-// itself inherits `dir` from the parent document, which `configureLocale`
-// sets.
 const LTR_CANVAS_STYLES = [
 	componentStyles,
 	blockEditorContentStyles,

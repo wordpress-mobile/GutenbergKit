@@ -218,16 +218,9 @@ fun SitePreparationScreen(
     val context = LocalContext.current
 
     // Re-read on resume so returning from the system language picker is
-    // noticed. Changing the per-app language does not always recreate this
-    // activity — when the picker is another app's task, this one is merely
-    // stopped and resumed — so without this the composition never re-reads the
-    // locale and the screen keeps showing the previous one.
+    // noticed.
     val locale = rememberLocaleOnResume()
 
-    // Keyed on the locale so changing the per-app language rebuilds the
-    // configuration. Where the system does recreate the activity, the view
-    // model survives it, so keying on `Unit` would keep serving the
-    // configuration built with the previous locale.
     LaunchedEffect(locale) {
         viewModel.startLoading()
     }
@@ -579,10 +572,6 @@ private fun rememberLocaleOnResume(): Locale {
  * The value is what the library resolved the app's language to, not the
  * language itself — a locale with no bundled translations resolves to `en`,
  * which is otherwise indistinguishable from the selection being ignored.
- *
- * The link is omitted below Android 13 (API 33), which has no per-app language
- * screen to open. `AppCompatDelegate` still honors a per-app locale there, but
- * only the app itself can set it.
  */
 @Composable
 private fun EditorLocaleRow(locale: String?) {

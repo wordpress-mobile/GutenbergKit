@@ -224,8 +224,6 @@ class SitePreparationViewModel(
             .setAuthHeader("")
             .setCookies(emptyMap())
             .setEnableOfflineMode(true)
-            // Forwards the per-app language to the editor so localization can
-            // be exercised from the system language picker.
             .setLocale(DemoAppLocale.current(getApplication()))
             .build()
     }
@@ -281,8 +279,6 @@ class SitePreparationViewModel(
             .setCookies(emptyMap())
             .setEnableNetworkLogging(true)
             .setEnableAssetCaching(capabilities.supportsPlugins)
-            // Forwards the per-app language to the editor so localization can
-            // be exercised from the system language picker.
             .setLocale(DemoAppLocale.current(getApplication()))
             .build()
     }
