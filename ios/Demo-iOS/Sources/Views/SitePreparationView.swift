@@ -97,6 +97,7 @@ struct SitePreparationView: View {
                     KeyValueRow(key: "API Root", value: editorConfiguration.siteApiRoot.absoluteString)
                     KeyValueRow(key: "Supports Block Assets", value: editorConfiguration.shouldUsePlugins)
                     KeyValueRow(key: "Supports Theme Styles", value: editorConfiguration.shouldUseThemeStyles)
+                    KeyValueRow(key: "Editor Locale", value: localeSummary(for: editorConfiguration))
                 }
             }
 
@@ -108,6 +109,28 @@ struct SitePreparationView: View {
                 }
             }
         }
+    }
+
+    /// Describes the locale the editor will use, and the language it was
+    /// resolved from when the two differ.
+    ///
+    /// Makes the Xcode *App Language* selection self-verifying: without it, a
+    /// language with no shipped bundle silently renders in English and looks
+    /// identical to the selection being ignored entirely.
+    private func localeSummary(for configuration: EditorConfiguration) -> String {
+        let resolved = configuration.locale
+        guard let requested = Locale.preferredLanguages.first else {
+            return resolved
+        }
+
+        if requested.replacingOccurrences(of: "_", with: "-").lowercased() == resolved {
+            return resolved
+        }
+
+        let outcome = resolved == DemoAppLocale.defaultLocale
+            ? "no bundle, using default"
+            : "resolved"
+        return "\(resolved) — \(outcome) from \(requested)"
     }
 
     var preloadSection: some View {
@@ -283,6 +306,10 @@ class SitePreparationViewModel {
     private static func applyDemoAppDefaults(to configuration: EditorConfiguration) -> EditorConfiguration {
         configuration.toBuilder()
             .setNativeInserterEnabled(true)
+            // Forwards Xcode's *App Language* selection to the editor so
+            // localization — including right-to-left — can be exercised
+            // without code changes.
+            .setLocale(DemoAppLocale.current)
             .build()
     }
 
