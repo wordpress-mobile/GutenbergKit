@@ -43,9 +43,10 @@ export function useScrollIndicators( scrollRef ) {
 		const distanceFromStart = Math.abs( scrollLeft );
 		const distanceFromEnd = scrollWidth - clientWidth - distanceFromStart;
 
-		const isRTL =
-			element.ownerDocument.defaultView.getComputedStyle( element )
-				.direction === 'rtl';
+		// Read from the document rather than resolving the element's computed
+		// style, which this would otherwise force on every scroll frame. The
+		// direction is set once at startup and fixed for the editor's lifetime.
+		const isRTL = element.ownerDocument.documentElement.dir === 'rtl';
 
 		const canScrollLeft =
 			( isRTL ? distanceFromEnd : distanceFromStart ) > threshold;

@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 
 /**
@@ -21,7 +21,9 @@ import { useScrollIndicators } from './use-scroll-indicators';
  *                                      right-to-left container.
  * @param {number} geometry.scrollWidth Total scrollable width.
  * @param {number} geometry.clientWidth Visible width.
- * @param {string} geometry.direction   Computed `direction` of the container.
+ * @param {string} geometry.direction   Text direction the editor renders in.
+ *                                      Set on the document, which is where the
+ *                                      hook reads it from.
  *
  * @return {Object} A React ref pointing at the element.
  */
@@ -32,7 +34,7 @@ function createScrollRef( {
 	direction = 'ltr',
 } ) {
 	const element = document.createElement( 'div' );
-	element.dir = direction;
+	document.documentElement.dir = direction;
 	document.body.appendChild( element );
 
 	Object.defineProperties( element, {
@@ -45,6 +47,12 @@ function createScrollRef( {
 }
 
 describe( 'useScrollIndicators', () => {
+	afterEach( () => {
+		// The direction is set on the document, so reset it to keep a
+		// right-to-left case from leaking into the next test.
+		document.documentElement.dir = '';
+	} );
+
 	it( 'reports an overflowing container as scrollable', () => {
 		const scrollRef = createScrollRef( { scrollLeft: 0 } );
 		const { result } = renderHook( () => useScrollIndicators( scrollRef ) );
