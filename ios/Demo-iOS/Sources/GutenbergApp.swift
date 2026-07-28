@@ -43,6 +43,10 @@ struct GutenbergApp: App {
         // Configure logger for GutenbergKit
         EditorLogger.shared = OSLogEditorLogger()
         EditorLogger.logLevel = .debug
+
+        // The demo app renders the editor's own strings on purpose, so every
+        // lookup falls back and the reports carry no signal here.
+        EditorLocalization.reportsMissingTranslations = false
     }
 
     var body: some Scene {

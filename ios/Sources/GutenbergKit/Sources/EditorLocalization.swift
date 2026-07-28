@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 /// Enum representing all localizable strings in the editor.
-public enum EditorLocalizableString {
+public enum EditorLocalizableString: Sendable {
     // MARK: - Block Inserter
     case showMore
     case showLess
@@ -32,6 +32,32 @@ public enum EditorLocalizableString {
     case lockdownModeDismiss
 }
 
+extension EditorLocalizableString: CaseIterable {
+    /// Written by hand because the associated value on ``patternsCount`` blocks
+    /// the compiler's synthesis. Add new cases here so they stay covered by the
+    /// test asserting every key has a default string.
+    public static let allCases: [EditorLocalizableString] = [
+        .showMore,
+        .showLess,
+        .search,
+        .insertBlock,
+        .failedToInsertMedia,
+        .patterns,
+        .noPatternsFound,
+        .insertPattern,
+        .patternsCategoryUncategorized,
+        .patternsCategoryAll,
+        .patternsCount(3),
+        .loadingEditor,
+        .editorError,
+        .lockdownModeTitle,
+        .lockdownModeWarning,
+        .lockdownModeExcludeHint,
+        .lockdownModeLearnMore,
+        .lockdownModeDismiss,
+    ]
+}
+
 /// Provides localized strings for the editor.
 ///
 /// Usage:
@@ -58,34 +84,31 @@ public final class EditorLocalization {
     /// An exhaustive switch stops compiling whenever the editor adds a string,
     /// which blocks the host from adopting unrelated changes until someone
     /// writes a translation. Delegating instead renders the untranslated
-    /// default for new strings and logs at the `debug` level, so a missing
-    /// translation degrades the string rather than the build.
+    /// default for new strings and reports the gap through ``Logger``, so a
+    /// missing translation degrades the string rather than the build. See
+    /// ``reportsMissingTranslations``.
     public static var localize: (EditorLocalizableString) -> String = { key in
         defaultLocalize(key)
-    } {
-        didSet { setShouldReportFallback(true) }
     }
 
-    /// Whether falling back to a default string is worth reporting.
+    /// Whether falling back to a default string is reported to the system log.
     ///
-    /// True once a host app installs its own ``localize`` and thereby takes
-    /// responsibility for translations. Without an override every string comes
-    /// from the default table by design, and reporting each one would be noise.
+    /// Enabled by default so a host that misses a translation finds out without
+    /// having to opt in. Set to `false` in apps that render the editor's own
+    /// strings deliberately — the demo app, say — where every fallback is
+    /// expected and the reports are noise.
     ///
     /// ``defaultLocalize`` reads this, and host apps call that from whatever
     /// context their own localization runs in, so it cannot be isolated to the
-    /// main actor. Guarded by a lock rather than declared `nonisolated(unsafe)`
-    /// so the access is actually free of races instead of merely asserted to be.
-    nonisolated static var shouldReportFallback: Bool {
-        fallbackReportingLock.withLock { _shouldReportFallback }
+    /// main actor. Guarded by the same lock as the reported-key set below.
+    public nonisolated static var reportsMissingTranslations: Bool {
+        get { reportingLock.withLock { _reportsMissingTranslations } }
+        set { reportingLock.withLock { _reportsMissingTranslations = newValue } }
     }
 
-    private nonisolated static let fallbackReportingLock = NSLock()
-    nonisolated(unsafe) private static var _shouldReportFallback = false
-
-    private nonisolated static func setShouldReportFallback(_ newValue: Bool) {
-        fallbackReportingLock.withLock { _shouldReportFallback = newValue }
-    }
+    private nonisolated static let reportingLock = NSLock()
+    nonisolated(unsafe) private static var _reportsMissingTranslations = true
+    nonisolated(unsafe) private static var reportedKeys: Set<String> = []
 
     /// The editor's untranslated strings.
     ///
@@ -98,21 +121,7 @@ public final class EditorLocalization {
     public nonisolated static func defaultLocalize(
         _ key: EditorLocalizableString
     ) -> String {
-        if shouldReportFallback {
-            // Logged through `OSLog` rather than `EditorLogger`, which reaches
-            // only hosts that install a logger and raise the log level. This
-            // message is for whoever integrates the library, and the hosts most
-            // likely to miss a translation are the ones least likely to have
-            // configured logging.
-            //
-            // Logged at `notice` rather than `debug` so it persists to the log
-            // store. `debug` is held in an in-memory buffer that requires
-            // enabling debug logging for the subsystem to read, which defeats
-            // the point of reporting something the host is unaware of.
-            Logger.localization.notice(
-                "Missing host translation for \(String(describing: key), privacy: .public), using the editor default."
-            )
-        }
+        reportMissingTranslation(for: key)
 
         return switch key {
         case .showMore: "Show More"
@@ -136,14 +145,49 @@ public final class EditorLocalization {
         }
     }
 
+    /// Reports a missing translation the first time each key falls back.
+    ///
+    /// Every call site sits inside a SwiftUI `body`, which re-evaluates on each
+    /// render pass, so logging unconditionally would write an entry per row per
+    /// frame while a list scrolls. Reporting once per key tells the integrator
+    /// the same thing without the volume.
+    private nonisolated static func reportMissingTranslation(
+        for key: EditorLocalizableString
+    ) {
+        // Associated values distinguish cases that share a translation:
+        // `patternsCount(3)` and `patternsCount(7)` are one missing string.
+        let name = String(String(describing: key).prefix { $0 != "(" })
+
+        let shouldReport = reportingLock.withLock {
+            _reportsMissingTranslations && reportedKeys.insert(name).inserted
+        }
+        guard shouldReport else { return }
+
+        // Logged through `OSLog` rather than `EditorLogger`, which reaches only
+        // hosts that install a logger and raise the log level. This message is
+        // for whoever integrates the library, and the hosts most likely to miss
+        // a translation are the ones least likely to have configured logging.
+        //
+        // Logged at `notice` rather than `debug` so it persists to the log
+        // store. `debug` is held in an in-memory buffer that requires enabling
+        // debug logging for the subsystem to read, which defeats the point of
+        // reporting something the host is unaware of.
+        Logger.localization.notice(
+            "Missing host translation for \(name, privacy: .public), using the editor default."
+        )
+    }
+
     /// Convenience subscript for accessing localized strings.
     public static subscript(key: EditorLocalizableString) -> String {
          localize(key)
     }
 
-    /// Clears the record of a host override so tests can restore the initial
-    /// state after assigning ``localize``.
-    static func resetFallbackReportingForTesting() {
-        setShouldReportFallback(false)
+    /// Clears the record of which keys have already been reported so tests do
+    /// not leak state into each other.
+    static func resetMissingTranslationReportingForTesting() {
+        reportingLock.withLock {
+            _reportsMissingTranslations = true
+            reportedKeys.removeAll()
+        }
     }
 }
