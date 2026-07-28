@@ -215,7 +215,6 @@ fun SitePreparationScreen(
     onBrowsePosts: (EditorConfiguration, EditorDependencies?, PostTypeDetails) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val context = LocalContext.current
 
     // Re-read on resume so returning from the system language picker is
     // noticed.
@@ -577,9 +576,22 @@ private fun rememberLocaleOnResume(): Locale {
 private fun EditorLocaleRow(locale: String?) {
     val context = LocalContext.current
     val resolved = locale ?: "en"
-    val canOpenSettings = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
 
-    if (!canOpenSettings) {
+    // The action is optional even on API 33+ — some devices ship no handler for
+    // it — so resolve the intent rather than inferring availability from the SDK
+    // level, which would throw on tap.
+    val settingsIntent = remember(context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            null
+        } else {
+            Intent(
+                Settings.ACTION_APP_LOCALE_SETTINGS,
+                Uri.fromParts("package", context.packageName, null)
+            ).takeIf { it.resolveActivity(context.packageManager) != null }
+        }
+    }
+
+    if (settingsIntent == null) {
         KeyValueRow(key = "Editor Locale", value = resolved)
         return
     }
@@ -587,14 +599,7 @@ private fun EditorLocaleRow(locale: String?) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable {
-                context.startActivity(
-                    Intent(
-                        Settings.ACTION_APP_LOCALE_SETTINGS,
-                        Uri.fromParts("package", context.packageName, null)
-                    )
-                )
-            }
+            .clickable { context.startActivity(settingsIntent) }
             .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
