@@ -59,7 +59,8 @@ enum DemoAppLocale {
         return defaultLocale
     }
 
-    private static func isEnglish(_ language: String) -> Bool {
+    /// Whether a tag's language subtag is English, regardless of region.
+    static func isEnglish(_ language: String) -> Bool {
         let normalized = language.replacingOccurrences(of: "_", with: "-")
         return Locale.Components(identifier: normalized)
             .languageComponents.languageCode?.identifier.lowercased() == defaultLocale

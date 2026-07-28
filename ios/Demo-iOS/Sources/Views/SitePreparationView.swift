@@ -131,7 +131,7 @@ struct SitePreparationView: View {
         // English ships no bundle of its own — it is the editor's source
         // language — so describe it as the language being used rather than as
         // a fallback from something else.
-        if resolved == DemoAppLocale.defaultLocale, normalized.hasPrefix(DemoAppLocale.defaultLocale) {
+        if resolved == DemoAppLocale.defaultLocale, DemoAppLocale.isEnglish(requested) {
             return "\(resolved) — \(requested)"
         }
 
