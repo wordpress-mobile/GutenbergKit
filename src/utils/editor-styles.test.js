@@ -49,7 +49,7 @@ const getStyleElement = () => document.getElementById( STYLE_ELEMENT_ID );
 
 describe( 'injectEditorStyles', () => {
 	beforeEach( () => {
-		getStyleElement()?.remove();
+		document.head.innerHTML = '';
 	} );
 
 	it( 'injects a single style element into the document head', () => {
@@ -59,6 +59,25 @@ describe( 'injectEditorStyles', () => {
 		expect( element ).not.toBeNull();
 		expect( element.tagName ).toBe( 'STYLE' );
 		expect( element.parentElement ).toBe( document.head );
+	} );
+
+	// Several selectors tie on specificity between these stylesheets and
+	// GutenbergKit's own, so the cascade resolves them by source order.
+	it( 'injects the styles before the existing stylesheets', () => {
+		const link = document.createElement( 'link' );
+		link.rel = 'stylesheet';
+		link.href = 'index.css';
+		document.head.appendChild( link );
+
+		injectEditorStyles( false );
+
+		expect( getStyleElement().nextElementSibling ).toBe( link );
+	} );
+
+	it( 'injects the styles when the head has no stylesheets', () => {
+		injectEditorStyles( false );
+
+		expect( getStyleElement().parentElement ).toBe( document.head );
 	} );
 
 	it( 'injects the left-to-right stylesheets in cascade order', () => {

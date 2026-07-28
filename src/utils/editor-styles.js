@@ -48,6 +48,15 @@ const STYLE_ELEMENT_ID = 'gutenberg-kit-editor-styles';
  * variants in the bundle and selects between them here instead, since the
  * editor loads a single static `index.html`.
  *
+ * The element is inserted before the first stylesheet link rather than
+ * appended. These stylesheets are the base layer that GutenbergKit's own
+ * styles build on, and several selectors tie on specificity across the two
+ * (`.gutenberg-kit .components-button` against
+ * `.editor-visual-editor .components-button`, both `0,2,0`). Ties resolve by
+ * source order, so appending would silently hand those to WordPress. Building
+ * these as a side-effect import placed them first; inserting first preserves
+ * that.
+ *
  * @param {boolean} isRTL Whether the editor renders right-to-left.
  *
  * @return {void}
@@ -61,5 +70,9 @@ export function injectEditorStyles( isRTL ) {
 	const element = document.createElement( 'style' );
 	element.id = STYLE_ELEMENT_ID;
 	element.textContent = ( isRTL ? RTL_STYLES : LTR_STYLES ).join( '\n' );
-	document.head.appendChild( element );
+
+	const firstStylesheet = document.head.querySelector(
+		'link[rel="stylesheet"], style'
+	);
+	document.head.insertBefore( element, firstStylesheet );
 }
