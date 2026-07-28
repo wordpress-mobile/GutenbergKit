@@ -1,44 +1,21 @@
 import Foundation
+import OSLog
 import Testing
 @testable import GutenbergKit
-
-/// Captures log messages so the fallback reporting can be inspected.
-private final class SpyLogger: EditorLogging, @unchecked Sendable {
-    private let lock = NSLock()
-    private var _messages: [(EditorLogLevel, String)] = []
-
-    var messages: [(EditorLogLevel, String)] {
-        lock.withLock { _messages }
-    }
-
-    func log(_ level: EditorLogLevel, _ message: String) {
-        lock.withLock { _messages.append((level, message)) }
-    }
-}
 
 @MainActor
 struct EditorLocalizationTests {
 
-    /// Restores the global localization and logging state around each test.
-    private func withLocalization(
-        _ body: (SpyLogger) throws -> Void
-    ) rethrows {
+    /// Restores the global localization state around each test.
+    private func withLocalization(_ body: () throws -> Void) rethrows {
         let previousLocalize = EditorLocalization.localize
-        let previousLogger = EditorLogger.shared
-        let previousLevel = EditorLogger.logLevel
-
-        let spy = SpyLogger()
-        EditorLogger.shared = spy
-        EditorLogger.logLevel = .debug
 
         defer {
             EditorLocalization.localize = previousLocalize
-            EditorLogger.shared = previousLogger
-            EditorLogger.logLevel = previousLevel
-            EditorLocalization.resetHostTranslationsForTesting()
+            EditorLocalization.resetFallbackReportingForTesting()
         }
 
-        try body(spy)
+        try body()
     }
 
     @Test
@@ -51,14 +28,14 @@ struct EditorLocalizationTests {
 
     @Test
     func subscriptUsesTheDefaultsWithoutAHostOverride() {
-        withLocalization { _ in
+        withLocalization {
             #expect(EditorLocalization[.showMore] == "Show More")
         }
     }
 
     @Test
     func hostTranslationsTakePrecedence() {
-        withLocalization { _ in
+        withLocalization {
             EditorLocalization.localize = { key in
                 switch key {
                 case .showMore: "Mostrar más"
@@ -72,7 +49,7 @@ struct EditorLocalizationTests {
 
     @Test
     func unhandledKeysFallBackToTheDefaults() {
-        withLocalization { _ in
+        withLocalization {
             EditorLocalization.localize = { key in
                 switch key {
                 case .showMore: "Mostrar más"
@@ -88,16 +65,14 @@ struct EditorLocalizationTests {
     // design, so reporting each one would be noise.
     @Test
     func fallbackIsNotReportedWithoutAHostOverride() {
-        withLocalization { spy in
-            _ = EditorLocalization[.showMore]
-
-            #expect(spy.messages.isEmpty)
+        withLocalization {
+            #expect(EditorLocalization.shouldReportFallback == false)
         }
     }
 
     @Test
     func fallbackIsReportedOnceAHostTranslates() {
-        withLocalization { spy in
+        withLocalization {
             EditorLocalization.localize = { key in
                 switch key {
                 case .showMore: "Mostrar más"
@@ -105,13 +80,46 @@ struct EditorLocalizationTests {
                 }
             }
 
-            _ = EditorLocalization[.showMore]
-            #expect(spy.messages.isEmpty)
+            #expect(EditorLocalization.shouldReportFallback)
+        }
+    }
 
-            _ = EditorLocalization[.search]
-            #expect(spy.messages.count == 1)
-            #expect(spy.messages.first?.0 == .debug)
-            #expect(spy.messages.first?.1.contains("search") == true)
+    /// Host apps are not required to configure `EditorLogger`, so the report
+    /// has to reach the log store on its own. `debug` messages are held in an
+    /// in-memory buffer and would not.
+    @Test
+    func fallbackReachesTheLogStoreWithoutAHostLogger() throws {
+        let previousShared = EditorLogger.shared
+        let previousLevel = EditorLogger.logLevel
+
+        // Explicitly leave `EditorLogger` unconfigured.
+        EditorLogger.shared = nil
+        EditorLogger.logLevel = .error
+
+        defer {
+            EditorLogger.shared = previousShared
+            EditorLogger.logLevel = previousLevel
+        }
+
+        try withLocalization {
+            EditorLocalization.localize = { key in
+                switch key {
+                case .showMore: "Mostrar más"
+                default: EditorLocalization.defaultLocalize(key)
+                }
+            }
+
+            let started = Date()
+            _ = EditorLocalization[.patternsCount(3)]
+
+            let store = try OSLogStore(scope: .currentProcessIdentifier)
+            let entries = try store.getEntries(
+                at: store.position(date: started),
+                matching: NSPredicate(format: "subsystem == %@", "GutenbergKit")
+            )
+
+            let messages = entries.compactMap { ($0 as? OSLogEntryLog)?.composedMessage }
+            #expect(messages.contains { $0.contains("Missing host translation") })
         }
     }
 }

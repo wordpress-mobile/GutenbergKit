@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Enum representing all localizable strings in the editor.
 public enum EditorLocalizableString {
@@ -62,23 +63,35 @@ public final class EditorLocalization {
     public static var localize: (EditorLocalizableString) -> String = { key in
         defaultLocalize(key)
     } {
-        didSet { hasHostTranslations = true }
+        didSet { shouldReportFallback = true }
     }
 
-    /// Whether a host app installed its own ``localize``.
+    /// Whether falling back to a default string is worth reporting.
     ///
-    /// Falling back is only worth reporting once a host has taken
+    /// True once a host app installs its own ``localize`` and thereby takes
     /// responsibility for translations. Without an override every string comes
-    /// from the default table by design, and logging each one would be noise.
-    private static var hasHostTranslations = false
+    /// from the default table by design, and reporting each one would be noise.
+    static private(set) var shouldReportFallback = false
 
     /// The editor's untranslated strings.
     ///
     /// Exposed so host apps can fall back to it for keys they do not translate.
     /// See ``localize``.
     public static let defaultLocalize: (EditorLocalizableString) -> String = { key in
-        if hasHostTranslations {
-            log(.debug, "Missing host translation for \(key), using the editor default.")
+        if shouldReportFallback {
+            // Logged through `OSLog` rather than `EditorLogger`, which reaches
+            // only hosts that install a logger and raise the log level. This
+            // message is for whoever integrates the library, and the hosts most
+            // likely to miss a translation are the ones least likely to have
+            // configured logging.
+            //
+            // Logged at `notice` rather than `debug` so it persists to the log
+            // store. `debug` is held in an in-memory buffer that requires
+            // enabling debug logging for the subsystem to read, which defeats
+            // the point of reporting something the host is unaware of.
+            Logger.localization.notice(
+                "Missing host translation for \(String(describing: key), privacy: .public), using the editor default."
+            )
         }
 
         return switch key {
@@ -110,7 +123,7 @@ public final class EditorLocalization {
 
     /// Clears the record of a host override so tests can restore the initial
     /// state after assigning ``localize``.
-    static func resetHostTranslationsForTesting() {
-        hasHostTranslations = false
+    static func resetFallbackReportingForTesting() {
+        shouldReportFallback = false
     }
 }
