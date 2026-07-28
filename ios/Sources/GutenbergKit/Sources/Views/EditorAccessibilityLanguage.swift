@@ -37,12 +37,35 @@ private struct EditorAccessibilityLanguageModifier: ViewModifier {
 private struct AccessibilityLanguageHost: UIViewRepresentable {
     let language: String
 
-    func makeUIView(context: Context) -> UIView {
-        UIView()
+    func makeUIView(context: Context) -> AccessibilityLanguageView {
+        AccessibilityLanguageView()
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
-        uiView.rootHostingView?.accessibilityLanguage = language
+    func updateUIView(_ uiView: AccessibilityLanguageView, context: Context) {
+        uiView.language = language
+    }
+}
+
+/// Applies the language once the view is in a hierarchy.
+///
+/// `updateUIView` runs before this view is necessarily attached to a superview,
+/// and with no superview the walk up the responder chain finds no hosting
+/// controller. Because the language does not change afterward, SwiftUI has no
+/// reason to call `updateUIView` again, so a miss there would be permanent.
+/// Re-applying on move to a window retries once the hierarchy exists.
+private final class AccessibilityLanguageView: UIView {
+    var language: String? {
+        didSet { applyLanguage() }
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        applyLanguage()
+    }
+
+    private func applyLanguage() {
+        guard let language else { return }
+        rootHostingView?.accessibilityLanguage = language
     }
 }
 
