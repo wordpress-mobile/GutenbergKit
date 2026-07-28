@@ -40,8 +40,48 @@ public enum EditorLocalizableString {
 @MainActor
 public final class EditorLocalization {
     /// This is designed to be overridden by the host app to provide translations.
+    ///
+    /// Host apps are encouraged to delegate unhandled keys to
+    /// ``defaultLocalize`` rather than switching exhaustively:
+    ///
+    /// ```swift
+    /// EditorLocalization.localize = { key in
+    ///     switch key {
+    ///     case .showMore: NSLocalizedString("editor.blockInserter.showMore", ...)
+    ///     // ...keys the host translates.
+    ///     default: EditorLocalization.defaultLocalize(key)
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// An exhaustive switch stops compiling whenever the editor adds a string,
+    /// which blocks the host from adopting unrelated changes until someone
+    /// writes a translation. Delegating instead renders the untranslated
+    /// default for new strings and logs at the `debug` level, so a missing
+    /// translation degrades the string rather than the build.
     public static var localize: (EditorLocalizableString) -> String = { key in
-        switch key {
+        defaultLocalize(key)
+    } {
+        didSet { hasHostTranslations = true }
+    }
+
+    /// Whether a host app installed its own ``localize``.
+    ///
+    /// Falling back is only worth reporting once a host has taken
+    /// responsibility for translations. Without an override every string comes
+    /// from the default table by design, and logging each one would be noise.
+    private static var hasHostTranslations = false
+
+    /// The editor's untranslated strings.
+    ///
+    /// Exposed so host apps can fall back to it for keys they do not translate.
+    /// See ``localize``.
+    public static let defaultLocalize: (EditorLocalizableString) -> String = { key in
+        if hasHostTranslations {
+            log(.debug, "Missing host translation for \(key), using the editor default.")
+        }
+
+        return switch key {
         case .showMore: "Show More"
         case .showLess: "Show Less"
         case .search: "Search"
@@ -66,5 +106,11 @@ public final class EditorLocalization {
     /// Convenience subscript for accessing localized strings.
     public static subscript(key: EditorLocalizableString) -> String {
          localize(key)
+    }
+
+    /// Clears the record of a host override so tests can restore the initial
+    /// state after assigning ``localize``.
+    static func resetHostTranslationsForTesting() {
+        hasHostTranslations = false
     }
 }
