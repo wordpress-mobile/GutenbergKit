@@ -12,26 +12,16 @@ $baseline-interactive-font-size: 17px;
 	margin: 0;
 }
 
-// Restore the text selection highlight within the block canvas.
-//
 // Gutenberg hides `::selection` on the block list container behind a
-// Safari-only selector hack. Our production CSS minification splits that hack's
-// selector list apart, leaving behind a plain rule that Chromium honors--and
-// since Chromium 134 ships CSS highlight inheritance, the transparent
-// background propagates to every descendant, erasing the highlight throughout
-// the canvas on Android.
+// Safari-only selector hack, which our CSS minification flattens into a plain
+// rule Chromium honors. Since Chromium 134 ships highlight inheritance, that
+// transparent background reaches every descendant and erases the selection
+// highlight on Android.
 //
-// Overriding at the container preserves the inheritance chain, so Gutenberg's
-// own `::selection` rules--multi-block selection, dragging, non-editable rich
-// text--continue to apply to their descendants. Excluded on iOS, where the
-// upstream hack still serves its intended purpose.
-//
-// `revert` rolls the declaration back to the user agent origin, restoring the
-// platform's own selection color rather than pinning a fixed one. That keeps
-// the canvas consistent with the post title and code editor, which sit outside
-// the container and are unaffected.
-//
-// See: https://github.com/WordPress/gutenberg/blob/trunk/packages/block-editor/src/components/block-list/content.scss
+// Reverting at the container--rather than on descendants--keeps the inheritance
+// chain intact for Gutenberg's other `::selection` rules. Left alone on iOS,
+// where the hack still works as intended.
+// https://github.com/WordPress/gutenberg/blob/trunk/packages/block-editor/src/components/block-list/content.scss
 body.gutenberg-kit:not(.is-ios) .block-editor-block-list__layout::selection {
 	background-color: revert;
 }
