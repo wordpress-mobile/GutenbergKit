@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
@@ -27,7 +28,15 @@ actor MediaFileManager {
     ///
     /// - Returns: MediaInfo with a `gbk-media-file://` URL and detected media type
     func `import`(_ item: PhotosPickerItem) async throws -> MediaInfo {
-        guard let data = try await item.loadTransferable(type: Data.self) else {
+        let data: Data?
+        do {
+            data = try await item.loadTransferable(type: Data.self)
+        } catch {
+            Logger.media.error("Failed to load picker item \(item.supportedContentTypes): \(error)")
+            throw error
+        }
+        guard let data else {
+            Logger.media.error("Picker returned no data for item \(item.supportedContentTypes)")
             throw URLError(.unknown)
         }
         let contentType = item.supportedContentTypes.first
