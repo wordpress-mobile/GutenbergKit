@@ -63,7 +63,7 @@ public final class EditorLocalization {
     public static var localize: (EditorLocalizableString) -> String = { key in
         defaultLocalize(key)
     } {
-        didSet { shouldReportFallback = true }
+        didSet { setShouldReportFallback(true) }
     }
 
     /// Whether falling back to a default string is worth reporting.
@@ -71,13 +71,33 @@ public final class EditorLocalization {
     /// True once a host app installs its own ``localize`` and thereby takes
     /// responsibility for translations. Without an override every string comes
     /// from the default table by design, and reporting each one would be noise.
-    static private(set) var shouldReportFallback = false
+    ///
+    /// ``defaultLocalize`` reads this, and host apps call that from whatever
+    /// context their own localization runs in, so it cannot be isolated to the
+    /// main actor. Guarded by a lock rather than declared `nonisolated(unsafe)`
+    /// so the access is actually free of races instead of merely asserted to be.
+    nonisolated static var shouldReportFallback: Bool {
+        fallbackReportingLock.withLock { _shouldReportFallback }
+    }
+
+    private nonisolated static let fallbackReportingLock = NSLock()
+    nonisolated(unsafe) private static var _shouldReportFallback = false
+
+    private nonisolated static func setShouldReportFallback(_ newValue: Bool) {
+        fallbackReportingLock.withLock { _shouldReportFallback = newValue }
+    }
 
     /// The editor's untranslated strings.
     ///
     /// Exposed so host apps can fall back to it for keys they do not translate.
     /// See ``localize``.
-    public static let defaultLocalize: (EditorLocalizableString) -> String = { key in
+    ///
+    /// Deliberately `nonisolated`: host apps delegate to this from their own
+    /// localization functions, which are ordinarily not main-actor isolated.
+    /// Isolating it would force that annotation onto every host.
+    public nonisolated static func defaultLocalize(
+        _ key: EditorLocalizableString
+    ) -> String {
         if shouldReportFallback {
             // Logged through `OSLog` rather than `EditorLogger`, which reaches
             // only hosts that install a logger and raise the log level. This
@@ -124,6 +144,6 @@ public final class EditorLocalization {
     /// Clears the record of a host override so tests can restore the initial
     /// state after assigning ``localize``.
     static func resetFallbackReportingForTesting() {
-        shouldReportFallback = false
+        setShouldReportFallback(false)
     }
 }
