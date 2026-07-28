@@ -1,3 +1,5 @@
+#if canImport(UIKit)
+import UIKit
 import SwiftUI
 
 extension View {
@@ -57,3 +59,4 @@ private extension UIView {
         return nil
     }
 }
+#endif
