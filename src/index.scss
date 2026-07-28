@@ -14,13 +14,15 @@ $baseline-interactive-font-size: 17px;
 
 // Gutenberg hides `::selection` on the block list container behind a
 // Safari-only selector hack, which our CSS minification flattens into a plain
-// rule Chromium honors. Since Chromium 134 ships highlight inheritance, that
-// transparent background reaches every descendant and erases the selection
-// highlight on Android.
+// rule every engine honors. Since Chromium 134 ships highlight inheritance,
+// that transparent background reaches every descendant and erases the
+// selection highlight on Android.
 //
-// Reverting at the container--rather than on descendants--keeps the inheritance
-// chain intact for Gutenberg's other `::selection` rules. Left alone on iOS,
-// where the hack still works as intended.
+// Reverting at the container--not on descendants--keeps the inheritance chain
+// intact for Gutenberg's other `::selection` rules. The leading `body` is
+// required; without it this ties upstream's `[data-has-multi-selection]`
+// variant and loses on source order. Excluded on iOS only because WebKit has
+// yet to ship highlight inheritance--if it does, drop `:not(.is-ios)`.
 // https://github.com/WordPress/gutenberg/blob/trunk/packages/block-editor/src/components/block-list/content.scss
 body.gutenberg-kit:not(.is-ios) .block-editor-block-list__layout::selection {
 	background-color: revert;
