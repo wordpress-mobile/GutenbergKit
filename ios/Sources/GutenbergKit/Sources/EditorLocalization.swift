@@ -50,10 +50,14 @@ public final class EditorLocalization {
     ///     switch key {
     ///     case .showMore: NSLocalizedString("editor.blockInserter.showMore", ...)
     ///     // ...keys the host translates.
-    ///     default: EditorLocalization.defaultLocalize(key)
+    ///     @unknown default: EditorLocalization.defaultLocalize(key)
     ///     }
     /// }
     /// ```
+    ///
+    /// `@unknown default` rather than a plain `default` so a host that happens
+    /// to cover every case today still compiles without a "default will never
+    /// be executed" warning.
     ///
     /// An exhaustive switch stops compiling whenever the editor adds a string,
     /// which blocks the host from adopting unrelated changes until someone
