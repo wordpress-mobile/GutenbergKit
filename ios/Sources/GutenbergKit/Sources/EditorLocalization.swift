@@ -61,8 +61,13 @@ public final class EditorLocalization {
     /// default for new strings and reports the gap through ``Logger``, so a
     /// missing translation degrades the string rather than the build. See
     /// ``reportsMissingTranslations``.
+    ///
+    /// Until a host installs its own closure this renders the defaults without
+    /// reporting them. Reporting here would fire for strings the host does
+    /// translate, because the editor reads some of them — `loadingEditor` among
+    /// them — while building views, which can run before the host assigns this.
     public static var localize: (EditorLocalizableString) -> String = { key in
-        defaultLocalize(key)
+        defaultString(for: key)
     }
 
     /// Whether falling back to a default string is reported to the system log.
@@ -95,9 +100,19 @@ public final class EditorLocalization {
     public nonisolated static func defaultLocalize(
         _ key: EditorLocalizableString
     ) -> String {
+        // Only the host delegating an unhandled key reaches here, so this is
+        // where a gap in the host's translations is genuinely observable. The
+        // editor's own reads go through `defaultString(for:)` instead.
         reportMissingTranslation(for: key)
 
-        return switch key {
+        return defaultString(for: key)
+    }
+
+    /// The editor's untranslated strings, without reporting.
+    private nonisolated static func defaultString(
+        for key: EditorLocalizableString
+    ) -> String {
+        switch key {
         case .showMore: "Show More"
         case .showLess: "Show Less"
         case .search: "Search"

@@ -49,6 +49,26 @@ struct EditorLocalizationTests {
         }
     }
 
+    /// The editor reads some strings while building views, which can run before
+    /// the host assigns `localize`. Reporting those would name keys the host
+    /// does translate, and reports that cry wolf get ignored.
+    @Test
+    func readsBeforeAHostOverrideAreNotReported() throws {
+        try withLocalization(reportsMissingTranslations: true) {
+            let started = Date()
+
+            // No host override installed: this is the editor reading its own
+            // default, not a gap in anyone's translations.
+            _ = EditorLocalization[.loadingEditor]
+
+            let reports = try missingTranslationReports(
+                forKeyNamed: "loadingEditor",
+                since: started
+            )
+            #expect(reports.isEmpty)
+        }
+    }
+
     @Test
     func hostTranslationsTakePrecedence() {
         withLocalization {
