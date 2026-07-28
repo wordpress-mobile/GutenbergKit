@@ -31,19 +31,12 @@ struct EditorLocalizationTests {
         try body()
     }
 
-    /// Every case needs a default; a new one without a string would otherwise
-    /// surface only when a host delegates to it at runtime.
-    @Test(arguments: EditorLocalizableString.allCases)
-    func defaultLocalizeProvidesEveryString(key: EditorLocalizableString) {
-        withLocalization {
-            #expect(!EditorLocalization.defaultLocalize(key).isEmpty)
-        }
-    }
-
+    /// The only default that is computed rather than a literal. The rest are
+    /// covered by the exhaustive switch in `defaultLocalize`, which fails to
+    /// compile if a case has no string.
     @Test
     func defaultLocalizePluralizesPatternCounts() {
         withLocalization {
-            #expect(EditorLocalization.defaultLocalize(.showMore) == "Show More")
             #expect(EditorLocalization.defaultLocalize(.patternsCount(1)) == "1 pattern")
             #expect(EditorLocalization.defaultLocalize(.patternsCount(3)) == "3 patterns")
         }

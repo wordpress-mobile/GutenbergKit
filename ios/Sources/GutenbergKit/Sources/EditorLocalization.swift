@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 /// Enum representing all localizable strings in the editor.
-public enum EditorLocalizableString: Sendable {
+public enum EditorLocalizableString {
     // MARK: - Block Inserter
     case showMore
     case showLess
@@ -30,32 +30,6 @@ public enum EditorLocalizableString: Sendable {
     case lockdownModeExcludeHint
     case lockdownModeLearnMore
     case lockdownModeDismiss
-}
-
-extension EditorLocalizableString: CaseIterable {
-    /// Written by hand because the associated value on ``patternsCount`` blocks
-    /// the compiler's synthesis. Add new cases here so they stay covered by the
-    /// test asserting every key has a default string.
-    public static let allCases: [EditorLocalizableString] = [
-        .showMore,
-        .showLess,
-        .search,
-        .insertBlock,
-        .failedToInsertMedia,
-        .patterns,
-        .noPatternsFound,
-        .insertPattern,
-        .patternsCategoryUncategorized,
-        .patternsCategoryAll,
-        .patternsCount(3),
-        .loadingEditor,
-        .editorError,
-        .lockdownModeTitle,
-        .lockdownModeWarning,
-        .lockdownModeExcludeHint,
-        .lockdownModeLearnMore,
-        .lockdownModeDismiss,
-    ]
 }
 
 /// Provides localized strings for the editor.
