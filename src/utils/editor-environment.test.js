@@ -46,7 +46,6 @@ vi.mock( './editor-loader.js', () => ( {
 
 vi.mock( './localization.js', () => ( {
 	configureLocale: vi.fn(),
-	isRTLLocale: vi.fn( () => false ),
 } ) );
 
 vi.mock( './api-fetch.js', () => ( {
@@ -63,7 +62,7 @@ describe( 'setUpEditorEnvironment', () => {
 
 		awaitGBKitGlobal.mockResolvedValue( undefined );
 		getGBKit.mockReturnValue( { plugins: false } );
-		configureLocale.mockResolvedValue( undefined );
+		configureLocale.mockResolvedValue( false );
 		initializeWordPressGlobals.mockImplementation( () => {} );
 		configureApiFetch.mockImplementation( () => {} );
 		initializeFetchInterceptor.mockImplementation( () => {} );

@@ -7,7 +7,7 @@ import {
 	getGBKit,
 	logException,
 } from './bridge';
-import { configureLocale, isRTLLocale } from './localization';
+import { configureLocale } from './localization';
 import { loadEditorAssets } from './editor-loader';
 import { configureAjax } from './ajax';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge';
@@ -31,8 +31,8 @@ export async function setUpEditorEnvironment() {
 		await awaitGBKitGlobal();
 		setLogLevelFromGBKit();
 		initializeFetchInterceptor();
-		await configureLocale();
-		injectEditorStyles( isRTLLocale( getGBKit().locale ) );
+		const isRTL = await configureLocale();
+		injectEditorStyles( isRTL );
 		await initializeWordPressGlobals();
 		await configureApiFetch();
 		const pluginLoadResult = await loadPluginsIfEnabled();

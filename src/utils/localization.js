@@ -34,12 +34,14 @@ const TEXT_DIRECTION_KEY = 'text direction\u0004ltr';
 /**
  * Initializes i18n support for the editor.
  *
- * @return {Promise<void>} A promise that resolves when i18n is initialized.
+ * @return {Promise<boolean>} A promise resolving to whether the configured
+ * locale renders right-to-left, so callers apply the same direction this
+ * resolved rather than deriving it a second time.
  */
 export async function configureLocale() {
 	const { locale = DEFAULT_LOCALE } = getGBKit();
 	await loadTranslations( locale );
-	configureTextDirection( locale );
+	return configureTextDirection( locale );
 }
 
 /**
@@ -80,7 +82,7 @@ export function isRTLLocale( locale ) {
  *
  * @param {string} locale The locale in use.
  *
- * @return {void}
+ * @return {boolean} Whether the locale renders right-to-left.
  */
 function configureTextDirection( locale ) {
 	const isRTL = isRTLLocale( locale );
@@ -98,6 +100,8 @@ function configureTextDirection( locale ) {
 	body?.classList.toggle( 'rtl', isRTL );
 
 	debug( `Text direction configured as "${ direction }" for "${ locale }"` );
+
+	return isRTL;
 }
 
 /**
