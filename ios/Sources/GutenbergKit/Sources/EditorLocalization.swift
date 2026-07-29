@@ -43,7 +43,8 @@ public final class EditorLocalization {
     /// This is designed to be overridden by the host app to provide translations.
     ///
     /// Return `nil` for keys the host does not translate; the editor renders its
-    /// own string for those:
+    /// own string for those and reports the gap. See
+    /// ``reportsMissingTranslations``.
     ///
     /// ```swift
     /// EditorLocalization.localize = { key in
@@ -55,27 +56,9 @@ public final class EditorLocalization {
     /// }
     /// ```
     ///
-    /// A plain `default` rather than `@unknown default`, which only suppresses
-    /// the warning about cases added in future versions and still requires the
-    /// switch to cover every case that exists today.
-    ///
-    /// An exhaustive switch stops compiling whenever the editor adds a string,
-    /// which blocks the host from adopting unrelated changes until someone
-    /// writes a translation. Returning `nil` instead renders the untranslated
-    /// default for new strings and reports the gap through ``Logger``, so a
-    /// missing translation degrades the string rather than the build. See
-    /// ``reportsMissingTranslations``.
-    ///
-    /// The return type is optional rather than the host calling a public
-    /// fallback itself so that the fallback cannot be skipped or reimplemented:
-    /// `nil` is the only way to decline a key, and it routes through the
-    /// editor's own defaults and reporting.
-    ///
-    /// Until a host installs its own closure this renders the defaults without
-    /// reporting them, because the closure answers every key. Reporting is tied
-    /// to `nil` returns, which only a host can produce, so strings the editor
-    /// reads while building views — `loadingEditor` among them, which can run
-    /// before the host assigns this — are never reported as missing.
+    /// Declining with `default: nil` rather than switching exhaustively keeps
+    /// the host compiling when the editor adds a string: the new key renders
+    /// untranslated instead of breaking the build.
     public static var localize: (EditorLocalizableString) -> String? = { key in
         defaultString(for: key)
     }
@@ -84,10 +67,8 @@ public final class EditorLocalization {
     ///
     /// Enabled by default so a host that misses a translation finds out without
     /// having to opt in. Set to `false` in apps that render the editor's own
-    /// strings deliberately — the demo app, say — where every fallback is
-    /// expected and the reports are noise.
-    ///
-    /// Guarded by the same lock as the reported-key set below.
+    /// strings deliberately, where every fallback is expected and the reports
+    /// are noise.
     public nonisolated static var reportsMissingTranslations: Bool {
         get { reportingLock.withLock { _reportsMissingTranslations } }
         set { reportingLock.withLock { _reportsMissingTranslations = newValue } }
@@ -158,16 +139,14 @@ public final class EditorLocalization {
     /// Convenience subscript for accessing localized strings.
     ///
     /// Falls back to the editor's own string when the host declines a key, and
-    /// reports the gap. Every read goes through here, so a host cannot skip the
-    /// fallback or supply a placeholder in its place.
+    /// reports the gap.
     public static subscript(key: EditorLocalizableString) -> String {
         if let translation = localize(key) {
             return translation
         }
 
-        // Only a host returning `nil` reaches here, so this is where a gap in
-        // the host's translations is genuinely observable. The default closure
-        // answers every key, so the editor's own reads never report.
+        // Only a host returning `nil` reaches here. The default closure answers
+        // every key, so reads before a host installs one are not reported.
         reportMissingTranslation(for: key)
 
         return defaultString(for: key)
