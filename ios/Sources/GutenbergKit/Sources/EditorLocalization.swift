@@ -38,7 +38,6 @@ public enum EditorLocalizableString {
 /// ```swift
 /// let text = EditorLocalization[.showMore]
 /// ```
-@MainActor
 public final class EditorLocalization {
     /// This is designed to be overridden by the host app to provide translations.
     ///
@@ -61,6 +60,10 @@ public final class EditorLocalization {
     /// of breaking the build. `@unknown default` rather than a plain `default`
     /// so a host that covers every case today still compiles without a
     /// "default will never be executed" warning.
+    ///
+    /// Main-actor isolated because it holds a non-`Sendable` closure. Hosts
+    /// assign it during editor setup, which already runs on the main actor.
+    @MainActor
     public static var localize: (EditorLocalizableString) -> String? = { key in
         defaultString(for: key)
     }
@@ -71,17 +74,17 @@ public final class EditorLocalization {
     /// having to opt in. Set to `false` in apps that render the editor's own
     /// strings deliberately, where every fallback is expected and the reports
     /// are noise.
-    public nonisolated static var reportsMissingTranslations: Bool {
+    public static var reportsMissingTranslations: Bool {
         get { reportingLock.withLock { _reportsMissingTranslations } }
         set { reportingLock.withLock { _reportsMissingTranslations = newValue } }
     }
 
-    private nonisolated static let reportingLock = NSLock()
+    private static let reportingLock = NSLock()
     nonisolated(unsafe) private static var _reportsMissingTranslations = true
     nonisolated(unsafe) private static var reportedKeys: Set<String> = []
 
     /// The editor's untranslated strings.
-    private nonisolated static func defaultString(
+    private static func defaultString(
         for key: EditorLocalizableString
     ) -> String {
         switch key {
@@ -112,7 +115,7 @@ public final class EditorLocalization {
     /// render pass, so logging unconditionally would write an entry per row per
     /// frame while a list scrolls. Reporting once per key tells the integrator
     /// the same thing without the volume.
-    private nonisolated static func reportMissingTranslation(
+    private static func reportMissingTranslation(
         for key: EditorLocalizableString
     ) {
         // Associated values distinguish cases that share a translation:
@@ -142,6 +145,7 @@ public final class EditorLocalization {
     ///
     /// Falls back to the editor's own string when the host declines a key, and
     /// reports the gap.
+    @MainActor
     public static subscript(key: EditorLocalizableString) -> String {
         if let translation = localize(key) {
             return translation
