@@ -42,35 +42,41 @@ public enum EditorLocalizableString {
 public final class EditorLocalization {
     /// This is designed to be overridden by the host app to provide translations.
     ///
-    /// Host apps are encouraged to delegate unhandled keys to
-    /// ``defaultLocalize`` rather than switching exhaustively:
+    /// Return `nil` for keys the host does not translate; the editor renders its
+    /// own string for those:
     ///
     /// ```swift
     /// EditorLocalization.localize = { key in
     ///     switch key {
     ///     case .showMore: NSLocalizedString("editor.blockInserter.showMore", ...)
     ///     // ...keys the host translates.
-    ///     @unknown default: EditorLocalization.defaultLocalize(key)
+    ///     default: nil
     ///     }
     /// }
     /// ```
     ///
-    /// `@unknown default` rather than a plain `default` so a host that happens
-    /// to cover every case today still compiles without a "default will never
-    /// be executed" warning.
+    /// A plain `default` rather than `@unknown default`, which only suppresses
+    /// the warning about cases added in future versions and still requires the
+    /// switch to cover every case that exists today.
     ///
     /// An exhaustive switch stops compiling whenever the editor adds a string,
     /// which blocks the host from adopting unrelated changes until someone
-    /// writes a translation. Delegating instead renders the untranslated
+    /// writes a translation. Returning `nil` instead renders the untranslated
     /// default for new strings and reports the gap through ``Logger``, so a
     /// missing translation degrades the string rather than the build. See
     /// ``reportsMissingTranslations``.
     ///
+    /// The return type is optional rather than the host calling a public
+    /// fallback itself so that the fallback cannot be skipped or reimplemented:
+    /// `nil` is the only way to decline a key, and it routes through the
+    /// editor's own defaults and reporting.
+    ///
     /// Until a host installs its own closure this renders the defaults without
-    /// reporting them. Reporting here would fire for strings the host does
-    /// translate, because the editor reads some of them — `loadingEditor` among
-    /// them — while building views, which can run before the host assigns this.
-    public static var localize: (EditorLocalizableString) -> String = { key in
+    /// reporting them, because the closure answers every key. Reporting is tied
+    /// to `nil` returns, which only a host can produce, so strings the editor
+    /// reads while building views — `loadingEditor` among them, which can run
+    /// before the host assigns this — are never reported as missing.
+    public static var localize: (EditorLocalizableString) -> String? = { key in
         defaultString(for: key)
     }
 
@@ -81,9 +87,7 @@ public final class EditorLocalization {
     /// strings deliberately — the demo app, say — where every fallback is
     /// expected and the reports are noise.
     ///
-    /// ``defaultLocalize`` reads this, and host apps call that from whatever
-    /// context their own localization runs in, so it cannot be isolated to the
-    /// main actor. Guarded by the same lock as the reported-key set below.
+    /// Guarded by the same lock as the reported-key set below.
     public nonisolated static var reportsMissingTranslations: Bool {
         get { reportingLock.withLock { _reportsMissingTranslations } }
         set { reportingLock.withLock { _reportsMissingTranslations = newValue } }
@@ -94,25 +98,6 @@ public final class EditorLocalization {
     nonisolated(unsafe) private static var reportedKeys: Set<String> = []
 
     /// The editor's untranslated strings.
-    ///
-    /// Exposed so host apps can fall back to it for keys they do not translate.
-    /// See ``localize``.
-    ///
-    /// Deliberately `nonisolated`: host apps delegate to this from their own
-    /// localization functions, which are ordinarily not main-actor isolated.
-    /// Isolating it would force that annotation onto every host.
-    public nonisolated static func defaultLocalize(
-        _ key: EditorLocalizableString
-    ) -> String {
-        // Only the host delegating an unhandled key reaches here, so this is
-        // where a gap in the host's translations is genuinely observable. The
-        // editor's own reads go through `defaultString(for:)` instead.
-        reportMissingTranslation(for: key)
-
-        return defaultString(for: key)
-    }
-
-    /// The editor's untranslated strings, without reporting.
     private nonisolated static func defaultString(
         for key: EditorLocalizableString
     ) -> String {
@@ -171,8 +156,21 @@ public final class EditorLocalization {
     }
 
     /// Convenience subscript for accessing localized strings.
+    ///
+    /// Falls back to the editor's own string when the host declines a key, and
+    /// reports the gap. Every read goes through here, so a host cannot skip the
+    /// fallback or supply a placeholder in its place.
     public static subscript(key: EditorLocalizableString) -> String {
-         localize(key)
+        if let translation = localize(key) {
+            return translation
+        }
+
+        // Only a host returning `nil` reaches here, so this is where a gap in
+        // the host's translations is genuinely observable. The default closure
+        // answers every key, so the editor's own reads never report.
+        reportMissingTranslation(for: key)
+
+        return defaultString(for: key)
     }
 
     /// Clears the record of which keys have already been reported so tests do

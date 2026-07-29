@@ -32,13 +32,13 @@ struct EditorLocalizationTests {
     }
 
     /// The only default that is computed rather than a literal. The rest are
-    /// covered by the exhaustive switch in `defaultLocalize`, which fails to
+    /// covered by the exhaustive switch in `defaultString(for:)`, which fails to
     /// compile if a case has no string.
     @Test
-    func defaultLocalizePluralizesPatternCounts() {
+    func defaultsPluralizePatternCounts() {
         withLocalization {
-            #expect(EditorLocalization.defaultLocalize(.patternsCount(1)) == "1 pattern")
-            #expect(EditorLocalization.defaultLocalize(.patternsCount(3)) == "3 patterns")
+            #expect(EditorLocalization[.patternsCount(1)] == "1 pattern")
+            #expect(EditorLocalization[.patternsCount(3)] == "3 patterns")
         }
     }
 
@@ -75,7 +75,7 @@ struct EditorLocalizationTests {
             EditorLocalization.localize = { key in
                 switch key {
                 case .showMore: "Mostrar más"
-                default: EditorLocalization.defaultLocalize(key)
+                default: nil
                 }
             }
 
@@ -84,12 +84,12 @@ struct EditorLocalizationTests {
     }
 
     @Test
-    func unhandledKeysFallBackToTheDefaults() {
+    func declinedKeysFallBackToTheDefaults() {
         withLocalization {
             EditorLocalization.localize = { key in
                 switch key {
                 case .showMore: "Mostrar más"
-                default: EditorLocalization.defaultLocalize(key)
+                default: nil
                 }
             }
 
@@ -102,10 +102,12 @@ struct EditorLocalizationTests {
     @Test
     func repeatedFallbacksForOneKeyAreReportedOnce() throws {
         try withLocalization(reportsMissingTranslations: true) {
+            EditorLocalization.localize = { _ in nil }
+
             let started = Date()
 
             for count in 1...5 {
-                _ = EditorLocalization.defaultLocalize(.patternsCount(count))
+                _ = EditorLocalization[.patternsCount(count)]
             }
 
             // One report despite five lookups, and despite the differing
@@ -123,10 +125,11 @@ struct EditorLocalizationTests {
         // Enabled by the helper, then turned off here, so the assertion below
         // rests on this property rather than on the helper's default.
         try withLocalization(reportsMissingTranslations: true) {
+            EditorLocalization.localize = { _ in nil }
             EditorLocalization.reportsMissingTranslations = false
 
             let started = Date()
-            _ = EditorLocalization.defaultLocalize(.lockdownModeDismiss)
+            _ = EditorLocalization[.lockdownModeDismiss]
 
             let reports = try missingTranslationReports(
                 forKeyNamed: "lockdownModeDismiss",
@@ -157,7 +160,7 @@ struct EditorLocalizationTests {
             EditorLocalization.localize = { key in
                 switch key {
                 case .showMore: "Mostrar más"
-                default: EditorLocalization.defaultLocalize(key)
+                default: nil
                 }
             }
 
