@@ -16,10 +16,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
@@ -35,20 +39,25 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
 import com.example.gutenbergkit.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.GutenbergView
 import org.wordpress.gutenberg.RecordedNetworkRequest
@@ -97,33 +106,96 @@ class EditorActivity : ComponentActivity() {
                 intent.getParcelableExtra<EditorConfiguration>(MainActivity.EXTRA_CONFIGURATION)
             } ?: EditorConfiguration.bundled()
 
-        // Read dependencies from disk if a file path was provided
-        val dependenciesPath = intent.getStringExtra(EXTRA_DEPENDENCIES_PATH)
-        val dependencies = dependenciesPath?.let { EditorDependenciesSerializer.readFromDisk(it) }
+        // The dependencies blob is on disk; deserialize it off the main thread
+        // and feed the editor once it's ready.
+        val dependenciesLoad = loadDependenciesFromIntent()
 
         // Optional account ID for REST API persistence (set when launched from PostsListActivity)
         val accountId = intent.getLongExtra(EXTRA_ACCOUNT_ID, -1L).takeIf { it >= 0 }?.toULong()
 
         setContent {
             AppTheme {
-                EditorScreen(
-                    configuration = configuration,
-                    dependencies = dependencies,
-                    accountId = accountId,
-                    coroutineScope =  this.lifecycleScope,
-                    onClose = { finish() },
-                    onGutenbergViewCreated = { view ->
-                        gutenbergView = view
-                        setupFileChooserListener(view)
-                    }
-                )
+                when (val load = dependenciesLoad.value) {
+                    is DependenciesLoad.Loading -> DependenciesLoadingScreen()
+                    is DependenciesLoad.Failed -> DependenciesErrorScreen(
+                        message = load.message,
+                        onClose = { finish() }
+                    )
+                    is DependenciesLoad.Ready -> EditorScreen(
+                        configuration = configuration,
+                        dependencies = load.dependencies,
+                        accountId = accountId,
+                        coroutineScope =  this.lifecycleScope,
+                        onClose = { finish() },
+                        onGutenbergViewCreated = { view ->
+                            gutenbergView = view
+                            setupFileChooserListener(view)
+                        }
+                    )
+                }
             }
         }
+    }
+
+    private sealed interface DependenciesLoad {
+        data object Loading : DependenciesLoad
+        data class Failed(val message: String) : DependenciesLoad
+        data class Ready(val dependencies: EditorDependencies?) : DependenciesLoad
+    }
+
+    /**
+     * Reads [EditorDependencies] from the intent's [EXTRA_DEPENDENCIES_PATH]
+     * off the main thread. Returns a state holder that flips from
+     * [DependenciesLoad.Loading] to [DependenciesLoad.Ready] or
+     * [DependenciesLoad.Failed]. When no path was provided, starts in
+     * [DependenciesLoad.Ready] with null dependencies (the editor will load
+     * from the network).
+     */
+    private fun loadDependenciesFromIntent(): MutableState<DependenciesLoad> {
+        val path = intent.getStringExtra(EXTRA_DEPENDENCIES_PATH)
+        val state = mutableStateOf<DependenciesLoad>(
+            if (path == null) DependenciesLoad.Ready(null) else DependenciesLoad.Loading
+        )
+        if (path != null) {
+            lifecycleScope.launch {
+                val deps = withContext(Dispatchers.IO) {
+                    EditorDependenciesSerializer.readFromDisk(path)
+                }
+                state.value = if (deps != null) {
+                    DependenciesLoad.Ready(deps)
+                } else {
+                    DependenciesLoad.Failed("The editor data file was missing or could not be read.")
+                }
+            }
+        }
+        return state
     }
 
     private fun setupFileChooserListener(view: GutenbergView) {
         view.setOnFileChooserRequestedListener { intent, _ ->
             filePickerLauncher.launch(intent)
+        }
+    }
+}
+
+@Composable
+private fun DependenciesLoadingScreen() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator()
+    }
+}
+
+@Composable
+private fun DependenciesErrorScreen(message: String, onClose: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(24.dp)
+        ) {
+            Text("Couldn't load editor data")
+            Text(message)
+            TextButton(onClick = onClose) { Text("Close") }
         }
     }
 }
@@ -365,8 +437,9 @@ private suspend fun persistPost(
         }
 
         val app = context.applicationContext as GutenbergKitApplication
-        val account = app.accountRepository.all().firstOrNull { it.id() == accountId }
-            ?: error("Account not found")
+        val account = app.withAccountRepository { repo ->
+            repo.all().firstOrNull { it.id() == accountId }
+        } ?: error("Account not found")
         val client = app.createApiClient(account)
 
         val endpointType = when (configuration.postType.postType) {

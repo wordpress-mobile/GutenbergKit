@@ -5,11 +5,13 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.wordpress.gutenberg.model.EditorCachePolicy
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
@@ -98,29 +100,41 @@ class SitePreparationViewModel(
         _uiState.update { it.copy(selectedPostType = postType) }
     }
 
-    fun prepareEditor() {
-        val configuration = _uiState.value.editorConfiguration ?: return
-
-        val cacheIntervalSeconds = 86_400L // Cache for one day
-        val editorService = EditorService.create(
+    /**
+     * Constructs the [EditorService] off the main thread. The constructor
+     * touches `context.filesDir` / `context.cacheDir`, allocates a
+     * synchronous SSL context, and reads the asset bundles directory.
+     */
+    private suspend fun createEditorService(
+        configuration: EditorConfiguration,
+        cachePolicy: EditorCachePolicy = EditorCachePolicy.Always
+    ): EditorService = withContext(Dispatchers.IO) {
+        EditorService.create(
             context = getApplication(),
             configuration = configuration,
-            cachePolicy = EditorCachePolicy.MaxAge(cacheIntervalSeconds),
+            cachePolicy = cachePolicy,
             coroutineScope = viewModelScope
         )
-        prepareEditor(editorService)
+    }
+
+    fun prepareEditor() {
+        val configuration = _uiState.value.editorConfiguration ?: return
+        viewModelScope.launch {
+            val cacheIntervalSeconds = 86_400L // Cache for one day
+            val editorService = createEditorService(
+                configuration,
+                EditorCachePolicy.MaxAge(cacheIntervalSeconds)
+            )
+            prepareEditor(editorService)
+        }
     }
 
     fun prepareEditorFromScratch() {
         val configuration = _uiState.value.editorConfiguration ?: return
-
-        val editorService = EditorService.create(
-            context = getApplication(),
-            configuration = configuration,
-            cachePolicy = EditorCachePolicy.Ignore,
-            coroutineScope = viewModelScope
-        )
-        prepareEditor(editorService)
+        viewModelScope.launch {
+            val editorService = createEditorService(configuration, EditorCachePolicy.Ignore)
+            prepareEditor(editorService)
+        }
     }
 
     private fun prepareEditor(editorService: EditorService) {
@@ -162,12 +176,8 @@ class SitePreparationViewModel(
             try {
                 _uiState.update { it.copy(editorDependencies = null) }
 
-                val editorService = EditorService.create(
-                    context = getApplication(),
-                    configuration = configuration,
-                    coroutineScope = viewModelScope
-                )
-                editorService.purge()
+                val editorService = createEditorService(configuration)
+                withContext(Dispatchers.IO) { editorService.purge() }
 
                 countAssetBundles()
 
@@ -191,12 +201,8 @@ class SitePreparationViewModel(
                     return@launch
                 }
 
-                val editorService = EditorService.create(
-                    context = getApplication(),
-                    configuration = configuration,
-                    coroutineScope = viewModelScope
-                )
-                val count = editorService.fetchAssetBundleCount()
+                val editorService = createEditorService(configuration)
+                val count = withContext(Dispatchers.IO) { editorService.fetchAssetBundleCount() }
 
                 _uiState.update { it.copy(cacheBundleCount = count) }
             } catch (e: Exception) {
@@ -297,8 +303,9 @@ class SitePreparationViewModel(
         config: ConfigurationItem.ConfiguredEditor
     ): List<PostTypeDetails>? {
         val app = getApplication<GutenbergKitApplication>()
-        val account = app.accountRepository.all().firstOrNull { it.id() == config.accountId }
-            ?: return null
+        val account = app.withAccountRepository { repo ->
+            repo.all().firstOrNull { it.id() == config.accountId }
+        } ?: return null
         val client = app.createApiClient(account)
 
         val result = client.request { builder ->

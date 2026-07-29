@@ -3,6 +3,10 @@ package com.example.gutenbergkit
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -168,16 +172,22 @@ class SitePreparationActivity : ComponentActivity() {
         configuration: EditorConfiguration,
         dependencies: EditorDependencies?
     ) {
-        val intent = Intent(this, EditorActivity::class.java).apply {
-            putExtra(MainActivity.EXTRA_CONFIGURATION, configuration)
+        lifecycleScope.launch {
+            val filePath = if (dependencies != null) {
+                withContext(Dispatchers.IO) {
+                    EditorDependenciesSerializer.writeToDisk(
+                        this@SitePreparationActivity,
+                        dependencies
+                    )
+                }
+            } else null
 
-            // Serialize dependencies to disk and pass the file path
-            if (dependencies != null) {
-                val filePath = EditorDependenciesSerializer.writeToDisk(this@SitePreparationActivity, dependencies)
-                putExtra(EditorActivity.EXTRA_DEPENDENCIES_PATH, filePath)
+            val intent = Intent(this@SitePreparationActivity, EditorActivity::class.java).apply {
+                putExtra(MainActivity.EXTRA_CONFIGURATION, configuration)
+                filePath?.let { putExtra(EditorActivity.EXTRA_DEPENDENCIES_PATH, it) }
             }
+            startActivity(intent)
         }
-        startActivity(intent)
     }
 
     private fun launchPostsList(
