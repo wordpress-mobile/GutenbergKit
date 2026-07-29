@@ -74,14 +74,16 @@ public final class EditorLocalization {
     /// having to opt in. Set to `false` in apps that render the editor's own
     /// strings deliberately, where every fallback is expected and the reports
     /// are noise.
-    public static var reportsMissingTranslations: Bool {
-        get { reportingLock.withLock { _reportsMissingTranslations } }
-        set { reportingLock.withLock { _reportsMissingTranslations = newValue } }
-    }
+    ///
+    /// Unsynchronized: hosts set this once during setup, before any editor view
+    /// reads a string, so the worst a race could cost is a single stray report.
+    public nonisolated(unsafe) static var reportsMissingTranslations = true
 
-    private static let reportingLock = NSLock()
-    nonisolated(unsafe) private static var _reportsMissingTranslations = true
-    nonisolated(unsafe) private static var reportedKeys: Set<String> = []
+    /// Keys already reported, so each is logged once. Guarded rather than
+    /// `nonisolated(unsafe)` because `Set` is not safe to mutate concurrently.
+    private static let reportedKeys = OSAllocatedUnfairLock<Set<String>>(
+        initialState: []
+    )
 
     /// The editor's untranslated strings.
     private static func defaultString(
@@ -118,14 +120,13 @@ public final class EditorLocalization {
     private static func reportMissingTranslation(
         for key: EditorLocalizableString
     ) {
+        guard reportsMissingTranslations else { return }
+
         // Associated values distinguish cases that share a translation:
         // `patternsCount(3)` and `patternsCount(7)` are one missing string.
         let name = String(String(describing: key).prefix { $0 != "(" })
 
-        let shouldReport = reportingLock.withLock {
-            _reportsMissingTranslations && reportedKeys.insert(name).inserted
-        }
-        guard shouldReport else { return }
+        guard reportedKeys.withLock({ $0.insert(name).inserted }) else { return }
 
         // Logged through `OSLog` rather than `EditorLogger`, which reaches only
         // hosts that install a logger and raise the log level. This message is
@@ -161,9 +162,7 @@ public final class EditorLocalization {
     /// Clears the record of which keys have already been reported so tests do
     /// not leak state into each other.
     static func resetMissingTranslationReportingForTesting() {
-        reportingLock.withLock {
-            _reportsMissingTranslations = true
-            reportedKeys.removeAll()
-        }
+        reportsMissingTranslations = true
+        reportedKeys.withLock { $0.removeAll() }
     }
 }
