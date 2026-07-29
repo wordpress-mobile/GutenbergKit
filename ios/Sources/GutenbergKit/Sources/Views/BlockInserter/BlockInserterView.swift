@@ -72,7 +72,6 @@ struct BlockInserterView: View {
                     insertCameraMedia(media)
                 }
                 .ignoresSafeArea()
-                .editorAccessibilityLanguage()
             }
             .animation(.smooth(duration: 2), value: viewModel.isProcessingMedia)
             .animation(.snappy, value: inlineSelectedMediaItems.count)
@@ -92,7 +91,6 @@ struct BlockInserterView: View {
                         }
                     )
                 }
-                .editorAccessibilityLanguage()
             }
             .background(
                 GeometryReader { geometry in
