@@ -51,14 +51,16 @@ public final class EditorLocalization {
     ///     switch key {
     ///     case .showMore: NSLocalizedString("editor.blockInserter.showMore", ...)
     ///     // ...keys the host translates.
-    ///     default: nil
+    ///     @unknown default: nil
     ///     }
     /// }
     /// ```
     ///
-    /// Declining with `default: nil` rather than switching exhaustively keeps
-    /// the host compiling when the editor adds a string: the new key renders
-    /// untranslated instead of breaking the build.
+    /// Declining rather than switching exhaustively keeps the host compiling
+    /// when the editor adds a string: the new key renders untranslated instead
+    /// of breaking the build. `@unknown default` rather than a plain `default`
+    /// so a host that covers every case today still compiles without a
+    /// "default will never be executed" warning.
     public static var localize: (EditorLocalizableString) -> String? = { key in
         defaultString(for: key)
     }
