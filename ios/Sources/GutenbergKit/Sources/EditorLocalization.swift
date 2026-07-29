@@ -75,8 +75,9 @@ public final class EditorLocalization {
     /// strings deliberately, where every fallback is expected and the reports
     /// are noise.
     ///
-    /// Unsynchronized: hosts set this once during setup, before any editor view
-    /// reads a string, so the worst a race could cost is a single stray report.
+    /// Set this once during app setup, before presenting an editor. It is
+    /// deliberately unsynchronized, so toggling it while an editor is on screen
+    /// may cost a stray report or drop one.
     public nonisolated(unsafe) static var reportsMissingTranslations = true
 
     /// Keys already reported, so each is logged once. Guarded rather than
