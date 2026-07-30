@@ -1,10 +1,17 @@
 @use "@wordpress/base-styles/variables" as wordpress;
 
 $baseline-interactive-font-size: 17px;
+// Space reserved for the fixed toolbar overlaying the bottom of the viewport.
+$toolbar-height: 56px;
 
 // Reasonable defaults used when theme styles are unavailable
 :root {
 	--wp--style--global--content-size: 645px;
+}
+
+html {
+	// Ensure the toolbar does not overlap the editor content
+	scroll-padding-bottom: $toolbar-height;
 }
 
 :where(body.gutenberg-kit) {

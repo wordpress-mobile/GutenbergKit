@@ -1,15 +1,3 @@
-// Space reserved for the fixed toolbar overlaying the bottom of the viewport.
-$toolbar-height: 56px;
-
-// The toolbar is `position: fixed`, so the browser cannot see it covering the
-// bottom of the scrollport and parks the caret behind it while typing. Set on
-// the root because the document is the scroller: `.editor-styles-wrapper` is
-// `overflow: auto`, but `.gutenberg-kit-editor` grows past the `100vh` root and
-// leaves it with no scroll range.
-:root {
-	scroll-padding-bottom: $toolbar-height;
-}
-
 .gutenberg-kit-visual-editor {
 	box-sizing: border-box;
 	flex-shrink: 0;
@@ -33,8 +21,6 @@ $toolbar-height: 56px;
 }
 
 .gutenberg-kit-visual-editor .editor-styles-wrapper {
-	// Ensure the toolbar does not overlap the content
-	padding-bottom: $toolbar-height;
 	// Remove outline to mirror default user agent styles for body elements, which
 	// is the element used for Gutenberg's iframed editor
 	outline: none;
