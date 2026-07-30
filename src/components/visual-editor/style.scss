@@ -21,8 +21,6 @@
 }
 
 .gutenberg-kit-visual-editor .editor-styles-wrapper {
-	// Ensure the toolbar does not overlap the content
-	padding-bottom: 56px;
 	// Remove outline to mirror default user agent styles for body elements, which
 	// is the element used for Gutenberg's iframed editor
 	outline: none;
