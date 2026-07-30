@@ -7,6 +7,12 @@
 // value propagates to the viewport rather than clipping out-of-flow
 // descendants. Clipping on `#root` misses them entirely, as popovers render
 // into a sibling of `#root` rather than a descendant.
+//
+// Stacks above the overlay container (below). Dropdowns opened from within the
+// full-screen block settings menu—color and typography controls, etc.—render
+// here, and the settings menu is opaque, so they must paint above it to be
+// visible. They are anchored on-screen within the menu and so stay within the
+// viewport clip.
 #popover-clip-container {
 	inset: 0;
 	overflow: hidden;
@@ -14,15 +20,18 @@
 	// The container spans the viewport, so it must not intercept touches
 	// intended for the editor. Popovers within it restore pointer events.
 	pointer-events: none;
-	z-index: 1000000; // Mirrors Gutenberg's `.components-popover` z-index
+	z-index: 1000001; // One above the overlay container
 }
 
 #popover-clip-container .components-popover {
 	pointer-events: auto;
 }
 
-// Popovers that must not be clipped—see `./index.jsx`. Left out of flow by its
-// popovers alone, which are positioned absolutely or fixed.
+// Popovers that must not be clipped—namely the full-screen block settings
+// menu. WebKit renders a `position: fixed` element semi-transparent when an
+// ancestor clips its overflow, so this container does not clip. The menu fills
+// the viewport and never overflows, so it does not need clipping. See
+// `./index.jsx`.
 #popover-overlay-container {
 	position: relative;
 	z-index: 1000000; // Mirrors Gutenberg's `.components-popover` z-index
