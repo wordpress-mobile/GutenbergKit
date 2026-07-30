@@ -93,7 +93,7 @@ $scroll-indicator-elevation: 32;
 }
 
 .gutenberg-kit-editor-toolbar .components-toolbar-group {
-	border-right-color: $border-color;
+	border-inline-end-color: $border-color;
 	min-height: $min-touch-target-size;
 	// Reset Gutenberg's negative margin that oddly create a gap at the top/bottom
 	// of the toolbar, rather than extending the button height as intended in
@@ -147,7 +147,7 @@ $scroll-indicator-elevation: 32;
 
 // Style the add block button with rounded black background
 .gutenberg-kit-editor-toolbar .gutenberg-kit-add-block-button {
-	margin-left: 8px;
+	margin-inline-start: 8px;
 
 	svg {
 		background: #eae9ec;

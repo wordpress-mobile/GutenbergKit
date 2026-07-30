@@ -97,6 +97,7 @@ struct SitePreparationView: View {
                     KeyValueRow(key: "API Root", value: editorConfiguration.siteApiRoot.absoluteString)
                     KeyValueRow(key: "Supports Block Assets", value: editorConfiguration.shouldUsePlugins)
                     KeyValueRow(key: "Supports Theme Styles", value: editorConfiguration.shouldUseThemeStyles)
+                    KeyValueRow(key: "Editor Locale", value: localeSummary(for: editorConfiguration))
                 }
             }
 
@@ -108,6 +109,36 @@ struct SitePreparationView: View {
                 }
             }
         }
+    }
+
+    /// Describes the locale the editor will use, and the language it was
+    /// resolved from when the two differ.
+    ///
+    /// Makes the Xcode *App Language* selection self-verifying: without it, a
+    /// language with no shipped bundle silently renders in English and looks
+    /// identical to the selection being ignored entirely.
+    private func localeSummary(for configuration: EditorConfiguration) -> String {
+        let resolved = configuration.locale
+        guard let requested = Locale.preferredLanguages.first else {
+            return resolved
+        }
+
+        let normalized = requested.replacingOccurrences(of: "_", with: "-").lowercased()
+        if normalized == resolved {
+            return resolved
+        }
+
+        // English ships no bundle of its own — it is the editor's source
+        // language — so describe it as the language being used rather than as
+        // a fallback from something else.
+        if resolved == DemoAppLocale.defaultLocale, DemoAppLocale.isEnglish(requested) {
+            return "\(resolved) — \(requested)"
+        }
+
+        let outcome = resolved == DemoAppLocale.defaultLocale
+            ? "no bundle, using default"
+            : "resolved"
+        return "\(resolved) — \(outcome) from \(requested)"
     }
 
     var preloadSection: some View {
@@ -283,6 +314,7 @@ class SitePreparationViewModel {
     private static func applyDemoAppDefaults(to configuration: EditorConfiguration) -> EditorConfiguration {
         configuration.toBuilder()
             .setNativeInserterEnabled(true)
+            .setLocale(DemoAppLocale.current)
             .build()
     }
 

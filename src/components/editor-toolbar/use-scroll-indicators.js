@@ -1,11 +1,16 @@
 /**
  * Hook to manage scroll indicator state for horizontally scrollable containers.
  *
+ * The `canScroll*` properties describe the physical edges of the container
+ * rather than the start and end of the content, matching the gradients they
+ * drive. Those are anchored with `left`/`right` and do not flip in a
+ * right-to-left layout.
+ *
  * @param {Object} scrollRef - React ref to the scrollable container element
  * @return {Object} Scroll state with properties:
  *   - isScrollable: Whether the container has overflow content
- *   - canScrollLeft: Whether there's content to the left (not at start)
- *   - canScrollRight: Whether there's content to the right (not at end)
+ *   - canScrollLeft: Whether there's content hidden past the left edge
+ *   - canScrollRight: Whether there's content hidden past the right edge
  */
 
 import { useState, useEffect, useCallback } from '@wordpress/element';
@@ -29,9 +34,24 @@ export function useScrollIndicators( scrollRef ) {
 		const threshold = 1;
 
 		const isScrollable = scrollWidth > clientWidth;
-		const canScrollLeft = scrollLeft > threshold;
+
+		// In a right-to-left container `scrollLeft` is `0` at the right edge
+		// and grows negative moving left, so the raw value describes distance
+		// from the start rather than from the left. Normalize to that distance,
+		// then map it back onto the physical edges the gradients are anchored
+		// to, which do not flip with the writing direction.
+		const distanceFromStart = Math.abs( scrollLeft );
+		const distanceFromEnd = scrollWidth - clientWidth - distanceFromStart;
+
+		// Read from the document rather than resolving the element's computed
+		// style, which this would otherwise force on every scroll frame. The
+		// direction is set once at startup and fixed for the editor's lifetime.
+		const isRTL = element.ownerDocument.documentElement.dir === 'rtl';
+
+		const canScrollLeft =
+			( isRTL ? distanceFromEnd : distanceFromStart ) > threshold;
 		const canScrollRight =
-			scrollLeft + clientWidth < scrollWidth - threshold;
+			( isRTL ? distanceFromStart : distanceFromEnd ) > threshold;
 
 		setScrollState( {
 			isScrollable,

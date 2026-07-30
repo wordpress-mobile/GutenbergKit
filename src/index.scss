@@ -46,7 +46,7 @@ body.gutenberg-kit:not(.is-ios) .block-editor-block-list__layout::selection {
 	/* Popover */
 
 	.components-popover__header-title {
-		padding-left: 20px;
+		padding-inline-start: 20px;
 	}
 
 	.components-popover.is-expanded .components-popover__content {
@@ -81,12 +81,6 @@ body.gutenberg-kit:not(.is-ios) .block-editor-block-list__layout::selection {
 	.block-settings-menu .components-popover__content {
 		width: 100%;
 		min-height: 100vh;
-	}
-
-	.block-inspector-siderbar {
-		background: #f6f6fbff;
-		border-left: 0.5px solid #c8c7cc;
-		width: 320px;
 	}
 
 	/* Inserter (Mobile Design) */
@@ -145,7 +139,7 @@ body.gutenberg-kit:not(.is-ios) .block-editor-block-list__layout::selection {
 	.block-editor-inserter__panel-title {
 		font-size: 15px;
 		font-weight: 600;
-		margin-left: 12px;
+		margin-inline-start: 12px;
 	}
 
 	.components-draggable-drag-component-root {

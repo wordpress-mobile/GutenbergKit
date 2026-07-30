@@ -2,11 +2,15 @@ package com.example.gutenbergkit
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import org.json.JSONObject
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,17 +47,26 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.gutenbergkit.ui.theme.AppTheme
+import java.util.Locale
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.model.EditorDependenciesSerializer
@@ -203,7 +216,11 @@ fun SitePreparationScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    LaunchedEffect(Unit) {
+    // Re-read on resume so returning from the system language picker is
+    // noticed.
+    val locale = rememberLocaleOnResume()
+
+    LaunchedEffect(locale) {
         viewModel.startLoading()
     }
 
@@ -515,7 +532,84 @@ private fun EditorConfigurationDetailsCard(configuration: EditorConfiguration) {
             KeyValueRow(key = "API Root", value = configuration.siteApiRoot)
             KeyValueBooleanRow(key = "Supports Block Assets", value = configuration.plugins)
             KeyValueBooleanRow(key = "Supports Theme Styles", value = configuration.themeStyles)
+            EditorLocaleRow(locale = configuration.locale)
         }
+    }
+}
+
+/**
+ * The app's current locale, re-read every time the activity resumes.
+ *
+ * Returning from the system language picker does not reliably recreate this
+ * activity — the picker belongs to another task, so this one is often just
+ * stopped and resumed — and a plain read during composition would never see
+ * the new value. Observing `ON_RESUME` covers both cases.
+ */
+@Composable
+private fun rememberLocaleOnResume(): Locale {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var locale by remember { mutableStateOf(DemoAppLocale.current(context)) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                locale = DemoAppLocale.current(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    return locale
+}
+
+/**
+ * Shows the locale the editor will use, linking to the system's per-app
+ * language picker where one exists.
+ *
+ * The value is what the library resolved the app's language to, not the
+ * language itself — a locale with no bundled translations resolves to `en`,
+ * which is otherwise indistinguishable from the selection being ignored.
+ */
+@Composable
+private fun EditorLocaleRow(locale: String?) {
+    val context = LocalContext.current
+    val resolved = locale ?: "en"
+
+    // The action is optional even on API 33+ — some devices ship no handler for
+    // it — so resolve the intent rather than inferring availability from the SDK
+    // level, which would throw on tap.
+    val settingsIntent = remember(context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            null
+        } else {
+            Intent(
+                Settings.ACTION_APP_LOCALE_SETTINGS,
+                Uri.fromParts("package", context.packageName, null)
+            ).takeIf { it.resolveActivity(context.packageManager) != null }
+        }
+    }
+
+    if (settingsIntent == null) {
+        KeyValueRow(key = "Editor Locale", value = resolved)
+        return
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { context.startActivity(settingsIntent) }
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        KeyValueRow(key = "Editor Locale", value = resolved)
+        Text(
+            text = "Change",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary
+        )
     }
 }
 

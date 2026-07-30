@@ -23,6 +23,7 @@ import { configureLocale } from './localization.js';
 import { configureApiFetch } from './api-fetch.js';
 import { initializeEditor } from './editor.jsx';
 import { initializeFetchInterceptor } from './fetch-interceptor.js';
+import { injectEditorStyles } from './editor-styles.js';
 
 vi.mock( './bridge.js' );
 vi.mock( './fetch-interceptor.js' );
@@ -61,7 +62,7 @@ describe( 'setUpEditorEnvironment', () => {
 
 		awaitGBKitGlobal.mockResolvedValue( undefined );
 		getGBKit.mockReturnValue( { plugins: false } );
-		configureLocale.mockResolvedValue( undefined );
+		configureLocale.mockResolvedValue( false );
 		initializeWordPressGlobals.mockImplementation( () => {} );
 		configureApiFetch.mockImplementation( () => {} );
 		initializeFetchInterceptor.mockImplementation( () => {} );
@@ -91,6 +92,10 @@ describe( 'setUpEditorEnvironment', () => {
 			return Promise.resolve();
 		} );
 
+		injectEditorStyles.mockImplementation( () => {
+			callOrder.push( 'injectEditorStyles' );
+		} );
+
 		initializeWordPressGlobals.mockImplementation( () => {
 			callOrder.push( 'loadRemainingGlobals' );
 		} );
@@ -117,6 +122,7 @@ describe( 'setUpEditorEnvironment', () => {
 			'awaitGBKitGlobal',
 			'initializeFetchInterceptor',
 			'configureLocale',
+			'injectEditorStyles',
 			'loadRemainingGlobals',
 			'configureApiFetch',
 			'configureAjax',

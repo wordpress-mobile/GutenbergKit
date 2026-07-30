@@ -213,6 +213,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         controller.delegate = self
         webView.navigationDelegate = controller
 
+        // Declares the editor's language to assistive technology, so it selects
+        // a matching speech voice. The web content declares its own language via
+        // `documentElement.lang`; this covers the native UI presented alongside
+        // it. `accessibilityLanguage` is inherited, including across modal
+        // presentations, so the block inserter and its sheets are covered too.
+        view.accessibilityLanguage = configuration.locale
+
         // Set up Lockdown Mode monitoring with foreground detection
         lockdownModeMonitor.setup(presentingViewController: self)
 
@@ -484,6 +491,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 onClose: { [weak self] in self?.notifyInserterClosed() }
             )
             .environmentObject(htmlPreviewManager)
+            .environment(\.locale, Locale(identifier: configuration.locale))
         })
 
         context.viewController = host

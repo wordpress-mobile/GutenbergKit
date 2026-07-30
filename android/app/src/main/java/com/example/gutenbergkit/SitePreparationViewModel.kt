@@ -224,6 +224,7 @@ class SitePreparationViewModel(
             .setAuthHeader("")
             .setCookies(emptyMap())
             .setEnableOfflineMode(true)
+            .setLocale(DemoAppLocale.current(getApplication()))
             .build()
     }
 
@@ -278,6 +279,7 @@ class SitePreparationViewModel(
             .setCookies(emptyMap())
             .setEnableNetworkLogging(true)
             .setEnableAssetCaching(capabilities.supportsPlugins)
+            .setLocale(DemoAppLocale.current(getApplication()))
             .build()
     }
 

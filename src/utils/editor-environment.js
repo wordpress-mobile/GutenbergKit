@@ -16,7 +16,7 @@ import EditorLoadError from '../components/editor-load-error';
 import { setLogLevel, error } from './logger';
 import { setUpGlobalErrorHandlers } from './global-error-handler';
 import { Platform } from './platform';
-import './editor-styles';
+import { injectEditorStyles } from './editor-styles';
 
 /**
  * Initialize the bundled editor by loading assets and configuring modules
@@ -31,7 +31,8 @@ export async function setUpEditorEnvironment() {
 		await awaitGBKitGlobal();
 		setLogLevelFromGBKit();
 		initializeFetchInterceptor();
-		await configureLocale();
+		const isRTL = await configureLocale();
+		injectEditorStyles( isRTL );
 		await initializeWordPressGlobals();
 		await configureApiFetch();
 		const pluginLoadResult = await loadPluginsIfEnabled();
