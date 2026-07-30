@@ -23,7 +23,7 @@ class RESTAPIRepository(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    private val apiRoot = configuration.siteApiRoot.trimEnd('/')
+    private val apiRoot = configuration.siteApiRoot
     private val namespace = configuration.siteApiNamespace.firstOrNull()?.let {
         it.trimEnd('/') + "/"
     }
@@ -225,16 +225,25 @@ class RESTAPIRepository(
      * the result is `$apiRoot/wp/v2/sites/123/types`.
      */
     private fun buildNamespacedUrl(path: String): String {
+        return apiRoot.appendingRestPath(namespacedPath(path))
+    }
+
+    /**
+     * Inserts the site API namespace after the version segment of [path], returning [path]
+     * unchanged when no namespace is configured.
+     */
+    private fun namespacedPath(path: String): String {
         if (namespace == null) {
-            return "$apiRoot$path"
+            return path
         }
 
         val parts = path.removePrefix("/").split("/", limit = 3)
-        if (parts.size < 3) {
-            return "$apiRoot$path"
+        if (parts.size < 2) {
+            return path
         }
 
-        return "$apiRoot/${parts[0]}/${parts[1]}/$namespace${parts[2]}"
+        val remainder = parts.getOrNull(2).orEmpty()
+        return "/${parts[0]}/${parts[1]}/$namespace$remainder"
     }
 
     companion object {
