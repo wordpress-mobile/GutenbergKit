@@ -1,16 +1,11 @@
 // Space reserved for the fixed toolbar overlaying the bottom of the viewport.
 $toolbar-height: 56px;
 
-// The toolbar is `position: fixed`, so it is out of flow and the browser has no
-// idea it covers the bottom of the scrollport. Without matching scroll padding,
-// the caret reveal that follows each keystroke stops as soon as the caret
-// reaches the bottom edge--parking it behind the toolbar--so text typed at the
-// bottom of the editor disappears as you write it.
-//
-// This applies to the root element because the document is the scroll container:
-// `.editor-styles-wrapper` sets `overflow: auto` inline, but `.gutenberg-kit-editor`
-// grows past the `100vh` root, leaving that wrapper with no scroll range. Move
-// this alongside `padding-bottom` below if the canvas ever becomes the scroller.
+// The toolbar is `position: fixed`, so the browser cannot see it covering the
+// bottom of the scrollport and parks the caret behind it while typing. Set on
+// the root because the document is the scroller: `.editor-styles-wrapper` is
+// `overflow: auto`, but `.gutenberg-kit-editor` grows past the `100vh` root and
+// leaves it with no scroll range.
 :root {
 	scroll-padding-bottom: $toolbar-height;
 }
