@@ -13,7 +13,7 @@ const LIVE_REGION_ARIA_ROLES = new Set( [
 	'timer',
 ] );
 
-const hiddenElementsByDepth = [];
+const hiddenElementBatches = [];
 
 /**
  * Hides all elements in the body element from screen-readers except
@@ -32,10 +32,16 @@ const hiddenElementsByDepth = [];
  * `aria-modal="true"`.
  *
  * @param {...Element} modalElements The elements that should not be hidden.
+ *
+ * @return {Set<Element>} A handle identifying the elements hidden by this call,
+ *                        to be passed to `unmodalize`.
  */
 export function modalize( ...modalElements ) {
-	const hiddenElements = [];
-	hiddenElementsByDepth.push( hiddenElements );
+	// A Set, so overlapping ancestor chains do not record an element twice, and
+	// so `unmodalize` can remove this batch by identity regardless of the order
+	// in which overlapping modals close.
+	const hiddenElements = new Set();
+	hiddenElementBatches.push( hiddenElements );
 
 	const elements = modalElements.filter(
 		( element ) => element?.isConnected
@@ -68,10 +74,12 @@ export function modalize( ...modalElements ) {
 				}
 
 				sibling.setAttribute( 'aria-hidden', 'true' );
-				hiddenElements.push( sibling );
+				hiddenElements.add( sibling );
 			}
 		}
 	}
+
+	return hiddenElements;
 }
 /**
  * Determines if the passed element should not be hidden from screen readers.
@@ -92,15 +100,33 @@ export function elementShouldBeHidden( element ) {
 }
 
 /**
- * Accessibly reveals the elements hidden by the latest modal.
+ * Accessibly reveals the elements hidden by a modal.
+ *
+ * The batch to reveal is identified by the handle `modalize` returned, rather
+ * than assuming the most recent modal closes first. Modals do not always close
+ * in the reverse of the order they opened—the block inserter and the block
+ * settings menu can be open together—and React runs effect cleanups in
+ * hook-declaration order, not reverse-open order.
+ *
+ * @param {Set<Element>} handle The handle returned by `modalize`. Defaults to
+ *                              the most recent batch for backward
+ *                              compatibility.
  */
-export function unmodalize() {
-	const hiddenElements = hiddenElementsByDepth.pop();
-	if ( ! hiddenElements ) {
+export function unmodalize( handle = hiddenElementBatches.at( -1 ) ) {
+	const index = hiddenElementBatches.lastIndexOf( handle );
+	if ( index === -1 ) {
 		return;
 	}
 
-	for ( const element of hiddenElements ) {
-		element.removeAttribute( 'aria-hidden' );
+	hiddenElementBatches.splice( index, 1 );
+
+	for ( const element of handle ) {
+		// Keep the element hidden if another open modal still hides it.
+		const stillHidden = hiddenElementBatches.some( ( batch ) =>
+			batch.has( element )
+		);
+		if ( ! stillHidden ) {
+			element.removeAttribute( 'aria-hidden' );
+		}
 	}
 }
