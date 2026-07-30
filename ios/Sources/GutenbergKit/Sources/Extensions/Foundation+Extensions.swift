@@ -47,10 +47,35 @@ extension URL {
     /// This method handles slash normalization between the base URL and the path being appended,
     /// ensuring exactly one slash separates them.
     ///
+    /// When the base URL is a query-based REST root — as used by sites with plain permalinks,
+    /// e.g. `https://example.com/?rest_route=/` — the path is appended to the query value rather
+    /// than the URL path, and any query string on `rawPath` is merged with `&`:
+    ///
+    /// ```
+    /// https://example.com/?rest_route=/ + /wp/v2/media -> https://example.com/?rest_route=/wp/v2/media
+    /// ```
+    ///
+    /// This mirrors the behavior of `@wordpress/api-fetch`'s root URL middleware, which the web
+    /// layer uses, so native and web requests resolve to the same endpoints.
+    ///
     /// - Parameter rawPath: The path to append. May or may not start with a slash.
     /// - Returns: A new URL with the path appended.
     func appending(rawPath: String) -> URL {
         let urlString = self.absoluteString
+
+        // A query-based root already carries the REST route in its query string, so the path is
+        // concatenated onto that value and its own query separator becomes `&`.
+        if urlString.contains("?") {
+            let path = rawPath.replacingFirstOccurrence(of: "?", with: "&")
+
+            // The route value must keep exactly one leading slash regardless of whether the root
+            // was supplied as `?rest_route=/` or `?rest_route=`.
+            if urlString.hasSuffix("/") {
+                return URL(string: urlString + path.trimmingPrefix("/"))!
+            }
+
+            return URL(string: urlString + (path.hasPrefix("/") ? path : "/" + path))!
+        }
 
         if urlString.hasSuffix("/") && rawPath.hasPrefix("/") {
             return URL(string: urlString + rawPath.trimmingPrefix("/"))!
@@ -99,6 +124,18 @@ extension Data {
 // MARK: - String Extensions
 
 extension String {
+    /// Replaces only the first occurrence of `target` with `replacement`.
+    ///
+    /// Used when merging a path's query string into a query-based REST root, where only the
+    /// leading `?` becomes `&` and any subsequent `&` separators are left untouched.
+    func replacingFirstOccurrence(of target: String, with replacement: String) -> String {
+        guard let range = self.range(of: target) else {
+            return self
+        }
+
+        return self.replacingCharacters(in: range, with: replacement)
+    }
+
     /// Calculates SHA1 from the given string and returns its hex representation.
       ///
       /// ```swift

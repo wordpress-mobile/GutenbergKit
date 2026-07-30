@@ -199,10 +199,10 @@ public actor EditorAssetLibrary {
         } else if let namespace = configuration.siteApiNamespace.first {
             // Insert namespace: /wpcom/v2/editor-assets -> /wpcom/v2/sites/123/editor-assets
             baseUrl = configuration.siteApiRoot
-                .appending(path: "/wpcom/v2/\(namespace)editor-assets")
+                .appending(rawPath: "/wpcom/v2/\(namespace)editor-assets")
         } else {
             baseUrl = configuration.siteApiRoot
-                .appending(path: "/wpcom/v2/editor-assets")
+                .appending(rawPath: "/wpcom/v2/editor-assets")
         }
         return baseUrl.appending(queryItems: [URLQueryItem(name: "exclude", value: "core,gutenberg")])
     }

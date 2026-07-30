@@ -245,11 +245,36 @@ struct URLAppendingRawPathTests {
     #expect(result.absoluteString == "https://example.com/api/posts?context=edit&per_page=10")
   }
 
-  @Test("preserves query parameters in base URL when appending path")
-  func preservesBaseQueryParameters() {
-    let base = URL(string: "https://example.com/api?token=abc")!
-    let result = base.appending(rawPath: "posts")
-    #expect(result.absoluteString == "https://example.com/api?token=abc/posts")
+  // MARK: - Query-based REST Roots (plain permalinks)
+
+  @Test("appends path to the query value of a query-based REST root")
+  func appendsPathToQueryBasedRoot() {
+    let base = URL(string: "https://example.com/?rest_route=/")!
+    let result = base.appending(rawPath: "/wp/v2/media")
+    #expect(result.absoluteString == "https://example.com/?rest_route=/wp/v2/media")
+  }
+
+  @Test("merges the path's query string into a query-based REST root")
+  func mergesQueryIntoQueryBasedRoot() {
+    let base = URL(string: "https://example.com/?rest_route=/")!
+    let result = base.appending(rawPath: "/wp/v2/themes?context=edit&status=active")
+    #expect(
+      result.absoluteString
+        == "https://example.com/?rest_route=/wp/v2/themes&context=edit&status=active")
+  }
+
+  @Test("normalizes a query-based REST root without a trailing slash")
+  func normalizesQueryBasedRootWithoutTrailingSlash() {
+    let base = URL(string: "https://example.com/?rest_route=")!
+    let result = base.appending(rawPath: "/wp/v2/media")
+    #expect(result.absoluteString == "https://example.com/?rest_route=/wp/v2/media")
+  }
+
+  @Test("appends path without a leading slash to a query-based REST root")
+  func appendsPathWithoutLeadingSlashToQueryBasedRoot() {
+    let base = URL(string: "https://example.com/?rest_route=/")!
+    let result = base.appending(rawPath: "wp/v2/media")
+    #expect(result.absoluteString == "https://example.com/?rest_route=/wp/v2/media")
   }
 
   // MARK: - Special Characters
