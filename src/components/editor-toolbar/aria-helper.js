@@ -1,6 +1,11 @@
 /**
  * This file was sourced from the Gutenberg project and converted from
- * TypeScript to JavaScript.
+ * TypeScript to JavaScript, then diverged from it. `modalize` walks each
+ * modal element's ancestor path rather than only `document.body`'s children,
+ * because our popovers render into slots nested within body-level containers
+ * rather than as direct body children. `unmodalize` reverses a batch by the
+ * handle `modalize` returns rather than popping the most recent one, because
+ * our modals do not always close in reverse-open order.
  *
  * @see https://github.com/WordPress/gutenberg/blob/3f0a805c568f92622faf4b71b24eeb5f39b5bca8/packages/components/src/modal/aria-helper.ts
  */
