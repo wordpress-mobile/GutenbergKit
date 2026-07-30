@@ -25,32 +25,16 @@ export function getOverlayContainer() {
 	return getContainer( 'popover-overlay-container' );
 }
 
-const containers = new Map();
-
 /**
- * Retrieves a body-level popover container by ID, creating it when absent.
+ * Retrieves a body-level popover container by ID.
  *
  * The containers are declared in `index.html` so their styles apply before the
- * editor mounts. They are created here as a fallback for environments that
- * render the editor into a different document—e.g. tests.
+ * editor mounts.
  *
  * @param {string} id The container element ID.
  *
- * @return {HTMLElement} The container element.
+ * @return {HTMLElement|null} The container element, or null if absent.
  */
 function getContainer( id ) {
-	if ( containers.get( id )?.isConnected ) {
-		return containers.get( id );
-	}
-
-	let container = document.getElementById( id );
-	if ( ! container ) {
-		container = document.createElement( 'div' );
-		container.id = id;
-		document.body.append( container );
-	}
-
-	containers.set( id, container );
-
-	return container;
+	return document.getElementById( id );
 }

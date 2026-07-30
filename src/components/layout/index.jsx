@@ -33,8 +33,10 @@ export default function Layout( props ) {
 			     its own registry, leaving the slots below unreachable and
 			     sending popovers to Gutenberg's fallback container instead. */ }
 			<SlotFillProvider>
-				{ /* Rendered before the editor so the slots exist by the time
-				     popovers look for them. */ }
+				{ /* Rendered ahead of the editor for tidiness. Order is not
+				     load-bearing: slots register via `useLayoutEffect` and
+				     fills resolve through an observable, so Gutenberg
+				     re-parents a fill that happens to mount first. */ }
 				<PopoverSlots />
 				<OfflineIndicator />
 				<AutosaveMonitor autosave={ onEditorContentChanged } />

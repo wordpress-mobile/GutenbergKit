@@ -18,20 +18,26 @@
 	overflow: hidden;
 	position: fixed;
 	// The container spans the viewport, so it must not intercept touches
-	// intended for the editor. Popovers within it restore pointer events.
+	// intended for the editor. Its slot content restores pointer events.
 	pointer-events: none;
 	z-index: 1000001; // One above the overlay container
 }
 
-#popover-clip-container .components-popover {
+// Restore pointer events on the slot content, not only on `.components-popover`
+// roots—a fill may portal in sibling markup that is not itself a popover.
+#popover-clip-container > * {
 	pointer-events: auto;
 }
 
 // Popovers that must not be clipped—namely the full-screen block settings
-// menu. WebKit renders a `position: fixed` element semi-transparent when an
-// ancestor clips its overflow, so this container does not clip. The menu fills
-// the viewport and never overflows, so it does not need clipping. See
-// `./index.jsx`.
+// menu. This container does not clip, so it does not stack a WebKit
+// compositing bug: an `overflow: hidden` ancestor rendered the fixed,
+// full-screen settings menu semi-transparent. (The block inserter is also a
+// fixed, full-screen popover but renders into the clipped container above
+// without that artifact—so the trigger is narrower than any clipped fixed
+// element; the menu is kept clear of clipping as a precaution.) The menu fills
+// the viewport and never overflows, so clipping would gain nothing regardless.
+// See `./index.jsx`.
 #popover-overlay-container {
 	position: relative;
 	z-index: 1000000; // Mirrors Gutenberg's `.components-popover` z-index
