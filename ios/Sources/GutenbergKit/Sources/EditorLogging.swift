@@ -25,6 +25,9 @@ extension Logger {
 
     /// Logs media import activity
     static let media = Logger(subsystem: "GutenbergKit", category: "media")
+
+    /// Logs editor localization activity
+    static let localization = Logger(subsystem: "GutenbergKit", category: "localization")
 }
 
 public struct SignpostMonitor: Sendable {

@@ -114,7 +114,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // MARK: - Private Properties (UI)
 
     /// Progress bar shown during async dependency fetching ("No Dependencies" flow).
-    private let progressView = UIEditorProgressView(loadingText: EditorLocalization.localize(.loadingEditor))
+    private let progressView = UIEditorProgressView(loadingText: EditorLocalization[.loadingEditor])
 
     /// Spinning indicator shown while WebKit loads and parses the editor JavaScript.
     private let waitingView = UIActivityIndicatorView(style: .medium)
@@ -885,7 +885,7 @@ extension EditorViewController {
     @MainActor
     func displayError(_ error: Error) {
         let view = ContentUnavailableView(
-            EditorLocalization.localize(.editorError),
+            EditorLocalization[.editorError],
             systemImage: "exclamationmark.circle",
             description: Text(error.localizedDescription)
         )

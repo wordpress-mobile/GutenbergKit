@@ -20,16 +20,16 @@ struct LockdownModeSheet: View {
                         .foregroundColor(.orange)
                         .accessibilityHidden(true)
 
-                    Text(EditorLocalization.localize(.lockdownModeTitle))
+                    Text(EditorLocalization[.lockdownModeTitle])
                         .font(.title2)
                         .fontWeight(.bold)
                         .accessibilityAddTraits(.isHeader)
 
-                    Text(EditorLocalization.localize(.lockdownModeWarning))
+                    Text(EditorLocalization[.lockdownModeWarning])
                         .font(.body)
                         .foregroundColor(.secondary)
 
-                    Text(EditorLocalization.localize(.lockdownModeExcludeHint))
+                    Text(EditorLocalization[.lockdownModeExcludeHint])
                         .font(.body)
                         .foregroundColor(.secondary)
                 }
@@ -41,7 +41,7 @@ struct LockdownModeSheet: View {
                 Button {
                     onLearnMore()
                 } label: {
-                    Text(EditorLocalization.localize(.lockdownModeLearnMore))
+                    Text(EditorLocalization[.lockdownModeLearnMore])
                         .font(.body)
                         .fontWeight(.semibold)
                         .foregroundStyle(.white)
@@ -54,7 +54,7 @@ struct LockdownModeSheet: View {
                 Button {
                     onDismiss()
                 } label: {
-                    Text(EditorLocalization.localize(.lockdownModeDismiss))
+                    Text(EditorLocalization[.lockdownModeDismiss])
                         .font(.body)
                         .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity)
