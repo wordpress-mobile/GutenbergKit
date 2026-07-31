@@ -573,8 +573,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/Automattic/wordpress-rs";
 			requirement = {
-				kind = revision;
-				revision = "alpha-20260313";
+				kind = exactVersion;
+				version = 0.6.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
