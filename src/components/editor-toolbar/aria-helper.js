@@ -78,16 +78,30 @@ export function modalize( ...modalElements ) {
 					continue;
 				}
 
-				sibling.setAttribute( 'aria-hidden', 'true' );
-				hiddenElements.add( sibling );
+				// Record the sibling even when another batch already hid it, so
+				// `unmodalize` reveals it only once every batch that hid it has
+				// been reversed. Leave `aria-hidden` present in that case, and
+				// never touch an element hidden by something other than a batch
+				// (e.g. authored markup)—`isBatchHidden` distinguishes the two.
+				if ( ! sibling.hasAttribute( 'aria-hidden' ) ) {
+					sibling.setAttribute( 'aria-hidden', 'true' );
+					hiddenElements.add( sibling );
+				} else if ( isBatchHidden( sibling ) ) {
+					hiddenElements.add( sibling );
+				}
 			}
 		}
 	}
 
 	return hiddenElements;
 }
+
 /**
  * Determines if the passed element should not be hidden from screen readers.
+ *
+ * A `aria-hidden` element that a batch already hid is still eligible, so an
+ * overlapping modal records it too; `modalize` guards the attribute write
+ * separately. An element hidden by anything else is left untouched.
  *
  * @param {Element} element The element that should be checked.
  *
@@ -98,10 +112,23 @@ export function elementShouldBeHidden( element ) {
 	return ! (
 		element.tagName === 'SCRIPT' ||
 		element.hasAttribute( 'hidden' ) ||
-		element.hasAttribute( 'aria-hidden' ) ||
+		( element.hasAttribute( 'aria-hidden' ) &&
+			! isBatchHidden( element ) ) ||
 		element.hasAttribute( 'aria-live' ) ||
 		( role && LIVE_REGION_ARIA_ROLES.has( role ) )
 	);
+}
+
+/**
+ * Determines whether an element's `aria-hidden` was set by an active batch,
+ * as opposed to authored markup or another mechanism.
+ *
+ * @param {Element} element The element to check.
+ *
+ * @return {boolean} Whether a current batch hid the element.
+ */
+function isBatchHidden( element ) {
+	return hiddenElementBatches.some( ( batch ) => batch.has( element ) );
 }
 
 /**
@@ -113,11 +140,9 @@ export function elementShouldBeHidden( element ) {
  * settings menu can be open together—and React runs effect cleanups in
  * hook-declaration order, not reverse-open order.
  *
- * @param {Set<Element>} handle The handle returned by `modalize`. Defaults to
- *                              the most recent batch for backward
- *                              compatibility.
+ * @param {Set<Element>} handle The handle returned by `modalize`.
  */
-export function unmodalize( handle = hiddenElementBatches.at( -1 ) ) {
+export function unmodalize( handle ) {
 	const index = hiddenElementBatches.lastIndexOf( handle );
 	if ( index === -1 ) {
 		return;
