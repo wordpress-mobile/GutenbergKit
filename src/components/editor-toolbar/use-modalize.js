@@ -7,47 +7,38 @@ import { useEffect } from '@wordpress/element';
  * Internal dependencies
  */
 import * as ariaHelper from './aria-helper';
-
-/** @typedef {import('@wordpress/element').RefObject} RefObject */
+import {
+	getClipContainer,
+	getOverlayContainer,
+} from '../popover-slots/containers';
 
 /**
- * Conditionally applies the `aria-hidden` attribute to all direct decendents of
- * the body element, except for the element provided.
+ * While a modal is visible, hides everything from screen readers except the
+ * containers popovers render into.
  *
- * @param {boolean}   isModalVisible A boolean indicating whether the modal is visible.
- * @param {RefObject} elementRef     A reference to the DOM element to be modalized.
+ * Every editor popover renders into one of the two containers, and neither
+ * holds editor content, so keeping both reachable while hiding the rest of the
+ * document is what an open popover needs.
+ *
+ * Multiple modals may be open at once (the block inserter and the block
+ * settings menu, for example), so each call is reversed by the handle
+ * `modalize` returns rather than by close order. See `./aria-helper.js`.
+ *
+ * @param {boolean} isModalVisible Whether the modal is visible.
  */
-export function useModalize( isModalVisible, elementRef = defaultPopover() ) {
+export function useModalize( isModalVisible ) {
 	useEffect( () => {
-		if ( isModalVisible ) {
-			ariaHelper.modalize( elementRef.current );
-		} else {
-			ariaHelper.unmodalize();
+		if ( ! isModalVisible ) {
+			return;
 		}
-	}, [ elementRef, isModalVisible ] );
-}
 
-const popoverFallbackContainerRef = { current: null };
+		const handle = ariaHelper.modalize(
+			getClipContainer(),
+			getOverlayContainer()
+		);
 
-/**
- * Retrieves or initializes the fallback container for popovers.
- *
- * This function checks if the `popoverFallbackContainerRef` is already defined.
- * If not, it attempts to find an element with the class name
- * 'components-popover__fallback-container' in the document and assigns it to
- * `popoverFallbackContainerRef`. It then returns an object with the current
- * `popoverFallbackContainerRef`.
- *
- * @return {Object} An object containing the current `popoverFallbackContainerRef`.
- */
-function defaultPopover() {
-	if ( popoverFallbackContainerRef.current ) {
-		return popoverFallbackContainerRef;
-	}
-
-	popoverFallbackContainerRef.current = document.getElementById(
-		'popover-fallback-container'
-	);
-
-	return popoverFallbackContainerRef;
+		return () => {
+			ariaHelper.unmodalize( handle );
+		};
+	}, [ isModalVisible ] );
 }

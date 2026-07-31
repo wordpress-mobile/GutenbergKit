@@ -12,9 +12,17 @@
 		<div id="root" class="gutenberg-kit-root"></div>
 		<script type="module" src="/utils/wordpress-i18n.js"></script>
 		<script type="module" src="/index.js"></script>
+		<!--
+			Popovers render into the two containers below, but keep Gutenberg's
+			fallback container: a popover falls back to it when its slot is not
+			yet registered, and Gutenberg locates it by class name
+			(`components-popover__fallback-container`), recreating it if absent.
+		-->
 		<div
 			id="popover-fallback-container"
 			class="components-popover__fallback-container"
 		></div>
+		<div id="popover-clip-container"></div>
+		<div id="popover-overlay-container"></div>
 	</body>
 </html>

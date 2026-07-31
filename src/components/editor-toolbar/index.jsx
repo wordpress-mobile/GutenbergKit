@@ -27,6 +27,7 @@ import { store as editorStore } from '@wordpress/editor';
 import './style.scss';
 import { useModalize } from './use-modalize';
 import { useModalDialogState } from '../editor/use-modal-dialog-state';
+import { OVERLAY_SLOT_NAME } from '../popover-slots/containers';
 import { getGBKit } from '../../utils/bridge';
 import NativeInserter from '../native-inserter';
 import { useScrollIndicators } from './use-scroll-indicators';
@@ -147,6 +148,12 @@ const EditorToolbar = ( { className } ) => {
 					onClose={ onCloseSettings }
 					onFocusOutside={ onFocusOutside }
 					role="dialog"
+					// Render outside the container clipping popovers to the
+					// viewport. This menu fills the viewport and never
+					// overflows, and WebKit renders a `position: fixed`
+					// element semi-transparent when an ancestor clips its
+					// overflow. See `../popover-slots`.
+					__unstableSlotName={ OVERLAY_SLOT_NAME }
 				>
 					<>
 						<div className="block-settings-menu__header">
