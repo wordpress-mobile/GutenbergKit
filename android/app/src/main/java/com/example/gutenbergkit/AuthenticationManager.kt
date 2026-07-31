@@ -26,7 +26,6 @@ import uniffi.wp_api.applicationPasswordsUrl
 import uniffi.wp_api.wordpressComOauth2Configuration
 import uniffi.wp_mobile.Account
 import uniffi.wp_mobile.AccountRepository
-import uniffi.wp_mobile.wordpressComSiteApiRoot
 
 class AuthenticationManager(
     private val context: Context,
@@ -49,6 +48,14 @@ class AuthenticationManager(
         private const val APP_ID = "00000000-0000-4000-9000-000000000000"
         private const val SELF_HOSTED_REDIRECT_URI = "gutenbergkit://authorized"
         private const val WPCOM_REDIRECT_URI = "gutenbergkit://wpcom-authorized"
+
+        /// Builds the API root stored for a WordPress.com site account.
+        ///
+        /// Replaces `wordpressComSiteApiRoot()`, which wordpress-rs removed in 0.6.0. The
+        /// format is unchanged, so the site ID remains recoverable by the callers that parse
+        /// it back out of the stored account.
+        private fun wordPressComSiteApiRoot(siteId: ULong): String =
+            "https://public-api.wordpress.com/wp/v2/sites/$siteId"
     }
 
     fun startAuthentication(siteUrl: String, callback: AuthenticationCallback) {
@@ -219,7 +226,7 @@ class AuthenticationManager(
                             val siteHost = discoverySuccess?.parsedSiteUrl?.toURL()?.toURI()?.host
                                 ?: throw OAuthException.MissingSiteHost()
 
-                            val siteApiRoot = wordpressComSiteApiRoot(blogId)
+                            val siteApiRoot = wordPressComSiteApiRoot(blogId)
 
                             val account = Account.WpCom(
                                 id = 0u,
