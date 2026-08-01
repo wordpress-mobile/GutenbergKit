@@ -33,16 +33,18 @@ fun AddConfigurationDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val focusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.add_wordpress_site)) },
         text = {
+            // Scoped to the dialog's subcomposition so the focus target is
+            // attached by the time focus is requested.
+            val focusRequester = remember { FocusRequester() }
+
+            LaunchedEffect(Unit) {
+                focusRequester.requestFocus()
+            }
+
             OutlinedTextField(
                 value = siteUrlInput,
                 onValueChange = onSiteUrlChange,
