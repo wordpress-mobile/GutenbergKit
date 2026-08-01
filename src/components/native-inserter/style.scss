@@ -15,10 +15,12 @@ $press-scale: 1.08;
 // UIKit fades a button's highlight in quickly and back out more slowly.
 $press-fade-in-duration: 0.1s;
 $press-fade-out-duration: 0.2s;
-// Approximates Material's spatial motion spring, which overshoots slightly
-// rather than easing flat.
-$shape-morph-duration: 0.2s;
-$shape-morph-easing: cubic-bezier(0.2, 0, 0, 1.2);
+// Material 3 motion tokens, matching the values in the `material3` artifact
+// the Android library builds against: `DurationShort3` and `EasingStandard`.
+// Short 3 is the fit for a small component's state change; the standard
+// easing settles flat rather than overshooting.
+$android-motion-duration: 0.15s;
+$android-motion-easing: cubic-bezier(0.2, 0, 0, 1);
 
 // Static appearance shared by both platforms. Motion is declared per platform
 // below, each owning its complete transition list, so that no rule depends on
@@ -61,17 +63,18 @@ body.is-android .gutenberg-kit-editor-toolbar .gutenberg-kit-add-block-button {
 	svg {
 		border-radius: $button-radius-android;
 		transition:
-			background-color $press-fade-out-duration ease-out,
-			transform $press-fade-out-duration ease-out,
-			border-radius $shape-morph-duration $shape-morph-easing;
+			background-color $android-motion-duration $android-motion-easing,
+			transform $android-motion-duration $android-motion-easing,
+			border-radius $android-motion-duration $android-motion-easing;
 	}
 
 	// Material's state layer is immediate, unlike UIKit's fade, so the fill
-	// snaps while the shape morph stays animated.
+	// snaps while the shape and scale stay animated.
 	&:active:not(:disabled, [aria-disabled="true"]) svg {
 		background: $button-background-pressed;
 		transform: scale($press-scale);
 		border-radius: $button-radius-android-pressed;
-		transition-duration: 0s, $press-fade-in-duration, $shape-morph-duration;
+		transition-duration: 0s, $android-motion-duration,
+			$android-motion-duration;
 	}
 }
