@@ -56,7 +56,13 @@ extension URL {
     /// ```
     ///
     /// This mirrors the behavior of `@wordpress/api-fetch`'s root URL middleware, which the web
-    /// layer uses, so native and web requests resolve to the same endpoints.
+    /// layer uses, for the canonical `?rest_route=/` root, so native and web requests resolve to
+    /// the same endpoints. For a root supplied without a trailing slash the two intentionally
+    /// diverge: this keeps the leading slash on the route value, which WordPress's `rest_route`
+    /// matching expects, whereas the middleware strips it.
+    ///
+    /// File URLs are always treated as plain paths, so a query string in a local path is never
+    /// mistaken for a query-based REST root.
     ///
     /// - Parameter rawPath: The path to append. May or may not start with a slash.
     /// - Returns: A new URL with the path appended.
@@ -65,7 +71,7 @@ extension URL {
 
         // A query-based root already carries the REST route in its query string, so the path is
         // concatenated onto that value and its own query separator becomes `&`.
-        if urlString.contains("?") {
+        if !isFileURL && urlString.contains("?") {
             let path = rawPath.replacingFirstOccurrence(of: "?", with: "&")
 
             // The route value must keep exactly one leading slash regardless of whether the root
