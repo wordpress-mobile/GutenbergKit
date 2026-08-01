@@ -1,14 +1,22 @@
 @use "@wordpress/base-styles/colors" as wordpress;
 
-// Style the add block button with rounded background
+$button-background: #eae9ec;
+$button-background-pressed: #d5d3d9;
+
 .gutenberg-kit-editor-toolbar .gutenberg-kit-add-block-button {
 	svg {
-		background: #eae9ec;
+		background: $button-background;
 		border-radius: 18px;
 		color: wordpress.$black;
 		padding: 1px;
 		width: 32px;
 		height: 32px;
 		display: block;
+		transition: background-color 0.15s ease-out;
+	}
+
+	&:active:not(:disabled, [aria-disabled="true"]) svg {
+		background: $button-background-pressed;
+		transition-duration: 0s;
 	}
 }
