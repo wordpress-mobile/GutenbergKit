@@ -29,7 +29,10 @@ fun String.encodeForEditor(): String {
  * ```
  *
  * This mirrors the behavior of `@wordpress/api-fetch`'s root URL middleware, which the web
- * layer uses, so native and web requests resolve to the same endpoints.
+ * layer uses, for the canonical `?rest_route=/` root, so native and web requests resolve to the
+ * same endpoints. For a root supplied without a trailing slash the two intentionally diverge:
+ * this keeps the leading slash on the route value, which WordPress's `rest_route` matching
+ * expects, whereas the middleware strips it.
  *
  * @param path The endpoint path to append. May or may not start with a slash.
  * @return The full endpoint URL.

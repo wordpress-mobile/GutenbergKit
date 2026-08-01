@@ -58,7 +58,7 @@ class StringExtensionsTest {
     }
 
     @Test
-    fun `normalizes a query-based API root without a trailing slash`() {
+    fun `keeps exactly one leading slash when the API root omits its trailing slash`() {
         assertEquals(
             "https://example.com/?rest_route=/wp/v2/media",
             "https://example.com/?rest_route=".appendingRestPath("/wp/v2/media")
