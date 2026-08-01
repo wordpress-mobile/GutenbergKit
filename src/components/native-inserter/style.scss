@@ -2,21 +2,59 @@
 
 $button-background: #eae9ec;
 $button-background-pressed: #d5d3d9;
+// Material 3 gives icon buttons a rounded square that morphs to full-round
+// while pressed. iOS keeps the circle, which a radius at least half the
+// button's size resolves to.
+$button-radius-ios: 18px;
+$button-radius-android: 10px;
+$button-radius-android-pressed: 50%;
+// Approximates Material's spatial motion spring, which overshoots slightly
+// rather than easing flat. The morph is the expressive gesture, so it stays
+// animated in both directions.
+$shape-morph-duration: 0.2s;
+$shape-morph-easing: cubic-bezier(0.2, 0, 0, 1.2);
 
 .gutenberg-kit-editor-toolbar .gutenberg-kit-add-block-button {
 	svg {
 		background: $button-background;
-		border-radius: 18px;
+		border-radius: $button-radius-ios;
 		color: wordpress.$black;
 		padding: 1px;
 		width: 32px;
 		height: 32px;
 		display: block;
+		// Ease the fill back to resting on release.
 		transition: background-color 0.15s ease-out;
 	}
 
 	&:active:not(:disabled, [aria-disabled="true"]) svg {
 		background: $button-background-pressed;
+		// Darken immediately so the tap does not read as laggy. Set on
+		// `background-color` specifically rather than via
+		// `transition-duration`, which would also flatten the Android shape
+		// morph below.
+		transition-property: background-color;
 		transition-duration: 0s;
+	}
+}
+
+// Material 3 shape language. Only the corner treatment differs from the
+// shared styles above; the fill, size, and press color stay in sync across
+// platforms.
+body.is-android .gutenberg-kit-editor-toolbar .gutenberg-kit-add-block-button {
+	svg {
+		border-radius: $button-radius-android;
+		transition:
+			background-color 0.15s ease-out,
+			border-radius $shape-morph-duration $shape-morph-easing;
+	}
+
+	&:active:not(:disabled, [aria-disabled="true"]) svg {
+		border-radius: $button-radius-android-pressed;
+		// Re-declare the animated morph alongside the instant fill, since the
+		// shared pressed rule narrows `transition-property` to the background.
+		transition-property: background-color, border-radius;
+		transition-duration: 0s, $shape-morph-duration;
+		transition-timing-function: linear, $shape-morph-easing;
 	}
 }
