@@ -2,59 +2,76 @@
 
 $button-background: #eae9ec;
 $button-background-pressed: #d5d3d9;
-// Material 3 gives icon buttons a rounded square that morphs to full-round
-// while pressed. iOS keeps the circle, which a radius at least half the
-// button's size resolves to.
+// iOS keeps the circle, which a radius at least half the button's size
+// resolves to. Material 3 gives icon buttons a rounded square that morphs to
+// full-round while pressed.
 $button-radius-ios: 18px;
 $button-radius-android: 10px;
 $button-radius-android-pressed: 50%;
+// Small controls grow under the finger rather than shrinking, so the edges
+// stay visible around the contact patch. Larger surfaces are the ones that
+// recede on press.
+$press-scale: 1.08;
+// UIKit fades a button's highlight in quickly and back out more slowly.
+$press-fade-in-duration: 0.1s;
+$press-fade-out-duration: 0.2s;
 // Approximates Material's spatial motion spring, which overshoots slightly
-// rather than easing flat. The morph is the expressive gesture, so it stays
-// animated in both directions.
+// rather than easing flat.
 $shape-morph-duration: 0.2s;
 $shape-morph-easing: cubic-bezier(0.2, 0, 0, 1.2);
 
-.gutenberg-kit-editor-toolbar .gutenberg-kit-add-block-button {
+// Static appearance shared by both platforms. Motion is declared per platform
+// below, each owning its complete transition list, so that no rule depends on
+// another rule narrowing `transition-property`.
+.gutenberg-kit-editor-toolbar .gutenberg-kit-add-block-button svg {
+	background: $button-background;
+	color: wordpress.$black;
+	padding: 1px;
+	width: 32px;
+	height: 32px;
+	display: block;
+	// Scale from the center. Transforms on an SVG element otherwise resolve
+	// against the SVG user space, anchoring the press scale at the top-left so
+	// the button drifts rather than growing in place.
+	transform-box: fill-box;
+	transform-origin: center;
+}
+
+// Scoped to everything but Android, rather than to `is-ios`, so the editor
+// keeps this treatment when running in a browser during development.
+body:not(.is-android)
+	.gutenberg-kit-editor-toolbar
+	.gutenberg-kit-add-block-button {
 	svg {
-		background: $button-background;
 		border-radius: $button-radius-ios;
-		color: wordpress.$black;
-		padding: 1px;
-		width: 32px;
-		height: 32px;
-		display: block;
-		// Ease the fill back to resting on release.
-		transition: background-color 0.15s ease-out;
+		transition:
+			background-color $press-fade-out-duration ease-out,
+			transform $press-fade-out-duration ease-out;
 	}
 
 	&:active:not(:disabled, [aria-disabled="true"]) svg {
 		background: $button-background-pressed;
-		// Darken immediately so the tap does not read as laggy. Set on
-		// `background-color` specifically rather than via
-		// `transition-duration`, which would also flatten the Android shape
-		// morph below.
-		transition-property: background-color;
-		transition-duration: 0s;
+		transform: scale($press-scale);
+		transition-duration: $press-fade-in-duration;
 	}
 }
 
-// Material 3 shape language. Only the corner treatment differs from the
-// shared styles above; the fill, size, and press color stay in sync across
-// platforms.
+// Material 3 shape language: the corner morphs to full-round while pressed.
 body.is-android .gutenberg-kit-editor-toolbar .gutenberg-kit-add-block-button {
 	svg {
 		border-radius: $button-radius-android;
 		transition:
-			background-color 0.15s ease-out,
+			background-color $press-fade-out-duration ease-out,
+			transform $press-fade-out-duration ease-out,
 			border-radius $shape-morph-duration $shape-morph-easing;
 	}
 
+	// Material's state layer is immediate, unlike UIKit's fade, so the fill
+	// snaps while the shape morph stays animated.
 	&:active:not(:disabled, [aria-disabled="true"]) svg {
+		background: $button-background-pressed;
+		transform: scale($press-scale);
 		border-radius: $button-radius-android-pressed;
-		// Re-declare the animated morph alongside the instant fill, since the
-		// shared pressed rule narrows `transition-property` to the background.
-		transition-property: background-color, border-radius;
-		transition-duration: 0s, $shape-morph-duration;
-		transition-timing-function: linear, $shape-morph-easing;
+		transition-duration: 0s, $press-fade-in-duration, $shape-morph-duration;
 	}
 }
