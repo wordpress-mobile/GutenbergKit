@@ -245,21 +245,25 @@ lint-android: ## Lint Android code with Detekt
 #
 # Set SWIFT_LINT_PATHS to lint specific files instead of the whole project, e.g.
 # `make lint-swift SWIFT_LINT_PATHS=ios/Sources/GutenbergKit/Sources/EditorService.swift`.
+#
+# The plugin only honors explicit paths when the last argument is an existing
+# file, so $(SWIFT_LINT_PATHS) must always be appended last — after flags like
+# `--fix` — or the plugin silently falls back to linting the whole project.
 SWIFT_LINT_PATHS ?=
 SWIFTLINT = SDKROOT="$$(xcrun --sdk macosx --show-sdk-path)" \
 	swift package --package-path BuildTools plugin \
 	--allow-writing-to-directory "$(CURDIR)" --allow-writing-to-package-directory \
-	swiftlint --working-directory "$(CURDIR)" --quiet $(SWIFT_LINT_PATHS)
+	swiftlint --working-directory "$(CURDIR)" --quiet
 
 .PHONY: lint-swift
 lint-swift: ## Lint Swift code
 	@echo "--- :swift: Running SwiftLint"
-	@$(SWIFTLINT)
+	@$(SWIFTLINT) $(SWIFT_LINT_PATHS)
 
 .PHONY: lint-swift-fix
 lint-swift-fix: ## Lint and auto-fix Swift code
 	@echo "--- :swift: Running SwiftLint (autocorrect)"
-	@$(SWIFTLINT) --fix
+	@$(SWIFTLINT) --fix $(SWIFT_LINT_PATHS)
 
 ################################################################################
 # Testing Targets
