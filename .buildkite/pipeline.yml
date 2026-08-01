@@ -170,6 +170,7 @@ steps:
           - build-xcframework
           - swift-test-swift-package
           - lint-js
+          - lint-swift
           - test-js
           - test-web-e2e
           - test-ios-e2e
