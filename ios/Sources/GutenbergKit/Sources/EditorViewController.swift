@@ -518,9 +518,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         if let sheet = host.popoverPresentationController?.adaptiveSheetPresentationController ?? host.sheetPresentationController {
             sheet.delegate = self
-            sheet.detents = [.custom(identifier: .medium, resolver: { context in
-                context.containerTraitCollection.horizontalSizeClass == .compact ? 536 : 900
-            }), .large()]
+            sheet.detents = [
+                .custom(identifier: .medium, resolver: { context in
+                    context.containerTraitCollection.horizontalSizeClass == .compact ? 536 : 900
+                }),
+                .large()
+            ]
             sheet.prefersGrabberVisible = true
             sheet.preferredCornerRadius = 26
         }
