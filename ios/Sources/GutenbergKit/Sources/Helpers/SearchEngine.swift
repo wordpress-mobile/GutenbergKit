@@ -11,7 +11,7 @@ struct SearchableField {
     let content: String
     let weight: Double
     let allowFuzzyMatch: Bool
-    
+
     init(content: String, weight: Double, allowFuzzyMatch: Bool = true) {
         self.content = content
         self.weight = weight
@@ -23,22 +23,22 @@ struct SearchableField {
 struct SearchConfiguration {
     /// Maximum allowed edit distance for fuzzy matching
     let maxEditDistance: Int
-    
+
     /// Minimum similarity threshold (0-1) for fuzzy matches
     let minSimilarityThreshold: Double
-    
+
     /// Multiplier for exact matches
     let exactMatchMultiplier: Double
-    
+
     /// Multiplier for prefix matches
     let prefixMatchMultiplier: Double
-    
+
     /// Multiplier for word prefix matches
     let wordPrefixMatchMultiplier: Double
-    
+
     /// Multiplier for fuzzy matches (applied to similarity score)
     let fuzzyMatchMultiplier: Double
-    
+
     static let `default` = SearchConfiguration(
         maxEditDistance: 2,
         minSimilarityThreshold: 0.7,
@@ -51,40 +51,40 @@ struct SearchConfiguration {
 
 /// A generic search engine that performs weighted fuzzy search
 struct SearchEngine<Item: Searchable> {
-    
+
     /// Search result with relevance score
     struct SearchResult {
         let item: Item
         let score: Double
     }
-    
+
     let configuration: SearchConfiguration
-    
+
     init(configuration: SearchConfiguration = .default) {
         self.configuration = configuration
     }
-    
+
     /// Search items with weighted fuzzy matching
     func search(query: String, in items: [Item]) -> [Item] {
         let normalizedQuery = query.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        
+
         // Empty query returns all items
         guard !normalizedQuery.isEmpty else {
             return items
         }
-        
+
         // Calculate scores for all items
         let results: [SearchResult] = items.compactMap { item in
             let score = calculateScore(for: item, query: normalizedQuery)
             return score > 0 ? SearchResult(item: item, score: score) : nil
         }
-        
+
         // Sort by score (highest first) and return items
         return results
             .sorted { $0.score > $1.score }
             .map { $0.item }
     }
-    
+
     /// Calculate weighted score for an item based on query match
     private func calculateScore(for item: Item, query: String) -> Double {
         let fields = item.searchableFields()
@@ -103,7 +103,7 @@ struct SearchEngine<Item: Searchable> {
             )
         }
     }
-    
+
     /// Calculate score for a single field
     private func calculateFieldScore(field: String, query: String, weight: Double, allowFuzzy: Bool) -> Double {
         // Defensive check: skip empty field or query
@@ -124,7 +124,7 @@ struct SearchEngine<Item: Searchable> {
             }
             return weight
         }
-        
+
         // Fuzzy match if allowed
         if allowFuzzy {
             // Check each word in the field
@@ -134,14 +134,14 @@ struct SearchEngine<Item: Searchable> {
                 if word.hasPrefix(query) {
                     return weight * configuration.wordPrefixMatchMultiplier
                 }
-                
+
                 // Calculate similarity
                 let similarity = calculateSimilarity(word, query)
                 if similarity >= configuration.minSimilarityThreshold {
                     return weight * similarity * configuration.fuzzyMatchMultiplier
                 }
             }
-            
+
             // Try full field fuzzy match for short queries
             if query.count <= 10 {
                 let similarity = calculateSimilarity(field, query)
@@ -150,10 +150,10 @@ struct SearchEngine<Item: Searchable> {
                 }
             }
         }
-        
+
         return 0
     }
-    
+
     /// Calculate similarity between two strings using normalized edit distance
     private func calculateSimilarity(_ str1: String, _ str2: String) -> Double {
         // Defensive check: return 0 for empty strings
@@ -171,7 +171,7 @@ struct SearchEngine<Item: Searchable> {
 
         return 1.0 - (Double(distance) / Double(maxLength))
     }
-    
+
     /// Calculate Levenshtein edit distance between two strings
     private func levenshteinDistance(_ str1: String, _ str2: String) -> Int {
         let str1Array = Array(str1)
@@ -199,11 +199,11 @@ struct SearchEngine<Item: Searchable> {
         // Fill matrix
         for i in 1...str1Array.count {
             for j in 1...str2Array.count {
-                let cost = str1Array[i-1] == str2Array[j-1] ? 0 : 1
+                let cost = str1Array[i - 1] == str2Array[j - 1] ? 0 : 1
                 matrix[i][j] = min(
-                    matrix[i-1][j] + 1,     // deletion
-                    matrix[i][j-1] + 1,     // insertion
-                    matrix[i-1][j-1] + cost // substitution
+                    matrix[i - 1][j] + 1,     // deletion
+                    matrix[i][j - 1] + 1,     // insertion
+                    matrix[i - 1][j - 1] + cost // substitution
                 )
             }
         }

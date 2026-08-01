@@ -112,7 +112,7 @@ enum HeaderValue {
                 continue
             }
             if char == "\"" {
-                inQuote = !inQuote
+                inQuote.toggle()
             }
             index = string.index(after: index)
         }

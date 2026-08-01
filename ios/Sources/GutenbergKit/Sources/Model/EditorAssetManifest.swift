@@ -202,7 +202,6 @@ public struct LocalEditorAssetManifest: Sendable, Codable, Equatable, Hashable {
             styles: styles,
             allowedBlockTypes: self.allowedBlockTypes
         )
-
     }
 
     /// Rewrites an asset URL to use the specified scheme.

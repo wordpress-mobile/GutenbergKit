@@ -622,7 +622,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // MARK: - Navigation Overlay
 
     private func setupNavigationOverlay() {
-        guard let navigationController = navigationController,
+        guard let navigationController,
                 navigationOverlayView.superview == nil else { return }
         navigationController.view.addSubview(navigationOverlayView)
         NSLayoutConstraint.activate([
@@ -879,7 +879,7 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     }
 }
 
-//MARK: - View Transformation
+// MARK: - View Transformation
 extension EditorViewController {
 
     @MainActor

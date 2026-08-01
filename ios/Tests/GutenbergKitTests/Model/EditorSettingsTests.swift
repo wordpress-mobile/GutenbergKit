@@ -7,7 +7,7 @@ import Testing
 struct EditorSettingsTests {
 
     @Test("Throws for invalid JSON")
-    func forInvalidJSON() throws{
+    func forInvalidJSON() throws {
         let invalidJSON = "not valid json"
 
         #expect(throws: DecodingError.self) {
@@ -25,14 +25,14 @@ struct EditorSettingsTests {
     }
 
     @Test("themeStyles extracts single css value")
-    func themeStylesExtractsSingleCSS() throws{
+    func themeStylesExtractsSingleCSS() throws {
         let json = #"{"styles": [{"css": "body { color: red; }", "isGlobalStyles": true}]}"#
         let settings = try EditorSettings(data: Data(json.utf8))
         #expect(settings.themeStyles == "body { color: red; }")
     }
 
     @Test("themeStyles joins multiple css values with newlines")
-    func themeStylesJoinsMultipleCSS() throws{
+    func themeStylesJoinsMultipleCSS() throws {
         let json = """
       {"styles": [{"css": "body { color: red; }", "isGlobalStyles": true}, {"css": "h1 { font-size: 2em; }", "isGlobalStyles": false}]}
       """
@@ -41,7 +41,7 @@ struct EditorSettingsTests {
     }
 
     @Test("themeStyles skips styles with null css")
-    func themeStylesSkipsNullCSS() throws{
+    func themeStylesSkipsNullCSS() throws {
         let json = """
       {"styles": [{"css": null, "isGlobalStyles": true}, {"css": "h1 { font-size: 2em; }", "isGlobalStyles": false}]}
       """
@@ -50,7 +50,7 @@ struct EditorSettingsTests {
     }
 
     @Test("themeStyles skips styles without css key")
-    func themeStylesSkipsMissingCSS() throws{
+    func themeStylesSkipsMissingCSS() throws {
         let json = """
       {"styles": [{"isGlobalStyles": true}, {"css": "h1 { font-size: 2em; }", "isGlobalStyles": false}]}
       """
@@ -59,7 +59,7 @@ struct EditorSettingsTests {
     }
 
     @Test("themeStyles is empty when styles key is missing")
-    func themeStylesEmptyWhenStylesKeyMissing() throws{
+    func themeStylesEmptyWhenStylesKeyMissing() throws {
         let json = """
       {"otherKey": "value"}
       """
