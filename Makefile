@@ -239,9 +239,23 @@ lint-android: ## Lint Android code with Detekt
 	@echo "--- :android: Running Detekt"
 	./android/gradlew -p ./android detekt
 
+# Runs SwiftLint via the BuildTools package plugin, which pins the SwiftLint version
+# to `swiftlint_version` in .swiftlint.yml. SDKROOT is pinned to the macOS SDK so the
+# plugin builds even when invoked from an environment that targets iOS.
+SWIFTLINT = SDKROOT="$$(xcrun --sdk macosx --show-sdk-path)" \
+	swift package --package-path BuildTools plugin \
+	--allow-writing-to-directory "$(CURDIR)" --allow-writing-to-package-directory \
+	swiftlint --working-directory "$(CURDIR)" --quiet
+
 .PHONY: lint-swift
 lint-swift: ## Lint Swift code
-	swift package plugin swiftlint
+	@echo "--- :swift: Running SwiftLint"
+	$(SWIFTLINT)
+
+.PHONY: lint-swift-fix
+lint-swift-fix: ## Lint and auto-fix Swift code
+	@echo "--- :swift: Running SwiftLint (autocorrect)"
+	$(SWIFTLINT) --fix
 
 ################################################################################
 # Testing Targets

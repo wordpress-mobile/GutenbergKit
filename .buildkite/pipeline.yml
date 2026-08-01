@@ -90,6 +90,11 @@ steps:
           queue: android
       plugins: *plugins
 
+    - label: ':swift: Lint Swift'
+      key: lint-swift
+      command: make lint-swift
+      plugins: *plugins
+
     - label: ':android: Test Android Library'
       depends_on: build-react
       command: |

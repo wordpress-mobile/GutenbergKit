@@ -72,9 +72,29 @@ Note: Console logs should be used sparingly. For verbose or development-specific
 ```bash
 # Auto-fix linting errors & verify linting passes
 make lint-js-fix
+
+# When Swift files changed
+make lint-swift-fix
 ```
 
 These commands ensure code quality and prevent lint errors from blocking commits.
+
+### Swift Linting
+
+Swift code is linted with SwiftLint, run via the SwiftPM plugin in the `BuildTools/`
+package so the linter stays out of the dependency graph of anyone consuming
+GutenbergKit via SwiftPM.
+
+-   `make lint-swift` — report violations
+-   `make lint-swift-fix` — auto-correct the violations SwiftLint can fix
+
+The SwiftLint version is pinned in a single place: the `swiftlint_version` key in
+`.swiftlint.yml`. `BuildTools/Package.swift` parses that key at manifest-evaluation
+time, so the binary version and the rule set cannot drift apart. To upgrade, bump
+`swiftlint_version` and run `swift package --package-path BuildTools resolve`.
+
+Rules are opt-in only (`only_rules:`), mirroring WordPress-iOS so the two codebases
+stay consistent for the shared team.
 
 ### Commit and Pull Request Guidelines
 
