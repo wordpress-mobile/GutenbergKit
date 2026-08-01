@@ -96,6 +96,17 @@ time, so the binary version and the rule set cannot drift apart. To upgrade, bum
 Rules are opt-in only (`only_rules:`), mirroring WordPress-iOS so the two codebases
 stay consistent for the shared team.
 
+To lint specific files rather than the whole project, set `SWIFT_LINT_PATHS`:
+
+```bash
+make lint-swift SWIFT_LINT_PATHS=ios/Sources/GutenbergKit/Sources/EditorService.swift
+```
+
+A Claude Code `PostToolUse` hook (`bin/claude-hooks/swiftlint.sh`, wired up in
+`.claude/settings.json`) lints each edited Swift file automatically and reports
+violations back for self-correction, so Swift edits are checked as they happen
+rather than only at commit time.
+
 ### Commit and Pull Request Guidelines
 
 Follow the conventions documented in [Developer Workflows](./docs/code/developer-workflows.md), including Conventional Commits prefixes, PR template usage, and label assignment.

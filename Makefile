@@ -242,20 +242,24 @@ lint-android: ## Lint Android code with Detekt
 # Runs SwiftLint via the BuildTools package plugin, which pins the SwiftLint version
 # to `swiftlint_version` in .swiftlint.yml. SDKROOT is pinned to the macOS SDK so the
 # plugin builds even when invoked from an environment that targets iOS.
+#
+# Set SWIFT_LINT_PATHS to lint specific files instead of the whole project, e.g.
+# `make lint-swift SWIFT_LINT_PATHS=ios/Sources/GutenbergKit/Sources/EditorService.swift`.
+SWIFT_LINT_PATHS ?=
 SWIFTLINT = SDKROOT="$$(xcrun --sdk macosx --show-sdk-path)" \
 	swift package --package-path BuildTools plugin \
 	--allow-writing-to-directory "$(CURDIR)" --allow-writing-to-package-directory \
-	swiftlint --working-directory "$(CURDIR)" --quiet
+	swiftlint --working-directory "$(CURDIR)" --quiet $(SWIFT_LINT_PATHS)
 
 .PHONY: lint-swift
 lint-swift: ## Lint Swift code
 	@echo "--- :swift: Running SwiftLint"
-	$(SWIFTLINT)
+	@$(SWIFTLINT)
 
 .PHONY: lint-swift-fix
 lint-swift-fix: ## Lint and auto-fix Swift code
 	@echo "--- :swift: Running SwiftLint (autocorrect)"
-	$(SWIFTLINT) --fix
+	@$(SWIFTLINT) --fix
 
 ################################################################################
 # Testing Targets
