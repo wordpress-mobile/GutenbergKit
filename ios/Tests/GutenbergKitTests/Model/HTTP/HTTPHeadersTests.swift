@@ -268,6 +268,8 @@ struct EditorHTTPHeadersTests {
   func headersHandleEmptyStringValues() {
     let headers: EditorHTTPHeaders = ["Empty-Header": ""]
 
+    // Optional `String?`: `== ""` asserts present-and-empty, which `isEmpty` cannot express.
+    // swiftlint:disable:next empty_string
     #expect(headers["Empty-Header"] == "")
   }
 

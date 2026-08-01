@@ -16,8 +16,8 @@ struct EditorConfigurationBuilderTests: MakesTestFixtures {
   func builderDefaultValues() {
     let config = makeConfigurationBuilder().build()
 
-    #expect(config.title == "")
-    #expect(config.content == "")
+    #expect(config.title.isEmpty)
+    #expect(config.content.isEmpty)
     #expect(config.postID == nil)
     #expect(config.postType == .post)
     #expect(config.postStatus == "draft")
@@ -28,7 +28,7 @@ struct EditorConfigurationBuilderTests: MakesTestFixtures {
     #expect(config.siteApiRoot == Self.testApiRoot)
     #expect(config.siteApiNamespace == [])
     #expect(config.namespaceExcludedPaths == [])
-    #expect(config.authHeader == "")
+    #expect(config.authHeader.isEmpty)
     #expect(config.editorSettings == "undefined")
     #expect(config.locale == "en")
     #expect(config.isNativeInserterEnabled == false)
@@ -272,7 +272,7 @@ struct EditorConfigurationBuilderTests: MakesTestFixtures {
     let config1 = builder1.build()
     let config2 = builder2.build()
 
-    #expect(config1.title == "")
+    #expect(config1.title.isEmpty)
     #expect(config2.title == "New Title")
   }
 
@@ -324,7 +324,7 @@ struct EditorConfigurationBuilderTests: MakesTestFixtures {
 
     #expect(config.postID == 42)
     #expect(config.title == "Applied Title")
-    #expect(config.content == "")
+    #expect(config.content.isEmpty)
   }
 
   // MARK: - toBuilder Round-Trip Tests
@@ -440,7 +440,7 @@ struct EditorConfigurationTests: MakesTestFixtures {
 
   @Test("escapedTitle handles empty string")
   func escapedTitleHandlesEmpty() {
-    #expect(makeConfiguration(title: "").escapedTitle == "")
+    #expect(makeConfiguration(title: "").escapedTitle.isEmpty)
   }
 
   @Test("escapedTitle preserves alphanumeric characters")
@@ -463,7 +463,7 @@ struct EditorConfigurationTests: MakesTestFixtures {
 
   @Test("escapedContent handles empty string")
   func escapedContentHandlesEmpty() {
-    #expect(makeConfiguration(content: "").escapedContent == "")
+    #expect(makeConfiguration(content: "").escapedContent.isEmpty)
   }
 
   @Test("escapedContent handles plain text")

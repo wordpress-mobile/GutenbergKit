@@ -104,7 +104,7 @@ struct EditorSettingsTests {
       {"styles": [{"css": "", "isGlobalStyles": true}]}
       """
         let settings = try EditorSettings(data: Data(json.utf8))
-        #expect(settings.themeStyles == "")
+        #expect(settings.themeStyles.isEmpty)
     }
 
     @Test("themeStyles handles css with special characters")

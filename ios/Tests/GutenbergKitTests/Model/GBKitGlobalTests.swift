@@ -240,8 +240,8 @@ struct GBKitGlobalTests: MakesTestFixtures {
 
     let data = Data(jsonString.utf8)
     let decoded = try JSONDecoder().decode(GBKitGlobal.self, from: data)
-    #expect(decoded.post.title == "")
-    #expect(decoded.post.content == "")
+    #expect(decoded.post.title.isEmpty)
+    #expect(decoded.post.content.isEmpty)
   }
 
   @Test("handles very long content")
