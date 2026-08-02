@@ -69,7 +69,7 @@ class EditorInteractionTest {
         EditorTestHelpers.waitForEnabled(composeTestRule, "Undo")
 
         // Insert a Paragraph block and type in the content area.
-        EditorTestHelpers.typeInContent("World")
+        EditorTestHelpers.typeInContent("World", composeTestRule)
 
         // Undo should still be enabled after typing content.
         EditorTestHelpers.waitForEnabled(composeTestRule, "Undo")

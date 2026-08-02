@@ -1,7 +1,10 @@
 package com.example.gutenbergkit
 
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -43,8 +46,6 @@ object EditorTestHelpers {
         "textarea[placeholder='Add title']"
     private const val CODE_EDITOR_CONTENT_SELECTOR =
         "textarea[placeholder='Start writing with text or HTML']"
-    private const val INSERTER_DIALOG_SELECTOR =
-        "[role='dialog'][aria-modal='true']"
 
     /**
      * Navigates from the main list through the configuration screen
@@ -114,35 +115,47 @@ object EditorTestHelpers {
     }
 
     /**
-     * Opens the web block inserter and inserts a block by name.
+     * Opens the native block inserter and inserts a block by name.
      *
-     * Taps the "Add block" toggle in the editor toolbar, then clicks
-     * the block option matching [name] inside the inserter popover.
+     * Taps the "Add block" toggle in the editor toolbar, then clicks the
+     * block tile matching [name] in the native block picker. The toggle
+     * lives in the WebView, but the picker it presents is native Compose —
+     * the demo app enables the native inserter by default, so tapping the
+     * toggle dispatches over the bridge rather than opening a web popover.
      * Mirrors `EditorUITestHelpers.insertBlock(_:webView:app:)` on iOS.
      */
-    fun insertBlock(name: String) {
+    fun insertBlock(
+        name: String,
+        rule: EditorTestRule
+    ) {
         // Tap the "Add block" toggle button in the WebView toolbar.
         waitForWebViewElement(ADD_BLOCK_SELECTOR, ELEMENT_TIMEOUT_MS)
         onWebView()
             .forceJavascriptEnabled()
             .withElement(findElement(Locator.CSS_SELECTOR, ADD_BLOCK_SELECTOR))
             .perform(webClick())
-        // Wait for the inserter dialog to appear, then find and click the block
-        // option by name. Block items use role="option" with their accessible
-        // name from inner text — we match via XPath within the modal dialog.
-        waitForWebViewElement(INSERTER_DIALOG_SELECTOR, ELEMENT_TIMEOUT_MS)
-        onWebView()
-            .forceJavascriptEnabled()
-            .withElement(findElement(Locator.XPATH, inserterOptionXpath(name)))
-            .perform(webClick())
+        // Wait for the native picker, then tap the tile by name. `BlockTile`
+        // is a clickable `Role.Button`, and `clickable` merges descendants, so
+        // the label resolves onto the tile itself in the merged tree — match
+        // the text there rather than on a descendant.
+        //
+        // Category tabs are clickable and labelled too, so a [name] that
+        // collides with a tab ("Text", "Media", "Design") would be ambiguous
+        // here. Only block names that are not also tab names are safe.
+        val tile = hasClickAction() and hasText(name)
+        rule.waitForNode(tile, NAVIGATE_TIMEOUT_MS)
+        rule.onNode(tile).performClick()
     }
 
     /**
-     * Inserts a Paragraph block via the web block inserter then types
+     * Inserts a Paragraph block via the native block inserter then types
      * text into the empty block placeholder.
      */
-    fun typeInContent(text: String) {
-        insertBlock("Paragraph")
+    fun typeInContent(
+        text: String,
+        rule: EditorTestRule
+    ) {
+        insertBlock("Paragraph", rule)
         // Wait for the empty block to appear after insertion.
         waitForWebViewElement(EMPTY_BLOCK_SELECTOR, ELEMENT_TIMEOUT_MS)
         onWebView()
@@ -272,13 +285,6 @@ object EditorTestHelpers {
     }
 
     /**
-     * Returns an XPath that matches a block option by [name] inside
-     * the inserter dialog (role="dialog", aria-modal="true").
-     */
-    private fun inserterOptionXpath(name: String) =
-        "//*[@role='dialog'][@aria-modal='true']//*[@role='option'][normalize-space()='$name']"
-
-    /**
      * Types text into the currently focused element via
      * `document.execCommand('insertText')`, which is what mobile browsers
      * use for software keyboard input. Gutenberg's rich text listens for
@@ -351,6 +357,18 @@ private fun AndroidComposeTestRule<*, *>.waitUntilAsserts(
 ) {
     waitUntil(timeoutMs) {
         runCatching { block(); true }.getOrDefault(false)
+    }
+}
+
+/**
+ * Waits until a Compose node matching [matcher] exists.
+ */
+private fun AndroidComposeTestRule<*, *>.waitForNode(
+    matcher: SemanticsMatcher,
+    timeoutMs: Long = 10_000L
+) {
+    waitUntilAsserts(timeoutMs) {
+        onNode(matcher).assertExists()
     }
 }
 
