@@ -1,8 +1,10 @@
 package com.example.gutenbergkit
 
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
@@ -139,10 +141,15 @@ object EditorTestHelpers {
         // the label resolves onto the tile itself in the merged tree — match
         // the text there rather than on a descendant.
         //
-        // Category tabs are clickable and labelled too, so a [name] that
-        // collides with a tab ("Text", "Media", "Design") would be ambiguous
-        // here. Only block names that are not also tab names are safe.
-        val tile = hasClickAction() and hasText(name)
+        // Scope to the block grid, which is the only `CollectionInfo` node in
+        // the sheet. Category tabs are clickable and labelled too, so an
+        // unscoped match on a name that is also a tab ("Text", "Media",
+        // "Design") would resolve two nodes — and because `waitForNode`
+        // swallows that error, it would surface as a timeout rather than as
+        // an ambiguous-match failure.
+        val tile = hasClickAction() and
+            hasText(name) and
+            hasAnyAncestor(SemanticsMatcher.keyIsDefined(SemanticsProperties.CollectionInfo))
         rule.waitForNode(tile, NAVIGATE_TIMEOUT_MS)
         rule.onNode(tile).performClick()
     }
