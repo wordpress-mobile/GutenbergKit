@@ -444,6 +444,10 @@ export default function NativeBlockInserterButton( {
 				prepareAndShowInserter();
 			} }
 			onMouseDown={ ( e ) => {
+				// Keep focus and the editor selection where they are. This
+				// cancels the default action only; both WebViews still apply
+				// `:active` from the hit test on pointer down, so the button's
+				// press styles are unaffected — verified on device.
 				e.preventDefault();
 			} }
 			className={ classes }
