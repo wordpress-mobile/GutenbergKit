@@ -141,12 +141,13 @@ object EditorTestHelpers {
         // the label resolves onto the tile itself in the merged tree — match
         // the text there rather than on a descendant.
         //
-        // Scope to the block grid, which is the only `CollectionInfo` node in
-        // the sheet. Category tabs are clickable and labelled too, so an
-        // unscoped match on a name that is also a tab ("Text", "Media",
-        // "Design") would resolve two nodes — and because `waitForNode`
-        // swallows that error, it would surface as a timeout rather than as
-        // an ambiguous-match failure.
+        // Scope to the block grid, the only `CollectionInfo` node in the
+        // sheet, so the match cannot stray outside it. No current block title
+        // collides with a category tab — `hasText` compares exactly, so
+        // "Media & Text" does not match the "Text" tab — but the tabs, close
+        // button, and search field are all clickable and labelled, so the
+        // scoping is what keeps that a property of the matcher rather than a
+        // coincidence of the current strings.
         val tile = hasClickAction() and
             hasText(name) and
             hasAnyAncestor(SemanticsMatcher.keyIsDefined(SemanticsProperties.CollectionInfo))
@@ -368,25 +369,42 @@ private fun AndroidComposeTestRule<*, *>.waitUntilAsserts(
 }
 
 /**
- * Waits until a Compose node matching [matcher] exists.
+ * Waits until exactly one Compose node matches [matcher].
+ *
+ * Waiting on an `assertExists` would swallow the ambiguous case: once two
+ * nodes match, waiting longer cannot reduce them to one, so the poll burns
+ * the full timeout and reports "condition still not satisfied" — hiding the
+ * real cause. Polling on the match count instead lets an ambiguous matcher
+ * fail immediately, with a message naming it.
  */
 private fun AndroidComposeTestRule<*, *>.waitForNode(
     matcher: SemanticsMatcher,
     timeoutMs: Long = 10_000L
 ) {
-    waitUntilAsserts(timeoutMs) {
-        onNode(matcher).assertExists()
+    // Poll on the match count rather than `assertExists`, so an ambiguous
+    // match fails as soon as it appears instead of burning the full timeout
+    // on an assertion that can never pass.
+    waitUntil(timeoutMs) {
+        onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
+    }
+    val matches = onAllNodes(matcher).fetchSemanticsNodes()
+    check(matches.size == 1) {
+        "Expected exactly 1 node matching '${matcher.description}' but found " +
+            "${matches.size}. Narrow the matcher — an ambiguous match cannot " +
+            "resolve by waiting."
     }
 }
 
 /**
- * Waits until a Compose node with the given [text] exists.
+ * Waits until exactly one Compose node with the given [text] exists.
+ *
+ * Every caller clicks the node afterwards, which already requires a unique
+ * match, so this shares [waitForNode]'s ambiguity check.
  */
 private fun AndroidComposeTestRule<*, *>.waitForNodeWithText(
     text: String,
     timeoutMs: Long = 10_000L
 ) {
-    waitUntilAsserts(timeoutMs) {
-        onNodeWithText(text).assertExists()
-    }
+    waitForNode(hasText(text), timeoutMs)
 }
+
