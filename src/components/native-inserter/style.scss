@@ -13,11 +13,16 @@ $button-radius-android-pressed: 50%;
 // recede on press.
 $press-scale: 1.08;
 // Samples SwiftUI's `.snappy` spring — duration 0.5, bounce 0.15, which is a
-// damping ratio of 0.85 — across its settling time. SwiftUI animates a state
-// change with a single spring rather than differing in and out timings, so
-// both directions share these. The overshoot is well under a device pixel at
-// this size; the value here is the spring's rise shape, which `ease-out`
-// does not reproduce.
+// damping ratio of 0.85. SwiftUI animates a state change with a single spring
+// rather than differing in and out timings, so both directions share these.
+//
+// This is the spring's rise shape, not a faithful settling curve: the samples
+// stop at peak overshoot and the final stop is pinned to 1, where the true
+// response is still ~1.005 and does not settle until ~0.7s. Truncating there
+// leaves a velocity discontinuity at the end. It is imperceptible because the
+// overshoot is ~0.016px at this size — under a device pixel — and the shorter
+// duration keeps the press responsive. What `ease-out` cannot reproduce, and
+// what this is for, is the acceleration profile of the rise.
 $ios-motion-duration: 0.538s;
 // Shorter for the eased fallback: without the spring's slow settling tail, the
 // full duration reads as sluggish.
@@ -54,9 +59,12 @@ $android-motion-easing: cubic-bezier(0.2, 0, 0, 1);
 	width: 32px;
 	height: 32px;
 	display: block;
-	// Scale from the center. Transforms on an SVG element otherwise resolve
-	// against the SVG user space, anchoring the press scale at the top-left so
-	// the button drifts rather than growing in place.
+	// Scale from the center of the painted circle. A root `<svg>` in an HTML
+	// document establishes an ordinary CSS box, so the initial
+	// `transform-origin` would already center against the border box —
+	// `fill-box` instead resolves against the content box, which stays
+	// centered on the background circle if the padding ever becomes
+	// asymmetric.
 	transform-box: fill-box;
 	transform-origin: center;
 }
@@ -93,18 +101,26 @@ body.is-android .gutenberg-kit-editor-toolbar .gutenberg-kit-add-block-button {
 	svg {
 		border-radius: $button-radius-android;
 		transition:
-			background-color $android-motion-duration $android-motion-easing,
+			background-color 0s,
 			transform $android-motion-duration $android-motion-easing,
 			border-radius $android-motion-duration $android-motion-easing;
 	}
 
-	// Material's state layer is immediate, unlike UIKit's fade, so the fill
-	// snaps while the shape and scale stay animated.
+	// Material's state layer appears and disappears immediately, unlike
+	// UIKit's fade, so the fill is set with no transition in either
+	// direction — the `0s` below on press, and `background-color 0s` in the
+	// base rule on release. The shape and scale stay animated throughout.
+	//
+	// Declared as a full shorthand rather than a bare `transition-duration`
+	// so the values are not matched positionally against the base rule's
+	// property list, where reordering would silently retarget the `0s`.
 	&:active:not(:disabled, [aria-disabled="true"]) svg {
 		background: $button-background-pressed;
 		transform: scale($press-scale);
 		border-radius: $button-radius-android-pressed;
-		transition-duration: 0s, $android-motion-duration,
-			$android-motion-duration;
+		transition:
+			background-color 0s,
+			transform $android-motion-duration $android-motion-easing,
+			border-radius $android-motion-duration $android-motion-easing;
 	}
 }
