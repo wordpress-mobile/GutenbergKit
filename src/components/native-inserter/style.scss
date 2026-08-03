@@ -1,7 +1,16 @@
+@use "sass:color";
 @use "@wordpress/base-styles/colors" as wordpress;
 
 $button-background: #eae9ec;
-$button-background-pressed: #d5d3d9;
+// Material 3's pressed state layer: `on-surface-variant` composited over the
+// container. The same value serves iOS, where a UIKit highlight reads as a
+// low-alpha black overlay and lands in the same range.
+//
+// The spec's 10% resolves to #dad9dc, which under-reads at 32px — the fill is
+// largely occluded by the finger at the moment it changes. 16% is the top of
+// the range that still reads as a state layer over this container rather than
+// as a differently colored control.
+$button-background-pressed: color.mix(#49454f, $button-background, 16%);
 // iOS keeps the circle, which a radius at least half the button's size
 // resolves to. Material 3 gives icon buttons a rounded square that morphs to
 // full-round while pressed.
