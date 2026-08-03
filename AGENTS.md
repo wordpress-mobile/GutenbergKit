@@ -102,6 +102,17 @@ To lint specific files rather than the whole project, set `SWIFT_LINT_PATHS`:
 make lint-swift SWIFT_LINT_PATHS=ios/Sources/GutenbergKit/Sources/EditorService.swift
 ```
 
+Separate multiple files with **newlines**, not spaces, so that paths containing
+spaces stay intact. This makes it easy to lint just the changed files:
+
+```bash
+make lint-swift SWIFT_LINT_PATHS="$(git diff --name-only -- '*.swift')"
+```
+
+Each value must be a path to an existing **file**. Passing a directory (or a
+nonexistent path) silently falls back to linting the whole project rather than
+reporting an error.
+
 A Claude Code `PostToolUse` hook (`bin/claude-hooks/swiftlint.sh`, wired up in
 `.claude/settings.json`) lints each edited Swift file automatically and reports
 violations back for self-correction, so Swift edits are checked as they happen
