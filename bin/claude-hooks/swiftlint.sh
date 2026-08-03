@@ -15,6 +15,21 @@ esac
 
 cd "${CLAUDE_PROJECT_DIR:-.}" || exit 0
 
+# Only lint files inside this project. A session rooted here can span additional
+# working directories, and sibling repos ship their own .swiftlint.yml — linting
+# their files against GutenbergKit's rule set would report violations that are
+# not violations there, and the hook exits 2, so those would be fed back as
+# errors to fix. Resolve both sides so symlinked paths compare correctly.
+project_dir=$(pwd -P)
+case "$f" in
+    /*) abs=$f ;;
+    *) abs=$project_dir/$f ;;
+esac
+case "$abs" in
+    "$project_dir"/*) ;;
+    *) exit 0 ;;
+esac
+
 # The SwiftPM plugin needs a toolchain. Exit quietly rather than failing the
 # edit when this runs somewhere Xcode isn't available.
 command -v xcrun >/dev/null 2>&1 || exit 0
