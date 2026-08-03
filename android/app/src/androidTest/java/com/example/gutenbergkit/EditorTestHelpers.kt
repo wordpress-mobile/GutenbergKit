@@ -1,7 +1,12 @@
 package com.example.gutenbergkit
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -43,8 +48,6 @@ object EditorTestHelpers {
         "textarea[placeholder='Add title']"
     private const val CODE_EDITOR_CONTENT_SELECTOR =
         "textarea[placeholder='Start writing with text or HTML']"
-    private const val INSERTER_DIALOG_SELECTOR =
-        "[role='dialog'][aria-modal='true']"
 
     /**
      * Navigates from the main list through the configuration screen
@@ -114,35 +117,53 @@ object EditorTestHelpers {
     }
 
     /**
-     * Opens the web block inserter and inserts a block by name.
+     * Opens the native block inserter and inserts a block by name.
      *
-     * Taps the "Add block" toggle in the editor toolbar, then clicks
-     * the block option matching [name] inside the inserter popover.
+     * Taps the "Add block" toggle in the editor toolbar, then clicks the
+     * block tile matching [name] in the native block picker. The toggle
+     * lives in the WebView, but the picker it presents is native Compose —
+     * the demo app enables the native inserter by default, so tapping the
+     * toggle dispatches over the bridge rather than opening a web popover.
      * Mirrors `EditorUITestHelpers.insertBlock(_:webView:app:)` on iOS.
      */
-    fun insertBlock(name: String) {
+    fun insertBlock(
+        name: String,
+        rule: EditorTestRule
+    ) {
         // Tap the "Add block" toggle button in the WebView toolbar.
         waitForWebViewElement(ADD_BLOCK_SELECTOR, ELEMENT_TIMEOUT_MS)
         onWebView()
             .forceJavascriptEnabled()
             .withElement(findElement(Locator.CSS_SELECTOR, ADD_BLOCK_SELECTOR))
             .perform(webClick())
-        // Wait for the inserter dialog to appear, then find and click the block
-        // option by name. Block items use role="option" with their accessible
-        // name from inner text — we match via XPath within the modal dialog.
-        waitForWebViewElement(INSERTER_DIALOG_SELECTOR, ELEMENT_TIMEOUT_MS)
-        onWebView()
-            .forceJavascriptEnabled()
-            .withElement(findElement(Locator.XPATH, inserterOptionXpath(name)))
-            .perform(webClick())
+        // Wait for the native picker, then tap the tile by name. `BlockTile`
+        // is a clickable `Role.Button`, and `clickable` merges descendants, so
+        // the label resolves onto the tile itself in the merged tree — match
+        // the text there rather than on a descendant.
+        //
+        // Scope to the block grid, the only `CollectionInfo` node in the
+        // sheet, so the match cannot stray outside it. No current block title
+        // collides with a category tab — `hasText` compares exactly, so
+        // "Media & Text" does not match the "Text" tab — but the tabs, close
+        // button, and search field are all clickable and labelled, so the
+        // scoping is what keeps that a property of the matcher rather than a
+        // coincidence of the current strings.
+        val tile = hasClickAction() and
+            hasText(name) and
+            hasAnyAncestor(SemanticsMatcher.keyIsDefined(SemanticsProperties.CollectionInfo))
+        rule.waitForNode(tile, NAVIGATE_TIMEOUT_MS)
+        rule.onNode(tile).performClick()
     }
 
     /**
-     * Inserts a Paragraph block via the web block inserter then types
+     * Inserts a Paragraph block via the native block inserter then types
      * text into the empty block placeholder.
      */
-    fun typeInContent(text: String) {
-        insertBlock("Paragraph")
+    fun typeInContent(
+        text: String,
+        rule: EditorTestRule
+    ) {
+        insertBlock("Paragraph", rule)
         // Wait for the empty block to appear after insertion.
         waitForWebViewElement(EMPTY_BLOCK_SELECTOR, ELEMENT_TIMEOUT_MS)
         onWebView()
@@ -272,13 +293,6 @@ object EditorTestHelpers {
     }
 
     /**
-     * Returns an XPath that matches a block option by [name] inside
-     * the inserter dialog (role="dialog", aria-modal="true").
-     */
-    private fun inserterOptionXpath(name: String) =
-        "//*[@role='dialog'][@aria-modal='true']//*[@role='option'][normalize-space()='$name']"
-
-    /**
      * Types text into the currently focused element via
      * `document.execCommand('insertText')`, which is what mobile browsers
      * use for software keyboard input. Gutenberg's rich text listens for
@@ -355,13 +369,42 @@ private fun AndroidComposeTestRule<*, *>.waitUntilAsserts(
 }
 
 /**
- * Waits until a Compose node with the given [text] exists.
+ * Waits until exactly one Compose node matches [matcher].
+ *
+ * Waiting on an `assertExists` would swallow the ambiguous case: once two
+ * nodes match, waiting longer cannot reduce them to one, so the poll burns
+ * the full timeout and reports "condition still not satisfied" — hiding the
+ * real cause. Polling on the match count instead lets an ambiguous matcher
+ * fail immediately, with a message naming it.
+ */
+private fun AndroidComposeTestRule<*, *>.waitForNode(
+    matcher: SemanticsMatcher,
+    timeoutMs: Long = 10_000L
+) {
+    // Poll on the match count rather than `assertExists`, so an ambiguous
+    // match fails as soon as it appears instead of burning the full timeout
+    // on an assertion that can never pass.
+    waitUntil(timeoutMs) {
+        onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
+    }
+    val matches = onAllNodes(matcher).fetchSemanticsNodes()
+    check(matches.size == 1) {
+        "Expected exactly 1 node matching '${matcher.description}' but found " +
+            "${matches.size}. Narrow the matcher — an ambiguous match cannot " +
+            "resolve by waiting."
+    }
+}
+
+/**
+ * Waits until exactly one Compose node with the given [text] exists.
+ *
+ * Every caller clicks the node afterwards, which already requires a unique
+ * match, so this shares [waitForNode]'s ambiguity check.
  */
 private fun AndroidComposeTestRule<*, *>.waitForNodeWithText(
     text: String,
     timeoutMs: Long = 10_000L
 ) {
-    waitUntilAsserts(timeoutMs) {
-        onNodeWithText(text).assertExists()
-    }
+    waitForNode(hasText(text), timeoutMs)
 }
+

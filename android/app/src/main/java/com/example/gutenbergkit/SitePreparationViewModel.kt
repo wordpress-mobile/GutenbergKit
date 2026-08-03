@@ -19,7 +19,7 @@ import rs.wordpress.api.kotlin.WpRequestResult
 import uniffi.wp_api.PostType as WpPostType
 
 data class SitePreparationUiState(
-    val enableNativeInserter: Boolean = false,
+    val enableNativeInserter: Boolean = true,
     val enableInserterMediaStrip: Boolean = false,
     val enableNetworkLogging: Boolean = false,
     /** All viewable post types fetched from the site, or empty while loading. */

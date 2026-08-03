@@ -1,4 +1,9 @@
 /**
+ * External dependencies
+ */
+import clsx from 'clsx';
+
+/**
  * WordPress dependencies
  */
 import { Button } from '@wordpress/components';
@@ -39,6 +44,7 @@ import useBlockTypesState from '@wordpress/block-editor/build-module/components/
 /**
  * Internal dependencies
  */
+import './style.scss';
 import { debug } from '../../utils/logger';
 import {
 	preprocessBlockTypesForNativeInserter,
@@ -58,11 +64,16 @@ import { unlock } from '../../lock-unlock';
  *
  * Mimics the WordPress Inserter component API with open/onToggle props.
  *
- * @param {Object}   props          Component props
- * @param {boolean}  props.open     Whether the inserter is open
- * @param {Function} props.onToggle Callback to toggle inserter open state
+ * @param {Object}   props           Component props
+ * @param {string}   props.className Optional CSS class for styling
+ * @param {boolean}  props.open      Whether the inserter is open
+ * @param {Function} props.onToggle  Callback to toggle inserter open state
  */
-export default function NativeBlockInserterButton( { open, onToggle } ) {
+export default function NativeBlockInserterButton( {
+	className,
+	open,
+	onToggle,
+} ) {
 	const buttonRef = useRef( null );
 	const prevOpen = useRef( false );
 
@@ -418,6 +429,8 @@ export default function NativeBlockInserterButton( { open, onToggle } ) {
 		prevOpen.current = open;
 	}, [ open, prepareAndShowInserter ] );
 
+	const classes = clsx( 'gutenberg-kit-add-block-button', className );
+
 	return (
 		<Button
 			ref={ buttonRef }
@@ -431,9 +444,13 @@ export default function NativeBlockInserterButton( { open, onToggle } ) {
 				prepareAndShowInserter();
 			} }
 			onMouseDown={ ( e ) => {
+				// Keep focus and the editor selection where they are. This
+				// cancels the default action only; both WebViews still apply
+				// `:active` from the hit test on pointer down, so the button's
+				// press styles are unaffected — verified on device.
 				e.preventDefault();
 			} }
-			className="gutenberg-kit-add-block-button"
+			className={ classes }
 		/>
 	);
 }

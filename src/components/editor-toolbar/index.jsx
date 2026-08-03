@@ -100,6 +100,7 @@ const EditorToolbar = ( { className } ) => {
 
 	const addBlockButton = enableNativeBlockInserter ? (
 		<NativeInserter
+			className="gutenberg-kit-editor-toolbar__inserter"
 			open={ isInserterOpened }
 			onToggle={ setIsInserterOpened }
 		/>

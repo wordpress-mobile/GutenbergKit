@@ -145,17 +145,6 @@ $scroll-indicator-elevation: 32;
 	right: 6px;
 }
 
-// Style the add block button with rounded black background
-.gutenberg-kit-editor-toolbar .gutenberg-kit-add-block-button {
+.gutenberg-kit-editor-toolbar__inserter {
 	margin-inline-start: 8px;
-
-	svg {
-		background: #eae9ec;
-		border-radius: 18px;
-		color: wordpress.$black;
-		padding: 1px;
-		width: 32px;
-		height: 32px;
-		display: block;
-	}
 }
