@@ -262,11 +262,12 @@ class SitePreparationViewModel {
                     )
                     do {
                         let parsedApiRoot = try ParsedUrl.parse(input: account.siteApiRoot)
+                        let parsedSiteUrl = try ParsedUrl.parse(input: account.siteUrl)
                         let configuration = URLSessionConfiguration.ephemeral
                         configuration.httpAdditionalHeaders = ["Authorization": account.authHeader]
                         let client = WordPressAPI(
                             urlSession: .init(configuration: configuration),
-                            apiRootUrl: parsedApiRoot,
+                            siteInfo: .selfHosted(siteUrl: parsedSiteUrl, apiRoot: parsedApiRoot),
                             authentication: .none,
                         )
                         self.client = client
@@ -274,23 +275,27 @@ class SitePreparationViewModel {
                         try await self.loadPostTypes()
                         let newConfiguration = try await self.loadConfiguration(for: account)
                         self.editorConfiguration = Self.applyDemoAppDefaults(to: newConfiguration)
-                    } catch is URLError {
+                    } catch let error where Self.isUnreachableSiteError(error) {
                         throw AppError(errorDescription: "Could not connect to Local WordPress at localhost:8888.\n\nThe wp-env server may not be running. Start it with 'make wp-env-start'.")
                     }
                 case .account(let account):
-                    let apiUrlResolver: ApiUrlResolver
-                    if account.isWpCom(), let siteId = Self.extractWpComSiteId(from: account.siteApiRoot) {
-                        apiUrlResolver = WpComDotOrgApiUrlResolver(siteId: siteId, baseUrl: .production)
+                    let siteInfo: SiteInfo
+                    if account.isWpCom(),
+                        let siteId = Self.extractWpComSiteId(from: account.siteApiRoot),
+                        let numericSiteId = UInt64(siteId)
+                    {
+                        siteInfo = .wordPressCom(siteId: numericSiteId)
                     } else {
                         let parsedApiRoot = try ParsedUrl.parse(input: account.siteApiRoot)
-                        apiUrlResolver = WpOrgSiteApiUrlResolver(apiRootUrl: parsedApiRoot)
+                        let parsedSiteUrl = try ParsedUrl.parse(input: account.siteUrl)
+                        siteInfo = .selfHosted(siteUrl: parsedSiteUrl, apiRoot: parsedApiRoot)
                     }
 
                     let configuration = URLSessionConfiguration.ephemeral
                     configuration.httpAdditionalHeaders = ["Authorization": account.authHeader]
                     let client = WordPressAPI(
                         urlSession: .init(configuration: configuration),
-                        apiUrlResolver: apiUrlResolver,
+                        siteInfo: siteInfo,
                         authenticationProvider: .staticWithAuth(auth: .none),
                     )
                     self.client = client
@@ -316,6 +321,20 @@ class SitePreparationViewModel {
             .setNativeInserterEnabled(true)
             .setLocale(DemoAppLocale.current)
             .build()
+    }
+
+    /// Whether the site could not be reached at all — the host did not resolve
+    /// or refused the connection.
+    ///
+    /// wordpress-rs intercepts the underlying `URLError` and rewraps it as a
+    /// `WpApiError`, so matching `URLError` alone never fires for a site that
+    /// is simply not running.
+    private static func isUnreachableSiteError(_ error: Error) -> Bool {
+        if let wpError = error as? WpApiError,
+           case .RequestExecutionFailed(_, _, .nonExistentSiteError, _, _) = wpError {
+            return true
+        }
+        return error is URLError
     }
 
     private static func isNetworkError(_ error: Error) -> Bool {

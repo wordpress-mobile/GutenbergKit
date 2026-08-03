@@ -22,7 +22,7 @@ val wpEnvCredentials: Map<String, String> = run {
 
 android {
     namespace = "com.example.gutenbergkit"
-    compileSdk = 34
+    compileSdk = 36
 
     // Copy shared OAuth credentials into Android assets so they're available at runtime.
     // Only registered when the file exists — the app handles the missing-file case gracefully.
@@ -44,8 +44,8 @@ android {
 
     defaultConfig {
         applicationId = "com.example.gutenbergkit"
-        minSdk = 24
-        targetSdk = 34
+        minSdk = 26
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
