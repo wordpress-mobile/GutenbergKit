@@ -120,9 +120,15 @@ nonexistent path) silently falls back to linting the whole project rather than
 reporting an error.
 
 A Claude Code `PostToolUse` hook (`bin/claude-hooks/swiftlint.sh`, wired up in
-`.claude/settings.json`) lints each edited Swift file automatically and reports
-violations back for self-correction, so Swift edits are checked as they happen
-rather than only at commit time.
+`.claude/settings.json`) runs after any Swift edit and reports violations back
+for self-correction, so Swift edits are checked as they happen rather than only
+at commit time.
+
+The hook lints the whole project rather than the edited file — process startup
+dominates the runtime, so scoping the run saves little, and a full run also
+catches violations in files the edit did not name. It relies on the
+`included:`/`excluded:` keys above for scoping, so it reports only GutenbergKit
+violations even when the edited file lives in another working directory.
 
 ### Commit and Pull Request Guidelines
 
