@@ -7,14 +7,22 @@
 			content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
 		/>
 		<title>Gutenberg</title>
-		<script type="module" crossorigin src="./assets/index-udfJjDEg.js"></script>
-		<link rel="stylesheet" crossorigin href="./assets/index-Budv5OTR.css">
+		<script type="module" crossorigin src="./assets/index-eD0bltqn.js"></script>
+		<link rel="stylesheet" crossorigin href="./assets/index-BTH-CJHI.css">
 	</head>
 	<body class="gutenberg-kit wp-embed-responsive">
 		<div id="root" class="gutenberg-kit-root"></div>
+		<!--
+			Popovers render into the two containers below, but keep Gutenberg's
+			fallback container: a popover falls back to it when its slot is not
+			yet registered, and Gutenberg locates it by class name
+			(`components-popover__fallback-container`), recreating it if absent.
+		-->
 		<div
 			id="popover-fallback-container"
 			class="components-popover__fallback-container"
 		></div>
+		<div id="popover-clip-container"></div>
+		<div id="popover-overlay-container"></div>
 	</body>
 </html>
