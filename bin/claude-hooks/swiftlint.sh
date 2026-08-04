@@ -1,4 +1,5 @@
-#!/bin/sh
+#!/usr/bin/env bash
+
 # Claude Code PostToolUse hook: lint the just-edited Swift file with SwiftLint.
 #
 # Reads the hook payload (JSON) on stdin, extracts the file path, and runs it
