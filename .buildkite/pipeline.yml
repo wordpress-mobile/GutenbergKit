@@ -90,10 +90,11 @@ steps:
           queue: android
       plugins: *plugins
 
-    - label: ":swift: SwiftLint"
+    - label: ':swift: SwiftLint'
+      key: lint-swift
       command: swiftlint
       agents:
-        queue: linter
+          queue: linter
 
     - label: ':android: Test Android Library'
       depends_on: build-react

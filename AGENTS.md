@@ -90,8 +90,14 @@ GutenbergKit via SwiftPM.
 
 The SwiftLint version is pinned in a single place: the `swiftlint_version` key in
 `.swiftlint.yml`. `BuildTools/Package.swift` parses that key at manifest-evaluation
-time, so the binary version and the rule set cannot drift apart. To upgrade, bump
-`swiftlint_version` and run `swift package --package-path BuildTools resolve`.
+time, so for local runs and the editor hook the binary version and the rule set
+cannot drift apart. To upgrade, bump `swiftlint_version` and run
+`swift package --package-path BuildTools resolve`.
+
+CI is the exception: the `:swift: SwiftLint` step runs on the shared `linter`
+agent queue, which invokes that image's own SwiftLint binary rather than the
+pinned one. If the image moves far enough ahead of `swiftlint_version`, CI can
+fail on a rule that passes locally — bump the pin to resolve it.
 
 Rules are opt-in only (`only_rules:`), mirroring WordPress-iOS so the two codebases
 stay consistent for the shared team.
