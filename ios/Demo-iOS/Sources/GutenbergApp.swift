@@ -63,7 +63,6 @@ struct GutenbergApp: App {
                         )
                     }
                 }
-
             }
         }
         .environment(\.navigation, navigation)

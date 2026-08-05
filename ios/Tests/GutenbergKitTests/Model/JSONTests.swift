@@ -145,6 +145,8 @@ struct JSONTests {
   func emptyStringLiteralCreatesString() {
     let json: JSON = ""
     #expect(json.isString)
+    // Optional `String?`: `== ""` asserts present-and-empty, which `isEmpty` cannot express.
+    // swiftlint:disable:next empty_string
     #expect(json.stringValue == "")
   }
 
@@ -475,6 +477,8 @@ struct JSONTests {
     let data = Data(#""""#.utf8)
     let json = try JSON(data)
     #expect(json.isString)
+    // Optional `String?`: `== ""` asserts present-and-empty, which `isEmpty` cannot express.
+    // swiftlint:disable:next empty_string
     #expect(json.stringValue == "")
   }
 

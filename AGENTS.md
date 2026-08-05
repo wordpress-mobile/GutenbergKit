@@ -72,9 +72,63 @@ Note: Console logs should be used sparingly. For verbose or development-specific
 ```bash
 # Auto-fix linting errors & verify linting passes
 make lint-js-fix
+
+# When Swift files changed
+make lint-swift-fix
 ```
 
 These commands ensure code quality and prevent lint errors from blocking commits.
+
+### Swift Linting
+
+Swift code is linted with SwiftLint, run via the SwiftPM plugin in the `BuildTools/`
+package so the linter stays out of the dependency graph of anyone consuming
+GutenbergKit via SwiftPM.
+
+-   `make lint-swift` — report violations
+-   `make lint-swift-fix` — auto-correct the violations SwiftLint can fix
+
+The SwiftLint version is pinned in a single place: the `swiftlint_version` key in
+`.swiftlint.yml`. `BuildTools/Package.swift` parses that key at manifest-evaluation
+time, so for local runs and the editor hook the binary version and the rule set
+cannot drift apart. To upgrade, bump `swiftlint_version` and run
+`swift package --package-path BuildTools resolve`.
+
+CI is the exception: the `:swift: SwiftLint` step runs on the shared `linter`
+agent queue, which invokes that image's own SwiftLint binary rather than the
+pinned one. If the image moves far enough ahead of `swiftlint_version`, CI can
+fail on a rule that passes locally — bump the pin to resolve it.
+
+Rules are opt-in only (`only_rules:`), mirroring WordPress-iOS so the two codebases
+stay consistent for the shared team.
+
+To lint specific files rather than the whole project, set `SWIFT_LINT_PATHS`:
+
+```bash
+make lint-swift SWIFT_LINT_PATHS=ios/Sources/GutenbergKit/Sources/EditorService.swift
+```
+
+Separate multiple files with **newlines**, not spaces, so that paths containing
+spaces stay intact. This makes it easy to lint just the changed files:
+
+```bash
+make lint-swift SWIFT_LINT_PATHS="$(git diff --name-only -- '*.swift')"
+```
+
+Each value must be a path to an existing **file**. Passing a directory (or a
+nonexistent path) silently falls back to linting the whole project rather than
+reporting an error.
+
+A Claude Code `PostToolUse` hook (`bin/claude-hooks/swiftlint.sh`, wired up in
+`.claude/settings.json`) runs after any Swift edit and reports violations back
+for self-correction, so Swift edits are checked as they happen rather than only
+at commit time.
+
+The hook lints the whole project rather than the edited file — process startup
+dominates the runtime, so scoping the run saves little, and a full run also
+catches violations in files the edit did not name. It relies on the
+`included:`/`excluded:` keys above for scoping, so it reports only GutenbergKit
+violations even when the edited file lives in another working directory.
 
 ### Commit and Pull Request Guidelines
 

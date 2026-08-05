@@ -84,6 +84,12 @@ final class HTMLWebViewRenderer {
     @MainActor
     private class PooledWebView {
         let webView: WKWebView
+        // Deliberately strong: `PooledWebView` is the delegate's sole owner, and
+        // `RenderDelegate` holds no reference back, so there is no retain cycle.
+        // `WKWebView.navigationDelegate` is itself weak, so a weak reference here
+        // would deallocate the delegate immediately after `init` and rendering
+        // would never complete.
+        // swiftlint:disable:next weak_delegate
         let delegate: RenderDelegate
         var isAvailable = true
 

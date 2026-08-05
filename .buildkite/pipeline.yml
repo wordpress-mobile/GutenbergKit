@@ -90,6 +90,12 @@ steps:
           queue: android
       plugins: *plugins
 
+    - label: ':swift: SwiftLint'
+      key: lint-swift
+      command: swiftlint
+      agents:
+          queue: linter
+
     - label: ':android: Test Android Library'
       depends_on: build-react
       command: |
@@ -165,6 +171,7 @@ steps:
           - build-xcframework
           - swift-test-swift-package
           - lint-js
+          - lint-swift
           - test-js
           - test-web-e2e
           - test-ios-e2e

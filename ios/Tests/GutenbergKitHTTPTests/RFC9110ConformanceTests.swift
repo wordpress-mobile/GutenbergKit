@@ -8,7 +8,7 @@ import Network
 
 /// Tests that require platform-specific APIs (URLRequest conversion, response
 /// serialization, server behavior) or conditional logic that cannot be expressed
-/// in the shared JSON fixture format.  All pure parse-input → expected-output
+/// in the shared JSON fixture format. All pure parse-input → expected-output
 /// tests have been migrated to test-fixtures/http/request-parsing.json.
 @Suite("RFC 9110 Conformance")
 struct RFC9110ConformanceTests {

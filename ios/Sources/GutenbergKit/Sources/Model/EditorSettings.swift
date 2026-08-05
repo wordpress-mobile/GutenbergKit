@@ -58,7 +58,7 @@ struct InternalEditorSettings: Decodable {
     struct CSSStyle: Decodable {
         /// The CSS content, if present.
         let css: String?
-        
+
         /// Whether this style is from the global styles system.
         let isGlobalStyles: Bool
     }

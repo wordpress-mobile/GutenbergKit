@@ -201,5 +201,4 @@ public struct RESTAPIRepository: Sendable {
         try self.cache.store(urlResponse, for: url, httpMethod: method)
         return urlResponse
     }
-
 }

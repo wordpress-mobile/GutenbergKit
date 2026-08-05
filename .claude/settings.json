@@ -7,6 +7,12 @@
 					{
 						"type": "command",
 						"command": "jq -r '.tool_input.file_path' | xargs ./node_modules/.bin/prettier --write"
+					},
+					{
+						"type": "command",
+						"command": "\"$CLAUDE_PROJECT_DIR\"/bin/claude-hooks/swiftlint.sh",
+						"timeout": 120,
+						"statusMessage": "Linting Swift..."
 					}
 				]
 			}

@@ -239,9 +239,49 @@ lint-android: ## Lint Android code with Detekt
 	@echo "--- :android: Running Detekt"
 	./android/gradlew -p ./android detekt
 
+# Runs SwiftLint via the BuildTools package plugin, which pins the SwiftLint version
+# to `swiftlint_version` in .swiftlint.yml. SDKROOT is pinned to the macOS SDK so the
+# plugin builds even when invoked from an environment that targets iOS.
+#
+# Set SWIFT_LINT_PATHS to lint specific files instead of the whole project, e.g.
+# `make lint-swift SWIFT_LINT_PATHS=ios/Sources/GutenbergKit/Sources/EditorService.swift`.
+# Only files are honored — passing a directory silently falls back to linting the
+# whole project.
+#
+# Separate multiple files with newlines rather than spaces, so that paths
+# containing spaces stay intact:
+#
+#   make lint-swift SWIFT_LINT_PATHS="$(git diff --name-only -- '*.swift')"
+#
+# The plugin only honors explicit paths when the last argument is an existing
+# file, so the paths must always be appended last — after flags like `--fix` — or
+# the plugin silently falls back to linting the whole project.
+#
+# The paths are exported and re-split on newlines inside the recipe rather than
+# expanded inline as $(SWIFT_LINT_PATHS). Inline expansion pastes the value into
+# the recipe text, where the shell word-splits a path containing spaces into
+# fragments that are not existing files — silently triggering that same
+# whole-project fallback. Going through the environment avoids that entirely.
+SWIFT_LINT_PATHS ?=
+export SWIFT_LINT_PATHS
+
+SWIFTLINT = IFS="$$(printf '\nx')"; IFS="$${IFS%x}"; \
+	set -f; set -- $${SWIFT_LINT_PATHS:+$$SWIFT_LINT_PATHS}; \
+	unset IFS; set +f; \
+	SDKROOT="$$(xcrun --sdk macosx --show-sdk-path)" \
+	swift package --package-path BuildTools plugin \
+	--allow-writing-to-directory "$(CURDIR)" --allow-writing-to-package-directory \
+	swiftlint --working-directory "$(CURDIR)" --quiet
+
 .PHONY: lint-swift
 lint-swift: ## Lint Swift code
-	swift package plugin swiftlint
+	@echo "--- :swift: Running SwiftLint"
+	@$(SWIFTLINT) "$$@"
+
+.PHONY: lint-swift-fix
+lint-swift-fix: ## Lint and auto-fix Swift code
+	@echo "--- :swift: Running SwiftLint (autocorrect)"
+	@$(SWIFTLINT) --fix "$$@"
 
 ################################################################################
 # Testing Targets

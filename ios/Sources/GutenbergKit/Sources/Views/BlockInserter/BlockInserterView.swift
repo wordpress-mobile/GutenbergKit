@@ -153,7 +153,6 @@ struct BlockInserterView: View {
             .tint(Color.primary)
         }
 
-
         ToolbarItemGroup(placement: .topBarTrailing) {
             if isLargeWidth {
                 customSearchField

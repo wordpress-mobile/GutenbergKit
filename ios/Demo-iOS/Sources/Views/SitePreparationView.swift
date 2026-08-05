@@ -220,7 +220,6 @@ class SitePreparationViewModel {
 
     var cacheBundleCount: Int?
 
-
     var error: Error?
 
     var configurationItem: ConfigurationItem
@@ -402,12 +401,10 @@ class SitePreparationViewModel {
                 }
 
                 await self.countAssetBundles()
-
             } catch {
                 self.error = error
             }
         }
-
     }
 
     /// Clears all local editor data, forcing the loading functions to run the next time the editor starts up. This is useful for testing the built-in
@@ -511,7 +508,7 @@ class SitePreparationViewModel {
         let response = try await client.postTypes.listWithEditContext().data
 
         self.postTypes = response.postTypes
-            .filter { (type, details) in
+            .filter { type, details in
                 switch type {
                 case .post, .page:
                     return true

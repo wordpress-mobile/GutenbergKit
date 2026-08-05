@@ -3,7 +3,7 @@ import SwiftUI
 struct BlockInserterBlockView: View {
     let block: BlockType
     let action: () -> Void
-    
+
     @State private var isPressed = false
     @State private var isHovered = false
 

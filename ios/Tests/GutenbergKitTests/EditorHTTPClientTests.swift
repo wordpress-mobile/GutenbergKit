@@ -7,7 +7,7 @@ private final class SpyURLSession: URLSessionProtocol, @unchecked Sendable {
     private let lock = NSLock()
     private var _capturedRequests: [URLRequest] = []
 
-    var responseData: Data = Data()
+    var responseData = Data()
 
     var capturedRequests: [URLRequest] {
         lock.withLock { _capturedRequests }

@@ -189,6 +189,8 @@ struct RFC9112ConformanceTests {
         let parser = HTTPRequestParser("GET /wp/v2/posts HTTP/1.1\r\nX-WP-Nonce:\r\nHost: localhost\r\n\r\n")
         let request = try #require(try parser.parseRequest())
 
+        // Optional `String?`: `== ""` asserts present-and-empty, which `isEmpty` cannot express.
+        // swiftlint:disable:next empty_string
         #expect(request.header("X-WP-Nonce") == "")
     }
 
@@ -197,6 +199,8 @@ struct RFC9112ConformanceTests {
         let parser = HTTPRequestParser("GET /wp/v2/posts HTTP/1.1\r\nX-WP-Nonce:   \t   \r\nHost: localhost\r\n\r\n")
         let request = try #require(try parser.parseRequest())
 
+        // Optional `String?`: `== ""` asserts present-and-empty, which `isEmpty` cannot express.
+        // swiftlint:disable:next empty_string
         #expect(request.header("X-WP-Nonce") == "")
     }
 

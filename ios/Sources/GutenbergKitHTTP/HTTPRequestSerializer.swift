@@ -369,7 +369,7 @@ public enum HTTPRequestSerializer {
                 throw HTTPRequestParseError.conflictingContentLength
             }
         }
-        if let existing = existing, existing != cl {
+        if let existing, existing != cl {
             throw HTTPRequestParseError.conflictingContentLength
         }
         return cl
