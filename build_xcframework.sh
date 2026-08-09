@@ -39,6 +39,19 @@ if [[ -z "${MARKETING_VERSION}" ]]; then
     echo "Error: could not read the version field from package.json (is 'jq' installed and is this the repo root?)" >&2
     exit 1
 fi
+
+# CFBundleVersion allows at most three period-separated non-negative integers,
+# so a SemVer prerelease like `0.19.0-alpha.0` is rejected (altool 90058). No
+# substitution helps — prerelease identifiers are alphanumeric by spec — so
+# strip the prerelease (`-...`) and build-metadata (`+...`) suffixes and stamp
+# the `major.minor.patch` core. CFBundleShortVersionString keeps the full
+# version, which Apple accepts.
+#
+# Reusing a core version across an alpha and its final release is safe:
+# artifacts are identified by git SHA and by CDN URL plus SwiftPM checksum,
+# never by this key.
+BUNDLE_VERSION="${MARKETING_VERSION%%[-+]*}"
+
 BUILD_DIR="$(pwd)/build"
 DERIVED_DATA_PATH="${BUILD_DIR}/DerivedData"
 
@@ -173,7 +186,7 @@ build_framework() {
     <key>CFBundleShortVersionString</key>
     <string>${MARKETING_VERSION}</string>
     <key>CFBundleVersion</key>
-    <string>${MARKETING_VERSION}</string>
+    <string>${BUNDLE_VERSION}</string>
     <key>MinimumOSVersion</key>
     <string>${MINIMUM_IOS_VERSION}</string>
 </dict>
@@ -279,8 +292,14 @@ verify_framework_plist() {
         echo "Error: ${plist}: CFBundleShortVersionString='${short_version}' does not match package.json version '${MARKETING_VERSION}'" >&2
         exit 1
     fi
-    if [[ "${bundle_version}" != "${MARKETING_VERSION}" ]]; then
-        echo "Error: ${plist}: CFBundleVersion='${bundle_version}' does not match package.json version '${MARKETING_VERSION}'" >&2
+    if [[ "${bundle_version}" != "${BUNDLE_VERSION}" ]]; then
+        echo "Error: ${plist}: CFBundleVersion='${bundle_version}' does not match expected '${BUNDLE_VERSION}' (derived from package.json version '${MARKETING_VERSION}')" >&2
+        exit 1
+    fi
+    # Assert Apple's grammar directly, not just agreement with package.json: a
+    # value can track the release perfectly and still be rejected on upload.
+    if [[ ! "${bundle_version}" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+        echo "Error: ${plist}: CFBundleVersion='${bundle_version}' must be at most three period-separated non-negative integers (altool 90058)" >&2
         exit 1
     fi
     if [[ "${min_os}" != "${MINIMUM_IOS_VERSION}" ]]; then
