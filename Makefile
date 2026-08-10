@@ -132,6 +132,7 @@ build: prep-translations ## Build the project for all platforms (iOS, Android, w
 		$(MAKE) _RECURSIVE_INVOKE=1 npm-dependencies && \
 		echo "--- :node: Building Gutenberg" && \
 		npm run build && \
+		$(MAKE) inject-sourcemap-debug-ids && \
 		echo "--- :open_file_folder: Copying Build Products into place" && \
 		$(MAKE) copy-dist-ios && \
 		$(MAKE) copy-dist-android; \
@@ -139,17 +140,42 @@ build: prep-translations ## Build the project for all platforms (iOS, Android, w
 		echo "--- :white_check_mark: Skipping JS build (dist already exists). Use REFRESH_JS_BUILD=1 to force refresh."; \
 	fi
 
+# Inject Sentry Debug IDs into the built JS and its source maps. This runs
+# BETWEEN `npm run build` and the `copy-dist-*` targets so the `//# debugId=`
+# comment lands in `dist/` and is copied into the shipped bundles, while the
+# matching `debug_id` is written into the `.map` files that get uploaded to
+# Sentry. Debug IDs let Sentry match maps to events regardless of the (unstable,
+# per-install) on-device file paths — the only reliable approach for GutenbergKit's
+# WebView, where path-based matching fails.
+#
+# `@sentry/cli sourcemaps inject` only rewrites files with adjacent maps; it needs
+# no auth token (uploading, which does, stays host-side). The injected UUIDs are
+# deterministic (content-hashed), so builds remain reproducible.
+.PHONY: inject-sourcemap-debug-ids
+inject-sourcemap-debug-ids:
+	@echo "--- :sentry: Injecting source map Debug IDs"
+	@npx sentry-cli sourcemaps inject dist
+
+# The `find ... -delete` after each copy strips source maps from the native
+# bundles. Maps are emitted into `dist/` (see `vite.config.js`) so build tooling
+# can deliver them to Sentry, but they must NOT ship inside the app: they'd bloat
+# the binary and expose de-minified source. `dist/` itself keeps its maps for the
+# upload step. Stripping here (rather than only in CI) covers every consumer of
+# these targets — local `make build`, CI, and `bin/release.sh` (which commits the
+# iOS bundle via `git add .`).
 .PHONY: copy-dist-ios
 copy-dist-ios:
 	@rm -rf ./ios/Sources/GutenbergKitResources/Gutenberg/
 	@mkdir -p ./ios/Sources/GutenbergKitResources/Gutenberg
 	@cp -r ./dist/. ./ios/Sources/GutenbergKitResources/Gutenberg/
+	@find ./ios/Sources/GutenbergKitResources/Gutenberg -name '*.map' -delete
 	@touch ./ios/Sources/GutenbergKitResources/Gutenberg/.gitkeep
 
 .PHONY: copy-dist-android
 copy-dist-android:
 	@rm -rf ./android/Gutenberg/src/main/assets/
 	@cp -r ./dist/. ./android/Gutenberg/src/main/assets
+	@find ./android/Gutenberg/src/main/assets -name '*.map' -delete
 
 .PHONY: build-swift-package
 build-swift-package: build ## Build the Swift package for iOS

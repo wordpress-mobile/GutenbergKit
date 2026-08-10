@@ -85,9 +85,62 @@ const parseException = ( originalException ) => {
 	return exception;
 };
 
+// Build a map of `filename -> debugId` from the `window._sentryDebugIds` global.
+// `sentry-cli sourcemaps inject` adds a snippet to each built chunk that captures
+// its own `(new Error).stack` as a key and stores the chunk's Debug ID as the
+// value. The top frame of that stack identifies the chunk's file, so parsing each
+// key yields which Debug ID belongs to which file.
+const getDebugIdsByFilename = () => {
+	const debugIdMap =
+		typeof window !== 'undefined' ? window._sentryDebugIds : undefined;
+	if ( ! debugIdMap ) {
+		return {};
+	}
+
+	const result = {};
+	for ( const stack of Object.keys( debugIdMap ) ) {
+		for ( const line of stack.split( '\n' ) ) {
+			let frame;
+			for ( const parser of stackParsers ) {
+				frame = parser( line );
+				if ( frame ) {
+					break;
+				}
+			}
+			// The first parseable frame's file is the chunk the snippet ran in.
+			if ( frame?.filename ) {
+				result[ frame.filename ] = debugIdMap[ stack ];
+				break;
+			}
+		}
+	}
+	return result;
+};
+
+// Produce the Sentry `debug_meta` images for the files referenced by this
+// exception's stack, so Sentry can match the uploaded source maps by Debug ID
+// (independent of the unstable on-device file paths).
+const getDebugImages = ( stacktrace ) => {
+	const debugIdsByFilename = getDebugIdsByFilename();
+	const seen = new Set();
+	const images = [];
+
+	for ( const frame of stacktrace ) {
+		const filename = frame.filename;
+		const debugId = filename && debugIdsByFilename[ filename ];
+		if ( debugId && ! seen.has( filename ) ) {
+			seen.add( filename );
+			images.push( { code_file: filename, debug_id: debugId } );
+		}
+	}
+	return images;
+};
+
 export default ( exception, { context, tags } = {} ) => {
+	const parsed = parseException( exception );
 	return {
-		...parseException( exception ),
+		...parsed,
+		debug_images: getDebugImages( parsed.stacktrace ),
 		context: {
 			...context,
 		},

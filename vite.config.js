@@ -24,6 +24,13 @@ export default defineConfig( {
 	build: {
 		outDir: '../dist',
 		target: 'esnext',
+		// Emit source maps so build tooling can upload them to Sentry for
+		// exception symbolication. `'hidden'` writes the `.map` files but omits
+		// the `//# sourceMappingURL=` comment from the shipped JS: the maps are
+		// stripped from the native bundles (see the Makefile) so a comment
+		// pointing at them would dangle. Dev-server debugging is unaffected —
+		// `build.sourcemap` applies only to production builds, not `vite dev`.
+		sourcemap: 'hidden',
 	},
 	resolve: {
 		alias: {
