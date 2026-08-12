@@ -34,8 +34,11 @@ public extension EditorHTTPClientProtocol {
 
 /// A delegate for observing HTTP requests made by the editor.
 ///
-/// Implement this protocol to inspect or log all network requests.
-public protocol EditorHTTPClientDelegate {
+/// Implement this protocol to inspect or log all network requests — including the
+/// media uploads and passthroughs routed through
+/// ``EditorHTTPClientProtocol/uploadClient()``. Conformers are invoked from an
+/// actor, so the protocol requires `Sendable` (implementations must be thread-safe).
+public protocol EditorHTTPClientDelegate: Sendable {
     func didPerformRequest(_ request: URLRequest, response: URLResponse, data: EditorResponseData)
 }
 
@@ -167,11 +170,12 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
     /// the request's default 60s inactivity timeout, mirroring Android's
     /// dedicated upload client (no total-duration cap).
     ///
-    /// The request-observing `delegate` is intentionally not carried over:
-    /// sharing a non-`Sendable` delegate across two actors would be unsound, and
-    /// Android likewise has no upload-request observer.
+    /// The request-observing `delegate` is carried over, so a host that installs
+    /// one observes media uploads and passthroughs like every other request; only
+    /// the REST `requestTimeout` is dropped. Sharing the observer across both
+    /// clients is sound because `EditorHTTPClientDelegate` is `Sendable`.
     public nonisolated func uploadClient() -> any EditorHTTPClientProtocol {
-        EditorHTTPClient(urlSession: urlSession, authHeader: authHeader)
+        EditorHTTPClient(urlSession: urlSession, authHeader: authHeader, delegate: delegate)
     }
 
     private func configureRequest(_ request: URLRequest) -> URLRequest {

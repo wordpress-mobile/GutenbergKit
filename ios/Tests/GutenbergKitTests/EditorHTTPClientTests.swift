@@ -213,6 +213,28 @@ struct EditorHTTPClientTests {
         #expect(captured.timeoutInterval == 120)
     }
 
+    @Test("uploadClient() carries the request-observing delegate so uploads are observed too")
+    func uploadClientCarriesDelegate() async throws {
+        let spySession = SpyURLSession()
+        let spyDelegate = SpyHTTPClientDelegate()
+        let client = EditorHTTPClient(
+            urlSession: spySession,
+            authHeader: "Bearer token",
+            delegate: spyDelegate
+        )
+
+        let uploadClient = client.uploadClient()
+        let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/media")!)
+        _ = try await uploadClient.performRaw(request)
+
+        // The delegate installed on the REST client must also observe requests
+        // made through the upload sibling — otherwise a host logging "all network
+        // requests" silently misses every media upload.
+        #expect(spyDelegate.callCount == 1)
+        let observed = try #require(spyDelegate.lastCall)
+        #expect(observed.request.url == request.url)
+    }
+
     // MARK: - Cookie Handling Tests
 
     @Test("perform() disables cookie handling")
