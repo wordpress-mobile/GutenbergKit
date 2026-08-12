@@ -3,6 +3,10 @@ agents:
 
 env:
     IMAGE_ID: $IMAGE_ID
+    # electron ships a ~100 MB prebuilt binary via a postinstall download
+    # that no CI step ever runs (it only backs react-devtools' `dev:tools`).
+    # The download is flaky from CI, so skip it -- see the Test Web E2E job.
+    ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
 
 steps:
     - label: ':react: Build React App'
