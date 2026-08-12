@@ -6,8 +6,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -19,6 +21,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.io.IOException
 import java.net.Socket
 
 class MediaUploadServerTest {
@@ -428,6 +431,49 @@ class MediaUploadServerTest {
         runBlocking { uploader.upload(file, "image/jpeg", "image.jpg", emptyList(), "") }
 
         assertEquals("/wp-json/wp/v2/sites/123/media", mockWpServer.takeRequest().path)
+
+        mockWpServer.shutdown()
+    }
+
+    @Test
+    fun `upload surfaces an error instead of hanging when the response body is truncated after headers`() {
+        // Regression test: WordPress sends the 201 status line + headers, then the
+        // body is truncated mid-transfer. OkHttp delivers onResponse for the 201 and
+        // the body read throws there — a throw OkHttp swallows rather than routing to
+        // onFailure. The upload must surface that as an error, not suspend forever
+        // holding a connection permit.
+        val mockWpServer = MockWebServer()
+        mockWpServer.enqueue(
+            MockResponse()
+                .setResponseCode(201)
+                .setBody("x".repeat(2048)) // large enough that DISCONNECT truncates it mid-body
+                .setSocketPolicy(SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY)
+        )
+        mockWpServer.start()
+
+        val uploader = DefaultMediaUploader(
+            httpClient = okhttp3.OkHttpClient(),
+            siteApiRoot = mockWpServer.url("/wp-json/").toString(),
+            authHeader = "Bearer test-token"
+        )
+        val file = tempFolder.newFile("image.jpg")
+        file.writeBytes("fake image".toByteArray())
+
+        // withTimeout is the regression guard: without the fix the coroutine never
+        // resumes, so this fails with a TimeoutCancellationException instead of the
+        // expected IOException.
+        val error = runCatching {
+            runBlocking {
+                withTimeout(5_000) {
+                    uploader.upload(file, "image/jpeg", "image.jpg", emptyList(), "")
+                }
+            }
+        }.exceptionOrNull()
+
+        assertTrue(
+            "Expected an IOException from the truncated body, got: $error",
+            error is IOException
+        )
 
         mockWpServer.shutdown()
     }

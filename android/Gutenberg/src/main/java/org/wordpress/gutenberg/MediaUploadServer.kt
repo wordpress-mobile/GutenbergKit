@@ -549,8 +549,21 @@ internal open class DefaultMediaUploader(
             continuation.invokeOnCancellation { call.cancel() }
             call.enqueue(object : okhttp3.Callback {
                 override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
-                    val result = response.use {
-                        MediaUploadResponse(it.code, it.body?.bytes() ?: ByteArray(0))
+                    // Read the body inside a try/catch and resume the continuation
+                    // ourselves on failure. OkHttp marks the callback as signalled
+                    // before invoking onResponse, so a throw while reading the body
+                    // — a truncated/reset stream, or the read timeout firing mid-body
+                    // after WordPress already sent its 201 headers — is swallowed
+                    // rather than routed to onFailure. Without this the continuation
+                    // would never resume and the upload coroutine would hang forever,
+                    // holding a connection permit.
+                    val result = try {
+                        response.use {
+                            MediaUploadResponse(it.code, it.body?.bytes() ?: ByteArray(0))
+                        }
+                    } catch (e: IOException) {
+                        if (!continuation.isCancelled) continuation.resumeWithException(e)
+                        return
                     }
                     continuation.resume(result)
                 }
