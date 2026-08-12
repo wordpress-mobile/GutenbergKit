@@ -58,6 +58,59 @@ struct HTTPServerCancellationTests {
         #expect(!signals.didFinishNormally)
     }
 
+    @Test("a client write-half-close mid-handler is treated as an abort, and the response is dropped")
+    func halfCloseIsTreatedAsAbort() async throws {
+        // A client MAY legally half-close its write half (`shutdown(SHUT_WR)`)
+        // after a complete request, keeping its read half open for the response.
+        // The server sees the same read EOF a full close produces and can't tell
+        // the two apart, so — by design — it treats the half-close as an abort: it
+        // cancels the in-flight handler and sends no response. This pins that
+        // deliberate tradeoff (prompt cancellation of the outbound POST /wp/v2/media
+        // so an aborted upload can't orphan an attachment) against a future change
+        // that "fixes" the half-close and, with it, silently resurrects the orphan
+        // bug. Safe in practice: the only client is the editor WebView's `fetch`,
+        // which never half-closes and fully closes on abort.
+        let signals = HandlerSignals()
+
+        let server = try await HTTPServer.start(
+            name: "half-close-abort",
+            requiresAuthentication: true
+        ) { _ in
+            signals.markStarted()
+            do {
+                try await Task.sleep(for: .seconds(10))
+                signals.markFinishedNormally()
+            } catch {
+                signals.markCancelled()
+            }
+            return HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let connection = NWConnection(
+            host: .ipv4(.loopback),
+            port: NWEndpoint.Port(rawValue: server.port)!,
+            using: .tcp
+        )
+        try await waitUntilReady(connection)
+        let request = "POST /upload HTTP/1.1\r\nHost: 127.0.0.1\r\nProxy-Authorization: Bearer \(server.token)\r\nContent-Length: 0\r\n\r\n"
+        try await send(Data(request.utf8), on: connection)
+
+        // Once the handler is running, half-close the write half only — the read
+        // half stays open to receive the (never-sent) response.
+        try await signals.waitUntilStarted()
+        try await halfCloseWrite(connection)
+
+        // Treated exactly like a full close: handler cancelled, no response.
+        let cancelled = await signals.waitUntilCancelled(timeout: .seconds(3))
+        #expect(cancelled)
+        #expect(!signals.didFinishNormally)
+
+        let received = (try? await receiveResponse(connection)) ?? ""
+        #expect(!received.hasPrefix("HTTP/1.1"))
+        connection.cancel()
+    }
+
     @Test("stopping the server mid-handler closes the connection without sending a response")
     func serverStopMidHandlerSendsNoResponse() async throws {
         let signals = HandlerSignals()
@@ -142,6 +195,21 @@ struct HTTPServerCancellationTests {
             connection.send(content: data, completion: .contentProcessed { error in
                 if let error { cont.resume(throwing: error) } else { cont.resume() }
             })
+        }
+    }
+
+    /// Half-closes the connection's send half (a FIN via an empty final message)
+    /// while leaving the receive half open — Network.framework's `shutdown(SHUT_WR)`.
+    private func halfCloseWrite(_ connection: NWConnection) async throws {
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, any Swift.Error>) in
+            connection.send(
+                content: nil,
+                contentContext: .finalMessage,
+                isComplete: true,
+                completion: .contentProcessed { error in
+                    if let error { cont.resume(throwing: error) } else { cont.resume() }
+                }
+            )
         }
     }
 

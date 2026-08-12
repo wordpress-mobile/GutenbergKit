@@ -651,6 +651,15 @@ public final class HTTPServer: Sendable {
     /// to any outbound work the handler is awaiting, and the caller skips the
     /// (doomed) send. If the handler wins, the watcher is cancelled *without*
     /// cancelling the connection, so the response can still be sent.
+    ///
+    /// A read EOF can't distinguish a full close from a client *write*-half-close
+    /// (`shutdown(SHUT_WR)` after the request, read half kept open for the
+    /// response), so both are deliberately treated as an abort. That's safe here
+    /// because the only client is the editor WebView's `fetch`, which never
+    /// half-closes and fully closes on abort; serving a half-closer instead would
+    /// forfeit the prompt cancellation this exists for — the two are only
+    /// distinguishable by attempting the write, by which point an aborted upload
+    /// has already run. A regression test pins this.
     private static func runHandler(
         _ handler: @escaping @Sendable (HTTPServer.Request) async -> HTTPResponse,
         _ request: HTTPServer.Request,
@@ -670,8 +679,9 @@ public final class HTTPServer: Sendable {
         }
     }
 
-    /// Suspends until the connection's peer closes it (EOF) or it fails, by
-    /// posting a receive whose bytes are discarded (it never feeds the parser).
+    /// Suspends until the connection's peer closes its send half (EOF) — a full
+    /// close or a write-half-close alike — or it fails, by posting a receive
+    /// whose bytes are discarded (it never feeds the parser).
     /// A well-behaved client sends nothing before the response, so in the common
     /// case the receive simply stays pending until the peer closes.
     ///

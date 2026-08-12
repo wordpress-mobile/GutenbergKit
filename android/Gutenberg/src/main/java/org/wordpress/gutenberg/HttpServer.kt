@@ -579,6 +579,15 @@ class HttpServer(
      * cancelling the handler cancels the outbound call instead of letting it run
      * to completion and orphan an attachment that a retry then duplicates.
      *
+     * A read EOF can't distinguish a full close from a client write-half-close
+     * (`shutdownOutput()` after the request, read half kept open for the
+     * response), so both are deliberately treated as an abort. That's safe here
+     * because the only client is the editor WebView's `fetch`, which never
+     * half-closes and fully closes on abort; serving a half-closer instead would
+     * forfeit the prompt cancellation this exists for — the two are only
+     * distinguishable by attempting the write, by which point an aborted upload
+     * has already run. A regression test pins this.
+     *
      * Returns null if the peer closed before the handler produced a response, in
      * which case the caller skips the (doomed) send.
      */
@@ -615,7 +624,8 @@ class HttpServer(
     }
 
     /**
-     * Suspends until the connection's peer closes it (EOF) or it fails. A
+     * Suspends until the connection's peer closes its send half (EOF) — a full
+     * close or a write-half-close alike — or it fails. A
      * well-behaved client sends nothing before the response, so the read blocks
      * until the peer closes; the per-read idle timeout ([Socket.setSoTimeout])
      * just makes it loop. Any unexpected pre-response bytes are discarded — this
