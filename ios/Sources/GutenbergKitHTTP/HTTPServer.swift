@@ -290,7 +290,8 @@ public final class HTTPServer: Sendable {
                 return nil
             }
             // First child to finish wins: a terminal state, or nil on timeout.
-            let first = await group.next() ?? nil
+            // `next()` yields a double optional (`State??`); flatten it to `State?`.
+            let first = (await group.next()).flatMap { $0 }
             group.cancelAll()
             return first
         }

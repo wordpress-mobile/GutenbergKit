@@ -330,7 +330,6 @@ final class MediaUploadServer: Sendable {
             }
         }
     }
-
 }
 
 // MARK: - Errors
@@ -544,4 +543,3 @@ class DefaultMediaUploader: @unchecked Sendable {
         }
     }
 }
-

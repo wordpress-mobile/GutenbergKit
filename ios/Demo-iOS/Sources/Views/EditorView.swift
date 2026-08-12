@@ -349,7 +349,6 @@ private struct _EditorView: UIViewControllerRepresentable {
             // Same format, so the original mimeType/filename carry over.
             return .processed(outputURL, mimeType: mimeType, filename: filename)
         }
-
     }
 }
 
