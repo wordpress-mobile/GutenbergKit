@@ -1,4 +1,5 @@
 {
+	"core": "https://wordpress.org/latest.zip",
 	"plugins": [
 		"https://downloads.wordpress.org/plugin/gutenberg.zip",
 		"https://downloads.wordpress.org/plugin/jetpack.zip"
