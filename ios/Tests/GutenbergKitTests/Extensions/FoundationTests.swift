@@ -245,11 +245,46 @@ struct URLAppendingRawPathTests {
     #expect(result.absoluteString == "https://example.com/api/posts?context=edit&per_page=10")
   }
 
-  @Test("preserves query parameters in base URL when appending path")
-  func preservesBaseQueryParameters() {
-    let base = URL(string: "https://example.com/api?token=abc")!
-    let result = base.appending(rawPath: "posts")
-    #expect(result.absoluteString == "https://example.com/api?token=abc/posts")
+  // MARK: - Query-based REST Roots (plain permalinks)
+
+  @Test("appends path to the query value of a query-based REST root")
+  func appendsPathToQueryBasedRoot() {
+    let base = URL(string: "https://example.com/?rest_route=/")!
+    let result = base.appending(rawPath: "/wp/v2/media")
+    #expect(result.absoluteString == "https://example.com/?rest_route=/wp/v2/media")
+  }
+
+  @Test("merges the path's query string into a query-based REST root")
+  func mergesQueryIntoQueryBasedRoot() {
+    let base = URL(string: "https://example.com/?rest_route=/")!
+    let result = base.appending(rawPath: "/wp/v2/themes?context=edit&status=active")
+    #expect(
+      result.absoluteString
+        == "https://example.com/?rest_route=/wp/v2/themes&context=edit&status=active")
+  }
+
+  @Test("keeps exactly one leading slash when the REST root omits its trailing slash")
+  func keepsOneLeadingSlashWhenRootOmitsTrailingSlash() {
+    let base = URL(string: "https://example.com/?rest_route=")!
+    let result = base.appending(rawPath: "/wp/v2/media")
+    #expect(result.absoluteString == "https://example.com/?rest_route=/wp/v2/media")
+  }
+
+  @Test("appends path without a leading slash to a query-based REST root")
+  func appendsPathWithoutLeadingSlashToQueryBasedRoot() {
+    let base = URL(string: "https://example.com/?rest_route=/")!
+    let result = base.appending(rawPath: "wp/v2/media")
+    #expect(result.absoluteString == "https://example.com/?rest_route=/wp/v2/media")
+  }
+
+  @Test("treats a file URL containing a query character as a plain path")
+  func treatsFileURLWithQueryCharacterAsPlainPath() {
+    // `URL(fileURLWithPath:)` would percent-encode the `?`, so build the URL from a string to
+    // keep the literal character that the query-based REST root branch looks for. The appended
+    // path carries its own `?`, which that branch would rewrite to `&`.
+    let base = URL(string: "file:///tmp/assets/site?name")!
+    let result = base.appending(rawPath: "styles?v=2")
+    #expect(result.absoluteString == "file:///tmp/assets/site?name/styles?v=2")
   }
 
   // MARK: - Special Characters

@@ -292,6 +292,66 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
         let urls = mockClient.requestedURLs.map(\.absoluteString)
         #expect(urls.contains { $0.contains("sites/123/posts/1") })
     }
+
+    // MARK: - Query-based API Root Tests (plain permalinks)
+
+    /// Sites using plain permalinks have no path-based REST root, so WordPress advertises the
+    /// query form `https://example.com/?rest_route=/` instead.
+    @Test("endpoints are appended to the route of a query-based API root")
+    func endpointsAreAppendedToQueryBasedApiRoot() async throws {
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        let configuration = makeQueryRootConfiguration()
+        let repository = makeRepository(configuration: configuration, httpClient: mockClient)
+
+        // Using try? because the mock returns empty data that fails decoding.
+        // We only care about the URLs that were requested, not the responses.
+        _ = try? await repository.fetchPost(id: 1)
+        _ = try? await repository.fetchEditorSettings()
+        _ = try? await repository.fetchSettingsOptions()
+        _ = try? await repository.fetchActiveTheme()
+        _ = try? await repository.fetchPostTypes()
+
+        let urls = Set(mockClient.requestedURLs.map(\.absoluteString))
+        #expect(urls.contains("https://example.com/?rest_route=/wp/v2/posts/1&context=edit"))
+        #expect(
+            urls.contains("https://example.com/?rest_route=/wp-block-editor/v1/settings"))
+        #expect(urls.contains("https://example.com/?rest_route=/wp/v2/settings"))
+        #expect(
+            urls.contains(
+                "https://example.com/?rest_route=/wp/v2/themes&context=edit&status=active"))
+        #expect(urls.contains("https://example.com/?rest_route=/wp/v2/types&context=view"))
+    }
+
+    @Test("namespace is inserted into a query-based API root")
+    func namespaceIsInsertedIntoQueryBasedApiRoot() async throws {
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        let configuration = makeQueryRootConfiguration(siteApiNamespace: ["sites/123/"])
+        let repository = makeRepository(configuration: configuration, httpClient: mockClient)
+
+        // Using try? because the mock returns empty data that fails decoding.
+        // We only care about the URLs that were requested, not the responses.
+        _ = try? await repository.fetchPost(id: 1)
+        _ = try? await repository.fetchSettingsOptions()
+
+        let urls = Set(mockClient.requestedURLs.map(\.absoluteString))
+        #expect(
+            urls.contains("https://example.com/?rest_route=/wp/v2/sites/123/posts/1&context=edit"))
+        #expect(urls.contains("https://example.com/?rest_route=/wp/v2/sites/123/settings"))
+    }
+
+    private func makeQueryRootConfiguration(
+        siteApiNamespace: [String] = []
+    ) -> EditorConfiguration {
+        EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: Self.testSiteURL,
+            siteApiRoot: URL(string: "https://example.com/?rest_route=/")!,
+            siteApiNamespace: siteApiNamespace
+        )
+        .setShouldUseThemeStyles(true)
+        .setAuthHeader("Bearer test-token")
+        .build()
+    }
 }
 
 // MARK: - URL Capturing Mock Client
