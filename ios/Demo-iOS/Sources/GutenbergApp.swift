@@ -59,7 +59,8 @@ struct GutenbergApp: App {
                         EditorView(
                             configuration: editor.configuration,
                             dependencies: editor.dependencies,
-                            apiClient: editor.apiClient
+                            apiClient: editor.apiClient,
+                            enableNativeMediaUpload: editor.enableNativeMediaUpload
                         )
                     }
                 }

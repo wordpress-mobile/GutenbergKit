@@ -8,10 +8,14 @@ import { getQueryArg } from '@wordpress/url';
  * Internal dependencies
  */
 import { getGBKit, POST_FALLBACKS } from './bridge';
+import { info, error as logError } from './logger';
 
 /**
  * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
  */
+
+/** Matches `POST /wp/v2/media` but not sub-paths like `/wp/v2/media/123`. */
+const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
 
 /**
  * Initializes the API fetch configuration and middleware.
@@ -26,6 +30,7 @@ export function configureApiFetch() {
 	apiFetch.use( apiPathModifierMiddleware );
 	apiFetch.use( tokenAuthMiddleware );
 	apiFetch.use( filterEndpointsMiddleware );
+	apiFetch.use( nativeMediaUploadMiddleware );
 	apiFetch.use( mediaUploadMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
 	apiFetch.use(
@@ -147,6 +152,169 @@ function filterEndpointsMiddleware( options, next ) {
 }
 
 /**
+ * Middleware that routes media uploads through the native host's local HTTP
+ * server for processing (e.g. image resizing) before uploading to WordPress.
+ *
+ * Exported for testing only.
+ *
+ * When `nativeUploadPort` is configured in GBKit, this middleware intercepts
+ * `POST /wp/v2/media` requests, forwards the file to the native server, and
+ * returns the response in WordPress REST API attachment format so the existing
+ * Gutenberg upload pipeline (blob previews, save locking, entity caching)
+ * works unchanged.
+ *
+ * When the native server is not configured, requests pass through unmodified.
+ *
+ * Note: Ideally, media uploads would be handled via the `mediaUpload` editor
+ * setting (see the Gutenberg Framework guides), but GutenbergKit uses
+ * Gutenberg's `EditorProvider` which overwrites that setting internally:
+ * https://github.com/WordPress/gutenberg/blob/29914e1d09a344edce58d938fa4992e1ec248e41/packages/editor/src/components/provider/use-block-editor-settings.js#L340
+ *
+ * Until GutenbergKit is refactored to use `BlockEditorProvider` and aligns
+ * with the Gutenberg Framework guides (https://wordpress.org/gutenberg-framework/docs/intro/),
+ * this api-fetch middleware approach is necessary. For context, see:
+ * - https://github.com/wordpress-mobile/GutenbergKit/pull/24
+ * - https://github.com/wordpress-mobile/GutenbergKit/pull/50
+ * - https://github.com/wordpress-mobile/GutenbergKit/pull/108
+ *
+ * @type {APIFetchMiddleware}
+ */
+export function nativeMediaUploadMiddleware( options, next ) {
+	const { nativeUploadPort, nativeUploadToken } = getGBKit();
+
+	if (
+		! nativeUploadPort ||
+		! nativeUploadToken ||
+		! options.method ||
+		options.method.toUpperCase() !== 'POST' ||
+		! options.path ||
+		! MEDIA_UPLOAD_PATH.test( options.path ) ||
+		! ( options.body instanceof FormData )
+	) {
+		return next( options );
+	}
+
+	const file = options.body.get( 'file' );
+	if ( ! file ) {
+		return next( options );
+	}
+
+	info(
+		`Routing upload of ${ file.name } through native server on port ${ nativeUploadPort }`
+	);
+
+	// Forward the original request body — the file plus every sibling field
+	// (`post`, additionalData) — and the original query string (e.g. `?_embed`)
+	// so the native server can relay them to WordPress unchanged. Rebuilding the
+	// body with only `file` would drop the post association and additionalData.
+	const query = requestQuery( options.path );
+
+	// Use the two-argument form of `.then()` so the rejection handler catches
+	// *only* a connection-level failure of the `fetch()` itself — not errors
+	// thrown while handling a response (those must surface as real failures).
+	return fetch( `http://localhost:${ nativeUploadPort }/upload${ query }`, {
+		method: 'POST',
+		headers: {
+			'Relay-Authorization': `Bearer ${ nativeUploadToken }`,
+		},
+		body: options.body,
+		signal: options.signal,
+	} ).then(
+		( response ) => {
+			// The native server relays WordPress's response verbatim. On a
+			// non-2xx, mirror @wordpress/api-fetch: reject with the parsed WP
+			// error body ({ code, message, data }) so @wordpress/media-utils
+			// surfaces WordPress's real message. On success, return WordPress's
+			// attachment object unchanged so every consumer behaves exactly as
+			// it would for a non-native upload.
+			if ( ! response.ok ) {
+				return response
+					.json()
+					.catch( invalidUploadResponseError )
+					.then( ( body ) => {
+						logError( 'Native upload failed', body );
+						throw body;
+					} );
+			}
+			// A 2xx with a non-JSON body (e.g. an HTML error page injected by an
+			// intermediary) rejects json(); normalize it the same way as the
+			// non-ok path rather than surfacing a raw SyntaxError.
+			return response.json().catch( () => {
+				const error = invalidUploadResponseError();
+				logError( 'Native upload returned an invalid response', error );
+				throw error;
+			} );
+		},
+		( connectionError ) => {
+			// A caller-initiated cancellation must propagate as the cancellation,
+			// never be retried. Detect it via `signal.aborted` — the cancellation
+			// *state* — rather than `connectionError.name === 'AbortError'`: the
+			// state check also catches `AbortSignal.timeout()` (which rejects with
+			// a TimeoutError, not an AbortError) and custom abort reasons, which a
+			// name match would miss and wrongly fall back on. Rethrow the signal's
+			// `reason` (the canonical abort error), not `connectionError`: if a
+			// network failure and the abort race, `fetch` can reject with a network
+			// TypeError even though the signal aborted, and rethrowing that would
+			// make upstream treat a cancelled upload as a real failure — surfacing
+			// a spurious error notice instead of a silent cancel.
+			if ( options.signal?.aborted ) {
+				throw options.signal.reason;
+			}
+			// Otherwise the loopback upload server is unreachable at the transport
+			// layer. We deliberately do NOT fall back to a direct re-upload:
+			// reachability is gated proactively upstream — this middleware's guard
+			// skips the native path when no port is advertised, and the native side
+			// only advertises a port the WebView can actually reach (server running
+			// + cleartext-to-localhost permitted, cleared on stop). So reaching here
+			// means the server died out-of-band after a valid start; retrying a
+			// non-idempotent POST /wp/v2/media could duplicate the attachment if the
+			// native server had already relayed it to WordPress.
+			logError(
+				'Native upload failed at the transport layer',
+				connectionError
+			);
+			throw connectionError;
+		}
+	);
+}
+
+/**
+ * The query component of a request path, including the leading `?`, or an empty
+ * string when there is no query.
+ *
+ * Mirrors the `query` accessors on the native request types (`HttpRequest` on
+ * Android, `ParsedHTTPRequest` on iOS): the split is on the first `?`, and a
+ * bare trailing `?` carries no parameters so it yields an empty string. Keeping
+ * the three in agreement means the value can be appended to an upstream URL
+ * unconditionally, whichever side derived it.
+ *
+ * @param {string} path The request path, e.g. `/wp/v2/media?_embed`.
+ * @return {string} The query, e.g. `?_embed`, or `''`.
+ */
+function requestQuery( path ) {
+	const separator = path.indexOf( '?' );
+	if ( separator === -1 ) {
+		return '';
+	}
+	const value = path.slice( separator + 1 );
+	return value ? `?${ value }` : '';
+}
+
+/**
+ * The error rejected when the upload server's response body can't be parsed as
+ * JSON. Shaped like a WordPress REST error so `@wordpress/media-utils` surfaces
+ * it the same way as a real one, on both the non-2xx and 2xx paths.
+ *
+ * @return {{ code: string, message: string }} The normalized error.
+ */
+function invalidUploadResponseError() {
+	return {
+		code: 'invalid_json',
+		message: 'The upload server returned an invalid response.',
+	};
+}
+
+/**
  * Middleware to modify media upload requests.
  *
  * This middleware intercepts requests to the media endpoint and conditionally
@@ -157,7 +325,7 @@ function filterEndpointsMiddleware( options, next ) {
 function mediaUploadMiddleware( options, next ) {
 	if (
 		options.path &&
-		options.path.startsWith( '/wp/v2/media' ) &&
+		MEDIA_UPLOAD_PATH.test( options.path ) &&
 		options.method === 'POST' &&
 		options.body instanceof FormData &&
 		options.body.get( 'post' ) === '-1'

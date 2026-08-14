@@ -35,11 +35,13 @@ struct RunnableEditor: Equatable, Hashable {
     let configuration: EditorConfiguration
     let dependencies: EditorDependencies?
     let apiClient: WordPressAPI?
+    var enableNativeMediaUpload: Bool = true
 
-    init(configuration: EditorConfiguration, dependencies: EditorDependencies?, apiClient: WordPressAPI? = nil) {
+    init(configuration: EditorConfiguration, dependencies: EditorDependencies?, apiClient: WordPressAPI? = nil, enableNativeMediaUpload: Bool = true) {
         self.configuration = configuration
         self.dependencies = dependencies
         self.apiClient = apiClient
+        self.enableNativeMediaUpload = enableNativeMediaUpload
     }
 
     // `apiClient` is intentionally excluded from `==` and `hash(into:)`:
@@ -47,12 +49,13 @@ struct RunnableEditor: Equatable, Hashable {
     // and two editors with the same configuration but different client
     // instances should be treated as equal for navigation/identity purposes.
     static func == (lhs: RunnableEditor, rhs: RunnableEditor) -> Bool {
-        lhs.configuration == rhs.configuration && lhs.dependencies == rhs.dependencies
+        lhs.configuration == rhs.configuration && lhs.dependencies == rhs.dependencies && lhs.enableNativeMediaUpload == rhs.enableNativeMediaUpload
     }
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(configuration)
         hasher.combine(dependencies)
+        hasher.combine(enableNativeMediaUpload)
     }
 }
 

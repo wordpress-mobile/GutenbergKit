@@ -21,6 +21,7 @@ import uniffi.wp_api.PostType as WpPostType
 data class SitePreparationUiState(
     val enableNativeInserter: Boolean = true,
     val enableInserterMediaStrip: Boolean = false,
+    val enableNativeMediaUpload: Boolean = true,
     val enableNetworkLogging: Boolean = false,
     /** All viewable post types fetched from the site, or empty while loading. */
     val postTypes: List<PostTypeDetails> = emptyList(),
@@ -88,6 +89,10 @@ class SitePreparationViewModel(
 
     fun setEnableInserterMediaStrip(enabled: Boolean) {
         _uiState.update { it.copy(enableInserterMediaStrip = enabled) }
+    }
+
+    fun setEnableNativeMediaUpload(enabled: Boolean) {
+        _uiState.update { it.copy(enableNativeMediaUpload = enabled) }
     }
 
     fun setEnableNetworkLogging(enabled: Boolean) {

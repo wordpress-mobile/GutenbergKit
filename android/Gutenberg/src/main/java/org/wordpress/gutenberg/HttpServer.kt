@@ -39,8 +39,29 @@ data class HttpRequest(
     val target: String,
     val headers: Map<String, String>,
     val body: org.wordpress.gutenberg.http.RequestBody? = null,
-    val parseDurationMs: Double = 0.0
+    val parseDurationMs: Double = 0.0,
+    /** A server-detected error that occurred after headers were parsed
+     *  (e.g., payload too large). When set, the handler is responsible
+     *  for building an appropriate error response. */
+    val serverError: org.wordpress.gutenberg.http.HTTPRequestParseError? = null
 ) {
+    /**
+     * The path portion of [target], without the query component
+     * (e.g., "/wp/v2/posts" for "/wp/v2/posts?per_page=10").
+     *
+     * Use this for routing — matching against [target] fails as soon as a
+     * client appends a query string.
+     */
+    val path: String
+        get() = target.substringBefore('?')
+
+    /**
+     * The query component of [target], including the leading "?"
+     * (e.g., "?per_page=10"), or an empty string when there is no query.
+     */
+    val query: String
+        get() = target.substringAfter('?', "").let { if (it.isEmpty()) "" else "?$it" }
+
     /**
      * Returns the value of the first header matching the given name (case-insensitive).
      */
@@ -66,6 +87,45 @@ data class HttpResponse(
     val headers: Map<String, String> = mapOf("Content-Type" to "text/plain"),
     val body: ByteArray = ByteArray(0)
 )
+
+/** CORS behavior for an [HttpServer]. */
+enum class CorsPolicy {
+    /** No CORS headers are added (the default). */
+    None,
+
+    /**
+     * Permissive CORS for a loopback-only server serving a WebView: allows any
+     * origin and the methods/headers this library's clients use. The server
+     * answers OPTIONS preflight requests itself and stamps these headers on every
+     * response — including ones it generates internally (timeouts, parse errors)
+     * that never reach the handler.
+     */
+    Permissive;
+
+    /** Headers added to every response under this policy. */
+    val responseHeaders: Map<String, String>
+        get() = when (this) {
+            None -> emptyMap()
+            Permissive -> mapOf(
+                "Access-Control-Allow-Origin" to "*",
+                "Access-Control-Allow-Methods" to "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers" to "Authorization, Relay-Authorization, Content-Type",
+                "Access-Control-Max-Age" to "86400"
+            )
+        }
+}
+
+/**
+ * Returns a copy with [newHeaders] added, skipping any whose name
+ * (case-insensitive) is already present.
+ */
+private fun HttpResponse.addingHeadersIfAbsent(newHeaders: Map<String, String>): HttpResponse {
+    if (newHeaders.isEmpty()) return this
+    val existing = headers.keys.map { it.lowercase() }.toSet()
+    val toAdd = newHeaders.filterKeys { it.lowercase() !in existing }
+    if (toAdd.isEmpty()) return this
+    return copy(headers = headers + toAdd)
+}
 
 /**
  * A lightweight local HTTP/1.1 server.
@@ -140,6 +200,7 @@ data class HttpResponse(
  * server.stop()
  * ```
  */
+@Suppress("LongParameterList")
 class HttpServer(
     val name: String,
     private val requestedPort: Int = 0,
@@ -150,6 +211,7 @@ class HttpServer(
     private val readTimeoutMs: Int = DEFAULT_READ_TIMEOUT_MS,
     private val idleTimeoutMs: Int = DEFAULT_IDLE_TIMEOUT_MS,
     private val cacheDir: File? = null,
+    private val cors: CorsPolicy = CorsPolicy.None,
     private val handler: suspend (HttpRequest) -> HttpResponse
 ) {
     @Volatile
@@ -277,14 +339,7 @@ class HttpServer(
             val buffer = ByteArray(READ_CHUNK_SIZE)
 
             // Phase 1: receive headers only.
-            while (!parser.state.hasHeaders) {
-                if (System.nanoTime() > deadlineNanos) {
-                    throw SocketTimeoutException("Read deadline exceeded")
-                }
-                val bytesRead = input.read(buffer)
-                if (bytesRead == -1) break
-                parser.append(buffer.copyOfRange(0, bytesRead))
-            }
+            readUntil(parser, input, buffer, deadlineNanos) { it.hasHeaders }
 
             // Validate headers (triggers full RFC validation).
             val partial = try {
@@ -312,8 +367,10 @@ class HttpServer(
                 return
             }
 
-            // Check auth before consuming body to avoid buffering up to
-            // maxBodySize for unauthenticated clients.
+            // Check auth on headers alone, before draining or consuming any
+            // body bytes — an unauthenticated client must not be able to make
+            // the server read (and discard) an arbitrarily large body, and the
+            // handler must never see an unauthenticated request.
             // OPTIONS is exempt because CORS preflight requests
             // never include credentials (Fetch spec §3.3.5).
             if (requiresAuthentication && partial.method.uppercase() != "OPTIONS") {
@@ -326,6 +383,38 @@ class HttpServer(
                     ))
                     return
                 }
+            }
+
+            // Drain the oversized body before responding so the (authenticated)
+            // client receives the 413 instead of a connection reset
+            // (RFC 9110 §15.5.14).
+            if (parser.state == HTTPRequestParser.State.DRAINING) {
+                readUntil(parser, input, buffer, deadlineNanos) { it.isComplete }
+            }
+
+            // If the parser detected a non-fatal error (e.g., payload too
+            // large after drain), let the handler build the response.
+            parser.pendingParseError?.let { error ->
+                val parseDurationMs = (System.nanoTime() - parseStart) / 1_000_000.0
+                val request = HttpRequest(
+                    method = partial.method,
+                    target = partial.target,
+                    headers = partial.headers,
+                    parseDurationMs = parseDurationMs,
+                    serverError = error
+                )
+                val response = try {
+                    handler(request)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Handler threw", e)
+                    HttpResponse(
+                        status = error.httpStatus,
+                        body = (STATUS_TEXT[error.httpStatus] ?: "Error").toByteArray()
+                    )
+                }
+                sendResponse(socket, response)
+                Log.d(TAG, "${partial.method} ${partial.target} → ${response.status} (${"%.1f".format(parseDurationMs)}ms)")
+                return
             }
 
             // Reject body-bearing methods without Content-Length.
@@ -341,14 +430,7 @@ class HttpServer(
             }
 
             // Phase 2: receive body (skipped if already complete).
-            while (!parser.state.isComplete) {
-                if (System.nanoTime() > deadlineNanos) {
-                    throw SocketTimeoutException("Read deadline exceeded")
-                }
-                val bytesRead = input.read(buffer)
-                if (bytesRead == -1) break
-                parser.append(buffer.copyOfRange(0, bytesRead))
-            }
+            readUntil(parser, input, buffer, deadlineNanos) { it.isComplete }
 
             // Final parse with body.
             val parsed = try {
@@ -391,24 +473,52 @@ class HttpServer(
                     body = parsed.body,
                     parseDurationMs = parseDurationMs
                 )
-                val response = try {
-                    handler(request)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Handler threw", e)
-                    HttpResponse(
-                        status = 500,
-                        body = "Internal Server Error".toByteArray()
-                    )
-                }
+                val response = resolveResponse(request)
                 sendResponse(socket, response)
                 Log.d(TAG, "${parsed.method} ${parsed.target} → ${response.status} (${"%.1f".format(parseDurationMs)}ms)")
             }
         }
     }
 
+    /** Reads data into the parser until [condition] is satisfied or the connection closes. */
+    private fun readUntil(
+        parser: HTTPRequestParser,
+        input: BufferedInputStream,
+        buffer: ByteArray,
+        deadlineNanos: Long,
+        condition: (HTTPRequestParser.State) -> Boolean
+    ) {
+        while (!condition(parser.state)) {
+            if (System.nanoTime() > deadlineNanos) {
+                throw SocketTimeoutException("Read deadline exceeded")
+            }
+            val bytesRead = input.read(buffer)
+            if (bytesRead == -1) break
+            parser.append(buffer.copyOfRange(0, bytesRead))
+        }
+    }
+
+    /**
+     * Resolves the response for a request: the CORS preflight (under a permissive
+     * policy) or the handler's response. Kept separate from [handleRequest] so
+     * that already-complex function doesn't grow.
+     */
+    private suspend fun resolveResponse(request: HttpRequest): HttpResponse {
+        if (cors == CorsPolicy.Permissive && request.method.uppercase() == "OPTIONS") {
+            return HttpResponse(status = 204, body = ByteArray(0))
+        }
+        return try {
+            handler(request)
+        } catch (e: Exception) {
+            Log.e(TAG, "Handler threw", e)
+            HttpResponse(status = 500, body = "Internal Server Error".toByteArray())
+        }
+    }
+
     private fun sendResponse(socket: Socket, response: HttpResponse) {
+        val decorated = response.addingHeadersIfAbsent(cors.responseHeaders)
         val output = socket.getOutputStream()
-        output.write(serializeResponse(response))
+        output.write(serializeResponse(decorated))
         output.flush()
     }
 

@@ -255,10 +255,18 @@ struct RequestParsingFixtureTests {
         let expectedError = testCase.expected.error
         do {
             _ = try parser.parseRequest()
-            Issue.record("Expected error \(expectedError) but parsing succeeded — \(testCase.description)")
+            // A recoverable error is surfaced via `parseError` instead of thrown.
+            if let parseError = parser.parseError {
+                let errorName = String(describing: parseError)
+                #expect(errorName == expectedError, "\(testCase.description): expected \(expectedError) but got \(errorName)")
+                #expect(parseError.disposition == .recoverable, "\(testCase.description): \(errorName) surfaced via parseError but is not recoverable")
+            } else {
+                Issue.record("Expected error \(expectedError) but parsing succeeded — \(testCase.description)")
+            }
         } catch {
             let errorName = String(describing: error)
             #expect(errorName == expectedError, "\(testCase.description): expected \(expectedError) but got \(errorName)")
+            #expect((error as? HTTPRequestParseError)?.disposition == .fatal, "\(testCase.description): \(errorName) was thrown but is not fatal")
         }
     }
 

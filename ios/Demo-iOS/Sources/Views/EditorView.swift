@@ -1,4 +1,7 @@
 import SwiftUI
+import ImageIO
+import OSLog
+import UniformTypeIdentifiers
 import GutenbergKit
 import WordPressAPI
 // `PostUpdateParams` is not yet re-exported from `WordPressAPI` in the pinned
@@ -7,19 +10,25 @@ import WordPressAPI
 // including Automattic/wordpress-rs#1270 is adopted.
 import WordPressAPIInternal
 
+private extension Logger {
+    static let demo = Logger(subsystem: "GutenbergKit-Demo", category: "media-upload")
+}
+
 struct EditorView: View {
     private let configuration: EditorConfiguration
     private let dependencies: EditorDependencies?
     private let apiClient: WordPressAPI?
+    private let enableNativeMediaUpload: Bool
 
     @State private var viewModel = EditorViewModel()
 
     @Environment(\.dismiss) var dismiss
 
-    init(configuration: EditorConfiguration, dependencies: EditorDependencies? = nil, apiClient: WordPressAPI? = nil) {
+    init(configuration: EditorConfiguration, dependencies: EditorDependencies? = nil, apiClient: WordPressAPI? = nil, enableNativeMediaUpload: Bool = true) {
         self.configuration = configuration
         self.dependencies = dependencies
         self.apiClient = apiClient
+        self.enableNativeMediaUpload = enableNativeMediaUpload
     }
 
     var body: some View {
@@ -27,6 +36,7 @@ struct EditorView: View {
             configuration: configuration,
             dependencies: dependencies,
             apiClient: apiClient,
+            enableNativeMediaUpload: enableNativeMediaUpload,
             viewModel: viewModel
         )
             .toolbar { toolbar }
@@ -101,17 +111,20 @@ private struct _EditorView: UIViewControllerRepresentable {
     private let configuration: EditorConfiguration
     private let dependencies: EditorDependencies?
     private let apiClient: WordPressAPI?
+    private let enableNativeMediaUpload: Bool
     private let viewModel: EditorViewModel
 
     init(
         configuration: EditorConfiguration,
         dependencies: EditorDependencies? = nil,
         apiClient: WordPressAPI? = nil,
+        enableNativeMediaUpload: Bool = true,
         viewModel: EditorViewModel
     ) {
         self.configuration = configuration
         self.dependencies = dependencies
         self.apiClient = apiClient
+        self.enableNativeMediaUpload = enableNativeMediaUpload
         self.viewModel = viewModel
     }
 
@@ -122,6 +135,9 @@ private struct _EditorView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> EditorViewController {
         let viewController = EditorViewController(configuration: configuration, dependencies: dependencies)
         viewController.delegate = context.coordinator
+        if enableNativeMediaUpload {
+            viewController.mediaUploadDelegate = context.coordinator
+        }
         viewController.webView.isInspectable = true
 
         viewModel.perform = { [weak viewController] in
@@ -173,7 +189,7 @@ private struct _EditorView: UIViewControllerRepresentable {
     }
 
     @MainActor
-    class Coordinator: NSObject, EditorViewControllerDelegate {
+    class Coordinator: NSObject, EditorViewControllerDelegate, MediaUploadDelegate {
         let viewModel: EditorViewModel
 
         init(viewModel: EditorViewModel) {
@@ -277,6 +293,61 @@ private struct _EditorView: UIViewControllerRepresentable {
             // Demo app has no persistence layer, so return nil.
             // In a real app, return the persisted title and content from autosave.
             return nil
+        }
+
+        // MARK: - MediaUploadDelegate
+
+        /// Resizes images to a maximum dimension of 2000px before upload.
+        nonisolated func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
+            guard mimeType.hasPrefix("image/"), mimeType != "image/gif" else {
+                return .original
+            }
+
+            let maxDimension: CGFloat = 2000
+
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                  let width = properties[kCGImagePropertyPixelWidth] as? CGFloat,
+                  let height = properties[kCGImagePropertyPixelHeight] as? CGFloat else {
+                return .original
+            }
+
+            let longestSide = max(width, height)
+            guard longestSide > maxDimension else {
+                return .original
+            }
+
+            let options: [CFString: Any] = [
+                kCGImageSourceThumbnailMaxPixelSize: maxDimension,
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true
+            ]
+
+            guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+                return .original
+            }
+
+            let outputURL = url.deletingLastPathComponent()
+                .appending(component: "resized-\(url.lastPathComponent)")
+
+            let sourceType = CGImageSourceGetType(source) ?? (UTType.png.identifier as CFString)
+            guard let destination = CGImageDestinationCreateWithURL(
+                outputURL as CFURL,
+                sourceType,
+                1,
+                nil
+            ) else {
+                return .original
+            }
+
+            CGImageDestinationAddImage(destination, thumbnail, nil)
+            guard CGImageDestinationFinalize(destination) else {
+                return .original
+            }
+
+            Logger.demo.info("Resized image from \(Int(width))x\(Int(height)) to fit \(Int(maxDimension))px")
+            // Same format, so the original mimeType/filename carry over.
+            return .processed(outputURL, mimeType: mimeType, filename: filename)
         }
     }
 }

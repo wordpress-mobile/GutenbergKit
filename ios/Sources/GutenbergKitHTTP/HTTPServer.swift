@@ -75,6 +75,16 @@ public final class HTTPServer: Sendable {
         public let parsed: ParsedHTTPRequest
         /// Time spent receiving and parsing the request.
         public let parseDuration: Duration
+        /// A server-detected error that occurred after headers were parsed
+        /// (e.g., payload too large). When set, the handler is responsible
+        /// for building an appropriate error response.
+        public let serverError: HTTPRequestParseError?
+
+        init(parsed: ParsedHTTPRequest, parseDuration: Duration, serverError: HTTPRequestParseError? = nil) {
+            self.parsed = parsed
+            self.parseDuration = parseDuration
+            self.serverError = serverError
+        }
     }
 
     public typealias Response = HTTPResponse
@@ -92,12 +102,17 @@ public final class HTTPServer: Sendable {
     private let queue: DispatchQueue
     private let connectionTasks: ConnectionTasks
 
-    private init(listener: NWListener, port: UInt16, queue: DispatchQueue, token: String, connectionTasks: ConnectionTasks) {
+    /// Sweeps crash-orphaned temp files off the caller's startup path.
+    /// Exposed so tests can await completion.
+    let cleanupTask: Task<Void, Never>
+
+    private init(listener: NWListener, port: UInt16, queue: DispatchQueue, token: String, connectionTasks: ConnectionTasks, cleanupTask: Task<Void, Never>) {
         self.listener = listener
         self.port = port
         self.queue = queue
         self.token = token
         self.connectionTasks = connectionTasks
+        self.cleanupTask = cleanupTask
     }
 
     /// The default maximum number of concurrent connections.
@@ -109,6 +124,12 @@ public final class HTTPServer: Sendable {
     /// The default idle timeout between consecutive reads (5 seconds).
     /// If no data arrives within this interval, the connection is closed with a 408 response.
     public static let defaultIdleTimeout: Duration = .seconds(5)
+
+    /// The default maximum time to wait for the listener to become ready (5 seconds).
+    /// Binding to loopback normally completes in milliseconds; the bound exists so a
+    /// listener stuck in the `.waiting` state (which emits no further updates)
+    /// cannot suspend its caller indefinitely.
+    public static let defaultStartTimeout: Duration = .seconds(5)
 
     /// The maximum number of bytes to read from the network in a single receive call.
     private static let readChunkSize: Int = 65536
@@ -134,10 +155,14 @@ public final class HTTPServer: Sendable {
     ///     the connection. Defaults to 30 seconds.
     ///   - idleTimeout: The maximum time to wait between consecutive reads before closing
     ///     the connection. Prevents slow-loris attacks. Defaults to 5 seconds.
+    ///   - startTimeout: The maximum time to wait for the listener to become ready
+    ///     before giving up with ``HTTPServerError/failedToStart``. Bounds a listener
+    ///     stuck in the `.waiting` state. Defaults to 5 seconds.
     ///   - handler: A closure invoked for each fully-parsed request. Return an ``HTTPResponse``
     ///     to send back to the client.
     /// - Returns: A running ``HTTPServer`` instance.
-    /// - Throws: ``HTTPServerError/failedToStart`` if the listener cannot bind to the port.
+    /// - Throws: ``HTTPServerError/failedToStart`` if the listener cannot bind to the port
+    ///   or does not become ready within `startTimeout`.
     public static func start(
         name: String,
         port: UInt16? = nil,
@@ -147,6 +172,8 @@ public final class HTTPServer: Sendable {
         maxConnections: Int = HTTPServer.defaultMaxConnections,
         readTimeout: Duration = HTTPServer.defaultReadTimeout,
         idleTimeout: Duration = HTTPServer.defaultIdleTimeout,
+        startTimeout: Duration = HTTPServer.defaultStartTimeout,
+        cors: CORSPolicy = .none,
         handler: @escaping @Sendable (HTTPServer.Request) async -> HTTPResponse
     ) async throws -> HTTPServer {
         // Sanitize to prevent path traversal — only allow safe filename characters.
@@ -158,10 +185,14 @@ public final class HTTPServer: Sendable {
         let tempDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("GutenbergKitHTTP-\(safeName)")
 
-        // Clean up temp files left behind by previous runs (e.g., crash or process kill).
-        // Swift's ARC guarantees deterministic cleanup during normal operation, but a
-        // crash can leave orphaned files in the system temp directory.
-        cleanOrphanedTempFiles(in: tempDirectory)
+        // Clean up temp files left behind by previous runs (e.g., crash or process
+        // kill), off the caller's startup path. Swift's ARC guarantees deterministic
+        // cleanup during normal operation, but a crash can leave orphaned files in
+        // the system temp directory. The sweep's one-hour age threshold means it
+        // cannot race temp files written by this (or any live) server instance.
+        let cleanupTask = Task.detached(priority: .utility) {
+            cleanOrphanedTempFiles(in: tempDirectory)
+        }
         try? FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
 
         let parameters = NWParameters.tcp
@@ -186,41 +217,84 @@ public final class HTTPServer: Sendable {
                 connection, queue: queue, token: token,
                 requiresAuthentication: requiresAuth,
                 maxRequestBodySize: maxRequestBodySize, readTimeout: readTimeout,
-                idleTimeout: idleTimeout, tempDirectory: tempDirectory,
+                idleTimeout: idleTimeout, cors: cors, tempDirectory: tempDirectory,
                 connectionCounter: connectionCounter, connectionTasks: connectionTasks, handler: handler
             )
         }
 
         // Bridge listener state callbacks to an AsyncStream so we can await readiness.
         // The listener is started synchronously — only the wait is async.
-        let states = AsyncStream<NWListener.State> { continuation in
-            listener.stateUpdateHandler = { state in
-                continuation.yield(state)
-            }
+        let (states, statesContinuation) = AsyncStream.makeStream(of: NWListener.State.self)
+        listener.stateUpdateHandler = { state in
+            statesContinuation.yield(state)
         }
         listener.start(queue: queue)
 
-        for await state in states {
-            switch state {
-            case .ready:
-                listener.stateUpdateHandler = nil
-                guard let p = listener.port else {
-                    throw HTTPServerError.failedToStart
-                }
-                let server = HTTPServer(listener: listener, port: p.rawValue, queue: queue, token: token, connectionTasks: connectionTasks)
-                Logger.httpServer.info("HTTP server started on port \(p.rawValue)")
-                return server
-            case .failed(let error):
-                Logger.httpServer.error("Listener failed: \(error)")
-                throw HTTPServerError.failedToStart
-            case .cancelled:
-                throw HTTPServerError.failedToStart
-            default:
-                continue
-            }
+        guard let terminalState = await firstTerminalState(in: states, timeout: startTimeout) else {
+            // No terminal state within the timeout: the listener is stuck in
+            // `.setup` or `.waiting` (which emit no further state updates), or
+            // the surrounding task was cancelled. Cancel the half-started
+            // listener so it doesn't leak.
+            listener.stateUpdateHandler = nil
+            listener.cancel()
+            Logger.httpServer.error("Listener not ready within \(startTimeout); giving up")
+            throw HTTPServerError.failedToStart
         }
 
-        throw HTTPServerError.failedToStart
+        listener.stateUpdateHandler = nil
+        switch terminalState {
+        case .ready:
+            guard let p = listener.port else {
+                listener.cancel()
+                throw HTTPServerError.failedToStart
+            }
+            let server = HTTPServer(listener: listener, port: p.rawValue, queue: queue, token: token, connectionTasks: connectionTasks, cleanupTask: cleanupTask)
+            Logger.httpServer.info("HTTP server started on port \(p.rawValue)")
+            return server
+        case .failed(let error):
+            Logger.httpServer.error("Listener failed: \(error)")
+            listener.cancel()
+            throw HTTPServerError.failedToStart
+        default: // .cancelled
+            throw HTTPServerError.failedToStart
+        }
+    }
+
+    /// Awaits the first terminal listener state (`.ready`, `.failed`, or
+    /// `.cancelled`) on `states`, skipping non-terminal states (`.setup`,
+    /// `.waiting`), or returns nil once `timeout` elapses without one.
+    ///
+    /// Internal for testability: a listener stuck in `.waiting` cannot be
+    /// reproduced deterministically with a real `NWListener`, but the wait's
+    /// behavior can be verified by feeding this a hand-built state stream.
+    static func firstTerminalState(
+        in states: AsyncStream<NWListener.State>,
+        timeout: Duration
+    ) async -> NWListener.State? {
+        await withTaskGroup(of: NWListener.State?.self) { group in
+            group.addTask {
+                for await state in states {
+                    switch state {
+                    case .ready, .failed, .cancelled:
+                        return state
+                    default:
+                        continue
+                    }
+                }
+                // The stream finished (or the task was cancelled) without a
+                // terminal state.
+                return nil
+            }
+            group.addTask {
+                try? await Task.sleep(for: timeout)
+                return nil
+            }
+            // First child to finish wins: a terminal state, or nil on timeout.
+            // `next()` yields a double optional (`State??`); flatten it to `State?`.
+            let first = (await group.next()).flatMap { $0 }
+            group.cancelAll()
+            return first
+        }
     }
 
     /// Stops the server and releases resources.
@@ -248,6 +322,7 @@ public final class HTTPServer: Sendable {
         maxRequestBodySize: Int64,
         readTimeout: Duration,
         idleTimeout: Duration,
+        cors: CORSPolicy,
         tempDirectory: URL,
         connectionCounter: ConnectionCounter,
         connectionTasks: ConnectionTasks,
@@ -275,14 +350,31 @@ public final class HTTPServer: Sendable {
                                 throw HTTPServerError.connectionClosed
                             }
 
-                            // Check auth before consuming body to avoid buffering
-                            // up to maxRequestBodySize for unauthenticated clients.
+                            // Check auth on headers alone, before draining or
+                            // consuming any body bytes — an unauthenticated client
+                            // must not be able to make the server read (and
+                            // discard) an arbitrarily large body, and the handler
+                            // must never see an unauthenticated request.
                             // OPTIONS is exempt because CORS preflight requests
                             // never include credentials (Fetch spec §3.3.5).
                             if requiresAuthentication && partial.method.uppercased() != "OPTIONS" {
                                 guard authenticate(partial, token: token) else {
                                     throw HTTPServerError.authenticationFailed
                                 }
+                            }
+
+                            // Drain the oversized body before responding so the
+                            // (authenticated) client receives the 413 instead of
+                            // a connection reset (RFC 9110 §15.5.14).
+                            if parser.state == .draining {
+                                try await Self.receiveUntil(\.isComplete, parser: parser, on: connection, idleTimeout: idleTimeout)
+                            }
+
+                            // If the parser detected a non-fatal error (e.g.,
+                            // payload too large after drain), return the partial
+                            // request so the handler can build the response.
+                            if parser.parseError != nil {
+                                return partial
                             }
 
                             // Reject body-bearing methods without Content-Length.
@@ -313,21 +405,28 @@ public final class HTTPServer: Sendable {
                     }
                 }
 
-                let response = await handler(Request(parsed: request, parseDuration: duration))
-                await send(response, on: connection)
+                // Under a permissive CORS policy the library answers the OPTIONS
+                // preflight itself; the send layer stamps the CORS headers.
+                let response: HTTPResponse
+                if cors == .permissive, request.method.uppercased() == "OPTIONS" {
+                    response = HTTPResponse(status: 204)
+                } else {
+                    response = await handler(Request(parsed: request, parseDuration: duration, serverError: parser.parseError))
+                }
+                await send(response, on: connection, cors: cors)
                 let (sec, atto) = duration.components
                 let ms = Double(sec) * 1000.0 + Double(atto) / 1_000_000_000_000_000.0
                 Logger.httpServer.debug("\(request.method) \(request.target) → \(response.status) (\(String(format: "%.1f", ms))ms)")
             } catch HTTPServerError.authenticationFailed {
-                await send(HTTPResponse(status: 407, headers: [("Content-Type", "text/plain"), ("Proxy-Authenticate", "Bearer")]), on: connection)
+                await send(HTTPResponse(status: 407, headers: [("Content-Type", "text/plain"), ("Proxy-Authenticate", "Bearer")]), on: connection, cors: cors)
             } catch HTTPServerError.lengthRequired {
-                await send(HTTPResponse(status: 411, statusText: "Length Required", body: Data("Length Required".utf8)), on: connection)
+                await send(HTTPResponse(status: 411, statusText: "Length Required", body: Data("Length Required".utf8)), on: connection, cors: cors)
             } catch is CancellationError {
                 Logger.httpServer.debug("Connection cancelled during shutdown")
                 connection.cancel()
             } catch HTTPServerError.readTimeout {
                 Logger.httpServer.warning("Read timeout, closing connection")
-                await send(HTTPResponse(status: 408, statusText: "Request Timeout", body: Data("Request Timeout".utf8)), on: connection)
+                await send(HTTPResponse(status: 408, statusText: "Request Timeout", body: Data("Request Timeout".utf8)), on: connection, cors: cors)
             } catch let error as HTTPRequestParseError {
                 Logger.httpServer.error("Parse error: \(error)")
                 let statusText = String(error.httpStatusText)
@@ -336,10 +435,10 @@ public final class HTTPServer: Sendable {
                     statusText: statusText,
                     body: Data(statusText.utf8)
                 )
-                await send(response, on: connection)
+                await send(response, on: connection, cors: cors)
             } catch {
                 Logger.httpServer.error("Unexpected error: \(error)")
-                await send(HTTPResponse(status: 400, statusText: "Bad Request", body: Data("Malformed HTTP request".utf8)), on: connection)
+                await send(HTTPResponse(status: 400, statusText: "Bad Request", body: Data("Malformed HTTP request".utf8)), on: connection, cors: cors)
             }
         }
         connectionTasks.track(taskID, task)
@@ -454,9 +553,10 @@ public final class HTTPServer: Sendable {
     }
 
     /// Sends a response on the connection and then closes it.
-    private static func send(_ response: HTTPResponse, on connection: NWConnection) async {
+    private static func send(_ response: HTTPResponse, on connection: NWConnection, cors: CORSPolicy) async {
+        let decorated = response.addingHeadersIfAbsent(cors.responseHeaders)
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            connection.send(content: response.serialized(), completion: .contentProcessed { _ in
+            connection.send(content: decorated.serialized(), completion: .contentProcessed { _ in
                 connection.cancel()
                 continuation.resume()
             })
@@ -546,19 +646,24 @@ public final class HTTPServer: Sendable {
     /// to a single server instance and will not affect files belonging to other
     /// servers running concurrently.
     ///
-    /// **Important:** Two server instances with the same `name` must not run
-    /// concurrently. On startup, this method deletes **all** files in the
-    /// server's temp subdirectory. If another instance with the same name is
-    /// still handling requests, its in-flight temp files will be removed,
-    /// causing `bufferIOError` failures. Callers must ensure each running
-    /// server uses a unique name, or that the previous instance is fully
-    /// stopped before starting a new one.
+    /// Only files older than one hour are deleted. Fresh files are preserved so
+    /// the sweep — which runs detached from `start()` — cannot race in-flight
+    /// temp files, whether they belong to this instance or another live server
+    /// sharing the same `name`.
     private static func cleanOrphanedTempFiles(in directory: URL) {
+        // Only delete files past the age threshold. Fresh files may belong to a
+        // live server instance — the sweep runs detached from start(), so
+        // without the threshold it could race and delete an in-flight
+        // request's temp buffer.
+        let cutoff = Date(timeIntervalSinceNow: -3600) // 1 hour ago
         guard let contents = try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: nil
+            at: directory, includingPropertiesForKeys: [.contentModificationDateKey]
         ) else { return }
         for url in contents {
-            try? FileManager.default.removeItem(at: url)
+            let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            if let modified, modified < cutoff {
+                try? FileManager.default.removeItem(at: url)
+            }
         }
     }
 }

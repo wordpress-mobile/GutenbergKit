@@ -15,6 +15,21 @@ import org.junit.Test
  */
 class HTTPRequestParserTests {
 
+    // MARK: - Error Disposition
+
+    /**
+     * Locks the fatal/recoverable classification so a refactor can't silently
+     * make a smuggling-relevant error recoverable — which would let a malformed
+     * request reach the handler before auth.
+     */
+    @Test
+    fun `only payloadTooLarge is recoverable`() {
+        val recoverable = HTTPRequestParseError.entries.filter {
+            it.disposition == HTTPRequestParseError.Disposition.RECOVERABLE
+        }
+        assertEquals(listOf(HTTPRequestParseError.PAYLOAD_TOO_LARGE), recoverable)
+    }
+
     // MARK: - Duplicate Header Key Casing (Internal Dict Representation)
 
     @Test
@@ -95,6 +110,69 @@ class HTTPRequestParserTests {
 
         assertTrue(request.isComplete)
         assertArrayEquals(body.toByteArray(), request.body?.readBytes())
+    }
+
+    @Test
+    fun `drains oversized body and returns partial with parseError`() {
+        val parser = HTTPRequestParser(maxBodySize = 100)
+        parser.append("POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Length: 101\r\n\r\n".toByteArray())
+
+        // Parser enters drain mode — not yet complete.
+        assertEquals(HTTPRequestParser.State.DRAINING, parser.state)
+
+        // Feed the remaining body bytes to complete the drain.
+        parser.append(ByteArray(101) { 0x41 })
+        assertTrue(parser.state.isComplete)
+
+        // parseRequest() returns partial headers instead of throwing.
+        val request = parser.parseRequest()!!
+        assertEquals("POST", request.method)
+        assertEquals("/upload", request.target)
+        assertFalse(request.isComplete)
+        assertEquals(HTTPRequestParseError.PAYLOAD_TOO_LARGE, parser.pendingParseError)
+    }
+
+    @Test
+    fun `enters drain mode for oversized Content-Length even when body has not arrived`() {
+        val parser = HTTPRequestParser(maxBodySize = 50)
+        parser.append("POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Length: 999999\r\n\r\n".toByteArray())
+
+        // Parser enters drain mode — headers are available but not yet complete.
+        assertEquals(HTTPRequestParser.State.DRAINING, parser.state)
+        assertTrue(parser.state.hasHeaders)
+        assertFalse(parser.state.isComplete)
+
+        // Feed body bytes in chunks to complete the drain.
+        val chunkSize = 8192
+        var remaining = 999999
+        while (remaining > 0) {
+            val size = minOf(chunkSize, remaining)
+            parser.append(ByteArray(size) { 0x42 })
+            remaining -= size
+        }
+
+        assertTrue(parser.state.isComplete)
+        val request = parser.parseRequest()!!
+        assertEquals("POST", request.method)
+        assertFalse(request.isComplete)
+        assertEquals(HTTPRequestParseError.PAYLOAD_TOO_LARGE, parser.pendingParseError)
+    }
+
+    @Test
+    fun `drain mode does not buffer body bytes`() {
+        val parser = HTTPRequestParser(maxBodySize = 10)
+        parser.append("POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1000\r\n\r\n".toByteArray())
+        assertEquals(HTTPRequestParser.State.DRAINING, parser.state)
+
+        // Feed 1000 bytes of body data.
+        parser.append(ByteArray(1000) { 0x43 })
+        assertTrue(parser.state.isComplete)
+
+        // parseRequest() returns headers; error is on pendingParseError.
+        val request = parser.parseRequest()!!
+        assertEquals("POST", request.method)
+        assertFalse(request.isComplete)
+        assertEquals(HTTPRequestParseError.PAYLOAD_TOO_LARGE, parser.pendingParseError)
     }
 
     // MARK: - Error HTTP Status Mapping
