@@ -5,7 +5,11 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import org.wordpress.gutenberg.http.HeaderValue
 import org.wordpress.gutenberg.http.MultipartPart
 import org.wordpress.gutenberg.http.HTTPRequestParseError
@@ -61,6 +65,24 @@ sealed class ProcessedProxyFile {
  */
 interface MediaUploadDelegate {
     /**
+     * Whether this delegate might handle a file with the given metadata — either
+     * processing it ([processFile]) or uploading it itself ([uploadFile]).
+     *
+     * A cheap, metadata-only gate the server consults *before* materializing the
+     * upload to a temp file. Return false to decline a file by type — e.g. an
+     * image-only delegate returning false for a video — so the server forwards
+     * the original upload to WordPress without first copying a file the delegate
+     * won't touch. Because it gates the temp-file copy needed by *both*
+     * [processFile] and [uploadFile], return true for any file the delegate will
+     * either process or upload itself.
+     *
+     * Defaults to true: every file is materialized and the full pipeline runs. A
+     * true here is not a commitment — [processFile] may still return
+     * [ProcessedProxyFile.Original] after inspecting the file's contents.
+     */
+    fun handlesFile(mimeType: String, filename: String): Boolean = true
+
+    /**
      * Process a file before upload (e.g., resize image, transcode video).
      *
      * Return [ProcessedProxyFile.Original] to upload the file unchanged, or
@@ -97,9 +119,9 @@ internal class MediaUploadServer(
     private val uploadDelegate: MediaUploadDelegate?,
     private val defaultUploader: DefaultMediaUploader?,
     cacheDir: File? = null,
-    scope: CoroutineScope = CoroutineScope(Dispatchers.IO),
+    scope: CoroutineScope? = null,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO
-) {
+) : HttpServerDelegate {
     /** The port the server is listening on. */
     val port: Int get() = server.port
 
@@ -116,12 +138,20 @@ internal class MediaUploadServer(
         File(cacheDir ?: File(System.getProperty("java.io.tmpdir")), "gutenbergkit-uploads")
 
     /**
+     * The scope MediaUploadServer created itself because the caller supplied none.
+     * It is cancelled in [stop]; a caller-supplied scope is left to the caller's
+     * lifecycle (cancelling it here would tear down state the caller still owns).
+     */
+    private val ownedScope: CoroutineScope? =
+        if (scope == null) CoroutineScope(Dispatchers.IO) else null
+
+    /**
      * Sweeps crash-orphaned temp files off the caller's thread. Exposed so tests
      * can await it; injecting `Dispatchers.Unconfined` for [ioDispatcher] runs the
      * sweep synchronously.
      */
     @Suppress("TooGenericExceptionCaught")
-    val cleanupJob: Job = scope.launch(ioDispatcher) {
+    val cleanupJob: Job = (scope ?: ownedScope!!).launch(ioDispatcher) {
         try {
             cleanOrphanedUploads()
         } catch (e: Exception) {
@@ -134,8 +164,10 @@ internal class MediaUploadServer(
             name = "media-upload",
             externallyAccessible = false,
             requiresAuthentication = true,
+            bodyReadTimeoutMs = UPLOAD_BODY_READ_TIMEOUT_MS,
             cacheDir = cacheDir,
             cors = CorsPolicy.Permissive,
+            delegate = this,
             handler = { request -> handleRequest(request) }
         )
         server.start()
@@ -145,6 +177,8 @@ internal class MediaUploadServer(
     fun stop() {
         cleanupJob.cancel()
         server.stop()
+        // Cancel the scope only if we created it; a caller-supplied scope is theirs.
+        ownedScope?.cancel()
     }
 
     /**
@@ -163,17 +197,21 @@ internal class MediaUploadServer(
 
     // MARK: - Request Handling
 
-    private suspend fun handleRequest(request: HttpRequest): HttpResponse {
-        // Server-detected error (e.g., payload too large) — build the
-        // error response here so it includes CORS headers.
-        request.serverError?.let { error ->
-            val message = when (error) {
-                HTTPRequestParseError.PAYLOAD_TOO_LARGE -> "The file is too large to upload in the editor."
-                else -> error.errorId
-            }
-            return errorResponse(error.httpStatus, message)
+    /**
+     * Answers the server's recoverable parse errors (e.g. an over-limit body) with
+     * the same JSON `{code, message}` shape the editor expects, so the middleware
+     * surfaces a real message ("The file is too large…") instead of a generic
+     * parse-failure. See [HttpServerDelegate].
+     */
+    override fun responseForRecoverableParseError(error: HTTPRequestParseError): HttpResponse {
+        val message = when (error) {
+            HTTPRequestParseError.PAYLOAD_TOO_LARGE -> "The file is too large to upload in the editor."
+            else -> error.errorId
         }
+        return errorResponse(error.httpStatus, message)
+    }
 
+    private suspend fun handleRequest(request: HttpRequest): HttpResponse {
         // Route: only POST /upload is handled. (OPTIONS preflight is answered by
         // the HTTP library under its permissive CORS policy.) Match on the path
         // alone — the target carries a query string (e.g. `?_embed`) that the
@@ -195,11 +233,46 @@ internal class MediaUploadServer(
         // (e.g. ?_embed) must reach WordPress too — relay them alongside the file.
         val extraParts = parts.filter { it.filename == null }
         val query = request.query
+        val mimeType = filePart.contentType
+        val filename = filePart.filename ?: "upload"
+
+        // Ask the delegate — from metadata alone — whether it will touch a file
+        // like this. If not, forward the original upload to WordPress directly,
+        // skipping a full temp-file copy of a file the delegate won't process or
+        // upload (e.g. a video handed to an image-only delegate).
+        if (uploadDelegate?.handlesFile(mimeType, filename) != true) {
+            return passthroughResponse(request, query)
+        }
 
         val tempFile = writePartToTempFile(filePart)
             ?: return errorResponse(500, "Failed to save file")
 
         return processAndRespond(request, tempFile, filePart, extraParts, query)
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    private suspend fun passthroughResponse(request: HttpRequest, query: String): HttpResponse {
+        return try {
+            Log.d(TAG, "Passthrough: forwarding original request body to WordPress")
+            relayResponse(performPassthroughUpload(request, query))
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e // Never swallow coroutine cancellation.
+        } catch (e: Exception) {
+            Log.e(TAG, "Passthrough upload failed", e)
+            errorResponse(500, e.message ?: "Upload failed")
+        }
+    }
+
+    /**
+     * Relays WordPress's exact status and body to the editor so it sees the same
+     * attachment object (or error) as a direct upload.
+     */
+    private fun relayResponse(response: MediaUploadResponse): HttpResponse {
+        return HttpResponse(
+            status = response.statusCode,
+            headers = mapOf("Content-Type" to "application/json"),
+            body = response.body
+        )
     }
 
     private fun parseParts(request: HttpRequest): List<MultipartPart>? {
@@ -264,13 +337,7 @@ internal class MediaUploadServer(
                     performPassthroughUpload(request, query)
                 }
             }
-            // Relay WordPress's exact status and body to the editor so it sees
-            // the same attachment object (or error) as a direct upload.
-            return HttpResponse(
-                status = response.statusCode,
-                headers = mapOf("Content-Type" to "application/json"),
-                body = response.body
-            )
+            return relayResponse(response)
         } catch (e: MediaUploadException) {
             Log.e(TAG, "Upload processing failed", e)
             return errorResponse(500, e.message ?: "Upload failed")
@@ -382,6 +449,16 @@ internal class MediaUploadServer(
 
     companion object {
         private const val TAG = "MediaUploadServer"
+
+        /**
+         * A generous ceiling for receiving the upload body. The body read is
+         * primarily bounded by the per-read idle timeout (which reaps a stalled
+         * connection in seconds); this absolute backstop ensures a slow-but-steady
+         * client can't hold a connection slot indefinitely. Ten minutes is far
+         * beyond any realistic media upload over loopback while still bounding a
+         * wedged one.
+         */
+        private const val UPLOAD_BODY_READ_TIMEOUT_MS: Int = 10 * 60 * 1000
     }
 }
 
@@ -457,12 +534,47 @@ internal open class DefaultMediaUploader(
         return performUpload(request)
     }
 
-    private fun performUpload(request: okhttp3.Request): MediaUploadResponse {
+    private suspend fun performUpload(request: okhttp3.Request): MediaUploadResponse {
         // Relay WordPress's response verbatim — including non-2xx statuses — so
         // the editor sees WordPress's real status and error body, exactly as a
         // direct upload would.
-        return httpClient.newCall(request).execute().use { response ->
-            MediaUploadResponse(response.code, response.body?.bytes() ?: ByteArray(0))
+        //
+        // Enqueue rather than execute() so coroutine cancellation can tear down
+        // the outbound call: when the editor aborts the upload the server cancels
+        // this handler, and the in-flight POST /wp/v2/media must be cancelled
+        // rather than run to completion and orphan an attachment that a retry
+        // then duplicates.
+        val call = httpClient.newCall(request)
+        return suspendCancellableCoroutine { continuation ->
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : okhttp3.Callback {
+                override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                    // Read the body inside a try/catch and resume the continuation
+                    // ourselves on failure. OkHttp marks the callback as signalled
+                    // before invoking onResponse, so a throw while reading the body
+                    // — a truncated/reset stream, or the read timeout firing mid-body
+                    // after WordPress already sent its 201 headers — is swallowed
+                    // rather than routed to onFailure. Without this the continuation
+                    // would never resume and the upload coroutine would hang forever,
+                    // holding a connection permit.
+                    val result = try {
+                        response.use {
+                            MediaUploadResponse(it.code, it.body?.bytes() ?: ByteArray(0))
+                        }
+                    } catch (e: IOException) {
+                        if (!continuation.isCancelled) continuation.resumeWithException(e)
+                        return
+                    }
+                    continuation.resume(result)
+                }
+
+                override fun onFailure(call: okhttp3.Call, e: IOException) {
+                    // A cancelled call also surfaces here; the continuation is
+                    // already resumed via cancellation, so don't resume again.
+                    if (continuation.isCancelled) return
+                    continuation.resumeWithException(e)
+                }
+            })
         }
     }
 }

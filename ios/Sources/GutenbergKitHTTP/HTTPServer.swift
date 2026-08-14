@@ -75,15 +75,10 @@ public final class HTTPServer: Sendable {
         public let parsed: ParsedHTTPRequest
         /// Time spent receiving and parsing the request.
         public let parseDuration: Duration
-        /// A server-detected error that occurred after headers were parsed
-        /// (e.g., payload too large). When set, the handler is responsible
-        /// for building an appropriate error response.
-        public let serverError: HTTPRequestParseError?
 
-        init(parsed: ParsedHTTPRequest, parseDuration: Duration, serverError: HTTPRequestParseError? = nil) {
+        init(parsed: ParsedHTTPRequest, parseDuration: Duration) {
             self.parsed = parsed
             self.parseDuration = parseDuration
-            self.serverError = serverError
         }
     }
 
@@ -125,10 +120,9 @@ public final class HTTPServer: Sendable {
     /// If no data arrives within this interval, the connection is closed with a 408 response.
     public static let defaultIdleTimeout: Duration = .seconds(5)
 
-    /// The default maximum time to wait for the listener to become ready (5 seconds).
-    /// Binding to loopback normally completes in milliseconds; the bound exists so a
-    /// listener stuck in the `.waiting` state (which emits no further updates)
-    /// cannot suspend its caller indefinitely.
+    /// The default ceiling on waiting for the listener to become ready (5 seconds).
+    /// A loopback bind completes near-instantly; this only bounds a pathological
+    /// listener stuck in a non-terminal state so the caller isn't hung forever.
     public static let defaultStartTimeout: Duration = .seconds(5)
 
     /// The maximum number of bytes to read from the network in a single receive call.
@@ -151,8 +145,15 @@ public final class HTTPServer: Sendable {
     ///     Requests exceeding this limit receive a 413 response. Defaults to 4 GB.
     ///   - maxConnections: The maximum number of concurrent connections. New connections
     ///     beyond this limit are immediately closed. Defaults to 5.
-    ///   - readTimeout: The maximum time to wait for a complete request before closing
-    ///     the connection. Defaults to 30 seconds.
+    ///   - readTimeout: The maximum time to wait for the pre-body phase of a request —
+    ///     receiving the headers and draining any oversized body — before closing the
+    ///     connection. This bounds the unauthenticated-reachable portion of the request.
+    ///     Defaults to 30 seconds.
+    ///   - bodyReadTimeout: The maximum total time to wait for an accepted (authenticated)
+    ///     request body, as a backstop above the per-read `idleTimeout`. A large body that
+    ///     streams steadily is bounded by this ceiling rather than by `readTimeout`, so it
+    ///     is not aborted mid-transfer. Pass `nil` (the default) to reuse `readTimeout`;
+    ///     consumers expecting large uploads should pass a generous value.
     ///   - idleTimeout: The maximum time to wait between consecutive reads before closing
     ///     the connection. Prevents slow-loris attacks. Defaults to 5 seconds.
     ///   - startTimeout: The maximum time to wait for the listener to become ready
@@ -171,9 +172,11 @@ public final class HTTPServer: Sendable {
         maxRequestBodySize: Int64 = HTTPRequestParser.defaultMaxBodySize,
         maxConnections: Int = HTTPServer.defaultMaxConnections,
         readTimeout: Duration = HTTPServer.defaultReadTimeout,
+        bodyReadTimeout: Duration? = nil,
         idleTimeout: Duration = HTTPServer.defaultIdleTimeout,
         startTimeout: Duration = HTTPServer.defaultStartTimeout,
         cors: CORSPolicy = .none,
+        delegate: HTTPServerDelegate? = nil,
         handler: @escaping @Sendable (HTTPServer.Request) async -> HTTPResponse
     ) async throws -> HTTPServer {
         // Sanitize to prevent path traversal — only allow safe filename characters.
@@ -207,6 +210,9 @@ public final class HTTPServer: Sendable {
         let queue = DispatchQueue(label: "com.gutenbergkit.http-server.\(safeName)")
 
         let requiresAuth = requiresAuthentication
+        // Falls back to `readTimeout` so consumers that don't distinguish the two
+        // keep the prior whole-request behavior.
+        let resolvedBodyReadTimeout = bodyReadTimeout ?? readTimeout
         listener.newConnectionHandler = { connection in
             guard connectionCounter.tryIncrement() else {
                 Logger.httpServer.warning("Connection limit reached, rejecting connection")
@@ -217,8 +223,10 @@ public final class HTTPServer: Sendable {
                 connection, queue: queue, token: token,
                 requiresAuthentication: requiresAuth,
                 maxRequestBodySize: maxRequestBodySize, readTimeout: readTimeout,
+                bodyReadTimeout: resolvedBodyReadTimeout,
                 idleTimeout: idleTimeout, cors: cors, tempDirectory: tempDirectory,
-                connectionCounter: connectionCounter, connectionTasks: connectionTasks, handler: handler
+                connectionCounter: connectionCounter, connectionTasks: connectionTasks,
+                delegate: delegate, handler: handler
             )
         }
 
@@ -230,70 +238,64 @@ public final class HTTPServer: Sendable {
         }
         listener.start(queue: queue)
 
-        guard let terminalState = await firstTerminalState(in: states, timeout: startTimeout) else {
-            // No terminal state within the timeout: the listener is stuck in
-            // `.setup` or `.waiting` (which emit no further state updates), or
-            // the surrounding task was cancelled. Cancel the half-started
-            // listener so it doesn't leak.
-            listener.stateUpdateHandler = nil
-            listener.cancel()
-            Logger.httpServer.error("Listener not ready within \(startTimeout); giving up")
-            throw HTTPServerError.failedToStart
-        }
-
-        listener.stateUpdateHandler = nil
-        switch terminalState {
-        case .ready:
-            guard let p = listener.port else {
-                listener.cancel()
-                throw HTTPServerError.failedToStart
-            }
-            let server = HTTPServer(listener: listener, port: p.rawValue, queue: queue, token: token, connectionTasks: connectionTasks, cleanupTask: cleanupTask)
-            Logger.httpServer.info("HTTP server started on port \(p.rawValue)")
-            return server
-        case .failed(let error):
-            Logger.httpServer.error("Listener failed: \(error)")
-            listener.cancel()
-            throw HTTPServerError.failedToStart
-        default: // .cancelled
-            throw HTTPServerError.failedToStart
-        }
-    }
-
-    /// Awaits the first terminal listener state (`.ready`, `.failed`, or
-    /// `.cancelled`) on `states`, skipping non-terminal states (`.setup`,
-    /// `.waiting`), or returns nil once `timeout` elapses without one.
-    ///
-    /// Internal for testability: a listener stuck in `.waiting` cannot be
-    /// reproduced deterministically with a real `NWListener`, but the wait's
-    /// behavior can be verified by feeding this a hand-built state stream.
-    static func firstTerminalState(
-        in states: AsyncStream<NWListener.State>,
-        timeout: Duration
-    ) async -> NWListener.State? {
-        await withTaskGroup(of: NWListener.State?.self) { group in
-            group.addTask {
+        // Bound the wait for readiness. The listener can sit in a non-terminal
+        // state (e.g. `.waiting` when it can't establish an endpoint) indefinitely;
+        // since callers await this — the editor load awaits the upload server's
+        // bind — an unbounded wait would hang the caller, not just fail the server.
+        // Race the readiness wait against a timeout, and tear the listener down on
+        // any failure path so its socket isn't leaked. On `.ready` the group
+        // returns the server without throwing, so a successfully-started server
+        // never has its listener cancelled out from under it.
+        do {
+            return try await withStartTimeout(startTimeout) {
                 for await state in states {
                     switch state {
-                    case .ready, .failed, .cancelled:
-                        return state
+                    case .ready:
+                        listener.stateUpdateHandler = nil
+                        guard let p = listener.port else {
+                            throw HTTPServerError.failedToStart
+                        }
+                        let server = HTTPServer(listener: listener, port: p.rawValue, queue: queue, token: token, connectionTasks: connectionTasks, cleanupTask: cleanupTask)
+                        Logger.httpServer.info("HTTP server started on port \(p.rawValue)")
+                        return server
+                    case .failed(let error):
+                        Logger.httpServer.error("Listener failed: \(error)")
+                        throw HTTPServerError.failedToStart
+                    case .cancelled:
+                        throw HTTPServerError.failedToStart
                     default:
                         continue
                     }
                 }
-                // The stream finished (or the task was cancelled) without a
-                // terminal state.
-                return nil
+                throw HTTPServerError.failedToStart
+            }
+        } catch {
+            // Failure or timeout: the listener may still be started, so cancel it
+            // to release the socket. (On success the returned server owns it.)
+            listener.cancel()
+            throw error
+        }
+    }
+
+    /// Races `operation` against `timeout`, throwing ``HTTPServerError/startTimeout``
+    /// if the timeout wins. Used to bound the wait for the listener to become ready
+    /// so a caller — such as the editor load awaiting the upload server's bind —
+    /// isn't hung on a listener stuck in a non-terminal state.
+    static func withStartTimeout<T: Sendable>(
+        _ timeout: Duration,
+        _ operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
             }
             group.addTask {
-                try? await Task.sleep(for: timeout)
-                return nil
+                try await Task.sleep(for: timeout)
+                throw HTTPServerError.startTimeout
             }
-            // First child to finish wins: a terminal state, or nil on timeout.
-            // `next()` yields a double optional (`State??`); flatten it to `State?`.
-            let first = (await group.next()).flatMap { $0 }
+            let result = try await group.next()!
             group.cancelAll()
-            return first
+            return result
         }
     }
 
@@ -312,6 +314,16 @@ public final class HTTPServer: Sendable {
         connectionTasks.cancelAll()
     }
 
+    /// The library's default response for a parse error: the mapped status code
+    /// with a plain-text body echoing the RFC reason phrase (e.g. 413 "Content Too
+    /// Large"). This is what fatal errors always use, what a recoverable error uses
+    /// when no delegate customizes it, and what an ``HTTPServerDelegate`` can
+    /// delegate back to for cases it doesn't handle.
+    public static func defaultErrorResponse(for error: HTTPRequestParseError) -> HTTPResponse {
+        let statusText = String(error.httpStatusText)
+        return HTTPResponse(status: error.httpStatus, statusText: statusText, body: Data(statusText.utf8))
+    }
+
     // MARK: - Connection Handling
 
     private static func handleConnection(
@@ -321,11 +333,13 @@ public final class HTTPServer: Sendable {
         requiresAuthentication: Bool,
         maxRequestBodySize: Int64,
         readTimeout: Duration,
+        bodyReadTimeout: Duration,
         idleTimeout: Duration,
         cors: CORSPolicy,
         tempDirectory: URL,
         connectionCounter: ConnectionCounter,
         connectionTasks: ConnectionTasks,
+        delegate: HTTPServerDelegate?,
         handler: @escaping @Sendable (HTTPServer.Request) async -> HTTPResponse
     ) {
         connection.start(queue: queue)
@@ -340,79 +354,126 @@ public final class HTTPServer: Sendable {
                 let parser = HTTPRequestParser(maxBodySize: maxRequestBodySize, tempDirectory: tempDirectory)
                 var request: ParsedHTTPRequest!
                 let duration = try await ContinuousClock().measure {
-                    request = try await withThrowingTaskGroup(of: ParsedHTTPRequest.self) { group in
-                        group.addTask {
-                            // Phase 1: receive headers only.
-                            try await Self.receiveUntil(\.hasHeaders, parser: parser, on: connection, idleTimeout: idleTimeout)
+                    // Phase 1 (pre-body): receive and validate headers, authenticate,
+                    // and drain any oversized body — all bounded by `readTimeout`. This is
+                    // the unauthenticated-reachable portion of the request, so it keeps a
+                    // strict total-duration cap.
+                    let partial = try await Self.withReadTimeout(readTimeout) { () -> ParsedHTTPRequest in
+                        // Receive headers only.
+                        try await Self.receiveUntil(\.hasHeaders, parser: parser, on: connection, idleTimeout: idleTimeout)
 
-                            // Validate headers (triggers full RFC validation).
-                            guard let partial = try parser.parseRequest() else {
-                                throw HTTPServerError.connectionClosed
-                            }
-
-                            // Check auth on headers alone, before draining or
-                            // consuming any body bytes — an unauthenticated client
-                            // must not be able to make the server read (and
-                            // discard) an arbitrarily large body, and the handler
-                            // must never see an unauthenticated request.
-                            // OPTIONS is exempt because CORS preflight requests
-                            // never include credentials (Fetch spec §3.3.5).
-                            if requiresAuthentication && partial.method.uppercased() != "OPTIONS" {
-                                guard authenticate(partial, token: token) else {
-                                    throw HTTPServerError.authenticationFailed
-                                }
-                            }
-
-                            // Drain the oversized body before responding so the
-                            // (authenticated) client receives the 413 instead of
-                            // a connection reset (RFC 9110 §15.5.14).
-                            if parser.state == .draining {
-                                try await Self.receiveUntil(\.isComplete, parser: parser, on: connection, idleTimeout: idleTimeout)
-                            }
-
-                            // If the parser detected a non-fatal error (e.g.,
-                            // payload too large after drain), return the partial
-                            // request so the handler can build the response.
-                            if parser.parseError != nil {
-                                return partial
-                            }
-
-                            // Reject body-bearing methods without Content-Length.
-                            // We don't support Transfer-Encoding: chunked, so
-                            // Content-Length is the only way to determine body size.
-                            let upperMethod = partial.method.uppercased()
-                            if ["POST", "PUT", "PATCH"].contains(upperMethod) && partial.header("Content-Length") == nil {
-                                throw HTTPServerError.lengthRequired
-                            }
-
-                            // Phase 2: receive body (skipped if already complete).
-                            if !parser.state.isComplete {
-                                try await Self.receiveUntil(\.isComplete, parser: parser, on: connection, idleTimeout: idleTimeout)
-                            }
-
-                            guard let complete = try parser.parseRequest(), complete.isComplete else {
-                                throw HTTPServerError.connectionClosed
-                            }
-                            return complete
+                        // Validate headers (triggers full RFC validation).
+                        guard let partial = try parser.parseRequest() else {
+                            throw HTTPServerError.connectionClosed
                         }
-                        group.addTask {
-                            try await Task.sleep(for: readTimeout)
-                            throw HTTPServerError.readTimeout
+
+                        // Check auth on headers alone, before draining or consuming any
+                        // body bytes — an unauthenticated client must not be able to make
+                        // the server read (and discard) an arbitrarily large body, and the
+                        // handler must never see an unauthenticated request. OPTIONS is
+                        // exempt because CORS preflight requests never include credentials
+                        // (Fetch spec §3.3.5).
+                        if requiresAuthentication && partial.method.uppercased() != "OPTIONS" {
+                            guard authenticate(partial, token: token) else {
+                                throw HTTPServerError.authenticationFailed
+                            }
                         }
-                        let result = try await group.next()!
-                        group.cancelAll()
-                        return result
+
+                        // Reject auth-exempt OPTIONS that carry a body. Real CORS preflight
+                        // requests are bodyless; a body on the auth-exempt path would
+                        // otherwise be read/drained without authentication — and the
+                        // accepted-body read below is bounded only by the idle timeout.
+                        if partial.method.uppercased() == "OPTIONS", (parser.expectedBodyLength ?? 0) > 0 {
+                            throw HTTPServerError.unexpectedBody
+                        }
+
+                        // Drain the oversized body before responding so the (authenticated)
+                        // client receives the 413 instead of a connection reset
+                        // (RFC 9110 §15.5.14). Still bounded by `readTimeout`.
+                        if parser.state == .draining {
+                            try await Self.receiveUntil(\.isComplete, parser: parser, on: connection, idleTimeout: idleTimeout)
+                        }
+
+                        return partial
                     }
+
+                    // If the parser detected a recoverable error (e.g. payload too
+                    // large, drained above), stop reading and let the post-measure
+                    // branch answer it via the delegate. `request` is the body-less
+                    // partial; the main handler is never invoked for it.
+                    if parser.parseError != nil {
+                        request = partial
+                        return
+                    }
+
+                    // Reject body-bearing methods without Content-Length. We don't support
+                    // Transfer-Encoding: chunked, so Content-Length is the only way to
+                    // determine body size.
+                    let upperMethod = partial.method.uppercased()
+                    if ["POST", "PUT", "PATCH"].contains(upperMethod) && partial.header("Content-Length") == nil {
+                        throw HTTPServerError.lengthRequired
+                    }
+
+                    // Phase 2 (accepted body): the client is authenticated, so read the body
+                    // bounded by `bodyReadTimeout` (a generous backstop) plus the per-read
+                    // `idleTimeout`. A large upload that streams steadily is never failed on
+                    // total duration — only a genuine stall (idle) or the generous ceiling
+                    // ends it.
+                    if !parser.state.isComplete {
+                        try await Self.withReadTimeout(bodyReadTimeout) {
+                            try await Self.receiveUntil(\.isComplete, parser: parser, on: connection, idleTimeout: idleTimeout)
+                        }
+                    }
+
+                    guard let complete = try parser.parseRequest(), complete.isComplete else {
+                        throw HTTPServerError.connectionClosed
+                    }
+                    request = complete
                 }
 
-                // Under a permissive CORS policy the library answers the OPTIONS
-                // preflight itself; the send layer stamps the CORS headers.
+                // A recoverable parse error (payload too large, drained above): the
+                // request was never fully read, so it must not reach the handler.
+                // The library owns the response — the delegate customizes the body if
+                // it wants, otherwise a correct generic error. `send` stamps CORS.
                 let response: HTTPResponse
-                if cors == .permissive, request.method.uppercased() == "OPTIONS" {
+                if let parseError = parser.parseError {
+                    response = delegate?.response(forRecoverableParseError: parseError)
+                        ?? Self.defaultErrorResponse(for: parseError)
+                } else if cors == .permissive, request.method.uppercased() == "OPTIONS" {
+                    // Under a permissive CORS policy the library answers the OPTIONS
+                    // preflight itself; the send layer stamps the CORS headers.
                     response = HTTPResponse(status: 204)
                 } else {
-                    response = await handler(Request(parsed: request, parseDuration: duration, serverError: parser.parseError))
+                    // Run the handler, but race it against the peer closing the
+                    // connection. Once the request has been fully read, no bytes
+                    // flow on this connection until the response is sent, so a
+                    // handler that awaits slow outbound work — the media-upload
+                    // relay awaiting `POST /wp/v2/media` — leaves the connection
+                    // idle. If the client (the editor WebView) aborts the upload
+                    // during that window, nothing here would otherwise notice, and
+                    // the outbound request would run to completion, creating an
+                    // orphaned attachment that a retry then duplicates. Watching for
+                    // the close and cancelling the handler propagates cancellation
+                    // through structured concurrency to the outbound URLSession
+                    // task, so a cancelled upload is actually cancelled.
+                    switch await Self.runHandler(
+                        handler,
+                        Request(parsed: request, parseDuration: duration),
+                        racingCloseOf: connection
+                    ) {
+                    case .completed(let handlerResponse):
+                        response = handlerResponse
+                    case .clientDisconnected:
+                        Logger.httpServer.debug("\(request.method) \(request.target) → client disconnected before response; cancelled in-flight handler")
+                        connection.cancel()
+                        return
+                    }
                 }
+                // The handler type is non-throwing and maps cancellation to a 500,
+                // so if the connection task was cancelled while it ran (server stop /
+                // editor teardown), honor that here rather than writing a doomed
+                // response: propagate so the outer handler just closes the connection.
+                try Task.checkCancellation()
                 await send(response, on: connection, cors: cors)
                 let (sec, atto) = duration.components
                 let ms = Double(sec) * 1000.0 + Double(atto) / 1_000_000_000_000_000.0
@@ -421,6 +482,9 @@ public final class HTTPServer: Sendable {
                 await send(HTTPResponse(status: 407, headers: [("Content-Type", "text/plain"), ("Proxy-Authenticate", "Bearer")]), on: connection, cors: cors)
             } catch HTTPServerError.lengthRequired {
                 await send(HTTPResponse(status: 411, statusText: "Length Required", body: Data("Length Required".utf8)), on: connection, cors: cors)
+            } catch HTTPServerError.unexpectedBody {
+                Logger.httpServer.warning("Rejected auth-exempt request carrying a body")
+                await send(HTTPResponse(status: 400, statusText: "Bad Request", body: Data("Unexpected request body".utf8)), on: connection, cors: cors)
             } catch is CancellationError {
                 Logger.httpServer.debug("Connection cancelled during shutdown")
                 connection.cancel()
@@ -428,20 +492,38 @@ public final class HTTPServer: Sendable {
                 Logger.httpServer.warning("Read timeout, closing connection")
                 await send(HTTPResponse(status: 408, statusText: "Request Timeout", body: Data("Request Timeout".utf8)), on: connection, cors: cors)
             } catch let error as HTTPRequestParseError {
+                // Fatal parse error (malformed framing, smuggling-relevant, etc.):
+                // always answered by the library, never routed to the delegate.
                 Logger.httpServer.error("Parse error: \(error)")
-                let statusText = String(error.httpStatusText)
-                let response = HTTPResponse(
-                    status: error.httpStatus,
-                    statusText: statusText,
-                    body: Data(statusText.utf8)
-                )
-                await send(response, on: connection, cors: cors)
+                await send(Self.defaultErrorResponse(for: error), on: connection, cors: cors)
             } catch {
                 Logger.httpServer.error("Unexpected error: \(error)")
                 await send(HTTPResponse(status: 400, statusText: "Bad Request", body: Data("Malformed HTTP request".utf8)), on: connection, cors: cors)
             }
         }
         connectionTasks.track(taskID, task)
+    }
+
+    /// Runs `operation` under a total-duration timeout, racing it against a sleep
+    /// task. Used to bound one phase of the request read (pre-body vs. accepted
+    /// body). The per-read `idleTimeout` inside `operation` still applies
+    /// independently, and cancellation of the enclosing task cancels both children.
+    private static func withReadTimeout<T: Sendable>(
+        _ timeout: Duration,
+        _ operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            group.addTask {
+                try await Task.sleep(for: timeout)
+                throw HTTPServerError.readTimeout
+            }
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
     }
 
     /// Feeds data from the connection into the parser until the given state
@@ -552,6 +634,133 @@ public final class HTTPServer: Sendable {
         }
     }
 
+    /// The result of racing a request handler against the connection's peer
+    /// closing it. See ``runHandler(_:_:racingCloseOf:)``.
+    private enum HandlerOutcome: Sendable {
+        case completed(HTTPResponse)
+        case clientDisconnected
+    }
+
+    /// Runs `handler`, racing it against the connection's peer closing it.
+    ///
+    /// Between the end of the request and the start of the response a
+    /// well-behaved HTTP/1.1 client sends nothing, so a receive posted now can
+    /// only complete when the peer closes the connection (EOF) or it fails —
+    /// i.e. the client went away (an aborted `fetch`). If that wins the race, the
+    /// handler task is cancelled, which propagates through structured concurrency
+    /// to any outbound work the handler is awaiting, and the caller skips the
+    /// (doomed) send. If the handler wins, the watcher is cancelled *without*
+    /// cancelling the connection, so the response can still be sent.
+    ///
+    /// A read EOF can't distinguish a full close from a client *write*-half-close
+    /// (`shutdown(SHUT_WR)` after the request, read half kept open for the
+    /// response), so both are deliberately treated as an abort. That's safe here
+    /// because the only client is the editor WebView's `fetch`, which never
+    /// half-closes and fully closes on abort; serving a half-closer instead would
+    /// forfeit the prompt cancellation this exists for — the two are only
+    /// distinguishable by attempting the write, by which point an aborted upload
+    /// has already run. A regression test pins this.
+    private static func runHandler(
+        _ handler: @escaping @Sendable (HTTPServer.Request) async -> HTTPResponse,
+        _ request: HTTPServer.Request,
+        racingCloseOf connection: NWConnection
+    ) async -> HandlerOutcome {
+        await withTaskGroup(of: HandlerOutcome.self) { group in
+            group.addTask {
+                .completed(await handler(request))
+            }
+            group.addTask {
+                await waitForConnectionClose(on: connection)
+                return .clientDisconnected
+            }
+            let outcome = await group.next()!
+            group.cancelAll()
+            return outcome
+        }
+    }
+
+    /// Suspends until the connection's peer closes its send half (EOF) — a full
+    /// close or a write-half-close alike — or it fails, by posting a receive
+    /// whose bytes are discarded (it never feeds the parser).
+    /// A well-behaved client sends nothing before the response, so in the common
+    /// case the receive simply stays pending until the peer closes.
+    ///
+    /// If the surrounding task is cancelled first (the handler finished), this
+    /// returns *without* cancelling the connection, so the caller can still use
+    /// it to send the response.
+    private static func waitForConnectionClose(on connection: NWConnection) async {
+        let watcher = ConnectionCloseWatcher()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                guard watcher.store(continuation) else { return }
+                watchForClose(on: connection, watcher: watcher)
+            }
+        } onCancel: {
+            watcher.cancel()
+        }
+    }
+
+    /// Posts a receive that wakes the watcher when the peer closes the
+    /// connection. Re-issues on a spurious wake or on unexpected pre-response
+    /// bytes (both are discarded); a normal idle connection never invokes the
+    /// callback until the peer actually closes.
+    private static func watchForClose(on connection: NWConnection, watcher: ConnectionCloseWatcher) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: readChunkSize) { _, _, isComplete, error in
+            if error != nil || isComplete {
+                watcher.resume()
+            } else {
+                watchForClose(on: connection, watcher: watcher)
+            }
+        }
+    }
+
+    /// Resumes ``waitForConnectionClose``'s continuation exactly once, whether
+    /// the wake comes from the peer closing the connection or from the
+    /// surrounding task being cancelled. Cancellation never touches the
+    /// connection itself.
+    private final class ConnectionCloseWatcher: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Void, Never>?
+        private var resumed = false
+        private var cancelled = false
+
+        /// Stores the continuation. Returns `false` — and resumes immediately —
+        /// if cancellation already arrived, so the caller skips posting a receive.
+        func store(_ continuation: CheckedContinuation<Void, Never>) -> Bool {
+            lock.lock()
+            if cancelled {
+                resumed = true
+                lock.unlock()
+                continuation.resume()
+                return false
+            }
+            self.continuation = continuation
+            lock.unlock()
+            return true
+        }
+
+        /// The peer closed the connection.
+        func resume() {
+            lock.lock()
+            guard !resumed, let continuation else { lock.unlock(); return }
+            resumed = true
+            self.continuation = nil
+            lock.unlock()
+            continuation.resume()
+        }
+
+        /// The surrounding task was cancelled (the handler finished first).
+        func cancel() {
+            lock.lock()
+            cancelled = true
+            guard !resumed, let continuation else { lock.unlock(); return }
+            resumed = true
+            self.continuation = nil
+            lock.unlock()
+            continuation.resume()
+        }
+    }
+
     /// Sends a response on the connection and then closes it.
     private static func send(_ response: HTTPResponse, on connection: NWConnection, cors: CORSPolicy) async {
         let decorated = response.addingHeadersIfAbsent(cors.responseHeaders)
@@ -639,31 +848,23 @@ public final class HTTPServer: Sendable {
     ///
     /// The parser creates temp files in a server-specific subdirectory under the
     /// system temp directory (e.g., `GutenbergKitHTTP-media-proxy/`). Under normal
-    /// operation, `TempFileOwner.deinit` deletes them via ARC. After a crash, these
+    /// operation, `Buffer`/`TempFileOwner` delete them via ARC. After a crash these
     /// files survive — this method cleans them up on the next server start.
     ///
-    /// Because each server `name` maps to its own subdirectory, cleanup is scoped
-    /// to a single server instance and will not affect files belonging to other
-    /// servers running concurrently.
-    ///
-    /// Only files older than one hour are deleted. Fresh files are preserved so
-    /// the sweep — which runs detached from `start()` — cannot race in-flight
-    /// temp files, whether they belong to this instance or another live server
-    /// sharing the same `name`.
-    private static func cleanOrphanedTempFiles(in directory: URL) {
-        // Only delete files past the age threshold. Fresh files may belong to a
-        // live server instance — the sweep runs detached from start(), so
-        // without the threshold it could race and delete an in-flight
-        // request's temp buffer.
-        let cutoff = Date(timeIntervalSinceNow: -3600) // 1 hour ago
+    /// Files currently backing an in-flight request are registered in
+    /// ``ActiveTempFiles`` and skipped, so a server instance that shares a
+    /// directory with a concurrently-running instance of the same name (e.g. two
+    /// editors open at once, or one being torn down as another starts) does not
+    /// delete the other's live buffers. Files not in the registry have no live
+    /// owner in this process — they are crash orphans and are removed. The sweep
+    /// runs detached from `start()` (see `cleanupTask`), off the caller's startup
+    /// path; the registry keeps it safe regardless of when it runs.
+    static func cleanOrphanedTempFiles(in directory: URL) {
         guard let contents = try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: [.contentModificationDateKey]
+            at: directory, includingPropertiesForKeys: nil
         ) else { return }
-        for url in contents {
-            let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-            if let modified, modified < cutoff {
-                try? FileManager.default.removeItem(at: url)
-            }
+        for url in contents where !ActiveTempFiles.contains(url.lastPathComponent) {
+            try? FileManager.default.removeItem(at: url)
         }
     }
 }

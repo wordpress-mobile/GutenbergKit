@@ -368,6 +368,10 @@ private final class Buffer {
         let dir = directory ?? FileManager.default.temporaryDirectory
         let url = dir.appendingPathComponent("GutenbergKitHTTP-\(UUID().uuidString)")
 
+        // Mark the file active before creating it, so a concurrent server's orphan
+        // sweep can't delete it in the window between creation and first use.
+        ActiveTempFiles.register(url.lastPathComponent)
+
         if FileManager.default.createFile(atPath: url.path, contents: nil),
            let handle = FileHandle(forUpdatingAtPath: url.path) {
             self.fileURL = url
@@ -375,6 +379,7 @@ private final class Buffer {
             self.memoryBuffer = nil
         } else {
             // Temp file unavailable — buffer in memory instead.
+            ActiveTempFiles.unregister(url.lastPathComponent)
             self.fileURL = nil
             self.fileHandle = nil
             self.memoryBuffer = Data()
@@ -388,6 +393,7 @@ private final class Buffer {
             try? fileHandle.close()
         }
         if let fileURL, !fileOwnershipTransferred {
+            ActiveTempFiles.unregister(fileURL.lastPathComponent)
             try? FileManager.default.removeItem(at: fileURL)
         }
     }

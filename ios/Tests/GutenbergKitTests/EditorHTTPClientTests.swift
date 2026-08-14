@@ -167,6 +167,74 @@ struct EditorHTTPClientTests {
         #expect(capturedRequest.timeoutInterval == 45)
     }
 
+    @Test("uploadClient() drops the REST request timeout so uploads aren't cut off mid-resize")
+    func uploadClientDropsRESTTimeout() async throws {
+        let spySession = SpyURLSession()
+        let authHeader = "Bearer upload-token"
+        // A short REST timeout a host might set for snappy REST calls.
+        let restTimeout: TimeInterval = 15
+        let client = EditorHTTPClient(
+            urlSession: spySession,
+            authHeader: authHeader,
+            requestTimeout: restTimeout
+        )
+
+        let uploadClient = client.uploadClient()
+        let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/media")!)
+        _ = try await uploadClient.performRaw(request)
+
+        let captured = try #require(spySession.lastCapturedRequest)
+        // The short REST timeout must not bleed into uploads — the request keeps
+        // its own (default) inactivity timeout instead.
+        #expect(captured.timeoutInterval != restTimeout)
+        #expect(captured.timeoutInterval == request.timeoutInterval)
+        // Auth and the shared session are still used.
+        #expect(captured.value(forHTTPHeaderField: "Authorization") == authHeader)
+    }
+
+    @Test("uploadClient() preserves an explicit upload request timeout instead of clobbering it")
+    func uploadClientPreservesExplicitTimeout() async throws {
+        let spySession = SpyURLSession()
+        let client = EditorHTTPClient(
+            urlSession: spySession,
+            authHeader: "Bearer token",
+            requestTimeout: 15
+        )
+
+        let uploadClient = client.uploadClient()
+        var request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/media")!)
+        request.timeoutInterval = 120
+
+        _ = try await uploadClient.performRaw(request)
+
+        // On the REST client the requestTimeout (15) would clobber this to 15;
+        // the upload client leaves it alone.
+        let captured = try #require(spySession.lastCapturedRequest)
+        #expect(captured.timeoutInterval == 120)
+    }
+
+    @Test("uploadClient() carries the request-observing delegate so uploads are observed too")
+    func uploadClientCarriesDelegate() async throws {
+        let spySession = SpyURLSession()
+        let spyDelegate = SpyHTTPClientDelegate()
+        let client = EditorHTTPClient(
+            urlSession: spySession,
+            authHeader: "Bearer token",
+            delegate: spyDelegate
+        )
+
+        let uploadClient = client.uploadClient()
+        let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/media")!)
+        _ = try await uploadClient.performRaw(request)
+
+        // The delegate installed on the REST client must also observe requests
+        // made through the upload sibling — otherwise a host logging "all network
+        // requests" silently misses every media upload.
+        #expect(spyDelegate.callCount == 1)
+        let observed = try #require(spyDelegate.lastCall)
+        #expect(observed.request.url == request.url)
+    }
+
     // MARK: - Cookie Handling Tests
 
     @Test("perform() disables cookie handling")

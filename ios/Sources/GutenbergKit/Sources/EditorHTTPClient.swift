@@ -12,6 +12,13 @@ public protocol EditorHTTPClientProtocol: Sendable {
     func performRaw(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse)
 
     func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse)
+
+    /// Returns a client tuned for large media uploads. The default returns the
+    /// client unchanged; ``EditorHTTPClient`` overrides it to drop the REST
+    /// request timeout so a silent server-side window — WordPress synchronously
+    /// generating image sub-sizes inside `POST /wp/v2/media` — can't trip an
+    /// inactivity timeout and orphan the attachment.
+    func uploadClient() -> any EditorHTTPClientProtocol
 }
 
 public extension EditorHTTPClientProtocol {
@@ -20,12 +27,18 @@ public extension EditorHTTPClientProtocol {
     func performRaw(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
         try await perform(urlRequest)
     }
+
+    /// Default implementation returns the client unchanged.
+    func uploadClient() -> any EditorHTTPClientProtocol { self }
 }
 
 /// A delegate for observing HTTP requests made by the editor.
 ///
-/// Implement this protocol to inspect or log all network requests.
-public protocol EditorHTTPClientDelegate {
+/// Implement this protocol to inspect or log all network requests — including the
+/// media uploads and passthroughs routed through
+/// ``EditorHTTPClientProtocol/uploadClient()``. Conformers are invoked from an
+/// actor, so the protocol requires `Sendable` (implementations must be thread-safe).
+public protocol EditorHTTPClientDelegate: Sendable {
     func didPerformRequest(_ request: URLRequest, response: URLResponse, data: EditorResponseData)
 }
 
@@ -145,6 +158,24 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
         }
 
         return (url, response as! HTTPURLResponse)
+    }
+
+    /// A sibling client tuned for large media uploads: it reuses this client's
+    /// session (preserving any custom configuration or pinning) and auth header,
+    /// but drops the REST `requestTimeout`. That timeout is an inactivity timer
+    /// (`URLRequest.timeoutInterval`); a short value set for snappy REST calls
+    /// would also fire during the silent window while WordPress synchronously
+    /// generates image sub-sizes inside `POST /wp/v2/media`, orphaning the
+    /// attachment server-side and duplicating it on retry. Uploads instead use
+    /// the request's default 60s inactivity timeout, mirroring Android's
+    /// dedicated upload client (no total-duration cap).
+    ///
+    /// The request-observing `delegate` is carried over, so a host that installs
+    /// one observes media uploads and passthroughs like every other request; only
+    /// the REST `requestTimeout` is dropped. Sharing the observer across both
+    /// clients is sound because `EditorHTTPClientDelegate` is `Sendable`.
+    public nonisolated func uploadClient() -> any EditorHTTPClientProtocol {
+        EditorHTTPClient(urlSession: urlSession, authHeader: authHeader, delegate: delegate)
     }
 
     private func configureRequest(_ request: URLRequest) -> URLRequest {

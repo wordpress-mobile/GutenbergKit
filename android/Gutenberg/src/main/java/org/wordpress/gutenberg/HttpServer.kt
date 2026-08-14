@@ -1,6 +1,7 @@
 package org.wordpress.gutenberg
 
 import android.util.Log
+import org.wordpress.gutenberg.http.HTTPRequestParseError
 import org.wordpress.gutenberg.http.HTTPRequestParser
 import org.wordpress.gutenberg.http.HTTPRequestParseException
 import org.wordpress.gutenberg.http.TempFileOwner
@@ -19,11 +20,18 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.Semaphore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 
 /**
  * A received HTTP request.
@@ -39,11 +47,7 @@ data class HttpRequest(
     val target: String,
     val headers: Map<String, String>,
     val body: org.wordpress.gutenberg.http.RequestBody? = null,
-    val parseDurationMs: Double = 0.0,
-    /** A server-detected error that occurred after headers were parsed
-     *  (e.g., payload too large). When set, the handler is responsible
-     *  for building an appropriate error response. */
-    val serverError: org.wordpress.gutenberg.http.HTTPRequestParseError? = null
+    val parseDurationMs: Double = 0.0
 ) {
     /**
      * The path portion of [target], without the query component
@@ -107,6 +111,17 @@ enum class CorsPolicy {
         get() = when (this) {
             None -> emptyMap()
             Permissive -> mapOf(
+                // `*` (any origin) rather than echoing a specific origin is
+                // deliberate, and safe here — not an oversight to tighten. The
+                // server is loopback-only, and every non-OPTIONS request is gated
+                // by a per-session random bearer token stored only in the editor
+                // origin's localStorage/window.GBKit, which is origin-scoped and
+                // unreadable by any other origin — so no cross-origin can obtain
+                // it. `*` only governs whether a *token-holding* origin may read
+                // the response, and the sole token-holder is the editor itself, the
+                // legitimate client. Echoing the origin isn't viable anyway: the
+                // editor loads from file:// (Origin null), which can't be cleanly
+                // allowlisted.
                 "Access-Control-Allow-Origin" to "*",
                 "Access-Control-Allow-Methods" to "GET, POST, PUT, DELETE, OPTIONS",
                 "Access-Control-Allow-Headers" to "Authorization, Relay-Authorization, Content-Type",
@@ -208,10 +223,18 @@ class HttpServer(
     private val requiresAuthentication: Boolean = true,
     private val maxConnections: Int = DEFAULT_MAX_CONNECTIONS,
     private val maxBodySize: Long = DEFAULT_MAX_BODY_SIZE,
+    // Bounds the pre-body phase — receiving headers and draining an oversized
+    // body — i.e. the unauthenticated-reachable portion of the request.
     private val readTimeoutMs: Int = DEFAULT_READ_TIMEOUT_MS,
+    // Total-duration backstop for an accepted (authenticated) body, above the
+    // per-read idle timeout. Defaults to readTimeoutMs; consumers expecting large
+    // uploads should pass a generous value so a steadily-streamed body isn't
+    // aborted mid-transfer.
+    private val bodyReadTimeoutMs: Int = readTimeoutMs,
     private val idleTimeoutMs: Int = DEFAULT_IDLE_TIMEOUT_MS,
     private val cacheDir: File? = null,
     private val cors: CorsPolicy = CorsPolicy.None,
+    private val delegate: HttpServerDelegate? = null,
     private val handler: suspend (HttpRequest) -> HttpResponse
 ) {
     @Volatile
@@ -263,7 +286,16 @@ class HttpServer(
                             socket.close()
                             continue
                         }
-                        launch {
+                        // Start ATOMIC, not DEFAULT: the permit has been acquired and
+                        // the socket accepted, but stop() can cancel this scope in the
+                        // window before the child is dispatched. With DEFAULT, a child
+                        // cancelled before it starts skips its body entirely — so
+                        // neither `finally` (release the permit) nor handleConnection's
+                        // `socket.use` (close the fd) would run, leaking the accepted
+                        // socket. ATOMIC guarantees the body begins: it enters
+                        // `socket.use` and hits readUntil's first `ensureActive()`,
+                        // which throws and unwinds cleanly through both.
+                        launch(start = CoroutineStart.ATOMIC) {
                             try {
                                 handleConnection(socket)
                             } finally {
@@ -317,6 +349,9 @@ class HttpServer(
                 } catch (_: Exception) {
                     // Best-effort — socket may already be broken.
                 }
+            } catch (e: CancellationException) {
+                // Propagate cancellation (e.g. from stop()) — don't swallow it.
+                throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Connection error", e)
             }
@@ -329,27 +364,29 @@ class HttpServer(
         val parser = HTTPRequestParser(maxBodySize = maxBodySize, cacheDir = cacheDir, tempSubdir = tempSubdir)
         parser.use {
             val parseStart = System.nanoTime()
+            // Bounds the pre-body phase (headers + oversized drain) — the
+            // unauthenticated-reachable portion of the request. The accepted body gets
+            // its own, more generous deadline below.
+            //
             // Note: the deadline is checked between reads, not during a blocking
             // read. Since each read can block for up to idleTimeoutMs (soTimeout),
             // the effective maximum time is readTimeoutMs + idleTimeoutMs. This is
             // a bounded imprecision — slow-loris protection is still effective
             // because the attacker must send data to keep the connection alive,
             // and each time data arrives the loop iterates and checks the deadline.
-            val deadlineNanos = parseStart + readTimeoutMs * 1_000_000L
+            val headerDeadlineNanos = parseStart + readTimeoutMs * 1_000_000L
             val buffer = ByteArray(READ_CHUNK_SIZE)
 
             // Phase 1: receive headers only.
-            readUntil(parser, input, buffer, deadlineNanos) { it.hasHeaders }
+            readUntil(parser, input, buffer, headerDeadlineNanos) { it.hasHeaders }
 
             // Validate headers (triggers full RFC validation).
             val partial = try {
                 parser.parseRequest()
             } catch (e: HTTPRequestParseException) {
-                val statusText = STATUS_TEXT[e.error.httpStatus] ?: "Bad Request"
-                sendResponse(socket, HttpResponse(
-                    status = e.error.httpStatus,
-                    body = statusText.toByteArray()
-                ))
+                // Fatal parse error (malformed framing, smuggling-relevant, etc.):
+                // always answered by the library, never routed to the delegate.
+                sendResponse(socket, defaultErrorResponse(e.error))
                 return
             } catch (_: java.io.IOException) {
                 sendResponse(socket, HttpResponse(
@@ -385,33 +422,33 @@ class HttpServer(
                 }
             }
 
-            // Drain the oversized body before responding so the (authenticated)
-            // client receives the 413 instead of a connection reset
-            // (RFC 9110 §15.5.14).
-            if (parser.state == HTTPRequestParser.State.DRAINING) {
-                readUntil(parser, input, buffer, deadlineNanos) { it.isComplete }
+            // Reject auth-exempt OPTIONS that carry a body. Real CORS preflight
+            // requests are bodyless; a body on the auth-exempt path would otherwise
+            // be read/drained without authentication — and the accepted-body read
+            // below is bounded only by the idle timeout.
+            if (partial.method.uppercase() == "OPTIONS" && (parser.expectedBodyLength ?: 0L) > 0L) {
+                sendResponse(socket, HttpResponse(
+                    status = 400,
+                    body = "Unexpected request body".toByteArray()
+                ))
+                return
             }
 
-            // If the parser detected a non-fatal error (e.g., payload too
-            // large after drain), let the handler build the response.
+            // Drain the oversized body before responding so the (authenticated)
+            // client receives the 413 instead of a connection reset
+            // (RFC 9110 §15.5.14). Still bounded by the pre-body deadline.
+            if (parser.state == HTTPRequestParser.State.DRAINING) {
+                readUntil(parser, input, buffer, headerDeadlineNanos) { it.isComplete }
+            }
+
+            // A recoverable parse error (payload too large, drained above): the
+            // request was never fully read, so it must not reach the handler. The
+            // library owns the response — the delegate customizes the body if it
+            // wants, otherwise a correct generic error. sendResponse stamps CORS.
             parser.pendingParseError?.let { error ->
                 val parseDurationMs = (System.nanoTime() - parseStart) / 1_000_000.0
-                val request = HttpRequest(
-                    method = partial.method,
-                    target = partial.target,
-                    headers = partial.headers,
-                    parseDurationMs = parseDurationMs,
-                    serverError = error
-                )
-                val response = try {
-                    handler(request)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Handler threw", e)
-                    HttpResponse(
-                        status = error.httpStatus,
-                        body = (STATUS_TEXT[error.httpStatus] ?: "Error").toByteArray()
-                    )
-                }
+                val response = delegate?.responseForRecoverableParseError(error)
+                    ?: defaultErrorResponse(error)
                 sendResponse(socket, response)
                 Log.d(TAG, "${partial.method} ${partial.target} → ${response.status} (${"%.1f".format(parseDurationMs)}ms)")
                 return
@@ -429,18 +466,20 @@ class HttpServer(
                 return
             }
 
-            // Phase 2: receive body (skipped if already complete).
-            readUntil(parser, input, buffer, deadlineNanos) { it.isComplete }
+            // Phase 2 (accepted body): now that the client is authenticated, give the
+            // body its own generous deadline. A large upload that streams steadily is
+            // bounded by bodyReadTimeoutMs + the per-read idle timeout, not by the
+            // pre-body readTimeoutMs — so it isn't aborted mid-transfer.
+            val bodyDeadlineNanos = System.nanoTime() + bodyReadTimeoutMs * 1_000_000L
+            readUntil(parser, input, buffer, bodyDeadlineNanos) { it.isComplete }
 
             // Final parse with body.
             val parsed = try {
                 parser.parseRequest()
             } catch (e: HTTPRequestParseException) {
-                val statusText = STATUS_TEXT[e.error.httpStatus] ?: "Bad Request"
-                sendResponse(socket, HttpResponse(
-                    status = e.error.httpStatus,
-                    body = statusText.toByteArray()
-                ))
+                // Fatal parse error (malformed framing, smuggling-relevant, etc.):
+                // always answered by the library, never routed to the delegate.
+                sendResponse(socket, defaultErrorResponse(e.error))
                 return
             } catch (_: java.io.IOException) {
                 sendResponse(socket, HttpResponse(
@@ -473,15 +512,19 @@ class HttpServer(
                     body = parsed.body,
                     parseDurationMs = parseDurationMs
                 )
-                val response = resolveResponse(request)
-                sendResponse(socket, response)
-                Log.d(TAG, "${parsed.method} ${parsed.target} → ${response.status} (${"%.1f".format(parseDurationMs)}ms)")
+                val response = resolveResponseRacingClose(request, socket, input)
+                if (response != null) {
+                    sendResponse(socket, response)
+                    Log.d(TAG, "${parsed.method} ${parsed.target} → ${response.status} (${"%.1f".format(parseDurationMs)}ms)")
+                } else {
+                    Log.d(TAG, "${parsed.method} ${parsed.target} → client disconnected before response; cancelled in-flight handler")
+                }
             }
         }
     }
 
     /** Reads data into the parser until [condition] is satisfied or the connection closes. */
-    private fun readUntil(
+    private suspend fun readUntil(
         parser: HTTPRequestParser,
         input: BufferedInputStream,
         buffer: ByteArray,
@@ -489,6 +532,11 @@ class HttpServer(
         condition: (HTTPRequestParser.State) -> Boolean
     ) {
         while (!condition(parser.state)) {
+            // Cooperative cancellation: stop() cancels the connection's coroutine
+            // scope, but a blocking read isn't interruptible — checking between reads
+            // lets a steadily-streaming connection be torn down promptly on shutdown
+            // (an idle connection is already bounded by soTimeout).
+            currentCoroutineContext().ensureActive()
             if (System.nanoTime() > deadlineNanos) {
                 throw SocketTimeoutException("Read deadline exceeded")
             }
@@ -509,9 +557,92 @@ class HttpServer(
         }
         return try {
             handler(request)
+        } catch (e: CancellationException) {
+            // Never swallow cooperative cancellation (e.g. from stop()/detach):
+            // rethrow so handleConnection unwinds cleanly instead of writing a 500
+            // to a connection that's being torn down.
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Handler threw", e)
             HttpResponse(status = 500, body = "Internal Server Error".toByteArray())
+        }
+    }
+
+    /**
+     * Runs [resolveResponse], racing it against the connection's peer closing.
+     *
+     * Once the request has been fully read no bytes flow on the connection until
+     * the response is sent, so a read posted now can only return EOF (the client
+     * closed) or fail — i.e. the client went away, which is what the editor
+     * WebView does when it aborts an upload. A media-upload handler awaits a slow
+     * outbound `POST /wp/v2/media`; if the client aborts during that window,
+     * cancelling the handler cancels the outbound call instead of letting it run
+     * to completion and orphan an attachment that a retry then duplicates.
+     *
+     * A read EOF can't distinguish a full close from a client write-half-close
+     * (`shutdownOutput()` after the request, read half kept open for the
+     * response), so both are deliberately treated as an abort. That's safe here
+     * because the only client is the editor WebView's `fetch`, which never
+     * half-closes and fully closes on abort; serving a half-closer instead would
+     * forfeit the prompt cancellation this exists for — the two are only
+     * distinguishable by attempting the write, by which point an aborted upload
+     * has already run. A regression test pins this.
+     *
+     * Returns null if the peer closed before the handler produced a response, in
+     * which case the caller skips the (doomed) send.
+     */
+    private suspend fun resolveResponseRacingClose(
+        request: HttpRequest,
+        socket: Socket,
+        input: BufferedInputStream
+    ): HttpResponse? = coroutineScope {
+        val handlerJob = async { resolveResponse(request) }
+        val watcherJob = async { awaitPeerClose(input) }
+
+        val response = select {
+            handlerJob.onAwait { it }
+            watcherJob.onAwait { null }
+        }
+
+        if (response != null) {
+            // The handler won. Stop watching and unblock the watcher's pending
+            // blocking read (soTimeout would otherwise hold it for a full idle
+            // interval) so this scope can join it promptly. shutdownInput closes
+            // only the receive half — the response can still be written.
+            watcherJob.cancel()
+            try {
+                socket.shutdownInput()
+            } catch (_: Exception) {
+                // Best-effort — the socket may already be closed.
+            }
+        } else {
+            // The peer closed first. Cancel the in-flight handler, which cancels
+            // the outbound relay call via its continuation's cancellation.
+            handlerJob.cancel()
+        }
+        response
+    }
+
+    /**
+     * Suspends until the connection's peer closes its send half (EOF) — a full
+     * close or a write-half-close alike — or it fails. A
+     * well-behaved client sends nothing before the response, so the read blocks
+     * until the peer closes; the per-read idle timeout ([Socket.setSoTimeout])
+     * just makes it loop. Any unexpected pre-response bytes are discarded — this
+     * never feeds the parser.
+     */
+    private suspend fun awaitPeerClose(input: BufferedInputStream) {
+        while (true) {
+            currentCoroutineContext().ensureActive()
+            val byte = try {
+                input.read()
+            } catch (_: SocketTimeoutException) {
+                continue // idle window elapsed; the connection is still open
+            } catch (_: java.io.IOException) {
+                return // reset/closed (incl. shutdownInput on the handler-win path)
+            }
+            if (byte == -1) return // clean EOF — the peer closed
+            // Otherwise an unexpected pre-response byte; discard and keep watching.
         }
     }
 
@@ -523,6 +654,18 @@ class HttpServer(
     }
 
     companion object {
+        /**
+         * The library's default response for a parse error: the mapped status code
+         * with a plain-text body echoing the reason phrase (e.g. 413 "Content Too
+         * Large"). This is what fatal errors always use, what a recoverable error
+         * uses when no delegate customizes it, and what an [HttpServerDelegate] can
+         * delegate back to for cases it doesn't handle.
+         */
+        fun defaultErrorResponse(error: HTTPRequestParseError): HttpResponse {
+            val statusText = STATUS_TEXT[error.httpStatus] ?: "Error"
+            return HttpResponse(status = error.httpStatus, body = statusText.toByteArray())
+        }
+
         /** Default maximum number of concurrent connections. */
         const val DEFAULT_MAX_CONNECTIONS: Int = 5
 

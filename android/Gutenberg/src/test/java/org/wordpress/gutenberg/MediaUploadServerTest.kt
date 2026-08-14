@@ -1,19 +1,27 @@
 package org.wordpress.gutenberg
 
 import com.google.gson.JsonParser
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.io.IOException
 import java.net.Socket
 
 class MediaUploadServerTest {
@@ -39,6 +47,37 @@ class MediaUploadServerTest {
     fun `starts and provides a port and token`() {
         assertTrue(server.port > 0)
         assertTrue(server.token.isNotEmpty())
+    }
+
+    @Test
+    fun `stop cancels an internally-created scope but leaves a caller-supplied one alone`() {
+        // No scope supplied → the server owns one, which stop() must cancel.
+        val owningServer =
+            MediaUploadServer(uploadDelegate = null, defaultUploader = null, cacheDir = tempFolder.root)
+        val ownedScope = ownedScopeOf(owningServer)
+        assertNotNull("server should own a scope when none is supplied", ownedScope)
+        assertTrue(ownedScope!!.isActive)
+        owningServer.stop()
+        assertFalse("stop() must cancel the scope it created", ownedScope.isActive)
+
+        // A caller-supplied scope belongs to the caller — stop() must not cancel it.
+        val callerScope = CoroutineScope(Dispatchers.IO)
+        val borrowingServer = MediaUploadServer(
+            uploadDelegate = null,
+            defaultUploader = null,
+            cacheDir = tempFolder.root,
+            scope = callerScope
+        )
+        assertNull("server must not own a caller-supplied scope", ownedScopeOf(borrowingServer))
+        borrowingServer.stop()
+        assertTrue("stop() must not cancel a caller-supplied scope", callerScope.isActive)
+        callerScope.cancel()
+    }
+
+    private fun ownedScopeOf(uploadServer: MediaUploadServer): CoroutineScope? {
+        val field = MediaUploadServer::class.java.getDeclaredField("ownedScope")
+        field.isAccessible = true
+        return field.get(uploadServer) as CoroutineScope?
     }
 
     // MARK: - Auth validation
@@ -280,6 +319,35 @@ class MediaUploadServerTest {
         assertEquals(99, json.get("id").asInt)
     }
 
+    @Test
+    fun `skips processing and the temp copy when the delegate declines by metadata`() {
+        val delegate = DeclineByMetadataDelegate()
+        val mockUploader = MockDefaultUploader()
+
+        server.stop()
+        server = MediaUploadServer(uploadDelegate = delegate, defaultUploader = mockUploader, cacheDir = tempFolder.root)
+
+        val boundary = "test-boundary-decline"
+        val body = buildMultipartBody(boundary, "clip.mov", "video/quicktime", "fake movie".toByteArray())
+
+        val response = sendRawRequest(
+            method = "POST",
+            path = "/upload",
+            headers = mapOf(
+                "Relay-Authorization" to "Bearer ${server.token}",
+                "Content-Type" to "multipart/form-data; boundary=$boundary"
+            ),
+            body = body
+        )
+
+        assertTrue("Expected 201 but got: ${response.statusLine}", response.statusLine.contains("201"))
+        // Declined by metadata → the delegate is never asked to process (so the
+        // file was never materialized), and the upload is passed through directly.
+        assertFalse(delegate.processFileCalled)
+        assertTrue(mockUploader.passthroughUploadCalled)
+        assertFalse(mockUploader.uploadCalled)
+    }
+
     // MARK: - DefaultMediaUploader
 
     @Test
@@ -363,6 +431,49 @@ class MediaUploadServerTest {
         runBlocking { uploader.upload(file, "image/jpeg", "image.jpg", emptyList(), "") }
 
         assertEquals("/wp-json/wp/v2/sites/123/media", mockWpServer.takeRequest().path)
+
+        mockWpServer.shutdown()
+    }
+
+    @Test
+    fun `upload surfaces an error instead of hanging when the response body is truncated after headers`() {
+        // Regression test: WordPress sends the 201 status line + headers, then the
+        // body is truncated mid-transfer. OkHttp delivers onResponse for the 201 and
+        // the body read throws there — a throw OkHttp swallows rather than routing to
+        // onFailure. The upload must surface that as an error, not suspend forever
+        // holding a connection permit.
+        val mockWpServer = MockWebServer()
+        mockWpServer.enqueue(
+            MockResponse()
+                .setResponseCode(201)
+                .setBody("x".repeat(2048)) // large enough that DISCONNECT truncates it mid-body
+                .setSocketPolicy(SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY)
+        )
+        mockWpServer.start()
+
+        val uploader = DefaultMediaUploader(
+            httpClient = okhttp3.OkHttpClient(),
+            siteApiRoot = mockWpServer.url("/wp-json/").toString(),
+            authHeader = "Bearer test-token"
+        )
+        val file = tempFolder.newFile("image.jpg")
+        file.writeBytes("fake image".toByteArray())
+
+        // withTimeout is the regression guard: without the fix the coroutine never
+        // resumes, so this fails with a TimeoutCancellationException instead of the
+        // expected IOException.
+        val error = runCatching {
+            runBlocking {
+                withTimeout(5_000) {
+                    uploader.upload(file, "image/jpeg", "image.jpg", emptyList(), "")
+                }
+            }
+        }.exceptionOrNull()
+
+        assertTrue(
+            "Expected an IOException from the truncated body, got: $error",
+            error is IOException
+        )
 
         mockWpServer.shutdown()
     }
@@ -569,6 +680,21 @@ class MediaUploadServerTest {
 
     private class ProcessOnlyDelegate : MediaUploadDelegate {
         @Volatile var processFileCalled = false
+
+        override suspend fun processFile(file: File, mimeType: String, filename: String): ProcessedProxyFile {
+            processFileCalled = true
+            return ProcessedProxyFile.Original
+        }
+    }
+
+    /**
+     * Declines every file by metadata via [handlesFile], so the server must pass
+     * through without materializing the file or calling [processFile].
+     */
+    private class DeclineByMetadataDelegate : MediaUploadDelegate {
+        @Volatile var processFileCalled = false
+
+        override fun handlesFile(mimeType: String, filename: String): Boolean = false
 
         override suspend fun processFile(file: File, mimeType: String, filename: String): ProcessedProxyFile {
             processFileCalled = true

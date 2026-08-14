@@ -297,6 +297,13 @@ private struct _EditorView: UIViewControllerRepresentable {
 
         // MARK: - MediaUploadDelegate
 
+        /// Only non-GIF images are ever resized (see `processFile`), so decline
+        /// everything else by metadata — the server then skips copying a file
+        /// this delegate would only pass through.
+        nonisolated func handlesFile(ofType mimeType: String, named _: String) -> Bool {
+            mimeType.hasPrefix("image/") && mimeType != "image/gif"
+        }
+
         /// Resizes images to a maximum dimension of 2000px before upload.
         nonisolated func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
             guard mimeType.hasPrefix("image/"), mimeType != "image/gif" else {

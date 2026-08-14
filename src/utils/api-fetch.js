@@ -3,6 +3,7 @@
  */
 import apiFetch from '@wordpress/api-fetch';
 import { getQueryArg } from '@wordpress/url';
+import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
@@ -194,8 +195,13 @@ export function nativeMediaUploadMiddleware( options, next ) {
 		return next( options );
 	}
 
+	// Only intercept a genuine file upload. `FormData.get('file')` returns a
+	// `File`, a string (a non-file field that happens to be named `file`), or
+	// `null` (no such field). The `instanceof File` check covers all the
+	// non-file cases at once — a missing field and a wrong-typed value both fall
+	// through to the default path — and guarantees `file.name` below is safe.
 	const file = options.body.get( 'file' );
-	if ( ! file ) {
+	if ( ! ( file instanceof File ) ) {
 		return next( options );
 	}
 
@@ -230,9 +236,22 @@ export function nativeMediaUploadMiddleware( options, next ) {
 			if ( ! response.ok ) {
 				return response
 					.json()
-					.catch( invalidUploadResponseError )
+					.catch( () => {
+						// An abort during the body read rejects json() too; surface
+						// the cancellation, not an "invalid response" error.
+						if ( options.signal?.aborted ) {
+							throw uploadAbortError( options.signal );
+						}
+						return invalidUploadResponseError();
+					} )
 					.then( ( body ) => {
 						logError( 'Native upload failed', body );
+						// Throw the parsed body verbatim, even if it isn't the usual
+						// WordPress `{ code, message, data }` shape. This is
+						// deliberate: it mirrors `@wordpress/api-fetch`'s
+						// `parseAndThrowError`, so a native-relayed error reaches
+						// consumers identically to a direct upload's. We intentionally
+						// don't reshape or second-guess a non-standard error body.
 						throw body;
 					} );
 			}
@@ -240,6 +259,11 @@ export function nativeMediaUploadMiddleware( options, next ) {
 			// intermediary) rejects json(); normalize it the same way as the
 			// non-ok path rather than surfacing a raw SyntaxError.
 			return response.json().catch( () => {
+				// An abort during the body read rejects json(); surface the
+				// cancellation rather than an "invalid response" error notice.
+				if ( options.signal?.aborted ) {
+					throw uploadAbortError( options.signal );
+				}
 				const error = invalidUploadResponseError();
 				logError( 'Native upload returned an invalid response', error );
 				throw error;
@@ -258,7 +282,7 @@ export function nativeMediaUploadMiddleware( options, next ) {
 			// make upstream treat a cancelled upload as a real failure — surfacing
 			// a spurious error notice instead of a silent cancel.
 			if ( options.signal?.aborted ) {
-				throw options.signal.reason;
+				throw uploadAbortError( options.signal );
 			}
 			// Otherwise the loopback upload server is unreachable at the transport
 			// layer. We deliberately do NOT fall back to a direct re-upload:
@@ -273,7 +297,27 @@ export function nativeMediaUploadMiddleware( options, next ) {
 				'Native upload failed at the transport layer',
 				connectionError
 			);
-			throw connectionError;
+			// Normalize to the same `{ code, message }` shape
+			// `@wordpress/api-fetch`'s default handler produces for a failed fetch,
+			// so a native-upload transport failure surfaces to consumers (which key
+			// off `error.code` and show `error.message`) exactly like a direct
+			// upload's would — not as a raw, code-less TypeError with an
+			// untranslated message. Same codes and strings as api-fetch, so the
+			// existing translations apply.
+			if ( ! globalThis.navigator.onLine ) {
+				throw {
+					code: 'offline_error',
+					message: __(
+						'Unable to connect. Please check your Internet connection.'
+					),
+				};
+			}
+			throw {
+				code: 'fetch_error',
+				message: __(
+					'Could not get a valid response from the server.'
+				),
+			};
 		}
 	);
 }
@@ -312,6 +356,26 @@ function invalidUploadResponseError() {
 		code: 'invalid_json',
 		message: 'The upload server returned an invalid response.',
 	};
+}
+
+/**
+ * The error to surface for a cancelled upload.
+ *
+ * Returns the signal's `reason` (the canonical abort error), falling back to a
+ * canonical `AbortError` for engines that abort without populating `reason`.
+ * Callers gate this behind `signal.aborted` (the cancellation *state*) rather
+ * than an error's `name`, so a body-read rejection or a network error that
+ * races the abort still surfaces as a silent cancel — not a spurious failure
+ * notice.
+ *
+ * @param {AbortSignal} signal The aborted signal.
+ * @return {Error} The error representing the cancellation.
+ */
+function uploadAbortError( signal ) {
+	return (
+		signal.reason ??
+		new DOMException( 'The upload was aborted.', 'AbortError' )
+	);
 }
 
 /**

@@ -198,6 +198,34 @@ struct MediaUploadServerTests {
     #expect(json["id"] as? Int == 99)
   }
 
+  @Test("skips processing and the temp copy when the delegate declines by metadata")
+  func delegateDeclinesByMetadata() async throws {
+    let delegate = DeclineByMetadataDelegate()
+    let mockUploader = MockDefaultUploader()
+    let server = try await MediaUploadServer.start(uploadDelegate: delegate, defaultUploader: mockUploader)
+    defer { server.stop() }
+
+    let boundary = UUID().uuidString
+    let body = buildMultipartBody(boundary: boundary, filename: "clip.mov", mimeType: "video/quicktime", data: Data("movie".utf8))
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    request.httpBody = body
+
+    let (_, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+    #expect(httpResponse.statusCode == 201)
+
+    // Declined by metadata → the delegate is never asked to process (so the file
+    // was never materialized), and the upload is passed through directly.
+    #expect(!delegate.processFileCalled)
+    #expect(mockUploader.passthroughUploadCalled)
+    #expect(!mockUploader.uploadCalled)
+  }
+
   @Test("forwards the delegate's processed metadata to the uploader")
   func processedMetadataForwarded() async throws {
     let delegate = ResizingDelegate()
@@ -394,6 +422,29 @@ struct MultipartBodyStreamTests {
     #expect(result == expected)
   }
 
+  @Test("escapes CR/LF and quotes so a crafted filename can't inject headers or parts")
+  func escapesHeaderInjection() throws {
+    let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("stream-test-\(UUID().uuidString)")
+    try Data("file-bytes".utf8).write(to: tempFile)
+    defer { try? FileManager.default.removeItem(at: tempFile) }
+
+    // Craft a filename, field name, and MIME type that each try to smuggle a CRLF
+    // and a fake header into the body relayed to WordPress.
+    let (stream, _) = try DefaultMediaUploader.multipartBodyStream(
+      fileURL: tempFile,
+      boundary: "boundary",
+      filename: "evil\"\r\nX-Injected-File: 1.jpg",
+      mimeType: "image/jpeg\r\nX-Injected-Type: 1",
+      extraFields: [("field\"\r\nX-Injected-Name: 1", Data("v".utf8))]
+    )
+    let text = String(decoding: readAllFromStream(stream), as: UTF8.self)
+
+    // None of the crafted CRLF sequences may survive as a real header break.
+    #expect(!text.contains("\r\nX-Injected-File:"))
+    #expect(!text.contains("\r\nX-Injected-Type:"))
+    #expect(!text.contains("\r\nX-Injected-Name:"))
+  }
+
   @Test("includes non-file parts (e.g. post) ahead of the file")
   func multipartBodyIncludesExtraParts() throws {
     let boundary = "boundary"
@@ -468,6 +519,61 @@ struct MultipartBodyStreamTests {
 
     let result = readAllFromStream(stream)
     #expect(result.count == contentLength)
+  }
+
+  @Test("writeMultipartBody streams the full body and closing boundary when the file reads cleanly")
+  func writeMultipartBodyWritesFullBody() throws {
+    let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("wmb-\(UUID().uuidString)")
+    let fileContent = Data("the file bytes".utf8)
+    try fileContent.write(to: tempFile)
+    defer { try? FileManager.default.removeItem(at: tempFile) }
+
+    let fileHandle = try FileHandle(forReadingFrom: tempFile)
+    defer { try? fileHandle.close() }
+
+    let output = OutputStream.toMemory()
+    output.open()
+    defer { output.close() }
+
+    let preamble = Data("PREAMBLE".utf8)
+    let epilogue = Data("EPILOGUE".utf8)
+    let ok = DefaultMediaUploader.writeMultipartBody(
+      fileHandle: fileHandle, fileSize: fileContent.count,
+      preamble: preamble, epilogue: epilogue, to: output
+    )
+
+    #expect(ok)
+    let written = output.property(forKey: .dataWrittenToMemoryStreamKey) as? Data
+    #expect(written == preamble + fileContent + epilogue)
+  }
+
+  @Test("writeMultipartBody aborts without the closing boundary when the file is shorter than measured")
+  func writeMultipartBodyAbortsOnShortFile() throws {
+    let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("wmb-short-\(UUID().uuidString)")
+    let fileContent = Data("only ten!!".utf8) // 10 bytes
+    try fileContent.write(to: tempFile)
+    defer { try? FileManager.default.removeItem(at: tempFile) }
+
+    let fileHandle = try FileHandle(forReadingFrom: tempFile)
+    defer { try? fileHandle.close() }
+
+    let output = OutputStream.toMemory()
+    output.open()
+    defer { output.close() }
+
+    let preamble = Data("PREAMBLE".utf8)
+    let epilogue = Data("EPILOGUE".utf8)
+    // Claim the file is larger than it is, as if it shrank after being measured.
+    let ok = DefaultMediaUploader.writeMultipartBody(
+      fileHandle: fileHandle, fileSize: fileContent.count + 100,
+      preamble: preamble, epilogue: epilogue, to: output
+    )
+
+    #expect(!ok)
+    // The preamble and the real file bytes were written, but NOT the closing
+    // boundary — a short body must not masquerade as a complete multipart.
+    let written = (output.property(forKey: .dataWrittenToMemoryStreamKey) as? Data) ?? Data()
+    #expect(written == preamble + fileContent)
   }
 }
 
@@ -627,6 +733,23 @@ private final class ProcessOnlyDelegate: MediaUploadDelegate, @unchecked Sendabl
   private var _processFileCalled = false
 
   var processFileCalled: Bool { lock.withLock { _processFileCalled } }
+
+  func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
+    lock.withLock { _processFileCalled = true }
+    return .original
+  }
+}
+
+/// A delegate that declines every file by metadata via `handlesFile`, so the
+/// server must pass through without ever materializing the file or calling
+/// `processFile`.
+private final class DeclineByMetadataDelegate: MediaUploadDelegate, @unchecked Sendable {
+  private let lock = NSLock()
+  private var _processFileCalled = false
+
+  var processFileCalled: Bool { lock.withLock { _processFileCalled } }
+
+  func handlesFile(ofType mimeType: String, named filename: String) -> Bool { false }
 
   func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
     lock.withLock { _processFileCalled = true }
