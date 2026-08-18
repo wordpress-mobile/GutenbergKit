@@ -122,8 +122,7 @@ lane :validate do |options|
   # Resolve the release-notes base now, while nothing has been published yet.
   # A wrong base produces notes that restate old releases — a silent failure
   # once the release is live, but a cheap re-run if it surfaces here.
-  previous_tag = previous_release_tag(version: version, token: token)
-  UI.user_error!("Could not resolve a previous release tag for #{version}.") if previous_tag.nil?
+  previous_tag = previous_release_tag!(version: version, token: token)
   UI.success("Release notes for #{version} will be generated against #{previous_tag}.")
 
   # Clear lane-context values populated by the probe calls above so a later
@@ -298,32 +297,34 @@ def previous_release_tag(version:, token:)
             .max_by { |tag| Gem::Version.new(tag.delete_prefix('v')) }
 end
 
-# Build the release body via GitHub's notes generator, pinned to an explicit
-# previous tag. `set_github_release`'s `is_generate_release_notes` cannot express
-# `previous_tag_name`, so call the endpoint directly and pass the result through
-# as `description`.
+# `previous_release_tag`, erroring instead of returning nil.
 #
-# Fails loudly rather than falling back to auto-generated notes: a wrong base
-# looks like a successful release, caught only by someone reading the page later.
-def generated_release_notes(version:, token:)
+# Falling back to GitHub's inference would restate every release back to
+# `v0.16.0` — a silent failure that looks like a successful publish and is only
+# caught by someone reading the release page later.
+def previous_release_tag!(version:, token:)
   previous_tag = previous_release_tag(version: version, token: token)
   UI.user_error!("Could not resolve a previous release tag for #{version}; refusing to publish notes that may restate old releases.") \
     if previous_tag.nil?
 
   UI.message("Generating release notes for #{version} against previous tag #{previous_tag}.")
+  previous_tag
+end
 
-  response = github_api(
-    api_token: token,
-    http_method: 'POST',
-    path: "/repos/#{GITHUB_REPO}/releases/generate-notes",
-    body: { tag_name: version, previous_tag_name: previous_tag }
+# Build the release body via GitHub's notes generator, pinned to an explicit
+# previous tag. `set_github_release`'s `is_generate_release_notes` cannot express
+# one.
+#
+# Uses `GithubHelper` rather than the `get_prs_between_tags` action that wraps it:
+# the action rescues every `StandardError` and returns the message as the
+# changelog, publishing a release whose notes read "❌ Error computing the list of
+# PRs…". The tag is already pushed by this point, so this must fail the step.
+def generated_release_notes(version:, token:)
+  Fastlane::Helper::GithubHelper.new(github_token: token).generate_release_notes(
+    repository: GITHUB_REPO,
+    tag_name: version,
+    previous_tag: previous_release_tag!(version: version, token: token)
   )
-
-  notes = response[:json]['body']
-  UI.user_error!("GitHub returned empty release notes for #{version} (status #{response[:status]}).") \
-    if notes.nil? || notes.strip.empty?
-
-  notes
 end
 
 def require_env_vars!(*keys)
