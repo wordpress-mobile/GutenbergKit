@@ -119,8 +119,15 @@ lane :validate do |options|
 
   UI.user_error!("Release #{version} already exists on GitHub.") unless release.nil?
 
-  # Clear lane-context values populated by `get_github_release` so a later
-  # action doesn't see stale state from this probe call.
+  # Resolve the release-notes base now, while nothing has been published yet.
+  # A wrong base produces notes that restate old releases — a silent failure
+  # once the release is live, but a cheap re-run if it surfaces here.
+  previous_tag = previous_release_tag(version: version, token: token)
+  UI.user_error!("Could not resolve a previous release tag for #{version}.") if previous_tag.nil?
+  UI.success("Release notes for #{version} will be generated against #{previous_tag}.")
+
+  # Clear lane-context values populated by the probe calls above so a later
+  # action doesn't see stale state from them.
   [
     SharedValues::GITHUB_API_RESPONSE,
     SharedValues::GITHUB_API_STATUS_CODE,
@@ -160,12 +167,17 @@ lane :publish_release_to_github do |options|
   # metadata + an asset mirror — if this call fails the tag is unaffected
   # and an operator can recreate the Release manually against the existing
   # tag (see docs/releases.md).
+  #
+  # Notes are generated against an explicit previous tag rather than via
+  # `is_generate_release_notes`. Our tags are unreachable from one another, so
+  # GitHub's own inference walks back to the last tag on `trunk` and restates
+  # every release since. See `previous_release_tag`.
   set_github_release(
     api_token: token,
     repository_name: GITHUB_REPO,
     name: version,
     tag_name: version,
-    is_generate_release_notes: true,
+    description: generated_release_notes(version: version, token: token),
     is_prerelease: version.include?('-'),
     upload_assets: [xcframework_file_path, xcframework_checksum_file_path]
   )
@@ -250,6 +262,74 @@ def github_token!(options = {})
   options[:github_token] || ENV.fetch('GITHUB_TOKEN') do
     UI.user_error!('GITHUB_TOKEN must be set in the environment (or pass `github_token:` to the lane).')
   end
+end
+
+# Resolve the tag that release notes for `version` should be generated against.
+#
+# GitHub's own "generate notes" inference picks the most recent tag whose commit
+# is an *ancestor* of the target commit. Our release tags never satisfy that:
+# `publish_release_to_github` tags a `Package.swift` rewrite committed on a local
+# `release/vX.Y.Z` branch that is never pushed, so every release tag is
+# unreachable from every other. GitHub therefore falls back to the last tag that
+# does sit on `trunk` (`v0.16.0`) and re-lists months of merged PRs. Passing an
+# explicit `previous_tag_name` sidesteps the inference entirely.
+#
+# Prereleases are excluded as candidates, matching GitHub's default behavior: a
+# stable release reports everything since the last stable release, including the
+# work already listed in any intervening alphas.
+#
+# Reads the Releases API rather than local tags: CI checkouts may not have
+# fetched every tag, the API reports `prerelease` authoritatively instead of us
+# inferring it from the tag name, and it naturally ignores stray tags that were
+# never published as releases (e.g. `vtest-s3-xcframework-*`).
+def previous_release_tag(version:, token:)
+  # Single unpaginated page: the API returns releases newest-first, so the most
+  # recent 100 always contain the immediately-preceding stable release. This
+  # holds until the repo accumulates 100 consecutive prereleases, at which point
+  # the lookup would need to paginate.
+  releases = github_api(
+    api_token: token,
+    http_method: 'GET',
+    path: "/repos/#{GITHUB_REPO}/releases?per_page=100"
+  )[:json]
+
+  candidates = releases.reject { |release| release['draft'] || release['prerelease'] }
+                       .map { |release| release['tag_name'] }
+                       .reject { |tag| tag == version }
+                       .select { |tag| tag =~ /\Av\d+\.\d+\.\d+\z/ }
+
+  target = Gem::Version.new(version.delete_prefix('v').split('-').first)
+  candidates.select { |tag| Gem::Version.new(tag.delete_prefix('v')) < target }
+            .max_by { |tag| Gem::Version.new(tag.delete_prefix('v')) }
+end
+
+# Build the release body via GitHub's notes generator, pinned to an explicit
+# previous tag. `set_github_release`'s `is_generate_release_notes` cannot express
+# `previous_tag_name`, so we call the endpoint directly and pass the result
+# through as `description`.
+#
+# Fails loudly rather than falling back to auto-generated notes: a silently wrong
+# base tag looks like a successful release and is only caught by someone reading
+# the release page later.
+def generated_release_notes(version:, token:)
+  previous_tag = previous_release_tag(version: version, token: token)
+  UI.user_error!("Could not resolve a previous release tag for #{version}; refusing to publish notes that may restate old releases.") \
+    if previous_tag.nil?
+
+  UI.message("Generating release notes for #{version} against previous tag #{previous_tag}.")
+
+  response = github_api(
+    api_token: token,
+    http_method: 'POST',
+    path: "/repos/#{GITHUB_REPO}/releases/generate-notes",
+    body: { tag_name: version, previous_tag_name: previous_tag }
+  )
+
+  notes = response[:json]['body']
+  UI.user_error!("GitHub returned empty release notes for #{version} (status #{response[:status]}).") \
+    if notes.nil? || notes.strip.empty?
+
+  notes
 end
 
 def require_env_vars!(*keys)
