@@ -290,11 +290,13 @@ def previous_release_tag(version:, token:)
   candidates = releases.reject { |release| release['draft'] || release['prerelease'] }
                        .map { |release| release['tag_name'] }
                        .reject { |tag| tag == version }
-                       .select { |tag| tag =~ /\Av\d+\.\d+\.\d+\z/ }
+                       .grep(/\Av\d+\.\d+\.\d+\z/)
+                       .map { |tag| [tag, Gem::Version.new(tag.delete_prefix('v'))] }
 
   target = Gem::Version.new(version.delete_prefix('v').split('-').first)
-  candidates.select { |tag| Gem::Version.new(tag.delete_prefix('v')) < target }
-            .max_by { |tag| Gem::Version.new(tag.delete_prefix('v')) }
+  candidates.select { |_tag, tag_version| tag_version < target }
+            .max_by { |_tag, tag_version| tag_version }
+            &.first
 end
 
 # `previous_release_tag`, erroring instead of returning nil.
