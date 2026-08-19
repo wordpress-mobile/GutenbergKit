@@ -119,8 +119,14 @@ lane :validate do |options|
 
   UI.user_error!("Release #{version} already exists on GitHub.") unless release.nil?
 
-  # Clear lane-context values populated by `get_github_release` so a later
-  # action doesn't see stale state from this probe call.
+  # Resolve the release-notes base now, while nothing has been published yet.
+  # A wrong base produces notes that restate old releases — a silent failure
+  # once the release is live, but a cheap re-run if it surfaces here.
+  previous_tag = previous_release_tag!(version: version, token: token)
+  UI.success("Release notes for #{version} will be generated against #{previous_tag}.")
+
+  # Clear lane-context values populated by the probe calls above so a later
+  # action doesn't see stale state from them.
   [
     SharedValues::GITHUB_API_RESPONSE,
     SharedValues::GITHUB_API_STATUS_CODE,
@@ -160,12 +166,15 @@ lane :publish_release_to_github do |options|
   # metadata + an asset mirror — if this call fails the tag is unaffected
   # and an operator can recreate the Release manually against the existing
   # tag (see docs/releases.md).
+  #
+  # Notes use an explicit previous tag rather than `is_generate_release_notes`,
+  # which cannot express one. See `previous_release_tag`.
   set_github_release(
     api_token: token,
     repository_name: GITHUB_REPO,
     name: version,
     tag_name: version,
-    is_generate_release_notes: true,
+    description: generated_release_notes(version: version, token: token),
     is_prerelease: version.include?('-'),
     upload_assets: [xcframework_file_path, xcframework_checksum_file_path]
   )
@@ -250,6 +259,73 @@ def github_token!(options = {})
   options[:github_token] || ENV.fetch('GITHUB_TOKEN') do
     UI.user_error!('GITHUB_TOKEN must be set in the environment (or pass `github_token:` to the lane).')
   end
+end
+
+# Resolve the tag that release notes for `version` should be generated against.
+#
+# GitHub's own inference picks the most recent tag whose commit is an *ancestor*
+# of the target. Our release tags are each committed on a local `release/vX.Y.Z`
+# branch that is never pushed, so no release tag is reachable from any other and
+# the inference falls back to the last tag on `trunk` (`v0.16.0`), re-listing
+# months of merged PRs. An explicit `previous_tag_name` sidesteps it.
+#
+# Prereleases are excluded as candidates, matching GitHub's default: a stable
+# release reports everything since the last stable one, including work already
+# listed in intervening alphas.
+#
+# Reads the Releases API rather than local tags: CI checkouts may not have
+# fetched every tag, the API reports `prerelease` authoritatively, and it ignores
+# stray tags never published as releases (e.g. `vtest-s3-xcframework-*`).
+def previous_release_tag(version:, token:)
+  # Single unpaginated page. Releases come back newest-first, so this misses the
+  # preceding stable release only after 100 *consecutive* prereleases — far off
+  # at the current ratio. It fails safe: no candidate returns nil, and both
+  # callers hard-error rather than publishing notes against a wrong base.
+  releases = github_api(
+    api_token: token,
+    http_method: 'GET',
+    path: "/repos/#{GITHUB_REPO}/releases?per_page=100"
+  )[:json]
+
+  candidates = releases.reject { |release| release['draft'] || release['prerelease'] }
+                       .map { |release| release['tag_name'] }
+                       .reject { |tag| tag == version }
+                       .grep(/\Av\d+\.\d+\.\d+\z/)
+                       .map { |tag| [tag, Gem::Version.new(tag.delete_prefix('v'))] }
+
+  target = Gem::Version.new(version.delete_prefix('v').split('-').first)
+  candidates.select { |_tag, tag_version| tag_version < target }
+            .max_by { |_tag, tag_version| tag_version }
+            &.first
+end
+
+# `previous_release_tag`, erroring instead of returning nil.
+#
+# Falling back to GitHub's inference would restate every release back to
+# `v0.16.0` — a silent failure that looks like a successful publish and is only
+# caught by someone reading the release page later.
+def previous_release_tag!(version:, token:)
+  previous_tag = previous_release_tag(version: version, token: token)
+  UI.user_error!("Could not resolve a previous release tag for #{version}; refusing to publish notes that may restate old releases.") \
+    if previous_tag.nil?
+
+  UI.message("Generating release notes for #{version} against previous tag #{previous_tag}.")
+  previous_tag
+end
+
+# Build the release body via GitHub's notes generator, pinned to an explicit
+# previous tag. `set_github_release`'s `is_generate_release_notes` cannot express
+# one.
+#
+# Uses `GithubHelper` rather than the `get_prs_between_tags` action that wraps it
+# until https://github.com/wordpress-mobile/release-toolkit/pull/772 gets ships in the next release-toolkit
+# version (at which point we'll be able to use the action and its new `fail_on_error: true` parameter)
+def generated_release_notes(version:, token:)
+  Fastlane::Helper::GithubHelper.new(github_token: token).generate_release_notes(
+    repository: GITHUB_REPO,
+    tag_name: version,
+    previous_tag: previous_release_tag!(version: version, token: token)
+  )
 end
 
 def require_env_vars!(*keys)
