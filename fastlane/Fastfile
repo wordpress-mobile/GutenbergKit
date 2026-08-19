@@ -317,10 +317,9 @@ end
 # previous tag. `set_github_release`'s `is_generate_release_notes` cannot express
 # one.
 #
-# Uses `GithubHelper` rather than the `get_prs_between_tags` action that wraps it:
-# the action rescues every `StandardError` and returns the message as the
-# changelog, publishing a release whose notes read "❌ Error computing the list of
-# PRs…". The tag is already pushed by this point, so this must fail the step.
+# Uses `GithubHelper` rather than the `get_prs_between_tags` action that wraps it
+# until https://github.com/wordpress-mobile/release-toolkit/pull/772 gets ships in the next release-toolkit
+# version (at which point we'll be able to use the action and its new `fail_on_error: true` parameter)
 def generated_release_notes(version:, token:)
   Fastlane::Helper::GithubHelper.new(github_token: token).generate_release_notes(
     repository: GITHUB_REPO,
