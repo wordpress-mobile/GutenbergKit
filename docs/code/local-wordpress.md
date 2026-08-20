@@ -43,6 +43,7 @@ The `.wp-env.json` file at the project root configures the environment:
 -   **Gutenberg plugin** is installed for the `/wp-block-editor/v1/settings` editor settings REST API endpoint.
 -   **Jetpack plugin** is installed with the blocks module auto-activated via a mu-plugin (`wp-env/mu-plugins/gutenbergkit-jetpack-blocks.php`), providing the `/wpcom/v2/editor-assets` endpoint and additional editor blocks.
 -   A **CORS mu-plugin** (`wp-env/mu-plugins/gutenbergkit-cors.php`) adds CORS headers to REST API responses, allowing requests from the Vite dev server, preview server, and native WebViews.
+-   A **media failure mu-plugin** (`wp-env/mu-plugins/gutenbergkit-media-failure.php`) can simulate a server-side image processing fatal on demand. Inactive by default — see [Simulating media upload failures](#simulating-media-upload-failures).
 -   **WP_DEBUG** and **WP_DEBUG_LOG** are enabled for development.
 
 ### Credential Provisioning
@@ -103,6 +104,36 @@ Physical devices cannot reach `localhost`. You'll need to:
 1. Find your machine's local IP address (e.g., `192.168.1.100`).
 2. Update the CORS mu-plugin to allow your IP.
 3. Manually create or edit `.wp-env.credentials.json` with the correct IP-based URLs.
+
+## Simulating Media Upload Failures
+
+When `wp_generate_attachment_metadata()` fatals server-side — commonly a PHP `memory_limit` or `max_execution_time` fatal on a large image — WordPress has already created the attachment row and sent an `X-WP-Upload-Attachment-ID` header. The editor reads that header off the resulting 5xx and retries `POST /wp/v2/media/<id>/post-process` up to five times, deleting the orphaned attachment if every attempt fails.
+
+`gutenbergkit-media-failure.php` reproduces that failure on demand so the retry can be exercised without a large image or a resource-starved host. Set the mode over the REST API (the `authHeader` value is in `.wp-env.credentials.json`):
+
+```bash
+AUTH=$(python3 -c "import json;print(json.load(open('.wp-env.credentials.json'))['authHeader'])")
+
+# Fail once per attachment, then succeed: the retry recovers the upload.
+curl -s -X POST -H "Authorization: $AUTH" \
+  'http://localhost:8888/wp-json/gutenbergkit/v1/media-failure?mode=recover'
+
+# Fail every time: exhausts all five retries, then the orphan is deleted.
+curl -s -X POST -H "Authorization: $AUTH" \
+  'http://localhost:8888/wp-json/gutenbergkit/v1/media-failure?mode=always'
+
+# Restore normal uploads.
+curl -s -X POST -H "Authorization: $AUTH" \
+  'http://localhost:8888/wp-json/gutenbergkit/v1/media-failure?mode=off'
+```
+
+Then upload an image from a demo app and watch the network requests. In `recover` mode the upload 500s and the following `post-process` call succeeds, leaving a complete attachment; in `always` mode you should see five `post-process` attempts followed by a `DELETE`.
+
+The mode is stored as an option rather than per-request state, because the upload and each retry are separate requests — and an upload routed through the native upload server is relayed by URLSession/OkHttp, which carries no browser cookie.
+
+**Note:** the plugin sets the 500 status itself. A real PHP fatal under FPM surfaces as a 500, but the Playground runtime wp-env uses returns 200, which the editor's `status >= 500` check would ignore.
+
+**Direct uploads on iOS cannot recover, by design of the platform rather than a bug here.** Reading `X-WP-Upload-Attachment-ID` cross-origin requires the site to list it in `Access-Control-Expose-Headers`, and WordPress core's `rest_send_cors_headers()` does not. Uploads routed through the native upload server recover on both platforms, since that server exposes the header itself. Android also recovers on direct uploads, because its editor is served from the site's own host and is therefore same-origin. Do not "fix" this by adding the header to the CORS mu-plugin — that would make local testing diverge from production.
 
 ## WordPress Admin
 
