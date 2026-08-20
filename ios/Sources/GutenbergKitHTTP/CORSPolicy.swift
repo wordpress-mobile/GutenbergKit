@@ -33,6 +33,12 @@ public enum CORSPolicy: Sendable {
                 ("Access-Control-Allow-Origin", "*"),
                 ("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"),
                 ("Access-Control-Allow-Headers", "Authorization, Relay-Authorization, Content-Type"),
+                // Only CORS-safelisted response headers are readable
+                // cross-origin by default. The editor needs to read
+                // `x-wp-upload-attachment-id` off a relayed media upload
+                // response to retry `post-process` and clean up an orphaned
+                // attachment, so it has to be exposed explicitly.
+                ("Access-Control-Expose-Headers", "x-wp-upload-attachment-id"),
                 ("Access-Control-Max-Age", "86400"),
             ]
         }

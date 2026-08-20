@@ -15,9 +15,19 @@ public struct MediaUploadResponse: Sendable {
     /// WordPress REST error object (`{ "code", "message", "data" }`) on failure.
     public let body: Data
 
-    public init(statusCode: Int, body: Data) {
+    /// The response headers to relay to the editor.
+    ///
+    /// `x-wp-upload-attachment-id` is the one that carries behavior: WordPress
+    /// sets it on a failed upload whose attachment row was created before
+    /// metadata generation fataled, and the editor's api-fetch middleware reads
+    /// it to retry `post-process` and clean up the orphan. Dropping it turns a
+    /// recoverable upload into a permanent failure.
+    public let headers: [String: String]
+
+    public init(statusCode: Int, body: Data, headers: [String: String] = [:]) {
         self.statusCode = statusCode
         self.body = body
+        self.headers = headers
     }
 }
 

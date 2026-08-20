@@ -414,6 +414,39 @@ class MediaUploadServerTest {
     }
 
     @Test
+    fun `DefaultMediaUploader relays the upload attachment ID header`() {
+        // WordPress sets this header on an upload whose attachment row was
+        // created before metadata generation fataled. The editor reads it to
+        // retry post-process and clean up the orphan, so it must survive the
+        // relay. Unrelated upstream headers are not relayed.
+        val mockWpServer = MockWebServer()
+        mockWpServer.enqueue(
+            MockResponse()
+                .setResponseCode(500)
+                .setBody("""{"code":"rest_upload_error"}""")
+                .setHeader("x-wp-upload-attachment-id", "4242")
+                .setHeader("X-Powered-By", "PHP/8.2")
+        )
+        mockWpServer.start()
+
+        val uploader = DefaultMediaUploader(
+            httpClient = okhttp3.OkHttpClient(),
+            siteApiRoot = mockWpServer.url("/wp-json/").toString(),
+            authHeader = "Bearer test-token"
+        )
+
+        val file = tempFolder.newFile("orphan.jpg")
+        file.writeBytes("data".toByteArray())
+
+        val response = runBlocking { uploader.upload(file, "image/jpeg", "orphan.jpg", emptyList(), "") }
+
+        assertEquals(500, response.statusCode)
+        assertEquals(mapOf("x-wp-upload-attachment-id" to "4242"), response.headers)
+
+        mockWpServer.shutdown()
+    }
+
+    @Test
     fun `DefaultMediaUploader normalizes an unslashed root and namespace`() {
         val mockWpServer = MockWebServer()
         mockWpServer.enqueue(MockResponse().setResponseCode(201).setBody("{}"))

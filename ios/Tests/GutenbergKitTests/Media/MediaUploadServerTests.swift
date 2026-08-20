@@ -604,6 +604,54 @@ struct DefaultMediaUploaderRelayTests {
     #expect(response.body == errorBody)
   }
 
+  @Test("relays the upload attachment ID header from a failed upload")
+  func relaysUploadAttachmentIdHeader() async throws {
+    // WordPress sets this header on an upload whose attachment row was created
+    // before metadata generation fataled. The editor reads it to retry
+    // post-process and clean up the orphan, so it must survive the relay.
+    let client = RelayStubHTTPClient(
+      statusCode: 500,
+      body: Data(#"{"code":"rest_upload_error"}"#.utf8),
+      headerFields: ["x-wp-upload-attachment-id": "4242"]
+    )
+    let uploader = DefaultMediaUploader(
+      httpClient: client, siteApiRoot: URL(string: "https://example.com/wp-json/")!)
+
+    let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "header-\(UUID().uuidString).jpg")
+    try Data("fake image".utf8).write(to: tempFile)
+    defer { try? FileManager.default.removeItem(at: tempFile) }
+
+    let response = try await uploader.upload(
+      fileURL: tempFile, mimeType: "image/jpeg", filename: "photo.jpg", extraParts: [], query: ""
+    )
+
+    #expect(response.statusCode == 500)
+    #expect(response.headers["x-wp-upload-attachment-id"] == "4242")
+  }
+
+  @Test("omits unrelated upstream headers from the relay")
+  func omitsUnrelatedHeaders() async throws {
+    let client = RelayStubHTTPClient(
+      statusCode: 201,
+      body: Data("{}".utf8),
+      headerFields: ["X-Powered-By": "PHP/8.2", "Set-Cookie": "session=secret"]
+    )
+    let uploader = DefaultMediaUploader(
+      httpClient: client, siteApiRoot: URL(string: "https://example.com/wp-json/")!)
+
+    let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "unrelated-\(UUID().uuidString).jpg")
+    try Data("fake image".utf8).write(to: tempFile)
+    defer { try? FileManager.default.removeItem(at: tempFile) }
+
+    let response = try await uploader.upload(
+      fileURL: tempFile, mimeType: "image/jpeg", filename: "photo.jpg", extraParts: [], query: ""
+    )
+
+    #expect(response.headers.isEmpty)
+  }
+
   @Test("carries the namespace and request query through to the media endpoint")
   func forwardsNamespaceAndQuery() async throws {
     let client = URLCapturingHTTPClient()
@@ -635,9 +683,11 @@ struct DefaultMediaUploaderRelayTests {
 private struct RelayStubHTTPClient: EditorHTTPClientProtocol {
   let statusCode: Int
   let body: Data
+  var headerFields: [String: String]?
 
   func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
-    let response = HTTPURLResponse(url: urlRequest.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
+    let response = HTTPURLResponse(
+      url: urlRequest.url!, statusCode: statusCode, httpVersion: nil, headerFields: headerFields)!
     guard (200...299).contains(statusCode) else {
       throw NSError(domain: "RelayStubHTTPClient", code: statusCode)
     }
@@ -645,7 +695,8 @@ private struct RelayStubHTTPClient: EditorHTTPClientProtocol {
   }
 
   func performRaw(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
-    let response = HTTPURLResponse(url: urlRequest.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
+    let response = HTTPURLResponse(
+      url: urlRequest.url!, statusCode: statusCode, httpVersion: nil, headerFields: headerFields)!
     return (body, response)
   }
 

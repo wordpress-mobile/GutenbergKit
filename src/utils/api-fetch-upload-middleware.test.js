@@ -625,6 +625,66 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		expect( next ).not.toHaveBeenCalled();
 	} );
 
+	// MARK: - Raw response passthrough
+
+	describe( 'parse: false', () => {
+		beforeEach( () => {
+			getGBKit.mockReturnValue( {
+				nativeUploadPort: 8080,
+				nativeUploadToken: 'token',
+			} );
+		} );
+
+		it( 'rejects with the Response so the attachment ID stays readable', async () => {
+			// Core's media upload middleware needs the `Response` itself to read
+			// `x-wp-upload-attachment-id` and retry post-process. Parsing the
+			// body here would hide the header.
+			const response = new Response( '{"code":"rest_upload_error"}', {
+				status: 500,
+				headers: { 'x-wp-upload-attachment-id': '4242' },
+			} );
+			global.fetch = vi.fn( () => Promise.resolve( response ) );
+
+			const options = makePostMediaOptions( makeFile() );
+			options.parse = false;
+
+			const thrown = await nativeMediaUploadMiddleware(
+				options,
+				makeNext()
+			).catch( ( error ) => error );
+
+			expect( thrown ).toBe( response );
+			expect( thrown.headers.get( 'x-wp-upload-attachment-id' ) ).toBe(
+				'4242'
+			);
+		} );
+
+		it( 'resolves with the Response on success', async () => {
+			const response = new Response( '{"id":1}', { status: 201 } );
+			global.fetch = vi.fn( () => Promise.resolve( response ) );
+
+			const options = makePostMediaOptions( makeFile() );
+			options.parse = false;
+
+			await expect(
+				nativeMediaUploadMiddleware( options, makeNext() )
+			).resolves.toBe( response );
+		} );
+
+		it( 'still parses the body when parse is not disabled', async () => {
+			global.fetch = vi.fn( () =>
+				Promise.resolve( new Response( '{"id":1}', { status: 201 } ) )
+			);
+
+			await expect(
+				nativeMediaUploadMiddleware(
+					makePostMediaOptions( makeFile() ),
+					makeNext()
+				)
+			).resolves.toEqual( { id: 1 } );
+		} );
+	} );
+
 	// MARK: - Signal forwarding
 
 	it( 'forwards abort signal to fetch', async () => {
