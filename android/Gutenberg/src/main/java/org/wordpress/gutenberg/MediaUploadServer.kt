@@ -38,7 +38,17 @@ class MediaUploadResponse(
      * The raw response body — a WordPress REST attachment on success, or a
      * WordPress REST error object (`{ "code", "message", "data" }`) on failure.
      */
-    val body: ByteArray
+    val body: ByteArray,
+    /**
+     * The response headers to relay to the editor.
+     *
+     * `x-wp-upload-attachment-id` is the one that carries behavior: WordPress
+     * sets it on a failed upload whose attachment row was created before
+     * metadata generation fataled, and the editor's api-fetch middleware reads
+     * it to retry `post-process` and clean up the orphan. Dropping it turns a
+     * recoverable upload into a permanent failure.
+     */
+    val headers: Map<String, String> = emptyMap()
 )
 
 /**
@@ -264,13 +274,18 @@ internal class MediaUploadServer(
     }
 
     /**
-     * Relays WordPress's exact status and body to the editor so it sees the same
-     * attachment object (or error) as a direct upload.
+     * Relays WordPress's exact status, body, and relayable headers to the editor
+     * so it sees the same attachment object (or error) as a direct upload.
+     *
+     * The headers matter for recovery: `x-wp-upload-attachment-id` is what lets
+     * the editor retry `post-process` for an upload whose metadata generation
+     * fataled server-side, rather than surfacing a permanent failure and leaving
+     * an orphaned attachment behind.
      */
     private fun relayResponse(response: MediaUploadResponse): HttpResponse {
         return HttpResponse(
             status = response.statusCode,
-            headers = mapOf("Content-Type" to "application/json"),
+            headers = mapOf("Content-Type" to "application/json") + response.headers,
             body = response.body
         )
     }
@@ -559,7 +574,11 @@ internal open class DefaultMediaUploader(
                     // holding a connection permit.
                     val result = try {
                         response.use {
-                            MediaUploadResponse(it.code, it.body?.bytes() ?: ByteArray(0))
+                            MediaUploadResponse(
+                                it.code,
+                                it.body?.bytes() ?: ByteArray(0),
+                                relayableHeaders(it)
+                            )
                         }
                     } catch (e: IOException) {
                         if (!continuation.isCancelled) continuation.resumeWithException(e)
@@ -576,5 +595,23 @@ internal open class DefaultMediaUploader(
                 }
             })
         }
+    }
+
+    /** Picks the headers to relay out of an upstream response. */
+    private fun relayableHeaders(response: okhttp3.Response): Map<String, String> =
+        RELAYABLE_HEADER_NAMES.mapNotNull { name ->
+            response.header(name)?.let { name to it }
+        }.toMap()
+
+    companion object {
+        /**
+         * The upstream headers worth relaying to the editor.
+         *
+         * Deliberately an allowlist rather than a filtered passthrough: the body
+         * is re-sent with a recomputed length, so relaying upstream entity or
+         * transport headers wholesale would risk contradicting what the server
+         * actually sends.
+         */
+        private val RELAYABLE_HEADER_NAMES = listOf("x-wp-upload-attachment-id")
     }
 }

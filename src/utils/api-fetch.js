@@ -32,12 +32,14 @@ export function configureApiFetch() {
 	apiFetch.use( tokenAuthMiddleware );
 	apiFetch.use( filterEndpointsMiddleware );
 	// `apiFetch.use` unshifts, so the last registration runs first. Core's media
-	// upload middleware is registered before the native one so that it runs
-	// after it, and below auth, namespacing, and the root URL so the
-	// `post-process` requests it issues through `next` stay authenticated and
-	// correctly addressed.
-	apiFetch.use( apiFetch.mediaUploadMiddleware );
+	// upload middleware is registered after the native one so that it runs
+	// before it, wrapping it: the native middleware handles an upload without
+	// calling `next`, so core's would never run at all from below. Both stay
+	// above auth, namespacing, and the root URL, so the `post-process` requests
+	// core issues through `next` are still authenticated and correctly
+	// addressed.
 	apiFetch.use( nativeMediaUploadMiddleware );
+	apiFetch.use( apiFetch.mediaUploadMiddleware );
 	apiFetch.use( stripDraftPostIdMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
 	apiFetch.use(
@@ -250,6 +252,24 @@ export function nativeMediaUploadMiddleware( options, next ) {
 		signal: options.signal,
 	} ).then(
 		( response ) => {
+			// `parse: false` asks for raw `Response` semantics. Core's media
+			// upload middleware runs above this one and makes exactly that
+			// request so it can read `x-wp-upload-attachment-id` off a failed
+			// upload and retry `post-process`. Honor it by resolving or
+			// rejecting with the `Response` itself, leaving the parsing (and
+			// the recovery decision) to that middleware — parsing here would
+			// hide the header and turn a recoverable upload into a permanent
+			// failure.
+			if ( options.parse === false ) {
+				if ( ! response.ok ) {
+					logError(
+						`Native upload failed with status ${ response.status }`
+					);
+					return Promise.reject( response );
+				}
+				return response;
+			}
+
 			// The native server relays WordPress's response verbatim. On a
 			// non-2xx, mirror @wordpress/api-fetch: reject with the parsed WP
 			// error body ({ code, message, data }) so @wordpress/media-utils

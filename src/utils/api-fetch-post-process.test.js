@@ -99,6 +99,37 @@ describe( "core's media upload post-process middleware", () => {
 		global.fetch = originalFetch;
 	} );
 
+	it( 'retries post-process for an upload routed through the native server', async () => {
+		// Regression test for middleware ordering. The native middleware handles
+		// the upload without calling `next`, so core's middleware only ever sees
+		// it by running *above* — registered after. With the two swapped, this
+		// upload surfaces as a permanent failure and no post-process is issued.
+		bridge.getGBKit.mockReturnValue( {
+			siteApiRoot: SITE_API_ROOT,
+			authHeader: 'Bearer test-token',
+			siteApiNamespace: [],
+			namespaceExcludedPaths: [],
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'relay-token',
+		} );
+
+		global.fetch = vi.fn( ( url ) => {
+			const path = String( url );
+			if ( path.includes( 'post-process' ) ) {
+				return Promise.resolve( makeResponse( 200, null, { id: 42 } ) );
+			}
+			// The native server relays WordPress's 500 plus the attachment ID.
+			return Promise.resolve( makeResponse( 500, '42' ) );
+		} );
+
+		await expect( apiFetch( uploadOptions() ) ).resolves.toEqual( {
+			id: 42,
+		} );
+
+		expect( fetchedPath( 0 ) ).toContain( 'localhost:8080/upload' );
+		expect( fetchedPath( 1 ) ).toContain( '/wp/v2/media/42/post-process' );
+	} );
+
 	it( 'retries post-process when the upload fails with an attachment ID', async () => {
 		global.fetch = vi.fn( ( url ) => {
 			if ( String( url ).includes( 'post-process' ) ) {

@@ -190,12 +190,18 @@ final class MediaUploadServer: Sendable {
         return relayResponse(response)
     }
 
-    /// Relays WordPress's exact status and body to the editor so it sees the same
-    /// attachment object (or error) as a direct upload.
+    /// Relays WordPress's exact status, body, and relayable headers to the editor
+    /// so it sees the same attachment object (or error) as a direct upload.
+    ///
+    /// The headers matter for recovery: `x-wp-upload-attachment-id` is what lets
+    /// the editor retry `post-process` for an upload whose metadata generation
+    /// fataled server-side, rather than surfacing a permanent failure and
+    /// leaving an orphaned attachment behind.
     private static func relayResponse(_ response: MediaUploadResponse) -> HTTPResponse {
         HTTPResponse(
             status: response.statusCode,
-            headers: [("Content-Type", "application/json")],
+            headers: [("Content-Type", "application/json")]
+                + response.headers.map { ($0.key, $0.value) },
             body: response.body
         )
     }
@@ -517,7 +523,30 @@ class DefaultMediaUploader: @unchecked Sendable {
         // the editor sees WordPress's real status and error body, exactly as a
         // direct upload would. `performRaw` does not throw on non-2xx.
         let (data, response) = try await httpClient.performRaw(request)
-        return MediaUploadResponse(statusCode: response.statusCode, body: data)
+        return MediaUploadResponse(
+            statusCode: response.statusCode,
+            body: data,
+            headers: Self.relayableHeaders(from: response)
+        )
+    }
+
+    /// The upstream headers worth relaying to the editor.
+    ///
+    /// Deliberately an allowlist rather than a filtered passthrough: the body is
+    /// re-sent with a recomputed length, so relaying upstream entity or
+    /// transport headers wholesale would risk contradicting what the server
+    /// actually sends.
+    private static let relayableHeaderNames = ["x-wp-upload-attachment-id"]
+
+    /// Picks the headers to relay out of an upstream response.
+    private static func relayableHeaders(from response: HTTPURLResponse) -> [String: String] {
+        var headers: [String: String] = [:]
+        for name in relayableHeaderNames {
+            if let value = response.value(forHTTPHeaderField: name) {
+                headers[name] = value
+            }
+        }
+        return headers
     }
 
     // MARK: - Streaming Multipart Body
