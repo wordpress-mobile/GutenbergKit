@@ -31,6 +31,12 @@ export function configureApiFetch() {
 	apiFetch.use( apiPathModifierMiddleware );
 	apiFetch.use( tokenAuthMiddleware );
 	apiFetch.use( filterEndpointsMiddleware );
+	// `apiFetch.use` unshifts, so the last registration runs first. Core's media
+	// upload middleware is registered before the native one so that it runs
+	// after it, and below auth, namespacing, and the root URL so the
+	// `post-process` requests it issues through `next` stay authenticated and
+	// correctly addressed.
+	apiFetch.use( apiFetch.mediaUploadMiddleware );
 	apiFetch.use( nativeMediaUploadMiddleware );
 	apiFetch.use( stripDraftPostIdMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
