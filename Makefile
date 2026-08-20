@@ -8,7 +8,9 @@ help: ## Display this help menu
 	@echo ""
 	@echo "Available targets:"
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | \
-	awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-25s\033[0m %s\n", $$1, $$2}' | \
+	awk 'BEGIN {FS = ":.*?## "}; \
+		{ names[NR] = $$1; descs[NR] = $$2; if (length($$1) > width) width = length($$1) } \
+		END { for (i = 1; i <= NR; i++) printf "  \033[36m%-*s\033[0m  %s\n", width, names[i], descs[i] }' | \
 	sort
 	@echo ""
 
