@@ -194,6 +194,69 @@ describe( 'api-fetch credentials handling', () => {
 		} );
 	} );
 
+	describe( 'apiPathModifierMiddleware', () => {
+		/** The URL of the first `fetch` call. */
+		function requestedUrl() {
+			return String( global.fetch.mock.calls[ 0 ][ 0 ] );
+		}
+
+		it( 'inserts the namespace when the path lacks it', async () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://example.com/wp-json/',
+				siteApiNamespace: [ 'sites/123/' ],
+				namespaceExcludedPaths: [],
+			} );
+
+			await apiFetch( { path: '/wp/v2/posts' } ).catch( () => {} );
+
+			expect( requestedUrl() ).toContain( '/wp/v2/sites/123/posts' );
+		} );
+
+		it( 'leaves the path alone when it already carries the namespace', async () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://example.com/wp-json/',
+				siteApiNamespace: [ 'sites/123/' ],
+				namespaceExcludedPaths: [],
+			} );
+
+			await apiFetch( { path: '/wp/v2/sites/123/posts' } ).catch(
+				() => {}
+			);
+
+			expect( requestedUrl() ).toContain( '/wp/v2/sites/123/posts' );
+			expect( requestedUrl() ).not.toContain( 'sites/123/sites/123' );
+		} );
+
+		it( 'leaves the path alone when no namespace is configured', async () => {
+			// An empty namespace previously built `new RegExp('()')`, which
+			// matches every string. Nothing should be inserted either way, but
+			// the guard must reach that outcome by reporting no namespace.
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://example.com/wp-json/',
+				siteApiNamespace: [],
+				namespaceExcludedPaths: [],
+			} );
+
+			await apiFetch( { path: '/wp/v2/posts' } ).catch( () => {} );
+
+			expect( requestedUrl() ).toContain( '/wp/v2/posts' );
+			expect( requestedUrl() ).not.toContain( 'undefined' );
+		} );
+
+		it( 'skips paths excluded from namespacing', async () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://example.com/wp-json/',
+				siteApiNamespace: [ 'sites/123/' ],
+				namespaceExcludedPaths: [ '/oembed' ],
+			} );
+
+			await apiFetch( { path: '/oembed/1.0/proxy' } ).catch( () => {} );
+
+			expect( requestedUrl() ).toContain( '/oembed/1.0/proxy' );
+			expect( requestedUrl() ).not.toContain( 'sites/123' );
+		} );
+	} );
+
 	it( 'should preserve other headers when adding Authorization', async () => {
 		bridge.getGBKit.mockReturnValue( {
 			siteApiRoot: 'https://example.com/wp-json/',

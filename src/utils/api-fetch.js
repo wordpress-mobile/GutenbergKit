@@ -73,16 +73,23 @@ function corsMiddleware( options, next ) {
  */
 function apiPathModifierMiddleware( options, next ) {
 	const { siteApiNamespace, namespaceExcludedPaths } = getGBKit();
-	const namespaceRegex = new RegExp( `(${ siteApiNamespace.join( '|' ) })` );
+	// Self-hosted sites configure no namespace, so there is nothing to insert.
+	// This has to gate the rewrite explicitly: the namespace match below cannot
+	// stand in for it, and an empty namespace would otherwise interpolate
+	// `undefined` into the path.
 	const isEligiblePath =
 		options.path &&
+		siteApiNamespace.length > 0 &&
 		! namespaceExcludedPaths.some( ( path ) =>
 			options.path.startsWith( path )
 		);
 
+	// Escape the namespaces so each is matched literally rather than as a
+	// pattern.
 	const alreadyHasSiteNamespace =
-		namespaceRegex.test( options.path ) ||
-		/\/sites\/[^/]+\//.test( options.path );
+		new RegExp(
+			`(${ siteApiNamespace.map( escapeRegExp ).join( '|' ) })`
+		).test( options.path ) || /\/sites\/[^/]+\//.test( options.path );
 
 	if ( isEligiblePath && ! alreadyHasSiteNamespace ) {
 		// Insert the API namespace after the first two path segments.
@@ -93,6 +100,16 @@ function apiPathModifierMiddleware( options, next ) {
 	}
 
 	return next( options );
+}
+
+/**
+ * Escapes a string for literal use inside a regular expression.
+ *
+ * @param {string} value The string to escape.
+ * @return {string} The escaped string.
+ */
+function escapeRegExp( value ) {
+	return value.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' );
 }
 
 /**
