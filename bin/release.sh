@@ -258,21 +258,24 @@ push_changes() {
     print_success "Changes pushed successfully"
 }
 
-# Function to print the post-push instructions for kicking off the
-# Buildkite publish build. CI creates the tag and the GitHub release —
-# this script just bumps the version files on trunk.
+# Buildkite pipeline that publishes tagged releases.
+BUILDKITE_PIPELINE="automattic/gutenbergkit"
+
+# Function to print the manual steps for kicking off the Buildkite publish
+# build. CI creates the tag and the GitHub release — this script just bumps
+# the version files on trunk.
+#
+# $3 frames the steps for the situation that produced them: the fallback
+# after a failed trigger reads differently from the only-path-available case
+# when the `bk` CLI is absent.
 print_publish_instructions() {
     local version=$1
     local sha=$2
+    local heading=$3
     local tag="v$version"
-    local prefix=""
-
-    if [ "$DRY_RUN" = "true" ]; then
-        prefix="[DRY RUN] "
-    fi
 
     echo
-    print_status "${prefix}Next: trigger the Buildkite publish build."
+    print_status "$heading"
     echo
     echo "  1. Open https://buildkite.com/organizations/automattic/pipelines/gutenbergkit/builds/new"
     echo "  2. Branch: trunk"
@@ -286,6 +289,78 @@ print_publish_instructions() {
     echo "The :rocket: 'Publish Swift release' step will build + sign the"
     echo "XCFramework, upload it to S3, and publish the GitHub Release —"
     echo "which also creates the $tag tag."
+}
+
+# Function to report whether the Buildkite CLI can trigger the publish build.
+#
+# Being installed is not sufficient — a freshly-installed `bk` has no token,
+# and `bk build create` would fail partway through the release. `bk auth
+# status` verifies both presence and a usable token, so an unconfigured CLI
+# degrades to the manual path instead of erroring after the version bump.
+can_trigger_build() {
+    command -v bk &> /dev/null && bk auth status &> /dev/null
+}
+
+# Function to print how to obtain the Buildkite CLI, shown when it is
+# unavailable so the automated path is discoverable without nagging.
+print_bk_install_hint() {
+    echo
+    print_status "Tip: install the Buildkite CLI (\`bk\`) to trigger this build"
+    print_status "automatically on future releases."
+    echo "  Install:      https://buildkite.com/docs/platform/cli/installation"
+    echo "  Authenticate: bk auth login --org automattic --scopes \"read_organizations read_pipelines write_builds\""
+}
+
+# Function to publish via the `bk` CLI, falling back to manual instructions.
+#
+# The publish step gates on `depends_on` (validate, tests, lint, XCFramework),
+# so triggering immediately after the push is equivalent to triggering later —
+# the build waits on its dependencies regardless of when it starts.
+trigger_publish_build() {
+    local version=$1
+    local sha=$2
+    local tag="v$version"
+
+    if ! can_trigger_build; then
+        print_bk_install_hint
+        print_publish_instructions "$version" "$sha" \
+            "Trigger the Buildkite publish build manually:"
+        return
+    fi
+
+    echo
+    print_status "Triggering the publish build via the \`bk\` CLI:"
+    echo "  bk build create -p $BUILDKITE_PIPELINE -b trunk \\"
+    echo "    -c $sha -e NEW_VERSION=$tag"
+
+    if [ "$DRY_RUN" = "true" ]; then
+        return
+    fi
+
+    echo
+
+    # The version bump is already pushed, so a failed trigger is a degraded
+    # path rather than a failed release — warn and fall back to the manual
+    # steps rather than exiting non-zero.
+    local status=0
+    bk build create \
+        --no-input \
+        --yes \
+        -p "$BUILDKITE_PIPELINE" \
+        -b trunk \
+        -c "$sha" \
+        -e "NEW_VERSION=$tag" || status=$?
+
+    if [ "$status" -eq 0 ]; then
+        print_success "Publish build triggered."
+        return
+    fi
+
+    echo
+    print_warning "\`bk build create\` failed (exit $status)."
+    print_warning "The version bump succeeded and is pushed to trunk."
+    print_publish_instructions "$version" "$sha" \
+        "Trigger the Buildkite publish build manually instead:"
 }
 
 # Main function
@@ -382,12 +457,15 @@ main() {
     print_success "Version bump completed successfully!"
     print_status "Version: $current_version -> $new_version"
 
+    trigger_publish_build "$new_version" "$pushed_sha"
+
+    # Closes the dry-run notice opened before the pre-flight checks, so the
+    # reminder bookends every line the run produced.
     if [ "$DRY_RUN" = "true" ]; then
+        echo
         print_warning "This was a dry run. No actual changes were made."
         print_status "To perform the actual release, run: make release VERSION_TYPE=$version_type"
     fi
-
-    print_publish_instructions "$new_version" "$pushed_sha"
 }
 
 # Run main function with all arguments

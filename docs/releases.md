@@ -46,12 +46,15 @@ The script:
 1. Builds the project[^2]
 1. Commits the version bump as `chore(release): X.Y.Z`
 1. Pushes to `origin/trunk`
+1. Triggers the Step 2 publish build, when the Buildkite CLI is available
 
 It does **not** create the git tag or the GitHub release — that's Step 2.
 
 ## Step 2 — Publish via Buildkite
 
-Step 1 prints the SHA of the version-bump commit it just pushed. Trigger a new Buildkite build with that SHA pinned:
+Step 1 triggers this build for you and prints the build URL, provided the Buildkite CLI (`bk`) is installed and authenticated — [install](https://buildkite.com/docs/platform/cli/installation) it, then run `bk auth login --org automattic --scopes "read_organizations read_pipelines write_builds"`. Those are the only scopes needed — `read_organizations` to complete the login itself, the other two to create the build; without `--scopes`, `bk` requests every scope your account can reach. Nothing is triggered during a dry run.
+
+Without the CLI, or if the trigger fails, Step 1 prints the SHA of the version-bump commit it just pushed. Trigger a new Buildkite build with that SHA pinned:
 
 1. Open <https://buildkite.com/organizations/automattic/pipelines/gutenbergkit/builds/new>
 2. **Branch**: `trunk`
