@@ -32,7 +32,7 @@ export function configureApiFetch() {
 	apiFetch.use( tokenAuthMiddleware );
 	apiFetch.use( filterEndpointsMiddleware );
 	apiFetch.use( nativeMediaUploadMiddleware );
-	apiFetch.use( mediaUploadMiddleware );
+	apiFetch.use( stripDraftPostIdMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
 	apiFetch.use(
 		apiFetch.createPreloadingMiddleware( preloadData ?? defaultPreloadData )
@@ -379,14 +379,14 @@ function uploadAbortError( signal ) {
 }
 
 /**
- * Middleware to modify media upload requests.
+ * Middleware that strips the placeholder post ID from media upload requests.
  *
  * This middleware intercepts requests to the media endpoint and conditionally
  * removes the 'post' field if its value is '-1', which is used for draft posts.
  *
  * @type {APIFetchMiddleware}
  */
-function mediaUploadMiddleware( options, next ) {
+function stripDraftPostIdMiddleware( options, next ) {
 	if (
 		options.path &&
 		MEDIA_UPLOAD_PATH.test( options.path ) &&
