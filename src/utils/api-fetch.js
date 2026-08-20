@@ -38,6 +38,19 @@ export function configureApiFetch() {
 	// above auth, namespacing, and the root URL, so the `post-process` requests
 	// core issues through `next` are still authenticated and correctly
 	// addressed.
+	//
+	// Recovery needs `x-wp-upload-attachment-id`, readable only same-origin or
+	// when the server exposes it via CORS:
+	//
+	// - Through the native upload server, which exposes it: works on both
+	//   platforms.
+	// - Direct to WordPress, which does not expose it (see
+	//   `rest_send_cors_headers()`): works on Android, whose editor is
+	//   same-origin with the site, and fails on iOS, which loads from `file://`.
+	//
+	// There is no fallback: core sends the header before
+	// `wp_generate_attachment_metadata()`, so the fatal leaves no body to parse
+	// the ID from.
 	apiFetch.use( nativeMediaUploadMiddleware );
 	apiFetch.use( apiFetch.mediaUploadMiddleware );
 	apiFetch.use( stripDraftPostIdMiddleware );
