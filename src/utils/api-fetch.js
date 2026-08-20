@@ -81,10 +81,11 @@ function apiPathModifierMiddleware( options, next ) {
 		/\/sites\/[^/]+\//.test( options.path );
 
 	if ( isEligiblePath && ! alreadyHasSiteNamespace ) {
-		// Insert the API namespace after the first two path segments.
+		// Insert the API namespace after the first two path segments, with a
+		// single trailing slash.
 		options.path = options.path.replace(
 			/^(?<apiPath>\/?(?:[\w.-]+\/){2})/,
-			`$<apiPath>${ siteApiNamespace[ 0 ] }`
+			`$<apiPath>${ siteApiNamespace[ 0 ].replace( /\/+$/, '' ) }/`
 		);
 	}
 
