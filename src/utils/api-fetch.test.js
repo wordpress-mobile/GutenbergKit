@@ -212,6 +212,33 @@ describe( 'api-fetch credentials handling', () => {
 			expect( requestedUrl() ).toContain( '/wp/v2/sites/123/posts' );
 		} );
 
+		it( 'inserts a namespace configured without a trailing slash', async () => {
+			// Both forms are supported; the native URL builders normalize them
+			// identically. Without normalizing here the namespace would run into
+			// the following segment: `/wp/v2/sites/123posts`.
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://example.com/wp-json/',
+				siteApiNamespace: [ 'sites/123' ],
+				namespaceExcludedPaths: [],
+			} );
+
+			await apiFetch( { path: '/wp/v2/posts' } ).catch( () => {} );
+
+			expect( requestedUrl() ).toContain( '/wp/v2/sites/123/posts' );
+		} );
+
+		it( 'does not double the slash on a namespace that already ends with one', async () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://example.com/wp-json/',
+				siteApiNamespace: [ 'sites/123/' ],
+				namespaceExcludedPaths: [],
+			} );
+
+			await apiFetch( { path: '/wp/v2/posts' } ).catch( () => {} );
+
+			expect( requestedUrl() ).not.toContain( 'sites/123//' );
+		} );
+
 		it( 'leaves the path alone when it already carries the namespace', async () => {
 			bridge.getGBKit.mockReturnValue( {
 				siteApiRoot: 'https://example.com/wp-json/',
