@@ -638,8 +638,22 @@ class MediaUploadServerTest {
     private data class RawHttpResponse(
         val statusLine: String,
         val headers: Map<String, String>,
-        val body: String
-    )
+        val body: String,
+        /** The header lines exactly as received, before collapsing into [headers]. */
+        val rawHeaderLines: List<String> = emptyList()
+    ) {
+        /**
+         * Every value sent for [name], in order. Unlike [headers], this preserves
+         * repeats — the only way to catch a header emitted twice.
+         */
+        fun rawHeaderValues(name: String): List<String> =
+            rawHeaderLines.mapNotNull { line ->
+                val colonIndex = line.indexOf(':')
+                if (colonIndex <= 0) return@mapNotNull null
+                if (!line.substring(0, colonIndex).trim().equals(name, ignoreCase = true)) return@mapNotNull null
+                line.substring(colonIndex + 1).trim()
+            }
+    }
 
     private fun sendRawRequest(
         method: String,
@@ -694,7 +708,7 @@ class MediaUploadServerTest {
             }
         }
 
-        return RawHttpResponse(statusLine, responseHeaders, responseBody)
+        return RawHttpResponse(statusLine, responseHeaders, responseBody, lines.drop(1))
     }
 
     private fun buildMultipartBody(
