@@ -30,7 +30,7 @@ Once started, the **"Local WordPress"** option in both the iOS and Android demo 
 | --------------------------------------- | ------------------------------------------------------------- |
 | `make wp-env-start`                     | Start the environment and provision credentials               |
 | `make wp-env-stop`                      | Stop the environment                                          |
-| `make wp-env-clean`                     | Destroy the environment and remove all local files            |
+| `make wp-env-clean`                     | Remove downloaded WordPress, plugin, and theme files          |
 | `make wp-env-android-urls`              | Report whether WordPress emits emulator-reachable URLs        |
 | `make wp-env-android-urls MODE=on\|off` | Emit `10.0.2.2` URLs for the Android emulator, or `localhost` |
 
@@ -147,6 +147,8 @@ If the port belongs to an unrelated service, change the wp-env port in `.wp-env.
 	"port": 9999
 }
 ```
+
+The make targets read the port from wp-env, so a `port` key here — or the `WP_ENV_PORT` environment variable — applies to the port check and credential provisioning as well as to the server itself.
 
 ### Resetting the environment
 

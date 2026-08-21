@@ -23,7 +23,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CREDENTIALS_FILE="$PROJECT_ROOT/.wp-env.credentials.json"
 
-SITE_URL="http://localhost:8888"
+# Resolve the port from wp-env so a "port" key in .wp-env.json or WP_ENV_PORT is
+# honoured here too, rather than provisioning against a site that moved.
+PORT=$(cd "$PROJECT_ROOT" && node -e "
+    const { loadConfig } = require( '@wordpress/env/lib/config' );
+    loadConfig( process.cwd() )
+        .then( ( config ) => process.stdout.write( String( config.env.development.port ) ) )
+        .catch( () => process.exit( 1 ) );
+") || PORT=""
+
+SITE_URL="http://localhost:${PORT:-${WP_ENV_PORT:-8888}}"
 USERNAME="admin"
 PASSWORD="password"
 APP_NAME="GutenbergKit"
