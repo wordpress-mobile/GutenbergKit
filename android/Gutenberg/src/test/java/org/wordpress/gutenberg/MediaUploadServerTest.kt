@@ -141,6 +141,27 @@ class MediaUploadServerTest {
     }
 
     @Test
+    fun `routes a deletion to the delegate when it handles one`() {
+        // A host that uploaded the attachment itself owns an ID only it can
+        // resolve, so the default uploader must not be asked to delete it. No
+        // default uploader is configured, so a 200 here can only come from the
+        // delegate — the fallback path would fail with "no uploader".
+        val delegate = DeletingDelegate()
+        server.stop()
+        server = MediaUploadServer(uploadDelegate = delegate, defaultUploader = null, cacheDir = tempFolder.root)
+
+        val response = sendRawRequest(
+            method = "DELETE",
+            path = "/media/42?force=true",
+            headers = mapOf("Relay-Authorization" to "Bearer ${server.token}"),
+            body = ByteArray(0)
+        )
+
+        assertTrue("Expected 200 but got: ${response.statusLine}", response.statusLine.contains("200"))
+        assertEquals("42", delegate.deletedAttachmentId)
+    }
+
+    @Test
     fun `routes upload with a query string and relays the query`() {
         val delegate = ProcessOnlyDelegate()
         val mockUploader = MockDefaultUploader()
@@ -731,6 +752,19 @@ class MediaUploadServerTest {
             lastFilename = filename
             val json = """{"id":42,"source_url":"https://example.com/photo.jpg","media_type":"image"}"""
             return MediaUploadResponse(201, json.toByteArray())
+        }
+    }
+
+    /**
+     * A delegate that handles deletions itself, as a host uploading to its own
+     * media service would.
+     */
+    private class DeletingDelegate : MediaUploadDelegate {
+        @Volatile var deletedAttachmentId: String? = null
+
+        override suspend fun deleteFile(attachmentId: String): MediaUploadResponse? {
+            deletedAttachmentId = attachmentId
+            return MediaUploadResponse(200, """{"deleted":true}""".toByteArray())
         }
     }
 

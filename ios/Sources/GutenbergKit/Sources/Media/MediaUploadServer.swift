@@ -98,7 +98,7 @@ final class MediaUploadServer: Sendable {
         }
 
         if method == "DELETE", let attachmentId = attachmentId(fromPath: parsed.path) {
-            return await handleDelete(attachmentId, query: parsed.query, context: context)
+            return await handleMediaDelete(attachmentId, query: parsed.query, context: context)
         }
 
         return errorResponse(status: 404, message: "Not found")
@@ -208,20 +208,28 @@ final class MediaUploadServer: Sendable {
         return id
     }
 
-    /// Relays the editor's orphan cleanup to WordPress.
+    /// Relays the editor's orphan cleanup.
     ///
     /// Core's media upload middleware deletes the attachment when every
     /// `post-process` retry fails. A cross-origin editor cannot issue that
     /// request directly — api-fetch tunnels `DELETE` as a `POST` carrying
     /// `X-HTTP-Method-Override`, which core's CORS allow-list omits, so the
     /// browser blocks it at preflight. Relaying it here lets the cleanup run.
-    private static func handleDelete(
+    ///
+    /// Offers the deletion to the delegate first, as ``handleUpload(_:context:)``
+    /// does, so a host that uploaded the attachment itself deletes it from the
+    /// same place.
+    private static func handleMediaDelete(
         _ attachmentId: String, query: String, context: UploadContext
     ) async -> HTTPResponse {
-        guard let defaultUploader = context.defaultUploader else {
-            return errorResponse(status: 500, message: UploadError.noUploader.localizedDescription)
-        }
         do {
+            if let response = try await context.uploadDelegate?.deleteFile(attachmentId: attachmentId) {
+                return relayResponse(response)
+            }
+
+            guard let defaultUploader = context.defaultUploader else {
+                return errorResponse(status: 500, message: UploadError.noUploader.localizedDescription)
+            }
             let response = try await defaultUploader.deleteMedia(attachmentId: attachmentId, query: query)
             return relayResponse(response)
         } catch {

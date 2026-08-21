@@ -111,6 +111,20 @@ interface MediaUploadDelegate {
      * the editor sees a complete attachment object.
      */
     suspend fun uploadFile(file: File, mimeType: String, filename: String): MediaUploadResponse? = null
+
+    /**
+     * Delete a previously uploaded attachment.
+     *
+     * The editor deletes the attachment when an upload's server-side
+     * post-processing fails past recovery, so it does not leave an orphan
+     * behind. A delegate that uploaded the attachment itself via [uploadFile]
+     * owns an ID only it can resolve, so it must delete the attachment itself
+     * too — the default uploader would address the wrong site.
+     *
+     * Return the raw response (status code + body), which GutenbergKit relays
+     * to the editor unchanged, or null to use the default uploader.
+     */
+    suspend fun deleteFile(attachmentId: String): MediaUploadResponse? = null
 }
 
 /**
@@ -234,7 +248,7 @@ internal class MediaUploadServer(
 
         if (method == "DELETE") {
             attachmentIdFromPath(request.path)?.let { attachmentId ->
-                return handleDelete(attachmentId, request.query)
+                return handleMediaDelete(attachmentId, request.query)
             }
         }
 
@@ -255,17 +269,22 @@ internal class MediaUploadServer(
     }
 
     /**
-     * Relays the editor's orphan cleanup to WordPress.
+     * Relays the editor's orphan cleanup.
      *
      * Core's media upload middleware deletes the attachment when every
      * `post-process` retry fails. A cross-origin editor cannot issue that
      * request directly — api-fetch tunnels `DELETE` as a `POST` carrying
      * `X-HTTP-Method-Override`, which core's CORS allow-list omits, so the
      * browser blocks it at preflight. Relaying it here lets the cleanup run.
+     *
+     * Offers the deletion to the delegate first, as [handleUpload] does, so a
+     * host that uploaded the attachment itself deletes it from the same place.
      */
-    private suspend fun handleDelete(attachmentId: String, query: String): HttpResponse {
-        val uploader = defaultUploader ?: return errorResponse(500, "No uploader configured")
+    private suspend fun handleMediaDelete(attachmentId: String, query: String): HttpResponse {
         return try {
+            uploadDelegate?.deleteFile(attachmentId)?.let { return relayResponse(it) }
+
+            val uploader = defaultUploader ?: return errorResponse(500, "No uploader configured")
             relayResponse(uploader.deleteMedia(attachmentId, query))
         } catch (e: IOException) {
             Log.e(TAG, "Media deletion failed", e)

@@ -131,6 +131,28 @@ struct MediaUploadServerTests {
     #expect(mockUploader.lastQuery == "?_embed=wp:featuredmedia")
   }
 
+  @Test("routes a deletion to the delegate when it handles one")
+  func delegateHandlesDeletion() async throws {
+    // A host that uploaded the attachment itself owns an ID only it can
+    // resolve, so the default uploader must not be asked to delete it.
+    // No default uploader is configured, so a 200 here can only come from the
+    // delegate — the fallback path would fail with "no uploader".
+    let delegate = DeletingDelegate()
+    let server = try await MediaUploadServer.start(uploadDelegate: delegate)
+    defer { server.stop() }
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/media/42?force=true")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "DELETE"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+
+    let (_, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+
+    #expect(httpResponse.statusCode == 200)
+    #expect(delegate.deletedAttachmentId == "42")
+  }
+
   @Test("calls delegate and returns upload result")
   func delegateProcessAndUpload() async throws {
     let delegate = MockUploadDelegate()
@@ -792,6 +814,20 @@ private final class MockUploadDelegate: MediaUploadDelegate, @unchecked Sendable
     }
     let json = #"{"id":42,"source_url":"https://example.com/photo.jpg","media_type":"image"}"#
     return MediaUploadResponse(statusCode: 201, body: Data(json.utf8))
+  }
+}
+
+/// A delegate that handles deletions itself, as a host uploading to its own
+/// media service would.
+private final class DeletingDelegate: MediaUploadDelegate, @unchecked Sendable {
+  private let lock = NSLock()
+  private var _deletedAttachmentId: String?
+
+  var deletedAttachmentId: String? { lock.withLock { _deletedAttachmentId } }
+
+  func deleteFile(attachmentId: String) async throws -> MediaUploadResponse? {
+    lock.withLock { _deletedAttachmentId = attachmentId }
+    return MediaUploadResponse(statusCode: 200, body: Data(#"{"deleted":true}"#.utf8))
   }
 }
 
