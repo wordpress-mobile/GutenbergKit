@@ -54,7 +54,9 @@ The `bin/wp-env-setup.sh` script runs automatically after `wp-env start`:
 3. Generates a Base64-encoded Basic Auth header.
 4. Writes credentials to `.wp-env.credentials.json`.
 
-The script is idempotent — it skips if the credentials file already exists. Use `make wp-env-start RESET=1` (or `make wp-env-clean`) to regenerate.
+The script is idempotent. It reuses existing credentials only when they still authenticate, and regenerates them otherwise — so `make wp-env-start` is safe to run repeatedly.
+
+This matters because the Playground runtime has no persistent database. Every restart rebuilds WordPress from the Blueprint, which recreates the `admin` user and discards the application password. The credentials file survives the restart even though the credentials it holds do not, so the file's presence alone is not evidence that it works.
 
 ### Demo App Integration
 

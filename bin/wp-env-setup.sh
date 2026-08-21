@@ -8,9 +8,14 @@
 # This script uses only REST API calls (no WP-CLI / wp-env run), so it works
 # with both the Docker and Playground runtimes.
 #
+# Existing credentials are reused only when they still authenticate. The
+# Playground runtime has no persistent database, so every restart rebuilds
+# WordPress from the Blueprint and discards the application password. The
+# credentials file is the one artifact that survives that, which makes its
+# presence on disk no evidence that it still works.
+#
 # Usage:
-#   bash bin/wp-env-setup.sh           # Create credentials (skips if file exists)
-#   RESET=1 bash bin/wp-env-setup.sh   # Recreate credentials from scratch
+#   bash bin/wp-env-setup.sh   # Reuse working credentials, otherwise recreate
 
 set -euo pipefail
 
@@ -24,20 +29,38 @@ PASSWORD="password"
 APP_NAME="GutenbergKit"
 
 # ---------------------------------------------------------------------------
-# Parse flags
+# Reuse existing credentials only if they still authenticate
+#
+# Anything other than a clean 200 falls through to provisioning: regenerating
+# unnecessarily costs a few seconds, whereas keeping credentials that no longer
+# work leaves the demo apps unable to connect.
 # ---------------------------------------------------------------------------
 
-RESET="${RESET:-}"
-
-if { [ "$RESET" = "true" ] || [ "$RESET" = "1" ]; } && [ -f "$CREDENTIALS_FILE" ]; then
-    echo "Removing existing credentials file..."
-    rm -f "$CREDENTIALS_FILE"
-fi
-
 if [ -f "$CREDENTIALS_FILE" ]; then
-    echo "Credentials file already exists at $CREDENTIALS_FILE — skipping setup."
-    echo "Use RESET=1 to regenerate credentials."
-    exit 0
+    EXISTING_AUTH=$(node -e "
+        const fs = require('fs');
+        try {
+            const c = JSON.parse(fs.readFileSync('$CREDENTIALS_FILE', 'utf8'));
+            if (!c.authHeader) process.exit(1);
+            process.stdout.write(c.authHeader);
+        } catch {
+            process.exit(1);
+        }
+    ") || EXISTING_AUTH=""
+
+    if [ -n "$EXISTING_AUTH" ]; then
+        PROBE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+            -H "Authorization: $EXISTING_AUTH" \
+            "$SITE_URL/?rest_route=/wp/v2/users/me" 2>/dev/null) || PROBE_STATUS=""
+
+        if [ "$PROBE_STATUS" = "200" ]; then
+            echo "Existing credentials are valid — skipping setup."
+            exit 0
+        fi
+    fi
+
+    echo "Existing credentials are no longer valid — regenerating..."
+    rm -f "$CREDENTIALS_FILE"
 fi
 
 # ---------------------------------------------------------------------------
