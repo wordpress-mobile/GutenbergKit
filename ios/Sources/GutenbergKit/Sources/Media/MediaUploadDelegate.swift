@@ -94,6 +94,16 @@ public protocol MediaUploadDelegate: AnyObject, Sendable {
     ///
     /// Return the raw response (status code + body), which GutenbergKit relays
     /// to the editor unchanged, or `nil` to use the default uploader.
+    ///
+    /// Return `nil` for any ID the delegate does not recognize. Unlike the upload
+    /// path, there is no ``handlesFile(ofType:named:)`` gate here — an attachment
+    /// ID carries no MIME type or filename — so this method is called for *every*
+    /// deletion, including attachments the delegate declined at upload time and
+    /// WordPress therefore created itself. Returning a response for one of those
+    /// (an error from the host's own media service, say) leaves the real
+    /// WordPress attachment undeleted — precisely the orphan this cleanup exists
+    /// to remove. `nil` hands it to the default uploader, which addresses the
+    /// right site.
     func deleteFile(attachmentId: String) async throws -> MediaUploadResponse?
 }
 
