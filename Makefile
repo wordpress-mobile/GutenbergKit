@@ -223,6 +223,10 @@ wp-env-clean: ## Stop wp-env and remove downloaded WordPress, plugin, and theme 
 wp-env-android-urls: ## Report whether WordPress emits emulator-reachable URLs, 10.0.2.2 instead of localhost (set via MODE=on|off)
 	@MODE=$(MODE) bash bin/wp-env-android.sh
 
+.PHONY: wp-env-media-failure
+wp-env-media-failure: ## Report the media upload failure simulation mode (MODE=off|recover|always to set it)
+	@MODE=$(MODE) bash bin/wp-env-media-failure.sh
+
 ################################################################################
 # Code Quality Targets
 ################################################################################
