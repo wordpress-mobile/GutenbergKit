@@ -236,10 +236,15 @@ final class MediaUploadServer: Sendable {
     /// the editor retry `post-process` for an upload whose metadata generation
     /// fataled server-side, rather than surfacing a permanent failure and
     /// leaving an orphaned attachment behind.
+    ///
+    /// The response's own `Content-Type` wins over the JSON default. `HTTPResponse`
+    /// serializes every header it is given, so appending the default unconditionally
+    /// would emit the name twice for a delegate that sets it.
     private static func relayResponse(_ response: MediaUploadResponse) -> HTTPResponse {
-        HTTPResponse(
+        let hasContentType = response.headers.keys.contains { $0.lowercased() == "content-type" }
+        return HTTPResponse(
             status: response.statusCode,
-            headers: [("Content-Type", "application/json")]
+            headers: (hasContentType ? [] : [("Content-Type", "application/json")])
                 + response.headers.map { ($0.key, $0.value) },
             body: response.body
         )
