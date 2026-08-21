@@ -115,6 +115,31 @@ function gbk_media_failure_should_fail( $attachment_id ) {
 }
 
 /**
+ * Whether the current request is one this simulator should be able to fail.
+ *
+ * Only the upload and its `post-process` retries. A `DELETE` must be left alone
+ * even in `always` mode: core's `force=true` delete path also runs sub-size
+ * handling, so failing there fatals the editor's orphan cleanup — the very
+ * request that proves the retry gave up correctly. Worse, a fatal aborts the
+ * request before `rest_pre_serve_request` adds CORS headers, so the editor sees
+ * a CORS error rather than the 500, which reads like a bug in the editor rather
+ * than in this plugin.
+ */
+function gbk_media_failure_is_failable_request() {
+	$method = isset( $_SERVER['REQUEST_METHOD'] )
+		? strtoupper( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) )
+		: '';
+
+	// api-fetch tunnels DELETE through POST with an override header, so the
+	// bare method is not enough to identify a delete.
+	$override = isset( $_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] )
+		? strtoupper( sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] ) ) )
+		: '';
+
+	return 'DELETE' !== $method && 'DELETE' !== $override;
+}
+
+/**
  * Fatals during sub-size generation when the active mode calls for it.
  *
  * Hooks both filters core runs while building sub-sizes: the initial upload
@@ -126,6 +151,10 @@ function gbk_media_failure_should_fail( $attachment_id ) {
  * @param int   $attachment_id The attachment being processed.
  */
 function gbk_media_failure_maybe_fail( $sizes, $metadata = null, $attachment_id = 0 ) {
+	if ( ! gbk_media_failure_is_failable_request() ) {
+		return $sizes;
+	}
+
 	if ( gbk_media_failure_should_fail( $attachment_id ) ) {
 		// Send the 500 explicitly before dying. A real PHP fatal under FPM
 		// surfaces as a 500, but the Playground runtime wp-env uses returns 200,

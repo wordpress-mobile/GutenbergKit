@@ -133,6 +133,8 @@ The mode is stored as an option rather than per-request state, because the uploa
 
 **Note:** the plugin sets the 500 status itself. A real PHP fatal under FPM surfaces as a 500, but the Playground runtime wp-env uses returns 200, which the editor's `status >= 500` check would ignore.
 
+**Note:** a simulated fatal aborts the request before WordPress adds CORS headers, so a cross-origin editor reports these responses as CORS errors with provisional request headers rather than as a readable 500. That is expected for the upload and `post-process` responses — the editor only needs their status and the attachment ID header. It is why the plugin never fails a `DELETE`, including the `POST` + `X-Http-Method-Override: DELETE` form api-fetch actually sends: failing the orphan cleanup would make a correctly working retry look broken.
+
 **Only the native upload server path recovers locally.** Reading `X-WP-Upload-Attachment-ID` cross-origin requires the site to list it in `Access-Control-Expose-Headers`, and WordPress core's `rest_send_cors_headers()` does not. Uploads routed through the native upload server recover on both platforms, since that server exposes the header itself.
 
 A **direct** upload (native media upload disabled) never recovers on iOS, which loads the editor from `file://`. It does not recover against wp-env on Android either: `GutenbergView` derives the asset domain from the site's _host_, which drops the port, so the editor at `http://10.0.2.2` is cross-origin with the site at `http://10.0.2.2:8888`. Direct uploads are only same-origin — and therefore only recover — when the site runs on the scheme's default port, as production sites do.
