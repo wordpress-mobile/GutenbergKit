@@ -94,10 +94,6 @@ function corsMiddleware( options, next ) {
  */
 function apiPathModifierMiddleware( options, next ) {
 	const { siteApiNamespace, namespaceExcludedPaths } = getGBKit();
-	// Self-hosted sites configure no namespace, so there is nothing to insert.
-	// This has to gate the rewrite explicitly: the namespace match below cannot
-	// stand in for it, and an empty namespace would otherwise interpolate
-	// `undefined` into the path.
 	const isEligiblePath =
 		options.path &&
 		siteApiNamespace.length > 0 &&

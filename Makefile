@@ -219,7 +219,7 @@ wp-env-android-reset: ## Remove the Android emulator URL remap and restart
 	@RESET=1 $(MAKE) wp-env-start
 
 .PHONY: wp-env-media-failure
-wp-env-media-failure: ## Report the media upload failure simulation mode (MODE=off|recover|always to set it)
+wp-env-media-failure: ## Report the media upload failure simulation mode (set via MODE=off|recover|always)
 	@MODE=$(MODE) bash bin/wp-env-media-failure.sh
 
 ################################################################################
