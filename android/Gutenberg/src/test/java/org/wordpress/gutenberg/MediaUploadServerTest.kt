@@ -447,6 +447,29 @@ class MediaUploadServerTest {
     }
 
     @Test
+    fun `DefaultMediaUploader deletes an attachment carrying namespace and force query`() {
+        val mockWpServer = MockWebServer()
+        mockWpServer.enqueue(MockResponse().setResponseCode(200).setBody("""{"deleted":true}"""))
+        mockWpServer.start()
+
+        val uploader = DefaultMediaUploader(
+            httpClient = okhttp3.OkHttpClient(),
+            siteApiRoot = mockWpServer.url("/wp-json/").toString(),
+            authHeader = "Bearer test-token",
+            siteApiNamespace = listOf("sites/123")
+        )
+
+        val response = runBlocking { uploader.deleteMedia("42", "?force=true") }
+
+        assertEquals(200, response.statusCode)
+        val recorded = mockWpServer.takeRequest()
+        assertEquals("DELETE", recorded.method)
+        assertEquals("/wp-json/wp/v2/sites/123/media/42?force=true", recorded.path)
+
+        mockWpServer.shutdown()
+    }
+
+    @Test
     fun `DefaultMediaUploader normalizes an unslashed root and namespace`() {
         val mockWpServer = MockWebServer()
         mockWpServer.enqueue(MockResponse().setResponseCode(201).setBody("{}"))

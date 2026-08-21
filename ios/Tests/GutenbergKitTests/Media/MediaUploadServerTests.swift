@@ -652,6 +652,22 @@ struct DefaultMediaUploaderRelayTests {
     #expect(response.headers.isEmpty)
   }
 
+  @Test("deletes an attachment, carrying the namespace and force query")
+  func deletesAttachment() async throws {
+    let client = URLCapturingHTTPClient()
+    let uploader = DefaultMediaUploader(
+      httpClient: client,
+      siteApiRoot: URL(string: "https://example.com/wp-json")!,
+      siteApiNamespace: ["sites/123"]
+    )
+
+    _ = try await uploader.deleteMedia(attachmentId: "42", query: "?force=true")
+
+    let url = try #require(client.lastURL)
+    #expect(
+      url.absoluteString == "https://example.com/wp-json/wp/v2/sites/123/media/42?force=true")
+  }
+
   @Test("carries the namespace and request query through to the media endpoint")
   func forwardsNamespaceAndQuery() async throws {
     let client = URLCapturingHTTPClient()

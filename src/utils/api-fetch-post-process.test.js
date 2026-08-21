@@ -174,6 +174,47 @@ describe( "core's media upload post-process middleware", () => {
 		expect( paths.at( -1 ) ).toContain( '/wp/v2/media/42?force=true' );
 	} );
 
+	it( 'relays the orphan cleanup through the native server', async () => {
+		// End-to-end shape of the `always` case on a native-upload host: the
+		// upload fails, five post-process attempts fail, and the resulting
+		// DELETE goes to the loopback server rather than direct to WordPress —
+		// where a cross-origin editor's tunnelled DELETE would be blocked at
+		// preflight, leaving the orphan behind.
+		bridge.getGBKit.mockReturnValue( {
+			siteApiRoot: SITE_API_ROOT,
+			authHeader: 'Bearer test-token',
+			siteApiNamespace: [],
+			namespaceExcludedPaths: [],
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'relay-token',
+		} );
+
+		global.fetch = vi.fn( ( url ) => {
+			const path = String( url );
+			if ( path.includes( 'post-process' ) ) {
+				return Promise.resolve( makeResponse( 500, null ) );
+			}
+			if ( path.includes( '/media/42' ) ) {
+				return Promise.resolve(
+					makeResponse( 200, null, { deleted: true } )
+				);
+			}
+			return Promise.resolve( makeResponse( 500, '42' ) );
+		} );
+
+		await expect( apiFetch( uploadOptions() ) ).rejects.toBeDefined();
+
+		const paths = global.fetch.mock.calls.map( ( [ url ] ) =>
+			String( url )
+		);
+		expect(
+			paths.filter( ( p ) => p.includes( 'post-process' ) )
+		).toHaveLength( 5 );
+		expect( paths.at( -1 ) ).toBe(
+			'http://localhost:8080/media/42?force=true'
+		);
+	} );
+
 	it( 'authenticates the post-process retry', async () => {
 		global.fetch = vi.fn( ( url ) => {
 			if ( String( url ).includes( 'post-process' ) ) {

@@ -222,15 +222,55 @@ internal class MediaUploadServer(
     }
 
     private suspend fun handleRequest(request: HttpRequest): HttpResponse {
-        // Route: only POST /upload is handled. (OPTIONS preflight is answered by
-        // the HTTP library under its permissive CORS policy.) Match on the path
-        // alone — the target carries a query string (e.g. `?_embed`) that the
-        // upload handler relays on to WordPress.
-        if (request.method.uppercase() != "POST" || request.path != "/upload") {
-            return errorResponse(404, "Not found")
+        // Routes: POST /upload, and DELETE /media/<id> for the editor's orphan
+        // cleanup. (OPTIONS preflight is answered by the HTTP library under its
+        // permissive CORS policy.) Match on the path alone — the target carries
+        // a query string (e.g. `?_embed`, `?force=true`) relayed to WordPress.
+        val method = request.method.uppercase()
+
+        if (method == "POST" && request.path == "/upload") {
+            return handleUpload(request)
         }
 
-        return handleUpload(request)
+        if (method == "DELETE") {
+            attachmentIdFromPath(request.path)?.let { attachmentId ->
+                return handleDelete(attachmentId, request.query)
+            }
+        }
+
+        return errorResponse(404, "Not found")
+    }
+
+    /**
+     * The attachment ID in a `/media/<id>` path, or `null` if the path is not one.
+     *
+     * Deliberately narrow: this server relays media operations, not arbitrary
+     * REST requests, so only a numeric attachment ID under `/media/` matches.
+     */
+    private fun attachmentIdFromPath(path: String): String? {
+        val components = path.split("/").filter { it.isNotEmpty() }
+        if (components.size != 2 || components[0] != "media") return null
+        val id = components[1]
+        return if (id.isNotEmpty() && id.all { it.isDigit() }) id else null
+    }
+
+    /**
+     * Relays the editor's orphan cleanup to WordPress.
+     *
+     * Core's media upload middleware deletes the attachment when every
+     * `post-process` retry fails. A cross-origin editor cannot issue that
+     * request directly — api-fetch tunnels `DELETE` as a `POST` carrying
+     * `X-HTTP-Method-Override`, which core's CORS allow-list omits, so the
+     * browser blocks it at preflight. Relaying it here lets the cleanup run.
+     */
+    private suspend fun handleDelete(attachmentId: String, query: String): HttpResponse {
+        val uploader = defaultUploader ?: return errorResponse(500, "No uploader configured")
+        return try {
+            relayResponse(uploader.deleteMedia(attachmentId, query))
+        } catch (e: IOException) {
+            Log.e(TAG, "Media deletion failed", e)
+            errorResponse(500, e.message ?: "Deletion failed")
+        }
     }
 
     private suspend fun handleUpload(request: HttpRequest): HttpResponse {
@@ -494,8 +534,26 @@ internal open class DefaultMediaUploader(
      * namespacing (so it matches every other REST URL) and carrying the original
      * request query (e.g. `?_embed`) through to WordPress.
      */
-    private fun mediaEndpointUrl(query: String): String =
-        RestUrlBuilder.namespaced(siteApiRoot, siteApiNamespace.firstOrNull(), "/wp/v2/media") + query
+    private fun mediaEndpointUrl(query: String, attachmentId: String? = null): String {
+        val path = if (attachmentId != null) "/wp/v2/media/$attachmentId" else "/wp/v2/media"
+        return RestUrlBuilder.namespaced(siteApiRoot, siteApiNamespace.firstOrNull(), path) + query
+    }
+
+    /**
+     * Deletes an attachment, relaying WordPress's response verbatim.
+     *
+     * Carries the editor's query through unchanged — core's cleanup sends
+     * `?force=true`, without which WordPress trashes rather than deletes.
+     */
+    open suspend fun deleteMedia(attachmentId: String, query: String): MediaUploadResponse {
+        val request = okhttp3.Request.Builder()
+            .url(mediaEndpointUrl(query, attachmentId))
+            .addHeader("Authorization", authHeader)
+            .delete()
+            .build()
+
+        return performUpload(request)
+    }
 
     open suspend fun upload(
         file: File, mimeType: String, filename: String,
