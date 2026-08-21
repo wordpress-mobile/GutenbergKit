@@ -51,16 +51,19 @@ if [ ! -f "$CREDENTIALS_FILE" ]; then
     exit 1
 fi
 
-AUTH_HEADER=$(node -e "
-    const fs = require('fs');
+# The path arrives as an argument rather than interpolated into the source: a
+# checkout under a path containing a quote or backslash would otherwise produce
+# a syntax error instead of the failure message below.
+AUTH_HEADER=$(node -e '
+    const fs = require("fs");
     try {
-        const c = JSON.parse(fs.readFileSync('$CREDENTIALS_FILE', 'utf8'));
+        const c = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
         if (!c.authHeader) process.exit(1);
         process.stdout.write(c.authHeader);
     } catch {
         process.exit(1);
     }
-") || {
+' "$CREDENTIALS_FILE") || {
     echo "Error: could not read authHeader from $CREDENTIALS_FILE" >&2
     echo 'The file may be malformed. Run "make wp-env-start RESET=1" to regenerate it.' >&2
     exit 1
