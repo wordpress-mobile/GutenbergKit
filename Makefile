@@ -198,7 +198,13 @@ preview: npm-dependencies ## Preview the production build locally
 
 .PHONY: wp-env-start
 wp-env-start: npm-dependencies ## Start the local WordPress environment
-	npm run wp-env start -- --runtime=playground
+	@bash bin/wp-env-guard.sh; \
+	status=$$?; \
+	if [ $$status -eq 0 ]; then \
+		npm run wp-env start -- --runtime=playground; \
+	elif [ $$status -ne 10 ]; then \
+		exit $$status; \
+	fi
 	@bash bin/wp-env-setup.sh
 
 .PHONY: wp-env-stop
@@ -209,6 +215,9 @@ wp-env-stop: ## Stop the local WordPress environment
 wp-env-clean: ## Stop wp-env and remove all data (fresh start)
 	npm run wp-env destroy
 	@rm -f .wp-env.credentials.json
+# `destroy` stops only the server named by its PID file, so report anything left
+# holding the port rather than letting the next start fail on it.
+	@bash bin/wp-env-guard.sh > /dev/null || true
 
 .PHONY: wp-env-android
 wp-env-android: ## Remap wp-env site URLs for the Android emulator and restart

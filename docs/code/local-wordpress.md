@@ -117,11 +117,21 @@ Access the WordPress admin dashboard at **http://localhost:8888/wp-admin/**:
 
 ### Port 8888 is already in use
 
+`make wp-env-start` checks the port before starting and reports the process holding it:
+
 ```
-Error: Port 8888 is already allocated
+Error: port 8888 is held by a process this project does not track.
+
+  PID 31041: node .../wp-playground.js server --port 8888 ...
 ```
 
-Another service is using port 8888. Stop the conflicting service or change the wp-env port in `.wp-env.json`:
+It reports the process rather than stopping it. Because each git worktree tracks its own environment while sharing one port, the process may be another worktree's healthy site rather than an orphan — check the command line, then stop it yourself:
+
+```bash
+kill <PID>
+```
+
+If the port belongs to an unrelated service, change the wp-env port in `.wp-env.json` instead:
 
 ```json
 {
@@ -137,6 +147,8 @@ To start fresh, destroy the environment and recreate it:
 make wp-env-clean
 make wp-env-start
 ```
+
+`make wp-env-clean` also checks the port afterwards. If a server is still holding it — one wp-env lost track of, and so could not stop — it reports the process so the next start does not fail on it.
 
 ### Credentials file not found
 
