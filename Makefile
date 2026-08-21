@@ -219,15 +219,9 @@ wp-env-clean: ## Stop wp-env and remove all data (fresh start)
 # holding the port rather than letting the next start fail on it.
 	@bash bin/wp-env-guard.sh > /dev/null || true
 
-.PHONY: wp-env-android
-wp-env-android: ## Remap wp-env site URLs for the Android emulator and restart
-	@cp wp-env/android-url-override.php wp-env/mu-plugins/gutenbergkit-android-urls.php
-	@$(MAKE) wp-env-start
-
-.PHONY: wp-env-android-reset
-wp-env-android-reset: ## Remove the Android emulator URL remap and restart
-	@rm -f wp-env/mu-plugins/gutenbergkit-android-urls.php
-	@$(MAKE) wp-env-start
+.PHONY: wp-env-android-urls
+wp-env-android-urls: ## Report whether WordPress emits emulator-reachable URLs, 10.0.2.2 instead of localhost (set via MODE=on|off)
+	@MODE=$(MODE) bash bin/wp-env-android.sh
 
 ################################################################################
 # Code Quality Targets

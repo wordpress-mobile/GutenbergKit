@@ -26,13 +26,15 @@ Once started, the **"Local WordPress"** option in both the iOS and Android demo 
 
 ## Available Commands
 
-| Command                     | Description                                             |
-| --------------------------- | ------------------------------------------------------- |
-| `make wp-env-start`         | Start the environment and provision credentials         |
-| `make wp-env-stop`          | Stop the environment (preserves data)                   |
-| `make wp-env-clean`         | Destroy the environment and remove all data             |
-| `make wp-env-android`       | Restart with site URL remapped for the Android emulator |
-| `make wp-env-android-reset` | Restart with the default localhost site URL             |
+| Command                                 | Description                                                   |
+| --------------------------------------- | ------------------------------------------------------------- |
+| `make wp-env-start`                     | Start the environment and provision credentials               |
+| `make wp-env-stop`                      | Stop the environment                                          |
+| `make wp-env-clean`                     | Destroy the environment and remove all local files            |
+| `make wp-env-android-urls`              | Report whether WordPress emits emulator-reachable URLs        |
+| `make wp-env-android-urls MODE=on\|off` | Emit `10.0.2.2` URLs for the Android emulator, or `localhost` |
+
+The site is rebuilt from scratch on every start, so stopping the environment discards any content you created. Use `make wp-env-clean` when you also want to remove the downloaded WordPress, plugin, and theme files.
 
 ## How It Works
 
@@ -78,25 +80,32 @@ The Xcode scheme includes a `WP_ENV_CREDENTIALS_PATH` environment variable point
 
 The Android emulator cannot reach `localhost` on the host machine directly. The credentials loader automatically remaps `localhost` to `10.0.2.2` (the emulator's alias for the host). Credentials are read at build time and baked into `BuildConfig` fields, since the emulator cannot access the host filesystem at runtime.
 
-#### Image URLs in the Android Emulator
+#### Server-Generated URLs in the Android Emulator
 
-WordPress generates image URLs (e.g., for uploaded media) using its configured site URL, which defaults to `http://localhost:8888`. These URLs don't resolve inside the Android emulator because `localhost` points to the emulator itself.
+The credentials remap above covers the site URL the app connects to. It does not cover the URLs WordPress writes into its responses — uploaded media, block editor assets, theme styles, and REST links — which WordPress generates from its configured site URL of `http://localhost:8888`. The app receives those as content rather than configuration, and they don't resolve inside the emulator because `localhost` points at the emulator itself.
 
-To fix this, activate a mu-plugin that remaps URLs and restart wp-env:
+To remap them, enable the URL override:
 
 ```bash
-make wp-env-android
+make wp-env-android-urls MODE=on
 ```
 
-This installs a mu-plugin (`gutenbergkit-android-urls.php`) that rewrites `localhost` and `127.0.0.1` to `10.0.2.2` in WordPress's site URL output, then restarts wp-env and regenerates credentials. After restarting, rebuild the Android app so the new credentials are baked into `BuildConfig`.
+This installs a mu-plugin (`gutenbergkit-android-urls.php`) that rewrites `localhost` and `127.0.0.1` to `10.0.2.2` in WordPress's URL output. The mu-plugins directory is mounted into the running server, so the change applies immediately — no restart, and existing credentials keep working.
+
+Rebuild the Android app afterwards. This is needed for the URL change itself, not because credentials rotated: `BuildConfig` is populated at build time.
 
 To revert (for browser access or iOS testing):
 
 ```bash
-make wp-env-android-reset
+make wp-env-android-urls MODE=off
 ```
 
-Note: While the URL override is active, the WordPress admin dashboard (`http://localhost:8888/wp-admin/`) will redirect to `10.0.2.2`, which doesn't resolve in a desktop browser.
+Run it with no `MODE` to report the current setting.
+
+Two things to be aware of while the override is active:
+
+-   The WordPress admin dashboard (`http://localhost:8888/wp-admin/`) redirects to `10.0.2.2`, which doesn't resolve in a desktop browser.
+-   The `/wp/v2/settings` endpoint still reports `url` as `localhost`, because that field reads the stored option directly rather than passing through the `site_url` and `home_url` filters. It is not a reliable way to check whether the override is on — use `make wp-env-android-urls` instead.
 
 ### Physical Devices
 
