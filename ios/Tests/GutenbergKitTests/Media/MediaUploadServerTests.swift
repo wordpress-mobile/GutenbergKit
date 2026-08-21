@@ -153,6 +153,28 @@ struct MediaUploadServerTests {
     #expect(delegate.deletedAttachmentId == "42")
   }
 
+  @Test("relays the delegate's own Content-Type instead of emitting it twice")
+  func delegateContentTypeWins() async throws {
+    // `HTTPResponse` serializes every header it is given, so appending the JSON
+    // default unconditionally would put `Content-Type` on the wire twice.
+    // URLSession joins repeated headers with a comma, which is what a
+    // regression would look like here.
+    let delegate = ContentTypeDeletingDelegate()
+    let server = try await MediaUploadServer.start(uploadDelegate: delegate)
+    defer { server.stop() }
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/media/42?force=true")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "DELETE"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+
+    let (_, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+    let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type")
+
+    #expect(contentType == "text/plain")
+  }
+
   @Test("calls delegate and returns upload result")
   func delegateProcessAndUpload() async throws {
     let delegate = MockUploadDelegate()
@@ -828,6 +850,18 @@ private final class DeletingDelegate: MediaUploadDelegate, @unchecked Sendable {
   func deleteFile(attachmentId: String) async throws -> MediaUploadResponse? {
     lock.withLock { _deletedAttachmentId = attachmentId }
     return MediaUploadResponse(statusCode: 200, body: Data(#"{"deleted":true}"#.utf8))
+  }
+}
+
+/// A delegate that sets its own `Content-Type`, so the relay must not also
+/// append the JSON default.
+private final class ContentTypeDeletingDelegate: MediaUploadDelegate, @unchecked Sendable {
+  func deleteFile(attachmentId: String) async throws -> MediaUploadResponse? {
+    MediaUploadResponse(
+      statusCode: 200,
+      body: Data("deleted".utf8),
+      headers: ["Content-Type": "text/plain"]
+    )
   }
 }
 
