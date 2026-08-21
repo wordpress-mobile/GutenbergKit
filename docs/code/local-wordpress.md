@@ -109,23 +109,23 @@ Physical devices cannot reach `localhost`. You'll need to:
 
 When `wp_generate_attachment_metadata()` fatals server-side — commonly a PHP `memory_limit` or `max_execution_time` fatal on a large image — WordPress has already created the attachment row and sent an `X-WP-Upload-Attachment-ID` header. The editor reads that header off the resulting 5xx and retries `POST /wp/v2/media/<id>/post-process` up to five times, deleting the orphaned attachment if every attempt fails.
 
-`gutenbergkit-media-failure.php` reproduces that failure on demand so the retry can be exercised without a large image or a resource-starved host. Set the mode over the REST API (the `authHeader` value is in `.wp-env.credentials.json`):
+`gutenbergkit-media-failure.php` reproduces that failure on demand so the retry can be exercised without a large image or a resource-starved host:
 
 ```bash
-AUTH=$(python3 -c "import json;print(json.load(open('.wp-env.credentials.json'))['authHeader'])")
+# Report the current mode.
+make wp-env-media-failure
 
 # Fail once per attachment, then succeed: the retry recovers the upload.
-curl -s -X POST -H "Authorization: $AUTH" \
-  'http://localhost:8888/wp-json/gutenbergkit/v1/media-failure?mode=recover'
+make wp-env-media-failure MODE=recover
 
 # Fail every time: exhausts all five retries, then the orphan is deleted.
-curl -s -X POST -H "Authorization: $AUTH" \
-  'http://localhost:8888/wp-json/gutenbergkit/v1/media-failure?mode=always'
+make wp-env-media-failure MODE=always
 
 # Restore normal uploads.
-curl -s -X POST -H "Authorization: $AUTH" \
-  'http://localhost:8888/wp-json/gutenbergkit/v1/media-failure?mode=off'
+make wp-env-media-failure MODE=off
 ```
+
+The mode is stored server-side, so it persists across uploads and retries until changed. It does not survive restarting wp-env — the Playground runtime starts from a fresh database, so the mode returns to `off` (and credentials need `make wp-env-start RESET=1`).
 
 Then upload an image from a demo app and watch the network requests. In `recover` mode the upload 500s and the following `post-process` call succeeds, leaving a complete attachment; in `always` mode you should see five `post-process` attempts followed by a `DELETE`.
 
@@ -156,6 +156,21 @@ Another service is using port 8888. Stop the conflicting service or change the w
 {
 	"port": 9999
 }
+```
+
+Under the Playground runtime the culprit is often a previous wp-env server that outlived `make wp-env-stop`, which then makes every subsequent start fail with `EADDRINUSE`:
+
+```bash
+lsof -ti:8888              # confirm what holds the port
+pkill -f "wp-playground.js"
+```
+
+### Credentials rejected with HTTP 401
+
+The Playground runtime starts from a fresh database on each start, so an existing `.wp-env.credentials.json` no longer matches the site's application password. Regenerate it:
+
+```bash
+make wp-env-start RESET=1
 ```
 
 ### Resetting the environment
