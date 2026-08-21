@@ -321,11 +321,18 @@ internal class MediaUploadServer(
      * the editor retry `post-process` for an upload whose metadata generation
      * fataled server-side, rather than surfacing a permanent failure and leaving
      * an orphaned attachment behind.
+     *
+     * The response's own `Content-Type` wins over the JSON default, matched
+     * case-insensitively — HTTP header names are case-insensitive, and
+     * [HttpResponse] serializes every entry it is given, so a plain map merge
+     * would emit the name twice for a delegate that spells it `content-type`.
      */
     private fun relayResponse(response: MediaUploadResponse): HttpResponse {
+        val hasContentType = response.headers.keys.any { it.lowercase() == "content-type" }
+        val defaults = if (hasContentType) emptyMap() else mapOf("Content-Type" to "application/json")
         return HttpResponse(
             status = response.statusCode,
-            headers = mapOf("Content-Type" to "application/json") + response.headers,
+            headers = defaults + response.headers,
             body = response.body
         )
     }
