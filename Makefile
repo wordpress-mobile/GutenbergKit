@@ -8,7 +8,9 @@ help: ## Display this help menu
 	@echo ""
 	@echo "Available targets:"
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | \
-	awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-25s\033[0m %s\n", $$1, $$2}' | \
+	awk 'BEGIN {FS = ":.*?## "}; \
+		{ names[NR] = $$1; descs[NR] = $$2; if (length($$1) > width) width = length($$1) } \
+		END { for (i = 1; i <= NR; i++) printf "  \033[36m%-*s\033[0m  %s\n", width, names[i], descs[i] }' | \
 	sort
 	@echo ""
 
@@ -457,34 +459,29 @@ test-android-library-e2e: build ## Run instrumented tests for the Gutenberg Andr
 
 .PHONY: release
 release: ## Create and publish a new release
-	@echo "--- :rocket: Starting GutenbergKit Release Process"
-	@echo "Usage: make release VERSION_TYPE=[<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease | from-git] [DRY_RUN=true]"
-	@echo ""
-	@echo "Version Types:"
-	@echo "  <newversion>     Custom version number (e.g., 1.2.3)"
-	@echo "  major            Increment major version (1.0.0 -> 2.0.0)"
-	@echo "  minor            Increment minor version (1.2.0 -> 1.3.0)"
-	@echo "  patch            Increment patch version (1.2.3 -> 1.2.4)"
-	@echo "  premajor         Increment major version and add prerelease (1.2.3 -> 2.0.0-alpha.0)"
-	@echo "  preminor         Increment minor version and add prerelease (1.2.3 -> 1.3.0-alpha.0)"
-	@echo "  prepatch         Increment patch version and add prerelease (1.2.3 -> 1.2.4-alpha.0)"
-	@echo "  prerelease       Increment prerelease version (1.2.3-alpha.0 -> 1.2.3-alpha.1)"
-	@echo "  from-git         Use version from git tag"
-	@echo ""
-	@echo "Examples:"
-	@echo "  make release VERSION_TYPE=patch"
-	@echo "  make release VERSION_TYPE=minor"
-	@echo "  make release VERSION_TYPE=major"
-	@echo "  make release VERSION_TYPE=1.2.3"
-	@echo "  make release VERSION_TYPE=premajor"
-	@echo "  make release VERSION_TYPE=prerelease"
-	@echo "  make release VERSION_TYPE=patch DRY_RUN=true"
-	@echo ""
 	@if [ -z "$(VERSION_TYPE)" ]; then \
 		echo "Error: VERSION_TYPE is required."; \
-		echo "Use one of: <newversion>, major, minor, patch, premajor, preminor, prepatch, prerelease, from-git"; \
+		echo ""; \
+		echo "Usage: make release VERSION_TYPE=[<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease | from-git] [DRY_RUN=true]"; \
+		echo ""; \
+		echo "Version Types:"; \
+		echo "  <newversion>     Custom version number (e.g., 1.2.3)"; \
+		echo "  major            Increment major version (1.0.0 -> 2.0.0)"; \
+		echo "  minor            Increment minor version (1.2.0 -> 1.3.0)"; \
+		echo "  patch            Increment patch version (1.2.3 -> 1.2.4)"; \
+		echo "  premajor         Increment major version and add prerelease (1.2.3 -> 2.0.0-alpha.0)"; \
+		echo "  preminor         Increment minor version and add prerelease (1.2.3 -> 1.3.0-alpha.0)"; \
+		echo "  prepatch         Increment patch version and add prerelease (1.2.3 -> 1.2.4-alpha.0)"; \
+		echo "  prerelease       Increment prerelease version (1.2.3-alpha.0 -> 1.2.3-alpha.1)"; \
+		echo "  from-git         Use version from git tag"; \
+		echo ""; \
+		echo "Examples:"; \
+		echo "  make release VERSION_TYPE=patch"; \
+		echo "  make release VERSION_TYPE=1.2.3"; \
+		echo "  make release VERSION_TYPE=patch DRY_RUN=true"; \
 		exit 1; \
 	fi
+	@echo "--- :rocket: Starting GutenbergKit Release Process"
 	@if [ "$(DRY_RUN)" = "true" ]; then \
 		./bin/release.sh $(VERSION_TYPE) --dry-run; \
 	else \
