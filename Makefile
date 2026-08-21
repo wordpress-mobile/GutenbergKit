@@ -212,7 +212,7 @@ wp-env-stop: ## Stop the local WordPress environment
 	npm run wp-env stop
 
 .PHONY: wp-env-clean
-wp-env-clean: ## Stop wp-env and remove all data (fresh start)
+wp-env-clean: ## Stop wp-env and remove downloaded WordPress, plugin, and theme files
 	npm run wp-env destroy
 	@rm -f .wp-env.credentials.json
 # `destroy` stops only the server named by its PID file, so report anything left
