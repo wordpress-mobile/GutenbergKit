@@ -43,10 +43,13 @@ export function configureApiFetch() {
 	// when the server exposes it via CORS:
 	//
 	// - Through the native upload server, which exposes it: works on both
-	//   platforms.
+	//   platforms. This is the only path that recovers everywhere.
 	// - Direct to WordPress, which does not expose it (see
-	//   `rest_send_cors_headers()`): works on Android, whose editor is
-	//   same-origin with the site, and fails on iOS, which loads from `file://`.
+	//   `rest_send_cors_headers()`): never recovers on iOS, which loads from
+	//   `file://`. On Android it recovers only when the editor is genuinely
+	//   same-origin — `GutenbergView` derives the asset domain from the site's
+	//   host, which drops the port, so a site on a non-default port (any local
+	//   dev setup) is cross-origin and does not recover.
 	//
 	// There is no fallback: core sends the header before
 	// `wp_generate_attachment_metadata()`, so the fatal leaves no body to parse
