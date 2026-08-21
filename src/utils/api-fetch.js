@@ -18,6 +18,9 @@ import { info, error as logError } from './logger';
 /** Matches `POST /wp/v2/media` but not sub-paths like `/wp/v2/media/123`. */
 const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
 
+/** Matches `/wp/v2/media/<id>`, capturing the attachment ID. */
+const MEDIA_ATTACHMENT_PATH = /^\/wp\/v2\/media\/(\d+)(\?|$)/;
+
 /**
  * Initializes the API fetch configuration and middleware.
  *
@@ -224,6 +227,17 @@ function filterEndpointsMiddleware( options, next ) {
 export function nativeMediaUploadMiddleware( options, next ) {
 	const { nativeUploadPort, nativeUploadToken } = getGBKit();
 
+	if ( nativeUploadPort && nativeUploadToken ) {
+		const deletion = nativeMediaDelete(
+			options,
+			nativeUploadPort,
+			nativeUploadToken
+		);
+		if ( deletion ) {
+			return deletion;
+		}
+	}
+
 	if (
 		! nativeUploadPort ||
 		! nativeUploadToken ||
@@ -371,6 +385,99 @@ export function nativeMediaUploadMiddleware( options, next ) {
 					),
 				};
 			}
+			throw {
+				code: 'fetch_error',
+				message: __(
+					'Could not get a valid response from the server.'
+				),
+			};
+		}
+	);
+}
+
+/**
+ * Routes a media attachment deletion through the native upload server.
+ *
+ * Returns `null` when the request is not a media deletion, so the caller falls
+ * through to its normal handling.
+ *
+ * Core's media upload middleware deletes the orphaned attachment when every
+ * `post-process` retry fails. That request cannot be made directly from a
+ * cross-origin editor: `@wordpress/api-fetch` tunnels `DELETE` as a `POST`
+ * carrying `X-HTTP-Method-Override`, and core's `rest_allowed_cors_headers`
+ * does not list that header, so the browser blocks it at preflight and the
+ * orphan survives. Relaying through the loopback server — which sets its own
+ * CORS policy — is what lets the cleanup complete.
+ *
+ * This runs before `X-HTTP-Method-Override` exists: api-fetch's `httpV1`
+ * middleware adds it further down the chain, so the method here is still a
+ * plain `DELETE`.
+ *
+ * @param {Object} options The api-fetch options.
+ * @param {number} port    The native upload server port.
+ * @param {string} token   The native upload server bearer token.
+ * @return {?Promise} The relayed deletion, or `null` if not applicable.
+ */
+function nativeMediaDelete( options, port, token ) {
+	if ( options.method?.toUpperCase() !== 'DELETE' || ! options.path ) {
+		return null;
+	}
+
+	const match = MEDIA_ATTACHMENT_PATH.exec( options.path );
+	if ( ! match ) {
+		return null;
+	}
+
+	const attachmentId = match[ 1 ];
+	const query = requestQuery( options.path );
+
+	info(
+		`Routing deletion of attachment ${ attachmentId } through native server`
+	);
+
+	return fetch(
+		`http://localhost:${ port }/media/${ attachmentId }${ query }`,
+		{
+			method: 'DELETE',
+			headers: { 'Relay-Authorization': `Bearer ${ token }` },
+			signal: options.signal,
+		}
+	).then(
+		( response ) => {
+			if ( options.parse === false ) {
+				if ( ! response.ok ) {
+					return Promise.reject( response );
+				}
+				return response;
+			}
+
+			if ( ! response.ok ) {
+				return response
+					.json()
+					.catch( () => invalidUploadResponseError() )
+					.then( ( body ) => {
+						logError( 'Native media deletion failed', body );
+						throw body;
+					} );
+			}
+
+			return response.json().catch( () => {
+				const error = invalidUploadResponseError();
+				logError(
+					'Native media deletion returned an invalid response',
+					error
+				);
+				throw error;
+			} );
+		},
+		( connectionError ) => {
+			if ( options.signal?.aborted ) {
+				throw uploadAbortError( options.signal );
+			}
+			logError(
+				'Native media deletion failed at the transport layer',
+				connectionError
+			);
 			throw {
 				code: 'fetch_error',
 				message: __(

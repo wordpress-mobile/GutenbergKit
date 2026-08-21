@@ -87,15 +87,21 @@ final class MediaUploadServer: Sendable {
     private static func handleRequest(_ request: HTTPServer.Request, context: UploadContext) async -> HTTPResponse {
         let parsed = request.parsed
 
-        // Route: only POST /upload is handled. (OPTIONS preflight is answered by
-        // the HTTP library under its permissive CORS policy.) Match on the path
-        // alone — the target carries a query string (e.g. `?_embed`) that the
-        // upload handler relays on to WordPress.
-        guard parsed.method.uppercased() == "POST", parsed.path == "/upload" else {
-            return errorResponse(status: 404, message: "Not found")
+        // Routes: POST /upload, and DELETE /media/<id> for the editor's orphan
+        // cleanup. (OPTIONS preflight is answered by the HTTP library under its
+        // permissive CORS policy.) Match on the path alone — the target carries
+        // a query string (e.g. `?_embed`, `?force=true`) relayed to WordPress.
+        let method = parsed.method.uppercased()
+
+        if method == "POST", parsed.path == "/upload" {
+            return await handleUpload(request, context: context)
         }
 
-        return await handleUpload(request, context: context)
+        if method == "DELETE", let attachmentId = attachmentId(fromPath: parsed.path) {
+            return await handleDelete(attachmentId, query: parsed.query, context: context)
+        }
+
+        return errorResponse(status: 404, message: "Not found")
     }
 
     private static func handleUpload(_ request: HTTPServer.Request, context: UploadContext) async -> HTTPResponse {
@@ -188,6 +194,39 @@ final class MediaUploadServer: Sendable {
         }
         let response = try await defaultUploader.passthroughUpload(body: body, contentType: contentType, query: query)
         return relayResponse(response)
+    }
+
+    /// The attachment ID in a `/media/<id>` path, or `nil` if the path is not one.
+    ///
+    /// Deliberately narrow: this server relays media operations, not arbitrary
+    /// REST requests, so only a numeric attachment ID under `/media/` matches.
+    private static func attachmentId(fromPath path: String) -> String? {
+        let components = path.split(separator: "/", omittingEmptySubsequences: true)
+        guard components.count == 2, components[0] == "media" else { return nil }
+        let id = String(components[1])
+        guard !id.isEmpty, id.allSatisfy(\.isNumber) else { return nil }
+        return id
+    }
+
+    /// Relays the editor's orphan cleanup to WordPress.
+    ///
+    /// Core's media upload middleware deletes the attachment when every
+    /// `post-process` retry fails. A cross-origin editor cannot issue that
+    /// request directly — api-fetch tunnels `DELETE` as a `POST` carrying
+    /// `X-HTTP-Method-Override`, which core's CORS allow-list omits, so the
+    /// browser blocks it at preflight. Relaying it here lets the cleanup run.
+    private static func handleDelete(
+        _ attachmentId: String, query: String, context: UploadContext
+    ) async -> HTTPResponse {
+        guard let defaultUploader = context.defaultUploader else {
+            return errorResponse(status: 500, message: UploadError.noUploader.localizedDescription)
+        }
+        do {
+            let response = try await defaultUploader.deleteMedia(attachmentId: attachmentId, query: query)
+            return relayResponse(response)
+        } catch {
+            return uploadErrorResponse(error)
+        }
     }
 
     /// Relays WordPress's exact status, body, and relayable headers to the editor
@@ -447,8 +486,9 @@ class DefaultMediaUploader: @unchecked Sendable {
     /// The WordPress media endpoint URL, built through the shared
     /// ``WordPressRESTURL`` namespacing (so it matches every other REST URL) and
     /// carrying the original request query (e.g. `?_embed`) through to WordPress.
-    private func mediaEndpointURL(query: String) -> URL {
-        let base = WordPressRESTURL.namespaced(apiRoot: siteApiRoot, path: "/wp/v2/media", namespace: siteApiNamespace)
+    private func mediaEndpointURL(query: String, attachmentId: String? = nil) -> URL {
+        let path = attachmentId.map { "/wp/v2/media/\($0)" } ?? "/wp/v2/media"
+        let base = WordPressRESTURL.namespaced(apiRoot: siteApiRoot, path: path, namespace: siteApiNamespace)
         guard !query.isEmpty else { return base }
         // `query` is the raw request query in wire form (leading "?"). Set it via
         // `percentEncodedQuery` so a value that isn't URL-safe can't make
@@ -493,6 +533,23 @@ class DefaultMediaUploader: @unchecked Sendable {
         request.httpBodyStream = try body.makeInputStream()
 
         return try await performUpload(request)
+    }
+
+    /// Deletes an attachment, relaying WordPress's response verbatim.
+    ///
+    /// Carries the editor's query through unchanged — core's cleanup sends
+    /// `?force=true`, without which WordPress trashes rather than deletes.
+    func deleteMedia(attachmentId: String, query: String) async throws -> MediaUploadResponse {
+        var request = URLRequest(url: mediaEndpointURL(query: query, attachmentId: attachmentId))
+        request.httpMethod = "DELETE"
+
+        // Authorization is applied centrally by the HTTP client, as for uploads.
+        let (data, response) = try await httpClient.performRaw(request)
+        return MediaUploadResponse(
+            statusCode: response.statusCode,
+            body: data,
+            headers: Self.relayableHeaders(from: response)
+        )
     }
 
     /// Sends the assembled upload request to WordPress and relays the response.
