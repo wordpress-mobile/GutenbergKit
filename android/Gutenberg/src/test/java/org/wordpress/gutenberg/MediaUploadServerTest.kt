@@ -162,6 +162,30 @@ class MediaUploadServerTest {
     }
 
     @Test
+    fun `relays a delegate's own Content-Type instead of emitting it twice`() {
+        // HTTP header names are case-insensitive, so a delegate spelling it
+        // `content-type` must still override the JSON default rather than merge
+        // alongside it — HttpResponse serializes every entry it is given, which
+        // would put the name on the wire twice (mirrors the iOS behavior).
+        val delegate = ContentTypeDeletingDelegate()
+        server.stop()
+        server = MediaUploadServer(uploadDelegate = delegate, defaultUploader = null, cacheDir = tempFolder.root)
+
+        val response = sendRawRequest(
+            method = "DELETE",
+            path = "/media/42?force=true",
+            headers = mapOf("Relay-Authorization" to "Bearer ${server.token}"),
+            body = ByteArray(0)
+        )
+
+        assertTrue("Expected 200 but got: ${response.statusLine}", response.statusLine.contains("200"))
+        // Assert on the raw header lines, not the parsed map: the parser
+        // lowercases keys into a map, so a duplicated header would silently
+        // collapse and this test would pass against the very bug it covers.
+        assertEquals(listOf("text/plain"), response.rawHeaderValues("content-type"))
+    }
+
+    @Test
     fun `routes upload with a query string and relays the query`() {
         val delegate = ProcessOnlyDelegate()
         val mockUploader = MockDefaultUploader()
@@ -659,8 +683,22 @@ class MediaUploadServerTest {
     private data class RawHttpResponse(
         val statusLine: String,
         val headers: Map<String, String>,
-        val body: String
-    )
+        val body: String,
+        /** The header lines exactly as received, before collapsing into [headers]. */
+        val rawHeaderLines: List<String> = emptyList()
+    ) {
+        /**
+         * Every value sent for [name], in order. Unlike [headers], this preserves
+         * repeats — the only way to catch a header emitted twice.
+         */
+        fun rawHeaderValues(name: String): List<String> =
+            rawHeaderLines.mapNotNull { line ->
+                val colonIndex = line.indexOf(':')
+                if (colonIndex <= 0) return@mapNotNull null
+                if (!line.substring(0, colonIndex).trim().equals(name, ignoreCase = true)) return@mapNotNull null
+                line.substring(colonIndex + 1).trim()
+            }
+    }
 
     private fun sendRawRequest(
         method: String,
@@ -715,7 +753,7 @@ class MediaUploadServerTest {
             }
         }
 
-        return RawHttpResponse(statusLine, responseHeaders, responseBody)
+        return RawHttpResponse(statusLine, responseHeaders, responseBody, lines.drop(1))
     }
 
     private fun buildMultipartBody(
@@ -765,6 +803,20 @@ class MediaUploadServerTest {
         override suspend fun deleteFile(attachmentId: String): MediaUploadResponse? {
             deletedAttachmentId = attachmentId
             return MediaUploadResponse(200, """{"deleted":true}""".toByteArray())
+        }
+    }
+
+    /**
+     * A delegate that sets its own `Content-Type`, lowercased, so the relay must
+     * override the JSON default rather than emit the header twice.
+     */
+    private class ContentTypeDeletingDelegate : MediaUploadDelegate {
+        override suspend fun deleteFile(attachmentId: String): MediaUploadResponse? {
+            return MediaUploadResponse(
+                200,
+                "deleted".toByteArray(),
+                mapOf("content-type" to "text/plain")
+            )
         }
     }
 
