@@ -193,16 +193,11 @@ function filterEndpointsMiddleware( options, next ) {
 }
 
 /**
- * Middleware that routes media uploads through the native host's local HTTP
- * server for processing (e.g. image resizing) before uploading to WordPress.
+ * Middleware that routes media requests through the native host's local HTTP
+ * server: uploads for processing (e.g. image resizing) before they reach
+ * WordPress, and attachment deletions for the editor's orphan cleanup.
  *
  * Exported for testing only.
- *
- * When `nativeUploadPort` is configured in GBKit, this middleware intercepts
- * `POST /wp/v2/media` requests, forwards the file to the native server, and
- * returns the response in WordPress REST API attachment format so the existing
- * Gutenberg upload pipeline (blob previews, save locking, entity caching)
- * works unchanged.
  *
  * When the native server is not configured, requests pass through unmodified.
  *
@@ -223,27 +218,44 @@ function filterEndpointsMiddleware( options, next ) {
 export function nativeMediaUploadMiddleware( options, next ) {
 	const { nativeUploadPort, nativeUploadToken } = getGBKit();
 
-	if ( nativeUploadPort && nativeUploadToken ) {
-		const deletion = nativeMediaDelete(
-			options,
-			nativeUploadPort,
-			nativeUploadToken
-		);
-		if ( deletion ) {
-			return deletion;
-		}
+	if ( ! nativeUploadPort || ! nativeUploadToken ) {
+		return next( options );
 	}
 
+	// Each helper returns `null` when the request is not its concern, so an
+	// unhandled request falls through to the default path.
+	return (
+		nativeMediaDelete( options, nativeUploadPort, nativeUploadToken ) ??
+		nativeMediaUpload( options, nativeUploadPort, nativeUploadToken ) ??
+		next( options )
+	);
+}
+
+/**
+ * Routes a media upload through the native upload server.
+ *
+ * Returns `null` when the request is not a media upload, so the caller falls
+ * through to its normal handling.
+ *
+ * Intercepts `POST /wp/v2/media`, forwards the file to the native server, and
+ * returns the response in WordPress REST API attachment format so the existing
+ * Gutenberg upload pipeline (blob previews, save locking, entity caching) works
+ * unchanged.
+ *
+ * @param {Object} options The api-fetch options.
+ * @param {number} port    The native upload server port.
+ * @param {string} token   The native upload server bearer token.
+ * @return {?Promise} The relayed upload, or `null` if not applicable.
+ */
+function nativeMediaUpload( options, port, token ) {
 	if (
-		! nativeUploadPort ||
-		! nativeUploadToken ||
 		! options.method ||
 		options.method.toUpperCase() !== 'POST' ||
 		! options.path ||
 		! MEDIA_UPLOAD_PATH.test( options.path ) ||
 		! ( options.body instanceof FormData )
 	) {
-		return next( options );
+		return null;
 	}
 
 	// Only intercept a genuine file upload. `FormData.get('file')` returns a
@@ -253,11 +265,11 @@ export function nativeMediaUploadMiddleware( options, next ) {
 	// through to the default path — and guarantees `file.name` below is safe.
 	const file = options.body.get( 'file' );
 	if ( ! ( file instanceof File ) ) {
-		return next( options );
+		return null;
 	}
 
 	info(
-		`Routing upload of ${ file.name } through native server on port ${ nativeUploadPort }`
+		`Routing upload of ${ file.name } through native server on port ${ port }`
 	);
 
 	// Forward the original request body — the file plus every sibling field
@@ -269,10 +281,10 @@ export function nativeMediaUploadMiddleware( options, next ) {
 	// Use the two-argument form of `.then()` so the rejection handler catches
 	// *only* a connection-level failure of the `fetch()` itself — not errors
 	// thrown while handling a response (those must surface as real failures).
-	return fetch( `http://localhost:${ nativeUploadPort }/upload${ query }`, {
+	return fetch( `http://localhost:${ port }/upload${ query }`, {
 		method: 'POST',
 		headers: {
-			'Relay-Authorization': `Bearer ${ nativeUploadToken }`,
+			'Relay-Authorization': `Bearer ${ token }`,
 		},
 		body: options.body,
 		signal: options.signal,
