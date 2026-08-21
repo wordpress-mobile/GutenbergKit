@@ -280,13 +280,16 @@ internal class MediaUploadServer(
      * Offers the deletion to the delegate first, as [handleUpload] does, so a
      * host that uploaded the attachment itself deletes it from the same place.
      */
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun handleMediaDelete(attachmentId: String, query: String): HttpResponse {
         return try {
             uploadDelegate?.deleteFile(attachmentId)?.let { return relayResponse(it) }
 
             val uploader = defaultUploader ?: return errorResponse(500, "No uploader configured")
             relayResponse(uploader.deleteMedia(attachmentId, query))
-        } catch (e: IOException) {
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e // Never swallow coroutine cancellation.
+        } catch (e: Exception) {
             Log.e(TAG, "Media deletion failed", e)
             errorResponse(500, e.message ?: "Deletion failed")
         }
