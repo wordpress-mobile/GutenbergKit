@@ -26,9 +26,7 @@ p {
 	line-height: 1.8;
 }
 
-.editor-post-title__block {
-	margin-top: 2em;
-	margin-bottom: 1em;
-	font-size: 2.5em;
+.editor-post-title {
+	font-size: 20px; // Set reasonable default size for small screens
 	font-weight: 800;
 }
