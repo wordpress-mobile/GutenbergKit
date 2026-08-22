@@ -200,4 +200,44 @@ class GutenbergViewTest {
         val result = siteView.editorWebView.webViewClient.shouldOverrideUrlLoading(siteView.editorWebView, request)
         assertTrue("Non-asset URLs on the site domain should open externally", result)
     }
+
+    @Test
+    fun `shouldOverrideUrlLoading allows asset path URLs when the site URL has a port`() {
+        val siteView = GutenbergView(
+            EditorConfiguration.builder("http://10.0.2.2:8888", "http://10.0.2.2:8888/wp-json/")
+                .build(),
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+
+        val request = mock(WebResourceRequest::class.java)
+        `when`(request.url).thenReturn(Uri.parse("http://10.0.2.2:8888/assets/index.html"))
+
+        val result = siteView.editorWebView.webViewClient.shouldOverrideUrlLoading(siteView.editorWebView, request)
+        assertFalse(
+            "Asset URLs on the site's authority should load in the WebView so the editor stays same-origin",
+            result
+        )
+    }
+
+    @Test
+    fun `shouldOverrideUrlLoading blocks asset path URLs that drop the site's port`() {
+        val siteView = GutenbergView(
+            EditorConfiguration.builder("http://10.0.2.2:8888", "http://10.0.2.2:8888/wp-json/")
+                .build(),
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+
+        val request = mock(WebResourceRequest::class.java)
+        `when`(request.url).thenReturn(Uri.parse("http://10.0.2.2/assets/index.html"))
+
+        val result = siteView.editorWebView.webViewClient.shouldOverrideUrlLoading(siteView.editorWebView, request)
+        assertTrue(
+            "A portless URL is a different origin than the site and must not be treated as an asset URL",
+            result
+        )
+    }
 }

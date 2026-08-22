@@ -98,7 +98,7 @@ class GutenbergView : FrameLayout {
     private var isEditorLoaded = false
     private var didFireEditorLoaded = false
     private lateinit var assetLoader: WebViewAssetLoader
-    private lateinit var assetDomain: String
+    private lateinit var assetAuthority: String
     private val configuration: EditorConfiguration
     private lateinit var dependencies: EditorDependencies
 
@@ -429,7 +429,7 @@ class GutenbergView : FrameLayout {
                     if (response != null) return response
                 }
 
-                if (request.url.host == assetDomain) {
+                if (request.url.authority == assetAuthority) {
                     return assetLoader.shouldInterceptRequest(request.url)
                 }
 
@@ -461,8 +461,8 @@ class GutenbergView : FrameLayout {
 
                 // Allow asset URLs (restrict to the asset path prefix so that
                 // arbitrary site pages don't load inside the WebView when the
-                // asset domain matches the site domain)
-                if (url.host == assetDomain && url.path?.startsWith("/assets/") == true) {
+                // asset authority matches the site authority)
+                if (url.authority == assetAuthority && url.path?.startsWith("/assets/") == true) {
                     return false
                 }
 
@@ -583,10 +583,16 @@ class GutenbergView : FrameLayout {
     private fun loadEditor(dependencies: EditorDependencies) {
         this.dependencies = dependencies
 
-        // Derive the asset loader domain from the site URL so that the editor
+        // Derive the asset loader authority from the site URL so that the editor
         // document shares the site's origin, making REST API and AJAX requests
         // same-origin and eliminating CORS restrictions.
-        assetDomain = Uri.parse(configuration.siteURL).host ?: DEFAULT_ASSET_DOMAIN
+        //
+        // This must be the authority (host *and* port), not the host: an origin
+        // is scheme + host + port, so dropping the port from a site served on a
+        // non-default one (e.g. `http://10.0.2.2:8888`) would make the editor
+        // cross-origin with the site. `WebViewAssetLoader` matches on authority,
+        // so a port-bearing value still resolves assets correctly.
+        assetAuthority = Uri.parse(configuration.siteURL).authority ?: DEFAULT_ASSET_DOMAIN
 
         // Set up asset caching
         requestInterceptor = CachedAssetRequestInterceptor(
@@ -601,7 +607,7 @@ class GutenbergView : FrameLayout {
         val siteUri = Uri.parse(configuration.siteURL)
         val isLocalHttpSite = siteUri.scheme == "http" && siteUri.host in LOCAL_HOSTS
         assetLoader = WebViewAssetLoader.Builder()
-            .setDomain(assetDomain)
+            .setDomain(assetAuthority)
             .setHttpAllowed(isLocalHttpSite)
             .addPathHandler("/assets/", AssetsPathHandler(this.context))
             .build()
@@ -612,7 +618,7 @@ class GutenbergView : FrameLayout {
         initializeWebView()
 
         val scheme = if (isLocalHttpSite) "http" else "https"
-        val assetUrl = "$scheme://$assetDomain$ASSET_PATH_INDEX"
+        val assetUrl = "$scheme://$assetAuthority$ASSET_PATH_INDEX"
         val editorUrl = BuildConfig.GUTENBERG_EDITOR_URL.ifEmpty {
             assetUrl
         }
