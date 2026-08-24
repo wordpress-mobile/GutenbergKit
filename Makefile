@@ -197,28 +197,31 @@ preview: npm-dependencies ## Preview the production build locally
 ################################################################################
 
 .PHONY: wp-env-start
-wp-env-start: npm-dependencies ## Start the local WordPress environment (RESET=1 to regenerate credentials)
-	npm run wp-env start -- --runtime=playground
-	@RESET=$(RESET) bash bin/wp-env-setup.sh
+wp-env-start: npm-dependencies ## Start the local WordPress environment
+	@bash bin/wp-env-guard.sh; \
+	status=$$?; \
+	if [ $$status -eq 0 ]; then \
+		npm run wp-env start -- --runtime=playground; \
+	elif [ $$status -ne 10 ]; then \
+		exit $$status; \
+	fi
+	@bash bin/wp-env-setup.sh
 
 .PHONY: wp-env-stop
 wp-env-stop: ## Stop the local WordPress environment
 	npm run wp-env stop
 
 .PHONY: wp-env-clean
-wp-env-clean: ## Stop wp-env and remove all data (fresh start)
+wp-env-clean: ## Stop wp-env and remove downloaded WordPress, plugin, and theme files
 	npm run wp-env destroy
 	@rm -f .wp-env.credentials.json
+# `destroy` stops only the server named by its PID file, so report anything left
+# holding the port rather than letting the next start fail on it.
+	@bash bin/wp-env-guard.sh > /dev/null || true
 
-.PHONY: wp-env-android
-wp-env-android: ## Remap wp-env site URLs for the Android emulator and restart
-	@cp wp-env/android-url-override.php wp-env/mu-plugins/gutenbergkit-android-urls.php
-	@RESET=1 $(MAKE) wp-env-start
-
-.PHONY: wp-env-android-reset
-wp-env-android-reset: ## Remove the Android emulator URL remap and restart
-	@rm -f wp-env/mu-plugins/gutenbergkit-android-urls.php
-	@RESET=1 $(MAKE) wp-env-start
+.PHONY: wp-env-android-urls
+wp-env-android-urls: ## Report whether WordPress emits emulator-reachable URLs, 10.0.2.2 instead of localhost (set via MODE=on|off)
+	@MODE=$(MODE) bash bin/wp-env-android.sh
 
 ################################################################################
 # Code Quality Targets
