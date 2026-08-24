@@ -1,9 +1,13 @@
 /**
  * WordPress dependencies
  */
-import defaultEditorStyles from '@wordpress/block-editor/build-style/default-editor-styles.css?inline';
 import { store as editorStore } from '@wordpress/editor';
 import { select } from '@wordpress/data';
+
+/**
+ * Internal dependencies
+ */
+import defaultEditorStyles from './default-editor-styles.scss?inline';
 
 /**
  * Returns a default editor settings object to use when a site cannot provide
