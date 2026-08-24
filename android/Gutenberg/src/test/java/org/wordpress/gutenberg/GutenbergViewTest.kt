@@ -240,4 +240,74 @@ class GutenbergViewTest {
             result
         )
     }
+
+    // ===== originAuthority =====
+
+    @Test
+    fun `originAuthority keeps a non-default port`() {
+        assertEquals("10.0.2.2:8888", GutenbergView.originAuthority("http://10.0.2.2:8888"))
+        assertEquals("example.com:8443", GutenbergView.originAuthority("https://example.com:8443"))
+    }
+
+    @Test
+    fun `originAuthority drops an explicit default port`() {
+        // Chromium canonicalizes these away before the URL reaches the WebViewClient,
+        // so keeping them would leave the asset loader unable to match its own document.
+        assertEquals("example.com", GutenbergView.originAuthority("https://example.com:443"))
+        assertEquals("example.com", GutenbergView.originAuthority("http://example.com:80"))
+    }
+
+    @Test
+    fun `originAuthority omits a port that is absent`() {
+        assertEquals("example.com", GutenbergView.originAuthority("https://example.com"))
+    }
+
+    @Test
+    fun `originAuthority strips userinfo`() {
+        // Credentials are also removed during canonicalization.
+        assertEquals("example.com", GutenbergView.originAuthority("https://user:pass@example.com"))
+        assertEquals(
+            "example.com:8443",
+            GutenbergView.originAuthority("https://user:pass@example.com:8443")
+        )
+    }
+
+    @Test
+    fun `originAuthority preserves an IPv6 authority verbatim`() {
+        // `Uri` does not split a bracketed IPv6 literal into host/port, so the
+        // authority is used as written rather than being rebuilt.
+        assertEquals("[::1]:8888", GutenbergView.originAuthority("http://[::1]:8888"))
+        assertEquals("[::1]", GutenbergView.originAuthority("http://[::1]"))
+        assertEquals(
+            "[2001:db8::1]:8443",
+            GutenbergView.originAuthority("https://[2001:db8::1]:8443")
+        )
+    }
+
+    @Test
+    fun `originAuthority returns null when the URL has no host`() {
+        assertEquals(null, GutenbergView.originAuthority(""))
+        assertEquals(null, GutenbergView.originAuthority("not a url"))
+    }
+
+    @Test
+    fun `shouldOverrideUrlLoading allows asset URLs when the site URL has an explicit default port`() {
+        val siteView = GutenbergView(
+            EditorConfiguration.builder("https://example.com:443", "https://example.com:443/wp-json/")
+                .build(),
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+
+        val request = mock(WebResourceRequest::class.java)
+        // Chromium canonicalizes `:443` away, so this is the URL the client actually sees.
+        `when`(request.url).thenReturn(Uri.parse("https://example.com/assets/index.html"))
+
+        val result = siteView.editorWebView.webViewClient.shouldOverrideUrlLoading(siteView.editorWebView, request)
+        assertFalse(
+            "An explicit default port in the site URL must still match the canonicalized request",
+            result
+        )
+    }
 }

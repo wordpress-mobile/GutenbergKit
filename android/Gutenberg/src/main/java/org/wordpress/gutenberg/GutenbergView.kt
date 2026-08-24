@@ -587,12 +587,11 @@ class GutenbergView : FrameLayout {
         // document shares the site's origin, making REST API and AJAX requests
         // same-origin and eliminating CORS restrictions.
         //
-        // This must be the authority (host *and* port), not the host: an origin
-        // is scheme + host + port, so dropping the port from a site served on a
-        // non-default one (e.g. `http://10.0.2.2:8888`) would make the editor
-        // cross-origin with the site. `WebViewAssetLoader` matches on authority,
-        // so a port-bearing value still resolves assets correctly.
-        assetAuthority = Uri.parse(configuration.siteURL).authority ?: DEFAULT_ASSET_DOMAIN
+        // This must carry the port, not just the host: an origin is scheme + host
+        // + port, so dropping the port from a site served on a non-default one
+        // (e.g. `http://10.0.2.2:8888`) would make the editor cross-origin with
+        // the site. See [originAuthority] for why a default port is left off.
+        assetAuthority = originAuthority(configuration.siteURL) ?: DEFAULT_ASSET_DOMAIN
 
         // Set up asset caching
         requestInterceptor = CachedAssetRequestInterceptor(
@@ -1233,6 +1232,35 @@ class GutenbergView : FrameLayout {
 
         /** Hosts that are safe to serve assets over HTTP (local development only). */
         private val LOCAL_HOSTS = setOf("localhost", "127.0.0.1", "10.0.2.2")
+
+        /**
+         * Returns [url]'s origin authority: its host, plus its port when that port
+         * is not the scheme's default.
+         *
+         * This deliberately does not use [Uri.authority], which returns whatever the
+         * URL was written with. Chromium canonicalizes a URL before it reaches
+         * [WebResourceRequest.url], dropping a default port and any userinfo, so
+         * `https://example.com:443` arrives as `example.com`. Comparing that against
+         * a raw authority of `example.com:443` would never match — and since
+         * `WebViewAssetLoader.PathMatcher` compares authorities exactly, the bundled
+         * editor document would not be served at all.
+         *
+         * Returns null when [url] has no host, leaving the caller to decide a default.
+         */
+        internal fun originAuthority(url: String): String? {
+            val uri = Uri.parse(url)
+            val authority = uri.authority ?: return null
+
+            // `Uri` does not parse a bracketed IPv6 literal into `host`/`port`, so
+            // fall back to the authority as written. A default port is not stripped
+            // in that case, but an IPv6 site URL is not a configuration this
+            // supports reaching, and the authority is at least well-formed.
+            if (authority.startsWith("[")) return authority
+
+            val host = uri.host ?: return null
+            val defaultPort = if (uri.scheme == "http") 80 else 443
+            return if (uri.port != -1 && uri.port != defaultPort) "$host:${uri.port}" else host
+        }
 
         private const val ASSET_LOADING_TIMEOUT_MS = 5000L
 
