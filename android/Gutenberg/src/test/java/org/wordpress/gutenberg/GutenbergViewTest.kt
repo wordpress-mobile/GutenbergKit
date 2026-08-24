@@ -290,6 +290,82 @@ class GutenbergViewTest {
         assertEquals(null, GutenbergView.originAuthority("not a url"))
     }
 
+    // ===== REST API navigation =====
+
+    @Test
+    fun `shouldOverrideUrlLoading allows REST API URLs on the site's API root`() {
+        // Callers pass a full API root with a path, e.g. WordPress-Android's
+        // `site.wpApiRestUrl ?: "${site.url}/wp-json/"`.
+        val siteView = GutenbergView(
+            EditorConfiguration.builder("https://example.com", "https://example.com/wp-json/")
+                .build(),
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+
+        val request = mock(WebResourceRequest::class.java)
+        `when`(request.url).thenReturn(Uri.parse("https://example.com/wp-json/wp/v2/posts"))
+
+        val result = siteView.editorWebView.webViewClient.shouldOverrideUrlLoading(siteView.editorWebView, request)
+        assertFalse("REST API URLs on the site's API root should load in the WebView", result)
+    }
+
+    @Test
+    fun `shouldOverrideUrlLoading allows REST API URLs for a rest_route API root`() {
+        val siteView = GutenbergView(
+            EditorConfiguration.builder(
+                "https://example.com",
+                "https://example.com/index.php?rest_route=/"
+            ).build(),
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+
+        val request = mock(WebResourceRequest::class.java)
+        `when`(request.url).thenReturn(
+            Uri.parse("https://example.com/index.php?rest_route=/wp/v2/posts")
+        )
+
+        val result = siteView.editorWebView.webViewClient.shouldOverrideUrlLoading(siteView.editorWebView, request)
+        assertFalse("rest_route REST API URLs should load in the WebView", result)
+    }
+
+    @Test
+    fun `shouldOverrideUrlLoading blocks REST API URLs on a different host`() {
+        val siteView = GutenbergView(
+            EditorConfiguration.builder("https://example.com", "https://example.com/wp-json/")
+                .build(),
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+
+        val request = mock(WebResourceRequest::class.java)
+        `when`(request.url).thenReturn(Uri.parse("https://other.example.net/wp-json/wp/v2/posts"))
+
+        val result = siteView.editorWebView.webViewClient.shouldOverrideUrlLoading(siteView.editorWebView, request)
+        assertTrue("REST API URLs on another host should open externally", result)
+    }
+
+    @Test
+    fun `shouldOverrideUrlLoading allows REST API URLs when the API root has a port`() {
+        val siteView = GutenbergView(
+            EditorConfiguration.builder("http://10.0.2.2:8888", "http://10.0.2.2:8888/wp-json/")
+                .build(),
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+
+        val request = mock(WebResourceRequest::class.java)
+        `when`(request.url).thenReturn(Uri.parse("http://10.0.2.2:8888/wp-json/wp/v2/posts"))
+
+        val result = siteView.editorWebView.webViewClient.shouldOverrideUrlLoading(siteView.editorWebView, request)
+        assertFalse("REST API URLs on a port-bearing API root should load in the WebView", result)
+    }
+
     @Test
     fun `shouldOverrideUrlLoading allows asset URLs when the site URL has an explicit default port`() {
         val siteView = GutenbergView(

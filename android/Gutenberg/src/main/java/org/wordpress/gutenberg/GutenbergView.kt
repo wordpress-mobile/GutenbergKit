@@ -472,7 +472,7 @@ class GutenbergView : FrameLayout {
                 }
 
                 // Allow WordPress REST API
-                if (url.host == configuration.siteApiRoot.removePrefix("https://").removePrefix("http://")) {
+                if (url.authority == originAuthority(configuration.siteApiRoot)) {
                     if (url.path?.contains("/wp-json/") == true || url.query?.contains("rest_route=") == true) {
                         return false
                     }
