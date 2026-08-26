@@ -11,6 +11,11 @@ public enum EditorLocalizableString {
 
     // MARK: - Media
     case failedToInsertMedia
+    case failedToLoadSelectedMedia
+    case failedToProcessCapturedMedia
+
+    // MARK: - Common
+    case ok
 
     // MARK: - Patterns
     case patterns
@@ -96,6 +101,9 @@ public final class EditorLocalization {
         case .search: "Search"
         case .insertBlock: "Insert Block"
         case .failedToInsertMedia: "Failed to insert media"
+        case .failedToLoadSelectedMedia: "The selected media could not be loaded. It may not be fully downloaded to this device."
+        case .failedToProcessCapturedMedia: "The captured media could not be processed."
+        case .ok: "OK"
         case .patterns: "Patterns"
         case .noPatternsFound: "No Patterns Found"
         case .insertPattern: "Insert Pattern"
