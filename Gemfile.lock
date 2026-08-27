@@ -120,7 +120,7 @@ GEM
       xcodeproj (>= 1.13.0, < 2.0.0)
       xcpretty (~> 0.4.1)
       xcpretty-travis-formatter (>= 0.0.3, < 2.0.0)
-    fastlane-plugin-wpmreleasetoolkit (14.11.3)
+    fastlane-plugin-wpmreleasetoolkit (15.0.0)
       buildkit (~> 1.5)
       chroma (= 0.2.0)
       diffy (~> 3.3)
@@ -316,7 +316,7 @@ PLATFORMS
 
 DEPENDENCIES
   fastlane (~> 2.238)
-  fastlane-plugin-wpmreleasetoolkit (~> 14.11)
+  fastlane-plugin-wpmreleasetoolkit (~> 15.0)
 
 CHECKSUMS
   CFPropertyList (3.0.8) sha256=2c99d0d980536d3d7ab252f7bd59ac8be50fbdd1ff487c98c949bb66bb114261
@@ -358,7 +358,7 @@ CHECKSUMS
   faraday-retry (2.4.0) sha256=7b79c48fb7e56526faf247b12d94a680071ff40c9fda7cf1ec1549439ad11ebe
   fastimage (2.4.1) sha256=c64bebd46b6fd8943ab70c1e6e85ff728f970f2e48f92ecd249b6bc3a540ad20
   fastlane (2.238.0) sha256=78e9252df2224c7e427012638e41051edfa29b133a40fda883fd2f1c13a77b98
-  fastlane-plugin-wpmreleasetoolkit (14.11.3) sha256=cfe39597775611aa7745ff3a6d6c7ac07644a052bee9d7e4c3eaebe0f7e03cac
+  fastlane-plugin-wpmreleasetoolkit (15.0.0) sha256=6ffd06713e7e98c0d4a65df404b6cf8ffe66258b0976900899d888e57909aa67
   fastlane-sirp (1.1.0) sha256=10bc94f9682efd8e1badfb31452a76dd8981f1f3a33717c765fde6d75b54d847
   fiddle (1.1.8) sha256=7fa8ee3627271497f3add5503acdbc3f40b32f610fc1cf49634f083ef3f32eee
   forwardable (1.4.0) sha256=f1cd40cc9812937980e1c76f1aa053660990a7c9b6a98fc37d945468afcce838
