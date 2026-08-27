@@ -11,7 +11,7 @@ $toolbar-height: 56px;
 
 html {
 	// Ensure the toolbar does not overlap the editor content
-	scroll-padding-bottom: $toolbar-height;
+	scroll-padding-block-end: $toolbar-height;
 }
 
 :where(body.gutenberg-kit) {
@@ -54,6 +54,9 @@ body.gutenberg-kit:not(.is-ios) .block-editor-block-list__layout::selection {
 
 	.components-popover__header-title {
 		padding-inline-start: 20px;
+		font-size: 17px;
+		font-weight: 600;
+		text-align: center;
 	}
 
 	.components-popover.is-expanded .components-popover__content {
@@ -64,12 +67,10 @@ body.gutenberg-kit:not(.is-ios) .block-editor-block-list__layout::selection {
 	/* Misc */
 
 	.block-settings-menu {
-		position: absolute;
 		top: 0;
 		bottom: 0;
-		left: 0;
-		right: 0;
-		background-color: #ffffff;
+		inset-inline: 0;
+		background-color: #fff;
 		transform: none !important;
 		position: fixed !important;
 		overflow: scroll;
@@ -82,7 +83,7 @@ body.gutenberg-kit:not(.is-ios) .block-editor-block-list__layout::selection {
 	}
 
 	.block-settings-menu__close {
-		margin: 8px 8px 0px 0px;
+		margin: 8px 8px 0 0;
 	}
 
 	.block-settings-menu .components-popover__content {
@@ -130,16 +131,8 @@ body.gutenberg-kit:not(.is-ios) .block-editor-block-list__layout::selection {
 	.block-editor-inserter__popover
 		.components-dropdown__content
 		.components-popover__content {
-		padding: 0px !important;
-		padding-left: 8px !important;
-		padding-right: 8px !important;
-	}
-
-	// Inserter title
-	.components-popover__header-title {
-		font-size: 17px;
-		font-weight: 600;
-		text-align: center;
+		padding: 0 !important;
+		padding-inline: 8px !important;
 	}
 
 	// Inserter section title
@@ -236,7 +229,7 @@ body.gutenberg-kit:not(.is-ios) .block-editor-block-list__layout::selection {
 	// Control label
 	.components-base-control__label {
 		font-size: 13px !important;
-		color: gray;
+		color: #808080;
 	}
 
 	// Block placeholder title
@@ -269,8 +262,8 @@ body.gutenberg-kit:not(.is-ios) .block-editor-block-list__layout::selection {
 	background-color: rgba(0, 0, 0, 0.3);
 
 	& .components-popover__content {
-		background-color: #ffffff;
-		border-top-left-radius: 26px;
-		border-top-right-radius: 26px;
+		background-color: #fff;
+		border-start-start-radius: 26px;
+		border-start-end-radius: 26px;
 	}
 }

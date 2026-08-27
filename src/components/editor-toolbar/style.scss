@@ -8,8 +8,7 @@ $scroll-indicator-elevation: 32;
 .gutenberg-kit-editor-toolbar {
 	background-color: wordpress.$white;
 	border-bottom: none;
-	border-left: none;
-	border-right: none;
+	border-inline: none;
 	border-top: 1px solid $border-color;
 	border-radius: 0;
 }
@@ -19,9 +18,11 @@ $scroll-indicator-elevation: 32;
 }
 
 // Disable overflow scrolling for the block toolbar, and rely upon scrolling the
-// parent editor toolbar to avoid nested scrolling views.
+// parent editor toolbar to avoid nested scrolling views. Also disable scrolling
+// of the block toolbar itself, relying on the parent container scrolling instead.
 .gutenberg-kit-editor-toolbar .block-editor-block-contextual-toolbar {
 	width: auto;
+	flex-shrink: 0;
 }
 
 .gutenberg-kit-editor-toolbar__scroll-view {
@@ -46,6 +47,10 @@ $scroll-indicator-elevation: 32;
 		content: "";
 		position: absolute;
 		top: 0;
+		// Not a symmetric pair with the `right` below (see the `::after` gradient) —
+		// whether this should flip in RTL needs its own investigation, so it is
+		// intentionally left physical for now rather than converted here.
+		// stylelint-disable-next-line plugin/use-logical-properties-and-values
 		left: 0;
 		bottom: 0;
 		width: 32px;
@@ -66,6 +71,9 @@ $scroll-indicator-elevation: 32;
 		content: "";
 		position: absolute;
 		top: 0;
+		// Not a symmetric pair with the `left` above — see the note on the
+		// `::before` gradient.
+		// stylelint-disable-next-line plugin/use-logical-properties-and-values
 		right: 0;
 		bottom: 0;
 		width: 32px;
@@ -100,8 +108,7 @@ $scroll-indicator-elevation: 32;
 	// Gutenberg.
 	margin-top: initial;
 	margin-bottom: initial;
-	padding-left: 0;
-	padding-right: 0;
+	padding-inline: 0;
 }
 
 .gutenberg-kit-editor-toolbar.gutenberg-kit-editor-toolbar
@@ -114,11 +121,6 @@ $scroll-indicator-elevation: 32;
 	background: wordpress.$black;
 	border-radius: $border-radius;
 	color: wordpress.$white;
-}
-
-// Disable scrolling of the block toolbar, rely upon parent container scrolling
-.gutenberg-kit-editor-toolbar .block-editor-block-contextual-toolbar {
-	flex-shrink: 0;
 }
 
 .gutenberg-kit-editor-toolbar
@@ -141,8 +143,7 @@ $scroll-indicator-elevation: 32;
 .gutenberg-kit-editor-toolbar.components-toolbar
 	.components-button.is-pressed::before {
 	height: calc($min-touch-target-size - 12px);
-	left: 6px;
-	right: 6px;
+	inset-inline: 6px;
 }
 
 .gutenberg-kit-editor-toolbar__inserter {
