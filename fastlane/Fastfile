@@ -317,14 +317,13 @@ end
 # previous tag. `set_github_release`'s `is_generate_release_notes` cannot express
 # one.
 #
-# `fail_on_error` is required, not cosmetic: the tag is already pushed by this
-# point, and the action otherwise returns the API error as the changelog itself,
-# publishing a release whose notes read "❌ Error computing the list of PRs…".
 def generated_release_notes(version:, token:)
   get_prs_between_tags(
     repository: GITHUB_REPO,
     tag_name: version,
     previous_tag: previous_release_tag!(version: version, token: token),
+    # Hard fail on errors. Otherwise, we might get release notes reading something
+    # like "Error computing the list of PRs."
     fail_on_error: true,
     github_token: token
   )
