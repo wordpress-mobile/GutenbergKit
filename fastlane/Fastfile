@@ -316,7 +316,6 @@ end
 # Build the release body via GitHub's notes generator, pinned to an explicit
 # previous tag. `set_github_release`'s `is_generate_release_notes` cannot express
 # one.
-#
 def generated_release_notes(version:, token:)
   get_prs_between_tags(
     repository: GITHUB_REPO,
