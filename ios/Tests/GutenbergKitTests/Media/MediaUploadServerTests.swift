@@ -77,12 +77,31 @@ struct MediaUploadServerTests {
     let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
     var request = URLRequest(url: url)
     request.httpMethod = "OPTIONS"
+    request.setValue("POST", forHTTPHeaderField: "Access-Control-Request-Method")
+    request.setBrowserOrigin()
 
     let (_, response) = try await URLSession.shared.data(for: request)
     let httpResponse = try #require(response as? HTTPURLResponse)
     #expect(httpResponse.statusCode == 204)
     #expect(httpResponse.value(forHTTPHeaderField: "Access-Control-Allow-Origin") == "*")
     #expect(httpResponse.value(forHTTPHeaderField: "Access-Control-Allow-Methods")?.contains("POST") == true)
+  }
+
+  @Test("rejects a request that did not come from the web view")
+  func rejectsNonBrowserRequest() async throws {
+    let server = try await MediaUploadServer.start()
+    defer { server.stop() }
+
+    // A correct token but none of the headers WebKit sets on a `fetch()`: the
+    // shape another process on the device would produce over a raw socket.
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+
+    let (_, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+    #expect(httpResponse.statusCode == 403)
   }
 
   @Test("returns 404 for unknown paths")
@@ -94,6 +113,7 @@ struct MediaUploadServerTests {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setBrowserOrigin()
 
     let (_, response) = try await URLSession.shared.data(for: request)
     let httpResponse = try #require(response as? HTTPURLResponse)
@@ -117,6 +137,7 @@ struct MediaUploadServerTests {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setBrowserOrigin()
     request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
     request.httpBody = body
 
@@ -145,6 +166,7 @@ struct MediaUploadServerTests {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setBrowserOrigin()
     request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
     request.httpBody = body
 
@@ -180,6 +202,7 @@ struct MediaUploadServerTests {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setBrowserOrigin()
     request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
     request.httpBody = body
 
@@ -212,6 +235,7 @@ struct MediaUploadServerTests {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setBrowserOrigin()
     request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
     request.httpBody = body
 
@@ -240,6 +264,7 @@ struct MediaUploadServerTests {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setBrowserOrigin()
     request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
     request.httpBody = body
 
@@ -266,6 +291,7 @@ struct MediaUploadServerTests {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setBrowserOrigin()
     request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
     request.httpBody = body
 
@@ -291,6 +317,7 @@ struct MediaUploadServerTests {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setBrowserOrigin()
     request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
     request.httpBody = body
 
@@ -824,6 +851,16 @@ private struct MockHTTPClient: EditorHTTPClientProtocol {
   func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse) {
     let response = HTTPURLResponse(url: urlRequest.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
     return (FileManager.default.temporaryDirectory, response)
+  }
+}
+
+private extension URLRequest {
+  /// Adds the header WebKit sets on every cross-origin `fetch()` the editor
+  /// makes. The server rejects requests carrying neither `Origin` nor
+  /// `Sec-Fetch-Site` (see `requiresBrowserOrigin`), so a test standing in for
+  /// the web view has to look like one.
+  mutating func setBrowserOrigin() {
+    setValue("file://", forHTTPHeaderField: "Origin")
   }
 }
 

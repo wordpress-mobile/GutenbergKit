@@ -59,6 +59,9 @@ final class MediaUploadServer: Sendable {
         let server = try await HTTPServer.start(
             name: "media-upload",
             requiresAuthentication: true,
+            // The editor web view is this server's only legitimate client, and
+            // every request it makes carries these headers.
+            requiresBrowserOrigin: true,
             maxRequestBodySize: maxRequestBodySize,
             bodyReadTimeout: bodyReadTimeout,
             cors: .permissive,

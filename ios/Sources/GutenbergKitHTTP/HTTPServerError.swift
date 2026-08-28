@@ -17,9 +17,13 @@ public enum HTTPServerError: Error, LocalizedError, Sendable {
     case readTimeout
     /// The request failed authentication (checked after headers, before body).
     case authenticationFailed
+    /// The request carried neither `Origin` nor `Sec-Fetch-Site`, so it did not
+    /// come from a web view's `fetch()`. Only raised when the server is started
+    /// with `requiresBrowserOrigin`.
+    case forbiddenOrigin
     /// The request method requires a Content-Length header but none was provided.
     case lengthRequired
-    /// An auth-exempt request (OPTIONS) carried a body. CORS preflights are
+    /// An auth-exempt request (a CORS preflight) carried a body. Preflights are
     /// bodyless, so a body on the auth-exempt path is rejected rather than read.
     case unexpectedBody
     /// A network-level error occurred on the connection.
@@ -32,6 +36,7 @@ public enum HTTPServerError: Error, LocalizedError, Sendable {
         case .connectionClosed: "Connection closed before request was complete"
         case .readTimeout: "Read timeout expired before request was complete"
         case .authenticationFailed: "Request failed authentication"
+        case .forbiddenOrigin: "Request did not originate from a web view"
         case .lengthRequired: "Content-Length header is required for this method"
         case .unexpectedBody: "Request method must not carry a body"
         case .networkError(let error): "Network error: \(error.localizedDescription)"

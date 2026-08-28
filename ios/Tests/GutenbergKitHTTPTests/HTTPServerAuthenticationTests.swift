@@ -241,10 +241,29 @@ struct HTTPServerAuthenticationTests {
         #expect(http.value(forHTTPHeaderField: "X-Received-Auth") == "Basic dXNlcjpwYXNz")
     }
 
-    // MARK: - CORS Preflight (OPTIONS) Auth Exemption
+    // MARK: - CORS Preflight Auth Exemption
 
-    @Test("OPTIONS without token returns 200 (CORS preflight exempt from auth)")
-    func optionsWithoutTokenReturns200() async throws {
+    @Test("preflight without token returns 200 (CORS preflight exempt from auth)")
+    func preflightWithoutTokenReturns200() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let raw = "OPTIONS /test HTTP/1.1\r\nHost: 127.0.0.1\r\nAccess-Control-Request-Method: GET\r\n\r\n"
+        let response = try await sendRaw(raw, toPort: server.port)
+        #expect(response.hasPrefix("HTTP/1.1 200"))
+    }
+
+    @Test("OPTIONS without Access-Control-Request-Method is not a preflight and returns 407")
+    func nonPreflightOptionsWithoutTokenReturns407() async throws {
+        // `canUser` issues a deliberate `OPTIONS` to read the `Allow` header. It
+        // is a request the client made on its own behalf, so it carries the
+        // token and must be authenticated like any other — the exemption covers
+        // preflights, which cannot carry credentials, and nothing else.
         let server = try await HTTPServer.start(
             name: "auth-test",
             requiresAuthentication: true
@@ -255,10 +274,49 @@ struct HTTPServerAuthenticationTests {
 
         let raw = "OPTIONS /test HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
         let response = try await sendRaw(raw, toPort: server.port)
-        #expect(response.hasPrefix("HTTP/1.1 200"))
+        #expect(response.hasPrefix("HTTP/1.1 407"))
     }
 
-    @Test("GET without token still returns 407 (only OPTIONS is exempt)")
+    @Test("authenticated OPTIONS without Access-Control-Request-Method reaches the handler")
+    func nonPreflightOptionsWithTokenReachesHandler() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true
+        ) { request in
+            HTTPResponse(status: 200, headers: [("Allow", request.parsed.method)], body: Data())
+        }
+        defer { server.stop() }
+
+        let raw = "OPTIONS /test HTTP/1.1\r\nHost: 127.0.0.1\r\nRelay-Authorization: Bearer \(server.token)\r\n\r\n"
+        let response = try await sendRaw(raw, toPort: server.port)
+        #expect(response.hasPrefix("HTTP/1.1 200"))
+        #expect(response.contains("Allow: OPTIONS"))
+    }
+
+    @Test("permissive CORS answers a preflight itself but forwards a deliberate OPTIONS")
+    func permissiveCORSDistinguishesPreflightFromOptions() async throws {
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true,
+            cors: .permissive
+        ) { _ in
+            HTTPResponse(status: 200, headers: [("Allow", "GET, POST")], body: Data())
+        }
+        defer { server.stop() }
+
+        let preflight = "OPTIONS /test HTTP/1.1\r\nHost: 127.0.0.1\r\nAccess-Control-Request-Method: POST\r\n\r\n"
+        #expect(try await sendRaw(preflight, toPort: server.port).hasPrefix("HTTP/1.1 204"))
+
+        // Without the preflight header the request belongs to the handler; the
+        // library answering it with its own 204 would swallow the `Allow`
+        // header `canUser` exists to read.
+        let deliberate = "OPTIONS /test HTTP/1.1\r\nHost: 127.0.0.1\r\nRelay-Authorization: Bearer \(server.token)\r\n\r\n"
+        let response = try await sendRaw(deliberate, toPort: server.port)
+        #expect(response.hasPrefix("HTTP/1.1 200"))
+        #expect(response.contains("Allow: GET, POST"))
+    }
+
+    @Test("GET without token still returns 407 (only a preflight is exempt)")
     func getWithoutTokenStillReturns407() async throws {
         let server = try await HTTPServer.start(
             name: "auth-test",
