@@ -26,6 +26,18 @@ final class MediaUploadServer: Sendable {
     /// Exposed so tests can await completion. (Mirrors Android's `cleanupJob`.)
     let cleanupTask: Task<Void, Never>
 
+    /// The concurrent connection ceiling for the local server.
+    ///
+    /// The library's default of 5 suits a server that only ever receives one
+    /// upload at a time. This one also carries every REST request the editor
+    /// makes under Lockdown Mode (see ``RestRelay``), and editor boot fans out
+    /// well past five: each connection serves exactly one request
+    /// (`Connection: close`), and a connection past the limit is closed
+    /// immediately, surfacing in JavaScript as an unretried `fetch_error`.
+    /// WebKit caps its own concurrency per host well below this, so the ceiling
+    /// exists to bound a runaway, not to schedule normal traffic.
+    static let maxConnections = 32
+
     /// Creates and starts a new upload server.
     ///
     /// - Parameters:
@@ -63,6 +75,7 @@ final class MediaUploadServer: Sendable {
             // every request it makes carries these headers.
             requiresBrowserOrigin: true,
             maxRequestBodySize: maxRequestBodySize,
+            maxConnections: maxConnections,
             bodyReadTimeout: bodyReadTimeout,
             cors: .permissive,
             delegate: ServerDelegate(),
