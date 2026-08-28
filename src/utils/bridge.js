@@ -234,6 +234,7 @@ export function onNetworkRequest( requestData ) {
  * @property {boolean}  [enableNetworkLogging]   Enables logging of all network requests/responses to the native host via onNetworkRequest bridge method.
  * @property {number}   [nativeUploadPort]       Port the local HTTP server is listening on. If absent, the native upload override is not activated.
  * @property {string}   [nativeUploadToken]      Per-session auth token for requests to the local upload server.
+ * @property {string}   [restRelayRoot]          API root REST requests are addressed to instead of the site, when the native host relays them (iOS Lockdown Mode). If absent, requests go to the site directly.
  */
 
 /**

@@ -9,7 +9,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import { getGBKit, POST_FALLBACKS } from './bridge';
-import { debug, info, error as logError } from './logger';
+import { info, error as logError } from './logger';
 
 /**
  * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
@@ -24,12 +24,18 @@ const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
  * @return {void}
  */
 export function configureApiFetch() {
-	const { siteApiRoot = '', preloadData = null } = getGBKit();
+	const {
+		siteApiRoot = '',
+		restRelayRoot = null,
+		preloadData = null,
+	} = getGBKit();
 
 	// Registered first so it runs innermost (after all option transforms),
-	// where it can retry the fully-built request through the native proxy.
-	apiFetch.use( networkProxyFallbackMiddleware );
-	apiFetch.use( apiFetch.createRootURLMiddleware( siteApiRoot ) );
+	// where `options.url` and `options.body` are final.
+	apiFetch.use( restRelayMiddleware );
+	apiFetch.use(
+		apiFetch.createRootURLMiddleware( restRelayRoot || siteApiRoot )
+	);
 	apiFetch.use( corsMiddleware );
 	apiFetch.use( apiPathModifierMiddleware );
 	apiFetch.use( tokenAuthMiddleware );
@@ -43,138 +49,119 @@ export function configureApiFetch() {
 }
 
 /**
- * Tracks whether the native network proxy successfully served a request.
- * Once it has, subsequent requests go straight to the proxy instead of
- * paying for a doomed direct attempt first.
+ * Request header marking a request that carries a body.
+ *
+ * WebKit hands a URL scheme handler no bytes at all for a blob-backed body,
+ * with no error and no `Content-Length` to notice the absence by, so the native
+ * relay would forward a bodyless write and WordPress would accept it as a
+ * successful no-op. The marker lets it tell a withheld body from one that was
+ * never sent. `Content-Type` cannot stand in: api-fetch's `httpV1Middleware`
+ * stamps `application/json` on every PUT/PATCH/DELETE whether or not there is a
+ * body, so keying off it would reject every `deleteEntityRecord`.
  */
-let isNetworkProxyPreferred = false;
+const RELAY_BODY_HEADER = 'X-GBK-Relay-Body';
 
 /**
- * Middleware that retries failed requests through the native loopback proxy.
+ * Middleware that addresses editor REST requests to the native relay.
  *
- * Under iOS Lockdown Mode the editor's `file://` page loses its CORS
- * exemption and WordPress sanitizes its `Origin: file://` into an empty
- * `Access-Control-Allow-Origin`, so every REST request rejects with
- * api-fetch's generic `fetch_error`. When the native host provides a
- * loopback proxy (`GBKit.networkProxy`), such failures are retried through
- * it: the proxy forwards the request to the site's REST API natively and
- * responds with CORS headers the web view accepts.
+ * Under iOS Lockdown Mode the editor's `file://` page loses its CORS exemption
+ * and WordPress sanitizes its `Origin: file://` into an empty
+ * `Access-Control-Allow-Origin`, so every direct REST request is rejected. The
+ * native host answers that by serving REST traffic from an in-process URL
+ * scheme handler (`GBKit.restRelayRoot`), which forwards each request to the
+ * site natively and responds with CORS headers the web view accepts.
  *
- * This middleware must run innermost so `options` carries the final
- * request (absolute `url`, headers, body) built by the other middleware.
+ * `createRootURLMiddleware` already points every request built from a `path` at
+ * that root. This middleware covers what it cannot: absolute site URLs taken
+ * back out of a response, and request bodies the transport is unable to carry.
+ *
+ * It must run innermost so `options.url` and `options.body` are final.
  *
  * @type {APIFetchMiddleware}
  */
-function networkProxyFallbackMiddleware( options, next ) {
-	const { networkProxy } = getGBKit();
+function restRelayMiddleware( options, next ) {
+	const { restRelayRoot, siteApiRoot } = getGBKit();
 
-	if ( ! networkProxy ) {
+	if ( ! restRelayRoot ) {
 		return next( options );
 	}
 
-	if ( isNetworkProxyPreferred ) {
-		return proxyFetch( options, networkProxy );
+	if ( hasBlobBackedBody( options.body ) ) {
+		// Sending it anyway would write nothing and report success. Media
+		// uploads avoid this by going to the native upload server instead
+		// (see `nativeMediaUploadMiddleware`), which is only available when
+		// the host app configures a media upload delegate.
+		logError(
+			'api-fetch: the relay cannot carry a file body',
+			options.path ?? options.url
+		);
+		return Promise.reject( {
+			code: 'relay_body_unavailable',
+			message: __( 'The editor could not send this file to your site.' ),
+		} );
 	}
 
-	return next( options ).catch( ( fetchError ) => {
-		if ( fetchError?.code !== 'fetch_error' ) {
-			throw fetchError;
-		}
-
-		debug(
-			'api-fetch: direct request failed, retrying through the native network proxy'
-		);
-		return proxyFetch( options, networkProxy ).then( ( result ) => {
-			isNetworkProxyPreferred = true;
-			return result;
-		} );
+	return next( {
+		...options,
+		url: relayURL( options.url, siteApiRoot, restRelayRoot ),
+		headers: {
+			...options.headers,
+			// `data` becomes the body in api-fetch's fetch handler, after every
+			// middleware has run, so both spellings count as a body here.
+			...( ( options.body ?? options.data ) !== undefined && {
+				[ RELAY_BODY_HEADER ]: 'attached',
+			} ),
+		},
 	} );
 }
 
 /**
- * Performs a request through the native loopback proxy.
+ * Whether a request body carries bytes the relay's transport cannot deliver.
  *
- * The absolute upstream URL travels in the `url` query parameter (a query
- * parameter rather than a custom header, so the local server's stock CORS
- * policy covers the preflight) and the per-session proxy token in
- * `Relay-Authorization` (`Proxy-*` headers are stripped by `fetch()`). The
- * upstream `Authorization` header is injected natively, so any value present
- * here is dropped.
+ * The boundary is the body's type rather than its size: in-memory bodies reach
+ * the scheme handler at any size, blob-backed ones never do. A `FormData` of
+ * text fields is fine, so "not a string" is too broad a test; `File` extends
+ * `Blob`, so the `Blob` check covers both.
  *
- * @param {Object} options            Fully-transformed api-fetch options.
- * @param {Object} networkProxy       Proxy connection details.
- * @param {number} networkProxy.port  Loopback port.
- * @param {string} networkProxy.token Per-session bearer token.
- * @return {Promise<any>} The parsed response, mirroring api-fetch semantics.
+ * @param {any} body The request body.
+ * @return {boolean} Whether the body is blob-backed.
  */
-async function proxyFetch( options, networkProxy ) {
-	const upstreamUrl = options.url ?? options.path;
-	const headers = { ...( options.headers || {} ) };
-	delete headers.Authorization;
-	headers[ 'Relay-Authorization' ] = `Bearer ${ networkProxy.token }`;
-
-	let response;
-	try {
-		response = await window.fetch(
-			`http://127.0.0.1:${
-				networkProxy.port
-			}/proxy?url=${ encodeURIComponent( upstreamUrl ) }`,
-			{
-				method: options.method || 'GET',
-				headers,
-				body: options.body,
-			}
-		);
-	} catch ( proxyError ) {
-		logError(
-			'api-fetch: native network proxy request failed',
-			proxyError
-		);
-		throw {
-			code: 'fetch_error',
-			message: 'Could not get a valid response from the server.',
-		};
+function hasBlobBackedBody( body ) {
+	if ( body instanceof Blob ) {
+		return true;
 	}
 
-	return parseProxyResponse( response, options.parse ?? true );
+	if ( body instanceof FormData ) {
+		for ( const [ , value ] of body.entries() ) {
+			if ( value instanceof Blob ) {
+				return true;
+			}
+		}
+	}
+
+	return false;
 }
 
 /**
- * Parses a proxied response, mirroring api-fetch's default handler:
- * unparsed requests get the raw `Response`, 204s resolve to `null`,
- * error statuses throw the decoded JSON body.
+ * Re-addresses an absolute site API URL to the relay.
  *
- * @param {Response} response    The proxy response.
- * @param {boolean}  shouldParse Whether the caller requested parsing.
- * @return {Promise<any>} The parsed body or raw response.
+ * `createRootURLMiddleware` only rewrites requests built from a `path`, but
+ * some re-enter `apiFetch` with a `url` read out of an earlier response —
+ * `fetchAllMiddleware` following a `Link` header for `per_page=-1`, or
+ * `getCurrentThemeGlobalStylesRevisions` following a `version-history` href.
+ * Those would otherwise bypass the relay and fail.
+ *
+ * @param {string|undefined} url         The request URL, if any.
+ * @param {string|undefined} siteApiRoot The site's REST API root.
+ * @param {string}           relayRoot   The relay's REST API root.
+ * @return {string|undefined} The URL to request.
  */
-async function parseProxyResponse( response, shouldParse ) {
-	if ( ! shouldParse ) {
-		if ( ! response.ok ) {
-			throw response;
-		}
-		return response;
+function relayURL( url, siteApiRoot, relayRoot ) {
+	if ( ! url || ! siteApiRoot || ! url.startsWith( siteApiRoot ) ) {
+		return url;
 	}
-
-	if ( response.status === 204 ) {
-		return null;
-	}
-
-	let json;
-	try {
-		json = await response.json();
-	} catch {
-		throw {
-			code: 'invalid_json',
-			message: 'The response is not a valid JSON response.',
-		};
-	}
-
-	if ( ! response.ok ) {
-		throw json;
-	}
-
-	return json;
+	// The relay root ends in a slash, so the remainder must not start with one.
+	return relayRoot + url.slice( siteApiRoot.length ).replace( /^\//, '' );
 }
 
 /**
