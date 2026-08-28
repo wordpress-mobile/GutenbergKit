@@ -31,8 +31,11 @@ public enum CORSPolicy: Sendable {
                 // anyway: the editor loads from `file://` (Origin `null`), which
                 // can't be cleanly allowlisted.
                 ("Access-Control-Allow-Origin", "*"),
-                ("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"),
-                ("Access-Control-Allow-Headers", "Authorization, Relay-Authorization, Content-Type"),
+                ("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"),
+                // `Accept` is listed because api-fetch's default value
+                // (`application/json, */*;q=0.1`) contains CORS-unsafe bytes,
+                // so it is not safelisted and does reach the preflight.
+                ("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, Relay-Authorization, X-HTTP-Method-Override"),
                 ("Access-Control-Max-Age", "86400"),
             ]
         }

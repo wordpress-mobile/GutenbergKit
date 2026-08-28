@@ -9,7 +9,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import { getGBKit, POST_FALLBACKS } from './bridge';
-import { debug, info, error as logError } from './logger';
+import { info, error as logError } from './logger';
 
 /**
  * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
@@ -24,11 +24,24 @@ const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
  * @return {void}
  */
 export function configureApiFetch() {
-	const { siteApiRoot = '', preloadData = null } = getGBKit();
+	const {
+		siteApiRoot = '',
+		preloadData = null,
+		networkProxy = null,
+	} = getGBKit();
 
-	// Registered first so it runs innermost (after all option transforms),
-	// where it can retry the fully-built request through the native proxy.
-	apiFetch.use( networkProxyFallbackMiddleware );
+	// The relay replaces the transport rather than intercepting requests,
+	// because `apiFetch.use()` unshifts and api-fetch applies its middleware
+	// with `reduceRight`: a registered middleware can never run innermost, so
+	// interception there would short-circuit past api-fetch's own middleware —
+	// losing `_locale=user`, the `per_page=-1` expansion, and the HTTP v1
+	// method override — and past everything `defaultFetchHandler` does.
+	if ( networkProxy ) {
+		apiFetch.setFetchHandler(
+			createRelayFetchHandler( networkProxy, siteApiRoot )
+		);
+	}
+
 	apiFetch.use( apiFetch.createRootURLMiddleware( siteApiRoot ) );
 	apiFetch.use( corsMiddleware );
 	apiFetch.use( apiPathModifierMiddleware );
@@ -43,116 +56,171 @@ export function configureApiFetch() {
 }
 
 /**
- * Tracks whether the native network proxy successfully served a request.
- * Once it has, subsequent requests go straight to the proxy instead of
- * paying for a doomed direct attempt first.
+ * Header values api-fetch's own handler defaults, which this transport
+ * replaces. WordPress treats `Accept` as a condition for handling a request as
+ * a REST request (core trac 44534), so losing it changes what the site returns.
  */
-let isNetworkProxyPreferred = false;
+const DEFAULT_RELAY_HEADERS = {
+	Accept: 'application/json, */*;q=0.1',
+};
 
 /**
- * Middleware that retries failed requests through the native loopback proxy.
+ * Builds the api-fetch transport that routes every request through the native
+ * loopback relay.
  *
- * Under iOS Lockdown Mode the editor's `file://` page loses its CORS
- * exemption and WordPress sanitizes its `Origin: file://` into an empty
- * `Access-Control-Allow-Origin`, so every REST request rejects with
- * api-fetch's generic `fetch_error`. When the native host provides a
- * loopback proxy (`GBKit.networkProxy`), such failures are retried through
- * it: the proxy forwards the request to the site's REST API natively and
- * responds with CORS headers the web view accepts.
+ * Under iOS Lockdown Mode the editor's `file://` page loses its CORS exemption
+ * and WordPress sanitizes its `Origin: file://` into an empty
+ * `Access-Control-Allow-Origin`, so every direct REST request rejects. The
+ * native host answers by running a loopback server and advertising it as
+ * `GBKit.networkProxy`; it forwards each request to the site's REST API
+ * natively and responds with CORS headers the web view accepts.
  *
- * This middleware must run innermost so `options` carries the final
- * request (absolute `url`, headers, body) built by the other middleware.
+ * Whether to use it is decided by that configuration alone. The relay is only
+ * advertised when the host knows direct requests cannot work, so attempting one
+ * first would be a guaranteed-doomed round trip per request — and inferring the
+ * answer from a response, as this once did, means one misleading response can
+ * latch the editor onto the wrong path for the rest of the session.
  *
- * @type {APIFetchMiddleware}
- */
-function networkProxyFallbackMiddleware( options, next ) {
-	const { networkProxy } = getGBKit();
-
-	if ( ! networkProxy ) {
-		return next( options );
-	}
-
-	if ( isNetworkProxyPreferred ) {
-		return proxyFetch( options, networkProxy );
-	}
-
-	return next( options ).catch( ( fetchError ) => {
-		if ( fetchError?.code !== 'fetch_error' ) {
-			throw fetchError;
-		}
-
-		debug(
-			'api-fetch: direct request failed, retrying through the native network proxy'
-		);
-		return proxyFetch( options, networkProxy ).then( ( result ) => {
-			isNetworkProxyPreferred = true;
-			return result;
-		} );
-	} );
-}
-
-/**
- * Performs a request through the native loopback proxy.
+ * Installed as the fetch handler rather than a middleware, so api-fetch's own
+ * middleware has already run and `options` carries the finished request.
+ * `defaultFetchHandler` is not exported, so what it does — `data` to a JSON
+ * body, default headers, response parsing and error normalization — is
+ * reproduced here.
  *
- * The absolute upstream URL travels in the `url` query parameter (a query
- * parameter rather than a custom header, so the local server's stock CORS
- * policy covers the preflight) and the per-session proxy token in
- * `Relay-Authorization` (`Proxy-*` headers are stripped by `fetch()`). The
- * upstream `Authorization` header is injected natively, so any value present
- * here is dropped.
- *
- * @param {Object} options            Fully-transformed api-fetch options.
- * @param {Object} networkProxy       Proxy connection details.
+ * @param {Object} networkProxy       Relay connection details.
  * @param {number} networkProxy.port  Loopback port.
  * @param {string} networkProxy.token Per-session bearer token.
- * @return {Promise<any>} The parsed response, mirroring api-fetch semantics.
+ * @param {string} siteApiRoot        The site's REST API root.
+ * @return {(options: Object) => Promise<any>} The fetch handler.
  */
-async function proxyFetch( options, networkProxy ) {
-	const upstreamUrl = options.url ?? options.path;
-	const headers = { ...( options.headers || {} ) };
-	delete headers.Authorization;
-	headers[ 'Relay-Authorization' ] = `Bearer ${ networkProxy.token }`;
+function createRelayFetchHandler( networkProxy, siteApiRoot ) {
+	const apiRoot = siteApiRoot.endsWith( '/' )
+		? siteApiRoot
+		: `${ siteApiRoot }/`;
+	// The upstream path follows the route; the relay resolves it natively
+	// against the site API root, so no absolute URL is ever sent.
+	const relayRoot = `http://127.0.0.1:${ networkProxy.port }/proxy/`;
 
-	let response;
-	try {
-		response = await window.fetch(
-			`http://127.0.0.1:${
-				networkProxy.port
-			}/proxy?url=${ encodeURIComponent( upstreamUrl ) }`,
-			{
-				method: options.method || 'GET',
+	return async ( options ) => {
+		const { data, parse = true, method = 'GET', signal } = options;
+
+		const upstreamPath = relayUpstreamPath(
+			options.url ?? options.path ?? '',
+			apiRoot
+		);
+		if ( upstreamPath === null ) {
+			logError(
+				'api-fetch: refusing to relay a request outside the site API root',
+				options.url ?? options.path
+			);
+			throw {
+				code: 'fetch_error',
+				message: __(
+					'Could not get a valid response from the server.'
+				),
+			};
+		}
+
+		const headers = { ...DEFAULT_RELAY_HEADERS, ...options.headers };
+		// The upstream `Authorization` header is injected natively, so the
+		// site credential never travels over loopback. The relay's own
+		// per-session token rides in `Relay-Authorization` because `fetch()`
+		// silently strips `Proxy-*` headers.
+		delete headers.Authorization;
+		headers[ 'Relay-Authorization' ] = `Bearer ${ networkProxy.token }`;
+
+		// `data` is api-fetch's shorthand for a JSON body, serialized by the
+		// handler rather than by a middleware. Missing it meant every relayed
+		// write sent `Content-Length: 0`, which WordPress accepts as a no-op:
+		// silent data loss on every save.
+		let { body } = options;
+		if ( data ) {
+			body = JSON.stringify( data );
+			headers[ 'Content-Type' ] = 'application/json';
+		}
+
+		let response;
+		try {
+			// Only the fields the transport needs, rather than spreading the
+			// remaining options: api-fetch defaults `credentials` to
+			// `include`, which a browser refuses against the relay's
+			// `Access-Control-Allow-Origin: *`.
+			response = await globalThis.fetch( relayRoot + upstreamPath, {
+				method,
 				headers,
-				body: options.body,
+				body,
+				signal,
+			} );
+		} catch ( relayError ) {
+			// Mirror `defaultFetchHandler`'s rejection handling, including
+			// re-throwing an abort for the caller to handle itself.
+			if ( relayError?.name === 'AbortError' ) {
+				throw relayError;
 			}
-		);
-	} catch ( proxyError ) {
-		logError(
-			'api-fetch: native network proxy request failed',
-			proxyError
-		);
-		throw {
-			code: 'fetch_error',
-			message: 'Could not get a valid response from the server.',
-		};
-	}
+			logError( 'api-fetch: relayed request failed', relayError );
+			if ( ! globalThis.navigator.onLine ) {
+				throw {
+					code: 'offline_error',
+					message: __(
+						'Unable to connect. Please check your Internet connection.'
+					),
+				};
+			}
+			throw {
+				code: 'fetch_error',
+				message: __(
+					'Could not get a valid response from the server.'
+				),
+			};
+		}
 
-	return parseProxyResponse( response, options.parse ?? true );
+		return parseRelayResponse( response, parse );
+	};
 }
 
 /**
- * Parses a proxied response, mirroring api-fetch's default handler:
- * unparsed requests get the raw `Response`, 204s resolve to `null`,
- * error statuses throw the decoded JSON body.
+ * The upstream path for a relayed request: the part of its target below the
+ * site API root, without a leading slash.
  *
- * @param {Response} response    The proxy response.
- * @param {boolean}  shouldParse Whether the caller requested parsing.
- * @return {Promise<any>} The parsed body or raw response.
+ * Returns `null` for a target the relay cannot serve — an absolute URL for
+ * somewhere other than the site's API. Paginated requests arrive this way:
+ * `fetchAllMiddleware` follows the absolute URL WordPress puts in the `Link`
+ * header, so the relay has to recognize the site's own API root in it.
+ *
+ * @param {string} target  The request's `url`, or its `path` when no root URL
+ *                         middleware has run.
+ * @param {string} apiRoot The site's REST API root, slash-terminated.
+ * @return {string|null} The upstream path, or `null` when it cannot be relayed.
  */
-async function parseProxyResponse( response, shouldParse ) {
-	if ( ! shouldParse ) {
-		if ( ! response.ok ) {
+function relayUpstreamPath( target, apiRoot ) {
+	if ( target.startsWith( apiRoot ) ) {
+		return target.slice( apiRoot.length );
+	}
+	// Anything that is not an absolute URL is a path relative to the API root.
+	if ( ! /^([a-z][a-z0-9+.-]*:|\/\/)/i.test( target ) ) {
+		return target.replace( /^\/+/, '' );
+	}
+	return null;
+}
+
+/**
+ * Parses a relayed response the way api-fetch's own handler does: unparsed
+ * requests get the raw `Response`, 204s resolve to `null`, and error statuses
+ * throw the decoded JSON body.
+ *
+ * @param {Response} response    The relay response.
+ * @param {boolean}  shouldParse Whether the caller requested parsing.
+ * @return {Promise<any>} The parsed body or the raw response.
+ */
+async function parseRelayResponse( response, shouldParse ) {
+	if ( ! response.ok ) {
+		if ( ! shouldParse ) {
 			throw response;
 		}
+		throw await parseRelayJSON( response );
+	}
+
+	if ( ! shouldParse ) {
 		return response;
 	}
 
@@ -160,21 +228,27 @@ async function parseProxyResponse( response, shouldParse ) {
 		return null;
 	}
 
-	let json;
+	return parseRelayJSON( response );
+}
+
+/**
+ * Decodes a relayed response body, normalizing a decode failure into the same
+ * error api-fetch raises. The relay reports its own failures as WordPress-shaped
+ * `{ code, message }` JSON, so a real error reaches the caller intact rather
+ * than as an opaque parse failure.
+ *
+ * @param {Response} response The relay response.
+ * @return {Promise<any>} The decoded body.
+ */
+async function parseRelayJSON( response ) {
 	try {
-		json = await response.json();
+		return await response.json();
 	} catch {
 		throw {
 			code: 'invalid_json',
-			message: 'The response is not a valid JSON response.',
+			message: __( 'The response is not a valid JSON response.' ),
 		};
 	}
-
-	if ( ! response.ok ) {
-		throw json;
-	}
-
-	return json;
 }
 
 /**
