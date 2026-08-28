@@ -45,11 +45,6 @@ struct GutenbergApp: App {
         EditorLogger.shared = OSLogEditorLogger()
         EditorLogger.logLevel = .debug
 
-        // Keep the device awake while the demo app is foregrounded — the
-        // debugging workflows here (probes, Web Inspector, devicectl console)
-        // break when the device auto-locks.
-        UIApplication.shared.isIdleTimerDisabled = true
-
         OriginProbeRunner.runIfRequested()
     }
 
