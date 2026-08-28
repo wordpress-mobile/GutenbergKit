@@ -91,10 +91,10 @@ final class MediaUploadServer: Sendable {
     private static func handleRequest(_ request: HTTPServer.Request, context: UploadContext) async -> HTTPResponse {
         let parsed = request.parsed
 
-        // REST relay route: `/proxy` requests are forwarded to the site's REST
-        // API (Lockdown Mode support). The upstream URL rides in the query
-        // string, so the library's permissive CORS policy covers the preflight.
-        if let restRelay = context.restRelay, parsed.path == "/proxy" {
+        // REST relay route: `/proxy/…` requests are forwarded to the site's REST
+        // API (Lockdown Mode support), the path after the route resolving
+        // against the site API root.
+        if let restRelay = context.restRelay, RestRelay.handles(parsed) {
             return await restRelay.handle(request)
         }
 
