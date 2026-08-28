@@ -83,6 +83,9 @@ function fetchCall( index = 0 ) {
 
 describe( 'REST relay transport', () => {
 	beforeAll( () => {
+		// The relay's connection details are read from the injected global
+		// rather than through `getGBKit`, so they have to be there.
+		window.GBKit = GBKIT;
 		bridge.getGBKit.mockReturnValue( GBKIT );
 		configureApiFetch();
 	} );

@@ -8,7 +8,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
-import { getGBKit, POST_FALLBACKS } from './bridge';
+import { getGBKit, getNetworkProxy, POST_FALLBACKS } from './bridge';
 import { info, error as logError } from './logger';
 
 /**
@@ -24,11 +24,8 @@ const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
  * @return {void}
  */
 export function configureApiFetch() {
-	const {
-		siteApiRoot = '',
-		preloadData = null,
-		networkProxy = null,
-	} = getGBKit();
+	const { siteApiRoot = '', preloadData = null } = getGBKit();
+	const networkProxy = getNetworkProxy();
 
 	// The relay replaces the transport rather than intercepting requests,
 	// because `apiFetch.use()` unshifts and api-fetch applies its middleware

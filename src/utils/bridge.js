@@ -269,6 +269,26 @@ export function getGBKit() {
 }
 
 /**
+ * The native loopback relay's connection details, or `null` when the host is
+ * not running one.
+ *
+ * Read from the injected global only, never through ``getGBKit``: its
+ * `localStorage` fallback returns whatever the last editor session wrote, and
+ * iOS does not clear it. A relay's port and per-session token are valid only
+ * for the server that issued them, so a persisted copy points at a listener
+ * that has been stopped — or, worse, at a port something else now owns. Every
+ * REST request would go there.
+ *
+ * Falling back to no relay is the safe direction to be wrong in: requests take
+ * the direct path, which is what they did before a relay existed.
+ *
+ * @return {{port: number, token: string}|null} The relay details.
+ */
+export function getNetworkProxy() {
+	return window.GBKit?.networkProxy ?? null;
+}
+
+/**
  * @typedef {Object} Post
  * @property {string} [title]       The title of the post.
  * @property {string} [content]     The content of the post.
