@@ -151,17 +151,46 @@ function hasBlobBackedBody( body ) {
  * `getCurrentThemeGlobalStylesRevisions` following a `version-history` href.
  * Those would otherwise bypass the relay and fail.
  *
+ * The comparison ignores the URL's origin. WordPress builds those URLs from its
+ * own `home_url()`, which need not be the host the app was configured with —
+ * `www.` versus bare, a reverse-proxied or mapped domain, an `http` `siteurl`
+ * behind `https`. Matching on the origin as well would leave `per_page=-1`
+ * silently failing on every such site.
+ *
  * @param {string|undefined} url         The request URL, if any.
  * @param {string|undefined} siteApiRoot The site's REST API root.
  * @param {string}           relayRoot   The relay's REST API root.
  * @return {string|undefined} The URL to request.
  */
 function relayURL( url, siteApiRoot, relayRoot ) {
-	if ( ! url || ! siteApiRoot || ! url.startsWith( siteApiRoot ) ) {
+	if ( ! url || ! siteApiRoot ) {
 		return url;
 	}
+
+	let target;
+	let root;
+	try {
+		target = new URL( url );
+		root = new URL( siteApiRoot );
+	} catch {
+		// A relative URL, or an unparseable API root: nothing to re-address.
+		return url;
+	}
+
+	// `hostname` and `port` separately, not `host`: assigning a `host` without a
+	// port leaves the existing one in place.
+	target.protocol = root.protocol;
+	target.hostname = root.hostname;
+	target.port = root.port;
+
+	if ( ! target.href.startsWith( root.href ) ) {
+		return url;
+	}
+
 	// The relay root ends in a slash, so the remainder must not start with one.
-	return relayRoot + url.slice( siteApiRoot.length ).replace( /^\//, '' );
+	return (
+		relayRoot + target.href.slice( root.href.length ).replace( /^\//, '' )
+	);
 }
 
 /**

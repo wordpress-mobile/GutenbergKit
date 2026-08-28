@@ -115,6 +115,20 @@ describe( 'REST relay', () => {
 			);
 		} );
 
+		// WordPress builds `Link` headers and `_links` hrefs from its own
+		// `home_url()`, which need not be the host the app was configured with.
+		// Matching on the origin too would leave `per_page=-1` silently failing
+		// on every such site.
+		it( 'redirects a site API URL that arrives on another host alias', async () => {
+			await apiFetch( {
+				url: 'http://127.0.0.1:8888/wp-json/wp/v2/tags?page=2',
+			} );
+
+			expect( fetchCall().url ).toMatch(
+				/^gbk-rest:\/\/\/wp\/v2\/tags\?page=2/
+			);
+		} );
+
 		it( 'leaves a URL outside the site API root alone', async () => {
 			await apiFetch( { url: 'https://other.example.com/thing' } );
 
