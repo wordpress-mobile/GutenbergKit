@@ -36,7 +36,6 @@ final class MediaUploadServer: Sendable {
     static func start(
         uploadDelegate: (any MediaUploadDelegate)? = nil,
         defaultUploader: DefaultMediaUploader? = nil,
-        restRelay: RestRelay? = nil,
         maxRequestBodySize: Int64 = HTTPRequestParser.defaultMaxBodySize
     ) async throws -> MediaUploadServer {
         // Sweep temp files orphaned by a prior crash, off the editor-startup
@@ -46,7 +45,7 @@ final class MediaUploadServer: Sendable {
             cleanOrphanedUploads()
         }
 
-        let context = UploadContext(uploadDelegate: uploadDelegate, defaultUploader: defaultUploader, restRelay: restRelay)
+        let context = UploadContext(uploadDelegate: uploadDelegate, defaultUploader: defaultUploader)
 
         // A generous ceiling for receiving the upload body. The body read is
         // primarily bounded by the per-read idle timeout (which reaps a stalled
@@ -87,13 +86,6 @@ final class MediaUploadServer: Sendable {
 
     private static func handleRequest(_ request: HTTPServer.Request, context: UploadContext) async -> HTTPResponse {
         let parsed = request.parsed
-
-        // REST relay route: `/proxy` requests are forwarded to the site's REST
-        // API (Lockdown Mode support). The upstream URL rides in the query
-        // string, so the library's permissive CORS policy covers the preflight.
-        if let restRelay = context.restRelay, parsed.path == "/proxy" {
-            return await restRelay.handle(request)
-        }
 
         // Route: only POST /upload is handled. (OPTIONS preflight is answered by
         // the HTTP library under its permissive CORS policy.) Match on the path
@@ -410,8 +402,8 @@ enum UploadError: Error, LocalizedError {
 
 // MARK: - Upload Context
 
-/// Container for the upload delegate, default uploader, and REST relay,
-/// captured by the HTTPServer handler closure and re-read on each request.
+/// Container for the upload delegate and default uploader, captured by the
+/// HTTPServer handler closure and re-read on each request.
 ///
 /// The delegate is held **weakly**. `EditorViewController.mediaUploadDelegate` is
 /// declared `weak` — the host owns the delegate's lifetime. Capturing it strongly
@@ -425,12 +417,10 @@ enum UploadError: Error, LocalizedError {
 private final class UploadContext: @unchecked Sendable {
     weak var uploadDelegate: (any MediaUploadDelegate)?
     let defaultUploader: DefaultMediaUploader?
-    let restRelay: RestRelay?
 
-    init(uploadDelegate: (any MediaUploadDelegate)?, defaultUploader: DefaultMediaUploader?, restRelay: RestRelay?) {
+    init(uploadDelegate: (any MediaUploadDelegate)?, defaultUploader: DefaultMediaUploader?) {
         self.uploadDelegate = uploadDelegate
         self.defaultUploader = defaultUploader
-        self.restRelay = restRelay
     }
 }
 

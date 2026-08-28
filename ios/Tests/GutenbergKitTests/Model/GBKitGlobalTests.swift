@@ -140,6 +140,20 @@ struct GBKitGlobalTests: MakesTestFixtures {
     #expect(!global.post.content.contains("<"))
   }
 
+  @Test("carries the REST relay root only when the relay is active")
+  func mapsRestRelayRoot() throws {
+    let configuration = makeConfiguration()
+
+    let relayed = try GBKitGlobal(
+      configuration: configuration,
+      dependencies: makeDependencies(),
+      restRelayRoot: RestRelay.rootURL)
+    let direct = try GBKitGlobal(configuration: configuration, dependencies: makeDependencies())
+
+    #expect(relayed.restRelayRoot == RestRelay.rootURL)
+    #expect(direct.restRelayRoot == nil)
+  }
+
   // MARK: - toString()
 
   @Test("toString produces valid JSON")

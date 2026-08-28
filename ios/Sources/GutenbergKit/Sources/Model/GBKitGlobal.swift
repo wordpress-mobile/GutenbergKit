@@ -93,17 +93,14 @@ public struct GBKitGlobal: Sendable, Codable {
     /// Pre-fetched editor assets (scripts, styles, allowed block types) for plugin loading.
     let editorAssets: JSON?
 
-    /// Connection details for the native loopback network proxy.
+    /// API root the editor addresses its REST requests to instead of the site,
+    /// when the native REST relay is active.
     ///
-    /// When present, REST API requests that fail in the web view (e.g. under
-    /// iOS Lockdown Mode, which breaks CORS for `file://` pages) are retried
-    /// through `http://127.0.0.1:<port>` with the given bearer token.
-    public struct NetworkProxy: Sendable, Codable {
-        let port: Int
-        let token: String
-    }
-
-    let networkProxy: NetworkProxy?
+    /// Under iOS Lockdown Mode the editor's `file://` page loses its CORS
+    /// exemption, so REST traffic is routed to a custom URL scheme served
+    /// in-process and forwarded natively. When nil, requests go to the site
+    /// directly.
+    let restRelayRoot: String?
 
     /// Creates a global configuration from an editor configuration and dependencies.
     ///
@@ -112,13 +109,13 @@ public struct GBKitGlobal: Sendable, Codable {
     ///   - dependencies: The pre-fetched editor dependencies (unused but reserved for future use).
     ///   - nativeUploadPort: Port of the local upload server, or nil if not running.
     ///   - nativeUploadToken: Auth token for the local upload server, or nil if not running.
-    ///   - networkProxy: Loopback proxy connection details, when the proxy is running.
+    ///   - restRelayRoot: API root for the native REST relay, when it is active.
     public init(
         configuration: EditorConfiguration,
         dependencies: EditorDependencies,
         nativeUploadPort: Int? = nil,
         nativeUploadToken: String? = nil,
-        networkProxy: NetworkProxy? = nil
+        restRelayRoot: String? = nil
     ) throws {
         self.siteURL = configuration.isOfflineModeEnabled ? nil : configuration.siteURL
         self.siteApiRoot = configuration.isOfflineModeEnabled ? nil : configuration.siteApiRoot
@@ -146,7 +143,7 @@ public struct GBKitGlobal: Sendable, Codable {
         self.editorSettings = dependencies.editorSettings.jsonValue
         self.preloadData = try dependencies.preloadList?.build()
         self.editorAssets = Self.buildEditorAssets(from: dependencies.assetBundle)
-        self.networkProxy = networkProxy
+        self.restRelayRoot = restRelayRoot
     }
 
     private static func buildEditorAssets(from bundle: EditorAssetBundle) -> JSON? {
