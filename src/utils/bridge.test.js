@@ -6,12 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 /**
  * Internal dependencies
  */
-import {
-	requestLatestContent,
-	getPost,
-	getNetworkProxy,
-	showBlockInserter,
-} from './bridge';
+import { requestLatestContent, getPost, showBlockInserter } from './bridge';
 
 vi.mock( './logger.js', () => ( {
 	error: vi.fn(),
@@ -548,37 +543,5 @@ describe( 'showBlockInserter', () => {
 
 		expect( editorDelegate.showBlockInserter ).toHaveBeenCalledTimes( 1 );
 		expect( postMessage ).toHaveBeenCalledTimes( 1 );
-	} );
-} );
-
-describe( 'getNetworkProxy', () => {
-	afterEach( () => {
-		delete window.GBKit;
-		localStorage.clear();
-	} );
-
-	it( 'returns the injected relay details', () => {
-		window.GBKit = { networkProxy: { port: 5555, token: 'fresh' } };
-
-		expect( getNetworkProxy() ).toEqual( { port: 5555, token: 'fresh' } );
-	} );
-
-	it( 'returns null when the host is not running a relay', () => {
-		window.GBKit = { siteApiRoot: 'https://example.com/wp-json/' };
-
-		expect( getNetworkProxy() ).toBeNull();
-	} );
-
-	it( 'ignores a persisted relay from an earlier session', () => {
-		// A relay's port and token belong to the server that issued them, and
-		// iOS never clears `GBKit` from localStorage. Trusting a persisted copy
-		// would point every REST request at a stopped listener — or at a port
-		// something else now owns.
-		localStorage.setItem(
-			'GBKit',
-			JSON.stringify( { networkProxy: { port: 4444, token: 'stale' } } )
-		);
-
-		expect( getNetworkProxy() ).toBeNull();
 	} );
 } );

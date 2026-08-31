@@ -222,18 +222,26 @@ export function onNetworkRequest( requestData ) {
 }
 
 /**
+ * @typedef {Object} NetworkProxy
+ *
+ * @property {number} port  The port the loopback REST relay is listening on.
+ * @property {string} token Per-session auth token for requests to the relay.
+ */
+
+/**
  * @typedef GBKitConfig
  *
- * @property {boolean}  [themeStyles]            Controls if theme styles are applied to the editor.
- * @property {string}   [siteApiRoot]            The root URL of the site's API.
- * @property {string[]} [siteApiNamespace]       The namespace of the site's API; if multiple namespaces are provided, the first one is used as the default.
- * @property {string[]} [namespaceExcludedPaths] The paths that should not be namespaced.
- * @property {string}   [authHeader]             The authentication header.
- * @property {string}   [hideTitle]              Whether to hide the title.
- * @property {Post}     [post]                   The post data.
- * @property {boolean}  [enableNetworkLogging]   Enables logging of all network requests/responses to the native host via onNetworkRequest bridge method.
- * @property {number}   [nativeUploadPort]       Port the local HTTP server is listening on. If absent, the native upload override is not activated.
- * @property {string}   [nativeUploadToken]      Per-session auth token for requests to the local upload server.
+ * @property {boolean}      [themeStyles]            Controls if theme styles are applied to the editor.
+ * @property {string}       [siteApiRoot]            The root URL of the site's API.
+ * @property {string[]}     [siteApiNamespace]       The namespace of the site's API; if multiple namespaces are provided, the first one is used as the default.
+ * @property {string[]}     [namespaceExcludedPaths] The paths that should not be namespaced.
+ * @property {string}       [authHeader]             The authentication header.
+ * @property {string}       [hideTitle]              Whether to hide the title.
+ * @property {Post}         [post]                   The post data.
+ * @property {boolean}      [enableNetworkLogging]   Enables logging of all network requests/responses to the native host via onNetworkRequest bridge method.
+ * @property {number}       [nativeUploadPort]       Port the local HTTP server is listening on. If absent, the native upload override is not activated.
+ * @property {string}       [nativeUploadToken]      Per-session auth token for requests to the local upload server.
+ * @property {NetworkProxy} [networkProxy]           The loopback REST relay's connection details. If absent, the host is not running a relay.
  */
 
 /**
@@ -266,26 +274,6 @@ export function getGBKit() {
 		error( 'Failed to parse GBKit from localStorage', err );
 		return {};
 	}
-}
-
-/**
- * The native loopback relay's connection details, or `null` when the host is
- * not running one.
- *
- * Read from the injected global only, never through ``getGBKit``: its
- * `localStorage` fallback returns whatever the last editor session wrote, and
- * iOS does not clear it. A relay's port and per-session token are valid only
- * for the server that issued them, so a persisted copy points at a listener
- * that has been stopped — or, worse, at a port something else now owns. Every
- * REST request would go there.
- *
- * Falling back to no relay is the safe direction to be wrong in: requests take
- * the direct path, which is what they did before a relay existed.
- *
- * @return {{port: number, token: string}|null} The relay details.
- */
-export function getNetworkProxy() {
-	return window.GBKit?.networkProxy ?? null;
 }
 
 /**

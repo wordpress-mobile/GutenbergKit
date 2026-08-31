@@ -1,7 +1,7 @@
 /**
  * Internal dependencies
  */
-import { getGBKit, getNetworkProxy } from './bridge';
+import { getGBKit } from './bridge';
 import { debug } from './logger';
 
 /** Hostnames that name the loopback interface. */
@@ -89,8 +89,7 @@ export function createRelayFetch( next, { networkProxy, siteApiRoot } ) {
  * @return {import('./fetch-chain').FetchWrapper|null} The wrapper.
  */
 export function createRelayFetchWrapper() {
-	const networkProxy = getNetworkProxy();
-	const { siteApiRoot } = getGBKit();
+	const { networkProxy, siteApiRoot } = getGBKit();
 
 	if ( ! networkProxy || ! siteApiRoot ) {
 		return null;
