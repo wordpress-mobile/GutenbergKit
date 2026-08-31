@@ -160,6 +160,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let lockdownModeMonitor: LockdownModeMonitor
     private var uploadServer: MediaUploadServer?
 
+    /// Whether `uploadServer` was started with a media upload pipeline behind
+    /// it, and so whether its port and token may be advertised to JavaScript.
+    /// See `startUploadServer()`.
+    private var isUploadPipelineEnabled = false
+
     /// Whether `uploadServer` also hosts the Lockdown Mode REST relay.
     /// See `RestRelay` and `startUploadServer()`.
     private var isRestRelayEnabled = false
@@ -442,18 +447,18 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     private func buildEditorConfiguration(dependencies: EditorDependencies) throws -> WKUserScript {
         // The upload pipeline and the REST relay share one local server, but
-        // each is advertised to JavaScript only when its feature is active:
-        // `nativeUploadPort` requires a delegate to process uploads, and
-        // `networkProxy` is only useful under Lockdown Mode.
-        let hasUploadPipeline = mediaUploadDelegate != nil
+        // each is advertised to JavaScript only when `startUploadServer()`
+        // actually enabled it: routing uploads to a server started without an
+        // uploader behind it would fail every one of them, and `networkProxy`
+        // is only useful under Lockdown Mode.
         let networkProxyGlobal = isRestRelayEnabled ? uploadServer.map {
             GBKitGlobal.NetworkProxy(port: Int($0.port), token: $0.token)
         } : nil
         let gbkitGlobal = try GBKitGlobal(
             configuration: self.configuration,
             dependencies: dependencies,
-            nativeUploadPort: hasUploadPipeline ? uploadServer.map { Int($0.port) } : nil,
-            nativeUploadToken: hasUploadPipeline ? uploadServer?.token : nil,
+            nativeUploadPort: isUploadPipelineEnabled ? uploadServer.map { Int($0.port) } : nil,
+            nativeUploadToken: isUploadPipelineEnabled ? uploadServer?.token : nil,
             networkProxy: networkProxyGlobal
         )
         let stringValue = try gbkitGlobal.toString()
@@ -493,15 +498,15 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // it because the WebView has no auth cookies). Without both there is nothing
         // to upload through, so leave the upload pipeline down and let uploads fall
         // to the default WebView path rather than start a pipeline that could only fail.
-        let needsUploadPipeline = mediaUploadDelegate != nil && !configuration.authHeader.isEmpty
+        isUploadPipelineEnabled = mediaUploadDelegate != nil && !configuration.authHeader.isEmpty
         isRestRelayEnabled = webView.configuration.defaultWebpagePreferences.isLockdownModeEnabled
             && !configuration.isOfflineModeEnabled
 
-        guard needsUploadPipeline || isRestRelayEnabled else {
+        guard isUploadPipelineEnabled || isRestRelayEnabled else {
             return
         }
 
-        let defaultUploader = needsUploadPipeline ? DefaultMediaUploader(
+        let defaultUploader = isUploadPipelineEnabled ? DefaultMediaUploader(
             httpClient: httpClient.uploadClient(),
             siteApiRoot: configuration.siteApiRoot,
             siteApiNamespace: configuration.siteApiNamespace
@@ -514,6 +519,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 restRelay: isRestRelayEnabled ? RestRelay(configuration: configuration) : nil
             )
         } catch {
+            isUploadPipelineEnabled = false
             isRestRelayEnabled = false
             Logger.uploadServer.error("Failed to start upload server: \(error). Falling back to default upload behavior.")
         }
