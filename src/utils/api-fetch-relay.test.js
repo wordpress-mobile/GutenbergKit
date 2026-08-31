@@ -202,6 +202,58 @@ describe( 'REST relay transport', () => {
 			expect( result ).toEqual( [ { id: 1 }, { id: 2 } ] );
 		} );
 
+		it( 'relays a next page that arrives on a host alias', async () => {
+			// WordPress builds `Link` from `home_url()`, which need not be the
+			// host the app was configured with — `www.` versus bare, a mapped
+			// domain, `http` behind `https`. wp-env is the everyday case: its
+			// credentials report `localhost` while WordPress reports
+			// `127.0.0.1`.
+			global.fetch = vi
+				.fn()
+				.mockResolvedValueOnce(
+					makeResponse( {
+						body: [ { id: 1 } ],
+						headers: {
+							link: '<https://www.example.com/wp-json/wp/v2/posts?page=2>; rel="next"',
+						},
+					} )
+				)
+				.mockResolvedValueOnce(
+					makeResponse( { body: [ { id: 2 } ] } )
+				);
+
+			const result = await apiFetch( {
+				path: '/wp/v2/posts?per_page=-1',
+			} );
+
+			expect( fetchCall( 1 ).url ).toBe(
+				`${ RELAY_ROOT }wp/v2/posts?page=2&_locale=user`
+			);
+			expect( result ).toEqual( [ { id: 1 }, { id: 2 } ] );
+		} );
+
+		it( 'preserves a percent-encoded value in a relayed next page', async () => {
+			// Matching moves the target onto the API root's origin, which
+			// re-parses it. An encoded value has to survive that unchanged.
+			global.fetch = vi
+				.fn()
+				.mockResolvedValueOnce(
+					makeResponse( {
+						body: [ { id: 1 } ],
+						headers: {
+							link: `<${ API_ROOT }wp/v2/posts?search=caf%C3%A9&page=2>; rel="next"`,
+						},
+					} )
+				)
+				.mockResolvedValueOnce(
+					makeResponse( { body: [ { id: 2 } ] } )
+				);
+
+			await apiFetch( { path: '/wp/v2/posts?per_page=-1' } );
+
+			expect( fetchCall( 1 ).url ).toContain( 'search=caf%C3%A9' );
+		} );
+
 		it( 'refuses a request for somewhere other than the site API', async () => {
 			await expect(
 				apiFetch( { url: 'https://elsewhere.example/x' } )

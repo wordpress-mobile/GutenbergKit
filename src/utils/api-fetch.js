@@ -91,9 +91,13 @@ const DEFAULT_RELAY_HEADERS = {
  * @return {(options: Object) => Promise<any>} The fetch handler.
  */
 function createRelayFetchHandler( networkProxy, siteApiRoot ) {
-	const apiRoot = siteApiRoot.endsWith( '/' )
-		? siteApiRoot
-		: `${ siteApiRoot }/`;
+	// Slash-terminated so a sibling cannot match the root as a prefix
+	// (`https://site/wp-json` would otherwise match `https://site/wp-jsonx/…`),
+	// and parsed so both sides of the comparison are normalized the same way —
+	// default ports collapsed, host lowercased.
+	const apiRoot = new URL(
+		siteApiRoot.endsWith( '/' ) ? siteApiRoot : `${ siteApiRoot }/`
+	);
 	// The upstream path follows the route; the relay resolves it natively
 	// against the site API root, so no absolute URL is ever sent.
 	const relayRoot = `http://127.0.0.1:${ networkProxy.port }/proxy/`;
@@ -184,20 +188,43 @@ function createRelayFetchHandler( networkProxy, siteApiRoot ) {
  * `fetchAllMiddleware` follows the absolute URL WordPress puts in the `Link`
  * header, so the relay has to recognize the site's own API root in it.
  *
+ * **Host aliases are tolerated; path differences are not.** WordPress builds
+ * `Link` headers and `_links` hrefs from `home_url()`, which need not be the
+ * host the app was configured with — `www.` versus bare, a mapped or
+ * reverse-proxied domain, an `http` `siteurl` behind `https`. wp-env is the
+ * everyday case: its credentials report `localhost` while WordPress reports
+ * `127.0.0.1`. Those are the same resource under another name, so the target is
+ * moved onto the root's origin before comparing. A *path* difference is a
+ * different resource: in a subdirectory multisite `https://site/a/wp-json/` and
+ * `https://site/b/wp-json/` are separate sites, and matching across them would
+ * route one site's request into the other's API root.
+ *
  * @param {string} target  The request's `url`, or its `path` when no root URL
  *                         middleware has run.
- * @param {string} apiRoot The site's REST API root, slash-terminated.
+ * @param {URL}    apiRoot The site's REST API root, normalized and
+ *                         slash-terminated.
  * @return {string|null} The upstream path, or `null` when it cannot be relayed.
  */
 function relayUpstreamPath( target, apiRoot ) {
-	if ( target.startsWith( apiRoot ) ) {
-		return target.slice( apiRoot.length );
-	}
-	// Anything that is not an absolute URL is a path relative to the API root.
-	if ( ! /^([a-z][a-z0-9+.-]*:|\/\/)/i.test( target ) ) {
+	let url;
+	try {
+		url = new URL( target );
+	} catch {
+		// Not an absolute URL, so it is a path relative to the API root.
 		return target.replace( /^\/+/, '' );
 	}
-	return null;
+
+	// Assign the origin's parts separately: the `host` setter leaves an
+	// existing port in place when the value carries none, so `host` alone turns
+	// `http://127.0.0.1:8888/…` into `https://example.com:8888/…`.
+	url.protocol = apiRoot.protocol;
+	url.hostname = apiRoot.hostname;
+	url.port = apiRoot.port;
+
+	if ( ! url.href.startsWith( apiRoot.href ) ) {
+		return null;
+	}
+	return url.href.slice( apiRoot.href.length );
 }
 
 /**
