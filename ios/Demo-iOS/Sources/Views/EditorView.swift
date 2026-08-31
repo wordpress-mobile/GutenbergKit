@@ -241,9 +241,6 @@ private struct _EditorView: UIViewControllerRepresentable {
             out.typeof_apiFetch = typeof (window.wp && window.wp.apiFetch);
             out.gbk_nativeUploadPort = !!(window.GBKit && window.GBKit.nativeUploadPort);
             out.gbk_networkProxy = !!(window.GBKit && window.GBKit.networkProxy);
-            const ECHO = 'http://192.168.0.57:8890';
-            try { const r = await fetch(ECHO + '/star/get', {signal: T()}); out.echo_star_get = r.status; } catch (e) { out.echo_star_get = 'REJECT ' + S(e); }
-            try { const fdE = new FormData(); fdE.append('probe', 'x'); const r = await fetch(ECHO + '/star/fd', {method: 'POST', body: fdE, signal: T()}); out.echo_star_post_formdata = r.status; } catch (e) { out.echo_star_post_formdata = 'REJECT ' + S(e); }
             try { const r = await fetch(apiRoot, {method: 'GET', signal: T()}); out.site_get_direct = r.status; } catch (e) { out.site_get_direct = 'REJECT ' + S(e); }
             try {
                 const fd1 = new FormData();
