@@ -80,24 +80,21 @@ export function createRelayFetch( next, { networkProxy, siteApiRoot } ) {
 }
 
 /**
- * Installs ``createRelayFetch`` over the global `fetch`, if the native host is
- * running a relay.
+ * The relay wrapper for the host's configuration, or `null` when the host is
+ * not running a relay.
  *
- * @return {void}
+ * @return {import('./fetch-chain').FetchWrapper|null} The wrapper.
  */
-export function installRelayFetch() {
+export function createRelayFetchWrapper() {
 	const networkProxy = getNetworkProxy();
 	const { siteApiRoot } = getGBKit();
 
 	if ( ! networkProxy || ! siteApiRoot ) {
-		return;
+		return null;
 	}
 
 	debug( `Relaying site REST requests through port ${ networkProxy.port }` );
-	window.fetch = createRelayFetch( window.fetch.bind( window ), {
-		networkProxy,
-		siteApiRoot,
-	} );
+	return ( next ) => createRelayFetch( next, { networkProxy, siteApiRoot } );
 }
 
 /**

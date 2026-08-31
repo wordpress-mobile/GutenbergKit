@@ -20,7 +20,8 @@ import apiFetch from '@wordpress/api-fetch';
  * Internal dependencies
  */
 import { configureApiFetch } from './api-fetch';
-import { installRelayFetch } from './fetch-relay';
+import { installFetchWrappers } from './fetch-chain';
+import { createRelayFetchWrapper } from './fetch-relay';
 import * as bridge from './bridge';
 
 vi.mock( './bridge', async ( importOriginal ) => {
@@ -104,10 +105,10 @@ describe( 'REST relay transport', () => {
 		bridge.getGBKit.mockReturnValue( GBKIT );
 
 		// A stable indirection so each test can swap the fetch the relay
-		// delegates to; the wrapper captures whatever `window.fetch` is at
+		// delegates to; the chain captures whatever `window.fetch` is at
 		// install time.
 		window.fetch = ( ...args ) => transport( ...args );
-		installRelayFetch();
+		installFetchWrappers( [ createRelayFetchWrapper() ] );
 
 		configureApiFetch();
 	} );
