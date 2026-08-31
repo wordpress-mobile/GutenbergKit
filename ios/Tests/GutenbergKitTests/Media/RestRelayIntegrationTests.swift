@@ -18,12 +18,9 @@ import Testing
 /// WP_ENV_CREDENTIALS_PATH="$PWD/.wp-env.credentials.json" swift test
 /// ```
 ///
-/// **`canUser` is not verifiable here.** The Playground runtime's web server
-/// answers every `OPTIONS` itself with a bodiless 204 and permissive CORS
-/// headers, before WordPress is reached, so no `Allow` header exists to relay.
-/// What is checked instead is that the relay *forwards* an `OPTIONS` rather
-/// than answering it locally — the defect that made `canUser` report no
-/// capabilities at all.
+/// Includes the `canUser` chain: a deliberate `OPTIONS` has to reach the site
+/// and its `Allow` header has to survive back to the caller, or the editor
+/// reports that the user can do nothing at all.
 @Suite("RestRelay against a live site", .enabled(if: WPEnvSite.current != nil), .serialized)
 struct RestRelayIntegrationTests {
 
@@ -53,15 +50,18 @@ struct RestRelayIntegrationTests {
         }
     }
 
-    @Test("forwards an OPTIONS request upstream instead of answering it locally")
-    func forwardsOptions() async throws {
+    @Test("relays the Allow header that reports what the user may do")
+    func relaysAllowHeader() async throws {
         try await withRelay { server, site in
+            // `canUser` issues a deliberate `OPTIONS` — no
+            // `Access-Control-Request-Method` — and reads `Allow` off the
+            // response. Answering it locally as a CORS preflight instead of
+            // forwarding it reports no capabilities at all, and reports it as
+            // success, so nothing surfaces to the user.
             let (_, response) = try await site.relayed("wp/v2/pages", method: "OPTIONS", on: server)
 
-            // The local server would answer with a bare 204 carrying only its
-            // own CORS headers. A response bearing the site's server headers
-            // can only have come from the site.
-            #expect(response.value(forHTTPHeaderField: "X-Powered-By") != nil)
+            let allow = try #require(response.value(forHTTPHeaderField: "Allow"))
+            #expect(allow.contains("GET"))
         }
     }
 
