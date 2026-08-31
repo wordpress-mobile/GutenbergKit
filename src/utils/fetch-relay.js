@@ -47,12 +47,12 @@ export function createRelayFetch( next, { networkProxy, siteApiRoot } ) {
 		siteApiRoot.endsWith( '/' ) ? siteApiRoot : `${ siteApiRoot }/`
 	);
 	const relayRoot = `http://127.0.0.1:${ networkProxy.port }/proxy/`;
-	const relayOrigin = new URL( relayRoot ).origin;
+	const localServerPort = String( networkProxy.port );
 
 	return ( input, init ) => {
 		const target = requestURL( input );
 		const upstreamPath =
-			target && target.origin !== relayOrigin
+			target && ! addressesLocalServer( target, localServerPort )
 				? relayUpstreamPath( target, apiRoot )
 				: null;
 
@@ -123,6 +123,24 @@ function requestURL( input ) {
 	} catch {
 		return null;
 	}
+}
+
+/**
+ * Whether a target addresses the native local server, in any spelling of
+ * loopback.
+ *
+ * The relay and the media upload route share one server, and they are addressed
+ * by different names: the relay route by address, the upload route by hostname
+ * (`localhost` is what Android hosts permit cleartext to). Neither is a site
+ * request, so both keep the path they had before a relay existed — the port
+ * identifies the server whichever name reached it.
+ *
+ * @param {URL}    target The request's target.
+ * @param {string} port   The local server's port.
+ * @return {boolean} Whether the target is the local server.
+ */
+function addressesLocalServer( target, port ) {
+	return target.port === port && LOOPBACK_HOSTNAMES.has( target.hostname );
 }
 
 /**

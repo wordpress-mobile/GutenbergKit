@@ -117,10 +117,13 @@ describe( 'createRelayFetch', () => {
 		}
 
 		it( 'a request to the relay server itself', async () => {
-			// The upload route shares the relay's server. Matching ignores the
-			// origin, so without this the guard would come down to the path —
-			// which a root configured as a bare `https://site/` would not
-			// distinguish.
+			// The upload route shares the relay's server and is addressed as
+			// `localhost` rather than by address. Without matching the port,
+			// the guard would come down to the path — which a root configured
+			// as a bare `https://site/` would not distinguish.
+			await expectPassthrough(
+				'http://localhost:5555/upload?_embed=wp:featuredmedia'
+			);
 			await expectPassthrough(
 				'http://127.0.0.1:5555/upload?_embed=wp:featuredmedia'
 			);
