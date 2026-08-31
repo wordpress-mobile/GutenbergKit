@@ -2,6 +2,7 @@
 import SwiftUI
 import PhotosUI
 import Combine
+import OSLog
 
 @MainActor
 class BlockInserterViewModel: ObservableObject {
@@ -82,14 +83,15 @@ class BlockInserterViewModel: ObservableObject {
                 }
             } catch {
                 anyError = error
+                Logger.media.error("Failed to import picker selection: \(error)")
             }
 
             guard !Task.isCancelled else {
                 return []
             }
 
-            if results.isEmpty {
-                self.error = MediaError(message: anyError?.localizedDescription ?? EditorLocalization[.failedToInsertMedia])
+            if results.isEmpty, anyError != nil {
+                self.error = MediaError(message: EditorLocalization[.failedToLoadSelectedMedia])
             }
 
             return results
@@ -109,7 +111,7 @@ class BlockInserterViewModel: ObservableObject {
                 switch media {
                 case .photo(let image):
                     guard let imageData = image.jpegData(compressionQuality: 0.8) else {
-                        throw MediaError(message: "Failed to convert image to JPEG")
+                        throw MediaError(message: EditorLocalization[.failedToProcessCapturedMedia])
                     }
 
                     let fileURL = try await fileManager.writeData(imageData, withExtension: "jpg")
@@ -128,7 +130,8 @@ class BlockInserterViewModel: ObservableObject {
 
                 return [mediaInfo]
             } catch {
-                self.error = MediaError(message: error.localizedDescription)
+                Logger.media.error("Failed to process captured media: \(error)")
+                self.error = MediaError(message: EditorLocalization[.failedToProcessCapturedMedia])
                 return []
             }
         }

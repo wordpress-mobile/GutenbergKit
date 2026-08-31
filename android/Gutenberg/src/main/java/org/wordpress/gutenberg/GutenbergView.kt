@@ -98,7 +98,7 @@ class GutenbergView : FrameLayout {
     private var isEditorLoaded = false
     private var didFireEditorLoaded = false
     private lateinit var assetLoader: WebViewAssetLoader
-    private lateinit var assetDomain: String
+    private lateinit var assetAuthority: String
     private val configuration: EditorConfiguration
     private lateinit var dependencies: EditorDependencies
 
@@ -429,7 +429,7 @@ class GutenbergView : FrameLayout {
                     if (response != null) return response
                 }
 
-                if (request.url.host == assetDomain) {
+                if (request.url.authority == assetAuthority) {
                     return assetLoader.shouldInterceptRequest(request.url)
                 }
 
@@ -461,8 +461,8 @@ class GutenbergView : FrameLayout {
 
                 // Allow asset URLs (restrict to the asset path prefix so that
                 // arbitrary site pages don't load inside the WebView when the
-                // asset domain matches the site domain)
-                if (url.host == assetDomain && url.path?.startsWith("/assets/") == true) {
+                // asset authority matches the site authority)
+                if (url.authority == assetAuthority && url.path?.startsWith("/assets/") == true) {
                     return false
                 }
 
@@ -472,7 +472,7 @@ class GutenbergView : FrameLayout {
                 }
 
                 // Allow WordPress REST API
-                if (url.host == configuration.siteApiRoot.removePrefix("https://").removePrefix("http://")) {
+                if (url.authority == originAuthority(configuration.siteApiRoot)) {
                     if (url.path?.contains("/wp-json/") == true || url.query?.contains("rest_route=") == true) {
                         return false
                     }
@@ -583,10 +583,15 @@ class GutenbergView : FrameLayout {
     private fun loadEditor(dependencies: EditorDependencies) {
         this.dependencies = dependencies
 
-        // Derive the asset loader domain from the site URL so that the editor
+        // Derive the asset loader authority from the site URL so that the editor
         // document shares the site's origin, making REST API and AJAX requests
         // same-origin and eliminating CORS restrictions.
-        assetDomain = Uri.parse(configuration.siteURL).host ?: DEFAULT_ASSET_DOMAIN
+        //
+        // This must carry the port, not just the host: an origin is scheme + host
+        // + port, so dropping the port from a site served on a non-default one
+        // (e.g. `http://10.0.2.2:8888`) would make the editor cross-origin with
+        // the site. See [originAuthority] for why a default port is left off.
+        assetAuthority = originAuthority(configuration.siteURL) ?: DEFAULT_ASSET_DOMAIN
 
         // Set up asset caching
         requestInterceptor = CachedAssetRequestInterceptor(
@@ -601,7 +606,7 @@ class GutenbergView : FrameLayout {
         val siteUri = Uri.parse(configuration.siteURL)
         val isLocalHttpSite = siteUri.scheme == "http" && siteUri.host in LOCAL_HOSTS
         assetLoader = WebViewAssetLoader.Builder()
-            .setDomain(assetDomain)
+            .setDomain(assetAuthority)
             .setHttpAllowed(isLocalHttpSite)
             .addPathHandler("/assets/", AssetsPathHandler(this.context))
             .build()
@@ -612,7 +617,7 @@ class GutenbergView : FrameLayout {
         initializeWebView()
 
         val scheme = if (isLocalHttpSite) "http" else "https"
-        val assetUrl = "$scheme://$assetDomain$ASSET_PATH_INDEX"
+        val assetUrl = "$scheme://$assetAuthority$ASSET_PATH_INDEX"
         val editorUrl = BuildConfig.GUTENBERG_EDITOR_URL.ifEmpty {
             assetUrl
         }
@@ -1227,6 +1232,35 @@ class GutenbergView : FrameLayout {
 
         /** Hosts that are safe to serve assets over HTTP (local development only). */
         private val LOCAL_HOSTS = setOf("localhost", "127.0.0.1", "10.0.2.2")
+
+        /**
+         * Returns [url]'s origin authority: its host, plus its port when that port
+         * is not the scheme's default.
+         *
+         * This deliberately does not use [Uri.authority], which returns whatever the
+         * URL was written with. Chromium canonicalizes a URL before it reaches
+         * [WebResourceRequest.url], dropping a default port and any userinfo, so
+         * `https://example.com:443` arrives as `example.com`. Comparing that against
+         * a raw authority of `example.com:443` would never match — and since
+         * `WebViewAssetLoader.PathMatcher` compares authorities exactly, the bundled
+         * editor document would not be served at all.
+         *
+         * Returns null when [url] has no host, leaving the caller to decide a default.
+         */
+        internal fun originAuthority(url: String): String? {
+            val uri = Uri.parse(url)
+            val authority = uri.authority ?: return null
+
+            // `Uri` does not parse a bracketed IPv6 literal into `host`/`port`, so
+            // fall back to the authority as written. A default port is not stripped
+            // in that case, but an IPv6 site URL is not a configuration this
+            // supports reaching, and the authority is at least well-formed.
+            if (authority.startsWith("[")) return authority
+
+            val host = uri.host ?: return null
+            val defaultPort = if (uri.scheme == "http") 80 else 443
+            return if (uri.port != -1 && uri.port != defaultPort) "$host:${uri.port}" else host
+        }
 
         private const val ASSET_LOADING_TIMEOUT_MS = 5000L
 
