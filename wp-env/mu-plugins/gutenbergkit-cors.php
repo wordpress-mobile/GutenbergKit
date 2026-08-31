@@ -33,7 +33,10 @@ function gutenbergkit_cors_send_origin_headers( $origin ) {
 	}
 
 	header( 'Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS' );
-	header( 'Access-Control-Allow-Headers: Authorization, Content-Type, X-WP-Nonce' );
+	// api-fetch turns every PUT/PATCH/DELETE into a POST carrying
+	// `X-HTTP-Method-Override`, which is not CORS-safelisted, so the browser
+	// announces it in the preflight and blocks the request without it here.
+	header( 'Access-Control-Allow-Headers: Authorization, Content-Type, X-HTTP-Method-Override, X-WP-Nonce' );
 }
 
 /**
