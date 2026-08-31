@@ -18,24 +18,16 @@ const LOOPBACK_HOSTNAMES = new Set( [ 'localhost', '127.0.0.1', '[::1]' ] );
  * `GBKit.networkProxy`; it forwards each request to the site's REST API
  * natively and responds with CORS headers the web view accepts.
  *
- * ## Why the transport, and not `apiFetch`
+ * The relay wraps `fetch` rather than registering an api-fetch middleware or
+ * fetch handler, either of which would replace api-fetch's own request building
+ * and response parsing — the `data`-to-body serialization, the method override,
+ * every parsing rule — and leave us reimplementing a package we do not control.
+ * Below `fetch`, this layer only changes where the request goes.
  *
- * `apiFetch.use()` unshifts and api-fetch composes with `reduceRight`, so a
- * registered middleware always runs *outside* api-fetch's own middleware and
- * outside `defaultFetchHandler` — it would short-circuit past the `data`-to-body
- * serialization, the default `Accept` header, the HTTP v1 method override, and
- * every response-parsing rule, all of which would then have to be reimplemented
- * and kept in step with a package we do not control. `setFetchHandler` runs late
- * enough for the request half but still replaces the response half.
- *
- * Wrapping `fetch` puts the relay below all of it: api-fetch builds the whole
- * request, hands it to `fetch`, and parses whatever comes back. This layer only
- * changes where the request goes.
- *
- * @param {typeof fetch}                  next                The fetch to delegate to.
- * @param {Object}                        config              Relay configuration.
- * @param {{port: number, token: string}} config.networkProxy Relay connection details.
- * @param {string}                        config.siteApiRoot  The site's REST API root.
+ * @param {typeof fetch}                    next                The fetch to delegate to.
+ * @param {Object}                          config              Relay configuration.
+ * @param {import('./bridge').NetworkProxy} config.networkProxy Relay connection details.
+ * @param {string}                          config.siteApiRoot  The site's REST API root.
  * @return {typeof fetch} The wrapped fetch.
  */
 export function createRelayFetch( next, { networkProxy, siteApiRoot } ) {

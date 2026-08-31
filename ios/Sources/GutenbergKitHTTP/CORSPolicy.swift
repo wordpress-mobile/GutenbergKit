@@ -32,9 +32,6 @@ public enum CORSPolicy: Sendable {
                 // can't be cleanly allowlisted.
                 ("Access-Control-Allow-Origin", "*"),
                 ("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"),
-                // `Accept` is listed because api-fetch's default value
-                // (`application/json, */*;q=0.1`) contains CORS-unsafe bytes,
-                // so it is not safelisted and does reach the preflight.
                 ("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, Relay-Authorization, X-HTTP-Method-Override"),
                 ("Access-Control-Max-Age", "86400"),
             ]
