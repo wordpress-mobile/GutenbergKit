@@ -4,6 +4,13 @@
 import { debug } from './logger';
 
 /**
+ * Marks the wrapped `fetch` as ours. Registered globally so a second copy of
+ * this module — a re-injected bundle — recognizes the mark rather than wrapping
+ * an already-wrapped `fetch`.
+ */
+const WRAPPED = Symbol.for( 'gutenbergkit.fetchWrappers' );
+
+/**
  * A transform on `fetch`: given the fetch to delegate to, returns a fetch.
  *
  * The same shape as an `apiFetch` middleware, one layer down. A wrapper may
@@ -26,6 +33,11 @@ import { debug } from './logger';
  * applicable" — network logging switched off, no relay configured — by
  * returning nothing rather than by installing a pass-through.
  *
+ * Installing twice is a no-op. A retried boot or a re-injected bundle would
+ * otherwise wrap the wrapped `fetch`, logging every request to the native host
+ * twice and sending it through two relay layers. A page load resets this along
+ * with `window.fetch` itself.
+ *
  * @param {Array<FetchWrapper|null>} wrappers The chain, outermost first.
  * @return {void}
  */
@@ -36,9 +48,16 @@ export function installFetchWrappers( wrappers ) {
 		return;
 	}
 
-	window.fetch = active.reduceRight(
+	if ( window.fetch[ WRAPPED ] ) {
+		debug( 'Fetch wrappers are already installed' );
+		return;
+	}
+
+	const wrapped = active.reduceRight(
 		( next, wrap ) => wrap( next ),
 		window.fetch.bind( window )
 	);
+	wrapped[ WRAPPED ] = true;
+	window.fetch = wrapped;
 	debug( `Installed ${ active.length } fetch wrapper(s)` );
 }

@@ -80,6 +80,15 @@ describe( 'installFetchWrappers', () => {
 		expect( calls ).toEqual( [ 'a:in', 'fetch', 'a:out' ] );
 	} );
 
+	it( 'installs once, however many times it is called', async () => {
+		installFetchWrappers( [ recorder( 'a' ) ] );
+		installFetchWrappers( [ recorder( 'b' ) ] );
+
+		await window.fetch( 'https://example.com/' );
+
+		expect( calls ).toEqual( [ 'a:in', 'fetch', 'a:out' ] );
+	} );
+
 	it( 'leaves fetch untouched when nothing applies', () => {
 		const before = window.fetch;
 
