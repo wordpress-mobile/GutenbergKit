@@ -101,6 +101,14 @@ public struct GBKitGlobal: Sendable, Codable {
     public struct NetworkProxy: Sendable, Codable {
         let port: Int
         let token: String
+
+        /// The synthesized memberwise initializer is internal, which would
+        /// leave the `networkProxy` parameter of this type's public initializer
+        /// with no value a host could pass it.
+        public init(port: Int, token: String) {
+            self.port = port
+            self.token = token
+        }
     }
 
     let networkProxy: NetworkProxy?
