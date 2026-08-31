@@ -57,7 +57,19 @@ struct RestRelay: Sendable {
     /// The authorization header injected into upstream requests.
     private let authHeader: String
 
-    private let session: URLSession
+    /// The session every relay shares.
+    ///
+    /// A `URLSession` holds its resources until it is invalidated, and a relay
+    /// is built on every editor load under Lockdown Mode, so one session each
+    /// would accumulate for the life of the process. Nothing about the session
+    /// is per-relay, and a relayed request is cancelled through its own task
+    /// rather than by tearing the session down.
+    private static let session: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 120
+        configuration.httpCookieStorage = nil
+        return URLSession(configuration: configuration)
+    }()
 
     init(configuration: EditorConfiguration) {
         var root = configuration.siteApiRoot.absoluteString
@@ -66,11 +78,6 @@ struct RestRelay: Sendable {
         }
         self.apiRoot = root
         self.authHeader = configuration.authHeader
-
-        let sessionConfiguration = URLSessionConfiguration.ephemeral
-        sessionConfiguration.timeoutIntervalForRequest = 120
-        sessionConfiguration.httpCookieStorage = nil
-        self.session = URLSession(configuration: sessionConfiguration)
     }
 
     /// Whether a request targets the relay.
@@ -108,9 +115,19 @@ struct RestRelay: Sendable {
             } else {
                 // Large bodies are buffered to disk by the request parser;
                 // stream them to avoid loading uploads fully into memory.
+                //
+                // `count` is a file-size lookup, and reports zero when it
+                // fails. Sending that as the `Content-Length` of a body the
+                // parser says exists would upload nothing, and WordPress
+                // answers a no-op with a 2xx the editor would take for success.
                 do {
+                    let length = body.count
+                    guard length > 0 else {
+                        Logger.restRelay.error("Refusing to relay a request body whose length could not be read")
+                        return Self.errorResponse(status: 500, code: "relay_body_unreadable", message: "Failed to read the request body.")
+                    }
                     upstreamRequest.httpBodyStream = try body.makeInputStream()
-                    upstreamRequest.setValue("\(body.count)", forHTTPHeaderField: "Content-Length")
+                    upstreamRequest.setValue("\(length)", forHTTPHeaderField: "Content-Length")
                 } catch {
                     Logger.restRelay.error("Failed to open request body stream: \(error)")
                     return Self.errorResponse(status: 500, code: "relay_body_unreadable", message: "Failed to read the request body.")
@@ -124,7 +141,7 @@ struct RestRelay: Sendable {
             // to whatever host the `Location` header names and relay that
             // response back. See ``RedirectGuard``.
             let redirectGuard = RedirectGuard(allowedPrefix: apiRoot)
-            let upstream = HTTPResponse(try await session.data(for: upstreamRequest, delegate: redirectGuard))
+            let upstream = HTTPResponse(try await Self.session.data(for: upstreamRequest, delegate: redirectGuard))
 
             // A refused redirect leaves `URLSession` holding the 3xx itself.
             // Relaying that would undo the refusal: the response carries the
