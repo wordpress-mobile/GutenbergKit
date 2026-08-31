@@ -8,7 +8,7 @@ import Foundation
 /// behavior it wants to change. A server started without a delegate — or whose
 /// delegate leaves a method defaulted — uses the library's built-in behavior.
 /// New customization points are added here as new defaulted methods, so
-/// ``HTTPServer/start(name:port:listenOnAllInterfaces:requiresAuthentication:maxRequestBodySize:maxConnections:readTimeout:bodyReadTimeout:idleTimeout:startTimeout:cors:delegate:handler:)``
+/// ``HTTPServer/start(name:port:listenOnAllInterfaces:requiresAuthentication:requiresBrowserOrigin:maxRequestBodySize:maxConnections:readTimeout:bodyReadTimeout:idleTimeout:startTimeout:cors:delegate:handler:)``
 /// never grows another parameter for them.
 ///
 /// The server **retains** its delegate for its lifetime. Because the delegate is

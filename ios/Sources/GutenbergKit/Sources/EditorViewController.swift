@@ -426,7 +426,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
-    /// Starts the loopback network proxy when the web view is subject to
     /// Loads the editor HTML without any dependencies (warmup mode only).
     ///
     /// This method is used exclusively by the warmup mechanism to preload editor resources
