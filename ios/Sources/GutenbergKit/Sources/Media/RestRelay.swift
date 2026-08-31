@@ -196,12 +196,21 @@ struct RestRelay: Sendable {
 
     /// Whether `path` contains a `.` or `..` segment, including the
     /// percent-encoded spellings a server may decode before resolving it.
+    ///
+    /// The separators are decoded alongside the dots. A server that decodes
+    /// `%2f` before normalizing — nginx normalizes the request URI ahead of
+    /// location matching — reads `%2e%2e%2fwp-admin` as `../wp-admin`, which
+    /// splitting on literal slashes alone would pass through. `%5c` is decoded
+    /// too because Windows-hosted servers treat a backslash as a separator.
     private static func containsDotSegment(_ path: some StringProtocol) -> Bool {
-        let lowercased = path.lowercased()
-        guard lowercased.contains(".") || lowercased.contains("%2e") else { return false }
-        return lowercased.split(separator: "/", omittingEmptySubsequences: false).contains {
-            let segment = $0.replacingOccurrences(of: "%2e", with: ".")
-            return segment == "." || segment == ".."
+        let decoded = path.lowercased()
+            .replacingOccurrences(of: "%2e", with: ".")
+            .replacingOccurrences(of: "%2f", with: "/")
+            .replacingOccurrences(of: "%5c", with: "/")
+            .replacingOccurrences(of: "\\", with: "/")
+        guard decoded.contains(".") else { return false }
+        return decoded.split(separator: "/", omittingEmptySubsequences: false).contains {
+            $0 == "." || $0 == ".."
         }
     }
 

@@ -90,6 +90,26 @@ struct RestRelayTests {
         #expect(relay.upstreamURL(for: request("/proxy/wp/%2E%2E/%2e%2e/")) == nil)
     }
 
+    @Test("refuses dot segments whose separators are encoded too")
+    func refusesDotSegmentsWithEncodedSeparators() {
+        // The whole traversal is one literal segment, so it is only a dot
+        // segment to a server that decodes the separator before normalizing.
+        let relay = makeRelay(apiRoot: Self.prettyRoot)
+        #expect(relay.upstreamURL(for: request("/proxy/%2e%2e%2f%2e%2e%2fwp-admin/admin-ajax.php")) == nil)
+        #expect(relay.upstreamURL(for: request("/proxy/wp%5C..%5Cwp-admin/")) == nil)
+        #expect(relay.upstreamURL(for: request("/proxy/wp\\..\\wp-admin/")) == nil)
+    }
+
+    @Test("an encoded slash within a segment is not a dot segment")
+    func allowsEncodedSlashesWithinSegments() {
+        // A template ID is `theme//slug`, encoded into a single path segment.
+        let relay = makeRelay(apiRoot: Self.prettyRoot)
+        #expect(
+            relay.upstreamURL(for: request("/proxy/wp/v2/templates/twentytwentyfour%2F%2Fsingle"))?.absoluteString
+                == "https://example.com/wp-json/wp/v2/templates/twentytwentyfour%2F%2Fsingle"
+        )
+    }
+
     @Test("a dot inside a path segment is not a dot segment")
     func allowsDotsWithinSegments() {
         let relay = makeRelay(apiRoot: Self.prettyRoot)
