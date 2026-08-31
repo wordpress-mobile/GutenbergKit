@@ -130,12 +130,15 @@ function requestURL( input ) {
  * `Link` headers and `_links` hrefs from `home_url()`, which need not be the
  * host the app was configured with — `www.` versus bare, a mapped or
  * reverse-proxied domain, an `http` `siteurl` behind `https`. wp-env is the
- * everyday case: its credentials report `localhost` while WordPress reports
- * `127.0.0.1`. Those are the same resource under another name, so the target is
- * moved onto the root's origin before comparing. A *path* difference is a
- * different resource: in a subdirectory multisite `https://site/a/wp-json/` and
- * `https://site/b/wp-json/` are separate sites, and matching across them would
- * route one site's request into the other's API root.
+ * everyday case, and a documented one: the Playground runtime resolves
+ * `localhost` to `127.0.0.1` in `WP_SITEURL`, which the e2e fixtures already
+ * work around by matching uploads on path rather than hostname (see
+ * `e2e/wp-env-fixtures.js`). Those are the same resource under another name, so
+ * the target is moved onto the root's origin before comparing. A *path*
+ * difference is a different resource: in a subdirectory multisite
+ * `https://site/a/wp-json/` and `https://site/b/wp-json/` are separate sites,
+ * and matching across them would route one site's request into the other's API
+ * root.
  *
  * @param {URL} target  The request's target.
  * @param {URL} apiRoot The site's REST API root, normalized and slash-terminated.

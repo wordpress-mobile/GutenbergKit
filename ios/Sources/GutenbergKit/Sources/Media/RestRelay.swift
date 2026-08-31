@@ -197,6 +197,13 @@ struct RestRelay: Sendable {
     /// carrying the site credential — followed to that host, and its response
     /// relayed back to the editor. Refusing hands the 3xx itself back instead.
     ///
+    /// The comparison is origin-exact, unlike the JavaScript side's, which
+    /// tolerates host aliases when recognizing a site URL. That asymmetry is
+    /// deliberate: recognizing an alias decides where a request is *sent*,
+    /// while this decides whether the site credential *follows* a redirect
+    /// somewhere we did not choose. A canonical redirect onto an alias host is
+    /// refused here rather than followed.
+    ///
     /// `@unchecked Sendable`: `allowedPrefix` is a `let` set at init and only
     /// read afterwards.
     private final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
