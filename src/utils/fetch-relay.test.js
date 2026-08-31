@@ -63,13 +63,22 @@ describe( 'createRelayFetch', () => {
 		} );
 
 		it( 'tolerates a host alias', async () => {
-			// The same resource under another name: `www.` versus bare, a
-			// mapped domain, wp-env's `127.0.0.1` versus `localhost`.
+			// The same host under another spelling: `www.` versus bare.
 			await relayFetch()(
 				'https://www.example.com/wp-json/wp/v2/posts?page=2'
 			);
 
 			expect( calledURL() ).toBe( `${ RELAY_ROOT }wp/v2/posts?page=2` );
+		} );
+
+		it( 'tolerates a loopback host alias', async () => {
+			// wp-env: the site is configured as `localhost`, and WordPress
+			// writes `127.0.0.1` into the URLs it emits.
+			await relayFetch( 'http://localhost:8888/wp-json/' )(
+				'http://127.0.0.1:8888/wp-json/wp/v2/posts'
+			);
+
+			expect( calledURL() ).toBe( `${ RELAY_ROOT }wp/v2/posts` );
 		} );
 
 		it( 'tolerates a scheme and default port that differ from the root', async () => {
@@ -127,6 +136,15 @@ describe( 'createRelayFetch', () => {
 		it( 'another origin entirely', async () => {
 			await expectPassthrough(
 				'https://public-api.wordpress.com/wpcom/v2/jetpack-ai-query'
+			);
+		} );
+
+		it( 'another WordPress site whose path matches the root', async () => {
+			// A different host is a different server, however its paths are
+			// shaped. Rewriting one onto the configured site would send its
+			// request to the user's own site with the site credential.
+			await expectPassthrough(
+				'https://other-wp.example/wp-json/wp/v2/posts'
 			);
 		} );
 

@@ -4,6 +4,9 @@
 import { getGBKit, getNetworkProxy } from './bridge';
 import { debug } from './logger';
 
+/** Hostnames that name the loopback interface. */
+const LOOPBACK_HOSTNAMES = new Set( [ 'localhost', '127.0.0.1', '[::1]' ] );
+
 /**
  * Wraps `fetch` so requests for the site's REST API go through the native
  * loopback relay.
@@ -126,25 +129,30 @@ function requestURL( input ) {
  * The upstream path for a relayed request: the part of its target below the
  * site API root, without a leading slash. `null` for anything else.
  *
- * **Host aliases are tolerated; path differences are not.** WordPress builds
- * `Link` headers and `_links` hrefs from `home_url()`, which need not be the
- * host the app was configured with — `www.` versus bare, a mapped or
- * reverse-proxied domain, an `http` `siteurl` behind `https`. wp-env is the
- * everyday case, and a documented one: the Playground runtime resolves
- * `localhost` to `127.0.0.1` in `WP_SITEURL`, which the e2e fixtures already
- * work around by matching uploads on path rather than hostname (see
- * `e2e/wp-env-fixtures.js`). Those are the same resource under another name, so
- * the target is moved onto the root's origin before comparing. A *path*
- * difference is a different resource: in a subdirectory multisite
- * `https://site/a/wp-json/` and `https://site/b/wp-json/` are separate sites,
- * and matching across them would route one site's request into the other's API
- * root.
+ * **Host aliases are tolerated; other hosts and path differences are not.**
+ * WordPress builds `Link` headers and `_links` hrefs from `home_url()`, which
+ * need not spell the host the app was configured with — `www.` versus bare, or
+ * wp-env's `localhost` versus the `127.0.0.1` its runtime writes into
+ * `WP_SITEURL` (the e2e fixtures work around the same thing by matching uploads
+ * on path rather than hostname, see `e2e/wp-env-fixtures.js`). Those spellings
+ * name the configured host, so the target is moved onto the root's origin —
+ * scheme and port included — before comparing. Any other host keeps the direct
+ * path it had before a relay existed: rewriting it would send a third party's
+ * request to the user's own site, with the site credential attached. A *path*
+ * difference is likewise a different resource: in a subdirectory multisite
+ * `https://site/a/wp-json/` and `https://site/b/wp-json/` are separate sites.
  *
  * @param {URL} target  The request's target.
  * @param {URL} apiRoot The site's REST API root, normalized and slash-terminated.
  * @return {string|null} The upstream path, or `null` when it is not a site request.
  */
 function relayUpstreamPath( target, apiRoot ) {
+	if (
+		canonicalHost( target.hostname ) !== canonicalHost( apiRoot.hostname )
+	) {
+		return null;
+	}
+
 	const aliased = new URL( target );
 	// Assign the origin's parts separately: the `host` setter leaves an
 	// existing port in place when the value carries none, so `host` alone turns
@@ -157,4 +165,18 @@ function relayUpstreamPath( target, apiRoot ) {
 		return null;
 	}
 	return aliased.href.slice( apiRoot.href.length );
+}
+
+/**
+ * A hostname reduced to the form its aliases share: every loopback spelling
+ * collapses to one, and a `www.` prefix is dropped.
+ *
+ * @param {string} hostname A URL hostname.
+ * @return {string} The canonical form.
+ */
+function canonicalHost( hostname ) {
+	if ( LOOPBACK_HOSTNAMES.has( hostname ) ) {
+		return 'localhost';
+	}
+	return hostname.replace( /^www\./, '' );
 }
