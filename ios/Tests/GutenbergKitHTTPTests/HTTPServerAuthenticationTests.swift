@@ -243,8 +243,29 @@ struct HTTPServerAuthenticationTests {
 
     // MARK: - CORS Preflight Auth Exemption
 
-    @Test("preflight without token returns 200 (CORS preflight exempt from auth)")
-    func preflightWithoutTokenReturns200() async throws {
+    @Test("preflight without token is answered under permissive CORS")
+    func preflightWithoutTokenIsAnsweredUnderPermissiveCORS() async throws {
+        // A preflight cannot carry credentials, so it is exempt from
+        // authentication — and the library answers it itself, so the exemption
+        // never reaches the handler.
+        let server = try await HTTPServer.start(
+            name: "auth-test",
+            requiresAuthentication: true,
+            cors: .permissive
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let raw = "OPTIONS /test HTTP/1.1\r\nHost: 127.0.0.1\r\nAccess-Control-Request-Method: GET\r\n\r\n"
+        let response = try await sendRaw(raw, toPort: server.port)
+        #expect(response.hasPrefix("HTTP/1.1 204"))
+    }
+
+    @Test("preflight without token is authenticated without a CORS policy")
+    func preflightWithoutTokenRequiresAuthWithoutCORS() async throws {
+        // Without a policy to answer it, a preflight would reach the handler,
+        // so the exemption would be an unauthenticated way in.
         let server = try await HTTPServer.start(
             name: "auth-test",
             requiresAuthentication: true
@@ -255,7 +276,7 @@ struct HTTPServerAuthenticationTests {
 
         let raw = "OPTIONS /test HTTP/1.1\r\nHost: 127.0.0.1\r\nAccess-Control-Request-Method: GET\r\n\r\n"
         let response = try await sendRaw(raw, toPort: server.port)
-        #expect(response.hasPrefix("HTTP/1.1 200"))
+        #expect(response.hasPrefix("HTTP/1.1 407"))
     }
 
     @Test("OPTIONS without Access-Control-Request-Method is not a preflight and returns 407")

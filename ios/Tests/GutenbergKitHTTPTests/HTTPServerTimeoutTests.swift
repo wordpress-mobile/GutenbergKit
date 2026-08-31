@@ -76,7 +76,8 @@ struct HTTPServerTimeoutTests {
     func preflightWithBodyReturns400() async throws {
         let server = try await HTTPServer.start(
             name: "options-with-body",
-            requiresAuthentication: true
+            requiresAuthentication: true,
+            cors: .permissive
         ) { _ in
             HTTPResponse(status: 200, body: Data("OK\n".utf8))
         }
@@ -94,7 +95,8 @@ struct HTTPServerTimeoutTests {
         let server = try await HTTPServer.start(
             name: "options-oversized-body",
             requiresAuthentication: true,
-            maxRequestBodySize: 16
+            maxRequestBodySize: 16,
+            cors: .permissive
         ) { _ in
             HTTPResponse(status: 200, body: Data("OK\n".utf8))
         }
@@ -107,11 +109,12 @@ struct HTTPServerTimeoutTests {
         #expect(response.hasPrefix("HTTP/1.1 400"))
     }
 
-    @Test("bodyless OPTIONS preflight still succeeds")
+    @Test("bodyless OPTIONS preflight is still answered")
     func bodylessOptionsSucceeds() async throws {
         let server = try await HTTPServer.start(
             name: "options-bodyless",
-            requiresAuthentication: true
+            requiresAuthentication: true,
+            cors: .permissive
         ) { _ in
             HTTPResponse(status: 200, body: Data("OK\n".utf8))
         }
@@ -119,7 +122,7 @@ struct HTTPServerTimeoutTests {
 
         let raw = "OPTIONS /test HTTP/1.1\r\nHost: 127.0.0.1\r\nAccess-Control-Request-Method: GET\r\n\r\n"
         let response = try await sendRaw(raw, toPort: server.port)
-        #expect(response.hasPrefix("HTTP/1.1 200"))
+        #expect(response.hasPrefix("HTTP/1.1 204"))
     }
 
     // MARK: - Start timeout

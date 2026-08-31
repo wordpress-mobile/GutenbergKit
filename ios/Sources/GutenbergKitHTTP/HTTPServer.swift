@@ -385,9 +385,12 @@ public final class HTTPServer: Sendable {
                         // the server read (and discard) an arbitrarily large body, and the
                         // handler must never see an unauthenticated request. A CORS
                         // preflight is exempt because preflights never include credentials
-                        // (Fetch spec §3.3.5); an `OPTIONS` the client sent deliberately is
-                        // not a preflight and is authenticated like any other request.
-                        if requiresAuthentication && !isPreflight(partial) {
+                        // (Fetch spec §3.3.5), and only under the policy that answers one
+                        // below without reaching the handler; an `OPTIONS` the client sent
+                        // deliberately is not a preflight and is authenticated like any
+                        // other request.
+                        let isExemptPreflight = cors == .permissive && isPreflight(partial)
+                        if requiresAuthentication && !isExemptPreflight {
                             guard authenticate(partial, token: token) else {
                                 throw HTTPServerError.authenticationFailed
                             }
@@ -403,7 +406,7 @@ public final class HTTPServer: Sendable {
                         // requests are bodyless; a body on the auth-exempt path would
                         // otherwise be read/drained without authentication — and the
                         // accepted-body read below is bounded only by the idle timeout.
-                        if isPreflight(partial), (parser.expectedBodyLength ?? 0) > 0 {
+                        if isExemptPreflight, (parser.expectedBodyLength ?? 0) > 0 {
                             throw HTTPServerError.unexpectedBody
                         }
 
@@ -813,6 +816,9 @@ public final class HTTPServer: Sendable {
     /// cannot use this to skip authentication: dropping the bearer token to
     /// look like a preflight means adding `Access-Control-Request-Method`,
     /// which routes the request to the 204 answer instead of the handler.
+    /// That holds only under ``CORSPolicy/permissive``, which is why the
+    /// authentication exemption is scoped to it — under any other policy a
+    /// preflight reaches the handler, so it is authenticated like anything else.
     private static func isPreflight(_ request: ParsedHTTPRequest) -> Bool {
         request.method.uppercased() == "OPTIONS"
             && request.header("Access-Control-Request-Method") != nil
