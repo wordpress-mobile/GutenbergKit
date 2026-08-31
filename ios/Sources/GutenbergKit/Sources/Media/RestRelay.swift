@@ -125,6 +125,22 @@ struct RestRelay: Sendable {
             // response back. See ``RedirectGuard``.
             let redirectGuard = RedirectGuard(allowedPrefix: apiRoot)
             let upstream = HTTPResponse(try await session.data(for: upstreamRequest, delegate: redirectGuard))
+
+            // A refused redirect leaves `URLSession` holding the 3xx itself.
+            // Relaying that would undo the refusal: the response carries the
+            // `Location` the guard just declined, and `fetch` follows redirects
+            // by default, so the web view would chase it to the very host the
+            // guard exists to keep the request away from — arriving as an
+            // opaque CORS failure rather than as this.
+            if let refused = redirectGuard.refusedTarget {
+                Logger.restRelay.error("Refused a relay redirect outside the site API root")
+                return Self.errorResponse(
+                    status: 502,
+                    code: "relay_redirect_refused",
+                    message: "The site redirected this request to \(refused), which is outside its configured REST API root. The editor did not follow it."
+                )
+            }
+
             return HTTPResponse(
                 status: upstream.status,
                 statusText: upstream.statusText,
@@ -197,6 +213,19 @@ struct RestRelay: Sendable {
     /// carrying the site credential — followed to that host, and its response
     /// relayed back to the editor. Refusing hands the 3xx itself back instead.
     ///
+    /// The comparison is a prefix match on the whole URL, not just its host,
+    /// so a redirect to another path on the same site — `/wp-login.php` for a
+    /// request to `/wp-json/…` — is refused too. The site credential should
+    /// follow the request only to the API it was configured for. It also means
+    /// a scheme downgrade fails without a rule of its own, since `http://…`
+    /// cannot prefix-match an `https://` root.
+    ///
+    /// The known cost: a redirect that changes permalink structure — pretty
+    /// REST URLs to `?rest_route=`, or the reverse after a permalink change —
+    /// is a legitimate redirect that this refuses. Refusing is the right
+    /// default because it cannot hand the credential somewhere unverified, and
+    /// the response says so specifically enough to find.
+    ///
     /// The comparison is origin-exact, unlike the JavaScript side's, which
     /// tolerates host aliases when recognizing a site URL. That asymmetry is
     /// deliberate: recognizing an alias decides where a request is *sent*,
@@ -204,10 +233,17 @@ struct RestRelay: Sendable {
     /// somewhere we did not choose. A canonical redirect onto an alias host is
     /// refused here rather than followed.
     ///
-    /// `@unchecked Sendable`: `allowedPrefix` is a `let` set at init and only
-    /// read afterwards.
-    private final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    /// `@unchecked Sendable`: `allowedPrefix` is a `let` set at init; the
+    /// refusal is recorded under a lock.
+    final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
         private let allowedPrefix: String
+        private let lock = NSLock()
+        private var _refusedTarget: String?
+
+        /// The redirect target that was refused, or `nil` if none was.
+        var refusedTarget: String? {
+            lock.withLock { _refusedTarget }
+        }
 
         init(allowedPrefix: String) {
             self.allowedPrefix = allowedPrefix
@@ -221,7 +257,7 @@ struct RestRelay: Sendable {
             completionHandler: @escaping (URLRequest?) -> Void
         ) {
             guard let url = request.url, url.absoluteString.hasPrefix(allowedPrefix) else {
-                Logger.restRelay.error("Refusing to follow a relay redirect outside the site API root")
+                lock.withLock { _refusedTarget = request.url?.absoluteString ?? "an unreadable URL" }
                 completionHandler(nil)
                 return
             }

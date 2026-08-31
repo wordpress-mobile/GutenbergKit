@@ -116,6 +116,42 @@ struct RestRelayTests {
         #expect(relay.upstreamURL(for: request("/proxying/wp/v2/posts")) == nil)
     }
 
+    // MARK: - Redirects
+
+    @Test("follows a redirect that stays under the API root")
+    func followsContainedRedirect() {
+        let followed = redirectDecision(to: "https://example.com/wp-json/wp/v2/posts/1")
+
+        #expect(followed?.url?.absoluteString == "https://example.com/wp-json/wp/v2/posts/1")
+    }
+
+    @Test("refuses a redirect that leaves the API root")
+    func refusesEscapingRedirect() {
+        // Another host, another path on the same site, and a scheme downgrade.
+        // The credential should follow the request only to the API it was
+        // configured for.
+        for target in [
+            "https://elsewhere.example/wp-json/wp/v2/posts",
+            "https://example.com/wp-login.php",
+            "http://example.com/wp-json/wp/v2/posts",
+        ] {
+            #expect(redirectDecision(to: target) == nil, "should refuse \(target)")
+        }
+    }
+
+    @Test("reports the refused target so the editor can say what happened")
+    func recordsRefusedTarget() {
+        // Without this the relay would hand back the 3xx itself, and `fetch`
+        // — which follows redirects by default — would chase it to the host
+        // the guard just declined.
+        let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: "https://example.com/wp-json/")
+        #expect(redirectGuard.refusedTarget == nil)
+
+        _ = decide(redirectGuard, target: "https://elsewhere.example/x")
+
+        #expect(redirectGuard.refusedTarget == "https://elsewhere.example/x")
+    }
+
     // MARK: - Routing
 
     @Test("claims its own route and nothing else")
@@ -141,6 +177,34 @@ struct RestRelayTests {
 
     private func request(_ target: String, method: String = "GET") -> ParsedHTTPRequest {
         .complete(method: method, target: target, httpVersion: "HTTP/1.1", headers: [:], body: nil)
+    }
+
+    /// The request a fresh guard would follow for a redirect to `target`, or
+    /// `nil` if it refuses.
+    private func redirectDecision(to target: String) -> URLRequest? {
+        decide(
+            RestRelay.RedirectGuard(allowedPrefix: "https://example.com/wp-json/"),
+            target: target
+        )
+    }
+
+    /// Asks `redirectGuard` whether to follow a redirect to `target`.
+    private func decide(_ redirectGuard: RestRelay.RedirectGuard, target: String) -> URLRequest? {
+        let url = URL(string: target)!
+        var followed: URLRequest?
+        redirectGuard.urlSession(
+            .shared,
+            task: URLSession.shared.dataTask(with: url),
+            willPerformHTTPRedirection: HTTPURLResponse(
+                url: URL(string: "https://example.com/wp-json/wp/v2/posts")!,
+                statusCode: 301,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Location": target]
+            )!,
+            newRequest: URLRequest(url: url),
+            completionHandler: { followed = $0 }
+        )
+        return followed
     }
 }
 
