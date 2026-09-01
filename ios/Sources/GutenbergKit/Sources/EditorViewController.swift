@@ -515,7 +515,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         do {
             self.uploadServer = try await MediaUploadServer.start(
-                uploadDelegate: mediaUploadDelegate,
+                uploadDelegate: isUploadPipelineEnabled ? mediaUploadDelegate : nil,
                 defaultUploader: defaultUploader,
                 restRelay: isRestRelayEnabled ? RestRelay(configuration: configuration) : nil
             )
