@@ -105,20 +105,24 @@ struct RestRelayIntegrationTests {
             let post = try #require((try? JSONSerialization.jsonObject(with: created)) as? [String: Any])
             let id = try #require(post["id"] as? Int)
 
-            // Read it back rather than trusting the create response: the defect
-            // this covers sent an empty body, which WordPress accepts as a
-            // no-op while still answering 2xx.
-            let (fetched, _) = try await site.relayed("wp/v2/posts/\(id)?context=edit", on: server)
-            let stored = try #require((try? JSONSerialization.jsonObject(with: fetched)) as? [String: Any])
-            let storedTitle = (stored["title"] as? [String: Any])?["raw"] as? String
-            #expect(storedTitle == title)
-
-            _ = try await site.relayed(
-                "wp/v2/posts/\(id)?force=true",
-                method: "POST",
-                headers: ["X-HTTP-Method-Override": "DELETE"],
-                on: server
-            )
+            // The draft is deleted whether or not the assertions below hold.
+            // `defer` cannot `await`, and leaving the deletion as the last
+            // statement meant a failing `#require` — exactly what this test
+            // exists to catch — left the draft in the `wp/v2/posts` listing
+            // `relaysGet` reads, on a site the suite is re-run against.
+            do {
+                // Read it back rather than trusting the create response: the
+                // defect this covers sent an empty body, which WordPress
+                // accepts as a no-op while still answering 2xx.
+                let (fetched, _) = try await site.relayed("wp/v2/posts/\(id)?context=edit", on: server)
+                let stored = try #require((try? JSONSerialization.jsonObject(with: fetched)) as? [String: Any])
+                let storedTitle = (stored["title"] as? [String: Any])?["raw"] as? String
+                #expect(storedTitle == title)
+            } catch {
+                await site.deletePost(id, on: server)
+                throw error
+            }
+            await site.deletePost(id, on: server)
         }
     }
 
@@ -202,6 +206,17 @@ struct WPEnvSite {
             siteApiRoot: apiRoot,
             authHeader: authHeader
         ).build()
+    }
+
+    /// Deletes a post through the relay, ignoring the outcome: this is cleanup,
+    /// and a failure here must not replace the failure that ran it.
+    func deletePost(_ id: Int, on server: MediaUploadServer) async {
+        _ = try? await relayed(
+            "wp/v2/posts/\(id)?force=true",
+            method: "POST",
+            headers: ["X-HTTP-Method-Override": "DELETE"],
+            on: server
+        )
     }
 
     /// Issues a request through the relay the way the editor's `fetch()` does:
