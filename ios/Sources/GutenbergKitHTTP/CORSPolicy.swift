@@ -28,8 +28,9 @@ public enum CORSPolicy: Sendable {
                 // obtain it. `*` only governs whether a *token-holding* origin may
                 // read the response, and the sole token-holder is the editor
                 // itself, the legitimate client. Echoing the origin isn't viable
-                // anyway: the editor loads from `file://` (Origin `null`), which
-                // can't be cleanly allowlisted.
+                // anyway: the editor loads from `file://` and WebKit sends
+                // `Origin: file://`, an opaque origin that can't be cleanly
+                // allowlisted.
                 ("Access-Control-Allow-Origin", "*"),
                 ("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"),
                 // Only headers a browser actually announces in a preflight

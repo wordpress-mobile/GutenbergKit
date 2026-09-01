@@ -43,6 +43,12 @@ final class MediaUploadServer: Sendable {
     /// - Parameters:
     ///   - uploadDelegate: Optional delegate for customizing file processing and upload.
     ///   - defaultUploader: Fallback uploader used when no delegate provides `uploadFile`.
+    ///   - restRelay: Optional ``RestRelay``. When present, this server also
+    ///     answers the relay's route, becoming the transport for every REST
+    ///     request the editor makes under iOS Lockdown Mode — which is what
+    ///     `GBKit.networkProxy` advertises to the web view. When `nil`, the
+    ///     server serves only the upload route and the editor calls the site
+    ///     directly.
     ///   - maxRequestBodySize: The maximum allowed request body size in bytes.
     ///     Requests exceeding this limit receive a 413 response. Defaults to 4 GB.
     static func start(
