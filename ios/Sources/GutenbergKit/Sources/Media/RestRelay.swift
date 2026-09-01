@@ -30,6 +30,15 @@ import GutenbergKitHTTP
 ///   cannot be pointed at another host by construction rather than by string
 ///   matching. The resolved URL is re-checked against the root, and redirects
 ///   away from it are refused.
+/// - Which route *within* the site is reached is the caller's to choose. The
+///   query is forwarded as-is, and WordPress registers `rest_route` as a public
+///   query variable that `WP::parse_request()` prefers over the route the path
+///   names, so a caller-supplied one wins. There is no boundary here to
+///   defend: every route reachable that way is one the editor may request
+///   through the relay directly. Filtering the parameter would have to
+///   reproduce PHP's `$_GET` name mangling — `.`, space and `+` all become `_`
+///   — and a filter that misses a spelling reads as a guarantee it does not
+///   provide.
 /// - The upstream `Authorization` header is injected natively from the editor
 ///   configuration; any client-supplied value is discarded.
 struct RestRelay: Sendable {
@@ -197,7 +206,7 @@ struct RestRelay: Sendable {
         let relativePath = path.dropFirst(Self.route.count).drop(while: { $0 == "/" })
         guard !Self.containsDotSegment(relativePath) else { return nil }
 
-        var suffix = String(relativePath) + Self.removingRestRoute(from: request.query)
+        var suffix = String(relativePath) + request.query
         // A root that already carries a query (plain permalinks) continues it
         // rather than starting a second one — mirroring `createRootURLMiddleware`.
         if apiRoot.contains("?"), let separator = suffix.firstIndex(of: "?") {
@@ -209,31 +218,6 @@ struct RestRelay: Sendable {
             return nil
         }
         return url
-    }
-
-    /// The caller's query with any `rest_route` parameter removed.
-    ///
-    /// The relay builds the upstream route from the request path; a
-    /// caller-supplied `rest_route` would replace it. WordPress registers
-    /// `rest_route` as a public query variable, and `WP::parse_request()`
-    /// prefers `$_GET` over the value a permalink rewrite produced — so the
-    /// override applies to every site, not only one on plain permalinks whose
-    /// root query the path merges into. api-fetch never emits the parameter.
-    ///
-    /// The route the caller would reach that way is one the editor may request
-    /// through the relay anyway, so this is containment, not a privilege
-    /// boundary: it keeps the path the relay validated as the path it sends.
-    private static func removingRestRoute(from query: String) -> String {
-        guard query.hasPrefix("?") else { return query }
-
-        // Names are percent-decoded before comparing because PHP decodes them
-        // too, so `rest%5Froute` arrives as `rest_route`. The comparison is
-        // case-sensitive to match PHP's `$_GET` lookup.
-        let kept = query.dropFirst().split(separator: "&", omittingEmptySubsequences: false).filter {
-            let name = $0.prefix { $0 != "=" }
-            return name.removingPercentEncoding != "rest_route"
-        }
-        return kept.isEmpty ? "" : "?\(kept.joined(separator: "&"))"
     }
 
     /// Whether `path` contains a `.` or `..` segment, including the

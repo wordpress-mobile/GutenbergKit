@@ -129,35 +129,15 @@ struct RestRelayTests {
         #expect(relay.upstreamURL(for: request("/proxy//elsewhere.example/x"))?.host() == "example.com")
     }
 
-    @Test("drops a rest_route parameter that would replace the path")
-    func dropsCallerSuppliedRestRoute() {
-        // WordPress prefers `$_GET['rest_route']` over the value a permalink
-        // rewrite produced, so without this the caller's parameter, not the
-        // validated path, would select the route — on either root shape.
-        let pretty = makeRelay(apiRoot: Self.prettyRoot)
-        #expect(
-            pretty.upstreamURL(for: request("/proxy/wp/v2/posts?rest_route=/wp/v2/users&_locale=user"))?.absoluteString
-                == "https://example.com/wp-json/wp/v2/posts?_locale=user"
-        )
-
-        let plain = makeRelay(apiRoot: Self.plainRoot)
-        #expect(
-            plain.upstreamURL(for: request("/proxy/wp/v2/posts?rest_route=/wp/v2/users"))?.absoluteString
-                == "https://example.com/?rest_route=/wp/v2/posts"
-        )
-        // Percent-encoded because PHP decodes the name before matching it.
-        #expect(
-            pretty.upstreamURL(for: request("/proxy/wp/v2/posts?rest%5Froute=/wp/v2/users"))?.absoluteString
-                == "https://example.com/wp-json/wp/v2/posts"
-        )
-    }
-
-    @Test("keeps parameters whose names merely resemble rest_route")
-    func keepsSimilarlyNamedParameters() {
+    @Test("forwards the query verbatim, rest_route included")
+    func forwardsQueryVerbatim() {
+        // WordPress prefers `$_GET['rest_route']` over the route the path
+        // names, so the caller picks the route whichever way it spells the
+        // parameter. Deliberately not filtered: see the type's Security notes.
         let relay = makeRelay(apiRoot: Self.prettyRoot)
         #expect(
-            relay.upstreamURL(for: request("/proxy/wp/v2/posts?rest_routes=1&x_rest_route=2"))?.absoluteString
-                == "https://example.com/wp-json/wp/v2/posts?rest_routes=1&x_rest_route=2"
+            relay.upstreamURL(for: request("/proxy/wp/v2/posts?rest_route=/wp/v2/users&_locale=user"))?.absoluteString
+                == "https://example.com/wp-json/wp/v2/posts?rest_route=/wp/v2/users&_locale=user"
         )
     }
 
