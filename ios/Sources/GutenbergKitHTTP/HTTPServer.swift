@@ -349,13 +349,17 @@ public final class HTTPServer: Sendable {
     /// client reads, never the protocol semantics. Without a delegate body the
     /// response is the reason phrase as `text/plain`, which is what a client
     /// that does not parse bodies expects.
+    ///
+    /// The reason phrase comes from ``HTTPResponse/defaultStatusText(for:)`` so
+    /// the status line and the fallback body cannot disagree with the rest of
+    /// the library about what a status is called.
     private static func errorResponse(
         status: Int,
-        statusText: String,
         headers: [(String, String)] = [],
         for error: HTTPServerError,
         delegate: HTTPServerDelegate?
     ) -> HTTPResponse {
+        let statusText = String(HTTPResponse.defaultStatusText(for: status))
         let body = delegate?.errorBody(for: error)
         return HTTPResponse(
             status: status,
@@ -549,7 +553,7 @@ public final class HTTPServer: Sendable {
                 Logger.httpServer.debug("\(request.method) \(request.target) → \(response.status) (\(String(format: "%.1f", ms))ms)")
             } catch HTTPServerError.authenticationFailed {
                 let response = Self.errorResponse(
-                    status: 407, statusText: "Proxy Authentication Required",
+                    status: 407,
                     headers: [("Proxy-Authenticate", "Bearer")],
                     for: .authenticationFailed, delegate: delegate
                 )
@@ -557,20 +561,20 @@ public final class HTTPServer: Sendable {
             } catch HTTPServerError.forbiddenOrigin {
                 Logger.httpServer.warning("Rejected a request that did not originate from a web view")
                 let response = Self.errorResponse(
-                    status: 403, statusText: "Forbidden",
+                    status: 403,
                     for: .forbiddenOrigin, delegate: delegate
                 )
                 await send(response, on: connection, cors: cors)
             } catch HTTPServerError.lengthRequired {
                 let response = Self.errorResponse(
-                    status: 411, statusText: "Length Required",
+                    status: 411,
                     for: .lengthRequired, delegate: delegate
                 )
                 await send(response, on: connection, cors: cors)
             } catch HTTPServerError.unexpectedBody {
                 Logger.httpServer.warning("Rejected auth-exempt request carrying a body")
                 let response = Self.errorResponse(
-                    status: 400, statusText: "Bad Request",
+                    status: 400,
                     for: .unexpectedBody, delegate: delegate
                 )
                 await send(response, on: connection, cors: cors)
@@ -580,7 +584,7 @@ public final class HTTPServer: Sendable {
             } catch HTTPServerError.readTimeout {
                 Logger.httpServer.warning("Read timeout, closing connection")
                 let response = Self.errorResponse(
-                    status: 408, statusText: "Request Timeout",
+                    status: 408,
                     for: .readTimeout, delegate: delegate
                 )
                 await send(response, on: connection, cors: cors)
