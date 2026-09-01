@@ -527,9 +527,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 restRelay: isRestRelayEnabled ? RestRelay(configuration: configuration) : nil
             )
         } catch {
-            // `uploadServer` is still nil, and every read of these flags in
-            // `buildEditorConfiguration` goes through it, so nothing is
-            // advertised either way.
             Logger.uploadServer.error("Failed to start upload server: \(error). Falling back to default upload behavior.")
         }
     }

@@ -38,8 +38,6 @@ export function createRelayFetch( next, { networkProxy, siteApiRoot } ) {
 	const apiRoot = new URL(
 		siteApiRoot.endsWith( '/' ) ? siteApiRoot : `${ siteApiRoot }/`
 	);
-	// The native host builds this so the relay's route is spelled in one
-	// language rather than derived on both sides of the bridge.
 	const relayRoot = networkProxy.baseURL;
 	const localServerPort = String( networkProxy.port );
 	const relayAuthorization = `Bearer ${ networkProxy.token }`;
