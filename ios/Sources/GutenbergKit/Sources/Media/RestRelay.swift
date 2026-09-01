@@ -191,8 +191,8 @@ struct RestRelay: Sendable {
     /// out of the API root and reach the rest of the site with the credential
     /// attached.
     func upstreamURL(for request: ParsedHTTPRequest) -> URL? {
+        guard Self.handles(request) else { return nil }
         let path = request.path
-        guard path == Self.route || path.hasPrefix("\(Self.route)/") else { return nil }
 
         // Strip the route and any leading slashes, so the remainder appends to
         // the API root rather than resolving against the site root.
