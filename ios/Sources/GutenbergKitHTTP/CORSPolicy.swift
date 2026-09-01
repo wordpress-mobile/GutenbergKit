@@ -33,7 +33,7 @@ public enum CORSPolicy: Sendable {
                 // allowlisted.
                 ("Access-Control-Allow-Origin", "*"),
                 ("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"),
-                ("Access-Control-Allow-Headers", Self.allowedRequestHeaders.joined(separator: ", ")),
+                ("Access-Control-Allow-Headers", Self.allowedRequestHeadersValue),
                 ("Access-Control-Max-Age", "86400"),
             ]
         }
@@ -55,6 +55,10 @@ public enum CORSPolicy: Sendable {
     static let allowedRequestHeaders = [
         "Authorization", "Content-Type", "Relay-Authorization", "X-HTTP-Method-Override",
     ]
+
+    /// ``allowedRequestHeaders`` as the header value, joined once rather than on
+    /// every response — `responseHeaders` is evaluated for each one.
+    static let allowedRequestHeadersValue = allowedRequestHeaders.joined(separator: ", ")
 
     /// The headers a preflight announced that this policy will not allow.
     ///
