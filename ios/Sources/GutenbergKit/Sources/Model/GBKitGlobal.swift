@@ -95,9 +95,11 @@ public struct GBKitGlobal: Sendable, Codable {
 
     /// Connection details for the native loopback network proxy.
     ///
-    /// When present, REST API requests that fail in the web view (e.g. under
-    /// iOS Lockdown Mode, which breaks CORS for `file://` pages) are retried
-    /// through `http://127.0.0.1:<port>` with the given bearer token.
+    /// When present, the editor sends every site REST API request through
+    /// `http://127.0.0.1:<port>` with the given bearer token rather than
+    /// directly. The host advertises it only when a direct request cannot work
+    /// — under iOS Lockdown Mode, which breaks CORS for `file://` pages — so
+    /// there is no direct attempt to fall back from.
     public struct NetworkProxy: Sendable, Codable {
         let port: Int
         let token: String

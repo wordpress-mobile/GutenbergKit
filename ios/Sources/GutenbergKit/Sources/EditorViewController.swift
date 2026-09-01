@@ -479,10 +479,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     /// The same server hosts the Lockdown Mode REST relay: when the web view
     /// is subject to Lockdown Mode, its `file://` page loses the CORS
-    /// exemption and WordPress rejects its `Origin: file://`, so REST requests
-    /// that fail in the web view are retried through this server (see
-    /// `RestRelay`). Relay failures never block the editor — the web view
-    /// simply keeps its direct (possibly broken) network path.
+    /// exemption and WordPress rejects its `Origin: file://`, so the editor
+    /// sends every site REST request through this server (see `RestRelay`).
+    /// The relay is the transport, not a fallback — it is advertised only when
+    /// a direct request cannot work, so there is no direct attempt to retry
+    /// from. If this server fails to start, `networkProxy` stays nil and the
+    /// web view keeps its direct (possibly broken) network path.
     private func startUploadServer() async {
         // A delegate that was provided but is already nil here was deallocated before
         // the editor finished loading — the host didn't hold a strong reference to it.
