@@ -97,6 +97,18 @@ struct RestRelayHandleTests {
         #expect(exposed.first?.1.contains("Allow") == true)
     }
 
+    @Test("strips the site's cookies rather than rescoping them to loopback")
+    func stripsSetCookie() async throws {
+        // Passed on, these would be stored against `127.0.0.1:<port>` — a
+        // different origin, on a port another process owns once this server
+        // stops.
+        let exchange = try await relay(responseHeaders: [
+            "Set-Cookie": "wordpress_logged_in_abc=user%7C123; Path=/; HttpOnly",
+        ])
+
+        #expect(exchange.response.header("Set-Cookie") == nil)
+    }
+
     @Test("strips Content-Encoding, which URLSession already acted on")
     func stripsContentEncoding() async throws {
         // `URLSession` decompresses transparently, so advertising the upstream
@@ -170,8 +182,8 @@ struct RestRelayHandleTests {
             body: responseBody,
             failure: failure
         )
-        let (session, recorder) = StubURLProtocol.makeSession(stub: stub)
-        defer { session.invalidateAndCancel() }
+        let stubbed = StubURLProtocol.makeSession(stub: stub)
+        defer { stubbed.finish() }
 
         let relay = RestRelay(
             configuration: EditorConfigurationBuilder(
@@ -180,7 +192,7 @@ struct RestRelayHandleTests {
                 siteApiRoot: URL(string: "https://example.com/wp-json/")!,
                 authHeader: "Bearer test-token"
             ).build(),
-            session: session
+            session: stubbed.session
         )
 
         let parsed = ParsedHTTPRequest.complete(
@@ -194,7 +206,7 @@ struct RestRelayHandleTests {
             HTTPServer.Request(parsed: parsed, parseDuration: .zero)
         )
 
-        return Exchange(sentRequest: recorder.request, response: response)
+        return Exchange(sentRequest: stubbed.recorder.request, response: response)
     }
 }
 

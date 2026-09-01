@@ -321,9 +321,9 @@ struct RestRelay: Sendable {
     ///
     /// A name missing from an expose list does not fail loudly: `headers.get()`
     /// returns `null`, so the feature behind it reads as absent rather than
-    /// broken. `Allow` was missed exactly that way — `canUser` decides from it
-    /// whether the user may create a page, update settings, or edit global
-    /// styles, and every capability silently read as false. Hence the leading
+    /// broken. `canUser` reads `Allow` to decide whether the user may create a
+    /// page, update settings, or edit global styles, so without it every such
+    /// capability reads as false with no error surfaced. Hence the leading
     /// `*`, which covers whatever a plugin or a core update reads next. It is
     /// valid because relayed requests are sent `credentials: 'omit'`, and it
     /// withholds nothing that was not already the editor's: the response comes
@@ -373,11 +373,18 @@ struct RestRelay: Sendable {
     /// `Content-Encoding` must go because URLSession already decompressed the
     /// body: advertising the upstream encoding would make WebKit decode the
     /// plain bytes a second time, corrupting every gzipped JSON response.
+    ///
+    /// `Set-Cookie` is the site's, scoped to the site. Passing it on would
+    /// store the site's session cookies against `127.0.0.1:<port>` instead —
+    /// a different origin, and one whose port belongs to another process after
+    /// this server stops. A proxy consumes the upstream's cookies; the relay
+    /// carries the site credential natively and never needs them.
     private static let responseHeadersToStrip: Set<String> = [
         "access-control-allow-origin", "access-control-allow-credentials",
         "access-control-allow-headers", "access-control-allow-methods",
         "access-control-expose-headers", "access-control-max-age", "vary",
         "content-encoding",
+        "set-cookie", "set-cookie2",
     ]
 
     /// Appends local response headers to upstream headers, dropping the
