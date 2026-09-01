@@ -349,12 +349,19 @@ struct RestRelay: Sendable {
     /// Request headers that must not be forwarded upstream.
     ///
     /// `host`/`content-length`/`accept-encoding` are recalculated by URLSession;
-    /// `origin`, `referer`, and `sec-fetch-*` describe the web view's fetch
-    /// context and would leak the local page to the server (and WordPress
-    /// rejects `file://` origins — the exact problem the relay exists to
-    /// solve); the rest are relay-internal.
+    /// the RFC 9110 §7.6.1 hop-by-hop headers describe the connection to the
+    /// relay rather than the request to the site, so a proxy consumes them
+    /// rather than passing them on; `origin`, `referer`, and `sec-fetch-*`
+    /// describe the web view's fetch context and would leak the local page to
+    /// the server (and WordPress rejects `file://` origins — the exact problem
+    /// the relay exists to solve); the rest are relay-internal.
+    ///
+    /// A browser refuses to send a hop-by-hop header at all, so that group only
+    /// matters for a client that is not one.
     private static let requestHeadersToStrip: Set<String> = [
-        "host", "content-length", "accept-encoding", "connection",
+        "host", "content-length", "accept-encoding",
+        "connection", "keep-alive", "proxy-connection",
+        "te", "trailer", "transfer-encoding", "upgrade",
         "origin", "referer",
         "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "sec-fetch-user",
         "authorization", "relay-authorization", "proxy-authorization",
