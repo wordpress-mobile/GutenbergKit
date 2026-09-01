@@ -261,22 +261,13 @@ export const POST_FALLBACKS = {
 };
 
 /**
- * Retrieves the native-host-provided GBKit object from localStorage or returns
- * an empty object if not found.
+ * Retrieves the native-host-provided GBKit object or returns an empty object
+ * if the host has not injected one.
  *
  * @return {GBKitConfig} The GBKit object.
  */
 export function getGBKit() {
-	if ( window.GBKit ) {
-		return window.GBKit;
-	}
-
-	try {
-		return JSON.parse( localStorage.getItem( 'GBKit' ) ) || {};
-	} catch ( err ) {
-		error( 'Failed to parse GBKit from localStorage', err );
-		return {};
-	}
+	return window.GBKit || {};
 }
 
 /**
