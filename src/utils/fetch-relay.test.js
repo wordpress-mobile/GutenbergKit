@@ -223,4 +223,22 @@ describe( 'createRelayFetch', () => {
 			expect( next ).toHaveBeenCalledWith( request, undefined );
 		} );
 	} );
+
+	describe( 'failures', () => {
+		it( 'rejects rather than throwing when a header is malformed', async () => {
+			// api-fetch's middleware calls its `next` synchronously, so a throw
+			// here would escape `apiFetch()` itself instead of reaching the
+			// caller's `.catch()`.
+			let pending;
+			expect( () => {
+				pending = relayFetch()(
+					'https://example.com/wp-json/wp/v2/posts',
+					{ headers: { 'Bad Header': 'value' } }
+				);
+			} ).not.toThrow();
+
+			await expect( pending ).rejects.toThrow( TypeError );
+			expect( next ).not.toHaveBeenCalled();
+		} );
+	} );
 } );

@@ -41,7 +41,12 @@ export function createRelayFetch( next, { networkProxy, siteApiRoot } ) {
 	const relayRoot = `http://127.0.0.1:${ networkProxy.port }/proxy/`;
 	const localServerPort = String( networkProxy.port );
 
-	return ( input, init ) => {
+	// `async` so that a throw becomes a rejection, as it would from the `fetch`
+	// this stands in for. `new Headers()` rejects a malformed name or value by
+	// throwing, and api-fetch's middleware chain calls its `next` synchronously
+	// — so a synchronous throw here escapes `apiFetch()` itself rather than
+	// arriving at the caller's `.catch()`.
+	return async ( input, init ) => {
 		// A `no-cors` request has an opaque response by definition, so there is
 		// no CORS rejection for the relay to solve — and relaying one breaks it:
 		// a browser attaches only CORS-safelisted headers to a no-cors request,
