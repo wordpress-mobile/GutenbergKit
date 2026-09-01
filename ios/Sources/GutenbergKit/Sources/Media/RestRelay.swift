@@ -329,11 +329,14 @@ struct RestRelay: Sendable {
     /// withholds nothing that was not already the editor's: the response comes
     /// from the site it is authenticated to, over loopback.
     ///
-    /// The four names stay listed behind the wildcard because WebKit's support
-    /// for `*` here is unverified, and these are the ones whose absence is
-    /// known to break a feature — `Allow` for capabilities, `Link` for
-    /// `fetchAllMiddleware`'s pagination, `X-WP-Total`/`X-WP-TotalPages` for
-    /// list counts.
+    /// The four names stay listed behind the wildcard because `*` is ignored
+    /// for a *credentialed* request — treated as a literal header name, not a
+    /// wildcard. `createRelayFetch` sends `credentials: 'omit'`, so the
+    /// wildcard applies today; if that ever changes, these keep working rather
+    /// than every capability silently reading false again. They are the names
+    /// whose absence is known to break a feature: `Allow` for capabilities,
+    /// `Link` for `fetchAllMiddleware`'s pagination, `X-WP-Total`/
+    /// `X-WP-TotalPages` for list counts.
     private static let corsHeaders: [(String, String)] = [
         ("Access-Control-Expose-Headers", "*, Allow, Link, X-WP-Total, X-WP-TotalPages"),
     ]
