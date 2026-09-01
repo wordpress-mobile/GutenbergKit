@@ -130,6 +130,20 @@ describe( 'createRelayFetch', () => {
 			await expectPassthrough( `${ RELAY_ROOT }wp/v2/posts` );
 		} );
 
+		it( 'a no-cors request, whose response is opaque anyway', async () => {
+			// The connectivity probe. Relayed, it would lose the bearer token
+			// (a no-cors request carries only safelisted headers), take a 407,
+			// and still resolve — reporting the site reachable because the
+			// loopback server answered.
+			const init = { method: 'HEAD', mode: 'no-cors' };
+			await relayFetch()( 'https://example.com/wp-json/', init );
+
+			expect( next ).toHaveBeenCalledWith(
+				'https://example.com/wp-json/',
+				init
+			);
+		} );
+
 		it( 'a blob, data, or custom-scheme read', async () => {
 			await expectPassthrough( 'blob:https://example.com/abc-123' );
 			await expectPassthrough( 'data:text/plain,hello' );

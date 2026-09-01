@@ -42,6 +42,17 @@ export function createRelayFetch( next, { networkProxy, siteApiRoot } ) {
 	const localServerPort = String( networkProxy.port );
 
 	return ( input, init ) => {
+		// A `no-cors` request has an opaque response by definition, so there is
+		// no CORS rejection for the relay to solve — and relaying one breaks it:
+		// a browser attaches only CORS-safelisted headers to a no-cors request,
+		// so `Relay-Authorization` is dropped and the loopback server answers
+		// 407. Opaque responses hide that, which is the trap: the connectivity
+		// probe in `offline-indicator` would report the site reachable whenever
+		// the relay's own server was up, which is always.
+		if ( init?.mode === 'no-cors' ) {
+			return next( input, init );
+		}
+
 		const target = requestURL( input );
 		const upstreamPath =
 			target && ! addressesLocalServer( target, localServerPort )
