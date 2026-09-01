@@ -45,24 +45,6 @@ export async function setUpEditorEnvironment() {
 }
 
 /**
- * Wraps the global `fetch`, outermost wrapper first.
- *
- * The network log sits outside the relay so it records the request the editor
- * made rather than the loopback rewrite of it — the native HTTP server already
- * logs that hop. Each wrapper reports itself inapplicable by returning `null`:
- * the log needs `enableNetworkLogging`, the relay needs `GBKit.networkProxy`
- * (iOS Lockdown Mode).
- *
- * @return {void}
- */
-function installEditorFetchWrappers() {
-	installFetchWrappers( [
-		createLoggingFetchWrapper(),
-		createRelayFetchWrapper(),
-	] );
-}
-
-/**
  * Adds conditional CSS classes to `document.body`.
  *
  * @return {void}
@@ -93,6 +75,24 @@ function setLogLevelFromGBKit() {
 	if ( logLevel ) {
 		setLogLevel( logLevel );
 	}
+}
+
+/**
+ * Wraps the global `fetch`, outermost wrapper first.
+ *
+ * The network log sits outside the relay so it records the request the editor
+ * made rather than the loopback rewrite of it — the native HTTP server already
+ * logs that hop. Each wrapper reports itself inapplicable by returning `null`:
+ * the log needs `enableNetworkLogging`, the relay needs `GBKit.networkProxy`
+ * (iOS Lockdown Mode).
+ *
+ * @return {void}
+ */
+function installEditorFetchWrappers() {
+	installFetchWrappers( [
+		createLoggingFetchWrapper(),
+		createRelayFetchWrapper(),
+	] );
 }
 
 /**
