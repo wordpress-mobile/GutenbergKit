@@ -527,6 +527,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 restRelay: isRestRelayEnabled ? RestRelay(configuration: configuration) : nil
             )
         } catch {
+            isUploadPipelineEnabled = false
+            isRestRelayEnabled = false
             Logger.uploadServer.error("Failed to start upload server: \(error). Falling back to default upload behavior.")
         }
     }
