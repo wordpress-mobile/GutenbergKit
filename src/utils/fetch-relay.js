@@ -143,13 +143,22 @@ function addressesLocalServer( target, port ) {
  * need not spell the host the app was configured with — `www.` versus bare, or
  * wp-env's `localhost` versus the `127.0.0.1` its runtime writes into
  * `WP_SITEURL` (the e2e fixtures work around the same thing by matching uploads
- * on path rather than hostname, see `e2e/wp-env-fixtures.js`). Those spellings
- * name the configured host, so the target is moved onto the root's origin —
- * scheme and port included — before comparing. Any other host keeps the direct
- * path it had before a relay existed: rewriting it would send a third party's
- * request to the user's own site, with the site credential attached. A *path*
- * difference is likewise a different resource: in a subdirectory multisite
- * `https://site/a/wp-json/` and `https://site/b/wp-json/` are separate sites.
+ * on path rather than hostname, see `e2e/wp-env-fixtures.js`). Only the scheme
+ * may differ beyond that — an `http` `siteurl` behind a TLS-terminating proxy.
+ * The port has to match: another port on the same host is another server, and
+ * answering its request with the site's response is a different bug from the
+ * one this tolerance exists to fix. A *path* difference is likewise a different
+ * resource: in a subdirectory multisite `https://site/a/wp-json/` and
+ * `https://site/b/wp-json/` are separate sites.
+ *
+ * Anything else keeps the direct path it had before a relay existed, because
+ * rewriting it would send a third party's request to the user's own site with
+ * the site credential attached. The cost is an alias this cannot recognize —
+ * a site reached by LAN IP whose `home_url()` says `localhost`, a mapped
+ * domain, a migration — where a paginated `Link` target goes direct and fails
+ * under Lockdown Mode. Growing the list of spellings cannot close that: the
+ * fix is for the relay to canonicalize the URLs the site emits, since it knows
+ * the response came from the configured root and this layer can only guess.
  *
  * @param {URL} target  The request's target.
  * @param {URL} apiRoot The site's REST API root, normalized and slash-terminated.
@@ -157,18 +166,18 @@ function addressesLocalServer( target, port ) {
  */
 function relayUpstreamPath( target, apiRoot ) {
 	if (
-		canonicalHost( target.hostname ) !== canonicalHost( apiRoot.hostname )
+		canonicalHost( target.hostname ) !==
+			canonicalHost( apiRoot.hostname ) ||
+		target.port !== apiRoot.port
 	) {
 		return null;
 	}
 
 	const aliased = new URL( target );
-	// Assign the origin's parts separately: the `host` setter leaves an
-	// existing port in place when the value carries none, so `host` alone turns
-	// `http://127.0.0.1:8888/…` into `https://example.com:8888/…`.
+	// `hostname` rather than `host`: the `host` setter would drop the port when
+	// the value carries none, and the port is part of the match.
 	aliased.protocol = apiRoot.protocol;
 	aliased.hostname = apiRoot.hostname;
-	aliased.port = apiRoot.port;
 
 	if ( ! aliased.href.startsWith( apiRoot.href ) ) {
 		return null;

@@ -142,6 +142,38 @@ describe( 'createRelayFetch', () => {
 			);
 		} );
 
+		it( 'another service on the site host', async () => {
+			// A different port is a different server, however its paths are
+			// shaped. Relaying it would answer one service's request with
+			// another's response.
+			await expectPassthrough(
+				'https://example.com:8443/wp-json/wp/v2/posts'
+			);
+			await relayFetch( 'http://localhost:8888/wp-json/' )(
+				'http://127.0.0.1:3000/wp-json/wp/v2/posts'
+			);
+			expect( next ).toHaveBeenCalledWith(
+				'http://127.0.0.1:3000/wp-json/wp/v2/posts',
+				undefined
+			);
+		} );
+
+		it( 'a host alias the canonical form does not cover', async () => {
+			// A documented limitation, not a decision: a site reached by LAN IP
+			// emits `localhost` URLs, which are not recognized as the same host,
+			// so paginated `Link` targets take the direct path — and fail under
+			// Lockdown Mode. Provenance belongs at the relay, which knows the
+			// response came from the configured site; see `relayUpstreamPath`.
+			await relayFetch( 'http://192.168.1.50:8888/wp-json/' )(
+				'http://localhost:8888/wp-json/wp/v2/posts?page=2'
+			);
+
+			expect( next ).toHaveBeenCalledWith(
+				'http://localhost:8888/wp-json/wp/v2/posts?page=2',
+				undefined
+			);
+		} );
+
 		it( 'another WordPress site whose path matches the root', async () => {
 			// A different host is a different server, however its paths are
 			// shaped. Rewriting one onto the configured site would send its
