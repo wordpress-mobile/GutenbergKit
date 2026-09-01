@@ -125,18 +125,11 @@ struct RestRelay: Sendable {
                 // Large bodies are buffered to disk by the request parser;
                 // stream them to avoid loading uploads fully into memory.
                 //
-                // `count` is a file-size lookup, and reports zero when it
-                // fails. Sending that as the `Content-Length` of a body the
-                // parser says exists would upload nothing, and WordPress
-                // answers a no-op with a 2xx the editor would take for success.
+                // `count` is the length the parser recorded for the slice, not
+                // a file-system lookup, so it cannot fail here.
                 do {
-                    let length = body.count
-                    guard length > 0 else {
-                        Logger.restRelay.error("Refusing to relay a request body whose length could not be read")
-                        return Self.errorResponse(status: 500, code: "relay_body_unreadable", message: "Failed to read the request body.")
-                    }
                     upstreamRequest.httpBodyStream = try body.makeInputStream()
-                    upstreamRequest.setValue("\(length)", forHTTPHeaderField: "Content-Length")
+                    upstreamRequest.setValue("\(body.count)", forHTTPHeaderField: "Content-Length")
                 } catch {
                     Logger.restRelay.error("Failed to open request body stream: \(error)")
                     return Self.errorResponse(status: 500, code: "relay_body_unreadable", message: "Failed to read the request body.")
