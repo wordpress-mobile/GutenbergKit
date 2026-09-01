@@ -54,6 +54,29 @@ struct MediaUploadServerTests {
     #expect(httpResponse.statusCode == 407)
   }
 
+  @Test("refuses in the JSON shape the editor parses")
+  func refusalIsParseableByTheEditor() async throws {
+    // `@wordpress/api-fetch` reads every response as JSON, so a `text/plain`
+    // refusal reaches the editor as `invalid_json` — "The response is not a
+    // valid JSON response." — with the real reason lost. Under the relay this
+    // server answers every REST request the editor makes.
+    let server = try await MediaUploadServer.start()
+    defer { server.stop() }
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+
+    let (data, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+
+    #expect(httpResponse.statusCode == 407)
+    #expect(httpResponse.value(forHTTPHeaderField: "Content-Type") == "application/json")
+    let error = try #require((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])
+    #expect(error["code"] as? String == "server_unauthorized")
+    #expect(error["message"] is String)
+  }
+
   @Test("rejects requests with wrong token")
   func rejectsWrongToken() async throws {
     let server = try await MediaUploadServer.start()

@@ -361,6 +361,51 @@ struct HTTPServerAuthenticationTests {
         #expect(http.statusCode == 407)
     }
 
+    // MARK: - Delegate Error Bodies
+
+    @Test("a delegate's body answers a refusal the handler never sees")
+    func delegateBodyAnswersRefusal() async throws {
+        // A client that parses every response the same way — api-fetch reads
+        // them all as JSON — reports a text/plain refusal as a parse failure,
+        // losing the reason it was refused.
+        let server = try await HTTPServer.start(
+            name: "error-body-test",
+            requiresAuthentication: true,
+            delegate: JSONErrorDelegate()
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let raw = "GET /test HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
+        let response = try await sendRaw(raw, toPort: server.port)
+
+        #expect(response.hasPrefix("HTTP/1.1 407"))
+        #expect(response.contains("Content-Type: application/json"))
+        #expect(response.contains(#"{"code":"refused"}"#))
+        // The status and the protocol's own headers stay the server's: a
+        // delegate supplies the payload, never the semantics.
+        #expect(response.contains("Proxy-Authenticate: Bearer"))
+    }
+
+    @Test("a refusal falls back to the reason phrase without a delegate")
+    func refusalWithoutDelegateIsPlainText() async throws {
+        let server = try await HTTPServer.start(
+            name: "error-body-test",
+            requiresAuthentication: true
+        ) { _ in
+            HTTPResponse(status: 200, body: Data("OK\n".utf8))
+        }
+        defer { server.stop() }
+
+        let raw = "GET /test HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
+        let response = try await sendRaw(raw, toPort: server.port)
+
+        #expect(response.hasPrefix("HTTP/1.1 407"))
+        #expect(response.contains("Content-Type: text/plain"))
+        #expect(response.contains("Proxy Authentication Required"))
+    }
+
     // MARK: - Content-Length Requirement
 
     @Test("POST without Content-Length returns 411")
@@ -481,6 +526,14 @@ struct HTTPServerAuthenticationTests {
                 }
             }
         }
+    }
+}
+
+/// Answers every server-generated error with a JSON body, the way a consumer
+/// whose client parses all responses as JSON would.
+private final class JSONErrorDelegate: HTTPServerDelegate {
+    func errorBody(for error: HTTPServerError) -> HTTPErrorBody? {
+        HTTPErrorBody(contentType: "application/json", data: Data(#"{"code":"refused"}"#.utf8))
     }
 }
 

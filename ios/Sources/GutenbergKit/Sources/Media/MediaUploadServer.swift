@@ -314,20 +314,33 @@ final class MediaUploadServer: Sendable {
         // Emit a WordPress-REST-style error object so the JS middleware normalizes
         // it (and surfaces `message`) the same way it does a relayed WordPress
         // error — the local server's own errors need no special-casing.
-        let payload = ["code": "upload_error", "message": message]
-        let body = (try? JSONSerialization.data(withJSONObject: payload))
-            ?? Data(#"{"code":"upload_error","message":"Upload failed"}"#.utf8)
+        let body = errorBody(code: "upload_error", message: message)
         return HTTPResponse(
             status: status,
-            headers: [("Content-Type", "application/json")],
-            body: body
+            headers: [("Content-Type", body.contentType)],
+            body: body.data
         )
     }
 
-    /// Answers the server's recoverable parse errors (e.g. an over-limit body)
-    /// with the same JSON `{code, message}` shape the editor expects, so the
-    /// middleware surfaces a real message ("The file is too large…") instead of a
-    /// generic parse-failure. A leaf object — the HTTP server retains it.
+    /// A WordPress-REST-style `{code, message}` payload.
+    private static func errorBody(code: String, message: String) -> HTTPErrorBody {
+        let payload = ["code": code, "message": message]
+        let data = (try? JSONSerialization.data(withJSONObject: payload))
+            ?? Data(#"{"code":"\#(code)","message":"Request failed"}"#.utf8)
+        return HTTPErrorBody(contentType: "application/json", data: data)
+    }
+
+    /// Answers the errors the HTTP server raises itself with the same JSON
+    /// `{code, message}` shape the editor expects, so the middleware surfaces a
+    /// real message instead of a generic parse failure.
+    ///
+    /// Every response on this server reaches `@wordpress/api-fetch`, which parses
+    /// all of them as JSON: a `text/plain` refusal arrives as `invalid_json`
+    /// ("The response is not a valid JSON response."), losing the reason. Under
+    /// the relay that covers every REST request the editor makes, so these are
+    /// the failures a user actually sees.
+    ///
+    /// A leaf object — the HTTP server retains it.
     private final class ServerDelegate: HTTPServerDelegate {
         func response(forRecoverableParseError error: HTTPRequestParseError) -> HTTPResponse {
             let message: String = switch error {
@@ -335,6 +348,24 @@ final class MediaUploadServer: Sendable {
             default: "\(error.httpStatusText)"
             }
             return MediaUploadServer.errorResponse(status: error.httpStatus, message: message)
+        }
+
+        func errorBody(for error: HTTPServerError) -> HTTPErrorBody? {
+            let (code, message): (String, String) = switch error {
+            case .authenticationFailed:
+                ("server_unauthorized", "The editor's credential for the local server was missing or stale.")
+            case .forbiddenOrigin:
+                ("server_forbidden_origin", "The local server accepts requests from the editor only.")
+            case .lengthRequired:
+                ("server_length_required", "The request did not declare its content length.")
+            case .unexpectedBody:
+                ("server_unexpected_body", "A preflight request carried a body.")
+            case .readTimeout:
+                ("server_timeout", "The local server timed out before the request finished arriving.")
+            default:
+                ("server_error", error.localizedDescription)
+            }
+            return MediaUploadServer.errorBody(code: code, message: message)
         }
     }
 

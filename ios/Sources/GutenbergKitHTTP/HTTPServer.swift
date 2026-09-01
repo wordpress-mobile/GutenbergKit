@@ -342,6 +342,29 @@ public final class HTTPServer: Sendable {
         return HTTPResponse(status: error.httpStatus, statusText: statusText, body: Data(statusText.utf8))
     }
 
+    /// An error the server raises itself, carrying the delegate's body when it
+    /// supplies one.
+    ///
+    /// The status and `headers` are the server's: a delegate customizes what the
+    /// client reads, never the protocol semantics. Without a delegate body the
+    /// response is the reason phrase as `text/plain`, which is what a client
+    /// that does not parse bodies expects.
+    private static func errorResponse(
+        status: Int,
+        statusText: String,
+        headers: [(String, String)] = [],
+        for error: HTTPServerError,
+        delegate: HTTPServerDelegate?
+    ) -> HTTPResponse {
+        let body = delegate?.errorBody(for: error)
+        return HTTPResponse(
+            status: status,
+            statusText: statusText,
+            headers: headers + [("Content-Type", body?.contentType ?? "text/plain")],
+            body: body?.data ?? Data(statusText.utf8)
+        )
+    }
+
     // MARK: - Connection Handling
 
     private static func handleConnection(
@@ -525,21 +548,42 @@ public final class HTTPServer: Sendable {
                 let ms = Double(sec) * 1000.0 + Double(atto) / 1_000_000_000_000_000.0
                 Logger.httpServer.debug("\(request.method) \(request.target) → \(response.status) (\(String(format: "%.1f", ms))ms)")
             } catch HTTPServerError.authenticationFailed {
-                await send(HTTPResponse(status: 407, headers: [("Content-Type", "text/plain"), ("Proxy-Authenticate", "Bearer")]), on: connection, cors: cors)
+                let response = Self.errorResponse(
+                    status: 407, statusText: "Proxy Authentication Required",
+                    headers: [("Proxy-Authenticate", "Bearer")],
+                    for: .authenticationFailed, delegate: delegate
+                )
+                await send(response, on: connection, cors: cors)
             } catch HTTPServerError.forbiddenOrigin {
                 Logger.httpServer.warning("Rejected a request that did not originate from a web view")
-                await send(HTTPResponse(status: 403, statusText: "Forbidden", body: Data("Forbidden".utf8)), on: connection, cors: cors)
+                let response = Self.errorResponse(
+                    status: 403, statusText: "Forbidden",
+                    for: .forbiddenOrigin, delegate: delegate
+                )
+                await send(response, on: connection, cors: cors)
             } catch HTTPServerError.lengthRequired {
-                await send(HTTPResponse(status: 411, statusText: "Length Required", body: Data("Length Required".utf8)), on: connection, cors: cors)
+                let response = Self.errorResponse(
+                    status: 411, statusText: "Length Required",
+                    for: .lengthRequired, delegate: delegate
+                )
+                await send(response, on: connection, cors: cors)
             } catch HTTPServerError.unexpectedBody {
                 Logger.httpServer.warning("Rejected auth-exempt request carrying a body")
-                await send(HTTPResponse(status: 400, statusText: "Bad Request", body: Data("Unexpected request body".utf8)), on: connection, cors: cors)
+                let response = Self.errorResponse(
+                    status: 400, statusText: "Bad Request",
+                    for: .unexpectedBody, delegate: delegate
+                )
+                await send(response, on: connection, cors: cors)
             } catch is CancellationError {
                 Logger.httpServer.debug("Connection cancelled during shutdown")
                 connection.cancel()
             } catch HTTPServerError.readTimeout {
                 Logger.httpServer.warning("Read timeout, closing connection")
-                await send(HTTPResponse(status: 408, statusText: "Request Timeout", body: Data("Request Timeout".utf8)), on: connection, cors: cors)
+                let response = Self.errorResponse(
+                    status: 408, statusText: "Request Timeout",
+                    for: .readTimeout, delegate: delegate
+                )
+                await send(response, on: connection, cors: cors)
             } catch let error as HTTPRequestParseError {
                 // Fatal parse error (malformed framing, smuggling-relevant, etc.):
                 // always answered by the library, never routed to the delegate.
