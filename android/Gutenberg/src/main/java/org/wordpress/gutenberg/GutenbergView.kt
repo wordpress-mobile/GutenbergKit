@@ -667,12 +667,8 @@ class GutenbergView : FrameLayout {
             nativeUploadToken = uploadServer?.token
         )
         val gbKitJson = gbKit.toJsonString()
-        val gbKitConfig = """
-            window.GBKit = $gbKitJson;
-            localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
-        """.trimIndent()
 
-        webView.evaluateJavascript(gbKitConfig, null)
+        webView.evaluateJavascript("window.GBKit = $gbKitJson;", null)
     }
 
     private fun startUploadServer() {
@@ -726,12 +722,7 @@ class GutenbergView : FrameLayout {
     }
 
     fun clearConfig() {
-        val jsCode = """
-            delete window.GBKit;
-            localStorage.removeItem('GBKit');
-        """.trimIndent()
-
-        webView.evaluateJavascript(jsCode, null)
+        webView.evaluateJavascript("delete window.GBKit;", null)
     }
 
     fun setContent(newContent: String) {
