@@ -266,13 +266,24 @@ struct RestRelayTests {
         )
     }
 
+    /// A task for the delegate signature, which the guard never inspects.
+    ///
+    /// Built once from a session the tests own and immediately invalidated:
+    /// asking `URLSession.shared` for one per assertion left a suspended task
+    /// retained for the life of the test process each time.
+    private static let unusedTask: URLSessionTask = {
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.invalidateAndCancel() }
+        return session.dataTask(with: URL(string: "https://example.com/")!)
+    }()
+
     /// Asks `redirectGuard` whether to follow a redirect to `target`.
     private func decide(_ redirectGuard: RestRelay.RedirectGuard, target: String) -> URLRequest? {
         let url = URL(string: target)!
         var followed: URLRequest?
         redirectGuard.urlSession(
             .shared,
-            task: URLSession.shared.dataTask(with: url),
+            task: Self.unusedTask,
             willPerformHTTPRedirection: HTTPURLResponse(
                 url: URL(string: "https://example.com/wp-json/wp/v2/posts")!,
                 statusCode: 301,
