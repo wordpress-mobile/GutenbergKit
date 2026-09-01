@@ -460,25 +460,15 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             nativeUploadToken: isUploadPipelineEnabled ? uploadServer?.token : nil,
             networkProxy: networkProxyGlobal
         )
-        return WKUserScript(
-            source: Self.configurationScript(gbkitGlobal: try gbkitGlobal.toString()),
-            injectionTime: .atDocumentStart,
-            forMainFrameOnly: true
-        )
-    }
+        let stringValue = try gbkitGlobal.toString()
 
-    /// The document-start script that installs `window.GBKit`.
-    ///
-    /// The configuration is session-scoped — it carries the site credential and
-    /// the local server's port and tokens — so no copy of it outlives the load
-    /// that injected it. (Android clears the WebView's web storage before each
-    /// load for the same reason.)
-    static func configurationScript(gbkitGlobal: String) -> String {
-        """
-        window.GBKit = \(gbkitGlobal);
-        localStorage.removeItem('GBKit');
+        let jsCode = """
+        window.GBKit = \(stringValue);
+        localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
         "done";
         """
+
+        return WKUserScript(source: jsCode, injectionTime: .atDocumentStart, forMainFrameOnly: true)
     }
 
     /// Starts the local HTTP server for routing file uploads through native processing.
