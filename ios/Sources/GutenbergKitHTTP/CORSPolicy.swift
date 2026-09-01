@@ -33,15 +33,43 @@ public enum CORSPolicy: Sendable {
                 // allowlisted.
                 ("Access-Control-Allow-Origin", "*"),
                 ("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"),
-                // Only headers a browser actually announces in a preflight
-                // belong here. `Accept` does not: api-fetch's value
-                // (`application/json, */*;q=0.1`) carries none of the
-                // CORS-unsafe bytes and is well under the 128-byte cap, so it
-                // is safelisted and never reaches the preflight.
-                ("Access-Control-Allow-Headers", "Authorization, Content-Type, Relay-Authorization, X-HTTP-Method-Override"),
+                ("Access-Control-Allow-Headers", Self.allowedRequestHeaders.joined(separator: ", ")),
                 ("Access-Control-Max-Age", "86400"),
             ]
         }
+    }
+
+    /// The request headers a browser may send under ``permissive``.
+    ///
+    /// Only headers a browser actually announces in a preflight belong here.
+    /// `Accept` does not: api-fetch's value (`application/json, */*;q=0.1`)
+    /// carries none of the CORS-unsafe bytes and is well under the 128-byte
+    /// cap, so it is safelisted and never reaches the preflight.
+    ///
+    /// Enumerated rather than echoed back from `Access-Control-Request-Headers`
+    /// because this governs what a caller may *send*, and the relay forwards
+    /// most request headers upstream with the site credential attached. A
+    /// header announced but not listed here is refused by the browser, which
+    /// reports only an opaque CORS error — see ``unallowedHeaders(announced:)``
+    /// for the diagnostic that makes that legible.
+    static let allowedRequestHeaders = [
+        "Authorization", "Content-Type", "Relay-Authorization", "X-HTTP-Method-Override",
+    ]
+
+    /// The headers a preflight announced that this policy will not allow.
+    ///
+    /// A preflight announces exactly the headers that are not CORS-safelisted,
+    /// so anything reported here is a header the caller intends to send and the
+    /// browser is about to refuse — failing the request before it reaches the
+    /// handler, with nothing on the wire to explain why.
+    func unallowedHeaders(announced: String?) -> [String] {
+        guard case .permissive = self, let announced else { return [] }
+
+        let allowed = Set(Self.allowedRequestHeaders.map { $0.lowercased() })
+        return announced
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+            .filter { !$0.isEmpty && !allowed.contains($0) }
     }
 }
 

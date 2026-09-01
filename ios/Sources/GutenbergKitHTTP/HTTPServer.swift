@@ -471,6 +471,23 @@ public final class HTTPServer: Sendable {
                 } else if cors == .permissive, isPreflight(request) {
                     // Under a permissive CORS policy the library answers the OPTIONS
                     // preflight itself; the send layer stamps the CORS headers.
+                    //
+                    // A header the caller announced but the policy does not allow
+                    // fails the real request inside the browser, which reports only
+                    // an opaque CORS error and never reaches the handler. This is
+                    // the one place that can say which header it was.
+                    let unallowed = cors.unallowedHeaders(
+                        announced: request.header("Access-Control-Request-Headers")
+                    )
+                    if !unallowed.isEmpty {
+                        Logger.httpServer.warning(
+                            """
+                            Refusing preflight header(s) \(unallowed.joined(separator: ", "), privacy: .public) \
+                            for \(request.target, privacy: .public); the browser will fail the request before \
+                            it reaches the handler. Add them to CORSPolicy.allowedRequestHeaders if they belong.
+                            """
+                        )
+                    }
                     response = HTTPResponse(status: 204)
                 } else {
                     // Run the handler, but race it against the peer closing the
