@@ -626,6 +626,32 @@ struct DefaultMediaUploaderRelayTests {
     let url = try #require(client.lastURL)
     #expect(url.absoluteString == "https://example.com/wp-json/wp/v2/sites/123/media?_embed=wp:featuredmedia")
   }
+
+  @Test("refuses a passthrough body that measures zero rather than uploading nothing")
+  func refusesUnmeasurableBody() async throws {
+    // A zero `Content-Length` sends no body at all, and WordPress answers that
+    // no-op with a 2xx — reported to the editor as a successful upload. The body
+    // opens fine here; only its length is unusable, which is the case
+    // `makeInputStream()` does not already catch.
+    let client = URLCapturingHTTPClient()
+    let uploader = DefaultMediaUploader(
+      httpClient: client,
+      siteApiRoot: URL(string: "https://example.com/wp-json/")!
+    )
+
+    let emptyFile = FileManager.default.temporaryDirectory.appendingPathComponent("empty-\(UUID().uuidString).bin")
+    try Data().write(to: emptyFile)
+    defer { try? FileManager.default.removeItem(at: emptyFile) }
+
+    await #expect(throws: UploadError.self) {
+      try await uploader.passthroughUpload(
+        body: RequestBody(fileURL: emptyFile),
+        contentType: "multipart/form-data; boundary=x",
+        query: ""
+      )
+    }
+    #expect(client.lastURL == nil, "nothing should reach WordPress")
+  }
 }
 
 /// An HTTP client whose `performRaw` relays a canned response without validating

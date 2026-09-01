@@ -480,10 +480,22 @@ class DefaultMediaUploader: @unchecked Sendable {
     /// Used when the delegate's `processFile` returned the file unchanged —
     /// the incoming multipart body is already valid for WordPress.
     func passthroughUpload(body: RequestBody, contentType: String, query: String) async throws -> MediaUploadResponse {
+        // `count` is a file-size lookup for a disk-backed body, and reports zero
+        // when it fails. Sending that as the `Content-Length` would upload an
+        // empty body, which WordPress accepts as a no-op and answers with a 2xx
+        // — reported to the editor as a successful upload of nothing. Fail
+        // instead. (`makeInputStream()` already throws for the missing file that
+        // is the likeliest cause, so this covers the rest.)
+        let length = body.count
+        guard length > 0 else {
+            Logger.uploadServer.error("Refusing to upload a body whose length could not be read")
+            throw UploadError.streamReadFailed
+        }
+
         var request = URLRequest(url: mediaEndpointURL(query: query))
         request.httpMethod = "POST"
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")
-        request.setValue("\(body.count)", forHTTPHeaderField: "Content-Length")
+        request.setValue("\(length)", forHTTPHeaderField: "Content-Length")
         request.httpBodyStream = try body.makeInputStream()
 
         return try await performUpload(request)
