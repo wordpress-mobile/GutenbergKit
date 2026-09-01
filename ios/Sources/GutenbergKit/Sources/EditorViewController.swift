@@ -454,7 +454,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // uploader behind it would fail every one of them, and `networkProxy`
         // is only useful under Lockdown Mode.
         let networkProxyGlobal = isRestRelayEnabled ? uploadServer.map {
-            GBKitGlobal.NetworkProxy(port: Int($0.port), token: $0.token)
+            GBKitGlobal.NetworkProxy(
+                port: Int($0.port),
+                token: $0.token,
+                baseURL: RestRelay.baseURL(port: $0.port)
+            )
         } : nil
         let gbkitGlobal = try GBKitGlobal(
             configuration: self.configuration,

@@ -104,12 +104,21 @@ public struct GBKitGlobal: Sendable, Codable {
         let port: Int
         let token: String
 
+        /// The relay's route, slash-terminated, for JavaScript to append an
+        /// upstream path to.
+        ///
+        /// Built natively so the route is spelled in one language: deriving it
+        /// in JavaScript instead means `/proxy` appears on both sides of the
+        /// bridge with nothing keeping them in step.
+        let baseURL: String
+
         /// The synthesized memberwise initializer is internal, which would
         /// leave the `networkProxy` parameter of this type's public initializer
         /// with no value a host could pass it.
-        public init(port: Int, token: String) {
+        public init(port: Int, token: String, baseURL: String) {
             self.port = port
             self.token = token
+            self.baseURL = baseURL
         }
     }
 

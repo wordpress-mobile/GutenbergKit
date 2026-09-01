@@ -224,8 +224,11 @@ export function onNetworkRequest( requestData ) {
 /**
  * @typedef {Object} NetworkProxy
  *
- * @property {number} port  The port the loopback REST relay is listening on.
- * @property {string} token Per-session auth token for requests to the relay.
+ * @property {number} port    The port the loopback REST relay is listening on.
+ * @property {string} token   Per-session auth token for requests to the relay.
+ * @property {string} baseURL The relay's route, slash-terminated, to append an
+ *                            upstream path to. Built natively so the route is
+ *                            spelled in one language.
  */
 
 /**

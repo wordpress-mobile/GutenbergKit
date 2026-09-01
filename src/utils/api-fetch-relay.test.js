@@ -47,7 +47,11 @@ const GBKIT = {
 	siteApiNamespace: [ 'wp/v2' ],
 	namespaceExcludedPaths: [],
 	authHeader: 'Bearer site-token',
-	networkProxy: { port: 5555, token: 'relay-token' },
+	networkProxy: {
+		port: 5555,
+		token: 'relay-token',
+		baseURL: 'http://127.0.0.1:5555/proxy/',
+	},
 };
 
 /** The fetch the relay wrapper delegates to; replaced per test. */

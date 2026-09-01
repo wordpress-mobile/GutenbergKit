@@ -53,6 +53,16 @@ struct RestRelay: Sendable {
     /// `/proxy`.
     static let route = "/proxy"
 
+    /// The URL the web view appends an upstream path to, slash-terminated.
+    ///
+    /// Built here rather than in JavaScript so ``route`` is spelled once. The
+    /// address is literal `127.0.0.1` rather than `localhost`: the server binds
+    /// the IPv4 loopback only, and a name that may resolve to `::1` first would
+    /// have to fall back.
+    static func baseURL(port: UInt16) -> String {
+        "http://127.0.0.1:\(port)\(route)/"
+    }
+
     /// The site's API root, slash-terminated. Upstream paths are appended to
     /// it, and every resulting URL — including redirect targets — must still
     /// start with it.

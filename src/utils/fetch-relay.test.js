@@ -15,8 +15,12 @@ vi.mock( './logger', () => ( {
 	error: vi.fn(),
 } ) );
 
-const NETWORK_PROXY = { port: 5555, token: 'relay-token' };
 const RELAY_ROOT = 'http://127.0.0.1:5555/proxy/';
+const NETWORK_PROXY = {
+	port: 5555,
+	token: 'relay-token',
+	baseURL: RELAY_ROOT,
+};
 
 describe( 'createRelayFetch', () => {
 	let next;
