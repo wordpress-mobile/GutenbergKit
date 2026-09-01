@@ -285,9 +285,16 @@ struct HTTPServerAuthenticationTests {
         // is a request the client made on its own behalf, so it carries the
         // token and must be authenticated like any other — the exemption covers
         // preflights, which cannot carry credentials, and nothing else.
+        //
+        // Under `.permissive` specifically: that is the only policy where the
+        // exemption exists at all, so it is the only one where dropping the
+        // `Access-Control-Request-Method` test would let this request through
+        // unauthenticated. Under `.none` the assertion would hold no matter
+        // what `isPreflight` returned.
         let server = try await HTTPServer.start(
             name: "auth-test",
-            requiresAuthentication: true
+            requiresAuthentication: true,
+            cors: .permissive
         ) { _ in
             HTTPResponse(status: 200, body: Data("OK\n".utf8))
         }
