@@ -40,6 +40,8 @@ export function createRelayFetch( next, { networkProxy, siteApiRoot } ) {
 	);
 	const relayRoot = `http://127.0.0.1:${ networkProxy.port }/proxy/`;
 	const localServerPort = String( networkProxy.port );
+	const relayAuthorization = `Bearer ${ networkProxy.token }`;
+	const apiRootHost = canonicalHost( apiRoot.hostname );
 
 	// `async` so that a throw becomes a rejection, as it would from the `fetch`
 	// this stands in for. `new Headers()` rejects a malformed name or value by
@@ -61,7 +63,7 @@ export function createRelayFetch( next, { networkProxy, siteApiRoot } ) {
 		const target = requestURL( input );
 		const upstreamPath =
 			target && ! addressesLocalServer( target, localServerPort )
-				? relayUpstreamPath( target, apiRoot )
+				? relayUpstreamPath( target, apiRoot, apiRootHost )
 				: null;
 
 		// Not a site REST request: media uploads to the loopback server,
@@ -76,7 +78,7 @@ export function createRelayFetch( next, { networkProxy, siteApiRoot } ) {
 		// loopback. The relay's own per-session token rides in
 		// `Relay-Authorization` because `fetch()` silently strips `Proxy-*`.
 		headers.delete( 'Authorization' );
-		headers.set( 'Relay-Authorization', `Bearer ${ networkProxy.token }` );
+		headers.set( 'Relay-Authorization', relayAuthorization );
 
 		return next( relayRoot + upstreamPath, {
 			...init,
@@ -176,14 +178,14 @@ function addressesLocalServer( target, port ) {
  * fix is for the relay to canonicalize the URLs the site emits, since it knows
  * the response came from the configured root and this layer can only guess.
  *
- * @param {URL} target  The request's target.
- * @param {URL} apiRoot The site's REST API root, normalized and slash-terminated.
+ * @param {URL}    target      The request's target.
+ * @param {URL}    apiRoot     The site's REST API root, normalized and slash-terminated.
+ * @param {string} apiRootHost `apiRoot`'s hostname in canonical form.
  * @return {string|null} The upstream path, or `null` when it is not a site request.
  */
-function relayUpstreamPath( target, apiRoot ) {
+function relayUpstreamPath( target, apiRoot, apiRootHost ) {
 	if (
-		canonicalHost( target.hostname ) !==
-			canonicalHost( apiRoot.hostname ) ||
+		canonicalHost( target.hostname ) !== apiRootHost ||
 		target.port !== apiRoot.port
 	) {
 		return null;

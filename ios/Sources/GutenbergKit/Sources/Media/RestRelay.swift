@@ -170,7 +170,7 @@ struct RestRelay: Sendable {
             return HTTPResponse(
                 status: upstream.status,
                 statusText: upstream.statusText,
-                headers: Self.merge(upstream.headers, adding: Self.corsHeaders),
+                headers: Self.merged(upstream.headers),
                 body: upstream.body
             )
         } catch {
@@ -387,14 +387,11 @@ struct RestRelay: Sendable {
         "set-cookie", "set-cookie2",
     ]
 
-    /// Appends local response headers to upstream headers, dropping the
-    /// upstream's own CORS and transport-encoding headers (see
-    /// `responseHeadersToStrip`).
-    private static func merge(
-        _ upstream: [(String, String)],
-        adding cors: [(String, String)]
-    ) -> [(String, String)] {
-        upstream.filter { !Self.responseHeadersToStrip.contains($0.0.lowercased()) } + cors
+    /// The upstream response's headers as the editor should see them: the
+    /// relay's own CORS headers appended, and the upstream's CORS and
+    /// transport-encoding headers dropped (see `responseHeadersToStrip`).
+    private static func merged(_ upstream: [(String, String)]) -> [(String, String)] {
+        upstream.filter { !responseHeadersToStrip.contains($0.0.lowercased()) } + corsHeaders
     }
 
     /// Emits a WordPress-REST-style error object rather than plain text, so the
