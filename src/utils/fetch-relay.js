@@ -174,8 +174,8 @@ function relayUpstreamPath( target, apiRoot ) {
 	}
 
 	const aliased = new URL( target );
-	// `hostname` rather than `host`: the `host` setter would drop the port when
-	// the value carries none, and the port is part of the match.
+	// Only the scheme and the host spelling are left to reconcile; the port
+	// matched above, and assigning `hostname` leaves it in place.
 	aliased.protocol = apiRoot.protocol;
 	aliased.hostname = apiRoot.hostname;
 
