@@ -315,19 +315,27 @@ struct RestRelay: Sendable {
 
     // MARK: - CORS
 
-    /// Response headers added to every relayed response. The library's
-    /// permissive CORS policy stamps `Access-Control-Allow-Origin` and friends;
-    /// the exposed headers keep paginated REST responses readable to
-    /// `api-fetch` callers.
+    /// Response headers the editor may read off a relayed response. The
+    /// library's permissive CORS policy stamps `Access-Control-Allow-Origin`
+    /// and friends; this governs what JavaScript can see.
     ///
-    /// `Allow` is what `canUser` reads off an `OPTIONS` response to decide
-    /// whether the user may create a page, update settings, upload media, or
-    /// edit global styles; without it every such capability reads as false with
-    /// no error surfaced. `Link` backs `fetchAllMiddleware`'s pagination and
-    /// `X-WP-Total`/`X-WP-TotalPages` back list counts. Nothing else in the
-    /// editor reads a response header.
+    /// A name missing from an expose list does not fail loudly: `headers.get()`
+    /// returns `null`, so the feature behind it reads as absent rather than
+    /// broken. `Allow` was missed exactly that way — `canUser` decides from it
+    /// whether the user may create a page, update settings, or edit global
+    /// styles, and every capability silently read as false. Hence the leading
+    /// `*`, which covers whatever a plugin or a core update reads next. It is
+    /// valid because relayed requests are sent `credentials: 'omit'`, and it
+    /// withholds nothing that was not already the editor's: the response comes
+    /// from the site it is authenticated to, over loopback.
+    ///
+    /// The four names stay listed behind the wildcard because WebKit's support
+    /// for `*` here is unverified, and these are the ones whose absence is
+    /// known to break a feature — `Allow` for capabilities, `Link` for
+    /// `fetchAllMiddleware`'s pagination, `X-WP-Total`/`X-WP-TotalPages` for
+    /// list counts.
     private static let corsHeaders: [(String, String)] = [
-        ("Access-Control-Expose-Headers", "Allow, Link, X-WP-Total, X-WP-TotalPages"),
+        ("Access-Control-Expose-Headers", "*, Allow, Link, X-WP-Total, X-WP-TotalPages"),
     ]
 
     /// Request headers that must not be forwarded upstream.
