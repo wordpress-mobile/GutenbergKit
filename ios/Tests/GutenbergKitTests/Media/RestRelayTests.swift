@@ -191,6 +191,32 @@ struct RestRelayTests {
         }
     }
 
+    @Test("follows a redirect that only upgrades the scheme")
+    func followsSchemeUpgrade() {
+        // A site whose `siteurl` is `http` but which answers on `https` is the
+        // deployment `relayUpstreamPath` already relays; refusing its redirect
+        // here would fail every request the layer above deliberately sent.
+        let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: "http://example.com/wp-json/")
+        let followed = decide(redirectGuard, target: "https://example.com/wp-json/wp/v2/posts")
+
+        #expect(followed?.url?.absoluteString == "https://example.com/wp-json/wp/v2/posts")
+        #expect(redirectGuard.refusedTarget == nil)
+    }
+
+    @Test("the scheme upgrade admits nothing else")
+    func schemeUpgradeStaysContained() {
+        // Upgrading the scheme must not also relax the host or the path.
+        for target in [
+            "https://elsewhere.example/wp-json/wp/v2/posts",
+            "https://example.com/wp-login.php",
+            "https://www.example.com/wp-json/wp/v2/posts",
+            "https://example.com:8443/wp-json/wp/v2/posts",
+        ] {
+            let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: "http://example.com/wp-json/")
+            #expect(decide(redirectGuard, target: target) == nil, "should refuse \(target)")
+        }
+    }
+
     @Test("reports the refused target so the editor can say what happened")
     func recordsRefusedTarget() {
         // Without this the relay would hand back the 3xx itself, and `fetch`

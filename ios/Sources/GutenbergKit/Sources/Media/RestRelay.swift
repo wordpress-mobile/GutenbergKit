@@ -271,10 +271,22 @@ struct RestRelay: Sendable {
     /// permalink-structure redirect is refused too, which the response says
     /// specifically enough to diagnose.
     ///
-    /// `@unchecked Sendable`: `allowedPrefix` is a `let` set at init; the
-    /// refusal is recorded under a lock.
+    /// The one exception is a redirect that differs from the root only by an
+    /// `http`→`https` upgrade. That is the TLS-terminating-proxy deployment
+    /// `relayUpstreamPath` already tolerates when it decides what to relay — a
+    /// site whose `siteurl` is `http` but which answers on `https` — so
+    /// refusing it here would fail the requests the layer above deliberately
+    /// sent. Containment holds: same host, same path, and a strictly stronger
+    /// scheme. A downgrade has no matching rule and stays refused.
+    ///
+    /// `@unchecked Sendable`: both prefixes are `let`s set at init; the refusal
+    /// is recorded under a lock.
     final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
         private let allowedPrefix: String
+
+        /// `allowedPrefix` under `https`, when the configured root is `http`.
+        private let upgradedPrefix: String?
+
         private let lock = NSLock()
         private var _refusedTarget: String?
 
@@ -285,6 +297,10 @@ struct RestRelay: Sendable {
 
         init(allowedPrefix: String) {
             self.allowedPrefix = allowedPrefix
+            let insecureScheme = "http://"
+            self.upgradedPrefix = allowedPrefix.hasPrefix(insecureScheme)
+                ? "https://" + allowedPrefix.dropFirst(insecureScheme.count)
+                : nil
         }
 
         func urlSession(
@@ -294,12 +310,22 @@ struct RestRelay: Sendable {
             newRequest request: URLRequest,
             completionHandler: @escaping (URLRequest?) -> Void
         ) {
-            guard let url = request.url, url.absoluteString.hasPrefix(allowedPrefix) else {
+            guard let url = request.url, contains(url.absoluteString) else {
                 lock.withLock { _refusedTarget = request.url?.absoluteString ?? "an unreadable URL" }
                 completionHandler(nil)
                 return
             }
             completionHandler(request)
+        }
+
+        /// Whether `target` is inside the API root, allowing only a scheme
+        /// upgrade to differ.
+        private func contains(_ target: String) -> Bool {
+            if target.hasPrefix(allowedPrefix) {
+                return true
+            }
+            guard let upgradedPrefix else { return false }
+            return target.hasPrefix(upgradedPrefix)
         }
     }
 
