@@ -314,20 +314,12 @@ final class MediaUploadServer: Sendable {
         // Emit a WordPress-REST-style error object so the JS middleware normalizes
         // it (and surfaces `message`) the same way it does a relayed WordPress
         // error — the local server's own errors need no special-casing.
-        let body = errorBody(code: "upload_error", message: message)
+        let body = HTTPErrorBody.wordPressError(code: "upload_error", message: message)
         return HTTPResponse(
             status: status,
             headers: [("Content-Type", body.contentType)],
             body: body.data
         )
-    }
-
-    /// A WordPress-REST-style `{code, message}` payload.
-    private static func errorBody(code: String, message: String) -> HTTPErrorBody {
-        let payload = ["code": code, "message": message]
-        let data = (try? JSONSerialization.data(withJSONObject: payload))
-            ?? Data(#"{"code":"\#(code)","message":"Request failed"}"#.utf8)
-        return HTTPErrorBody(contentType: "application/json", data: data)
     }
 
     /// Answers the errors the HTTP server raises itself with the same JSON
@@ -365,7 +357,7 @@ final class MediaUploadServer: Sendable {
             default:
                 ("server_error", error.localizedDescription)
             }
-            return MediaUploadServer.errorBody(code: code, message: message)
+            return .wordPressError(code: code, message: message)
         }
     }
 

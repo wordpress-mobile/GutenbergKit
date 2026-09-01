@@ -402,13 +402,11 @@ struct RestRelay: Sendable {
     /// a `text/plain` body reaches JavaScript as an unparseable `invalid_json`
     /// with the real reason lost.
     static func errorResponse(status: Int, code: String, message: String) -> HTTPResponse {
-        let payload = ["code": code, "message": message]
-        let body = (try? JSONSerialization.data(withJSONObject: payload))
-            ?? Data(#"{"code":"relay_error","message":"The editor could not reach the site."}"#.utf8)
+        let body = HTTPErrorBody.wordPressError(code: code, message: message)
         return HTTPResponse(
             status: status,
-            headers: corsHeaders + [("Content-Type", "application/json")],
-            body: body
+            headers: corsHeaders + [("Content-Type", body.contentType)],
+            body: body.data
         )
     }
 }
