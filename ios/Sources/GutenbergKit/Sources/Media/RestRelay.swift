@@ -66,6 +66,9 @@ struct RestRelay: Sendable {
     /// The authorization header injected into upstream requests.
     private let authHeader: String
 
+    /// The session upstream requests are sent on.
+    private let session: URLSession
+
     /// The session every relay shares.
     ///
     /// A `URLSession` holds its resources until it is invalidated, and a relay
@@ -73,20 +76,24 @@ struct RestRelay: Sendable {
     /// would accumulate for the life of the process. Nothing about the session
     /// is per-relay, and a relayed request is cancelled through its own task
     /// rather than by tearing the session down.
-    private static let session: URLSession = {
+    private static let sharedSession: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 120
         configuration.httpCookieStorage = nil
         return URLSession(configuration: configuration)
     }()
 
-    init(configuration: EditorConfiguration) {
+    /// - Parameter session: The session to send upstream requests on. Defaults
+    ///   to the shared one; tests substitute a stubbed session to exercise
+    ///   ``handle(_:)`` without a site.
+    init(configuration: EditorConfiguration, session: URLSession? = nil) {
         var root = configuration.siteApiRoot.absoluteString
         if !root.hasSuffix("/") {
             root += "/"
         }
         self.apiRoot = root
         self.authHeader = configuration.authHeader
+        self.session = session ?? Self.sharedSession
     }
 
     /// Whether a request targets the relay.
@@ -143,7 +150,7 @@ struct RestRelay: Sendable {
             // to whatever host the `Location` header names and relay that
             // response back. See ``RedirectGuard``.
             let redirectGuard = RedirectGuard(allowedPrefix: apiRoot)
-            let upstream = HTTPResponse(try await Self.session.data(for: upstreamRequest, delegate: redirectGuard))
+            let upstream = HTTPResponse(try await session.data(for: upstreamRequest, delegate: redirectGuard))
 
             // A refused redirect leaves `URLSession` holding the 3xx itself.
             // Relaying that would undo the refusal: the response carries the
