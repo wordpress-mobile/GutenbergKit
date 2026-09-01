@@ -115,12 +115,7 @@ struct RestRelay: Sendable {
             )
         }
 
-        var upstreamRequest = URLRequest(url: upstreamURL)
-        upstreamRequest.httpMethod = parsed.method
-
-        for (name, value) in parsed.allHeaders where !Self.requestHeadersToStrip.contains(name.lowercased()) {
-            upstreamRequest.setValue(value, forHTTPHeaderField: name)
-        }
+        var upstreamRequest = parsed.urlRequest(url: upstreamURL, stripping: Self.requestHeadersToStrip)
         if !authHeader.isEmpty {
             upstreamRequest.setValue(authHeader, forHTTPHeaderField: "Authorization")
         }
@@ -341,25 +336,22 @@ struct RestRelay: Sendable {
         ("Access-Control-Expose-Headers", "*, Allow, Link, X-WP-Total, X-WP-TotalPages"),
     ]
 
-    /// Request headers that must not be forwarded upstream.
+    /// Request headers the relay strips beyond what
+    /// ``ParsedHTTPRequest/urlRequest(url:stripping:)`` already drops.
     ///
-    /// `host`/`content-length`/`accept-encoding` are recalculated by URLSession;
-    /// the RFC 9110 §7.6.1 hop-by-hop headers describe the connection to the
-    /// relay rather than the request to the site, so a proxy consumes them
-    /// rather than passing them on; `origin`, `referer`, and `sec-fetch-*`
-    /// describe the web view's fetch context and would leak the local page to
-    /// the server (and WordPress rejects `file://` origins — the exact problem
-    /// the relay exists to solve); the rest are relay-internal.
-    ///
-    /// A browser refuses to send a hop-by-hop header at all, so that group only
-    /// matters for a client that is not one.
+    /// That method removes the RFC 9110 §7.6.1 hop-by-hop set — including the
+    /// headers this request's own `Connection` names — along with `host` and the
+    /// proxy credentials. These are the rest: `content-length` and
+    /// `accept-encoding` are recalculated by `URLSession`; `origin`, `referer`
+    /// and `sec-fetch-*` describe the web view's fetch context and would leak
+    /// the local page to the site (and WordPress rejects a `file://` origin —
+    /// the exact problem the relay exists to solve); `authorization` is the
+    /// caller's, replaced below by the natively held site credential.
     private static let requestHeadersToStrip: Set<String> = [
-        "host", "content-length", "accept-encoding",
-        "connection", "keep-alive", "proxy-connection",
-        "te", "trailer", "transfer-encoding", "upgrade",
+        "content-length", "accept-encoding",
         "origin", "referer",
         "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "sec-fetch-user",
-        "authorization", "relay-authorization", "proxy-authorization",
+        "authorization",
     ]
 
     /// Upstream response headers dropped from relayed responses.

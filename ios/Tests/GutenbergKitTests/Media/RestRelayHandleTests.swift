@@ -55,6 +55,19 @@ struct RestRelayHandleTests {
         }
     }
 
+    @Test("strips the headers the request's own Connection names")
+    func stripsConnectionNamedHeaders() async throws {
+        // RFC 9110 §7.6.1: `Connection` names further headers that describe this
+        // hop only, so a forwarding hop consumes those too rather than passing
+        // them to the site.
+        let exchange = try await relay(headers: [
+            "Connection": "X-Hop-Only, close",
+            "X-Hop-Only": "1",
+        ])
+
+        #expect(exchange.upstream.value(forHTTPHeaderField: "X-Hop-Only") == nil)
+    }
+
     @Test("forwards the headers the site needs")
     func forwardsContentHeaders() async throws {
         let exchange = try await relay(
