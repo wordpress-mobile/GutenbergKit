@@ -241,10 +241,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         // Debug hook: force Lockdown Mode on this web view so its restrictions
         // can be reproduced in the Simulator, where the system-wide setting is
-        // unavailable.
+        // unavailable. Debug-only so a release build of a host app cannot have
+        // the editor's transport rerouted by its process environment.
+        #if DEBUG
         if ProcessInfo.processInfo.environment["GUTENBERG_FORCE_LOCKDOWN_MODE"] == "1" {
             config.defaultWebpagePreferences.isLockdownModeEnabled = true
         }
+        #endif
 
         // Set-up communications with the editor.
         config.userContentController.add(controller, name: "editorDelegate")
