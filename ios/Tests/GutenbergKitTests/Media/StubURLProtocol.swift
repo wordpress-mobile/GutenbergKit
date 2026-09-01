@@ -47,12 +47,32 @@ final class StubURLProtocol: URLProtocol {
 
     private static let tokenHeader = "X-Stub-Session"
 
-    /// A session that answers every request with `stub`, plus the recorder that
-    /// captures what it was asked to send.
+    /// A stubbed session and the recorder capturing what it was asked to send.
     ///
-    /// Invalidate the session when the test finishes; the registration is
-    /// released with it.
-    static func makeSession(stub: Stub) -> (URLSession, Recorder) {
+    /// Call ``finish()`` when the test is done. Invalidating the session alone
+    /// would leave the registration — and the stub's body — held for the life
+    /// of the test process.
+    struct Stubbed {
+        let session: URLSession
+        let recorder: Recorder
+        private let token: String
+
+        init(session: URLSession, recorder: Recorder, token: String) {
+            self.session = session
+            self.recorder = recorder
+            self.token = token
+        }
+
+        func finish() {
+            session.invalidateAndCancel()
+            StubURLProtocol.lock.withLock {
+                StubURLProtocol.registrations[token] = nil
+            }
+        }
+    }
+
+    /// A session that answers every request with `stub`.
+    static func makeSession(stub: Stub) -> Stubbed {
         let token = UUID().uuidString
         let recorder = Recorder()
 
@@ -63,7 +83,11 @@ final class StubURLProtocol: URLProtocol {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubURLProtocol.self]
         configuration.httpAdditionalHeaders = [tokenHeader: token]
-        return (URLSession(configuration: configuration), recorder)
+        return Stubbed(
+            session: URLSession(configuration: configuration),
+            recorder: recorder,
+            token: token
+        )
     }
 
     override class func canInit(with request: URLRequest) -> Bool {
