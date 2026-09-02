@@ -48,8 +48,9 @@ import OSLog
 ///
 /// When proxying to a remote server, the upstream response will typically
 /// include the correct CORS headers already — pass it through unaltered.
-/// When serving local content under ``CORSPolicy/none``, the handler must
-/// return appropriate headers for `OPTIONS` requests, typically:
+/// When serving local content under ``CORSPolicy/none`` with
+/// `requiresAuthentication` disabled, the handler must return appropriate
+/// headers for `OPTIONS` requests, typically:
 ///
 ///     Access-Control-Allow-Origin: <origin>
 ///     Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
@@ -60,9 +61,9 @@ import OSLog
 /// the actual request. A handler that returns 404 for unrecognized methods
 /// will silently break CORS for browser clients.
 ///
-/// A browser client therefore needs ``CORSPolicy/permissive`` whenever
-/// `requiresAuthentication` is enabled. Because the exemption above is scoped
-/// to the policy that answers preflights, ``CORSPolicy/none`` authenticates a
+/// With `requiresAuthentication` enabled, a browser client needs
+/// ``CORSPolicy/permissive``. Because the exemption above is scoped to the
+/// policy that answers preflights, ``CORSPolicy/none`` authenticates a
 /// preflight like any other request — and a browser sends one without
 /// credentials, so the server answers 407 and the handler is never reached.
 ///
