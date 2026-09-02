@@ -159,6 +159,25 @@ function decodeSlashes( component ) {
 }
 
 /**
+ * A hostname reduced to the form its aliases share: every loopback spelling
+ * collapses to one, and a `www.` prefix is dropped.
+ *
+ * The native relay's redirect guard reads redirect targets through the same
+ * spellings (`RestRelay.RedirectGuard.canonicalHost`), and the two must stay
+ * the same: a spelling relayed here and refused there fails every request on
+ * a site whose canonical redirect uses it.
+ *
+ * @param {string} hostname A URL hostname.
+ * @return {string} The canonical form.
+ */
+function canonicalHost( hostname ) {
+	if ( LOOPBACK_HOSTNAMES.has( hostname ) ) {
+		return 'localhost';
+	}
+	return hostname.replace( /^www\./, '' );
+}
+
+/**
  * The URL a `fetch` call addresses, or `null` when it cannot be determined.
  *
  * A `Request` object returns `null` rather than being relayed: rewriting one
@@ -317,23 +336,4 @@ function splitQueryPair( pair ) {
 				name: pair.slice( 0, separator ),
 				value: pair.slice( separator + 1 ),
 		  };
-}
-
-/**
- * A hostname reduced to the form its aliases share: every loopback spelling
- * collapses to one, and a `www.` prefix is dropped.
- *
- * The native relay's redirect guard reads redirect targets through the same
- * spellings (`RestRelay.RedirectGuard.canonicalHost`), and the two must stay
- * the same: a spelling relayed here and refused there fails every request on
- * a site whose canonical redirect uses it.
- *
- * @param {string} hostname A URL hostname.
- * @return {string} The canonical form.
- */
-function canonicalHost( hostname ) {
-	if ( LOOPBACK_HOSTNAMES.has( hostname ) ) {
-		return 'localhost';
-	}
-	return hostname.replace( /^www\./, '' );
 }
