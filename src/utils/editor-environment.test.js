@@ -23,6 +23,8 @@ import { configureLocale } from './localization.js';
 import { configureApiFetch } from './api-fetch.js';
 import { initializeEditor } from './editor.jsx';
 import { installFetchWrappers } from './fetch-chain.js';
+import { createLoggingFetchWrapper } from './fetch-logging.js';
+import { createRelayFetchWrapper } from './fetch-relay.js';
 import { injectEditorStyles } from './editor-styles.js';
 
 vi.mock( './bridge.js' );
@@ -130,6 +132,22 @@ describe( 'setUpEditorEnvironment', () => {
 			'configureAjax',
 			'initializeVideoPressAjaxBridge',
 			'initializeEditor',
+		] );
+	} );
+
+	it( 'installs the network log outside the relay', async () => {
+		// Order is behavior: the log has to record the request the editor
+		// made, not the relay's loopback rewrite of it.
+		const logging = () => {};
+		const relay = () => {};
+		createLoggingFetchWrapper.mockReturnValue( logging );
+		createRelayFetchWrapper.mockReturnValue( relay );
+
+		await setUpEditorEnvironment();
+
+		expect( installFetchWrappers ).toHaveBeenCalledWith( [
+			logging,
+			relay,
 		] );
 	} );
 
