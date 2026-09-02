@@ -194,9 +194,10 @@ describe( 'createRelayFetch', () => {
 
 		it( 'a request to the relay server itself', async () => {
 			// The upload route shares the relay's server and is addressed as
-			// `localhost` rather than by address. Without matching the port,
-			// the guard would come down to the path — which a root configured
-			// as a bare `https://site/` would not distinguish.
+			// `localhost` rather than by address, so the server is recognized
+			// by port under any loopback spelling. Today the site match's own
+			// port comparison would exclude these too; the exemption is what
+			// has to hold once the relay accepts other origins.
 			await expectPassthrough(
 				'http://localhost:5555/upload?_embed=wp:featuredmedia'
 			);

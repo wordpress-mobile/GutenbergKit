@@ -212,6 +212,13 @@ function requestURL( input ) {
  * request, so both keep the path they had before a relay existed — the port
  * identifies the server whichever name reached it.
  *
+ * While the relay accepts only the configured site, `relayUpstreamPath`'s own
+ * host and port comparison excludes the server anyway, since its port is
+ * OS-assigned and cannot be the site's. This is kept as the exemption that
+ * has to survive the relay accepting other origins: without it an upload
+ * would be relayed to the server it was already addressed to, and a request
+ * the relay had already rewritten would be relayed again.
+ *
  * @param {URL}    target The request's target.
  * @param {string} port   The local server's port.
  * @return {boolean} Whether the target is the local server.
