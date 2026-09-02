@@ -6,7 +6,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 /**
  * Internal dependencies
  */
-import { createRelayFetch } from './fetch-relay';
+import { createRelayFetch, createRelayFetchWrapper } from './fetch-relay';
+import { getGBKit } from './bridge';
+import { warn } from './logger';
+
+vi.mock( './bridge', () => ( {
+	getGBKit: vi.fn(),
+} ) );
 
 vi.mock( './logger', () => ( {
 	debug: vi.fn(),
@@ -291,6 +297,44 @@ describe( 'createRelayFetch', () => {
 			await relayFetch()( request );
 
 			expect( next ).toHaveBeenCalledWith( request, undefined );
+		} );
+	} );
+
+	describe( 'the wrapper', () => {
+		it( 'declines a site API root that is not a URL', () => {
+			// The wrapper parses the root at install time, inside the editor's
+			// boot sequence, where a throw would replace the editor with the
+			// load-error page.
+			getGBKit.mockReturnValue( {
+				networkProxy: NETWORK_PROXY,
+				siteApiRoot: 'wp-json/',
+			} );
+
+			expect( createRelayFetchWrapper() ).toBeNull();
+			expect( warn ).toHaveBeenCalledWith(
+				expect.stringContaining( 'wp-json/' )
+			);
+		} );
+
+		it( 'declines when no relay is advertised', () => {
+			getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://example.com/wp-json/',
+			} );
+
+			expect( createRelayFetchWrapper() ).toBeNull();
+		} );
+
+		it( 'wraps when a relay is advertised', async () => {
+			getGBKit.mockReturnValue( {
+				networkProxy: NETWORK_PROXY,
+				siteApiRoot: 'https://example.com/wp-json/',
+			} );
+
+			await createRelayFetchWrapper()( next )(
+				'https://example.com/wp-json/wp/v2/posts'
+			);
+
+			expect( calledURL() ).toBe( `${ RELAY_ROOT }wp/v2/posts` );
 		} );
 	} );
 

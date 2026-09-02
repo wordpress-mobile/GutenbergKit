@@ -2,7 +2,7 @@
  * Internal dependencies
  */
 import { getGBKit } from './bridge';
-import { debug } from './logger';
+import { debug, warn } from './logger';
 
 /** Hostnames that name the loopback interface. */
 const LOOPBACK_HOSTNAMES = new Set( [ 'localhost', '127.0.0.1', '[::1]' ] );
@@ -96,6 +96,18 @@ export function createRelayFetchWrapper() {
 	const { networkProxy, siteApiRoot } = getGBKit();
 
 	if ( ! networkProxy || ! siteApiRoot ) {
+		return null;
+	}
+
+	// The wrapper parses the root when it is installed, inside the editor's
+	// boot sequence, so a root that is not a URL is caught here — costing the
+	// editor its relay rather than the boot.
+	try {
+		new URL( siteApiRoot );
+	} catch {
+		warn(
+			`Not relaying site REST requests: the site API root ${ siteApiRoot } is not a URL`
+		);
 		return null;
 	}
 
