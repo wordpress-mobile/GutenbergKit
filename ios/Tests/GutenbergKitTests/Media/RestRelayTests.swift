@@ -62,6 +62,23 @@ struct RestRelayTests {
         )
     }
 
+    @Test("decodes the route of a root advertised with it encoded")
+    func decodesAdvertisedPlainPermalinkRoot() {
+        // WordPress advertises a plain-permalink root through `add_query_arg`,
+        // which percent-encodes the route: `index.php?rest_route=%2F`. The
+        // slash termination has to land inside that value, since WordPress
+        // reads `rest_route=%2F/wp/v2/posts` as the route `//wp/v2/posts`.
+        let relay = makeRelay(apiRoot: URL(string: "https://example.com/index.php?rest_route=%2F")!)
+        #expect(
+            relay.upstreamURL(for: request("/proxy/wp/v2/posts?_locale=user"))?.absoluteString
+                == "https://example.com/index.php?rest_route=/wp/v2/posts&_locale=user"
+        )
+        #expect(
+            relay.upstreamURL(for: request("/proxy"))?.absoluteString
+                == "https://example.com/index.php?rest_route=/"
+        )
+    }
+
     @Test("preserves percent-encoding in the query")
     func preservesPercentEncoding() {
         let relay = makeRelay(apiRoot: Self.prettyRoot)

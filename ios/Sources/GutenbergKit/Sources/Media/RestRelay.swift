@@ -97,13 +97,28 @@ struct RestRelay: Sendable {
     ///   to the shared one; tests substitute a stubbed session to exercise
     ///   ``handle(_:)`` without a site.
     init(configuration: EditorConfiguration, session: URLSession? = nil) {
-        var root = configuration.siteApiRoot.absoluteString
-        if !root.hasSuffix("/") {
-            root += "/"
-        }
-        self.apiRoot = root
+        self.apiRoot = Self.normalizedRoot(configuration.siteApiRoot.absoluteString)
         self.authHeader = configuration.authHeader
         self.session = session ?? Self.sharedSession
+    }
+
+    /// The configured root, slash-terminated, with the route value of a
+    /// plain-permalink root decoded.
+    ///
+    /// WordPress advertises that root through `add_query_arg`, which
+    /// percent-encodes the value: `index.php?rest_route=%2F`. The separators
+    /// are decoded before the slash is added so it lands inside the route
+    /// value. Appended after `%2F`, it would make a root no path can extend:
+    /// WordPress reads `rest_route=%2F/wp/v2/posts` as the route
+    /// `//wp/v2/posts` and answers `rest_no_route`. `createRelayFetch`
+    /// normalizes the same way, so both sides agree on what the root is.
+    private static func normalizedRoot(_ configured: String) -> String {
+        var root = configured
+        if let query = root.firstIndex(of: "?") {
+            let decoded = root[query...].replacingOccurrences(of: "%2f", with: "/", options: .caseInsensitive)
+            root = String(root[..<query]) + decoded
+        }
+        return root.hasSuffix("/") ? root : root + "/"
     }
 
     /// Whether a request targets the relay.
