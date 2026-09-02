@@ -3,3 +3,5 @@ ios
 package-lock.json
 .github/**/*.md
 vendor
+e2e/test-results
+playwright-report
