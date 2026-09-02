@@ -31,13 +31,7 @@ const LOOPBACK_HOSTNAMES = new Set( [ 'localhost', '127.0.0.1', '[::1]' ] );
  * @return {typeof fetch} The wrapped fetch.
  */
 export function createRelayFetch( next, { networkProxy, siteApiRoot } ) {
-	// Slash-terminated so a sibling cannot match the root as a prefix
-	// (`https://site/wp-json` would otherwise match `https://site/wp-jsonx/…`),
-	// and parsed so both sides of every comparison normalize the same way —
-	// default ports collapsed, host lowercased.
-	const apiRoot = new URL(
-		siteApiRoot.endsWith( '/' ) ? siteApiRoot : `${ siteApiRoot }/`
-	);
+	const apiRoot = normalizedApiRoot( siteApiRoot );
 	const relayRoot = networkProxy.baseURL;
 	const localServerPort = String( networkProxy.port );
 	const relayAuthorization = `Bearer ${ networkProxy.token }`;
@@ -107,6 +101,49 @@ export function createRelayFetchWrapper() {
 
 	debug( `Relaying site REST requests through port ${ networkProxy.port }` );
 	return ( next ) => createRelayFetch( next, { networkProxy, siteApiRoot } );
+}
+
+/**
+ * The site API root as a `URL`, slash-terminated, with the route value of a
+ * plain-permalink root decoded.
+ *
+ * Slash-terminated so a sibling cannot match the root as a prefix
+ * (`https://site/wp-json` would otherwise match `https://site/wp-jsonx/…`),
+ * and parsed so both sides of every comparison normalize the same way —
+ * default ports collapsed, host lowercased.
+ *
+ * A plain-permalink root carries its route in the query, and WordPress
+ * advertises it percent-encoded — `index.php?rest_route=%2F` — because it
+ * builds the URL through `add_query_arg`. The separators are decoded before
+ * the slash is added so it lands inside the route value: appended after
+ * `%2F`, it would make a root that no path can extend, since WordPress reads
+ * `rest_route=%2F/wp/v2/posts` as the route `//wp/v2/posts`. `RestRelay`
+ * normalizes the same way, so both sides agree on what the root is.
+ *
+ * @param {string} siteApiRoot The site's REST API root as configured.
+ * @return {URL} The normalized root.
+ */
+function normalizedApiRoot( siteApiRoot ) {
+	const separator = siteApiRoot.indexOf( '?' );
+	const root =
+		separator === -1
+			? siteApiRoot
+			: siteApiRoot.slice( 0, separator ) +
+			  decodeSlashes( siteApiRoot.slice( separator ) );
+	return new URL( root.endsWith( '/' ) ? root : `${ root }/` );
+}
+
+/**
+ * A URL component with its percent-encoded slashes decoded, and nothing else.
+ *
+ * Only the separators are decoded so any other encoded byte reaches the site
+ * exactly as it was sent, rather than decoded once here and once more by PHP.
+ *
+ * @param {string} component A URL component.
+ * @return {string} The component with `%2F` spelled `/`.
+ */
+function decodeSlashes( component ) {
+	return component.replace( /%2f/gi, '/' );
 }
 
 /**
@@ -191,6 +228,10 @@ function relayUpstreamPath( target, apiRoot, apiRootHost ) {
 		return null;
 	}
 
+	if ( apiRoot.search ) {
+		return queryRoutedPath( target, apiRoot );
+	}
+
 	const aliased = new URL( target );
 	// Only the scheme and the host spelling are left to reconcile; the port
 	// matched above, and assigning `hostname` leaves it in place.
@@ -201,6 +242,69 @@ function relayUpstreamPath( target, apiRoot, apiRootHost ) {
 		return null;
 	}
 	return aliased.href.slice( apiRoot.href.length );
+}
+
+/**
+ * The upstream path for a request to a root that carries its route in the
+ * query — plain permalinks, `https://site/index.php?rest_route=/`.
+ *
+ * A prefix match on the href cannot decide this shape: the root spells the
+ * route `/`, and every request that reaches here spells it `%2F`. api-fetch's
+ * locale middleware rebuilds the query through `addQueryArgs`, and WordPress
+ * builds pagination `Link` URLs through `add_query_arg`; both percent-encode
+ * every value. So the route is read out of the query by name, its separators
+ * decoded, and the other parameters are carried verbatim after a `?` — the
+ * relay merges them into the root's query, as `createRootURLMiddleware` did.
+ *
+ * The host and port were matched by the caller. The scheme is not compared,
+ * for the same reason it is not for a pretty-permalink root: an `http`
+ * `siteurl` behind a TLS-terminating proxy.
+ *
+ * @param {URL} target  The request's target.
+ * @param {URL} apiRoot The site's REST API root, whose query names the route.
+ * @return {string|null} The upstream path, or `null` when it is not a site request.
+ */
+function queryRoutedPath( target, apiRoot ) {
+	if ( target.pathname !== apiRoot.pathname ) {
+		return null;
+	}
+
+	// The root's query is the single `rest_route=/` pair `get_rest_url()`
+	// emits; on a namespaced site the value is longer (`/sites/1/`), but it
+	// is still the one parameter every request continues.
+	const rootRoute = splitQueryPair( apiRoot.search.slice( 1 ) );
+	const pairs = target.search.slice( 1 ).split( '&' );
+	const index = pairs.findIndex(
+		( pair ) => splitQueryPair( pair ).name === rootRoute.name
+	);
+	if ( index === -1 ) {
+		return null;
+	}
+
+	const route = decodeSlashes( splitQueryPair( pairs[ index ] ).value );
+	if ( ! route.startsWith( rootRoute.value ) ) {
+		return null;
+	}
+
+	const path = route.slice( rootRoute.value.length );
+	const query = pairs.filter( ( _, i ) => i !== index ).join( '&' );
+	return query ? `${ path }?${ query }` : path;
+}
+
+/**
+ * A `name=value` query pair split at its first `=`, verbatim.
+ *
+ * @param {string} pair One pair of a query string.
+ * @return {{name: string, value: string}} The name and the value, the latter `''` if absent.
+ */
+function splitQueryPair( pair ) {
+	const separator = pair.indexOf( '=' );
+	return separator === -1
+		? { name: pair, value: '' }
+		: {
+				name: pair.slice( 0, separator ),
+				value: pair.slice( separator + 1 ),
+		  };
 }
 
 /**

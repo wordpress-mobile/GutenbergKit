@@ -99,13 +99,79 @@ describe( 'createRelayFetch', () => {
 			expect( calledURL() ).toBe( `${ RELAY_ROOT }wp/v2/posts` );
 		} );
 
-		it( 'merges into a root that already carries a query', async () => {
-			// Plain permalinks: `https://site/?rest_route=/`.
-			await relayFetch( 'https://example.com/?rest_route=/' )(
-				'https://example.com/?rest_route=/wp/v2/posts&x=1'
-			);
+		describe( 'a root that carries its route in the query', () => {
+			// Plain permalinks. WordPress advertises the root through
+			// `add_query_arg`, which percent-encodes the route.
+			const PLAIN_ROOT = 'https://example.com/index.php?rest_route=%2F';
 
-			expect( calledURL() ).toBe( `${ RELAY_ROOT }wp/v2/posts&x=1` );
+			it( 'reads the route out of the query and carries the rest', async () => {
+				await relayFetch( PLAIN_ROOT )(
+					'https://example.com/index.php?rest_route=/wp/v2/posts&x=1'
+				);
+
+				expect( calledURL() ).toBe( `${ RELAY_ROOT }wp/v2/posts?x=1` );
+			} );
+
+			it( 'recognizes the route with its separators encoded', async () => {
+				// The spelling every request actually arrives in: api-fetch's
+				// locale middleware rebuilds the query through `addQueryArgs`,
+				// and WordPress builds `Link` through `add_query_arg`, both of
+				// which percent-encode the value.
+				await relayFetch( PLAIN_ROOT )(
+					'https://example.com/index.php?rest_route=%2Fwp%2Fv2%2Fposts&page=2&_locale=user'
+				);
+
+				expect( calledURL() ).toBe(
+					`${ RELAY_ROOT }wp/v2/posts?page=2&_locale=user`
+				);
+			} );
+
+			it( 'accepts a root whose route is spelled with a literal slash', async () => {
+				await relayFetch( 'https://example.com/?rest_route=/' )(
+					'https://example.com/?rest_route=%2Fwp%2Fv2%2Fposts'
+				);
+
+				expect( calledURL() ).toBe( `${ RELAY_ROOT }wp/v2/posts` );
+			} );
+
+			it( 'relays the root itself', async () => {
+				await relayFetch( PLAIN_ROOT )(
+					'https://example.com/index.php?rest_route=%2F'
+				);
+
+				expect( calledURL() ).toBe( RELAY_ROOT );
+			} );
+
+			it( 'continues a route that names a site', async () => {
+				// A namespaced site's root carries more than `/` in the route,
+				// and every request continues it.
+				await relayFetch(
+					'https://public-api.example/wp-json/?rest_route=/sites/1/'
+				)(
+					'https://public-api.example/wp-json/?rest_route=%2Fsites%2F1%2Fwp%2Fv2%2Fposts&_locale=user'
+				);
+
+				expect( calledURL() ).toBe(
+					`${ RELAY_ROOT }wp/v2/posts?_locale=user`
+				);
+			} );
+
+			it( 'leaves the same page alone without the route', async () => {
+				const url = 'https://example.com/index.php?p=1';
+				await relayFetch( PLAIN_ROOT )( url );
+
+				expect( next ).toHaveBeenCalledWith( url, undefined );
+			} );
+
+			it( 'leaves a route outside the root alone', async () => {
+				const url =
+					'https://public-api.example/wp-json/?rest_route=%2Fsites%2F2%2Fwp%2Fv2%2Fposts';
+				await relayFetch(
+					'https://public-api.example/wp-json/?rest_route=/sites/1/'
+				)( url );
+
+				expect( next ).toHaveBeenCalledWith( url, undefined );
+			} );
 		} );
 	} );
 
