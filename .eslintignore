@@ -1,5 +1,7 @@
 android/
 build/
 dist/
+e2e/test-results/
 ios/
+playwright-report/
 vendor/
