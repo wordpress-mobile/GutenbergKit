@@ -139,7 +139,6 @@ private struct _EditorView: UIViewControllerRepresentable {
             viewController.mediaUploadDelegate = context.coordinator
         }
         viewController.webView.isInspectable = true
-        context.coordinator.editorViewController = viewController
 
         viewModel.perform = { [weak viewController] in
             switch $0 {
@@ -192,7 +191,6 @@ private struct _EditorView: UIViewControllerRepresentable {
     @MainActor
     class Coordinator: NSObject, EditorViewControllerDelegate, MediaUploadDelegate {
         let viewModel: EditorViewModel
-        weak var editorViewController: EditorViewController?
 
         init(viewModel: EditorViewModel) {
             self.viewModel = viewModel
