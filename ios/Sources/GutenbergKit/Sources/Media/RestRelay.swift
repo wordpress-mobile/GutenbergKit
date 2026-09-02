@@ -11,10 +11,10 @@ import GutenbergKitHTTP
 /// The editor web view is a `file://` page. Its REST API requests normally
 /// bypass CORS thanks to the `allowUniversalAccessFromFileURLs` preference,
 /// but iOS Lockdown Mode stops honoring that exemption while still making the
-/// page send `Origin: file://`. WordPress core and WordPress.com sanitize that
-/// value through a URL-protocol allowlist that doesn't include `file`, so they
-/// respond with an empty `Access-Control-Allow-Origin` and WebKit rejects
-/// every response — most visibly media uploads (`POST /wp/v2/media`).
+/// page send `Origin: file://`. WordPress sanitizes that value through a
+/// URL-protocol allowlist that doesn't include `file`, so it responds with an
+/// empty `Access-Control-Allow-Origin` and WebKit rejects every response —
+/// most visibly media uploads (`POST /wp/v2/media`).
 ///
 /// The relay sidesteps the problem: the web view fetches the local
 /// ``MediaUploadServer`` and this handler forwards the request to the site's
