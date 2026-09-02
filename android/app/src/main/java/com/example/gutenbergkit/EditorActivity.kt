@@ -351,7 +351,25 @@ fun EditorScreen(
 }
 
 /**
+ * Suspends until the editor store's save lifecycle completes.
+ *
+ * Bridges the [GutenbergView.triggerSaveLifecycle] callback to a coroutine so
+ * the caller can sequence post-save work (like persisting content via the REST API).
+ */
+private suspend fun GutenbergView.triggerSaveLifecycleAwait(): Boolean =
+    suspendCancellableCoroutine { continuation ->
+        triggerSaveLifecycle { success, _ ->
+            if (continuation.isActive) continuation.resume(success)
+        }
+    }
+
+/**
  * Reads the latest title/content from the editor and PUTs it to the WordPress REST API.
+ *
+ * Triggers [GutenbergView.triggerSaveLifecycle] first so plugin side-effects
+ * (e.g., VideoPress syncing metadata) settle before the content is read and
+ * persisted. A lifecycle failure must NOT block the user from saving their
+ * work — the warning is logged and persistence proceeds anyway.
  */
 private suspend fun persistPost(
     context: Context,
@@ -360,6 +378,15 @@ private suspend fun persistPost(
     accountId: ULong,
     postId: UInt
 ): String? {
+    // 1. Trigger the editor store save lifecycle so plugins fire side-effects.
+    val lifecycleSucceeded = view.triggerSaveLifecycleAwait()
+    if (lifecycleSucceeded) {
+        Log.i("EditorActivity", "editor.triggerSaveLifecycle() completed — editor store save lifecycle fired")
+    } else {
+        Log.w("EditorActivity", "editor.triggerSaveLifecycle() failed; persisting anyway")
+    }
+
+    // 2. Persist post content via REST API.
     return try {
         val titleAndContent = suspendCancellableCoroutine<Pair<CharSequence, CharSequence>> { cont ->
             view.getTitleAndContent(

@@ -5,6 +5,7 @@ import { useEffect, useCallback, useRef } from '@wordpress/element';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as coreStore } from '@wordpress/core-data';
 import { store as editorStore } from '@wordpress/editor';
+import { store as noticesStore } from '@wordpress/notices';
 import { parse, serialize, getBlockType } from '@wordpress/blocks';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { insert, create, toHTMLString } from '@wordpress/rich-text';
@@ -18,7 +19,9 @@ window.editor = window.editor || {};
 
 export function useHostBridge( post, editorRef, markBridgeReady ) {
 	const { editEntityRecord } = useDispatch( coreStore );
-	const { undo, redo, switchEditorMode } = useDispatch( editorStore );
+	const { undo, redo, switchEditorMode, savePost } =
+		useDispatch( editorStore );
+	const { removeNotice } = useDispatch( noticesStore );
 	const { getEditedPostAttribute, getEditedPostContent } =
 		useSelect( editorStore );
 	const { updateBlock, selectionChange } = useDispatch( blockEditorStore );
@@ -91,6 +94,18 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 		window.editor.redo = () => {
 			// Do not return the `Promise` return value to avoid host errors.
 			redo();
+		};
+
+		window.editor.triggerSaveLifecycle = async () => {
+			try {
+				// Await the lifecycle so hosts can sequence persistence after
+				// plugin side-effects settle, do not return the `Promise` return value
+				// to avoid host errors.
+				await savePost();
+			} finally {
+				// Native hosts display their own save feedback, disable the default
+				removeNotice( 'editor-save' );
+			}
 		};
 
 		window.editor.switchEditorMode = ( mode ) => {
@@ -191,6 +206,7 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 			delete window.editor.setTitle;
 			delete window.editor.getContent;
 			delete window.editor.getTitleAndContent;
+			delete window.editor.triggerSaveLifecycle;
 			delete window.editor.undo;
 			delete window.editor.redo;
 			delete window.editor.switchEditorMode;
@@ -204,6 +220,8 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 		markBridgeReady,
 		getEditedPostAttribute,
 		getEditedPostContent,
+		savePost,
+		removeNotice,
 		redo,
 		switchEditorMode,
 		undo,

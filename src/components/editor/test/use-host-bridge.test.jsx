@@ -16,8 +16,20 @@ const mockGetSelectedBlockClientId = vi.fn();
 const mockGetBlock = vi.fn();
 const mockGetSelectionStart = vi.fn();
 const mockGetSelectionEnd = vi.fn();
-const mockUpdateBlock = vi.fn();
-const mockSelectionChange = vi.fn();
+
+// Hoisted so the `vi.mock` factory below can capture references to the
+// same spies the tests assert on. `vi.mock` is hoisted above imports,
+// so plain top-level `const`s aren't visible to its factory.
+const dispatchMocks = vi.hoisted( () => ( {
+	savePost: vi.fn(),
+	removeNotice: vi.fn(),
+	undo: vi.fn(),
+	redo: vi.fn(),
+	switchEditorMode: vi.fn(),
+	editEntityRecord: vi.fn(),
+	updateBlock: vi.fn(),
+	selectionChange: vi.fn(),
+} ) );
 
 vi.mock( '@wordpress/data', () => ( {
 	useSelect: ( store ) => {
@@ -35,17 +47,11 @@ vi.mock( '@wordpress/data', () => ( {
 			getSelectionEnd: mockGetSelectionEnd,
 		};
 	},
-	useDispatch: () => ( {
-		editEntityRecord: vi.fn(),
-		undo: vi.fn(),
-		redo: vi.fn(),
-		switchEditorMode: vi.fn(),
-		updateBlock: mockUpdateBlock,
-		selectionChange: mockSelectionChange,
-	} ),
+	useDispatch: vi.fn( () => dispatchMocks ),
 } ) );
 vi.mock( '@wordpress/core-data' );
 vi.mock( '@wordpress/editor' );
+vi.mock( '@wordpress/notices' );
 vi.mock( '@wordpress/blocks' );
 vi.mock( '@wordpress/rich-text', () => ( {
 	create: vi.fn( ( { html } ) => ( {
@@ -98,6 +104,7 @@ describe( 'useHostBridge', () => {
 		expect( window.editor.getTitleAndContent ).toBeTypeOf( 'function' );
 		expect( window.editor.undo ).toBeTypeOf( 'function' );
 		expect( window.editor.redo ).toBeTypeOf( 'function' );
+		expect( window.editor.triggerSaveLifecycle ).toBeTypeOf( 'function' );
 		expect( window.editor.switchEditorMode ).toBeTypeOf( 'function' );
 		expect( window.editor.dismissTopModal ).toBeTypeOf( 'function' );
 		expect( window.editor.focus ).toBeTypeOf( 'function' );
@@ -290,7 +297,7 @@ describe( 'useHostBridge', () => {
 		const result = window.editor.appendTextAtCursor( ' appended' );
 
 		expect( result ).toBe( true );
-		expect( mockUpdateBlock ).toHaveBeenCalledWith( 'block-1', {
+		expect( dispatchMocks.updateBlock ).toHaveBeenCalledWith( 'block-1', {
 			attributes: expect.objectContaining( {
 				content: expect.any( String ),
 			} ),
@@ -325,7 +332,7 @@ describe( 'useHostBridge', () => {
 		const result = window.editor.appendTextAtCursor( ' World' );
 
 		expect( result ).toBe( true );
-		expect( mockUpdateBlock ).toHaveBeenCalledWith( 'block-1', {
+		expect( dispatchMocks.updateBlock ).toHaveBeenCalledWith( 'block-1', {
 			attributes: expect.objectContaining( {
 				content: expect.any( String ),
 			} ),
@@ -368,7 +375,7 @@ describe( 'useHostBridge', () => {
 
 		// The block should contain the original content plus the
 		// appended text — not just the appended text alone.
-		expect( mockUpdateBlock ).toHaveBeenCalledWith( 'block-1', {
+		expect( dispatchMocks.updateBlock ).toHaveBeenCalledWith( 'block-1', {
 			attributes: expect.objectContaining( {
 				content: 'Existing block content @username ',
 			} ),
@@ -418,9 +425,45 @@ describe( 'useHostBridge', () => {
 		expect( window.editor.getTitleAndContent ).toBeUndefined();
 		expect( window.editor.undo ).toBeUndefined();
 		expect( window.editor.redo ).toBeUndefined();
+		expect( window.editor.triggerSaveLifecycle ).toBeUndefined();
 		expect( window.editor.switchEditorMode ).toBeUndefined();
 		expect( window.editor.dismissTopModal ).toBeUndefined();
 		expect( window.editor.focus ).toBeUndefined();
 		expect( window.editor.appendTextAtCursor ).toBeUndefined();
+	} );
+
+	describe( 'window.editor.triggerSaveLifecycle', () => {
+		it( 'removes the editor-save snackbar after a successful save', async () => {
+			dispatchMocks.savePost.mockResolvedValueOnce( undefined );
+
+			renderHook( () =>
+				useHostBridge( defaultPost, editorRef, markBridgeReady )
+			);
+
+			await window.editor.triggerSaveLifecycle();
+
+			expect( dispatchMocks.savePost ).toHaveBeenCalledTimes( 1 );
+			expect( dispatchMocks.removeNotice ).toHaveBeenCalledWith(
+				'editor-save'
+			);
+		} );
+
+		it( 'removes the editor-save snackbar even when the save fails', async () => {
+			const failure = new Error( 'plugin lifecycle error' );
+			dispatchMocks.savePost.mockRejectedValueOnce( failure );
+
+			renderHook( () =>
+				useHostBridge( defaultPost, editorRef, markBridgeReady )
+			);
+
+			await expect(
+				window.editor.triggerSaveLifecycle()
+			).rejects.toThrow( failure );
+
+			expect( dispatchMocks.savePost ).toHaveBeenCalledTimes( 1 );
+			expect( dispatchMocks.removeNotice ).toHaveBeenCalledWith(
+				'editor-save'
+			);
+		} );
 	} );
 } );
