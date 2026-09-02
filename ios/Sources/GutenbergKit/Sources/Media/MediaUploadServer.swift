@@ -311,15 +311,7 @@ final class MediaUploadServer: Sendable {
     }
 
     private static func errorResponse(status: Int, message: String) -> HTTPResponse {
-        // Emit a WordPress-REST-style error object so the JS middleware normalizes
-        // it (and surfaces `message`) the same way it does a relayed WordPress
-        // error — the local server's own errors need no special-casing.
-        let body = HTTPErrorBody.wordPressError(code: "upload_error", message: message)
-        return HTTPResponse(
-            status: status,
-            headers: [("Content-Type", body.contentType)],
-            body: body.data
-        )
+        .wordPressError(status: status, code: "upload_error", message: message)
     }
 
     /// Answers the errors the HTTP server raises itself with the same JSON

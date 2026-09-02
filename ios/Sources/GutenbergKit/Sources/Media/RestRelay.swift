@@ -481,17 +481,8 @@ struct RestRelay: Sendable {
     /// a `text/plain` body reaches JavaScript as an unparseable `invalid_json`
     /// with the real reason lost.
     static func errorResponse(status: Int, code: String, message: String) -> HTTPResponse {
-        let body = HTTPErrorBody.wordPressError(code: code, message: message)
-        return HTTPResponse(
-            status: status,
-            headers: corsHeaders + [("Content-Type", body.contentType)],
-            body: body.data
-        )
+        .wordPressError(status: status, code: code, message: message, headers: corsHeaders)
     }
-}
-
-extension Logger {
-    static let restRelay = Logger(subsystem: "GutenbergKit", category: "rest-relay")
 }
 
 #endif // canImport(Network)

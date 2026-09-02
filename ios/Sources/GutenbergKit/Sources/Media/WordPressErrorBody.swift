@@ -27,4 +27,23 @@ extension HTTPErrorBody {
     }
 }
 
+extension HTTPResponse {
+
+    /// A response carrying a WordPress-REST-style error, with any headers the
+    /// route adds ahead of the body's `Content-Type`.
+    static func wordPressError(
+        status: Int,
+        code: String,
+        message: String,
+        headers: [(String, String)] = []
+    ) -> HTTPResponse {
+        let body = HTTPErrorBody.wordPressError(code: code, message: message)
+        return HTTPResponse(
+            status: status,
+            headers: headers + [("Content-Type", body.contentType)],
+            body: body.data
+        )
+    }
+}
+
 #endif // canImport(Network)
