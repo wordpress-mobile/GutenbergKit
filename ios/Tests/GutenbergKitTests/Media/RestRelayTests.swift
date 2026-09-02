@@ -206,11 +206,44 @@ struct RestRelayTests {
         for target in [
             "https://elsewhere.example/wp-json/wp/v2/posts",
             "https://example.com/wp-login.php",
-            "https://www.example.com/wp-json/wp/v2/posts",
             "https://example.com:8443/wp-json/wp/v2/posts",
         ] {
             let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: "http://example.com/wp-json/")
             #expect(decide(redirectGuard, target: target) == nil, "should refuse \(target)")
+        }
+    }
+
+    @Test("follows a redirect to an alias of the configured host")
+    func followsHostAlias() {
+        // The spellings `relayUpstreamPath` tolerates, so the two layers
+        // agree: a site whose canonical redirect names its `www.` alias, or
+        // wp-env answering on `127.0.0.1` for a root configured as
+        // `localhost`, would otherwise have every relayed request refused.
+        for (root, target) in [
+            ("https://example.com/wp-json/", "https://www.example.com/wp-json/wp/v2/posts"),
+            ("https://www.example.com/wp-json/", "https://example.com/wp-json/wp/v2/posts"),
+            ("http://localhost:8888/wp-json/", "http://127.0.0.1:8888/wp-json/wp/v2/posts"),
+            ("http://example.com/wp-json/", "https://www.example.com/wp-json/wp/v2/posts"),
+            ("https://example.com/wp-json/", "https://Example.com:443/wp-json/wp/v2/posts"),
+        ] {
+            let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: root)
+            #expect(decide(redirectGuard, target: target)?.url?.absoluteString == target, "should follow \(target)")
+            #expect(redirectGuard.refusedTarget == nil)
+        }
+    }
+
+    @Test("the alias tolerance admits nothing else")
+    func hostAliasStaysContained() {
+        // Only the spellings of the same name: not a subdomain, a lookalike,
+        // another port on the alias, or another path.
+        for target in [
+            "https://www2.example.com/wp-json/wp/v2/posts",
+            "https://example.com.evil.example/wp-json/wp/v2/posts",
+            "https://wwwexample.com/wp-json/wp/v2/posts",
+            "https://www.example.com:8443/wp-json/wp/v2/posts",
+            "https://www.example.com/wp-login.php",
+        ] {
+            #expect(redirectDecision(to: target) == nil, "should refuse \(target)")
         }
     }
 

@@ -270,20 +270,21 @@ struct RestRelay: Sendable {
     /// carrying the site credential — followed to that host, and its response
     /// relayed back to the editor. Refusing hands the 3xx itself back instead.
     ///
-    /// The comparison is a prefix match on the whole URL, so another path on
-    /// the same site (`/wp-login.php`), a scheme downgrade, and an alias of the
-    /// configured host are all refused: the site credential follows the request
-    /// only to the API it was configured for. The cost is that a legitimate
+    /// The comparison is a prefix match on the whole URL, read through the
+    /// host spellings `relayUpstreamPath` tolerates — `www.` versus bare, the
+    /// loopback names — and an `http`→`https` upgrade. So another path on the
+    /// same site (`/wp-login.php`), another port, another host, and a scheme
+    /// downgrade are refused: the site credential follows the request only to
+    /// the API it was configured for. The cost is that a legitimate
     /// permalink-structure redirect is refused too, which the response says
     /// specifically enough to diagnose.
     ///
-    /// The one exception is a redirect that differs from the root only by an
-    /// `http`→`https` upgrade. That is the TLS-terminating-proxy deployment
-    /// `relayUpstreamPath` already tolerates when it decides what to relay — a
-    /// site whose `siteurl` is `http` but which answers on `https` — so
-    /// refusing it here would fail the requests the layer above deliberately
-    /// sent. Containment holds: same host, same path, and a strictly stronger
-    /// scheme. A downgrade has no matching rule and stays refused.
+    /// The tolerances are the layer above's so that the two agree. A `Link`
+    /// target on the `www.` alias is relayed by `createRelayFetch`, and a site
+    /// whose canonical redirect names that alias — or whose `siteurl` is `http`
+    /// behind a TLS-terminating proxy — would otherwise have every relayed
+    /// request refused here. Containment holds: the same site under another
+    /// of its own names, and a strictly stronger scheme.
     ///
     /// A redirect the guard follows is also its job to make work. A `307` or
     /// `308` has `URLSession` resend the body, and a body the parser spilled
@@ -296,6 +297,7 @@ struct RestRelay: Sendable {
     /// `@unchecked Sendable`: the prefixes and the body are `let`s set at
     /// init; the refusal is recorded under a lock.
     final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+        /// The API root, in the form ``normalized(_:)`` gives a target.
         private let allowedPrefix: String
 
         /// `allowedPrefix` under `https`, when the configured root is `http`.
@@ -314,10 +316,11 @@ struct RestRelay: Sendable {
         }
 
         init(allowedPrefix: String, streamedBody: RequestBody? = nil) {
-            self.allowedPrefix = allowedPrefix
+            let root = Self.normalized(allowedPrefix) ?? allowedPrefix
+            self.allowedPrefix = root
             let insecureScheme = "http://"
-            self.upgradedPrefix = allowedPrefix.hasPrefix(insecureScheme)
-                ? "https://" + allowedPrefix.dropFirst(insecureScheme.count)
+            self.upgradedPrefix = root.hasPrefix(insecureScheme)
+                ? "https://" + root.dropFirst(insecureScheme.count)
                 : nil
             self.streamedBody = streamedBody
         }
@@ -347,14 +350,51 @@ struct RestRelay: Sendable {
             completionHandler(request)
         }
 
-        /// Whether `target` is inside the API root, allowing only a scheme
-        /// upgrade to differ.
+        /// Whether `target` is inside the API root, allowing only the host
+        /// spelling and a scheme upgrade to differ.
         private func contains(_ target: String) -> Bool {
+            guard let target = Self.normalized(target) else { return false }
             if target.hasPrefix(allowedPrefix) {
                 return true
             }
             guard let upgradedPrefix else { return false }
             return target.hasPrefix(upgradedPrefix)
+        }
+
+        /// `url` with its host in the form its aliases share and a default
+        /// port dropped, so that a prefix comparison reads through the
+        /// spellings the layer above tolerates. `nil` for a URL without a host.
+        private static func normalized(_ url: String) -> String? {
+            guard var components = URLComponents(string: url), let host = components.host else {
+                return nil
+            }
+            components.host = canonicalHost(host)
+            if let port = components.port, port == defaultPort(for: components.scheme) {
+                components.port = nil
+            }
+            return components.string
+        }
+
+        private static func defaultPort(for scheme: String?) -> Int? {
+            switch scheme?.lowercased() {
+            case "http": return 80
+            case "https": return 443
+            default: return nil
+            }
+        }
+
+        /// A host reduced to the form its aliases share: every loopback
+        /// spelling collapses to one, and a `www.` prefix is dropped.
+        ///
+        /// Mirrors `canonicalHost` in `fetch-relay.js`, and the two must stay
+        /// the same: a spelling the web view relays and this refuses fails
+        /// every request on a site whose canonical redirect uses it.
+        private static func canonicalHost(_ host: String) -> String {
+            let lowercased = host.lowercased()
+            if ["localhost", "127.0.0.1", "::1", "[::1]"].contains(lowercased) {
+                return "localhost"
+            }
+            return lowercased.hasPrefix("www.") ? String(lowercased.dropFirst(4)) : lowercased
         }
     }
 
