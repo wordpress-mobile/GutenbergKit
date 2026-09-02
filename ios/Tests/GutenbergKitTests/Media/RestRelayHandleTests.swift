@@ -154,6 +154,52 @@ struct RestRelayHandleTests {
         #expect(body.contains("relay_upstream_failed"))
     }
 
+    @Test("replays a streamed body across a redirect it follows")
+    func replaysStreamedBodyAcrossRedirect() async throws {
+        // A body over the in-memory threshold is spilled to disk and sent as
+        // a one-shot stream. A `308` has `URLSession` resend it, which needs
+        // a fresh stream or fails with `requestBodyStreamExhausted`. The site
+        // is a real server rather than a stub: `URLSession` asks for a
+        // replacement only for a stream it drained itself.
+        let contents = Data(repeating: 0x41, count: 100_000)
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try contents.write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let resent = ReceivedBody()
+        let site = try await HTTPServer.start(name: "relay-redirect-site", requiresAuthentication: false) { request in
+            guard request.parsed.query.isEmpty else {
+                resent.record((try? await request.parsed.body?.data) ?? Data())
+                return HTTPResponse(status: 201)
+            }
+            // Relative, as RFC 9110 allows, since the port is not known
+            // until the server has started.
+            return HTTPResponse(status: 308, headers: [("Location", "/wp-json/wp/v2/media?redirected=1")])
+        }
+        defer { site.stop() }
+
+        let relay = RestRelay(
+            configuration: EditorConfigurationBuilder(
+                postType: .post,
+                siteURL: URL(string: "http://127.0.0.1:\(site.port)")!,
+                siteApiRoot: URL(string: "http://127.0.0.1:\(site.port)/wp-json/")!,
+                authHeader: "Bearer test-token"
+            ).build()
+        )
+        let parsed = ParsedHTTPRequest.complete(
+            method: "POST",
+            target: "/proxy/wp/v2/media",
+            httpVersion: "HTTP/1.1",
+            headers: ["Content-Type": "image/jpeg"],
+            body: RequestBody(fileURL: file)
+        )
+
+        let response = await relay.handle(HTTPServer.Request(parsed: parsed, parseDuration: .zero))
+
+        #expect(response.status == 201)
+        #expect(resent.body == contents)
+    }
+
     @Test("refuses a path outside the API root before sending anything")
     func refusesForbiddenPath() async throws {
         let exchange = try await relay(target: "/proxy/../wp-admin/")
@@ -220,6 +266,20 @@ struct RestRelayHandleTests {
         )
 
         return Exchange(sentRequest: stubbed.recorder.request, response: response)
+    }
+}
+
+/// The body a test server received, handed across from its handler.
+private final class ReceivedBody: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _body: Data?
+
+    var body: Data? {
+        lock.withLock { _body }
+    }
+
+    func record(_ body: Data) {
+        lock.withLock { _body = body }
     }
 }
 

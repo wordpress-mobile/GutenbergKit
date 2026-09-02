@@ -145,6 +145,7 @@ struct RestRelay: Sendable {
             upstreamRequest.setValue(authHeader, forHTTPHeaderField: "Authorization")
         }
 
+        var streamedBody: RequestBody?
         if let body = parsed.body {
             if let data = body.inMemoryData {
                 upstreamRequest.httpBody = data
@@ -157,6 +158,7 @@ struct RestRelay: Sendable {
                 do {
                     upstreamRequest.httpBodyStream = try body.makeInputStream()
                     upstreamRequest.setValue("\(body.count)", forHTTPHeaderField: "Content-Length")
+                    streamedBody = body
                 } catch {
                     Logger.restRelay.error("Failed to open request body stream: \(error)")
                     return Self.errorResponse(status: 500, code: "relay_body_unreadable", message: "Failed to read the request body.")
@@ -169,7 +171,7 @@ struct RestRelay: Sendable {
             // 3xx responses on its own, which would carry the site credential
             // to whatever host the `Location` header names and relay that
             // response back. See ``RedirectGuard``.
-            let redirectGuard = RedirectGuard(allowedPrefix: apiRoot)
+            let redirectGuard = RedirectGuard(allowedPrefix: apiRoot, streamedBody: streamedBody)
             let upstream = HTTPResponse(try await session.data(for: upstreamRequest, delegate: redirectGuard))
 
             // A refused redirect leaves `URLSession` holding the 3xx itself.
@@ -283,13 +285,25 @@ struct RestRelay: Sendable {
     /// sent. Containment holds: same host, same path, and a strictly stronger
     /// scheme. A downgrade has no matching rule and stays refused.
     ///
-    /// `@unchecked Sendable`: both prefixes are `let`s set at init; the refusal
-    /// is recorded under a lock.
+    /// A redirect the guard follows is also its job to make work. A `307` or
+    /// `308` has `URLSession` resend the body, and a body the parser spilled
+    /// to disk went out as a one-shot stream, so the resend needs a fresh one
+    /// from ``urlSession(_:task:needNewBodyStream:)``. Without it the task
+    /// fails with `requestBodyStreamExhausted` — and only for bodies over the
+    /// in-memory threshold, since `URLSession` replays a `Data` body itself:
+    /// every JSON save would succeed while every photo upload failed.
+    ///
+    /// `@unchecked Sendable`: the prefixes and the body are `let`s set at
+    /// init; the refusal is recorded under a lock.
     final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
         private let allowedPrefix: String
 
         /// `allowedPrefix` under `https`, when the configured root is `http`.
         private let upgradedPrefix: String?
+
+        /// The body sent as a one-shot stream, reopened when a followed
+        /// redirect resends it. `nil` when `URLSession` holds the bytes itself.
+        private let streamedBody: RequestBody?
 
         private let lock = NSLock()
         private var _refusedTarget: String?
@@ -299,12 +313,23 @@ struct RestRelay: Sendable {
             lock.withLock { _refusedTarget }
         }
 
-        init(allowedPrefix: String) {
+        init(allowedPrefix: String, streamedBody: RequestBody? = nil) {
             self.allowedPrefix = allowedPrefix
             let insecureScheme = "http://"
             self.upgradedPrefix = allowedPrefix.hasPrefix(insecureScheme)
                 ? "https://" + allowedPrefix.dropFirst(insecureScheme.count)
                 : nil
+            self.streamedBody = streamedBody
+        }
+
+        func urlSession(
+            _ session: URLSession,
+            task: URLSessionTask,
+            needNewBodyStream completionHandler: @escaping (InputStream?) -> Void
+        ) {
+            // `makeInputStream()` opens a fresh read of the parser's file on
+            // each call, so the resend carries the whole body again.
+            completionHandler(try? streamedBody?.makeInputStream())
         }
 
         func urlSession(

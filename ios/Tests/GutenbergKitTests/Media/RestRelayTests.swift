@@ -227,6 +227,38 @@ struct RestRelayTests {
         #expect(redirectGuard.refusedTarget == "https://elsewhere.example/x")
     }
 
+    // MARK: - Body replay
+
+    @Test("reopens a streamed body for a redirect it follows")
+    func reopensStreamedBody() throws {
+        // A `307`/`308` has `URLSession` resend the body, and a body the
+        // parser spilled to disk went out as a one-shot stream. Without a
+        // fresh one the task fails with `requestBodyStreamExhausted` — for
+        // large uploads only, since a `Data` body replays on its own.
+        let contents = Data(repeating: 0x41, count: 100_000)
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try contents.write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let redirectGuard = RestRelay.RedirectGuard(
+            allowedPrefix: "https://example.com/wp-json/",
+            streamedBody: RequestBody(fileURL: file)
+        )
+        var reopened: InputStream?
+        redirectGuard.urlSession(.shared, task: Self.unusedTask, needNewBodyStream: { reopened = $0 })
+
+        #expect(try readAll(#require(reopened)) == contents)
+    }
+
+    @Test("supplies no stream when the body was not streamed")
+    func noStreamWithoutStreamedBody() {
+        let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: "https://example.com/wp-json/")
+        var reopened: InputStream? = InputStream(data: Data())
+        redirectGuard.urlSession(.shared, task: Self.unusedTask, needNewBodyStream: { reopened = $0 })
+
+        #expect(reopened == nil)
+    }
+
     // MARK: - Routing
 
     @Test("claims its own route and nothing else")
@@ -291,6 +323,20 @@ struct RestRelayTests {
             completionHandler: { followed = $0 }
         )
         return followed
+    }
+
+    private func readAll(_ stream: InputStream) -> Data {
+        stream.open()
+        defer { stream.close() }
+
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while stream.hasBytesAvailable {
+            let read = stream.read(&buffer, maxLength: buffer.count)
+            guard read > 0 else { break }
+            data.append(buffer, count: read)
+        }
+        return data
     }
 }
 
