@@ -37,15 +37,20 @@ import OSLog
 ///
 /// ## CORS
 ///
-/// When `requiresAuthentication` is enabled, `OPTIONS` requests are exempt
-/// from authentication because CORS preflight requests never include
-/// credentials (Fetch spec §3.3.5). However, the server does not generate
-/// CORS response headers — this is the handler's responsibility.
+/// When `requiresAuthentication` is enabled, CORS preflight requests are exempt
+/// from authentication because a preflight never includes credentials (Fetch
+/// spec §3.3.5). The exemption is scoped to genuine preflights — an `OPTIONS`
+/// without `Access-Control-Request-Method` is a request the client made on its
+/// own behalf and is authenticated, and dispatched to the handler, like any
+/// other. Under ``CORSPolicy/permissive`` the server answers preflights itself;
+/// otherwise it does not generate CORS response headers and that is the
+/// handler's responsibility.
 ///
 /// When proxying to a remote server, the upstream response will typically
 /// include the correct CORS headers already — pass it through unaltered.
-/// When serving local content, the handler must return appropriate headers
-/// for `OPTIONS` requests, typically:
+/// When serving local content under ``CORSPolicy/none`` with
+/// `requiresAuthentication` disabled, the handler must return appropriate
+/// headers for `OPTIONS` requests, typically:
 ///
 ///     Access-Control-Allow-Origin: <origin>
 ///     Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
@@ -55,6 +60,12 @@ import OSLog
 /// Without these headers, browsers will reject the preflight and block
 /// the actual request. A handler that returns 404 for unrecognized methods
 /// will silently break CORS for browser clients.
+///
+/// With `requiresAuthentication` enabled, a browser client needs
+/// ``CORSPolicy/permissive``. Because the exemption above is scoped to the
+/// policy that answers preflights, ``CORSPolicy/none`` authenticates a
+/// preflight like any other request — and a browser sends one without
+/// credentials, so the server answers 407 and the handler is never reached.
 ///
 /// ## Connection Model
 ///
@@ -141,6 +152,11 @@ public final class HTTPServer: Sendable {
     ///     to choose a descriptive, collision-free identifier (e.g. `"media-proxy"`,
     ///     `"editor-assets"`).
     ///   - port: The port to listen on. Pass `nil` or omit to let the system assign an available port.
+    ///   - requiresBrowserOrigin: When enabled, requests must carry `Origin` or
+    ///     `Sec-Fetch-Site` — headers a web view's `fetch()` always sets and a raw
+    ///     socket does not — and receive a 403 otherwise. Defense in depth behind the
+    ///     bearer token, for servers whose only legitimate client is a web view; both
+    ///     headers are trivially forged by a process that cares to. Defaults to off.
     ///   - maxRequestBodySize: The maximum allowed request body size in bytes.
     ///     Requests exceeding this limit receive a 413 response. Defaults to 4 GB.
     ///   - maxConnections: The maximum number of concurrent connections. New connections
@@ -169,6 +185,7 @@ public final class HTTPServer: Sendable {
         port: UInt16? = nil,
         listenOnAllInterfaces: Bool = false,
         requiresAuthentication: Bool = true,
+        requiresBrowserOrigin: Bool = false,
         maxRequestBodySize: Int64 = HTTPRequestParser.defaultMaxBodySize,
         maxConnections: Int = HTTPServer.defaultMaxConnections,
         readTimeout: Duration = HTTPServer.defaultReadTimeout,
@@ -210,6 +227,7 @@ public final class HTTPServer: Sendable {
         let queue = DispatchQueue(label: "com.gutenbergkit.http-server.\(safeName)")
 
         let requiresAuth = requiresAuthentication
+        let requiresOrigin = requiresBrowserOrigin
         // Falls back to `readTimeout` so consumers that don't distinguish the two
         // keep the prior whole-request behavior.
         let resolvedBodyReadTimeout = bodyReadTimeout ?? readTimeout
@@ -222,6 +240,7 @@ public final class HTTPServer: Sendable {
             handleConnection(
                 connection, queue: queue, token: token,
                 requiresAuthentication: requiresAuth,
+                requiresBrowserOrigin: requiresOrigin,
                 maxRequestBodySize: maxRequestBodySize, readTimeout: readTimeout,
                 bodyReadTimeout: resolvedBodyReadTimeout,
                 idleTimeout: idleTimeout, cors: cors, tempDirectory: tempDirectory,
@@ -324,6 +343,33 @@ public final class HTTPServer: Sendable {
         return HTTPResponse(status: error.httpStatus, statusText: statusText, body: Data(statusText.utf8))
     }
 
+    /// An error the server raises itself, carrying the delegate's body when it
+    /// supplies one.
+    ///
+    /// The status and `headers` are the server's: a delegate customizes what the
+    /// client reads, never the protocol semantics. Without a delegate body the
+    /// response is the reason phrase as `text/plain`, which is what a client
+    /// that does not parse bodies expects.
+    ///
+    /// The reason phrase comes from ``HTTPResponse/defaultStatusText(for:)`` so
+    /// the status line and the fallback body cannot disagree with the rest of
+    /// the library about what a status is called.
+    private static func errorResponse(
+        status: Int,
+        headers: [(String, String)] = [],
+        for error: HTTPServerError,
+        delegate: HTTPServerDelegate?
+    ) -> HTTPResponse {
+        let statusText = String(HTTPResponse.defaultStatusText(for: status))
+        let body = delegate?.errorBody(for: error)
+        return HTTPResponse(
+            status: status,
+            statusText: statusText,
+            headers: headers + [("Content-Type", body?.contentType ?? "text/plain")],
+            body: body?.data ?? Data(statusText.utf8)
+        )
+    }
+
     // MARK: - Connection Handling
 
     private static func handleConnection(
@@ -331,6 +377,7 @@ public final class HTTPServer: Sendable {
         queue: DispatchQueue,
         token: String,
         requiresAuthentication: Bool,
+        requiresBrowserOrigin: Bool,
         maxRequestBodySize: Int64,
         readTimeout: Duration,
         bodyReadTimeout: Duration,
@@ -370,20 +417,30 @@ public final class HTTPServer: Sendable {
                         // Check auth on headers alone, before draining or consuming any
                         // body bytes — an unauthenticated client must not be able to make
                         // the server read (and discard) an arbitrarily large body, and the
-                        // handler must never see an unauthenticated request. OPTIONS is
-                        // exempt because CORS preflight requests never include credentials
-                        // (Fetch spec §3.3.5).
-                        if requiresAuthentication && partial.method.uppercased() != "OPTIONS" {
+                        // handler must never see an unauthenticated request. A CORS
+                        // preflight is exempt because preflights never include credentials
+                        // (Fetch spec §3.3.5), and only under the policy that answers one
+                        // below without reaching the handler; an `OPTIONS` the client sent
+                        // deliberately is not a preflight and is authenticated like any
+                        // other request.
+                        let isExemptPreflight = cors == .permissive && isPreflight(partial)
+                        if requiresAuthentication && !isExemptPreflight {
                             guard authenticate(partial, token: token) else {
                                 throw HTTPServerError.authenticationFailed
                             }
                         }
 
-                        // Reject auth-exempt OPTIONS that carry a body. Real CORS preflight
+                        if requiresBrowserOrigin {
+                            guard hasBrowserOrigin(partial) else {
+                                throw HTTPServerError.forbiddenOrigin
+                            }
+                        }
+
+                        // Reject preflights that carry a body. Real CORS preflight
                         // requests are bodyless; a body on the auth-exempt path would
                         // otherwise be read/drained without authentication — and the
                         // accepted-body read below is bounded only by the idle timeout.
-                        if partial.method.uppercased() == "OPTIONS", (parser.expectedBodyLength ?? 0) > 0 {
+                        if isExemptPreflight, (parser.expectedBodyLength ?? 0) > 0 {
                             throw HTTPServerError.unexpectedBody
                         }
 
@@ -439,9 +496,26 @@ public final class HTTPServer: Sendable {
                 if let parseError = parser.parseError {
                     response = delegate?.response(forRecoverableParseError: parseError)
                         ?? Self.defaultErrorResponse(for: parseError)
-                } else if cors == .permissive, request.method.uppercased() == "OPTIONS" {
+                } else if cors == .permissive, isPreflight(request) {
                     // Under a permissive CORS policy the library answers the OPTIONS
                     // preflight itself; the send layer stamps the CORS headers.
+                    //
+                    // A header the caller announced but the policy does not allow
+                    // fails the real request inside the browser, which reports only
+                    // an opaque CORS error and never reaches the handler. This is
+                    // the one place that can say which header it was.
+                    let unallowed = cors.unallowedHeaders(
+                        announced: request.header("Access-Control-Request-Headers")
+                    )
+                    if !unallowed.isEmpty {
+                        Logger.httpServer.warning(
+                            """
+                            Refusing preflight header(s) \(unallowed.joined(separator: ", "), privacy: .public) \
+                            for \(request.target, privacy: .public); the browser will fail the request before \
+                            it reaches the handler. Add them to CORSPolicy.allowedRequestHeaders if they belong.
+                            """
+                        )
+                    }
                     response = HTTPResponse(status: 204)
                 } else {
                     // Run the handler, but race it against the peer closing the
@@ -479,18 +553,42 @@ public final class HTTPServer: Sendable {
                 let ms = Double(sec) * 1000.0 + Double(atto) / 1_000_000_000_000_000.0
                 Logger.httpServer.debug("\(request.method) \(request.target) → \(response.status) (\(String(format: "%.1f", ms))ms)")
             } catch HTTPServerError.authenticationFailed {
-                await send(HTTPResponse(status: 407, headers: [("Content-Type", "text/plain"), ("Proxy-Authenticate", "Bearer")]), on: connection, cors: cors)
+                let response = Self.errorResponse(
+                    status: 407,
+                    headers: [("Proxy-Authenticate", "Bearer")],
+                    for: .authenticationFailed, delegate: delegate
+                )
+                await send(response, on: connection, cors: cors)
+            } catch HTTPServerError.forbiddenOrigin {
+                Logger.httpServer.warning("Rejected a request that did not originate from a web view")
+                let response = Self.errorResponse(
+                    status: 403,
+                    for: .forbiddenOrigin, delegate: delegate
+                )
+                await send(response, on: connection, cors: cors)
             } catch HTTPServerError.lengthRequired {
-                await send(HTTPResponse(status: 411, statusText: "Length Required", body: Data("Length Required".utf8)), on: connection, cors: cors)
+                let response = Self.errorResponse(
+                    status: 411,
+                    for: .lengthRequired, delegate: delegate
+                )
+                await send(response, on: connection, cors: cors)
             } catch HTTPServerError.unexpectedBody {
                 Logger.httpServer.warning("Rejected auth-exempt request carrying a body")
-                await send(HTTPResponse(status: 400, statusText: "Bad Request", body: Data("Unexpected request body".utf8)), on: connection, cors: cors)
+                let response = Self.errorResponse(
+                    status: 400,
+                    for: .unexpectedBody, delegate: delegate
+                )
+                await send(response, on: connection, cors: cors)
             } catch is CancellationError {
                 Logger.httpServer.debug("Connection cancelled during shutdown")
                 connection.cancel()
             } catch HTTPServerError.readTimeout {
                 Logger.httpServer.warning("Read timeout, closing connection")
-                await send(HTTPResponse(status: 408, statusText: "Request Timeout", body: Data("Request Timeout".utf8)), on: connection, cors: cors)
+                let response = Self.errorResponse(
+                    status: 408,
+                    for: .readTimeout, delegate: delegate
+                )
+                await send(response, on: connection, cors: cors)
             } catch let error as HTTPRequestParseError {
                 // Fatal parse error (malformed framing, smuggling-relevant, etc.):
                 // always answered by the library, never routed to the delegate.
@@ -770,6 +868,47 @@ public final class HTTPServer: Sendable {
                 continuation.resume()
             })
         }
+    }
+
+    // MARK: - CORS
+
+    /// Whether a request is a CORS preflight rather than an `OPTIONS` the
+    /// client sent on its own behalf.
+    ///
+    /// Both arrive as `OPTIONS` at the same target, so the two are only
+    /// separable by `Access-Control-Request-Method`: a preflight always carries
+    /// it (Fetch spec §4.8), and a deliberate `OPTIONS` — WordPress's
+    /// `canUser`, which reads the `Allow` response header — never does.
+    /// Answering the latter with the library's 204 would swallow it before the
+    /// handler ran, reporting no capabilities at all and surfacing no error,
+    /// because the request "succeeded".
+    ///
+    /// A preflight also only *announces* custom headers via
+    /// `Access-Control-Request-Headers`; it never sends them. So a client
+    /// cannot use this to skip authentication: dropping the bearer token to
+    /// look like a preflight means adding `Access-Control-Request-Method`,
+    /// which routes the request to the 204 answer instead of the handler.
+    /// That holds only under ``CORSPolicy/permissive``, which is why the
+    /// authentication exemption is scoped to it — under any other policy a
+    /// preflight reaches the handler, so it is authenticated like anything else.
+    private static func isPreflight(_ request: ParsedHTTPRequest) -> Bool {
+        request.method.uppercased() == "OPTIONS"
+            && request.header("Access-Control-Request-Method") != nil
+    }
+
+    /// Whether a request looks like it came from a web view's `fetch()`.
+    ///
+    /// WebKit sets `Origin` on every cross-origin fetch and `Sec-Fetch-Site` on
+    /// every fetch, so the editor's requests always carry at least one. Either
+    /// is accepted rather than a specific value: the editor's origin is
+    /// `file://` in a release build but the dev server's `http://localhost:…`
+    /// when `GUTENBERG_EDITOR_URL` is set, and neither is worth pinning.
+    ///
+    /// This is a speed bump, not the control — the per-session bearer token is.
+    /// Another process on the device sends neither header by default, but can
+    /// forge both the moment it cares to.
+    private static func hasBrowserOrigin(_ request: ParsedHTTPRequest) -> Bool {
+        request.header("Origin") != nil || request.header("Sec-Fetch-Site") != nil
     }
 
     // MARK: - Authentication

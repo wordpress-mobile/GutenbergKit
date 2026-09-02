@@ -31,6 +31,9 @@ extension Logger {
 
     /// Logs upload server activity
     static let uploadServer = Logger(subsystem: "GutenbergKit", category: "upload-server")
+
+    /// Logs REST relay activity
+    static let restRelay = Logger(subsystem: "GutenbergKit", category: "rest-relay")
 }
 
 public struct SignpostMonitor: Sendable {

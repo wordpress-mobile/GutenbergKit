@@ -195,34 +195,54 @@ extension ParsedHTTPRequest {
             return nil
         }
 
+        var request = urlRequest(url: url)
+        if let body {
+            request.httpBodyStream = try? body.makeInputStream()
+        }
+        return request
+    }
+
+    /// A `URLRequest` for `url` carrying this request's method and forwardable
+    /// headers.
+    ///
+    /// The hop-by-hop headers of RFC 9110 §7.6.1 are dropped — including the
+    /// ones this request's own `Connection` header names — as are the proxy
+    /// credentials a forwarding hop consumes rather than passes on.
+    /// `Authorization` is kept, so a client's own upstream credentials survive;
+    /// a caller that supplies its own must strip it through `additionalStripped`.
+    ///
+    /// The body is deliberately not attached: how to send it differs by caller —
+    /// buffered or streamed, `Content-Length` declared or left to `URLSession`,
+    /// a read failure swallowed or surfaced. ``urlRequest(relativeTo:)`` attaches
+    /// it as a stream.
+    ///
+    /// - Parameters:
+    ///   - url: The URL to send to, already resolved.
+    ///   - additionalStripped: Further header names the caller owns and will set
+    ///     itself, or that describe a hop the upstream should not see.
+    ///     **Lowercase**; names are compared case-insensitively against them.
+    /// - Returns: A configured `URLRequest`, without a body.
+    public func urlRequest(url: URL, stripping additionalStripped: Set<String> = []) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method
 
-        // RFC 9110 §7.6.1: hop-by-hop headers must not be forwarded by proxies.
-        // "proxy-authorization" and "relay-authorization" carry the proxy's
-        // own bearer token and must not be forwarded to the upstream server.
-        // "authorization" is intentionally kept so that the client's own
-        // credentials (e.g. HTTP Basic for the upstream server) pass through.
-        var hopByHop: Set<String> = [
+        var stripped: Set<String> = [
             "host", "connection", "transfer-encoding", "keep-alive",
             "proxy-connection", "te", "upgrade", "trailer",
             "proxy-authorization", "relay-authorization",
         ]
+        stripped.formUnion(additionalStripped)
 
         // Headers listed in Connection are also hop-by-hop (RFC 9110 §7.6.1).
         if let connectionValue = header("Connection") {
             for name in connectionValue.split(separator: ",") {
-                hopByHop.insert(name.trimmingCharacters(in: .whitespaces).lowercased())
+                stripped.insert(name.trimmingCharacters(in: .whitespaces).lowercased())
             }
         }
 
         for (key, value) in headers {
-            guard !hopByHop.contains(key.lowercased()) else { continue }
+            guard !stripped.contains(key.lowercased()) else { continue }
             request.setValue(value, forHTTPHeaderField: key)
-        }
-
-        if let body {
-            request.httpBodyStream = try? body.makeInputStream()
         }
 
         return request

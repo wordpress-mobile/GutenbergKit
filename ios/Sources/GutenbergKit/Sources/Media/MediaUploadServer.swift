@@ -26,16 +26,35 @@ final class MediaUploadServer: Sendable {
     /// Exposed so tests can await completion. (Mirrors Android's `cleanupJob`.)
     let cleanupTask: Task<Void, Never>
 
+    /// The concurrent connection ceiling for the local server.
+    ///
+    /// The library's default of 5 suits a server that only ever receives one
+    /// upload at a time. This one also carries every REST request the editor
+    /// makes under Lockdown Mode (see ``RestRelay``), and editor boot fans out
+    /// well past five: each connection serves exactly one request
+    /// (`Connection: close`), and a connection past the limit is closed
+    /// immediately, surfacing in JavaScript as an unretried `fetch_error`.
+    /// WebKit caps its own concurrency per host well below this, so the ceiling
+    /// exists to bound a runaway, not to schedule normal traffic.
+    static let maxConnections = 32
+
     /// Creates and starts a new upload server.
     ///
     /// - Parameters:
     ///   - uploadDelegate: Optional delegate for customizing file processing and upload.
     ///   - defaultUploader: Fallback uploader used when no delegate provides `uploadFile`.
+    ///   - restRelay: Optional ``RestRelay``. When present, this server also
+    ///     answers the relay's route, becoming the transport for every REST
+    ///     request the editor makes under iOS Lockdown Mode — which is what
+    ///     `GBKit.networkProxy` advertises to the web view. When `nil`, the
+    ///     server serves only the upload route and the editor calls the site
+    ///     directly.
     ///   - maxRequestBodySize: The maximum allowed request body size in bytes.
     ///     Requests exceeding this limit receive a 413 response. Defaults to 4 GB.
     static func start(
         uploadDelegate: (any MediaUploadDelegate)? = nil,
         defaultUploader: DefaultMediaUploader? = nil,
+        restRelay: RestRelay? = nil,
         maxRequestBodySize: Int64 = HTTPRequestParser.defaultMaxBodySize
     ) async throws -> MediaUploadServer {
         // Sweep temp files orphaned by a prior crash, off the editor-startup
@@ -45,7 +64,7 @@ final class MediaUploadServer: Sendable {
             cleanOrphanedUploads()
         }
 
-        let context = UploadContext(uploadDelegate: uploadDelegate, defaultUploader: defaultUploader)
+        let context = UploadContext(uploadDelegate: uploadDelegate, defaultUploader: defaultUploader, restRelay: restRelay)
 
         // A generous ceiling for receiving the upload body. The body read is
         // primarily bounded by the per-read idle timeout (which reaps a stalled
@@ -58,7 +77,11 @@ final class MediaUploadServer: Sendable {
         let server = try await HTTPServer.start(
             name: "media-upload",
             requiresAuthentication: true,
+            // The editor web view is this server's only legitimate client, and
+            // every request it makes carries these headers.
+            requiresBrowserOrigin: true,
             maxRequestBodySize: maxRequestBodySize,
+            maxConnections: maxConnections,
             bodyReadTimeout: bodyReadTimeout,
             cors: .permissive,
             delegate: ServerDelegate(),
@@ -86,6 +109,13 @@ final class MediaUploadServer: Sendable {
 
     private static func handleRequest(_ request: HTTPServer.Request, context: UploadContext) async -> HTTPResponse {
         let parsed = request.parsed
+
+        // REST relay route: `/proxy/…` requests are forwarded to the site's REST
+        // API (Lockdown Mode support), the path after the route resolving
+        // against the site API root.
+        if let restRelay = context.restRelay, RestRelay.handles(parsed) {
+            return await restRelay.handle(request)
+        }
 
         // Route: only POST /upload is handled. (OPTIONS preflight is answered by
         // the HTTP library under its permissive CORS policy.) Match on the path
@@ -281,23 +311,20 @@ final class MediaUploadServer: Sendable {
     }
 
     private static func errorResponse(status: Int, message: String) -> HTTPResponse {
-        // Emit a WordPress-REST-style error object so the JS middleware normalizes
-        // it (and surfaces `message`) the same way it does a relayed WordPress
-        // error — the local server's own errors need no special-casing.
-        let payload = ["code": "upload_error", "message": message]
-        let body = (try? JSONSerialization.data(withJSONObject: payload))
-            ?? Data(#"{"code":"upload_error","message":"Upload failed"}"#.utf8)
-        return HTTPResponse(
-            status: status,
-            headers: [("Content-Type", "application/json")],
-            body: body
-        )
+        .wordPressError(status: status, code: "upload_error", message: message)
     }
 
-    /// Answers the server's recoverable parse errors (e.g. an over-limit body)
-    /// with the same JSON `{code, message}` shape the editor expects, so the
-    /// middleware surfaces a real message ("The file is too large…") instead of a
-    /// generic parse-failure. A leaf object — the HTTP server retains it.
+    /// Answers the errors the HTTP server raises itself with the same JSON
+    /// `{code, message}` shape the editor expects, so the middleware surfaces a
+    /// real message instead of a generic parse failure.
+    ///
+    /// Every response on this server reaches `@wordpress/api-fetch`, which parses
+    /// all of them as JSON: a `text/plain` refusal arrives as `invalid_json`
+    /// ("The response is not a valid JSON response."), losing the reason. Under
+    /// the relay that covers every REST request the editor makes, so these are
+    /// the failures a user actually sees.
+    ///
+    /// A leaf object — the HTTP server retains it.
     private final class ServerDelegate: HTTPServerDelegate {
         func response(forRecoverableParseError error: HTTPRequestParseError) -> HTTPResponse {
             let message: String = switch error {
@@ -305,6 +332,24 @@ final class MediaUploadServer: Sendable {
             default: "\(error.httpStatusText)"
             }
             return MediaUploadServer.errorResponse(status: error.httpStatus, message: message)
+        }
+
+        func errorBody(for error: HTTPServerError) -> HTTPErrorBody? {
+            let (code, message): (String, String) = switch error {
+            case .authenticationFailed:
+                ("server_unauthorized", "The editor's credential for the local server was missing or stale.")
+            case .forbiddenOrigin:
+                ("server_forbidden_origin", "The local server accepts requests from the editor only.")
+            case .lengthRequired:
+                ("server_length_required", "The request did not declare its content length.")
+            case .unexpectedBody:
+                ("server_unexpected_body", "A preflight request carried a body.")
+            case .readTimeout:
+                ("server_timeout", "The local server timed out before the request finished arriving.")
+            default:
+                ("server_error", error.localizedDescription)
+            }
+            return .wordPressError(code: code, message: message)
         }
     }
 
@@ -402,8 +447,8 @@ enum UploadError: Error, LocalizedError {
 
 // MARK: - Upload Context
 
-/// Container for the upload delegate and default uploader, captured by the
-/// HTTPServer handler closure and re-read on each request.
+/// Container for the upload delegate, default uploader, and REST relay,
+/// captured by the HTTPServer handler closure and re-read on each request.
 ///
 /// The delegate is held **weakly**. `EditorViewController.mediaUploadDelegate` is
 /// declared `weak` — the host owns the delegate's lifetime. Capturing it strongly
@@ -417,10 +462,12 @@ enum UploadError: Error, LocalizedError {
 private final class UploadContext: @unchecked Sendable {
     weak var uploadDelegate: (any MediaUploadDelegate)?
     let defaultUploader: DefaultMediaUploader?
+    let restRelay: RestRelay?
 
-    init(uploadDelegate: (any MediaUploadDelegate)?, defaultUploader: DefaultMediaUploader?) {
+    init(uploadDelegate: (any MediaUploadDelegate)?, defaultUploader: DefaultMediaUploader?, restRelay: RestRelay?) {
         self.uploadDelegate = uploadDelegate
         self.defaultUploader = defaultUploader
+        self.restRelay = restRelay
     }
 }
 

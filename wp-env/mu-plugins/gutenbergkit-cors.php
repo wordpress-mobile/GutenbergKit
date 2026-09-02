@@ -33,8 +33,32 @@ function gutenbergkit_cors_send_origin_headers( $origin ) {
 	}
 
 	header( 'Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS' );
-	header( 'Access-Control-Allow-Headers: Authorization, Content-Type, X-WP-Nonce' );
+	// api-fetch turns every PUT/PATCH/DELETE into a POST carrying
+	// `X-HTTP-Method-Override`, which is not CORS-safelisted, so the browser
+	// announces it in the preflight and blocks the request without it here.
+	header( 'Access-Control-Allow-Headers: Authorization, Content-Type, X-HTTP-Method-Override, X-WP-Nonce' );
 }
+
+/**
+ * Exposes the `Allow` header to cross-origin callers.
+ *
+ * `canUser` issues `OPTIONS /wp/v2/{resource}` and reads `Allow` to decide
+ * whether the user may create a page, update settings, upload media, or edit
+ * global styles. Core sets that header from the matched route's permission
+ * callbacks, but as of 6.8.3 exposes only `X-WP-Total`, `X-WP-TotalPages` and
+ * `Link` — so cross-origin the header is on the wire and invisible to
+ * JavaScript, and every capability reads as false with no error surfaced.
+ *
+ * Added through core's filter rather than by sending the header directly:
+ * core sends its own `Access-Control-Expose-Headers`, so a second `header()`
+ * call would replace that value rather than extend it.
+ *
+ * @see https://github.com/WordPress/wordpress-develop/blob/6.8.3/src/wp-includes/rest-api/class-wp-rest-server.php#L395-L408
+ */
+add_filter( 'rest_exposed_cors_headers', function ( $headers ) {
+	$headers[] = 'Allow';
+	return $headers;
+} );
 
 add_action( 'rest_api_init', function () {
 	// Remove default WordPress CORS headers to avoid duplicates.
@@ -46,12 +70,32 @@ add_action( 'rest_api_init', function () {
 	});
 }, 15 );
 
-// Handle preflight OPTIONS requests early.
+// Answer CORS preflights early, before WordPress routes the request.
+//
+// This runs site-wide rather than on `rest_api_init` because the editor also
+// sends an authenticated request to `admin-ajax.php`, which core does not
+// answer preflights for.
+//
+// Only a genuine preflight is answered here. A preflight always carries
+// `Access-Control-Request-Method`; an `OPTIONS` a client sent on its own behalf
+// never does, and core answers those itself — `rest_handle_options_request`
+// builds the response and `rest_send_allow_header` sets `Allow` from the
+// matched route's permission callbacks. Short-circuiting both made every
+// `canUser` check report that the user could do nothing, with no error
+// surfaced, because the request "succeeded".
+//
+// @see https://github.com/WordPress/wordpress-develop/blob/6.8.3/src/wp-includes/rest-api.php#L252-L256
 add_action( 'init', function () {
-	if ( isset( $_SERVER['REQUEST_METHOD'] ) && 'OPTIONS' === $_SERVER['REQUEST_METHOD'] ) {
-		gutenbergkit_cors_send_origin_headers( get_http_origin() );
-		header( 'Access-Control-Max-Age: 86400' );
-		status_header( 204 );
-		exit;
+	if ( ! isset( $_SERVER['REQUEST_METHOD'] ) || 'OPTIONS' !== $_SERVER['REQUEST_METHOD'] ) {
+		return;
 	}
+
+	if ( ! isset( $_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD'] ) ) {
+		return;
+	}
+
+	gutenbergkit_cors_send_origin_headers( get_http_origin() );
+	header( 'Access-Control-Max-Age: 86400' );
+	status_header( 204 );
+	exit;
 });

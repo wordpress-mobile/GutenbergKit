@@ -6,23 +6,30 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 /**
  * Internal dependencies
  */
-import { initializeFetchInterceptor } from './fetch-interceptor';
+import { createLoggingFetchWrapper } from './fetch-logging';
 import * as bridge from './bridge';
 
 vi.mock( './bridge' );
 
 // Helper to await the nested, non-blocking async logging that occurs within the
-// fetch interceptor.
+// wrapper.
 const waitForAsyncLogging = () =>
 	new Promise( ( resolve ) => setTimeout( resolve, 10 ) );
 
-describe( 'initializeFetchInterceptor', () => {
+/**
+ * Wraps the current `window.fetch` with the logging wrapper, standing in for
+ * what `installFetchWrappers` does at runtime.
+ *
+ * @return {void}
+ */
+const installLogging = () => {
+	window.fetch = createLoggingFetchWrapper()( window.fetch.bind( window ) );
+};
+
+describe( 'createLoggingFetchWrapper', () => {
 	let originalFetch;
 
 	beforeEach( () => {
-		// Reset window state
-		delete window.__fetchInterceptorInitialized;
-
 		// Store original fetch
 		originalFetch = global.fetch;
 
@@ -61,20 +68,14 @@ describe( 'initializeFetchInterceptor', () => {
 		vi.clearAllMocks();
 	} );
 
-	it( 'should not initialize when network logging is disabled', () => {
-		// Store the current fetch (which is the mock from beforeEach)
-		const currentFetch = window.fetch;
-
+	it( 'should produce no wrapper when network logging is disabled', () => {
 		bridge.getGBKit.mockReturnValue( {
 			enableNetworkLogging: false,
 		} );
 
-		initializeFetchInterceptor();
-
-		// Should not have initialized
-		expect( window.__fetchInterceptorInitialized ).toBeUndefined();
-		// Fetch should not have been wrapped (should still be the same mock)
-		expect( window.fetch ).toBe( currentFetch );
+		// `null` rather than a pass-through, so the chain leaves `fetch`
+		// untouched instead of installing a layer that does nothing.
+		expect( createLoggingFetchWrapper() ).toBeNull();
 	} );
 
 	it( 'should derive statusText from status code when empty (HTTP/2)', async () => {
@@ -102,7 +103,7 @@ describe( 'initializeFetchInterceptor', () => {
 			} )
 		);
 
-		initializeFetchInterceptor();
+		installLogging();
 
 		await window.fetch( 'https://example.com/api', { method: 'POST' } );
 
@@ -118,7 +119,7 @@ describe( 'initializeFetchInterceptor', () => {
 
 	describe( 'request header capture', () => {
 		it( 'should capture headers from plain object with string URL', async () => {
-			initializeFetchInterceptor();
+			installLogging();
 
 			await window.fetch( 'https://example.com/api', {
 				method: 'POST',
@@ -144,7 +145,7 @@ describe( 'initializeFetchInterceptor', () => {
 		} );
 
 		it( 'should capture headers from Request object', async () => {
-			initializeFetchInterceptor();
+			installLogging();
 
 			const request = new Request( 'https://example.com/api', {
 				method: 'GET',
@@ -169,7 +170,7 @@ describe( 'initializeFetchInterceptor', () => {
 		} );
 
 		it( 'should merge Request headers with init override', async () => {
-			initializeFetchInterceptor();
+			installLogging();
 
 			const request = new Request( 'https://example.com/api', {
 				headers: {
@@ -199,7 +200,7 @@ describe( 'initializeFetchInterceptor', () => {
 		} );
 
 		it( 'should handle empty headers', async () => {
-			initializeFetchInterceptor();
+			installLogging();
 
 			await window.fetch( 'https://example.com/api' );
 
@@ -213,7 +214,7 @@ describe( 'initializeFetchInterceptor', () => {
 		} );
 
 		it( 'should handle Headers instance', async () => {
-			initializeFetchInterceptor();
+			installLogging();
 
 			const headers = new Headers();
 			headers.append( 'Authorization', 'Bearer token123' );
@@ -239,7 +240,7 @@ describe( 'initializeFetchInterceptor', () => {
 
 	describe( 'request body serialization', () => {
 		it( 'should serialize FormData with files correctly', async () => {
-			initializeFetchInterceptor();
+			installLogging();
 
 			// Create a FormData with a file
 			const formData = new FormData();
@@ -276,7 +277,7 @@ describe( 'initializeFetchInterceptor', () => {
 		} );
 
 		it( 'should serialize Blob bodies correctly', async () => {
-			initializeFetchInterceptor();
+			installLogging();
 
 			const blob = new Blob( [ 'binary content' ], {
 				type: 'image/png',
@@ -299,7 +300,7 @@ describe( 'initializeFetchInterceptor', () => {
 		} );
 
 		it( 'should serialize File bodies correctly', async () => {
-			initializeFetchInterceptor();
+			installLogging();
 
 			const file = new File( [ 'file content' ], 'document.pdf', {
 				type: 'application/pdf',
@@ -322,7 +323,7 @@ describe( 'initializeFetchInterceptor', () => {
 		} );
 
 		it( 'should serialize ArrayBuffer bodies correctly', async () => {
-			initializeFetchInterceptor();
+			installLogging();
 
 			const buffer = new ArrayBuffer( 1024 );
 
@@ -341,7 +342,7 @@ describe( 'initializeFetchInterceptor', () => {
 		} );
 
 		it( 'should serialize URLSearchParams bodies correctly', async () => {
-			initializeFetchInterceptor();
+			installLogging();
 
 			const params = new URLSearchParams();
 			params.append( 'key1', 'value1' );
@@ -362,7 +363,7 @@ describe( 'initializeFetchInterceptor', () => {
 		} );
 
 		it( 'should handle string bodies correctly', async () => {
-			initializeFetchInterceptor();
+			installLogging();
 
 			const jsonString = JSON.stringify( { test: 'data' } );
 
@@ -381,7 +382,7 @@ describe( 'initializeFetchInterceptor', () => {
 		} );
 
 		it( 'should handle FormData with mixed content types', async () => {
-			initializeFetchInterceptor();
+			installLogging();
 
 			const formData = new FormData();
 			formData.append( 'text', 'simple text value' );
@@ -446,7 +447,7 @@ describe( 'initializeFetchInterceptor', () => {
 		} );
 
 		it( 'should truncate long string values in FormData', async () => {
-			initializeFetchInterceptor();
+			installLogging();
 
 			const formData = new FormData();
 			const longString = 'a'.repeat( 100 );
@@ -479,7 +480,7 @@ describe( 'initializeFetchInterceptor', () => {
 		} );
 
 		it( 'should handle ReadableStream bodies', async () => {
-			initializeFetchInterceptor();
+			installLogging();
 
 			const stream = new ReadableStream( {
 				start( controller ) {
@@ -504,7 +505,7 @@ describe( 'initializeFetchInterceptor', () => {
 		} );
 
 		it( 'should handle missing body gracefully', async () => {
-			initializeFetchInterceptor();
+			installLogging();
 
 			await window.fetch( 'https://example.com/api' );
 

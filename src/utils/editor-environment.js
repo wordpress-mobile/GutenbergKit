@@ -11,7 +11,9 @@ import { configureLocale } from './localization';
 import { loadEditorAssets } from './editor-loader';
 import { configureAjax } from './ajax';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge';
-import { initializeFetchInterceptor } from './fetch-interceptor';
+import { installFetchWrappers } from './fetch-chain';
+import { createLoggingFetchWrapper } from './fetch-logging';
+import { createRelayFetchWrapper } from './fetch-relay';
 import EditorLoadError from '../components/editor-load-error';
 import { setLogLevel, error } from './logger';
 import { setUpGlobalErrorHandlers } from './global-error-handler';
@@ -30,7 +32,7 @@ export async function setUpEditorEnvironment() {
 		setBodyClasses();
 		await awaitGBKitGlobal();
 		setLogLevelFromGBKit();
-		initializeFetchInterceptor();
+		installEditorFetchWrappers();
 		const isRTL = await configureLocale();
 		injectEditorStyles( isRTL );
 		await initializeWordPressGlobals();
@@ -73,6 +75,24 @@ function setLogLevelFromGBKit() {
 	if ( logLevel ) {
 		setLogLevel( logLevel );
 	}
+}
+
+/**
+ * Wraps the global `fetch`, outermost wrapper first.
+ *
+ * The network log sits outside the relay so it records the request the editor
+ * made rather than the loopback rewrite of it — the native HTTP server already
+ * logs that hop. Each wrapper reports itself inapplicable by returning `null`:
+ * the log needs `enableNetworkLogging`, the relay needs `GBKit.networkProxy`
+ * (iOS Lockdown Mode).
+ *
+ * @return {void}
+ */
+function installEditorFetchWrappers() {
+	installFetchWrappers( [
+		createLoggingFetchWrapper(),
+		createRelayFetchWrapper(),
+	] );
 }
 
 /**

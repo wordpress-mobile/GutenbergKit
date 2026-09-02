@@ -8,7 +8,7 @@ import Foundation
 /// behavior it wants to change. A server started without a delegate — or whose
 /// delegate leaves a method defaulted — uses the library's built-in behavior.
 /// New customization points are added here as new defaulted methods, so
-/// ``HTTPServer/start(name:port:listenOnAllInterfaces:requiresAuthentication:maxRequestBodySize:maxConnections:readTimeout:bodyReadTimeout:idleTimeout:startTimeout:cors:delegate:handler:)``
+/// ``HTTPServer/start(name:port:listenOnAllInterfaces:requiresAuthentication:requiresBrowserOrigin:maxRequestBodySize:maxConnections:readTimeout:bodyReadTimeout:idleTimeout:startTimeout:cors:delegate:handler:)``
 /// never grows another parameter for them.
 ///
 /// The server **retains** its delegate for its lifetime. Because the delegate is
@@ -30,11 +30,47 @@ public protocol HTTPServerDelegate: AnyObject, Sendable {
     /// Fatal parse errors (malformed framing, header smuggling, etc.) are always
     /// answered by the library and never routed here.
     func response(forRecoverableParseError error: HTTPRequestParseError) -> HTTPResponse
+
+    /// The body to send for an error the server itself raises — failed
+    /// authentication, a refused origin, a read timeout, a missing
+    /// `Content-Length` — where the request never reaches the handler.
+    ///
+    /// Only the payload: the server keeps the status and the headers the
+    /// protocol requires, so answering a 407 cannot drop its
+    /// `Proxy-Authenticate` challenge. Returning `nil` keeps the default, the
+    /// reason phrase as `text/plain`.
+    ///
+    /// Worth overriding when the client parses every response the same way.
+    /// `@wordpress/api-fetch` reads each one as JSON, so a `text/plain` refusal
+    /// reaches it as a parse failure — reported to the user as an invalid
+    /// response rather than as the timeout or the missing credential it was.
+    func errorBody(for error: HTTPServerError) -> HTTPErrorBody?
 }
 
 public extension HTTPServerDelegate {
     func response(forRecoverableParseError error: HTTPRequestParseError) -> HTTPResponse {
         HTTPServer.defaultErrorResponse(for: error)
+    }
+
+    func errorBody(for error: HTTPServerError) -> HTTPErrorBody? {
+        nil
+    }
+}
+
+/// A response payload for an error the server generates itself.
+///
+/// The status and protocol headers stay with the server; this carries only what
+/// the client reads. See ``HTTPServerDelegate/errorBody(for:)``.
+public struct HTTPErrorBody: Sendable {
+    /// The `Content-Type` to send.
+    public let contentType: String
+
+    /// The serialized body.
+    public let data: Data
+
+    public init(contentType: String, data: Data) {
+        self.contentType = contentType
+        self.data = data
     }
 }
 

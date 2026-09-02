@@ -68,16 +68,17 @@ struct LocalWordPressCredentials: Codable {
     let authHeader: String
 
     /// Loads credentials from the file path specified in the `WP_ENV_CREDENTIALS_PATH` environment variable.
+    ///
+    /// Returns `nil` when the variable is unset or the file cannot be read, so
+    /// a misconfigured environment surfaces as the "not configured" message
+    /// rather than as a confusing failure against some other site.
     static func load() -> LocalWordPressCredentials? {
-        guard let path = ProcessInfo.processInfo.environment["WP_ENV_CREDENTIALS_PATH"] else {
+        guard let path = ProcessInfo.processInfo.environment["WP_ENV_CREDENTIALS_PATH"],
+              let data = FileManager.default.contents(atPath: path),
+              let credentials = try? JSONDecoder().decode(LocalWordPressCredentials.self, from: data) else {
             return nil
         }
-
-        guard let data = FileManager.default.contents(atPath: path) else {
-            return nil
-        }
-
-        return try? JSONDecoder().decode(LocalWordPressCredentials.self, from: data)
+        return credentials
     }
 }
 

@@ -93,6 +93,37 @@ public struct GBKitGlobal: Sendable, Codable {
     /// Pre-fetched editor assets (scripts, styles, allowed block types) for plugin loading.
     let editorAssets: JSON?
 
+    /// Connection details for the native loopback network proxy.
+    ///
+    /// When present, the editor sends every site REST API request through
+    /// `http://127.0.0.1:<port>` with the given bearer token rather than
+    /// directly. The host advertises it only when a direct request cannot work
+    /// — under iOS Lockdown Mode, which breaks CORS for `file://` pages — so
+    /// there is no direct attempt to fall back from.
+    public struct NetworkProxy: Sendable, Codable {
+        let port: Int
+        let token: String
+
+        /// The relay's route, slash-terminated, for JavaScript to append an
+        /// upstream path to.
+        ///
+        /// Built natively so the route is spelled in one language: deriving it
+        /// in JavaScript instead means `/proxy` appears on both sides of the
+        /// bridge with nothing keeping them in step.
+        let baseURL: String
+
+        /// The synthesized memberwise initializer is internal, which would
+        /// leave the `networkProxy` parameter of this type's public initializer
+        /// with no value a host could pass it.
+        public init(port: Int, token: String, baseURL: String) {
+            self.port = port
+            self.token = token
+            self.baseURL = baseURL
+        }
+    }
+
+    let networkProxy: NetworkProxy?
+
     /// Creates a global configuration from an editor configuration and dependencies.
     ///
     /// - Parameters:
@@ -100,11 +131,13 @@ public struct GBKitGlobal: Sendable, Codable {
     ///   - dependencies: The pre-fetched editor dependencies (unused but reserved for future use).
     ///   - nativeUploadPort: Port of the local upload server, or nil if not running.
     ///   - nativeUploadToken: Auth token for the local upload server, or nil if not running.
+    ///   - networkProxy: Loopback proxy connection details, when the proxy is running.
     public init(
         configuration: EditorConfiguration,
         dependencies: EditorDependencies,
         nativeUploadPort: Int? = nil,
-        nativeUploadToken: String? = nil
+        nativeUploadToken: String? = nil,
+        networkProxy: NetworkProxy? = nil
     ) throws {
         self.siteURL = configuration.isOfflineModeEnabled ? nil : configuration.siteURL
         self.siteApiRoot = configuration.isOfflineModeEnabled ? nil : configuration.siteApiRoot
@@ -132,6 +165,7 @@ public struct GBKitGlobal: Sendable, Codable {
         self.editorSettings = dependencies.editorSettings.jsonValue
         self.preloadData = try dependencies.preloadList?.build()
         self.editorAssets = Self.buildEditorAssets(from: dependencies.assetBundle)
+        self.networkProxy = networkProxy
     }
 
     private static func buildEditorAssets(from bundle: EditorAssetBundle) -> JSON? {

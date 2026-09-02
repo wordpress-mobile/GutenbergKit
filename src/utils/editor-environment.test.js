@@ -22,11 +22,15 @@ import { initializeWordPressGlobals } from './wordpress-globals.js';
 import { configureLocale } from './localization.js';
 import { configureApiFetch } from './api-fetch.js';
 import { initializeEditor } from './editor.jsx';
-import { initializeFetchInterceptor } from './fetch-interceptor.js';
+import { installFetchWrappers } from './fetch-chain.js';
+import { createLoggingFetchWrapper } from './fetch-logging.js';
+import { createRelayFetchWrapper } from './fetch-relay.js';
 import { injectEditorStyles } from './editor-styles.js';
 
 vi.mock( './bridge.js' );
-vi.mock( './fetch-interceptor.js' );
+vi.mock( './fetch-chain.js' );
+vi.mock( './fetch-logging.js' );
+vi.mock( './fetch-relay.js' );
 vi.mock( './logger.js' );
 vi.mock( './editor-styles.js' );
 vi.mock( './ajax.js' );
@@ -65,7 +69,7 @@ describe( 'setUpEditorEnvironment', () => {
 		configureLocale.mockResolvedValue( false );
 		initializeWordPressGlobals.mockImplementation( () => {} );
 		configureApiFetch.mockImplementation( () => {} );
-		initializeFetchInterceptor.mockImplementation( () => {} );
+		installFetchWrappers.mockImplementation( () => {} );
 		configureAjax.mockImplementation( () => {} );
 		initializeVideoPressAjaxBridge.mockImplementation( () => {} );
 		initializeEditor.mockImplementation( () => {} );
@@ -83,8 +87,8 @@ describe( 'setUpEditorEnvironment', () => {
 			return Promise.resolve();
 		} );
 
-		initializeFetchInterceptor.mockImplementation( () => {
-			callOrder.push( 'initializeFetchInterceptor' );
+		installFetchWrappers.mockImplementation( () => {
+			callOrder.push( 'installFetchWrappers' );
 		} );
 
 		configureLocale.mockImplementation( () => {
@@ -120,7 +124,7 @@ describe( 'setUpEditorEnvironment', () => {
 
 		expect( callOrder ).toEqual( [
 			'awaitGBKitGlobal',
-			'initializeFetchInterceptor',
+			'installFetchWrappers',
 			'configureLocale',
 			'injectEditorStyles',
 			'loadRemainingGlobals',
@@ -128,6 +132,22 @@ describe( 'setUpEditorEnvironment', () => {
 			'configureAjax',
 			'initializeVideoPressAjaxBridge',
 			'initializeEditor',
+		] );
+	} );
+
+	it( 'installs the network log outside the relay', async () => {
+		// Order is behavior: the log has to record the request the editor
+		// made, not the relay's loopback rewrite of it.
+		const logging = () => {};
+		const relay = () => {};
+		createLoggingFetchWrapper.mockReturnValue( logging );
+		createRelayFetchWrapper.mockReturnValue( relay );
+
+		await setUpEditorEnvironment();
+
+		expect( installFetchWrappers ).toHaveBeenCalledWith( [
+			logging,
+			relay,
 		] );
 	} );
 
