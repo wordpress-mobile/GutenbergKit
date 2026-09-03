@@ -21,6 +21,7 @@ import apiFetch from '@wordpress/api-fetch';
  */
 import { configureApiFetch } from './api-fetch';
 import * as bridge from './bridge';
+import { error } from './logger';
 
 vi.mock( './bridge', async ( importOriginal ) => {
 	const actual = await importOriginal();
@@ -257,5 +258,31 @@ describe( "core's media upload post-process middleware", () => {
 		} );
 
 		expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'does not log an error for an upload that recovers', async () => {
+		// The initial 5xx is a handoff to core's post-process retry, not a
+		// failure. A silently-recovered upload must surface no error to the host.
+		bridge.getGBKit.mockReturnValue( {
+			siteApiRoot: SITE_API_ROOT,
+			authHeader: 'Bearer test-token',
+			siteApiNamespace: [],
+			namespaceExcludedPaths: [],
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'relay-token',
+		} );
+
+		global.fetch = vi.fn( ( url ) => {
+			if ( String( url ).includes( 'post-process' ) ) {
+				return Promise.resolve( makeResponse( 200, null, { id: 42 } ) );
+			}
+			return Promise.resolve( makeResponse( 500, '42' ) );
+		} );
+
+		await expect( apiFetch( uploadOptions() ) ).resolves.toEqual( {
+			id: 42,
+		} );
+
+		expect( error ).not.toHaveBeenCalled();
 	} );
 } );
