@@ -300,9 +300,10 @@ function nativeMediaUpload( options, port, token ) {
 			// failure.
 			if ( options.parse === false ) {
 				if ( ! response.ok ) {
-					logError(
-						`Native upload failed with status ${ response.status }`
-					);
+					// A handoff to core's post-process retry, not an outcome —
+					// core reads `x-wp-upload-attachment-id` off this response and
+					// may still recover. Stay silent (as `nativeMediaDelete` does)
+					// rather than reporting a failure that hasn't happened yet.
 					return Promise.reject( response );
 				}
 				return response;
