@@ -58,6 +58,11 @@ steps:
       command: make lint-js
       plugins: *plugins
 
+    - label: ':npm: Check @wordpress package versions'
+      key: check-wp-packages
+      command: make check-wp-packages
+      plugins: *plugins
+
     - label: ':javascript: Test JavaScript'
       key: test-js
       command: make test-js
@@ -176,6 +181,7 @@ steps:
           - swift-test-swift-package
           - lint-js
           - lint-swift
+          - check-wp-packages
           - test-js
           - test-web-e2e
           - test-ios-e2e
