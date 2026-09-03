@@ -158,7 +158,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let controller: GutenbergEditorController
     private let bundleProvider: EditorAssetBundleProvider
     private let lockdownModeMonitor: LockdownModeMonitor
-    private var uploadServer: MediaUploadServer?
+    private var uploadServer: EditorLocalServer?
 
     /// Whether `uploadServer` was started with a media upload pipeline behind
     /// it, and so whether its port and token may be advertised to JavaScript.
@@ -514,18 +514,21 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             return
         }
 
-        let defaultUploader = isUploadPipelineEnabled ? DefaultMediaUploader(
-            httpClient: httpClient.uploadClient(),
-            siteApiRoot: configuration.siteApiRoot,
-            siteApiNamespace: configuration.siteApiNamespace
-        ) : nil
+        var routes: [any LocalServerRoute] = []
+        if isRestRelayEnabled {
+            routes.append(RestRelay(configuration: configuration))
+        }
+        if isUploadPipelineEnabled {
+            let defaultUploader = DefaultMediaUploader(
+                httpClient: httpClient.uploadClient(),
+                siteApiRoot: configuration.siteApiRoot,
+                siteApiNamespace: configuration.siteApiNamespace
+            )
+            routes.append(MediaUploadRoute(uploadDelegate: mediaUploadDelegate, defaultUploader: defaultUploader))
+        }
 
         do {
-            self.uploadServer = try await MediaUploadServer.start(
-                uploadDelegate: isUploadPipelineEnabled ? mediaUploadDelegate : nil,
-                defaultUploader: defaultUploader,
-                restRelay: isRestRelayEnabled ? RestRelay(configuration: configuration) : nil
-            )
+            self.uploadServer = try await EditorLocalServer.start(routes: routes)
         } catch {
             isUploadPipelineEnabled = false
             isRestRelayEnabled = false

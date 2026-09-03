@@ -2,8 +2,8 @@ import Foundation
 import GutenbergKitHTTP
 import OSLog
 
-/// A local HTTP server that receives file uploads from the WebView and routes
-/// them through the native media processing pipeline.
+/// The editor's local HTTP server: the loopback endpoint the web view reaches
+/// for whatever the native side answers on the page's behalf.
 ///
 /// Built on ``HTTPServer`` from `GutenbergKitHTTP`, which handles TCP binding,
 /// HTTP parsing, bearer token authentication, and multipart form-data parsing.
@@ -13,7 +13,7 @@ import OSLog
 ///
 /// Lifecycle is tied to `EditorViewController` — start when the editor loads,
 /// stop on deinit.
-final class MediaUploadServer: Sendable {
+final class EditorLocalServer: Sendable {
 
     /// The port the server is listening on.
     let port: UInt16
@@ -22,10 +22,7 @@ final class MediaUploadServer: Sendable {
     let token: String
 
     private let server: HTTPServer
-
-    /// The upload route's startup sweep of crash-orphaned temp files.
-    /// Exposed so tests can await completion.
-    let cleanupTask: Task<Void, Never>
+    private let routes: [any LocalServerRoute]
 
     /// The concurrent connection ceiling for the local server.
     ///
@@ -39,31 +36,19 @@ final class MediaUploadServer: Sendable {
     /// exists to bound a runaway, not to schedule normal traffic.
     static let maxConnections = 32
 
-    /// Creates and starts a new upload server.
+    /// Creates and starts a new server.
     ///
     /// - Parameters:
-    ///   - uploadDelegate: Optional delegate for customizing file processing and upload.
-    ///   - defaultUploader: Fallback uploader used when no delegate provides `uploadFile`.
-    ///   - restRelay: Optional ``RestRelay``. When present, this server also
-    ///     answers the relay's route, becoming the transport for every REST
-    ///     request the editor makes under iOS Lockdown Mode — which is what
-    ///     `GBKit.networkProxy` advertises to the web view. When `nil`, the
-    ///     server serves only the upload route and the editor calls the site
-    ///     directly.
+    ///   - routes: The routes to serve, checked in this order. A request no
+    ///     route claims is answered 404.
     ///   - maxRequestBodySize: The maximum allowed request body size in bytes.
-    ///     Requests exceeding this limit receive a 413 response. Defaults to 4 GB.
+    ///     Requests exceeding this limit receive a 413 response. Defaults to
+    ///     4 GB, and applies to every route: under Lockdown Mode the relay
+    ///     carries the editor's media uploads too.
     static func start(
-        uploadDelegate: (any MediaUploadDelegate)? = nil,
-        defaultUploader: DefaultMediaUploader? = nil,
-        restRelay: RestRelay? = nil,
+        routes: [any LocalServerRoute],
         maxRequestBodySize: Int64 = HTTPRequestParser.defaultMaxBodySize
-    ) async throws -> MediaUploadServer {
-        let uploadRoute = MediaUploadRoute(uploadDelegate: uploadDelegate, defaultUploader: defaultUploader)
-
-        // Checked in order: the relay's `/proxy/…` prefix ahead of the upload
-        // route's exact path.
-        let routes: [any LocalServerRoute] = restRelay.map { [$0, uploadRoute] } ?? [uploadRoute]
-
+    ) async throws -> EditorLocalServer {
         // A generous ceiling for receiving the upload body. The body read is
         // primarily bounded by the per-read idle timeout (which reaps a stalled
         // connection in seconds); this absolute backstop ensures a slow-but-steady
@@ -72,6 +57,9 @@ final class MediaUploadServer: Sendable {
         // wedged one.
         let bodyReadTimeout: Duration = .seconds(600)
 
+        // The name scopes the library's temp directory and its orphan sweep.
+        // It predates the server hosting anything but uploads and is kept so
+        // an upgrade does not strand the directory it was already using.
         let server = try await HTTPServer.start(
             name: "media-upload",
             requiresAuthentication: true,
@@ -88,14 +76,20 @@ final class MediaUploadServer: Sendable {
             }
         )
 
-        return MediaUploadServer(server: server, cleanupTask: uploadRoute.cleanupTask)
+        return EditorLocalServer(server: server, routes: routes)
     }
 
-    private init(server: HTTPServer, cleanupTask: Task<Void, Never>) {
+    private init(server: HTTPServer, routes: [any LocalServerRoute]) {
         self.server = server
+        self.routes = routes
         self.port = server.port
         self.token = server.token
-        self.cleanupTask = cleanupTask
+    }
+
+    /// Whether a route of type `R` is registered — what decides whether the
+    /// port and token are advertised to the web view for that route's use.
+    func hosts<R: LocalServerRoute>(_ route: R.Type) -> Bool {
+        routes.contains { $0 is R }
     }
 
     /// Stops the server and releases resources.
@@ -134,7 +128,7 @@ final class MediaUploadServer: Sendable {
             case .payloadTooLarge: "The file is too large to upload in the editor."
             default: "\(error.httpStatusText)"
             }
-            return MediaUploadServer.errorResponse(status: error.httpStatus, message: message)
+            return EditorLocalServer.errorResponse(status: error.httpStatus, message: message)
         }
 
         func errorBody(for error: HTTPServerError) -> HTTPErrorBody? {

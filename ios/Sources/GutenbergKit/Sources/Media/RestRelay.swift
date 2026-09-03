@@ -17,7 +17,7 @@ import GutenbergKitHTTP
 /// most visibly media uploads (`POST /wp/v2/media`).
 ///
 /// The relay sidesteps the problem: the web view fetches the local
-/// ``MediaUploadServer`` and this handler forwards the request to the site's
+/// ``EditorLocalServer`` and this route forwards the request to the site's
 /// REST API with the configured authorization header, responding with CORS
 /// headers we control.
 ///

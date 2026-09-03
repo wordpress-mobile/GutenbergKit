@@ -9,7 +9,7 @@ private let _canStartUploadServer: Bool = {
   let semaphore = DispatchSemaphore(value: 0)
   Task {
     do {
-      let server = try await MediaUploadServer.start()
+      let server = try await EditorLocalServer.start(routes: [])
       server.stop()
       result.value = true
     } catch {
@@ -29,12 +29,12 @@ private final class UnsafeMutableSendablePointer<T>: @unchecked Sendable {
 
 // MARK: - Integration Tests (require network)
 
-@Suite("MediaUploadServer Integration", .enabled(if: _canStartUploadServer))
-struct MediaUploadServerTests {
+@Suite("EditorLocalServer Integration", .enabled(if: _canStartUploadServer))
+struct EditorLocalServerTests {
 
   @Test("starts and provides a port and token")
   func startAndStop() async throws {
-    let server = try await MediaUploadServer.start()
+    let server = try await EditorLocalServer.start(routes: [])
     #expect(server.port > 0)
     #expect(!server.token.isEmpty)
     server.stop()
@@ -42,7 +42,7 @@ struct MediaUploadServerTests {
 
   @Test("rejects requests without auth token")
   func rejectsUnauthenticated() async throws {
-    let server = try await MediaUploadServer.start()
+    let server = try await EditorLocalServer.start(routes: [])
     defer { server.stop() }
 
     let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
@@ -60,7 +60,7 @@ struct MediaUploadServerTests {
     // refusal reaches the editor as `invalid_json` — "The response is not a
     // valid JSON response." — with the real reason lost. Under the relay this
     // server answers every REST request the editor makes.
-    let server = try await MediaUploadServer.start()
+    let server = try await EditorLocalServer.start(routes: [])
     defer { server.stop() }
 
     let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
@@ -79,7 +79,7 @@ struct MediaUploadServerTests {
 
   @Test("rejects requests with wrong token")
   func rejectsWrongToken() async throws {
-    let server = try await MediaUploadServer.start()
+    let server = try await EditorLocalServer.start(routes: [])
     defer { server.stop() }
 
     let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
@@ -94,7 +94,7 @@ struct MediaUploadServerTests {
 
   @Test("responds to OPTIONS preflight with CORS headers")
   func corsPreflightResponse() async throws {
-    let server = try await MediaUploadServer.start()
+    let server = try await EditorLocalServer.start(routes: [])
     defer { server.stop() }
 
     let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
@@ -112,7 +112,7 @@ struct MediaUploadServerTests {
 
   @Test("rejects a request that did not come from the web view")
   func rejectsNonBrowserRequest() async throws {
-    let server = try await MediaUploadServer.start()
+    let server = try await EditorLocalServer.start(routes: [])
     defer { server.stop() }
 
     // A correct token but none of the headers WebKit sets on a `fetch()`: the
@@ -129,7 +129,7 @@ struct MediaUploadServerTests {
 
   @Test("returns 404 for unknown paths")
   func unknownPath() async throws {
-    let server = try await MediaUploadServer.start()
+    let server = try await EditorLocalServer.start(routes: [])
     defer { server.stop() }
 
     let url = URL(string: "http://127.0.0.1:\(server.port)/unknown")!
@@ -147,7 +147,7 @@ struct MediaUploadServerTests {
   func uploadWithQueryString() async throws {
     let delegate = ProcessOnlyDelegate()
     let mockUploader = MockDefaultUploader()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, defaultUploader: mockUploader)
+    let server = try await EditorLocalServer.start(routes: [MediaUploadRoute(uploadDelegate: delegate, defaultUploader: mockUploader)])
     defer { server.stop() }
 
     // `@wordpress/media-utils` uploads to `/wp/v2/media?_embed=wp:featuredmedia`,
@@ -178,7 +178,7 @@ struct MediaUploadServerTests {
   @Test("calls delegate and returns upload result")
   func delegateProcessAndUpload() async throws {
     let delegate = MockUploadDelegate()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate)
+    let server = try await EditorLocalServer.start(routes: [MediaUploadRoute(uploadDelegate: delegate)])
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -214,7 +214,7 @@ struct MediaUploadServerTests {
   func delegatePassthrough() async throws {
     let delegate = ProcessOnlyDelegate()
     let mockUploader = MockDefaultUploader()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, defaultUploader: mockUploader)
+    let server = try await EditorLocalServer.start(routes: [MediaUploadRoute(uploadDelegate: delegate, defaultUploader: mockUploader)])
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -248,7 +248,7 @@ struct MediaUploadServerTests {
   func delegateDeclinesByMetadata() async throws {
     let delegate = DeclineByMetadataDelegate()
     let mockUploader = MockDefaultUploader()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, defaultUploader: mockUploader)
+    let server = try await EditorLocalServer.start(routes: [MediaUploadRoute(uploadDelegate: delegate, defaultUploader: mockUploader)])
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -277,7 +277,7 @@ struct MediaUploadServerTests {
   func processedMetadataForwarded() async throws {
     let delegate = ResizingDelegate()
     let mockUploader = MockDefaultUploader()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, defaultUploader: mockUploader)
+    let server = try await EditorLocalServer.start(routes: [MediaUploadRoute(uploadDelegate: delegate, defaultUploader: mockUploader)])
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -304,7 +304,7 @@ struct MediaUploadServerTests {
   func deletesProcessedFile() async throws {
     let delegate = ResizingDelegate()
     let mockUploader = MockDefaultUploader()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, defaultUploader: mockUploader)
+    let server = try await EditorLocalServer.start(routes: [MediaUploadRoute(uploadDelegate: delegate, defaultUploader: mockUploader)])
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -329,7 +329,7 @@ struct MediaUploadServerTests {
 
   @Test("returns 413 with CORS headers when request body exceeds max size")
   func oversizedUploadReturns413WithCORSHeaders() async throws {
-    let server = try await MediaUploadServer.start(maxRequestBodySize: 1024)
+    let server = try await EditorLocalServer.start(routes: [], maxRequestBodySize: 1024)
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -355,7 +355,7 @@ struct MediaUploadServerTests {
 
   @Test("unauthenticated oversized request returns 407, not 413 (auth precedes drain)")
   func oversizedUploadWithoutTokenReturns407() async throws {
-    let server = try await MediaUploadServer.start(maxRequestBodySize: 1024)
+    let server = try await EditorLocalServer.start(routes: [], maxRequestBodySize: 1024)
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -398,12 +398,12 @@ struct MediaUploadServerTests {
       ofItemAtPath: stale.path(percentEncoded: false)
     )
 
-    // start() kicks off cleanOrphanedUploads() off the editor-startup path.
-    // The sweep must delete the aged file and keep the fresh one — a flipped
-    // comparison would do the opposite and wipe an in-flight upload.
-    let server = try await MediaUploadServer.start()
-    await server.cleanupTask.value
-    server.stop()
+    // Creating the route kicks off cleanOrphanedUploads() off the
+    // editor-startup path. The sweep must delete the aged file and keep the
+    // fresh one — a flipped comparison would do the opposite and wipe an
+    // in-flight upload.
+    let route = MediaUploadRoute()
+    await route.cleanupTask.value
 
     #expect(!FileManager.default.fileExists(atPath: stale.path(percentEncoded: false)))
     #expect(FileManager.default.fileExists(atPath: fresh.path(percentEncoded: false)))
@@ -412,15 +412,15 @@ struct MediaUploadServerTests {
   @Test("does not strongly retain the upload delegate (weak — preserves deinit teardown)")
   func doesNotStronglyRetainDelegate() async throws {
     weak var weakDelegate: MockUploadDelegate?
-    let server: MediaUploadServer
+    let server: EditorLocalServer
     do {
       let delegate = MockUploadDelegate()
       weakDelegate = delegate
-      server = try await MediaUploadServer.start(uploadDelegate: delegate)
+      server = try await EditorLocalServer.start(routes: [MediaUploadRoute(uploadDelegate: delegate)])
     }
     defer { server.stop() }
 
-    // UploadContext holds the delegate weakly, so releasing the host's strong
+    // MediaUploadRoute holds the delegate weakly, so releasing the host's strong
     // reference deallocates it. A strong reference here would reintroduce the
     // EditorViewController → uploadServer → … → delegate → EditorViewController
     // cycle, so deinit would never fire and the server would never stop.
