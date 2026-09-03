@@ -41,7 +41,7 @@ import GutenbergKitHTTP
 ///   provide.
 /// - The upstream `Authorization` header is injected natively from the editor
 ///   configuration; any client-supplied value is discarded.
-struct RestRelay: Sendable {
+struct RestRelay: LocalServerRoute {
 
     /// The local server route the relay answers. Everything after it is the
     /// upstream path, relative to the site API root — `/proxy/wp/v2/posts?…`
@@ -122,8 +122,16 @@ struct RestRelay: Sendable {
     }
 
     /// Whether a request targets the relay.
+    ///
+    /// Static because the answer depends on ``route`` alone, so callers that
+    /// hold no relay — the URL check in ``upstreamURL(for:)``, tests — can ask
+    /// too. The instance method ``LocalServerRoute`` requires forwards here.
     static func handles(_ request: ParsedHTTPRequest) -> Bool {
         request.path == route || request.path.hasPrefix("\(route)/")
+    }
+
+    func handles(_ request: ParsedHTTPRequest) -> Bool {
+        Self.handles(request)
     }
 
     /// Forwards a relayed request to the site's REST API and returns the
