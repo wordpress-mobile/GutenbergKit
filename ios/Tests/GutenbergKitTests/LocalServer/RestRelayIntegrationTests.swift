@@ -159,10 +159,10 @@ struct RestRelayIntegrationTests {
     /// Runs `body` against a local server hosting a relay for the wp-env site,
     /// stopping it afterwards.
     private func withRelay(
-        _ body: (MediaUploadServer, WPEnvSite) async throws -> Void
+        _ body: (EditorLocalServer, WPEnvSite) async throws -> Void
     ) async throws {
         let site = try #require(WPEnvSite.current)
-        let server = try await MediaUploadServer.start(restRelay: RestRelay(configuration: site.configuration))
+        let server = try await EditorLocalServer.start(routes: [RestRelay(configuration: site.configuration)])
         defer { server.stop() }
         try await body(server, site)
     }
@@ -210,7 +210,7 @@ struct WPEnvSite {
 
     /// Deletes a post through the relay, ignoring the outcome: this is cleanup,
     /// and a failure here must not replace the failure that ran it.
-    func deletePost(_ id: Int, on server: MediaUploadServer) async {
+    func deletePost(_ id: Int, on server: EditorLocalServer) async {
         _ = try? await relayed(
             "wp/v2/posts/\(id)?force=true",
             method: "POST",
@@ -227,7 +227,7 @@ struct WPEnvSite {
         method: String = "GET",
         body: [String: Any]? = nil,
         headers: [String: String] = [:],
-        on server: MediaUploadServer
+        on server: EditorLocalServer
     ) async throws -> (Data, HTTPURLResponse) {
         var request = URLRequest(url: URL(string: "http://127.0.0.1:\(server.port)/proxy/\(path)")!)
         request.httpMethod = method

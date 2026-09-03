@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-/// Verifies the assumption behind `MediaUploadServer.performUpload`'s
+/// Verifies the assumption behind `DefaultMediaUploader.performUpload`'s
 /// `defer { request.httpBodyStream?.close() }`: closing the input side of a bound
 /// stream pair unblocks a writer that is blocked on a full output buffer. Without
 /// that, a consumer (URLSession) that abandons the body stream on cancel/failure
