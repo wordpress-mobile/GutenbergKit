@@ -62,15 +62,15 @@ class GutenbergViewUploadServerTest {
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
     @Test
-    fun `the upload server starts when the page begins loading, capturing the delegate`() {
+    fun `the upload server starts when the page begins loading, capturing the processor`() {
         val view = makeView()
         try {
-            // A delegate provided before load is captured when the page starts.
-            view.mediaUploadDelegate = mock(MediaUploadDelegate::class.java)
+            // A processor provided before load is captured when the page starts.
+            view.mediaProcessor = mock(MediaProcessor::class.java)
             startLoading(view)
             idle()
             assertNotNull(
-                "a delegate provided before load should bring up the upload server",
+                "a processor provided before load should bring up the upload server",
                 uploadServerOf(view)
             )
         } finally {
@@ -79,14 +79,14 @@ class GutenbergViewUploadServerTest {
     }
 
     @Test
-    fun `no delegate means no upload server`() {
+    fun `no processor or uploader means no upload server`() {
         val view = makeView()
         try {
-            // No delegate provided — uploads should use the default WebView path.
+            // Nothing provided — uploads should use the default WebView path.
             startLoading(view)
             idle()
             assertNull(
-                "with no delegate, no upload server should be started",
+                "with no processor or uploader, no upload server should be started",
                 uploadServerOf(view)
             )
         } finally {
@@ -95,15 +95,15 @@ class GutenbergViewUploadServerTest {
     }
 
     @Test
-    fun `setting the delegate after the page has started loading throws`() {
+    fun `setting a media handler after the page has started loading throws`() {
         val view = makeView()
         try {
             startLoading(view)
             idle()
-            // The delegate is captured at load; a later assignment is a programmer
+            // The processor is captured at load; a later assignment is a programmer
             // error and must surface loudly rather than silently do nothing.
             assertThrows(IllegalStateException::class.java) {
-                view.mediaUploadDelegate = mock(MediaUploadDelegate::class.java)
+                view.mediaProcessor = mock(MediaProcessor::class.java)
             }
         } finally {
             detach(view)
@@ -113,7 +113,7 @@ class GutenbergViewUploadServerTest {
     @Test
     fun `detaching the view stops and clears the upload server`() {
         val view = makeView()
-        view.mediaUploadDelegate = mock(MediaUploadDelegate::class.java)
+        view.mediaProcessor = mock(MediaProcessor::class.java)
         startLoading(view)
         idle()
         assertNotNull(uploadServerOf(view))

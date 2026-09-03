@@ -31,8 +31,8 @@ import okio.source
  * so every consumer — image sub-sizes, attachment links, error notices —
  * behaves identically to a non-native upload.
  */
-class MediaUploadResponse(
-    /** The HTTP status code WordPress (or the host's upload service) returned. */
+internal class MediaUploadResponse(
+    /** The HTTP status code WordPress returned. */
     val statusCode: Int,
     /**
      * The raw response body — a WordPress REST attachment on success, or a
@@ -52,7 +52,7 @@ class MediaUploadResponse(
 )
 
 /**
- * The result of a delegate's [MediaUploadDelegate.processFile].
+ * The result of a [MediaProcessor.processFile].
  */
 sealed class ProcessedProxyFile {
     /** The delegate did not modify the file; the original upload is forwarded unchanged. */
@@ -68,72 +68,70 @@ sealed class ProcessedProxyFile {
 }
 
 /**
- * Interface for customizing media upload behavior.
+ * Transforms media before GutenbergKit delivers it.
  *
- * The native host app can provide an implementation to resize images,
- * transcode video, or use its own upload service.
+ * A processor only changes *bytes* — GutenbergKit still uploads the result to the
+ * configured site and owns the whole lifecycle (retries, cleanup). Because it
+ * never performs the upload itself, a processor cannot deliver media to the wrong
+ * place. Set [GutenbergView.mediaProcessor] to resize images, transcode video,
+ * strip EXIF, etc. This is the safe, common extension point: most hosts want only
+ * this.
  */
-interface MediaUploadDelegate {
+interface MediaProcessor {
     /**
-     * Whether this delegate might handle a file with the given metadata — either
-     * processing it ([processFile]) or uploading it itself ([uploadFile]).
-     *
-     * A cheap, metadata-only gate the server consults *before* materializing the
-     * upload to a temp file. Return false to decline a file by type — e.g. an
-     * image-only delegate returning false for a video — so the server forwards
-     * the original upload to WordPress without first copying a file the delegate
-     * won't touch. Because it gates the temp-file copy needed by *both*
-     * [processFile] and [uploadFile], return true for any file the delegate will
-     * either process or upload itself.
-     *
-     * Defaults to true: every file is materialized and the full pipeline runs. A
-     * true here is not a commitment — [processFile] may still return
-     * [ProcessedProxyFile.Original] after inspecting the file's contents.
+     * Whether this processor might transform a file with the given metadata. A
+     * cheap, metadata-only gate consulted *before* the upload is materialized to a
+     * temp file; return false to pass a file straight through untouched — e.g. an
+     * image-only processor returning false for a video. Defaults to true; not a
+     * commitment, since [processFile] may still return [ProcessedProxyFile.Original]
+     * after inspecting the file's contents.
      */
     fun handlesFile(mimeType: String, filename: String): Boolean = true
 
     /**
-     * Process a file before upload (e.g., resize image, transcode video).
-     *
-     * Return [ProcessedProxyFile.Original] to upload the file unchanged, or
-     * [ProcessedProxyFile.Processed] with the processed file and its metadata.
-     * When the format changes, report the new mimeType and filename so WordPress
-     * stores it with the correct extension and type.
+     * Transform a file before upload (e.g., resize image, transcode video). Return
+     * [ProcessedProxyFile.Original] to upload it unchanged, or
+     * [ProcessedProxyFile.Processed] with the new file and its metadata (report the
+     * new mimeType and filename when the format changes, so WordPress stores it
+     * with the correct extension and type).
      */
     suspend fun processFile(file: File, mimeType: String, filename: String): ProcessedProxyFile = ProcessedProxyFile.Original
+}
 
+/**
+ * Takes over performing a media upload — on the host's own stack: its own
+ * networking (say, to log every request), a background service, an offline queue,
+ * a resumable transport, its own retry policy.
+ *
+ * This is a choice of who executes the requests, not where they go: an uploader
+ * and GutenbergKit's built-in default both target the same configured site.
+ * Setting [GutenbergView.mediaUploader] makes the host own that upload end-to-end —
+ * the request, its own retries, and its recovery and cleanup — with GutenbergKit
+ * out of the network entirely. Because the host does the retries itself, there's no
+ * raw response left for core to retry behind it. The attachment you return lives on
+ * that same configured site, where the editor reads and updates it by ID.
+ */
+interface MediaUploader {
     /**
-     * Upload a processed file to the remote WordPress site.
+     * Upload a (possibly processed) file and return the finished WordPress
+     * attachment JSON the editor inserts — the same object a direct
+     * `POST /wp/v2/media` returns. Return only once the upload is genuinely done, or
+     * throw on terminal failure: a returned value is taken as a completed attachment,
+     * and there is no GutenbergKit recovery behind you.
      *
-     * Return the raw WordPress response (status code + body), which GutenbergKit
-     * relays to the editor unchanged, or null to use the default uploader. A host
-     * that uploads to WordPress should return the exact response it received so
-     * the editor sees a complete attachment object.
+     * That recovery is yours to run. When `POST /wp/v2/media` fatals in server-side
+     * post-processing it returns a 5xx carrying the attachment's ID in
+     * `x-wp-upload-attachment-id` — the attachment exists but is unfinished. Don't
+     * re-upload; drive `POST /wp/v2/media/<id>/post-process` to completion, the way
+     * core recovers its own uploads (up to 5 attempts), then return the finished
+     * attachment.
+     *
+     * Owning the upload means owning cleanup on the server too: if post-process
+     * can't be recovered, force-delete the orphan (`DELETE /wp/v2/media/<id>?force=true`)
+     * before you throw, or it stays on the site — neither GutenbergKit nor core
+     * cleans up behind you.
      */
-    suspend fun uploadFile(file: File, mimeType: String, filename: String): MediaUploadResponse? = null
-
-    /**
-     * Delete a previously uploaded attachment.
-     *
-     * The editor deletes the attachment when an upload's server-side
-     * post-processing fails past recovery, so it does not leave an orphan
-     * behind. A delegate that uploaded the attachment itself via [uploadFile]
-     * owns an ID only it can resolve, so it must delete the attachment itself
-     * too — the default uploader would address the wrong site.
-     *
-     * Return the raw response (status code + body), which GutenbergKit relays
-     * to the editor unchanged, or null to use the default uploader.
-     *
-     * Return null for any ID the delegate does not recognize. Unlike the upload
-     * path, there is no [handlesFile] gate here — an attachment ID carries no
-     * MIME type or filename — so this method is called for *every* deletion,
-     * including attachments the delegate declined at upload time and WordPress
-     * therefore created itself. Returning a response for one of those (an error
-     * from the host's own media service, say) leaves the real WordPress
-     * attachment undeleted — precisely the orphan this cleanup exists to remove.
-     * null hands it to the default uploader, which addresses the right site.
-     */
-    suspend fun deleteFile(attachmentId: String): MediaUploadResponse? = null
+    suspend fun upload(file: File, mimeType: String, filename: String): ByteArray
 }
 
 /**
@@ -149,7 +147,8 @@ interface MediaUploadDelegate {
  * stop on detach.
  */
 internal class MediaUploadServer(
-    private val uploadDelegate: MediaUploadDelegate?,
+    private val processor: MediaProcessor?,
+    private val uploader: MediaUploader?,
     private val defaultUploader: DefaultMediaUploader?,
     cacheDir: File? = null,
     scope: CoroutineScope? = null,
@@ -278,24 +277,32 @@ internal class MediaUploadServer(
     }
 
     /**
-     * Relays the editor's orphan cleanup.
+     * Relays a media deletion.
      *
-     * Core's media upload middleware deletes the attachment when every
-     * `post-process` retry fails. A cross-origin editor cannot issue that
-     * request directly — api-fetch tunnels `DELETE` as a `POST` carrying
-     * `X-HTTP-Method-Override`, which core's CORS allow-list omits, so the
-     * browser blocks it at preflight. Relaying it here lets the cleanup run.
+     * The editor deletes an attachment when the user removes it, and core deletes
+     * an upload's orphan when every `post-process` retry fails. A cross-origin
+     * editor cannot issue `DELETE` directly — api-fetch tunnels it as a `POST`
+     * carrying `X-HTTP-Method-Override`, which core's CORS allow-list omits, so the
+     * browser blocks it at preflight; relaying it here lets the deletion run.
      *
-     * Offers the deletion to the delegate first, as [handleUpload] does, so a
-     * host that uploaded the attachment itself deletes it from the same place.
+     * Every attachment lives on the configured site — even one a host uploader
+     * delivered — so its deletion is relayed to the default uploader there. See
+     * the accepted-risk note in the body.
      */
     @Suppress("TooGenericExceptionCaught")
     private suspend fun handleMediaDelete(attachmentId: String, query: String): HttpResponse {
         return try {
-            uploadDelegate?.deleteFile(attachmentId)?.let { return relayResponse(it) }
-
-            val uploader = defaultUploader ?: return errorResponse(500, "No uploader configured")
-            relayResponse(uploader.deleteMedia(attachmentId, query))
+            // Relay to the default uploader (the configured site) — every attachment
+            // lives there, even one a host uploader delivered. Core issues this only
+            // as orphan cleanup after failed recovery, but the relay can't tell that
+            // from any other DELETE the WebView sends: a compromised editor script
+            // holding the loopback token could force-delete arbitrary media on the
+            // configured site. Accepted risk — such a script already has broad write
+            // access, and a server-side compromise (a malicious plugin) deletes media
+            // directly without the editor, so scoping this with a per-session ledger
+            // buys little for the cost.
+            val defaultUploader = defaultUploader ?: return errorResponse(500, "No uploader configured")
+            relayResponse(defaultUploader.deleteMedia(attachmentId, query))
         } catch (e: kotlin.coroutines.cancellation.CancellationException) {
             throw e // Never swallow coroutine cancellation.
         } catch (e: Exception) {
@@ -317,11 +324,13 @@ internal class MediaUploadServer(
         val mimeType = filePart.contentType
         val filename = filePart.filename ?: "upload"
 
-        // Ask the delegate — from metadata alone — whether it will touch a file
-        // like this. If not, forward the original upload to WordPress directly,
-        // skipping a full temp-file copy of a file the delegate won't process or
-        // upload (e.g. a video handed to an image-only delegate).
-        if (uploadDelegate?.handlesFile(mimeType, filename) != true) {
+        // Materialize a temp file only if someone will touch it: a processor that
+        // claims this file, or an uploader (which always delivers the file itself).
+        // If GutenbergKit will deliver (no uploader) and no processor wants the
+        // file, forward the original request body directly, skipping a temp copy of
+        // a file nobody will process (e.g. a video handed to an image-only processor).
+        val processorWantsFile = processor?.handlesFile(mimeType, filename) == true
+        if (uploader == null && !processorWantsFile) {
             return passthroughResponse(request, query)
         }
 
@@ -424,8 +433,8 @@ internal class MediaUploadServer(
                     uploadResult.response
                 }
                 is UploadResult.Passthrough -> {
-                    // Delegate didn't modify the file — forward the original
-                    // request body to WordPress without re-encoding.
+                    // No uploader is set and the processor left the file unmodified —
+                    // forward the original request body without re-encoding.
                     Log.d(TAG, "Passthrough: forwarding original request body to WordPress")
                     performPassthroughUpload(request, query)
                 }
@@ -450,7 +459,7 @@ internal class MediaUploadServer(
         }
     }
 
-    // MARK: - Delegate Pipeline
+    // MARK: - Process + Deliver Pipeline
 
     private sealed class UploadResult {
         data class Uploaded(val response: MediaUploadResponse) : UploadResult()
@@ -471,10 +480,15 @@ internal class MediaUploadServer(
         file: File, mimeType: String, filename: String,
         extraParts: List<MultipartPart>, query: String
     ): UploadResult {
-        val processed = uploadDelegate?.processFile(file, mimeType, filename) ?: ProcessedProxyFile.Original
+        // Transform (resize, transcode, …) if a processor claims the file.
+        val processed = if (processor?.handlesFile(mimeType, filename) == true) {
+            processor.processFile(file, mimeType, filename)
+        } else {
+            ProcessedProxyFile.Original
+        }
 
         // Resolve the file to upload and its metadata. Processed uses the
-        // delegate's values verbatim, so a format change is reported to WordPress.
+        // processor's values verbatim, so a format change is reported to WordPress.
         val targetFile: File
         val targetMimeType: String
         val targetFilename: String
@@ -492,9 +506,11 @@ internal class MediaUploadServer(
         }
 
         try {
-            // If the delegate provided its own upload, use that.
-            uploadDelegate?.uploadFile(targetFile, targetMimeType, targetFilename)?.let {
-                return UploadResult.Uploaded(it)
+            // An uploader owns delivery on the host's own stack and returns the
+            // finished attachment JSON (or throws); GutenbergKit relays that as a
+            // success and never runs its own recovery behind it.
+            uploader?.let {
+                return UploadResult.Uploaded(MediaUploadResponse(201, it.upload(targetFile, targetMimeType, targetFilename)))
             }
 
             // Unmodified — forward the original request body directly, skipping
@@ -504,7 +520,7 @@ internal class MediaUploadServer(
             }
 
             val result = defaultUploader?.upload(targetFile, targetMimeType, targetFilename, extraParts, query)
-                ?: error("No upload delegate or default uploader configured")
+                ?: error("No uploader or default uploader configured")
             return UploadResult.Uploaded(result)
         } finally {
             // The processed file (if the delegate produced a new one) is ours to

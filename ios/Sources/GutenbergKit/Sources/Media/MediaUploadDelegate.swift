@@ -7,13 +7,13 @@ import Foundation
 /// or WordPress REST error object (on failure) it would get from a direct
 /// upload, so every consumer — image sub-sizes, attachment links, error notices —
 /// behaves identically to a non-native upload.
-public struct MediaUploadResponse: Sendable {
-    /// The HTTP status code WordPress (or the host's upload service) returned.
-    public let statusCode: Int
+struct MediaUploadResponse: Sendable {
+    /// The HTTP status code WordPress returned.
+    let statusCode: Int
 
     /// The raw response body — a WordPress REST attachment on success, or a
     /// WordPress REST error object (`{ "code", "message", "data" }`) on failure.
-    public let body: Data
+    let body: Data
 
     /// The response headers to relay to the editor.
     ///
@@ -22,16 +22,16 @@ public struct MediaUploadResponse: Sendable {
     /// metadata generation fataled, and the editor's api-fetch middleware reads
     /// it to retry `post-process` and clean up the orphan. Dropping it turns a
     /// recoverable upload into a permanent failure.
-    public let headers: [String: String]
+    let headers: [String: String]
 
-    public init(statusCode: Int, body: Data, headers: [String: String] = [:]) {
+    init(statusCode: Int, body: Data, headers: [String: String] = [:]) {
         self.statusCode = statusCode
         self.body = body
         self.headers = headers
     }
 }
 
-/// The result of a delegate's ``MediaUploadDelegate/processFile(at:mimeType:filename:)``.
+/// The result of a ``MediaProcessor/processFile(at:mimeType:filename:)``.
 public enum ProcessedProxyFile: Sendable {
     /// The delegate did not modify the file; the original upload is forwarded
     /// to WordPress unchanged.
@@ -44,84 +44,76 @@ public enum ProcessedProxyFile: Sendable {
     case processed(URL, mimeType: String, filename: String)
 }
 
-/// Protocol for customizing media upload behavior.
+/// Transforms media before GutenbergKit delivers it.
 ///
-/// The native host app can provide an implementation to resize images,
-/// transcode video, or use its own upload service. Default implementations
-/// pass files through unchanged and upload via the WordPress REST API.
-public protocol MediaUploadDelegate: AnyObject, Sendable {
-    /// Whether this delegate might handle a file with the given metadata — either
-    /// processing it (``processFile(at:mimeType:filename:)``) or uploading it
-    /// itself (``uploadFile(at:mimeType:filename:)``).
+/// A processor only changes *bytes* — GutenbergKit still uploads the result to
+/// the configured site and owns the whole lifecycle (retries, cleanup). Because
+/// it never performs the upload itself, a processor cannot deliver media to the
+/// wrong place. Set ``EditorViewController/mediaProcessor`` to resize images,
+/// transcode video, strip EXIF, etc.
+///
+/// This is the safe, common extension point: most hosts want only this.
+public protocol MediaProcessor: AnyObject, Sendable {
+    /// Whether this processor might transform a file with the given metadata.
     ///
     /// A cheap, metadata-only gate the server consults *before* materializing the
-    /// upload to a temp file. Return `false` to decline a file by type — e.g. an
-    /// image-only delegate returning `false` for a video — so the server forwards
-    /// the original upload to WordPress without first copying a file the delegate
-    /// won't touch. Because it gates the temp-file copy needed by *both*
-    /// `processFile` and `uploadFile`, return `true` for any file the delegate
-    /// will either process or upload itself.
+    /// upload to a temp file. Return `false` to pass a file straight through
+    /// untouched — e.g. an image-only processor returning `false` for a video —
+    /// so the server never copies a file the processor won't touch.
     ///
-    /// Defaults to `true`: every file is materialized and the full pipeline runs.
-    /// A `true` here is not a commitment — `processFile` may still return
-    /// `.original` after inspecting the file's contents.
+    /// Defaults to `true`. A `true` here is not a commitment — `processFile` may
+    /// still return `.original` after inspecting the file's contents.
     func handlesFile(ofType mimeType: String, named filename: String) -> Bool
 
-    /// Process a file before upload (e.g., resize image, transcode video).
+    /// Transform a file before upload (e.g., resize image, transcode video).
     ///
     /// Return ``ProcessedProxyFile/original`` to upload the file unchanged, or
     /// ``ProcessedProxyFile/processed(_:mimeType:filename:)`` with the processed
     /// file and its metadata. When the format changes, report the new mimeType
     /// and filename so WordPress stores it with the correct extension and type.
     func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile
-
-    /// Upload a processed file to the remote WordPress site.
-    ///
-    /// Return the raw WordPress response (status code + body), which GutenbergKit
-    /// relays to the editor unchanged, or `nil` to use the default uploader. A
-    /// host that uploads to WordPress should return the exact response it
-    /// received so the editor sees a complete attachment object.
-    func uploadFile(at url: URL, mimeType: String, filename: String) async throws -> MediaUploadResponse?
-
-    /// Delete a previously uploaded attachment.
-    ///
-    /// The editor deletes the attachment when an upload's server-side
-    /// post-processing fails past recovery, so it does not leave an orphan
-    /// behind. A delegate that uploaded the attachment itself via
-    /// ``uploadFile(at:mimeType:filename:)`` owns an ID only it can resolve, so
-    /// it must delete the attachment itself too — the default uploader would
-    /// address the wrong site.
-    ///
-    /// Return the raw response (status code + body), which GutenbergKit relays
-    /// to the editor unchanged, or `nil` to use the default uploader.
-    ///
-    /// Return `nil` for any ID the delegate does not recognize. Unlike the upload
-    /// path, there is no ``handlesFile(ofType:named:)`` gate here — an attachment
-    /// ID carries no MIME type or filename — so this method is called for *every*
-    /// deletion, including attachments the delegate declined at upload time and
-    /// WordPress therefore created itself. Returning a response for one of those
-    /// (an error from the host's own media service, say) leaves the real
-    /// WordPress attachment undeleted — precisely the orphan this cleanup exists
-    /// to remove. `nil` hands it to the default uploader, which addresses the
-    /// right site.
-    func deleteFile(attachmentId: String) async throws -> MediaUploadResponse?
 }
 
-/// Default implementations.
-extension MediaUploadDelegate {
+/// Takes over *performing* a media upload — on the host's own stack: its own
+/// networking (say, to log every request), a background session, an offline queue,
+/// a resumable transport, its own retry policy.
+///
+/// This is a choice of *who executes the requests*, not where they go: an uploader
+/// and GutenbergKit's built-in default both target the same configured site.
+/// Setting ``EditorViewController/mediaUploader`` makes the host own that upload
+/// end-to-end — the request, its own retries, and its recovery and cleanup — with
+/// GutenbergKit out of the network entirely. Because the host does the retries
+/// itself, there's no raw response left for core to retry behind it. The attachment
+/// you return lives on that same configured site, where the editor reads and
+/// updates it by ID.
+public protocol MediaUploader: AnyObject, Sendable {
+    /// Upload a (possibly processed) file and return the finished WordPress
+    /// attachment JSON the editor inserts — the same object a direct
+    /// `POST /wp/v2/media` returns. Return only once the upload is genuinely done,
+    /// or `throw` on terminal failure: a returned value is taken as a completed
+    /// attachment, and there is no GutenbergKit recovery behind you.
+    ///
+    /// That recovery is yours to run. When `POST /wp/v2/media` fatals in server-side
+    /// post-processing it returns a 5xx carrying the attachment's ID in
+    /// `x-wp-upload-attachment-id` — the attachment exists but is unfinished. Don't
+    /// re-upload; drive `POST /wp/v2/media/<id>/post-process` to completion, the way
+    /// core recovers its own uploads (up to 5 attempts), then return the finished
+    /// attachment.
+    ///
+    /// Owning the upload means owning cleanup on the server too: if post-process
+    /// can't be recovered, force-delete the orphan
+    /// (`DELETE /wp/v2/media/<id>?force=true`) before you `throw`, or it stays on the
+    /// site — neither GutenbergKit nor core cleans up behind you.
+    func upload(fileAt url: URL, mimeType: String, filename: String) async throws -> Data
+}
+
+/// Default implementations for the optional ``MediaProcessor`` methods.
+extension MediaProcessor {
     public func handlesFile(ofType mimeType: String, named filename: String) -> Bool {
         true
     }
 
     public func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
         .original
-    }
-
-    public func uploadFile(at url: URL, mimeType: String, filename: String) async throws -> MediaUploadResponse? {
-        nil
-    }
-
-    public func deleteFile(attachmentId: String) async throws -> MediaUploadResponse? {
-        nil
     }
 }

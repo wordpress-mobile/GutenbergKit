@@ -29,12 +29,14 @@ final class MediaUploadServer: Sendable {
     /// Creates and starts a new upload server.
     ///
     /// - Parameters:
-    ///   - uploadDelegate: Optional delegate for customizing file processing and upload.
-    ///   - defaultUploader: Fallback uploader used when no delegate provides `uploadFile`.
+    ///   - processor: Optional processor for transforming files before upload.
+    ///   - uploader: Optional uploader that takes over delivery on the host's own stack.
+    ///   - defaultUploader: Delivers to the configured site when no uploader is set.
     ///   - maxRequestBodySize: The maximum allowed request body size in bytes.
     ///     Requests exceeding this limit receive a 413 response. Defaults to 4 GB.
     static func start(
-        uploadDelegate: (any MediaUploadDelegate)? = nil,
+        processor: (any MediaProcessor)? = nil,
+        uploader: (any MediaUploader)? = nil,
         defaultUploader: DefaultMediaUploader? = nil,
         maxRequestBodySize: Int64 = HTTPRequestParser.defaultMaxBodySize
     ) async throws -> MediaUploadServer {
@@ -45,7 +47,7 @@ final class MediaUploadServer: Sendable {
             cleanOrphanedUploads()
         }
 
-        let context = UploadContext(uploadDelegate: uploadDelegate, defaultUploader: defaultUploader)
+        let context = UploadContext(processor: processor, uploader: uploader, defaultUploader: defaultUploader)
 
         // A generous ceiling for receiving the upload body. The body read is
         // primarily bounded by the per-read idle timeout (which reaps a stalled
@@ -126,11 +128,13 @@ final class MediaUploadServer: Sendable {
         let filename = filePart.filename ?? "upload"
         let mimeType = filePart.contentType
 
-        // Ask the delegate — from metadata alone — whether it will touch a file
-        // like this. If not, forward the original upload to WordPress directly,
-        // skipping a full temp-file copy of a file the delegate won't process or
-        // upload (e.g. a video handed to an image-only delegate).
-        guard context.uploadDelegate?.handlesFile(ofType: mimeType, named: filename) ?? false else {
+        // Materialize a temp file only if someone will touch it: a processor that
+        // claims this file, or an uploader (which always delivers the file itself).
+        // If GutenbergKit will deliver (no uploader) and no processor wants the
+        // file, forward the original request body directly, skipping a temp copy of
+        // a file nobody will process (e.g. a video handed to an image-only processor).
+        let processorWantsFile = context.processor?.handlesFile(ofType: mimeType, named: filename) ?? false
+        if context.uploader == nil, !processorWantsFile {
             do {
                 return try await passthroughResponse(request, query: query, context: context)
             } catch {
@@ -180,9 +184,9 @@ final class MediaUploadServer: Sendable {
     }
 
     /// Forwards the original request body to WordPress unchanged (no multipart
-    /// re-encoding) and relays the response. Used when the delegate won't touch
-    /// the file — it declined by metadata (`handlesFile` returned false) or
-    /// `processFile` returned `.original`.
+    /// re-encoding) and relays the response. Used on the no-uploader path when the
+    /// processor won't touch the file — it declined by metadata (`handlesFile`
+    /// returned false) or `processFile` returned `.original`.
     private static func passthroughResponse(
         _ request: HTTPServer.Request, query: String, context: UploadContext
     ) async throws -> HTTPResponse {
@@ -208,25 +212,30 @@ final class MediaUploadServer: Sendable {
         return id
     }
 
-    /// Relays the editor's orphan cleanup.
+    /// Relays a media deletion.
     ///
-    /// Core's media upload middleware deletes the attachment when every
-    /// `post-process` retry fails. A cross-origin editor cannot issue that
-    /// request directly — api-fetch tunnels `DELETE` as a `POST` carrying
-    /// `X-HTTP-Method-Override`, which core's CORS allow-list omits, so the
-    /// browser blocks it at preflight. Relaying it here lets the cleanup run.
+    /// The editor deletes an attachment when the user removes it, and core deletes
+    /// an upload's orphan when every `post-process` retry fails. A cross-origin
+    /// editor cannot issue `DELETE` directly — api-fetch tunnels it as a `POST`
+    /// carrying `X-HTTP-Method-Override`, which core's CORS allow-list omits, so the
+    /// browser blocks it at preflight; relaying it here lets the deletion run.
     ///
-    /// Offers the deletion to the delegate first, as ``handleUpload(_:context:)``
-    /// does, so a host that uploaded the attachment itself deletes it from the
-    /// same place.
+    /// Every attachment lives on the configured site — even one a host uploader
+    /// delivered — so its deletion is relayed to the default uploader there. See
+    /// the accepted-risk note in the body.
     private static func handleMediaDelete(
         _ attachmentId: String, query: String, context: UploadContext
     ) async -> HTTPResponse {
         do {
-            if let response = try await context.uploadDelegate?.deleteFile(attachmentId: attachmentId) {
-                return relayResponse(response)
-            }
-
+            // Relay to the default uploader (the configured site) — every attachment
+            // lives there, even one a host uploader delivered. Core issues this only
+            // as orphan cleanup after failed recovery, but the relay can't tell that
+            // from any other DELETE the WebView sends: a compromised editor script
+            // holding the loopback token could force-delete arbitrary media on the
+            // configured site. Accepted risk — such a script already has broad write
+            // access, and a server-side compromise (a malicious plugin) deletes media
+            // directly without the editor, so scoping this with a per-session ledger
+            // buys little for the cost.
             guard let defaultUploader = context.defaultUploader else {
                 return errorResponse(status: 500, message: UploadError.noUploader.localizedDescription)
             }
@@ -274,13 +283,13 @@ final class MediaUploadServer: Sendable {
 
     // MARK: - Delegate Pipeline
 
-    /// Result of the delegate processing + upload pipeline.
+    /// Result of the process + deliver pipeline.
     private enum UploadResult {
-        /// The delegate (or default uploader) completed the upload; carries the
-        /// raw WordPress response to relay.
+        /// The uploader or default uploader completed the upload; carries the
+        /// response to relay.
         case uploaded(MediaUploadResponse)
-        /// The delegate didn't modify the file and `uploadFile` returned nil.
-        /// The caller should forward the original request body to WordPress.
+        /// No uploader is set and the processor left the file unmodified, so the
+        /// caller should forward the original request body to the configured site.
         case passthrough
     }
 
@@ -288,16 +297,16 @@ final class MediaUploadServer: Sendable {
         fileURL: URL, mimeType: String, filename: String,
         extraParts: [MultipartPart], query: String, context: UploadContext
     ) async throws -> UploadResult {
-        // Step 1: Process (resize, transcode, etc.)
+        // Step 1: transform (resize, transcode, …) if a processor claims the file.
         let processed: ProcessedProxyFile
-        if let delegate = context.uploadDelegate {
-            processed = try await delegate.processFile(at: fileURL, mimeType: mimeType, filename: filename)
+        if let processor = context.processor, processor.handlesFile(ofType: mimeType, named: filename) {
+            processed = try await processor.processFile(at: fileURL, mimeType: mimeType, filename: filename)
         } else {
             processed = .original
         }
 
         // Resolve the file to upload and its metadata. `.processed` uses the
-        // delegate's values verbatim, so a format change is reported to WordPress.
+        // processor's values verbatim, so a format change is reported to WordPress.
         let uploadURL: URL
         let uploadMimeType: String
         let uploadFilename: String
@@ -312,7 +321,7 @@ final class MediaUploadServer: Sendable {
             uploadFilename = processedFilename
         }
 
-        // The processed file (if the delegate produced a new one) is ours to
+        // The processed file (if the processor produced a new one) is ours to
         // clean up — on success it has been uploaded, on failure it is abandoned.
         // Cleaning up here rather than in the caller covers the throw paths too.
         defer {
@@ -321,10 +330,13 @@ final class MediaUploadServer: Sendable {
             }
         }
 
-        // Step 2: Upload to remote WordPress
-        if let delegate = context.uploadDelegate,
-           let result = try await delegate.uploadFile(at: uploadURL, mimeType: uploadMimeType, filename: uploadFilename) {
-            return .uploaded(result)
+        // Step 2: deliver. An uploader owns delivery on the host's own stack and
+        // returns the finished attachment JSON (or throws); GutenbergKit relays that
+        // as a success and never runs its own recovery behind it. Otherwise the
+        // default uploader delivers to the configured site.
+        if let uploader = context.uploader {
+            let body = try await uploader.upload(fileAt: uploadURL, mimeType: uploadMimeType, filename: uploadFilename)
+            return .uploaded(MediaUploadResponse(statusCode: 201, body: body))
         } else if let defaultUploader = context.defaultUploader {
             // Unmodified — forward the original request body directly, skipping
             // multipart re-encoding.
@@ -460,24 +472,26 @@ enum UploadError: Error, LocalizedError {
 
 // MARK: - Upload Context
 
-/// Container for the upload delegate and default uploader, captured by the
-/// HTTPServer handler closure and re-read on each request.
+/// Container for the media processor, uploader, and default uploader, captured by
+/// the HTTPServer handler closure and re-read on each request.
 ///
-/// The delegate is held **weakly**. `EditorViewController.mediaUploadDelegate` is
-/// declared `weak` — the host owns the delegate's lifetime. Capturing it strongly
-/// here would silently defeat that contract and, worse, risk a retain cycle
-/// (`EditorViewController → uploadServer → HTTPServer → handler → UploadContext →
-/// delegate → EditorViewController`) that would keep the view controller — and
-/// therefore the server — alive forever, so `deinit` would never stop it.
+/// The processor and uploader are held **weakly** — the host owns their lifetime
+/// (`EditorViewController.mediaProcessor` / `.mediaUploader` are `weak`). Capturing
+/// them strongly here would risk a retain cycle (`EditorViewController →
+/// uploadServer → HTTPServer → handler → UploadContext → host object →
+/// EditorViewController`) that would keep the view controller — and therefore the
+/// server — alive forever, so `deinit` would never stop it.
 ///
-/// `@unchecked Sendable`: `uploadDelegate` is assigned once at init and only read
-/// afterwards; weak-reference reads are thread-safe at runtime.
+/// `@unchecked Sendable`: `processor`/`uploader` are assigned once at init and only
+/// read afterwards; weak-reference reads are thread-safe at runtime.
 private final class UploadContext: @unchecked Sendable {
-    weak var uploadDelegate: (any MediaUploadDelegate)?
+    weak var processor: (any MediaProcessor)?
+    weak var uploader: (any MediaUploader)?
     let defaultUploader: DefaultMediaUploader?
 
-    init(uploadDelegate: (any MediaUploadDelegate)?, defaultUploader: DefaultMediaUploader?) {
-        self.uploadDelegate = uploadDelegate
+    init(processor: (any MediaProcessor)?, uploader: (any MediaUploader)?, defaultUploader: DefaultMediaUploader?) {
+        self.processor = processor
+        self.uploader = uploader
         self.defaultUploader = defaultUploader
     }
 }
