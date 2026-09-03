@@ -18,6 +18,9 @@ import { info, error as logError } from './logger';
 /** Matches `POST /wp/v2/media` but not sub-paths like `/wp/v2/media/123`. */
 const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
 
+/** Matches `/wp/v2/media/<id>`, capturing the attachment ID. */
+const MEDIA_ATTACHMENT_PATH = /^\/wp\/v2\/media\/(\d+)(\?|$)/;
+
 /**
  * Initializes the API fetch configuration and middleware.
  *
@@ -31,8 +34,32 @@ export function configureApiFetch() {
 	apiFetch.use( apiPathModifierMiddleware );
 	apiFetch.use( tokenAuthMiddleware );
 	apiFetch.use( filterEndpointsMiddleware );
+	// `apiFetch.use` unshifts, so the last registration runs first. Core's media
+	// upload middleware is registered after the native one so that it runs
+	// before it, wrapping it: the native middleware handles an upload without
+	// calling `next`, so core's would never run at all from below. Both stay
+	// above auth, namespacing, and the root URL, so the `post-process` requests
+	// core issues through `next` are still authenticated and correctly
+	// addressed.
+	//
+	// Recovery needs `x-wp-upload-attachment-id`, readable only same-origin or
+	// when the server exposes it via CORS:
+	//
+	// - Through the native upload server, which exposes it: works on both
+	//   platforms. This is the only path that recovers everywhere.
+	// - Direct to WordPress, which does not expose it (see
+	//   `rest_send_cors_headers()`): never recovers on iOS, which loads from
+	//   `file://`. On Android it recovers only when the editor is genuinely
+	//   same-origin — `GutenbergView` derives the asset domain from the site's
+	//   host, which drops the port, so a site on a non-default port (any local
+	//   dev setup) is cross-origin and does not recover.
+	//
+	// There is no fallback: core sends the header before
+	// `wp_generate_attachment_metadata()`, so the fatal leaves no body to parse
+	// the ID from.
 	apiFetch.use( nativeMediaUploadMiddleware );
-	apiFetch.use( mediaUploadMiddleware );
+	apiFetch.use( apiFetch.mediaUploadMiddleware );
+	apiFetch.use( stripDraftPostIdMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
 	apiFetch.use(
 		apiFetch.createPreloadingMiddleware( preloadData ?? defaultPreloadData )
@@ -67,16 +94,19 @@ function corsMiddleware( options, next ) {
  */
 function apiPathModifierMiddleware( options, next ) {
 	const { siteApiNamespace, namespaceExcludedPaths } = getGBKit();
-	const namespaceRegex = new RegExp( `(${ siteApiNamespace.join( '|' ) })` );
 	const isEligiblePath =
 		options.path &&
+		siteApiNamespace.length > 0 &&
 		! namespaceExcludedPaths.some( ( path ) =>
 			options.path.startsWith( path )
 		);
 
+	// Escape the namespaces so each is matched literally rather than as a
+	// pattern.
 	const alreadyHasSiteNamespace =
-		namespaceRegex.test( options.path ) ||
-		/\/sites\/[^/]+\//.test( options.path );
+		new RegExp(
+			`(${ siteApiNamespace.map( escapeRegExp ).join( '|' ) })`
+		).test( options.path ) || /\/sites\/[^/]+\//.test( options.path );
 
 	if ( isEligiblePath && ! alreadyHasSiteNamespace ) {
 		// Insert the API namespace after the first two path segments.
@@ -87,6 +117,16 @@ function apiPathModifierMiddleware( options, next ) {
 	}
 
 	return next( options );
+}
+
+/**
+ * Escapes a string for literal use inside a regular expression.
+ *
+ * @param {string} value The string to escape.
+ * @return {string} The escaped string.
+ */
+function escapeRegExp( value ) {
+	return value.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' );
 }
 
 /**
@@ -153,16 +193,11 @@ function filterEndpointsMiddleware( options, next ) {
 }
 
 /**
- * Middleware that routes media uploads through the native host's local HTTP
- * server for processing (e.g. image resizing) before uploading to WordPress.
+ * Middleware that routes media requests through the native host's local HTTP
+ * server: uploads for processing (e.g. image resizing) before they reach
+ * WordPress, and attachment deletions for the editor's orphan cleanup.
  *
  * Exported for testing only.
- *
- * When `nativeUploadPort` is configured in GBKit, this middleware intercepts
- * `POST /wp/v2/media` requests, forwards the file to the native server, and
- * returns the response in WordPress REST API attachment format so the existing
- * Gutenberg upload pipeline (blob previews, save locking, entity caching)
- * works unchanged.
  *
  * When the native server is not configured, requests pass through unmodified.
  *
@@ -183,16 +218,44 @@ function filterEndpointsMiddleware( options, next ) {
 export function nativeMediaUploadMiddleware( options, next ) {
 	const { nativeUploadPort, nativeUploadToken } = getGBKit();
 
+	if ( ! nativeUploadPort || ! nativeUploadToken ) {
+		return next( options );
+	}
+
+	// Each helper returns `null` when the request is not its concern, so an
+	// unhandled request falls through to the default path.
+	return (
+		nativeMediaDelete( options, nativeUploadPort, nativeUploadToken ) ??
+		nativeMediaUpload( options, nativeUploadPort, nativeUploadToken ) ??
+		next( options )
+	);
+}
+
+/**
+ * Routes a media upload through the native upload server.
+ *
+ * Returns `null` when the request is not a media upload, so the caller falls
+ * through to its normal handling.
+ *
+ * Intercepts `POST /wp/v2/media`, forwards the file to the native server, and
+ * returns the response in WordPress REST API attachment format so the existing
+ * Gutenberg upload pipeline (blob previews, save locking, entity caching) works
+ * unchanged.
+ *
+ * @param {Object} options The api-fetch options.
+ * @param {number} port    The native upload server port.
+ * @param {string} token   The native upload server bearer token.
+ * @return {?Promise} The relayed upload, or `null` if not applicable.
+ */
+function nativeMediaUpload( options, port, token ) {
 	if (
-		! nativeUploadPort ||
-		! nativeUploadToken ||
 		! options.method ||
 		options.method.toUpperCase() !== 'POST' ||
 		! options.path ||
 		! MEDIA_UPLOAD_PATH.test( options.path ) ||
 		! ( options.body instanceof FormData )
 	) {
-		return next( options );
+		return null;
 	}
 
 	// Only intercept a genuine file upload. `FormData.get('file')` returns a
@@ -202,11 +265,11 @@ export function nativeMediaUploadMiddleware( options, next ) {
 	// through to the default path — and guarantees `file.name` below is safe.
 	const file = options.body.get( 'file' );
 	if ( ! ( file instanceof File ) ) {
-		return next( options );
+		return null;
 	}
 
 	info(
-		`Routing upload of ${ file.name } through native server on port ${ nativeUploadPort }`
+		`Routing upload of ${ file.name } through native server on port ${ port }`
 	);
 
 	// Forward the original request body — the file plus every sibling field
@@ -218,15 +281,34 @@ export function nativeMediaUploadMiddleware( options, next ) {
 	// Use the two-argument form of `.then()` so the rejection handler catches
 	// *only* a connection-level failure of the `fetch()` itself — not errors
 	// thrown while handling a response (those must surface as real failures).
-	return fetch( `http://localhost:${ nativeUploadPort }/upload${ query }`, {
+	return fetch( `http://localhost:${ port }/upload${ query }`, {
 		method: 'POST',
 		headers: {
-			'Relay-Authorization': `Bearer ${ nativeUploadToken }`,
+			'Relay-Authorization': `Bearer ${ token }`,
 		},
 		body: options.body,
 		signal: options.signal,
 	} ).then(
 		( response ) => {
+			// `parse: false` asks for raw `Response` semantics. Core's media
+			// upload middleware runs above this one and makes exactly that
+			// request so it can read `x-wp-upload-attachment-id` off a failed
+			// upload and retry `post-process`. Honor it by resolving or
+			// rejecting with the `Response` itself, leaving the parsing (and
+			// the recovery decision) to that middleware — parsing here would
+			// hide the header and turn a recoverable upload into a permanent
+			// failure.
+			if ( options.parse === false ) {
+				if ( ! response.ok ) {
+					// A handoff to core's post-process retry, not an outcome —
+					// core reads `x-wp-upload-attachment-id` off this response and
+					// may still recover. Stay silent (as `nativeMediaDelete` does)
+					// rather than reporting a failure that hasn't happened yet.
+					return Promise.reject( response );
+				}
+				return response;
+			}
+
 			// The native server relays WordPress's response verbatim. On a
 			// non-2xx, mirror @wordpress/api-fetch: reject with the parsed WP
 			// error body ({ code, message, data }) so @wordpress/media-utils
@@ -323,6 +405,99 @@ export function nativeMediaUploadMiddleware( options, next ) {
 }
 
 /**
+ * Routes a media attachment deletion through the native upload server.
+ *
+ * Returns `null` when the request is not a media deletion, so the caller falls
+ * through to its normal handling.
+ *
+ * Core's media upload middleware deletes the orphaned attachment when every
+ * `post-process` retry fails. That request cannot be made directly from a
+ * cross-origin editor: `@wordpress/api-fetch` tunnels `DELETE` as a `POST`
+ * carrying `X-HTTP-Method-Override`, and core's `rest_allowed_cors_headers`
+ * does not list that header, so the browser blocks it at preflight and the
+ * orphan survives. Relaying through the loopback server — which sets its own
+ * CORS policy — is what lets the cleanup complete.
+ *
+ * This runs before `X-HTTP-Method-Override` exists: api-fetch's `httpV1`
+ * middleware adds it further down the chain, so the method here is still a
+ * plain `DELETE`.
+ *
+ * @param {Object} options The api-fetch options.
+ * @param {number} port    The native upload server port.
+ * @param {string} token   The native upload server bearer token.
+ * @return {?Promise} The relayed deletion, or `null` if not applicable.
+ */
+function nativeMediaDelete( options, port, token ) {
+	if ( options.method?.toUpperCase() !== 'DELETE' || ! options.path ) {
+		return null;
+	}
+
+	const match = MEDIA_ATTACHMENT_PATH.exec( options.path );
+	if ( ! match ) {
+		return null;
+	}
+
+	const attachmentId = match[ 1 ];
+	const query = requestQuery( options.path );
+
+	info(
+		`Routing deletion of attachment ${ attachmentId } through native server`
+	);
+
+	return fetch(
+		`http://localhost:${ port }/media/${ attachmentId }${ query }`,
+		{
+			method: 'DELETE',
+			headers: { 'Relay-Authorization': `Bearer ${ token }` },
+			signal: options.signal,
+		}
+	).then(
+		( response ) => {
+			if ( options.parse === false ) {
+				if ( ! response.ok ) {
+					return Promise.reject( response );
+				}
+				return response;
+			}
+
+			if ( ! response.ok ) {
+				return response
+					.json()
+					.catch( () => invalidUploadResponseError() )
+					.then( ( body ) => {
+						logError( 'Native media deletion failed', body );
+						throw body;
+					} );
+			}
+
+			return response.json().catch( () => {
+				const error = invalidUploadResponseError();
+				logError(
+					'Native media deletion returned an invalid response',
+					error
+				);
+				throw error;
+			} );
+		},
+		( connectionError ) => {
+			if ( options.signal?.aborted ) {
+				throw uploadAbortError( options.signal );
+			}
+			logError(
+				'Native media deletion failed at the transport layer',
+				connectionError
+			);
+			throw {
+				code: 'fetch_error',
+				message: __(
+					'Could not get a valid response from the server.'
+				),
+			};
+		}
+	);
+}
+
+/**
  * The query component of a request path, including the leading `?`, or an empty
  * string when there is no query.
  *
@@ -379,14 +554,14 @@ function uploadAbortError( signal ) {
 }
 
 /**
- * Middleware to modify media upload requests.
+ * Middleware that strips the placeholder post ID from media upload requests.
  *
  * This middleware intercepts requests to the media endpoint and conditionally
  * removes the 'post' field if its value is '-1', which is used for draft posts.
  *
  * @type {APIFetchMiddleware}
  */
-function mediaUploadMiddleware( options, next ) {
+function stripDraftPostIdMiddleware( options, next ) {
 	if (
 		options.path &&
 		MEDIA_UPLOAD_PATH.test( options.path ) &&

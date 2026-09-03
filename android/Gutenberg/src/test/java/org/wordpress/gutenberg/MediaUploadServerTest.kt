@@ -141,6 +141,51 @@ class MediaUploadServerTest {
     }
 
     @Test
+    fun `routes a deletion to the delegate when it handles one`() {
+        // A host that uploaded the attachment itself owns an ID only it can
+        // resolve, so the default uploader must not be asked to delete it. No
+        // default uploader is configured, so a 200 here can only come from the
+        // delegate — the fallback path would fail with "no uploader".
+        val delegate = DeletingDelegate()
+        server.stop()
+        server = MediaUploadServer(uploadDelegate = delegate, defaultUploader = null, cacheDir = tempFolder.root)
+
+        val response = sendRawRequest(
+            method = "DELETE",
+            path = "/media/42?force=true",
+            headers = mapOf("Relay-Authorization" to "Bearer ${server.token}"),
+            body = ByteArray(0)
+        )
+
+        assertTrue("Expected 200 but got: ${response.statusLine}", response.statusLine.contains("200"))
+        assertEquals("42", delegate.deletedAttachmentId)
+    }
+
+    @Test
+    fun `relays a delegate's own Content-Type instead of emitting it twice`() {
+        // HTTP header names are case-insensitive, so a delegate spelling it
+        // `content-type` must still override the JSON default rather than merge
+        // alongside it — HttpResponse serializes every entry it is given, which
+        // would put the name on the wire twice (mirrors the iOS behavior).
+        val delegate = ContentTypeDeletingDelegate()
+        server.stop()
+        server = MediaUploadServer(uploadDelegate = delegate, defaultUploader = null, cacheDir = tempFolder.root)
+
+        val response = sendRawRequest(
+            method = "DELETE",
+            path = "/media/42?force=true",
+            headers = mapOf("Relay-Authorization" to "Bearer ${server.token}"),
+            body = ByteArray(0)
+        )
+
+        assertTrue("Expected 200 but got: ${response.statusLine}", response.statusLine.contains("200"))
+        // Assert on the raw header lines, not the parsed map: the parser
+        // lowercases keys into a map, so a duplicated header would silently
+        // collapse and this test would pass against the very bug it covers.
+        assertEquals(listOf("text/plain"), response.rawHeaderValues("content-type"))
+    }
+
+    @Test
     fun `routes upload with a query string and relays the query`() {
         val delegate = ProcessOnlyDelegate()
         val mockUploader = MockDefaultUploader()
@@ -414,6 +459,62 @@ class MediaUploadServerTest {
     }
 
     @Test
+    fun `DefaultMediaUploader relays the upload attachment ID header`() {
+        // WordPress sets this header on an upload whose attachment row was
+        // created before metadata generation fataled. The editor reads it to
+        // retry post-process and clean up the orphan, so it must survive the
+        // relay. Unrelated upstream headers are not relayed.
+        val mockWpServer = MockWebServer()
+        mockWpServer.enqueue(
+            MockResponse()
+                .setResponseCode(500)
+                .setBody("""{"code":"rest_upload_error"}""")
+                .setHeader("x-wp-upload-attachment-id", "4242")
+                .setHeader("X-Powered-By", "PHP/8.2")
+        )
+        mockWpServer.start()
+
+        val uploader = DefaultMediaUploader(
+            httpClient = okhttp3.OkHttpClient(),
+            siteApiRoot = mockWpServer.url("/wp-json/").toString(),
+            authHeader = "Bearer test-token"
+        )
+
+        val file = tempFolder.newFile("orphan.jpg")
+        file.writeBytes("data".toByteArray())
+
+        val response = runBlocking { uploader.upload(file, "image/jpeg", "orphan.jpg", emptyList(), "") }
+
+        assertEquals(500, response.statusCode)
+        assertEquals(mapOf("x-wp-upload-attachment-id" to "4242"), response.headers)
+
+        mockWpServer.shutdown()
+    }
+
+    @Test
+    fun `DefaultMediaUploader deletes an attachment carrying namespace and force query`() {
+        val mockWpServer = MockWebServer()
+        mockWpServer.enqueue(MockResponse().setResponseCode(200).setBody("""{"deleted":true}"""))
+        mockWpServer.start()
+
+        val uploader = DefaultMediaUploader(
+            httpClient = okhttp3.OkHttpClient(),
+            siteApiRoot = mockWpServer.url("/wp-json/").toString(),
+            authHeader = "Bearer test-token",
+            siteApiNamespace = listOf("sites/123")
+        )
+
+        val response = runBlocking { uploader.deleteMedia("42", "?force=true") }
+
+        assertEquals(200, response.statusCode)
+        val recorded = mockWpServer.takeRequest()
+        assertEquals("DELETE", recorded.method)
+        assertEquals("/wp-json/wp/v2/sites/123/media/42?force=true", recorded.path)
+
+        mockWpServer.shutdown()
+    }
+
+    @Test
     fun `DefaultMediaUploader normalizes an unslashed root and namespace`() {
         val mockWpServer = MockWebServer()
         mockWpServer.enqueue(MockResponse().setResponseCode(201).setBody("{}"))
@@ -582,8 +683,22 @@ class MediaUploadServerTest {
     private data class RawHttpResponse(
         val statusLine: String,
         val headers: Map<String, String>,
-        val body: String
-    )
+        val body: String,
+        /** The header lines exactly as received, before collapsing into [headers]. */
+        val rawHeaderLines: List<String> = emptyList()
+    ) {
+        /**
+         * Every value sent for [name], in order. Unlike [headers], this preserves
+         * repeats — the only way to catch a header emitted twice.
+         */
+        fun rawHeaderValues(name: String): List<String> =
+            rawHeaderLines.mapNotNull { line ->
+                val colonIndex = line.indexOf(':')
+                if (colonIndex <= 0) return@mapNotNull null
+                if (!line.substring(0, colonIndex).trim().equals(name, ignoreCase = true)) return@mapNotNull null
+                line.substring(colonIndex + 1).trim()
+            }
+    }
 
     private fun sendRawRequest(
         method: String,
@@ -638,7 +753,7 @@ class MediaUploadServerTest {
             }
         }
 
-        return RawHttpResponse(statusLine, responseHeaders, responseBody)
+        return RawHttpResponse(statusLine, responseHeaders, responseBody, lines.drop(1))
     }
 
     private fun buildMultipartBody(
@@ -675,6 +790,33 @@ class MediaUploadServerTest {
             lastFilename = filename
             val json = """{"id":42,"source_url":"https://example.com/photo.jpg","media_type":"image"}"""
             return MediaUploadResponse(201, json.toByteArray())
+        }
+    }
+
+    /**
+     * A delegate that handles deletions itself, as a host uploading to its own
+     * media service would.
+     */
+    private class DeletingDelegate : MediaUploadDelegate {
+        @Volatile var deletedAttachmentId: String? = null
+
+        override suspend fun deleteFile(attachmentId: String): MediaUploadResponse? {
+            deletedAttachmentId = attachmentId
+            return MediaUploadResponse(200, """{"deleted":true}""".toByteArray())
+        }
+    }
+
+    /**
+     * A delegate that sets its own `Content-Type`, lowercased, so the relay must
+     * override the JSON default rather than emit the header twice.
+     */
+    private class ContentTypeDeletingDelegate : MediaUploadDelegate {
+        override suspend fun deleteFile(attachmentId: String): MediaUploadResponse? {
+            return MediaUploadResponse(
+                200,
+                "deleted".toByteArray(),
+                mapOf("content-type" to "text/plain")
+            )
         }
     }
 

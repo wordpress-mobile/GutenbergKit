@@ -15,9 +15,19 @@ public struct MediaUploadResponse: Sendable {
     /// WordPress REST error object (`{ "code", "message", "data" }`) on failure.
     public let body: Data
 
-    public init(statusCode: Int, body: Data) {
+    /// The response headers to relay to the editor.
+    ///
+    /// `x-wp-upload-attachment-id` is the one that carries behavior: WordPress
+    /// sets it on a failed upload whose attachment row was created before
+    /// metadata generation fataled, and the editor's api-fetch middleware reads
+    /// it to retry `post-process` and clean up the orphan. Dropping it turns a
+    /// recoverable upload into a permanent failure.
+    public let headers: [String: String]
+
+    public init(statusCode: Int, body: Data, headers: [String: String] = [:]) {
         self.statusCode = statusCode
         self.body = body
+        self.headers = headers
     }
 }
 
@@ -72,6 +82,29 @@ public protocol MediaUploadDelegate: AnyObject, Sendable {
     /// host that uploads to WordPress should return the exact response it
     /// received so the editor sees a complete attachment object.
     func uploadFile(at url: URL, mimeType: String, filename: String) async throws -> MediaUploadResponse?
+
+    /// Delete a previously uploaded attachment.
+    ///
+    /// The editor deletes the attachment when an upload's server-side
+    /// post-processing fails past recovery, so it does not leave an orphan
+    /// behind. A delegate that uploaded the attachment itself via
+    /// ``uploadFile(at:mimeType:filename:)`` owns an ID only it can resolve, so
+    /// it must delete the attachment itself too — the default uploader would
+    /// address the wrong site.
+    ///
+    /// Return the raw response (status code + body), which GutenbergKit relays
+    /// to the editor unchanged, or `nil` to use the default uploader.
+    ///
+    /// Return `nil` for any ID the delegate does not recognize. Unlike the upload
+    /// path, there is no ``handlesFile(ofType:named:)`` gate here — an attachment
+    /// ID carries no MIME type or filename — so this method is called for *every*
+    /// deletion, including attachments the delegate declined at upload time and
+    /// WordPress therefore created itself. Returning a response for one of those
+    /// (an error from the host's own media service, say) leaves the real
+    /// WordPress attachment undeleted — precisely the orphan this cleanup exists
+    /// to remove. `nil` hands it to the default uploader, which addresses the
+    /// right site.
+    func deleteFile(attachmentId: String) async throws -> MediaUploadResponse?
 }
 
 /// Default implementations.
@@ -85,6 +118,10 @@ extension MediaUploadDelegate {
     }
 
     public func uploadFile(at url: URL, mimeType: String, filename: String) async throws -> MediaUploadResponse? {
+        nil
+    }
+
+    public func deleteFile(attachmentId: String) async throws -> MediaUploadResponse? {
         nil
     }
 }

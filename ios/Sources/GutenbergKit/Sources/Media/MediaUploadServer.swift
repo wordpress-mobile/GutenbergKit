@@ -87,15 +87,21 @@ final class MediaUploadServer: Sendable {
     private static func handleRequest(_ request: HTTPServer.Request, context: UploadContext) async -> HTTPResponse {
         let parsed = request.parsed
 
-        // Route: only POST /upload is handled. (OPTIONS preflight is answered by
-        // the HTTP library under its permissive CORS policy.) Match on the path
-        // alone — the target carries a query string (e.g. `?_embed`) that the
-        // upload handler relays on to WordPress.
-        guard parsed.method.uppercased() == "POST", parsed.path == "/upload" else {
-            return errorResponse(status: 404, message: "Not found")
+        // Routes: POST /upload, and DELETE /media/<id> for the editor's orphan
+        // cleanup. (OPTIONS preflight is answered by the HTTP library under its
+        // permissive CORS policy.) Match on the path alone — the target carries
+        // a query string (e.g. `?_embed`, `?force=true`) relayed to WordPress.
+        let method = parsed.method.uppercased()
+
+        if method == "POST", parsed.path == "/upload" {
+            return await handleUpload(request, context: context)
         }
 
-        return await handleUpload(request, context: context)
+        if method == "DELETE", let attachmentId = attachmentId(fromPath: parsed.path) {
+            return await handleMediaDelete(attachmentId, query: parsed.query, context: context)
+        }
+
+        return errorResponse(status: 404, message: "Not found")
     }
 
     private static func handleUpload(_ request: HTTPServer.Request, context: UploadContext) async -> HTTPResponse {
@@ -190,12 +196,64 @@ final class MediaUploadServer: Sendable {
         return relayResponse(response)
     }
 
-    /// Relays WordPress's exact status and body to the editor so it sees the same
-    /// attachment object (or error) as a direct upload.
+    /// The attachment ID in a `/media/<id>` path, or `nil` if the path is not one.
+    ///
+    /// Deliberately narrow: this server relays media operations, not arbitrary
+    /// REST requests, so only a numeric attachment ID under `/media/` matches.
+    private static func attachmentId(fromPath path: String) -> String? {
+        let components = path.split(separator: "/", omittingEmptySubsequences: true)
+        guard components.count == 2, components[0] == "media" else { return nil }
+        let id = String(components[1])
+        guard !id.isEmpty, id.allSatisfy(\.isNumber) else { return nil }
+        return id
+    }
+
+    /// Relays the editor's orphan cleanup.
+    ///
+    /// Core's media upload middleware deletes the attachment when every
+    /// `post-process` retry fails. A cross-origin editor cannot issue that
+    /// request directly — api-fetch tunnels `DELETE` as a `POST` carrying
+    /// `X-HTTP-Method-Override`, which core's CORS allow-list omits, so the
+    /// browser blocks it at preflight. Relaying it here lets the cleanup run.
+    ///
+    /// Offers the deletion to the delegate first, as ``handleUpload(_:context:)``
+    /// does, so a host that uploaded the attachment itself deletes it from the
+    /// same place.
+    private static func handleMediaDelete(
+        _ attachmentId: String, query: String, context: UploadContext
+    ) async -> HTTPResponse {
+        do {
+            if let response = try await context.uploadDelegate?.deleteFile(attachmentId: attachmentId) {
+                return relayResponse(response)
+            }
+
+            guard let defaultUploader = context.defaultUploader else {
+                return errorResponse(status: 500, message: UploadError.noUploader.localizedDescription)
+            }
+            let response = try await defaultUploader.deleteMedia(attachmentId: attachmentId, query: query)
+            return relayResponse(response)
+        } catch {
+            return uploadErrorResponse(error)
+        }
+    }
+
+    /// Relays WordPress's exact status, body, and relayable headers to the editor
+    /// so it sees the same attachment object (or error) as a direct upload.
+    ///
+    /// The headers matter for recovery: `x-wp-upload-attachment-id` is what lets
+    /// the editor retry `post-process` for an upload whose metadata generation
+    /// fataled server-side, rather than surfacing a permanent failure and
+    /// leaving an orphaned attachment behind.
+    ///
+    /// The response's own `Content-Type` wins over the JSON default. `HTTPResponse`
+    /// serializes every header it is given, so appending the default unconditionally
+    /// would emit the name twice for a delegate that sets it.
     private static func relayResponse(_ response: MediaUploadResponse) -> HTTPResponse {
-        HTTPResponse(
+        let hasContentType = response.headers.keys.contains { $0.lowercased() == "content-type" }
+        return HTTPResponse(
             status: response.statusCode,
-            headers: [("Content-Type", "application/json")],
+            headers: (hasContentType ? [] : [("Content-Type", "application/json")])
+                + response.headers.map { ($0.key, $0.value) },
             body: response.body
         )
     }
@@ -441,8 +499,9 @@ class DefaultMediaUploader: @unchecked Sendable {
     /// The WordPress media endpoint URL, built through the shared
     /// ``WordPressRESTURL`` namespacing (so it matches every other REST URL) and
     /// carrying the original request query (e.g. `?_embed`) through to WordPress.
-    private func mediaEndpointURL(query: String) -> URL {
-        let base = WordPressRESTURL.namespaced(apiRoot: siteApiRoot, path: "/wp/v2/media", namespace: siteApiNamespace)
+    private func mediaEndpointURL(query: String, attachmentId: String? = nil) -> URL {
+        let path = attachmentId.map { "/wp/v2/media/\($0)" } ?? "/wp/v2/media"
+        let base = WordPressRESTURL.namespaced(apiRoot: siteApiRoot, path: path, namespace: siteApiNamespace)
         guard !query.isEmpty else { return base }
         // `query` is the raw request query in wire form (leading "?"). Set it via
         // `percentEncodedQuery` so a value that isn't URL-safe can't make
@@ -489,6 +548,23 @@ class DefaultMediaUploader: @unchecked Sendable {
         return try await performUpload(request)
     }
 
+    /// Deletes an attachment, relaying WordPress's response verbatim.
+    ///
+    /// Carries the editor's query through unchanged — core's cleanup sends
+    /// `?force=true`, without which WordPress trashes rather than deletes.
+    func deleteMedia(attachmentId: String, query: String) async throws -> MediaUploadResponse {
+        var request = URLRequest(url: mediaEndpointURL(query: query, attachmentId: attachmentId))
+        request.httpMethod = "DELETE"
+
+        // Authorization is applied centrally by the HTTP client, as for uploads.
+        let (data, response) = try await httpClient.performRaw(request)
+        return MediaUploadResponse(
+            statusCode: response.statusCode,
+            body: data,
+            headers: Self.relayableHeaders(from: response)
+        )
+    }
+
     /// Sends the assembled upload request to WordPress and relays the response.
     ///
     /// The request body is a **one-shot** stream (a bound-pair pipe for the
@@ -517,7 +593,30 @@ class DefaultMediaUploader: @unchecked Sendable {
         // the editor sees WordPress's real status and error body, exactly as a
         // direct upload would. `performRaw` does not throw on non-2xx.
         let (data, response) = try await httpClient.performRaw(request)
-        return MediaUploadResponse(statusCode: response.statusCode, body: data)
+        return MediaUploadResponse(
+            statusCode: response.statusCode,
+            body: data,
+            headers: Self.relayableHeaders(from: response)
+        )
+    }
+
+    /// The upstream headers worth relaying to the editor.
+    ///
+    /// Deliberately an allowlist rather than a filtered passthrough: the body is
+    /// re-sent with a recomputed length, so relaying upstream entity or
+    /// transport headers wholesale would risk contradicting what the server
+    /// actually sends.
+    private static let relayableHeaderNames = ["x-wp-upload-attachment-id"]
+
+    /// Picks the headers to relay out of an upstream response.
+    private static func relayableHeaders(from response: HTTPURLResponse) -> [String: String] {
+        var headers: [String: String] = [:]
+        for name in relayableHeaderNames {
+            if let value = response.value(forHTTPHeaderField: name) {
+                headers[name] = value
+            }
+        }
+        return headers
     }
 
     // MARK: - Streaming Multipart Body

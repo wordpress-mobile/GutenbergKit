@@ -125,6 +125,12 @@ enum class CorsPolicy {
                 "Access-Control-Allow-Origin" to "*",
                 "Access-Control-Allow-Methods" to "GET, POST, PUT, DELETE, OPTIONS",
                 "Access-Control-Allow-Headers" to "Authorization, Relay-Authorization, Content-Type",
+                // Only CORS-safelisted response headers are readable
+                // cross-origin by default. The editor needs to read
+                // `x-wp-upload-attachment-id` off a relayed media upload
+                // response to retry `post-process` and clean up an orphaned
+                // attachment, so it has to be exposed explicitly.
+                "Access-Control-Expose-Headers" to "x-wp-upload-attachment-id",
                 "Access-Control-Max-Age" to "86400"
             )
         }
@@ -179,6 +185,7 @@ private fun HttpResponse.addingHeadersIfAbsent(newHeaders: Map<String, String>):
  *     Access-Control-Allow-Origin: <origin>
  *     Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
  *     Access-Control-Allow-Headers: Authorization, Relay-Authorization, Content-Type
+ *     Access-Control-Expose-Headers: x-wp-upload-attachment-id
  *     Access-Control-Max-Age: 86400
  *
  * Without these headers, browsers will reject the preflight and block
