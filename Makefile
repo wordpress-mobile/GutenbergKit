@@ -231,6 +231,14 @@ wp-env-android-urls: ## Report whether WordPress emits emulator-reachable URLs, 
 format: npm-dependencies ## Format code
 	npm run format
 
+.PHONY: lint-css
+lint-css: npm-dependencies ## Lint SCSS code
+	npm run lint:css
+
+.PHONY: lint-css-fix
+lint-css-fix: npm-dependencies ## Lint and auto-fix SCSS code
+	npm run lint:css:fix
+
 .PHONY: lint-js
 lint-js: npm-dependencies ## Lint JavaScript code
 	npm run lint:js

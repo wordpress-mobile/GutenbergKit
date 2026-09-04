@@ -34,8 +34,7 @@
 // Apply root level padding for themes that do not use the experimental
 // `useRootPaddingAwareAlignments` settings
 .gutenberg-kit-visual-editor.has-root-padding .editor-styles-wrapper {
-	padding-left: 16px;
-	padding-right: 16px;
+	padding-inline: 16px;
 }
 
 // Prevent horizontal scroll in the block inserter popover. This only appears to
@@ -76,9 +75,8 @@
 
 .gutenberg-kit-visual-editor__toolbar {
 	bottom: 0;
-	left: 0;
+	inset-inline: 0;
 	position: fixed;
-	right: 0;
 	z-index: 40; // Ensure the toolbar is above the block canvas and its controls
 }
 
@@ -101,6 +99,5 @@
 // Gutenberg itself or implement our own error boudnary--including matching copy
 // content/error functionality.
 .editor-error-boundary {
-	margin-left: 16px;
-	margin-right: 16px;
+	margin-inline: 16px;
 }

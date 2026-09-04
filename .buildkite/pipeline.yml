@@ -58,6 +58,11 @@ steps:
       command: make lint-js
       plugins: *plugins
 
+    - label: ':stylelint: Lint CSS'
+      key: lint-css
+      command: make lint-css
+      plugins: *plugins
+
     - label: ':javascript: Test JavaScript'
       key: test-js
       command: make test-js
@@ -175,6 +180,7 @@ steps:
           - build-xcframework
           - swift-test-swift-package
           - lint-js
+          - lint-css
           - lint-swift
           - test-js
           - test-web-e2e
