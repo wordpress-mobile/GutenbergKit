@@ -34,6 +34,7 @@ export function configureApiFetch() {
 	apiFetch.use( nativeMediaUploadMiddleware );
 	apiFetch.use( mediaUploadMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
+	apiFetch.use( siteIndexMiddleware );
 	apiFetch.use(
 		apiFetch.createPreloadingMiddleware( preloadData ?? defaultPreloadData )
 	);
@@ -458,6 +459,54 @@ function transformOEmbedApiResponse( options, next ) {
 	}
 
 	return next( options, next );
+}
+
+/**
+ * Middleware resolving the REST API index locally on namespaced sites.
+ *
+ * Gutenberg's `root`/`__unstableBase` entity fetches the REST API index (`/`)
+ * during editor initialization. On a namespaced site that path has no segments
+ * for `apiPathModifierMiddleware` to insert the namespace into, so the request
+ * targets the API host's root, which serves no index. Rather than let the
+ * request fail, resolve the entity with `home` from the host's site URL. The
+ * host supplies a single URL, so `url`, the WordPress address, has no accurate
+ * source and is left unset.
+ *
+ * Consumers tolerate the remaining fields being absent: the site blocks read
+ * the `site` entity when the user can edit settings, and client-side media
+ * processing treats missing image sizes as none.
+ *
+ * Runs after the preloading middleware so a host-supplied index entry takes
+ * precedence. `apiFetch.use()` prepends, so this is registered immediately
+ * before it.
+ *
+ * @type {APIFetchMiddleware}
+ */
+function siteIndexMiddleware( options, next ) {
+	const { siteApiNamespace = [], siteURL } = getGBKit();
+	const isNamespacedSite = siteApiNamespace.length > 0;
+	const isGet = ! options.method || options.method.toUpperCase() === 'GET';
+
+	if ( ! isNamespacedSite || ! isGet || ! isRestIndexPath( options.path ) ) {
+		return next( options );
+	}
+
+	const home = siteURL?.replace( /\/+$/, '' );
+	return Promise.resolve( home ? { home } : {} );
+}
+
+/**
+ * Whether a request path targets the REST API index.
+ *
+ * @param {string} [path] The request path, e.g. `/?_fields=name`.
+ * @return {boolean} True for `/` with or without a query string.
+ */
+function isRestIndexPath( path ) {
+	if ( typeof path !== 'string' ) {
+		return false;
+	}
+	const pathname = path.split( '?' )[ 0 ];
+	return pathname === '' || pathname === '/';
 }
 
 const defaultPreloadData = {
