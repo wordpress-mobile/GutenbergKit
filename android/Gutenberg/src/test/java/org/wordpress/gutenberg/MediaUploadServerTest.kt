@@ -256,7 +256,7 @@ class MediaUploadServerTest {
         val boundary = "test-boundary-123"
         val body = buildMultipartBody(
             boundary, "photo.jpg", "image/jpeg", "fake image data".toByteArray(),
-            fields = mapOf("post" to "123")
+            fields = listOf("post" to "123")
         )
 
         val response = sendRawRequest(
@@ -275,7 +275,7 @@ class MediaUploadServerTest {
         assertEquals("photo.jpg", uploader.lastFilename)
         // The editor's post association and query must reach the host uploader, so it
         // can reproduce a native upload (attach to the post, honor ?_embed).
-        assertEquals("123", uploader.lastFields["post"])
+        assertEquals("123", uploader.lastFields.first { it.first == "post" }.second)
         assertEquals("?_embed=wp:featuredmedia", uploader.lastQuery)
         // …and the actual file bytes the editor sent — the host uploads them itself.
         assertEquals("fake image data", uploader.lastFileBytes?.decodeToString())
@@ -288,6 +288,47 @@ class MediaUploadServerTest {
         assertEquals(42, json.get("id").asInt)
         assertEquals("https://example.com/photo.jpg", json.get("source_url").asString)
         assertEquals("image", json.get("media_type").asString)
+    }
+
+    @Test
+    fun `hands a host uploader repeated form field names in order, not collapsed`() {
+        // A `field[]`-style repeated name (e.g. a custom attachment taxonomy): WordPress
+        // builds an array from these, so both values must reach the host uploader in
+        // order. A map would drop the first — the ordered-list contract must not.
+        val uploader = MockUploader()
+        val internalClient = MockInternalMediaClient()
+        server.stop()
+        server = MediaUploadServer(
+            processor = null,
+            uploader = uploader,
+            internalClient = internalClient,
+            cacheDir = tempFolder.root
+        )
+
+        val boundary = "test-boundary-123"
+        val body = buildMultipartBody(
+            boundary, "photo.jpg", "image/jpeg", "fake image data".toByteArray(),
+            fields = listOf("post" to "123", "media_folder[]" to "12", "media_folder[]" to "45")
+        )
+
+        val response = sendRawRequest(
+            method = "POST",
+            path = "/upload",
+            headers = mapOf(
+                "Relay-Authorization" to "Bearer ${server.token}",
+                "Content-Type" to "multipart/form-data; boundary=$boundary"
+            ),
+            body = body
+        )
+
+        assertTrue("Expected 201 but got: ${response.statusLine}", response.statusLine.contains("201"))
+        assertTrue(uploader.uploadCalled)
+        // Both repeated values survive, in order — not collapsed to the last.
+        assertEquals(
+            listOf("12", "45"),
+            uploader.lastFields.filter { it.first == "media_folder[]" }.map { it.second }
+        )
+        assertEquals("123", uploader.lastFields.first { it.first == "post" }.second)
     }
 
     @Test
@@ -863,7 +904,7 @@ class MediaUploadServerTest {
         filename: String,
         mimeType: String,
         data: ByteArray,
-        fields: Map<String, String> = emptyMap()
+        fields: List<Pair<String, String>> = emptyList()
     ): ByteArray {
         val out = java.io.ByteArrayOutputStream()
         for ((name, value) in fields) {
@@ -894,7 +935,7 @@ class MediaUploadServerTest {
         @Volatile var uploadCalled = false
         @Volatile var lastMimeType: String? = null
         @Volatile var lastFilename: String? = null
-        @Volatile var lastFields: Map<String, String> = emptyMap()
+        @Volatile var lastFields: List<Pair<String, String>> = emptyList()
         @Volatile var lastQuery: String? = null
         @Volatile var lastFileBytes: ByteArray? = null
 

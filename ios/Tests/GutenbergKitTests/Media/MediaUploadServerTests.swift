@@ -185,7 +185,7 @@ struct MediaUploadServerTests {
     let boundary = UUID().uuidString
     let body = buildMultipartBody(
       boundary: boundary, filename: "photo.jpg", mimeType: "image/jpeg",
-      data: Data("fake image data".utf8), fields: ["post": "123"]
+      data: Data("fake image data".utf8), fields: [(name: "post", value: "123")]
     )
 
     let url = URL(string: "http://127.0.0.1:\(server.port)/upload?_embed=wp:featuredmedia")!
@@ -204,7 +204,7 @@ struct MediaUploadServerTests {
     #expect(uploader.lastFilename == "photo.jpg")
     // The editor's post association and query must reach the host uploader, so it can
     // reproduce a native upload (attach to the post, honor ?_embed).
-    #expect(uploader.lastFields["post"] == "123")
+    #expect(uploader.lastFields.first { $0.name == "post" }?.value == "123")
     #expect(uploader.lastQuery == "?_embed=wp:featuredmedia")
     // …and the actual file bytes the editor sent — the host uploads them itself.
     #expect(uploader.lastFileData == Data("fake image data".utf8))
@@ -218,6 +218,43 @@ struct MediaUploadServerTests {
     #expect(json["id"] as? Int == 42)
     #expect(json["source_url"] as? String == "https://example.com/photo.jpg")
     #expect(json["media_type"] as? String == "image")
+  }
+
+  @Test("hands a host uploader repeated form field names in order, not collapsed")
+  func uploaderReceivesRepeatedFieldNames() async throws {
+    // A `field[]`-style repeated name (e.g. a custom attachment taxonomy): WordPress
+    // builds an array from these, so both values must reach the host uploader in order.
+    // A dictionary would drop the first — the ordered-list contract must not.
+    let uploader = MockUploader()
+    let internalClient = MockInternalMediaClient()
+    let server = try await MediaUploadServer.start(uploader: uploader, internalClient: internalClient)
+    defer { server.stop() }
+
+    let boundary = UUID().uuidString
+    let body = buildMultipartBody(
+      boundary: boundary, filename: "photo.jpg", mimeType: "image/jpeg",
+      data: Data("fake image data".utf8),
+      fields: [
+        (name: "post", value: "123"),
+        (name: "media_folder[]", value: "12"),
+        (name: "media_folder[]", value: "45"),
+      ]
+    )
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    request.httpBody = body
+
+    _ = try await URLSession.shared.data(for: request)
+
+    #expect(uploader.uploadCalled)
+    // Both repeated values survive, in order — not collapsed to the last.
+    let folderValues = uploader.lastFields.filter { $0.name == "media_folder[]" }.map(\.value)
+    #expect(folderValues == ["12", "45"])
+    #expect(uploader.lastFields.first { $0.name == "post" }?.value == "123")
   }
 
   @Test("hands the processed file and its new metadata to the uploader")
@@ -485,7 +522,7 @@ struct MediaUploadServerTests {
     #expect(weakProcessor == nil)
   }
 
-  private func buildMultipartBody(boundary: String, filename: String, mimeType: String, data: Data, fields: [String: String] = [:]) -> Data {
+  private func buildMultipartBody(boundary: String, filename: String, mimeType: String, data: Data, fields: [(name: String, value: String)] = []) -> Data {
     var body = Data()
     for (name, value) in fields {
       body.append("--\(boundary)\r\n")
@@ -886,7 +923,7 @@ private final class MockUploader: MediaUploader, @unchecked Sendable {
   private var _uploadCalled = false
   private var _lastMimeType: String?
   private var _lastFilename: String?
-  private var _lastFields: [String: String] = [:]
+  private var _lastFields: [(name: String, value: String)] = []
   private var _lastQuery: String?
   private var _lastFileData: Data?
   private let uploadBody: Data
@@ -895,7 +932,7 @@ private final class MockUploader: MediaUploader, @unchecked Sendable {
   var uploadCalled: Bool { lock.withLock { _uploadCalled } }
   var lastMimeType: String? { lock.withLock { _lastMimeType } }
   var lastFilename: String? { lock.withLock { _lastFilename } }
-  var lastFields: [String: String] { lock.withLock { _lastFields } }
+  var lastFields: [(name: String, value: String)] { lock.withLock { _lastFields } }
   var lastQuery: String? { lock.withLock { _lastQuery } }
   var lastFileData: Data? { lock.withLock { _lastFileData } }
 

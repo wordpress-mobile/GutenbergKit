@@ -86,10 +86,12 @@ public struct MediaUpload: Sendable {
     /// The file's name.
     public let filename: String
 
-    /// The editor's non-file form fields, decoded as UTF-8 — most importantly `post`,
-    /// the parent post's ID, without which the attachment is created unattached. Send
-    /// each as a form part on your `POST /wp/v2/media`.
-    public let fields: [String: String]
+    /// The editor's non-file form fields, in order, each decoded as UTF-8 — most
+    /// importantly `post`, the parent post's ID, without which the attachment is created
+    /// unattached. A list of `(name, value)` pairs, not a dictionary, so repeated field
+    /// names (e.g. a `field[]` array) survive verbatim. Send each as a form part on your
+    /// `POST /wp/v2/media`, in the given order.
+    public let fields: [(name: String, value: String)]
 
     /// The request's query string (leading `?`, e.g. `?_embed=wp:featuredmedia`), or
     /// empty. Carry it on your request so the editor gets the response it expects.

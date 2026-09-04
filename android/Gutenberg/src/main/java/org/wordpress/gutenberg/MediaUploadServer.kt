@@ -105,9 +105,11 @@ interface MediaProcessor {
  * @property file The file to upload — already processed, if a [MediaProcessor] ran.
  * @property mimeType The file's MIME type.
  * @property filename The file's name.
- * @property fields The editor's non-file form fields, decoded as UTF-8 — most
- *   importantly `post`, the parent post's ID, without which the attachment is created
- *   unattached. Send each as a form part on your `POST /wp/v2/media`.
+ * @property fields The editor's non-file form fields, in order, each decoded as UTF-8 —
+ *   most importantly `post`, the parent post's ID, without which the attachment is
+ *   created unattached. A list of `(name, value)` pairs, not a map, so repeated field
+ *   names (e.g. a `field[]` array) survive verbatim. Send each as a form part on your
+ *   `POST /wp/v2/media`, in the given order.
  * @property query The request's query string (leading `?`, e.g. `?_embed=...`), or
  *   empty. Carry it on your request so the editor gets the response it expects.
  */
@@ -115,7 +117,7 @@ data class MediaUpload(
     val file: File,
     val mimeType: String,
     val filename: String,
-    val fields: Map<String, String>,
+    val fields: List<Pair<String, String>>,
     val query: String
 )
 
@@ -536,7 +538,7 @@ internal class MediaUploadServer(
                 // Hand the host the editor's non-file fields (e.g. `post`) and query
                 // too, so its own POST can reproduce a native upload — otherwise the
                 // attachment is created unattached and `?_embed` is lost.
-                val fields = extraParts.associate { part ->
+                val fields = extraParts.map { part ->
                     part.name to String(part.body.readBytes(), Charsets.UTF_8)
                 }
                 val upload = MediaUpload(targetFile, targetMimeType, targetFilename, fields, query)
