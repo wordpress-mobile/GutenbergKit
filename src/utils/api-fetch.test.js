@@ -208,10 +208,7 @@ describe( 'api-fetch credentials handling', () => {
 			const result = await apiFetch( { path: indexPath } );
 
 			expect( global.fetch ).not.toHaveBeenCalled();
-			expect( result ).toEqual( {
-				home: 'https://example.com',
-				url: 'https://example.com',
-			} );
+			expect( result ).toEqual( { home: 'https://example.com' } );
 		} );
 
 		it( 'resolves an empty record when the site URL is unknown', async () => {

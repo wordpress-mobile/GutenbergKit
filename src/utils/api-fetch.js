@@ -468,7 +468,9 @@ function transformOEmbedApiResponse( options, next ) {
  * during editor initialization. On a namespaced site that path has no segments
  * for `apiPathModifierMiddleware` to insert the namespace into, so the request
  * targets the API host's root, which serves no index. Rather than let the
- * request fail, resolve the entity with the fields the host already provides.
+ * request fail, resolve the entity with `home` from the host's site URL. The
+ * host supplies a single URL, so `url`, the WordPress address, has no accurate
+ * source and is left unset.
  *
  * Consumers tolerate the remaining fields being absent: the site blocks read
  * the `site` entity when the user can edit settings, and client-side media
@@ -490,7 +492,7 @@ function siteIndexMiddleware( options, next ) {
 	}
 
 	const home = siteURL?.replace( /\/+$/, '' );
-	return Promise.resolve( home ? { home, url: home } : {} );
+	return Promise.resolve( home ? { home } : {} );
 }
 
 /**
