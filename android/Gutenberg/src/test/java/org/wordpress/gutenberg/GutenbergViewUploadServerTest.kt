@@ -2,10 +2,12 @@ package org.wordpress.gutenberg
 
 import android.os.Looper
 import android.view.View
+import java.lang.reflect.InvocationTargetException
 import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mockito.mock
@@ -105,6 +107,41 @@ class GutenbergViewUploadServerTest {
             assertThrows(IllegalStateException::class.java) {
                 view.mediaProcessor = mock(MediaProcessor::class.java)
             }
+        } finally {
+            detach(view)
+        }
+    }
+
+    @Test
+    fun `an uploader without site credentials is a configuration error`() {
+        // A mediaUploader owns uploads, but media deletes still relay to the configured
+        // site — which needs credentials to reach. Setting an uploader without them is
+        // a programmer error, surfaced loudly rather than starting a server whose every
+        // delete would fail. (A processor without credentials is fine — it just falls
+        // back to the default WebView path, covered above.)
+        val config = EditorConfiguration
+            .builder("https://example.com", "https://example.com/wp-json/")
+            .build() // deliberately no auth header
+        val view = GutenbergView(
+            config,
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+        try {
+            view.mediaUploader = mock(MediaUploader::class.java)
+            // startUploadServer runs inside onEditorPageStarted, so reflection wraps its throw.
+            val error = assertThrows(InvocationTargetException::class.java) {
+                startLoading(view)
+            }
+            assertTrue(
+                "an uploader without credentials should fail with IllegalStateException",
+                error.cause is IllegalStateException
+            )
+            assertNull(
+                "no server should be left running after the configuration error",
+                uploadServerOf(view)
+            )
         } finally {
             detach(view)
         }

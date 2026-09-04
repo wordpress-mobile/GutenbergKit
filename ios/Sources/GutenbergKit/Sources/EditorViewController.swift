@@ -109,12 +109,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// longer take effect, so their setters trap if written.
     private var hasStartedLoading = false
 
-    /// Whether a non-nil ``mediaProcessor``/``mediaUploader`` was ever assigned. Lets
-    /// the load path tell "the host object was released before load" (a retention
-    /// mistake to trap) apart from "none was configured" (a valid opt-out).
-    private var mediaProcessorWasAssigned = false
-    private var mediaUploaderWasAssigned = false
-
     /// Transforms media (resize, transcode, …) before GutenbergKit delivers it to
     /// the configured site. The safe, common extension point — a processor never
     /// performs the upload itself, so it cannot deliver media to the wrong place.
@@ -123,13 +117,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// is captured once, when the editor begins loading; setting it afterward has no
     /// effect, so the setter traps.
     ///
-    /// - Important: This is a `weak` reference — hold a strong reference to your
-    ///   processor until the editor has loaded, or native media handling is silently
-    ///   disabled. The editor traps at load time if a processor assigned here has
-    ///   already been deallocated.
-    public weak var mediaProcessor: (any MediaProcessor)? {
+    /// The editor **owns** this for its lifetime and releases it on `deinit`, so you
+    /// don't need to keep a reference after assigning it. The one rule: your processor
+    /// must not strongly retain this `EditorViewController` in return, or the two form
+    /// a retain cycle and neither is freed.
+    public var mediaProcessor: (any MediaProcessor)? {
         didSet {
-            mediaProcessorWasAssigned = mediaProcessor != nil
             precondition(!hasStartedLoading, Self.lateMediaAssignmentMessage("mediaProcessor"))
         }
     }
@@ -138,11 +131,16 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// queue, resumable transport). Setting it makes the host own every upload and
     /// its whole lifecycle; GutenbergKit stays out of the network entirely for media.
     ///
-    /// Same lifecycle rules as ``mediaProcessor``: set it before the editor loads,
-    /// and hold a strong reference until then.
-    public weak var mediaUploader: (any MediaUploader)? {
+    /// Same lifecycle rules as ``mediaProcessor``: set it before the editor loads.
+    /// The editor owns it for its lifetime (releasing it on `deinit`), so you needn't
+    /// retain it yourself — just don't strongly retain this `EditorViewController`
+    /// from your uploader.
+    ///
+    /// Requires site credentials in the editor configuration: media deletes always
+    /// relay to the configured site, so an uploader set without an auth header is a
+    /// configuration error and traps at load.
+    public var mediaUploader: (any MediaUploader)? {
         didSet {
-            mediaUploaderWasAssigned = mediaUploader != nil
             precondition(!hasStartedLoading, Self.lateMediaAssignmentMessage("mediaUploader"))
         }
     }
@@ -394,8 +392,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     @MainActor
     private func loadEditor(dependencies: EditorDependencies) async throws {
-        // From here on the editor configuration — including `mediaUploadDelegate` —
-        // is captured, so the delegate setter traps if written after this point.
+        // From here on the editor configuration — including `mediaProcessor` and
+        // `mediaUploader` — is captured, so their setters trap if written after this point.
         self.hasStartedLoading = true
 
         self.displayActivityView()
@@ -461,52 +459,52 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// falls back to Gutenberg's default upload behavior (the JS override won't activate
     /// because `nativeUploadPort` will be nil in GBKit).
     private func startUploadServer() async {
-        // A processor/uploader that was provided but is already nil here was
-        // deallocated before the editor finished loading — the host didn't hold a
-        // strong reference. That silently disables native media handling, so trap.
-        precondition(
-            !(mediaProcessorWasAssigned && mediaProcessor == nil),
-            "mediaProcessor was released before the editor loaded — hold a strong reference to it."
-        )
-        precondition(
-            !(mediaUploaderWasAssigned && mediaUploader == nil),
-            "mediaUploader was released before the editor loaded — hold a strong reference to it."
-        )
-
         // Nothing to route through the native server unless the host provided a
-        // processor or an uploader.
+        // processor or an uploader. The editor owns whichever it was given — its
+        // `mediaProcessor`/`mediaUploader` are strong — so there's no
+        // released-before-load case to guard against; they live as long as it does.
         guard mediaProcessor != nil || mediaUploader != nil else {
             return
         }
 
-        // A DefaultMediaUploader does two jobs: it delivers GutenbergKit-owned
+        // An InternalMediaClient does two jobs: it delivers GutenbergKit-owned
         // uploads (when no `mediaUploader` is set), and it relays the editor's media
         // DELETEs to the configured site — every attachment lives there, even one a
-        // host uploader delivered, so that's where its deletion goes. It needs a site
-        // root and an auth header (every host provides one — the editor injects it
-        // because the WebView has no auth cookies).
+        // host uploader delivered, so that's where its deletion goes. It needs an auth
+        // header (the editor injects it because the WebView has no auth cookies).
         //
-        // If GutenbergKit would have to deliver uploads itself but has no auth
-        // header, there's nothing to upload through: leave the server down and let
-        // uploads fall to the default WebView path rather than start a server that
-        // could only fail.
-        if mediaUploader == nil && configuration.authHeader.isEmpty {
+        // Without one there's no internal media client, so the behavior forks by intent:
+        //
+        // - A `mediaProcessor` only enhances GutenbergKit-owned uploads. With no
+        //   credentials there's nothing to deliver through, so nothing to process —
+        //   leave the server down and let uploads fall to the default WebView path.
+        //
+        // - A `mediaUploader` means the host is *taking over* uploads. Falling back
+        //   would silently drop it, and its media deletes still need the default
+        //   uploader to reach the configured site. A host that sets an uploader must
+        //   provide credentials too; omitting them is a configuration error, so trap
+        //   rather than start a server whose every delete would 500.
+        if configuration.authHeader.isEmpty {
+            precondition(
+                mediaUploader == nil,
+                "A mediaUploader needs site credentials so GutenbergKit can relay the "
+                    + "editor's media deletes to the configured site. Set the auth header "
+                    + "in the editor configuration."
+            )
             return
         }
-        var defaultUploader: DefaultMediaUploader?
-        if !configuration.authHeader.isEmpty {
-            defaultUploader = DefaultMediaUploader(
-                httpClient: httpClient.uploadClient(),
-                siteApiRoot: configuration.siteApiRoot,
-                siteApiNamespace: configuration.siteApiNamespace
-            )
-        }
+
+        let internalClient = InternalMediaClient(
+            httpClient: httpClient.uploadClient(),
+            siteApiRoot: configuration.siteApiRoot,
+            siteApiNamespace: configuration.siteApiNamespace
+        )
 
         do {
             self.uploadServer = try await MediaUploadServer.start(
                 processor: mediaProcessor,
                 uploader: mediaUploader,
-                defaultUploader: defaultUploader
+                internalClient: internalClient
             )
         } catch {
             Logger.uploadServer.error("Failed to start upload server: \(error). Falling back to default upload behavior.")

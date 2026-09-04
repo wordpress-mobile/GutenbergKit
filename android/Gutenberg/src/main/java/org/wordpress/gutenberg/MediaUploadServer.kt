@@ -99,6 +99,27 @@ interface MediaProcessor {
 }
 
 /**
+ * Everything a [MediaUploader] needs to reproduce a native upload: the file to send,
+ * its metadata, the editor's non-file form fields, and the request's query.
+ *
+ * @property file The file to upload — already processed, if a [MediaProcessor] ran.
+ * @property mimeType The file's MIME type.
+ * @property filename The file's name.
+ * @property fields The editor's non-file form fields, decoded as UTF-8 — most
+ *   importantly `post`, the parent post's ID, without which the attachment is created
+ *   unattached. Send each as a form part on your `POST /wp/v2/media`.
+ * @property query The request's query string (leading `?`, e.g. `?_embed=...`), or
+ *   empty. Carry it on your request so the editor gets the response it expects.
+ */
+data class MediaUpload(
+    val file: File,
+    val mimeType: String,
+    val filename: String,
+    val fields: Map<String, String>,
+    val query: String
+)
+
+/**
  * Takes over performing a media upload — on the host's own stack: its own
  * networking (say, to log every request), a background service, an offline queue,
  * a resumable transport, its own retry policy.
@@ -119,6 +140,10 @@ interface MediaUploader {
      * throw on terminal failure: a returned value is taken as a completed attachment,
      * and there is no GutenbergKit recovery behind you.
      *
+     * The [MediaUpload] carries the file plus the editor's form fields (e.g. `post`)
+     * and query — send them all so the created attachment matches a native upload
+     * rather than landing as an unattached orphan.
+     *
      * That recovery is yours to run. When `POST /wp/v2/media` fatals in server-side
      * post-processing it returns a 5xx carrying the attachment's ID in
      * `x-wp-upload-attachment-id` — the attachment exists but is unfinished. Don't
@@ -131,7 +156,7 @@ interface MediaUploader {
      * before you throw, or it stays on the site — neither GutenbergKit nor core
      * cleans up behind you.
      */
-    suspend fun upload(file: File, mimeType: String, filename: String): ByteArray
+    suspend fun upload(upload: MediaUpload): ByteArray
 }
 
 /**
@@ -149,8 +174,8 @@ interface MediaUploader {
 internal class MediaUploadServer(
     private val processor: MediaProcessor?,
     private val uploader: MediaUploader?,
-    private val defaultUploader: DefaultMediaUploader?,
-    cacheDir: File? = null,
+    private val internalClient: InternalMediaClient,
+    cacheDir: File,
     scope: CoroutineScope? = null,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : HttpServerDelegate {
@@ -163,11 +188,10 @@ internal class MediaUploadServer(
     private val server: HttpServer
 
     /**
-     * Directory for staging uploaded files, under the injected cache dir (with a
-     * system-temp fallback) so orphans share the app's managed cache lifecycle.
+     * Directory for staging uploaded files, under the injected cache dir so orphans
+     * share the app's managed cache lifecycle.
      */
-    private val uploadsTempDir: File =
-        File(cacheDir ?: File(System.getProperty("java.io.tmpdir")), "gutenbergkit-uploads")
+    private val uploadsTempDir: File = File(cacheDir, "gutenbergkit-uploads")
 
     /**
      * The scope MediaUploadServer created itself because the caller supplied none.
@@ -286,13 +310,13 @@ internal class MediaUploadServer(
      * browser blocks it at preflight; relaying it here lets the deletion run.
      *
      * Every attachment lives on the configured site — even one a host uploader
-     * delivered — so its deletion is relayed to the default uploader there. See
+     * delivered — so its deletion is relayed to the internal media client there. See
      * the accepted-risk note in the body.
      */
     @Suppress("TooGenericExceptionCaught")
     private suspend fun handleMediaDelete(attachmentId: String, query: String): HttpResponse {
         return try {
-            // Relay to the default uploader (the configured site) — every attachment
+            // Relay to the internal media client (the configured site) — every attachment
             // lives there, even one a host uploader delivered. Core issues this only
             // as orphan cleanup after failed recovery, but the relay can't tell that
             // from any other DELETE the WebView sends: a compromised editor script
@@ -301,8 +325,7 @@ internal class MediaUploadServer(
             // access, and a server-side compromise (a malicious plugin) deletes media
             // directly without the editor, so scoping this with a per-session ledger
             // buys little for the cost.
-            val defaultUploader = defaultUploader ?: return errorResponse(500, "No uploader configured")
-            relayResponse(defaultUploader.deleteMedia(attachmentId, query))
+            relayResponse(internalClient.deleteMedia(attachmentId, query))
         } catch (e: kotlin.coroutines.cancellation.CancellationException) {
             throw e // Never swallow coroutine cancellation.
         } catch (e: Exception) {
@@ -337,7 +360,7 @@ internal class MediaUploadServer(
         val tempFile = writePartToTempFile(filePart)
             ?: return errorResponse(500, "Failed to save file")
 
-        return processAndRespond(request, tempFile, filePart, extraParts, query)
+        return processAndRespond(request, tempFile, filePart, extraParts, query, processorWantsFile)
     }
 
     @Suppress("TooGenericExceptionCaught")
@@ -362,17 +385,15 @@ internal class MediaUploadServer(
      * fataled server-side, rather than surfacing a permanent failure and leaving
      * an orphaned attachment behind.
      *
-     * The response's own `Content-Type` wins over the JSON default, matched
-     * case-insensitively — HTTP header names are case-insensitive, and
-     * [HttpResponse] serializes every entry it is given, so a plain map merge
-     * would emit the name twice for a delegate that spells it `content-type`.
+     * The relayed body is always WordPress REST JSON — an attachment, or a
+     * `{code, message, data}` error — so the response is always `application/json`.
+     * The relayed headers are a content-type-free allowlist (`RELAYABLE_HEADER_NAMES`),
+     * so prepending the JSON default never collides with them.
      */
     private fun relayResponse(response: MediaUploadResponse): HttpResponse {
-        val hasContentType = response.headers.keys.any { it.lowercase() == "content-type" }
-        val defaults = if (hasContentType) emptyMap() else mapOf("Content-Type" to "application/json")
         return HttpResponse(
             status = response.statusCode,
-            headers = defaults + response.headers,
+            headers = mapOf("Content-Type" to "application/json") + response.headers,
             body = response.body
         )
     }
@@ -421,11 +442,12 @@ internal class MediaUploadServer(
     @Suppress("TooGenericExceptionCaught")
     private suspend fun processAndRespond(
         request: HttpRequest, tempFile: File, filePart: MultipartPart,
-        extraParts: List<MultipartPart>, query: String
+        extraParts: List<MultipartPart>, query: String, processorWantsFile: Boolean
     ): HttpResponse {
         try {
             val uploadResult = processAndUpload(
-                tempFile, filePart.contentType, filePart.filename ?: "upload", extraParts, query
+                tempFile, filePart.contentType, filePart.filename ?: "upload",
+                extraParts, query, processorWantsFile
             )
             val response = when (uploadResult) {
                 is UploadResult.Uploaded -> {
@@ -469,19 +491,20 @@ internal class MediaUploadServer(
     private suspend fun performPassthroughUpload(request: HttpRequest, query: String): MediaUploadResponse {
         val body = request.body
         val contentType = request.header("Content-Type")
-        val uploader = defaultUploader
-        if (body == null || contentType == null || uploader == null) {
-            throw MediaUploadException("Passthrough upload requires a request body, Content-Type, and default uploader")
+        if (body == null || contentType == null) {
+            throw MediaUploadException("Passthrough upload requires a request body and Content-Type")
         }
-        return uploader.passthroughUpload(body, contentType, query)
+        return internalClient.passthroughUpload(body, contentType, query)
     }
 
     private suspend fun processAndUpload(
         file: File, mimeType: String, filename: String,
-        extraParts: List<MultipartPart>, query: String
+        extraParts: List<MultipartPart>, query: String, processorWantsFile: Boolean
     ): UploadResult {
-        // Transform (resize, transcode, …) if a processor claims the file.
-        val processed = if (processor?.handlesFile(mimeType, filename) == true) {
+        // Transform (resize, transcode, …) if a processor claims the file. Reuse the
+        // gate's handlesFile decision from handleUpload rather than asking again — one
+        // metadata call per upload, and the admit and transform steps can't disagree.
+        val processed = if (processorWantsFile && processor != null) {
             processor.processFile(file, mimeType, filename)
         } else {
             ProcessedProxyFile.Original
@@ -509,8 +532,15 @@ internal class MediaUploadServer(
             // An uploader owns delivery on the host's own stack and returns the
             // finished attachment JSON (or throws); GutenbergKit relays that as a
             // success and never runs its own recovery behind it.
-            uploader?.let {
-                return UploadResult.Uploaded(MediaUploadResponse(201, it.upload(targetFile, targetMimeType, targetFilename)))
+            uploader?.let { up ->
+                // Hand the host the editor's non-file fields (e.g. `post`) and query
+                // too, so its own POST can reproduce a native upload — otherwise the
+                // attachment is created unattached and `?_embed` is lost.
+                val fields = extraParts.associate { part ->
+                    part.name to String(part.body.readBytes(), Charsets.UTF_8)
+                }
+                val upload = MediaUpload(targetFile, targetMimeType, targetFilename, fields, query)
+                return UploadResult.Uploaded(MediaUploadResponse(201, up.upload(upload)))
             }
 
             // Unmodified — forward the original request body directly, skipping
@@ -519,8 +549,7 @@ internal class MediaUploadServer(
                 return UploadResult.Passthrough
             }
 
-            val result = defaultUploader?.upload(targetFile, targetMimeType, targetFilename, extraParts, query)
-                ?: error("No uploader or default uploader configured")
+            val result = internalClient.upload(targetFile, targetMimeType, targetFilename, extraParts, query)
             return UploadResult.Uploaded(result)
         } finally {
             // The processed file (if the delegate produced a new one) is ours to
@@ -577,7 +606,7 @@ internal class MediaUploadException(message: String, cause: Throwable? = null) :
 /**
  * Uploads files to the WordPress REST API using OkHttp.
  */
-internal open class DefaultMediaUploader(
+internal open class InternalMediaClient(
     private val httpClient: okhttp3.OkHttpClient,
     private val siteApiRoot: String,
     private val authHeader: String,

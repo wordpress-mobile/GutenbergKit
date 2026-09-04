@@ -31,13 +31,14 @@ final class MediaUploadServer: Sendable {
     /// - Parameters:
     ///   - processor: Optional processor for transforming files before upload.
     ///   - uploader: Optional uploader that takes over delivery on the host's own stack.
-    ///   - defaultUploader: Delivers to the configured site when no uploader is set.
+    ///   - internalClient: GutenbergKit's client for the configured site — delivers
+    ///     GutenbergKit's own uploads (when no uploader is set) and relays every delete.
     ///   - maxRequestBodySize: The maximum allowed request body size in bytes.
     ///     Requests exceeding this limit receive a 413 response. Defaults to 4 GB.
     static func start(
         processor: (any MediaProcessor)? = nil,
         uploader: (any MediaUploader)? = nil,
-        defaultUploader: DefaultMediaUploader? = nil,
+        internalClient: InternalMediaClient,
         maxRequestBodySize: Int64 = HTTPRequestParser.defaultMaxBodySize
     ) async throws -> MediaUploadServer {
         // Sweep temp files orphaned by a prior crash, off the editor-startup
@@ -47,7 +48,7 @@ final class MediaUploadServer: Sendable {
             cleanOrphanedUploads()
         }
 
-        let context = UploadContext(processor: processor, uploader: uploader, defaultUploader: defaultUploader)
+        let context = UploadContext(processor: processor, uploader: uploader, internalClient: internalClient)
 
         // A generous ceiling for receiving the upload body. The body read is
         // primarily bounded by the per-read idle timeout (which reaps a stalled
@@ -167,7 +168,8 @@ final class MediaUploadServer: Sendable {
         do {
             let uploadResult = try await processAndUpload(
                 fileURL: fileURL, mimeType: mimeType, filename: filename,
-                extraParts: extraParts, query: query, context: context
+                extraParts: extraParts, query: query,
+                processorWantsFile: processorWantsFile, context: context
             )
             switch uploadResult {
             case .uploaded(let uploaded):
@@ -192,11 +194,10 @@ final class MediaUploadServer: Sendable {
     ) async throws -> HTTPResponse {
         Logger.uploadServer.debug("Passthrough: forwarding original request body to WordPress")
         guard let body = request.parsed.body,
-              let contentType = request.parsed.header("Content-Type"),
-              let defaultUploader = context.defaultUploader else {
-            return errorResponse(status: 500, message: UploadError.noUploader.localizedDescription)
+              let contentType = request.parsed.header("Content-Type") else {
+            return errorResponse(status: 500, message: "Passthrough upload requires a request body and Content-Type")
         }
-        let response = try await defaultUploader.passthroughUpload(body: body, contentType: contentType, query: query)
+        let response = try await context.internalClient.passthroughUpload(body: body, contentType: contentType, query: query)
         return relayResponse(response)
     }
 
@@ -221,13 +222,13 @@ final class MediaUploadServer: Sendable {
     /// browser blocks it at preflight; relaying it here lets the deletion run.
     ///
     /// Every attachment lives on the configured site — even one a host uploader
-    /// delivered — so its deletion is relayed to the default uploader there. See
+    /// delivered — so its deletion is relayed to the internal media client there. See
     /// the accepted-risk note in the body.
     private static func handleMediaDelete(
         _ attachmentId: String, query: String, context: UploadContext
     ) async -> HTTPResponse {
         do {
-            // Relay to the default uploader (the configured site) — every attachment
+            // Relay to the internal media client (the configured site) — every attachment
             // lives there, even one a host uploader delivered. Core issues this only
             // as orphan cleanup after failed recovery, but the relay can't tell that
             // from any other DELETE the WebView sends: a compromised editor script
@@ -236,10 +237,7 @@ final class MediaUploadServer: Sendable {
             // access, and a server-side compromise (a malicious plugin) deletes media
             // directly without the editor, so scoping this with a per-session ledger
             // buys little for the cost.
-            guard let defaultUploader = context.defaultUploader else {
-                return errorResponse(status: 500, message: UploadError.noUploader.localizedDescription)
-            }
-            let response = try await defaultUploader.deleteMedia(attachmentId: attachmentId, query: query)
+            let response = try await context.internalClient.deleteMedia(attachmentId: attachmentId, query: query)
             return relayResponse(response)
         } catch {
             return uploadErrorResponse(error)
@@ -254,15 +252,14 @@ final class MediaUploadServer: Sendable {
     /// fataled server-side, rather than surfacing a permanent failure and
     /// leaving an orphaned attachment behind.
     ///
-    /// The response's own `Content-Type` wins over the JSON default. `HTTPResponse`
-    /// serializes every header it is given, so appending the default unconditionally
-    /// would emit the name twice for a delegate that sets it.
+    /// The relayed body is always WordPress REST JSON — an attachment, or a
+    /// `{code, message, data}` error — so the response is always `application/json`.
+    /// The relayed headers are a content-type-free allowlist (`relayableHeaderNames`),
+    /// so prepending the JSON default never collides with them.
     private static func relayResponse(_ response: MediaUploadResponse) -> HTTPResponse {
-        let hasContentType = response.headers.keys.contains { $0.lowercased() == "content-type" }
         return HTTPResponse(
             status: response.statusCode,
-            headers: (hasContentType ? [] : [("Content-Type", "application/json")])
-                + response.headers.map { ($0.key, $0.value) },
+            headers: [("Content-Type", "application/json")] + response.headers.map { ($0.key, $0.value) },
             body: response.body
         )
     }
@@ -285,7 +282,7 @@ final class MediaUploadServer: Sendable {
 
     /// Result of the process + deliver pipeline.
     private enum UploadResult {
-        /// The uploader or default uploader completed the upload; carries the
+        /// The uploader or internal media client completed the upload; carries the
         /// response to relay.
         case uploaded(MediaUploadResponse)
         /// No uploader is set and the processor left the file unmodified, so the
@@ -295,11 +292,15 @@ final class MediaUploadServer: Sendable {
 
     private static func processAndUpload(
         fileURL: URL, mimeType: String, filename: String,
-        extraParts: [MultipartPart], query: String, context: UploadContext
+        extraParts: [MultipartPart], query: String,
+        processorWantsFile: Bool, context: UploadContext
     ) async throws -> UploadResult {
         // Step 1: transform (resize, transcode, …) if a processor claims the file.
+        // Reuse the gate's `handlesFile` decision from `handleUpload` rather than
+        // asking again — one metadata call per upload, and the admit and transform
+        // steps can't disagree.
         let processed: ProcessedProxyFile
-        if let processor = context.processor, processor.handlesFile(ofType: mimeType, named: filename) {
+        if processorWantsFile, let processor = context.processor {
             processed = try await processor.processFile(at: fileURL, mimeType: mimeType, filename: filename)
         } else {
             processed = .original
@@ -333,21 +334,38 @@ final class MediaUploadServer: Sendable {
         // Step 2: deliver. An uploader owns delivery on the host's own stack and
         // returns the finished attachment JSON (or throws); GutenbergKit relays that
         // as a success and never runs its own recovery behind it. Otherwise the
-        // default uploader delivers to the configured site.
+        // internal media client delivers to the configured site.
         if let uploader = context.uploader {
-            let body = try await uploader.upload(fileAt: uploadURL, mimeType: uploadMimeType, filename: uploadFilename)
+            // Hand the host the editor's non-file fields (e.g. `post`) and query too,
+            // so its own POST can reproduce a native upload — otherwise the attachment
+            // is created unattached and `?_embed` is lost.
+            let fields = try await formFields(from: extraParts)
+            let upload = MediaUpload(
+                fileURL: uploadURL, mimeType: uploadMimeType, filename: uploadFilename,
+                fields: fields, query: query
+            )
+            let body = try await uploader.upload(upload)
             return .uploaded(MediaUploadResponse(statusCode: 201, body: body))
-        } else if let defaultUploader = context.defaultUploader {
+        } else {
             // Unmodified — forward the original request body directly, skipping
             // multipart re-encoding.
             if case .original = processed {
                 return .passthrough
             }
-            let result = try await defaultUploader.upload(fileURL: uploadURL, mimeType: uploadMimeType, filename: uploadFilename, extraParts: extraParts, query: query)
+            let result = try await context.internalClient.upload(fileURL: uploadURL, mimeType: uploadMimeType, filename: uploadFilename, extraParts: extraParts, query: query)
             return .uploaded(result)
-        } else {
-            throw UploadError.noUploader
         }
+    }
+
+    /// Decodes the editor's non-file form parts (e.g. `post`, additionalData) into
+    /// name→value pairs for a host uploader, so it can send them on its own
+    /// `POST /wp/v2/media`. Values are WordPress form fields — UTF-8 text.
+    private static func formFields(from parts: [MultipartPart]) async throws -> [String: String] {
+        var fields: [String: String] = [:]
+        for part in parts {
+            fields[part.name] = String(decoding: try await part.body.data, as: UTF8.self)
+        }
+        return fields
     }
 
     private static func errorResponse(status: Int, message: String) -> HTTPResponse {
@@ -457,13 +475,11 @@ final class MediaUploadServer: Sendable {
 
 /// Errors from the native media upload pipeline.
 enum UploadError: Error, LocalizedError {
-    case noUploader
     case streamReadFailed
     case streamWriteFailed
 
     var errorDescription: String? {
         switch self {
-        case .noUploader: "No upload delegate or default uploader configured"
         case .streamReadFailed: "Failed to read upload stream"
         case .streamWriteFailed: "Failed to write upload to disk"
         }
@@ -472,34 +488,36 @@ enum UploadError: Error, LocalizedError {
 
 // MARK: - Upload Context
 
-/// Container for the media processor, uploader, and default uploader, captured by
+/// Container for the media processor, uploader, and internal media client, captured by
 /// the HTTPServer handler closure and re-read on each request.
 ///
-/// The processor and uploader are held **weakly** — the host owns their lifetime
-/// (`EditorViewController.mediaProcessor` / `.mediaUploader` are `weak`). Capturing
-/// them strongly here would risk a retain cycle (`EditorViewController →
+/// The processor and uploader are held **weakly**. `EditorViewController` owns them
+/// for its lifetime — its `mediaProcessor` / `.mediaUploader` are strong — and owns
+/// this server too, so they stay alive for every request. The weak reference here is
+/// solely to break the cycle the server would otherwise close (`EditorViewController →
 /// uploadServer → HTTPServer → handler → UploadContext → host object →
-/// EditorViewController`) that would keep the view controller — and therefore the
-/// server — alive forever, so `deinit` would never stop it.
+/// EditorViewController`) whenever the host object retains the view controller:
+/// capturing strongly would keep the view controller — and therefore the server —
+/// alive forever, so `deinit` would never stop it.
 ///
 /// `@unchecked Sendable`: `processor`/`uploader` are assigned once at init and only
 /// read afterwards; weak-reference reads are thread-safe at runtime.
 private final class UploadContext: @unchecked Sendable {
     weak var processor: (any MediaProcessor)?
     weak var uploader: (any MediaUploader)?
-    let defaultUploader: DefaultMediaUploader?
+    let internalClient: InternalMediaClient
 
-    init(processor: (any MediaProcessor)?, uploader: (any MediaUploader)?, defaultUploader: DefaultMediaUploader?) {
+    init(processor: (any MediaProcessor)?, uploader: (any MediaUploader)?, internalClient: InternalMediaClient) {
         self.processor = processor
         self.uploader = uploader
-        self.defaultUploader = defaultUploader
+        self.internalClient = internalClient
     }
 }
 
 // MARK: - Default Media Uploader
 
 /// Uploads files to the WordPress REST API using site credentials from EditorConfiguration.
-class DefaultMediaUploader: @unchecked Sendable {
+class InternalMediaClient: @unchecked Sendable {
     private let httpClient: EditorHTTPClientProtocol
     private let siteApiRoot: URL
     private let siteApiNamespace: String?

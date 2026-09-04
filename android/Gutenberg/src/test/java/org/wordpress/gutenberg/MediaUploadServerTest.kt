@@ -33,7 +33,12 @@ class MediaUploadServerTest {
 
     @Before
     fun setUp() {
-        server = MediaUploadServer(processor = null, uploader = null, defaultUploader = null, cacheDir = tempFolder.root)
+        server = MediaUploadServer(
+            processor = null,
+            uploader = null,
+            internalClient = MockInternalMediaClient(),
+            cacheDir = tempFolder.root
+        )
     }
 
     @After
@@ -53,7 +58,12 @@ class MediaUploadServerTest {
     fun `stop cancels an internally-created scope but leaves a caller-supplied one alone`() {
         // No scope supplied → the server owns one, which stop() must cancel.
         val owningServer =
-            MediaUploadServer(processor = null, uploader = null, defaultUploader = null, cacheDir = tempFolder.root)
+            MediaUploadServer(
+                processor = null,
+                uploader = null,
+                internalClient = MockInternalMediaClient(),
+                cacheDir = tempFolder.root
+            )
         val ownedScope = ownedScopeOf(owningServer)
         assertNotNull("server should own a scope when none is supplied", ownedScope)
         assertTrue(ownedScope!!.isActive)
@@ -65,7 +75,7 @@ class MediaUploadServerTest {
         val borrowingServer = MediaUploadServer(
             processor = null,
             uploader = null,
-            defaultUploader = null,
+            internalClient = MockInternalMediaClient(),
             cacheDir = tempFolder.root,
             scope = callerScope
         )
@@ -142,17 +152,17 @@ class MediaUploadServerTest {
     }
 
     @Test
-    fun `relays a deletion to the default uploader even when an uploader owns uploads`() {
+    fun `relays a deletion to the internal media client even when an uploader owns uploads`() {
         // An attachment lives on the configured site even when a host uploader
-        // delivered it, so its deletion goes to the default uploader — the host
+        // delivered it, so its deletion goes to the internal media client — the host
         // uploader owns uploads, not deletes.
         val uploader = MockUploader()
-        val defaultUploader = MockDefaultUploader()
+        val internalClient = MockInternalMediaClient()
         server.stop()
         server = MediaUploadServer(
             processor = null,
             uploader = uploader,
-            defaultUploader = defaultUploader,
+            internalClient = internalClient,
             cacheDir = tempFolder.root
         )
 
@@ -164,22 +174,22 @@ class MediaUploadServerTest {
         )
 
         assertTrue("Expected 200 but got: ${response.statusLine}", response.statusLine.contains("200"))
-        assertTrue(defaultUploader.deleteMediaCalled)
-        assertEquals("42", defaultUploader.deletedAttachmentId)
+        assertTrue(internalClient.deleteMediaCalled)
+        assertEquals("42", internalClient.deletedAttachmentId)
     }
 
     // MARK: - Media deletion
 
     @Test
-    fun `relays a deletion to the default uploader (configured site)`() {
+    fun `relays a deletion to the internal media client (configured site)`() {
         // With no uploader set, GutenbergKit owns deletes: core's orphan cleanup
-        // DELETE is relayed to the default uploader (the configured site).
-        val mockUploader = MockDefaultUploader()
+        // DELETE is relayed to the internal media client (the configured site).
+        val mockUploader = MockInternalMediaClient()
         server.stop()
         server = MediaUploadServer(
             processor = null,
             uploader = null,
-            defaultUploader = mockUploader,
+            internalClient = mockUploader,
             cacheDir = tempFolder.root
         )
 
@@ -198,9 +208,9 @@ class MediaUploadServerTest {
     @Test
     fun `routes upload with a query string and relays the query`() {
         val processor = PassthroughProcessor()
-        val mockUploader = MockDefaultUploader()
+        val mockUploader = MockInternalMediaClient()
         server.stop()
-        server = MediaUploadServer(processor = processor, uploader = null, defaultUploader = mockUploader, cacheDir = tempFolder.root)
+        server = MediaUploadServer(processor = processor, uploader = null, internalClient = mockUploader, cacheDir = tempFolder.root)
 
         // `@wordpress/media-utils` uploads to `/wp/v2/media?_embed=wp:featuredmedia`,
         // so the middleware forwards that query on to the native server. Routing must
@@ -232,19 +242,70 @@ class MediaUploadServerTest {
     @Test
     fun `routes an upload to the uploader and relays its attachment`() {
         // With an uploader set, GutenbergKit hands it the file and relays the finished
-        // attachment it returns — the default uploader (configured site) is never used.
+        // attachment it returns — the internal media client (configured site) is never used.
         val uploader = MockUploader()
-        val defaultUploader = MockDefaultUploader()
+        val internalClient = MockInternalMediaClient()
         server.stop()
         server = MediaUploadServer(
             processor = null,
             uploader = uploader,
-            defaultUploader = defaultUploader,
+            internalClient = internalClient,
             cacheDir = tempFolder.root
         )
 
         val boundary = "test-boundary-123"
-        val body = buildMultipartBody(boundary, "photo.jpg", "image/jpeg", "fake image data".toByteArray())
+        val body = buildMultipartBody(
+            boundary, "photo.jpg", "image/jpeg", "fake image data".toByteArray(),
+            fields = mapOf("post" to "123")
+        )
+
+        val response = sendRawRequest(
+            method = "POST",
+            path = "/upload?_embed=wp:featuredmedia",
+            headers = mapOf(
+                "Relay-Authorization" to "Bearer ${server.token}",
+                "Content-Type" to "multipart/form-data; boundary=$boundary"
+            ),
+            body = body
+        )
+
+        assertTrue("Expected 201 but got: ${response.statusLine}", response.statusLine.contains("201"))
+        assertTrue(uploader.uploadCalled)
+        assertEquals("image/jpeg", uploader.lastMimeType)
+        assertEquals("photo.jpg", uploader.lastFilename)
+        // The editor's post association and query must reach the host uploader, so it
+        // can reproduce a native upload (attach to the post, honor ?_embed).
+        assertEquals("123", uploader.lastFields["post"])
+        assertEquals("?_embed=wp:featuredmedia", uploader.lastQuery)
+        // …and the actual file bytes the editor sent — the host uploads them itself.
+        assertEquals("fake image data", uploader.lastFileBytes?.decodeToString())
+        // The host owns delivery — GutenbergKit must not upload to the configured site.
+        assertFalse(internalClient.uploadCalled)
+        assertFalse(internalClient.passthroughUploadCalled)
+
+        // The server relays the exact attachment JSON the uploader returned.
+        val json = JsonParser.parseString(response.body).asJsonObject
+        assertEquals(42, json.get("id").asInt)
+        assertEquals("https://example.com/photo.jpg", json.get("source_url").asString)
+        assertEquals("image", json.get("media_type").asString)
+    }
+
+    @Test
+    fun `hands the processed file and its new metadata to the uploader`() {
+        // A processor transcodes the file; the host uploader must receive the processed
+        // bytes and the new metadata, not the original clip.mov.
+        val processor = TranscodingProcessor()
+        val uploader = MockUploader()
+        server.stop()
+        server = MediaUploadServer(
+            processor = processor,
+            uploader = uploader,
+            internalClient = MockInternalMediaClient(),
+            cacheDir = tempFolder.root
+        )
+
+        val boundary = "test-boundary-proc"
+        val body = buildMultipartBody(boundary, "clip.mov", "video/quicktime", "movie".toByteArray())
 
         val response = sendRawRequest(
             method = "POST",
@@ -258,25 +319,45 @@ class MediaUploadServerTest {
 
         assertTrue("Expected 201 but got: ${response.statusLine}", response.statusLine.contains("201"))
         assertTrue(uploader.uploadCalled)
-        assertEquals("image/jpeg", uploader.lastMimeType)
-        assertEquals("photo.jpg", uploader.lastFilename)
-        // The host owns delivery — GutenbergKit must not upload to the configured site.
-        assertFalse(defaultUploader.uploadCalled)
-        assertFalse(defaultUploader.passthroughUploadCalled)
+        assertEquals("processed", uploader.lastFileBytes?.decodeToString())
+        assertEquals("video/mp4", uploader.lastMimeType)
+        assertEquals("clip.mp4", uploader.lastFilename)
+    }
 
-        // The server relays the exact attachment JSON the uploader returned.
-        val json = JsonParser.parseString(response.body).asJsonObject
-        assertEquals(42, json.get("id").asInt)
-        assertEquals("https://example.com/photo.jpg", json.get("source_url").asString)
-        assertEquals("image", json.get("media_type").asString)
+    @Test
+    fun `relays a 500 when the host uploader throws`() {
+        val uploader = MockUploader(error = RuntimeException("upload failed"))
+        server.stop()
+        server = MediaUploadServer(
+            processor = null,
+            uploader = uploader,
+            internalClient = MockInternalMediaClient(),
+            cacheDir = tempFolder.root
+        )
+
+        val boundary = "test-boundary-err"
+        val body = buildMultipartBody(boundary, "photo.jpg", "image/jpeg", "fake image data".toByteArray())
+
+        val response = sendRawRequest(
+            method = "POST",
+            path = "/upload",
+            headers = mapOf(
+                "Relay-Authorization" to "Bearer ${server.token}",
+                "Content-Type" to "multipart/form-data; boundary=$boundary"
+            ),
+            body = body
+        )
+
+        assertTrue("Expected 500 but got: ${response.statusLine}", response.statusLine.contains("500"))
+        assertTrue(uploader.uploadCalled)
     }
 
     @Test
     fun `forwards the processor's processed metadata to the uploader`() {
         val processor = TranscodingProcessor()
-        val mockUploader = MockDefaultUploader()
+        val mockUploader = MockInternalMediaClient()
         server.stop()
-        server = MediaUploadServer(processor = processor, uploader = null, defaultUploader = mockUploader, cacheDir = tempFolder.root)
+        server = MediaUploadServer(processor = processor, uploader = null, internalClient = mockUploader, cacheDir = tempFolder.root)
 
         val boundary = "test-boundary-meta"
         val body = buildMultipartBody(boundary, "clip.mov", "video/quicktime", "movie".toByteArray())
@@ -301,9 +382,9 @@ class MediaUploadServerTest {
     @Test
     fun `deletes the processor's processed file after upload`() {
         val processor = TranscodingProcessor()
-        val mockUploader = MockDefaultUploader()
+        val mockUploader = MockInternalMediaClient()
         server.stop()
-        server = MediaUploadServer(processor = processor, uploader = null, defaultUploader = mockUploader, cacheDir = tempFolder.root)
+        server = MediaUploadServer(processor = processor, uploader = null, internalClient = mockUploader, cacheDir = tempFolder.root)
 
         val boundary = "test-boundary-cleanup"
         val body = buildMultipartBody(boundary, "clip.mov", "video/quicktime", "movie".toByteArray())
@@ -343,7 +424,7 @@ class MediaUploadServerTest {
         server = MediaUploadServer(
             processor = null,
             uploader = null,
-            defaultUploader = null,
+            internalClient = MockInternalMediaClient(),
             cacheDir = tempFolder.root,
             ioDispatcher = Dispatchers.Unconfined
         )
@@ -352,15 +433,15 @@ class MediaUploadServerTest {
         assertTrue("Fresh temp should be preserved", fresh.exists())
     }
 
-    // MARK: - Fallback to default uploader
+    // MARK: - Fallback to internal media client
 
     @Test
     fun `uses passthrough when the processor does not modify the file`() {
         val processor = PassthroughProcessor()
-        val mockUploader = MockDefaultUploader()
+        val mockUploader = MockInternalMediaClient()
 
         server.stop()
-        server = MediaUploadServer(processor = processor, uploader = null, defaultUploader = mockUploader, cacheDir = tempFolder.root)
+        server = MediaUploadServer(processor = processor, uploader = null, internalClient = mockUploader, cacheDir = tempFolder.root)
 
         val boundary = "test-boundary-456"
         val body = buildMultipartBody(boundary, "doc.pdf", "application/pdf", "fake pdf data".toByteArray())
@@ -388,10 +469,10 @@ class MediaUploadServerTest {
     @Test
     fun `skips processing and the temp copy when the processor declines by metadata`() {
         val processor = DecliningProcessor()
-        val mockUploader = MockDefaultUploader()
+        val mockUploader = MockInternalMediaClient()
 
         server.stop()
-        server = MediaUploadServer(processor = processor, uploader = null, defaultUploader = mockUploader, cacheDir = tempFolder.root)
+        server = MediaUploadServer(processor = processor, uploader = null, internalClient = mockUploader, cacheDir = tempFolder.root)
 
         val boundary = "test-boundary-decline"
         val body = buildMultipartBody(boundary, "clip.mov", "video/quicktime", "fake movie".toByteArray())
@@ -414,10 +495,10 @@ class MediaUploadServerTest {
         assertFalse(mockUploader.uploadCalled)
     }
 
-    // MARK: - DefaultMediaUploader
+    // MARK: - InternalMediaClient
 
     @Test
-    fun `DefaultMediaUploader relays the WordPress response`() {
+    fun `InternalMediaClient relays the WordPress response`() {
         val mockWpServer = MockWebServer()
         val wpBody =
             """{"id":1,"source_url":"https://example.com/u.jpg","media_type":"image"}"""
@@ -430,7 +511,7 @@ class MediaUploadServerTest {
         mockWpServer.start()
 
         val wpBaseUrl = mockWpServer.url("/wp-json/").toString()
-        val uploader = DefaultMediaUploader(
+        val uploader = InternalMediaClient(
             httpClient = okhttp3.OkHttpClient(),
             siteApiRoot = wpBaseUrl,
             authHeader = "Bearer test-token"
@@ -455,13 +536,13 @@ class MediaUploadServerTest {
     }
 
     @Test
-    fun `DefaultMediaUploader relays a WordPress error response instead of throwing`() {
+    fun `InternalMediaClient relays a WordPress error response instead of throwing`() {
         val mockWpServer = MockWebServer()
         mockWpServer.enqueue(MockResponse().setResponseCode(500).setBody("Internal error"))
         mockWpServer.start()
 
         val wpBaseUrl = mockWpServer.url("/wp-json/").toString()
-        val uploader = DefaultMediaUploader(
+        val uploader = InternalMediaClient(
             httpClient = okhttp3.OkHttpClient(),
             siteApiRoot = wpBaseUrl,
             authHeader = "Bearer test-token"
@@ -480,7 +561,7 @@ class MediaUploadServerTest {
     }
 
     @Test
-    fun `DefaultMediaUploader relays the upload attachment ID header`() {
+    fun `InternalMediaClient relays the upload attachment ID header`() {
         // WordPress sets this header on an upload whose attachment row was
         // created before metadata generation fataled. The editor reads it to
         // retry post-process and clean up the orphan, so it must survive the
@@ -495,7 +576,7 @@ class MediaUploadServerTest {
         )
         mockWpServer.start()
 
-        val uploader = DefaultMediaUploader(
+        val uploader = InternalMediaClient(
             httpClient = okhttp3.OkHttpClient(),
             siteApiRoot = mockWpServer.url("/wp-json/").toString(),
             authHeader = "Bearer test-token"
@@ -513,12 +594,12 @@ class MediaUploadServerTest {
     }
 
     @Test
-    fun `DefaultMediaUploader deletes an attachment carrying namespace and force query`() {
+    fun `InternalMediaClient deletes an attachment carrying namespace and force query`() {
         val mockWpServer = MockWebServer()
         mockWpServer.enqueue(MockResponse().setResponseCode(200).setBody("""{"deleted":true}"""))
         mockWpServer.start()
 
-        val uploader = DefaultMediaUploader(
+        val uploader = InternalMediaClient(
             httpClient = okhttp3.OkHttpClient(),
             siteApiRoot = mockWpServer.url("/wp-json/").toString(),
             authHeader = "Bearer test-token",
@@ -536,12 +617,12 @@ class MediaUploadServerTest {
     }
 
     @Test
-    fun `DefaultMediaUploader normalizes an unslashed root and namespace`() {
+    fun `InternalMediaClient normalizes an unslashed root and namespace`() {
         val mockWpServer = MockWebServer()
         mockWpServer.enqueue(MockResponse().setResponseCode(201).setBody("{}"))
         mockWpServer.start()
 
-        val uploader = DefaultMediaUploader(
+        val uploader = InternalMediaClient(
             httpClient = okhttp3.OkHttpClient(),
             siteApiRoot = mockWpServer.url("/wp-json").toString(), // no trailing slash
             authHeader = "Bearer test-token",
@@ -573,7 +654,7 @@ class MediaUploadServerTest {
         )
         mockWpServer.start()
 
-        val uploader = DefaultMediaUploader(
+        val uploader = InternalMediaClient(
             httpClient = okhttp3.OkHttpClient(),
             siteApiRoot = mockWpServer.url("/wp-json/").toString(),
             authHeader = "Bearer test-token"
@@ -601,12 +682,12 @@ class MediaUploadServerTest {
     }
 
     @Test
-    fun `DefaultMediaUploader re-encode preserves extra parts and query`() {
+    fun `InternalMediaClient re-encode preserves extra parts and query`() {
         val mockWpServer = MockWebServer()
         mockWpServer.enqueue(MockResponse().setResponseCode(201).setBody("{}"))
         mockWpServer.start()
 
-        val uploader = DefaultMediaUploader(
+        val uploader = InternalMediaClient(
             httpClient = okhttp3.OkHttpClient(),
             siteApiRoot = mockWpServer.url("/wp-json/").toString(),
             authHeader = "Bearer test-token"
@@ -641,7 +722,7 @@ class MediaUploadServerTest {
         mockWpServer.enqueue(MockResponse().setResponseCode(201).setBody("{}"))
         mockWpServer.start()
 
-        val uploader = DefaultMediaUploader(
+        val uploader = InternalMediaClient(
             httpClient = okhttp3.OkHttpClient(),
             siteApiRoot = mockWpServer.url("/wp-json/").toString(),
             authHeader = "Bearer test-token"
@@ -781,9 +862,16 @@ class MediaUploadServerTest {
         boundary: String,
         filename: String,
         mimeType: String,
-        data: ByteArray
+        data: ByteArray,
+        fields: Map<String, String> = emptyMap()
     ): ByteArray {
         val out = java.io.ByteArrayOutputStream()
+        for ((name, value) in fields) {
+            out.write("--$boundary\r\n".toByteArray())
+            out.write("Content-Disposition: form-data; name=\"$name\"\r\n\r\n".toByteArray())
+            out.write(value.toByteArray())
+            out.write("\r\n".toByteArray())
+        }
         out.write("--$boundary\r\n".toByteArray())
         out.write("Content-Disposition: form-data; name=\"file\"; filename=\"$filename\"\r\n".toByteArray())
         out.write("Content-Type: $mimeType\r\n\r\n".toByteArray())
@@ -800,16 +888,24 @@ class MediaUploadServerTest {
      */
     private class MockUploader(
         private val uploadBody: ByteArray =
-            """{"id":42,"source_url":"https://example.com/photo.jpg","media_type":"image"}""".toByteArray()
+            """{"id":42,"source_url":"https://example.com/photo.jpg","media_type":"image"}""".toByteArray(),
+        private val error: Exception? = null
     ) : MediaUploader {
         @Volatile var uploadCalled = false
         @Volatile var lastMimeType: String? = null
         @Volatile var lastFilename: String? = null
+        @Volatile var lastFields: Map<String, String> = emptyMap()
+        @Volatile var lastQuery: String? = null
+        @Volatile var lastFileBytes: ByteArray? = null
 
-        override suspend fun upload(file: File, mimeType: String, filename: String): ByteArray {
+        override suspend fun upload(upload: MediaUpload): ByteArray {
             uploadCalled = true
-            lastMimeType = mimeType
-            lastFilename = filename
+            lastMimeType = upload.mimeType
+            lastFilename = upload.filename
+            lastFields = upload.fields
+            lastQuery = upload.query
+            lastFileBytes = upload.file.readBytes()
+            error?.let { throw it }
             return uploadBody
         }
     }
@@ -851,13 +947,13 @@ class MediaUploadServerTest {
         }
     }
 
-    private class MockDefaultUploader(
+    private class MockInternalMediaClient(
         /** The response `upload`/`passthroughUpload` return. Defaults to a 201 success. */
         private val uploadResponse: MediaUploadResponse = MediaUploadResponse(
             201,
             """{"id":99,"source_url":"https://example.com/doc.pdf","media_type":"file"}""".toByteArray()
         )
-    ) : DefaultMediaUploader(
+    ) : InternalMediaClient(
         httpClient = okhttp3.OkHttpClient(),
         siteApiRoot = "https://example.com/wp-json/",
         authHeader = "Bearer mock"

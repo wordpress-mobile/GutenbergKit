@@ -74,6 +74,28 @@ public protocol MediaProcessor: AnyObject, Sendable {
     func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile
 }
 
+/// Everything a ``MediaUploader`` needs to reproduce a native upload: the file to
+/// send, its metadata, the editor's non-file form fields, and the request's query.
+public struct MediaUpload: Sendable {
+    /// The file to upload — already processed, if a ``MediaProcessor`` ran.
+    public let fileURL: URL
+
+    /// The file's MIME type.
+    public let mimeType: String
+
+    /// The file's name.
+    public let filename: String
+
+    /// The editor's non-file form fields, decoded as UTF-8 — most importantly `post`,
+    /// the parent post's ID, without which the attachment is created unattached. Send
+    /// each as a form part on your `POST /wp/v2/media`.
+    public let fields: [String: String]
+
+    /// The request's query string (leading `?`, e.g. `?_embed=wp:featuredmedia`), or
+    /// empty. Carry it on your request so the editor gets the response it expects.
+    public let query: String
+}
+
 /// Takes over *performing* a media upload — on the host's own stack: its own
 /// networking (say, to log every request), a background session, an offline queue,
 /// a resumable transport, its own retry policy.
@@ -93,6 +115,10 @@ public protocol MediaUploader: AnyObject, Sendable {
     /// or `throw` on terminal failure: a returned value is taken as a completed
     /// attachment, and there is no GutenbergKit recovery behind you.
     ///
+    /// The ``MediaUpload`` carries the file plus the editor's form fields (e.g.
+    /// `post`) and query — send them all so the created attachment matches a native
+    /// upload rather than landing as an unattached orphan.
+    ///
     /// That recovery is yours to run. When `POST /wp/v2/media` fatals in server-side
     /// post-processing it returns a 5xx carrying the attachment's ID in
     /// `x-wp-upload-attachment-id` — the attachment exists but is unfinished. Don't
@@ -104,7 +130,7 @@ public protocol MediaUploader: AnyObject, Sendable {
     /// can't be recovered, force-delete the orphan
     /// (`DELETE /wp/v2/media/<id>?force=true`) before you `throw`, or it stays on the
     /// site — neither GutenbergKit nor core cleans up behind you.
-    func upload(fileAt url: URL, mimeType: String, filename: String) async throws -> Data
+    func upload(_ upload: MediaUpload) async throws -> Data
 }
 
 /// Default implementations for the optional ``MediaProcessor`` methods.
