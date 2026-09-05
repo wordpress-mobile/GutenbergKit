@@ -694,12 +694,29 @@ class GutenbergView : FrameLayout {
         // WebView path. (Matches iOS.)
         if (mediaProcessor == null && mediaUploader == null) return
 
-        // The native upload server relays through InternalMediaClient, which needs a
-        // site root and an auth header (every host provides one — the editor injects
-        // it because the WebView has no auth cookies). Without both there is nothing
-        // to upload through, so leave the server down and let uploads fall to the
-        // default WebView path rather than start a server that could only fail.
-        if (configuration.siteApiRoot.isEmpty() || configuration.authHeader.isEmpty()) return
+        // An InternalMediaClient delivers GutenbergKit-owned uploads (when no uploader
+        // is set) and relays the editor's media DELETEs to the configured site — every
+        // attachment lives there, even one a host uploader delivered. It needs a site
+        // root and an auth header (the editor injects the latter because the WebView
+        // has no auth cookies). Without them the behavior forks by intent:
+        //
+        // - A mediaProcessor only enhances GutenbergKit-owned uploads; with no
+        //   credentials there's nothing to deliver through, so nothing to process —
+        //   leave the server down and let uploads fall to the default WebView path.
+        //
+        // - A mediaUploader means the host is taking over uploads. Falling back would
+        //   silently drop it, and its media deletes still need the internal media
+        //   client to reach the configured site. A host that sets an uploader must
+        //   provide credentials too; omitting them is a configuration error, so fail
+        //   fast. (Matches iOS's precondition.)
+        if (configuration.siteApiRoot.isEmpty() || configuration.authHeader.isEmpty()) {
+            check(mediaUploader == null) {
+                "A mediaUploader needs site credentials so GutenbergKit can relay the " +
+                    "editor's media deletes to the configured site. Set siteApiRoot and " +
+                    "the auth header in the editor configuration."
+            }
+            return
+        }
 
         // The editor reaches the loopback server over cleartext http://localhost. If
         // the host app's network-security config doesn't permit cleartext to
