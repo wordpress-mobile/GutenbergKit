@@ -470,10 +470,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // An InternalMediaClient does two jobs: it delivers GutenbergKit-owned
         // uploads (when no `mediaUploader` is set), and it relays the editor's media
         // DELETEs to the configured site — every attachment lives there, even one a
-        // host uploader delivered, so that's where its deletion goes. It needs an auth
-        // header (the editor injects it because the WebView has no auth cookies).
+        // host uploader delivered, so that's where its deletion goes. It needs both a
+        // site API root to address and an auth header (the editor injects the latter
+        // because the WebView has no auth cookies); with either missing, every media
+        // request it makes fails.
         //
-        // Without one there's no internal media client, so the behavior forks by intent:
+        // Without them there's no usable internal media client, so the behavior forks
+        // by intent:
         //
         // - A `mediaProcessor` only enhances GutenbergKit-owned uploads. With no
         //   credentials there's nothing to deliver through, so nothing to process —
@@ -483,13 +486,20 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         //   would silently drop it, and its media deletes still need the default
         //   uploader to reach the configured site. A host that sets an uploader must
         //   provide credentials too; omitting them is a configuration error, so trap
-        //   rather than start a server whose every delete would 500.
-        if configuration.authHeader.isEmpty {
+        //   rather than start a server whose every delete would fail.
+        //
+        // `siteApiRoot` is a `URL` here where Android types it as a `String`, so the
+        // equivalent of Android's `isEmpty()` check is "not absolute" — a URL with no
+        // scheme or host can't address the site, and every request built from it fails
+        // at the URLSession layer.
+        let siteApiRootIsUsable = configuration.siteApiRoot.scheme != nil
+            && configuration.siteApiRoot.host() != nil
+        if !siteApiRootIsUsable || configuration.authHeader.isEmpty {
             precondition(
                 mediaUploader == nil,
                 "A mediaUploader needs site credentials so GutenbergKit can relay the "
-                    + "editor's media deletes to the configured site. Set the auth header "
-                    + "in the editor configuration."
+                    + "editor's media deletes to the configured site. Set an absolute "
+                    + "siteApiRoot and the auth header in the editor configuration."
             )
             return
         }

@@ -148,6 +148,40 @@ class GutenbergViewUploadServerTest {
     }
 
     @Test
+    fun `an uploader without a site api root is a configuration error`() {
+        // The other arm of the same gate: an auth header is no use without a site to
+        // send it to. Both fields have to be present and usable for the internal media
+        // client to reach the configured site, so either one missing traps — iOS gates
+        // on the same pair.
+        val config = EditorConfiguration
+            .builder("https://example.com", "")
+            .setAuthHeader("Bearer token")
+            .build() // deliberately no site API root
+        val view = GutenbergView(
+            config,
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+        try {
+            view.mediaUploader = mock(MediaUploader::class.java)
+            val error = assertThrows(InvocationTargetException::class.java) {
+                startLoading(view)
+            }
+            assertTrue(
+                "an uploader without a site api root should fail with IllegalStateException",
+                error.cause is IllegalStateException
+            )
+            assertNull(
+                "no server should be left running after the configuration error",
+                uploadServerOf(view)
+            )
+        } finally {
+            detach(view)
+        }
+    }
+
+    @Test
     fun `detaching the view stops and clears the upload server`() {
         val view = makeView()
         view.mediaProcessor = mock(MediaProcessor::class.java)
