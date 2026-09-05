@@ -12,7 +12,7 @@ class BlockInserterViewModel: ObservableObject {
     @Published private(set) var isProcessingMedia = false
 
     private let allSections: [BlockInserterSection]
-    private let fileManager: MediaFileManager = .shared
+    private let fileManager: MediaFileManager
     private var processingTask: Task<[MediaInfo], Never>?
     private var cancellables = Set<AnyCancellable>()
 
@@ -21,8 +21,11 @@ class BlockInserterViewModel: ObservableObject {
         let message: String
     }
 
-    init(sections: [BlockInserterSection]) {
+    /// - Parameter fileManager: Injectable so tests can point imports at a
+    ///   temporary directory; defaults to the app-wide shared instance.
+    init(sections: [BlockInserterSection], fileManager: MediaFileManager = .shared) {
         self.allSections = sections
+        self.fileManager = fileManager
         self.sections = sections.filter { $0.category != "gbk-search-only" }
 
         setupSearchObserver()
@@ -68,7 +71,7 @@ class BlockInserterViewModel: ObservableObject {
 
     // MARK: - Media Processing
 
-    func processSelectedPhotosPickerItems(_ items: [PhotosPickerItem]) async -> [MediaInfo] {
+    func processSelectedPhotosPickerItems(_ items: [some ImportableMediaItem]) async -> [MediaInfo] {
         isProcessingMedia = true
         defer { isProcessingMedia = false }
 
