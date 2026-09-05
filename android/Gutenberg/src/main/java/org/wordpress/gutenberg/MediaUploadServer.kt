@@ -313,20 +313,29 @@ internal class MediaUploadServer(
     }
 
     /**
+     * The editor's non-file form parts as ordered, UTF-8-decoded fields.
+     *
+     * A list rather than a map so repeated names (e.g. a `field[]` array) survive
+     * verbatim, in the order the editor sent them.
+     *
+     * The UTF-8 decode is lossless because of an invariant nothing enforces: the only
+     * client is the editor's browser FormData. The server binds to loopback behind a
+     * per-session token; a FormData string value is a USVString, already well-formed at
+     * append time; and its only way to carry arbitrary bytes is a Blob, which always
+     * gets a filename and so is filtered out of extraParts. Valid UTF-8 — emoji, any
+     * script — round-trips exactly. If that stops holding this silently substitutes
+     * U+FFFD, and differently from iOS (Java reports one replacement char for ED A0 80
+     * where Swift's maximal-subpart rule reports three).
+     */
+    private fun formFields(parts: List<MultipartPart>): List<MediaUploadField> =
+        parts.map { MediaUploadField(it.name, String(it.body.readBytes(), Charsets.UTF_8)) }
+
+    /**
      * The attachment ID in a `/media/<id>` path, or `null` if the path is not one.
      *
      * Deliberately narrow: this server relays media operations, not arbitrary
      * REST requests, so only a numeric attachment ID under `/media/` matches.
      */
-    /**
-     * The editor's non-file form parts as ordered, UTF-8-decoded fields.
-     *
-     * A list rather than a map so repeated names (e.g. a `field[]` array) survive
-     * verbatim, in the order the editor sent them.
-     */
-    private fun formFields(parts: List<MultipartPart>): List<MediaUploadField> =
-        parts.map { MediaUploadField(it.name, String(it.body.readBytes(), Charsets.UTF_8)) }
-
     private fun attachmentIdFromPath(path: String): String? {
         val components = path.split("/").filter { it.isNotEmpty() }
         if (components.size != 2 || components[0] != "media") return null
@@ -667,9 +676,12 @@ internal open class InternalMediaClient(
         val mediaType = mimeType.toMediaType()
         val builder = okhttp3.MultipartBody.Builder().setType(okhttp3.MultipartBody.FORM)
         // Preserve the non-file parts (post, additionalData) through the re-encode.
-        // Append each field's raw bytes (not via String) so a non-UTF-8 value is
-        // forwarded verbatim rather than coerced. filename=null makes it a plain
-        // field, matching okhttp's String overload byte-for-byte.
+        // Each field's raw bytes are appended rather than round-tripped through String
+        // — not because malformed values are expected (they can't reach here; see the
+        // invariant on formFields), but so this re-encode stays byte-identical to the
+        // passthrough it stands in for: a user's upload shouldn't change shape just
+        // because a processor resized the image. filename=null makes it a plain field,
+        // matching okhttp's String overload byte-for-byte.
         for (part in extraParts) {
             builder.addFormDataPart(part.name, null, part.body.readBytes().toRequestBody())
         }
