@@ -38,4 +38,50 @@ struct MediaServerCredentialsTests {
   func rejectsEmptySiteRoot() {
     #expect(!MediaServerCredentials.areUsable(siteApiRoot: URL(string: "/")!, authHeader: "Bearer t"))
   }
+
+  // MARK: - canStartServer
+
+  @Test("starts with usable credentials, uploader or not", arguments: [true, false])
+  func startsWithUsableCredentials(hasUploader: Bool) {
+    #expect(MediaServerCredentials.canStartServer(
+      siteApiRoot: Self.siteRoot, authHeader: "Bearer t", hasUploader: hasUploader
+    ))
+  }
+
+  @Test("declines to start for a processor with no credentials")
+  func declinesForProcessorWithoutCredentials() {
+    // Nothing to deliver through, so nothing to process — the caller leaves the
+    // server down and uploads fall to the default WebView path.
+    #expect(!MediaServerCredentials.canStartServer(
+      siteApiRoot: Self.siteRoot, authHeader: "", hasUploader: false
+    ))
+  }
+
+  // Exit tests run the body in a child process, so they can assert the trap itself.
+  // They are unavailable on iOS — including the simulator — and referencing them
+  // there is a *compile* error rather than a skip, so the whole block is gated to
+  // the host platform. This is exactly why the policy lives outside
+  // `EditorViewController`: that type is `#if canImport(UIKit)`, so on the one
+  // platform that can run these tests it does not exist.
+#if os(macOS)
+
+  @Test("traps for an uploader with no auth header")
+  func trapsForUploaderWithoutAuthHeader() async {
+    await #expect(processExitsWith: .failure) {
+      _ = MediaServerCredentials.canStartServer(
+        siteApiRoot: URL(string: "https://example.com/wp-json/")!, authHeader: "", hasUploader: true
+      )
+    }
+  }
+
+  @Test("traps for an uploader with no site root")
+  func trapsForUploaderWithoutSiteRoot() async {
+    await #expect(processExitsWith: .failure) {
+      _ = MediaServerCredentials.canStartServer(
+        siteApiRoot: URL(string: "/")!, authHeader: "Bearer t", hasUploader: true
+      )
+    }
+  }
+
+#endif
 }
