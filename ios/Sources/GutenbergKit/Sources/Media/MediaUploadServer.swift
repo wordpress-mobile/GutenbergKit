@@ -29,14 +29,14 @@ final class MediaUploadServer: Sendable {
     /// Creates and starts a new upload server.
     ///
     /// - Parameters:
-    ///   - uploadDelegate: Optional delegate for customizing file processing and upload.
+    ///   - processor: Optional processor that transforms the file before delivery.
     ///   - uploader: Optional host uploader that performs the upload on its own stack.
     ///   - internalClient: GutenbergKit's own client for the configured site. Delivers
-    ///     uploads when no host uploader or delegate does, and every media delete.
+    ///     uploads when no host uploader or processor does, and every media delete.
     ///   - maxRequestBodySize: The maximum allowed request body size in bytes.
     ///     Requests exceeding this limit receive a 413 response. Defaults to 4 GB.
     static func start(
-        uploadDelegate: (any MediaUploadDelegate)? = nil,
+        processor: (any MediaProcessor)? = nil,
         uploader: (any MediaUploader)? = nil,
         internalClient: InternalMediaClient? = nil,
         maxRequestBodySize: Int64 = HTTPRequestParser.defaultMaxBodySize
@@ -48,7 +48,7 @@ final class MediaUploadServer: Sendable {
             cleanOrphanedUploads()
         }
 
-        let context = UploadContext(uploadDelegate: uploadDelegate, uploader: uploader, internalClient: internalClient)
+        let context = UploadContext(processor: processor, uploader: uploader, internalClient: internalClient)
 
         // A generous ceiling for receiving the upload body. The body read is
         // primarily bounded by the per-read idle timeout (which reaps a stalled
@@ -129,19 +129,19 @@ final class MediaUploadServer: Sendable {
         let filename = filePart.filename ?? "upload"
         let mimeType = filePart.contentType
 
-        // Ask the delegate — from metadata alone — whether it will touch a file like
+        // Ask the processor — from metadata alone — whether it will touch a file like
         // this. If not, forward the original upload to WordPress directly, skipping a
-        // full temp-file copy of a file the delegate won't process (e.g. a video handed
-        // to an image-only delegate).
+        // full temp-file copy of a file the processor won't process (e.g. a video handed
+        // to an image-only processor).
         //
         // An uploader takes over delivery for *every* file, so with one set there is
         // no passthrough to fall to and the gate can't decline the upload outright.
         // It still decides whether `processFile` runs, though — a declined file is
-        // handed to the uploader unprocessed rather than to a delegate that said it
+        // handed to the uploader unprocessed rather than to a processor that said it
         // won't touch it — so the answer is carried into `processAndUpload` rather
         // than discarded here. Asked exactly once per upload, matching Android.
-        let delegateWantsFile = context.uploadDelegate?.handlesFile(ofType: mimeType, named: filename) ?? false
-        guard context.uploader != nil || delegateWantsFile else {
+        let processorWantsFile = context.processor?.handlesFile(ofType: mimeType, named: filename) ?? false
+        guard context.uploader != nil || processorWantsFile else {
             do {
                 return try await passthroughResponse(request, query: query, internalClient: context.internalClient)
             } catch {
@@ -149,7 +149,7 @@ final class MediaUploadServer: Sendable {
             }
         }
 
-        // Someone wants the file — the delegate, the uploader, or both. Stream the
+        // Someone wants the file — the processor, the uploader, or both. Stream the
         // part body to a dedicated temp file for them: the library's RequestBody may
         // be a byte-range slice of a larger temp file whose lifecycle is tied to ARC,
         // so they need a standalone file that outlives the handler return.
@@ -167,7 +167,7 @@ final class MediaUploadServer: Sendable {
         }
 
         // From here on always clean up the original temp file. The processed
-        // file (if the delegate produced a new one) is cleaned up inside
+        // file (if the processor produced a new one) is cleaned up inside
         // processAndUpload so its throw paths are covered too.
         defer { try? FileManager.default.removeItem(at: fileURL) }
 
@@ -175,7 +175,7 @@ final class MediaUploadServer: Sendable {
             let uploadResult = try await processAndUpload(
                 fileURL: fileURL, mimeType: mimeType, filename: filename,
                 extraParts: extraParts, query: query,
-                delegateWantsFile: delegateWantsFile, context: context
+                processorWantsFile: processorWantsFile, context: context
             )
             switch uploadResult {
             case .uploaded(let uploaded):
@@ -192,7 +192,7 @@ final class MediaUploadServer: Sendable {
     }
 
     /// Forwards the original request body to WordPress unchanged (no multipart
-    /// re-encoding) and relays the response. Used when the delegate won't touch
+    /// re-encoding) and relays the response. Used when the processor won't touch
     /// the file — it declined by metadata (`handlesFile` returned false) or
     /// `processFile` returned `.original`.
     private static func passthroughResponse(
@@ -255,7 +255,7 @@ final class MediaUploadServer: Sendable {
     ///
     /// The response's own `Content-Type` wins over the JSON default. `HTTPResponse`
     /// serializes every header it is given, so appending the default unconditionally
-    /// would emit the name twice for a delegate that sets it.
+    /// would emit the name twice for a processor that sets it.
     private static func relayResponse(_ response: MediaUploadResponse) -> HTTPResponse {
         let hasContentType = response.headers.keys.contains { $0.lowercased() == "content-type" }
         return HTTPResponse(
@@ -282,12 +282,12 @@ final class MediaUploadServer: Sendable {
 
     // MARK: - Delegate Pipeline
 
-    /// Result of the delegate processing + upload pipeline.
+    /// Result of the processor processing + upload pipeline.
     private enum UploadResult {
-        /// The uploader, delegate, or internal media client completed the upload;
+        /// The uploader, processor, or internal media client completed the upload;
         /// carries the raw WordPress response to relay.
         case uploaded(MediaUploadResponse)
-        /// The delegate didn't modify the file, so the original body is forwarded.
+        /// The processor didn't modify the file, so the original body is forwarded.
         /// The caller should forward the original request body to WordPress.
         case passthrough
     }
@@ -295,22 +295,22 @@ final class MediaUploadServer: Sendable {
     private static func processAndUpload(
         fileURL: URL, mimeType: String, filename: String,
         extraParts: [MultipartPart], query: String,
-        delegateWantsFile: Bool, context: UploadContext
+        processorWantsFile: Bool, context: UploadContext
     ) async throws -> UploadResult {
         // Step 1: Process (resize, transcode, etc.) — but only for a file the
-        // delegate's metadata gate accepted. `handlesFile` returning false is the
-        // delegate saying it won't touch a file like this, so handing it one anyway
+        // processor's metadata gate accepted. `handlesFile` returning false is the
+        // processor saying it won't touch a file like this, so handing it one anyway
         // would break the contract the gate documents. With an uploader set the file
         // still gets delivered; it just skips processing on its way there.
         let processed: ProcessedProxyFile
-        if let delegate = context.uploadDelegate, delegateWantsFile {
-            processed = try await delegate.processFile(at: fileURL, mimeType: mimeType, filename: filename)
+        if let processor = context.processor, processorWantsFile {
+            processed = try await processor.processFile(at: fileURL, mimeType: mimeType, filename: filename)
         } else {
             processed = .original
         }
 
         // Resolve the file to upload and its metadata. `.processed` uses the
-        // delegate's values verbatim, so a format change is reported to WordPress.
+        // processor's values verbatim, so a format change is reported to WordPress.
         let uploadURL: URL
         let uploadMimeType: String
         let uploadFilename: String
@@ -325,7 +325,7 @@ final class MediaUploadServer: Sendable {
             uploadFilename = processedFilename
         }
 
-        // The processed file (if the delegate produced a new one) is ours to
+        // The processed file (if the processor produced a new one) is ours to
         // clean up — on success it has been uploaded, on failure it is abandoned.
         // Cleaning up here rather than in the caller covers the throw paths too.
         defer {
@@ -494,7 +494,7 @@ enum UploadError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .noUploader: "No upload delegate or internal media client configured"
+        case .noUploader: "No media processor or internal media client configured"
         case .streamReadFailed: "Failed to read upload stream"
         case .streamWriteFailed: "Failed to write upload to disk"
         }
@@ -503,30 +503,30 @@ enum UploadError: Error, LocalizedError {
 
 // MARK: - Upload Context
 
-/// Container for the upload delegate, host uploader, and internal media client,
+/// Container for the media processor, host uploader, and internal media client,
 /// captured by the HTTPServer handler closure and read on each request.
 ///
-/// All are held **strongly**, so a delegate that admitted a file for processing
+/// All are held **strongly**, so a processor that admitted a file for processing
 /// will process it — the three reads within a request can't disagree, and an
-/// in-flight upload keeps the host's delegate alive until it unwinds. That lifetime
+/// in-flight upload keeps the host's processor alive until it unwinds. That lifetime
 /// comes from the handler closure, which the listener retains for the server's
 /// lifetime; it therefore holds just as well on the paths that take the client
 /// alone rather than the whole context. This matches Android, which holds its
-/// `uploadDelegate` as a plain `val` for the same reason.
+/// `processor` as a plain `val` for the same reason.
 ///
-/// Strong is safe *given* `EditorViewController` now owns `mediaUploadDelegate`
+/// Strong is safe *given* `EditorViewController` now owns `mediaProcessor`
 /// strongly too — but be exact about what that trades away. Weak here did break one
 /// ring: every other edge in `EditorViewController → uploadServer → HTTPServer →
-/// listener → newConnectionHandler → handler → UploadContext → delegate` is strong,
+/// listener → newConnectionHandler → handler → UploadContext → processor` is strong,
 /// so this was its only weak link. What it could not break is the shorter ring
 /// straight through the property. A host that retains the view controller back now
-/// leaks either way, so weak here buys a partial guard in exchange for the delegate
+/// leaks either way, so weak here buys a partial guard in exchange for the processor
 /// vanishing mid-request — which is the failure that was actually being hit.
 ///
-/// A `struct`, so it is implicitly `Sendable`: `MediaUploadDelegate` is a `Sendable`
-/// protocol and `InternalMediaClient` is `@unchecked Sendable`.
+/// A `struct`, so it is implicitly `Sendable`: `MediaProcessor` and `MediaUploader`
+/// are `Sendable` protocols and `InternalMediaClient` is `@unchecked Sendable`.
 private struct UploadContext: Sendable {
-    let uploadDelegate: (any MediaUploadDelegate)?
+    let processor: (any MediaProcessor)?
     let uploader: (any MediaUploader)?
     let internalClient: InternalMediaClient?
 }
@@ -591,7 +591,7 @@ class InternalMediaClient: @unchecked Sendable {
 
     /// Forwards the original request body to WordPress without re-encoding.
     ///
-    /// Used when the delegate's `processFile` returned the file unchanged —
+    /// Used when the processor's `processFile` returned the file unchanged —
     /// the incoming multipart body is already valid for WordPress.
     func passthroughUpload(body: RequestBody, contentType: String, query: String) async throws -> MediaUploadResponse {
         var request = URLRequest(url: mediaEndpointURL(query: query))
