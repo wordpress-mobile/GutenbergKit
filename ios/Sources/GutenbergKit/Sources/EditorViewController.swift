@@ -475,32 +475,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // because the WebView has no auth cookies); with either missing, every media
         // request it makes fails.
         //
-        // Without them there's no usable internal media client, so the behavior forks
-        // by intent:
-        //
-        // - A `mediaProcessor` only enhances GutenbergKit-owned uploads. With no
-        //   credentials there's nothing to deliver through, so nothing to process —
-        //   leave the server down and let uploads fall to the default WebView path.
-        //
-        // - A `mediaUploader` means the host is *taking over* uploads. Falling back
-        //   would silently drop it, and its media deletes still need the default
-        //   uploader to reach the configured site. A host that sets an uploader must
-        //   provide credentials too; omitting them is a configuration error, so trap
-        //   rather than start a server whose every delete would fail.
-        //
-        // `siteApiRoot` is a `URL` here where Android types it as a `String`, so the
-        // equivalent of Android's `isEmpty()` check is "not absolute" — a URL with no
-        // scheme or host can't address the site, and every request built from it fails
-        // at the URLSession layer.
-        let siteApiRootIsUsable = configuration.siteApiRoot.scheme != nil
-            && configuration.siteApiRoot.host() != nil
-        if !siteApiRootIsUsable || configuration.authHeader.isEmpty {
-            precondition(
-                mediaUploader == nil,
-                "A mediaUploader needs site credentials so GutenbergKit can relay the "
-                    + "editor's media deletes to the configured site. Set an absolute "
-                    + "siteApiRoot and the auth header in the editor configuration."
-            )
+        // `MediaServerCredentials` owns that check and the fail-fast behind it, so the
+        // policy is reachable from the host test suite — this file is not.
+        guard MediaServerCredentials.canStartServer(
+            siteApiRoot: configuration.siteApiRoot,
+            authHeader: configuration.authHeader,
+            hasUploader: mediaUploader != nil
+        ) else {
             return
         }
 
