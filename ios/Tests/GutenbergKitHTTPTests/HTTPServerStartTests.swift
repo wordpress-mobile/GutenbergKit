@@ -38,6 +38,35 @@ struct HTTPServerStartTests {
         // rather than suspending its caller indefinitely.
         #expect(elapsed < .seconds(5))
     }
+
+    @Test("serves requests from an HTTPRequestHandler object, carrying its state")
+    func servesFromRequestHandlerObject() async throws {
+        // The point of the object overload: the handler holds its dependencies as
+        // stored properties and serves from an instance method, so a consumer with
+        // state doesn't need statics threading a context through every call.
+        let server = try await HTTPServer.start(
+            name: "handler-object-test",
+            requiresAuthentication: false,
+            handler: EchoHandler(greeting: "hello from a struct")
+        )
+        defer { server.stop() }
+
+        let url = URL(string: "http://127.0.0.1:\(server.port)/anything")!
+        let (data, response) = try await URLSession.shared.data(from: url)
+
+        #expect((response as? HTTPURLResponse)?.statusCode == 200)
+        #expect(String(decoding: data, as: UTF8.self) == "hello from a struct")
+    }
+}
+
+/// A value-type handler — it cannot form a reference cycle back to whatever owns
+/// the server, which is why ``HTTPRequestHandler`` isn't `AnyObject`-constrained.
+private struct EchoHandler: HTTPRequestHandler {
+    let greeting: String
+
+    func handle(_ request: HTTPServer.Request) async -> HTTPResponse {
+        HTTPResponse(status: 200, body: Data(greeting.utf8))
+    }
 }
 
 #endif
