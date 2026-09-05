@@ -473,9 +473,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         //
         // `MediaServerCredentials` owns the check so it is reachable from the host
         // test suite — this file is not.
-        guard MediaServerCredentials.areUsable(
+        guard MediaServerCredentials.canStartServer(
             siteApiRoot: configuration.siteApiRoot,
-            authHeader: configuration.authHeader
+            authHeader: configuration.authHeader,
+            hasUploader: mediaUploader != nil
         ) else {
             return
         }
