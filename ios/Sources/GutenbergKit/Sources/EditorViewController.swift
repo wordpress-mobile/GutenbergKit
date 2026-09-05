@@ -109,11 +109,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// take effect, so its setter traps if written.
     private var hasStartedLoading = false
 
-    /// Whether a non-nil ``mediaUploadDelegate`` was ever assigned. Lets the load
-    /// path tell "the delegate was released before load" (a retention mistake to
-    /// trap) apart from "no delegate was configured" (a valid opt-out).
-    private var mediaUploadDelegateWasAssigned = false
-
     /// Delegate for customizing media file processing and upload behavior.
     ///
     /// Provide this **before the editor loads** — typically right after `init`, the
@@ -121,16 +116,17 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// once, when the editor begins loading, and injected into the page's initial
     /// configuration; setting it afterward has no effect, so the setter traps.
     ///
-    /// - Important: This is a `weak` reference — you must hold a strong reference to
-    ///   your delegate until the editor has loaded, or native uploads are silently
-    ///   disabled. To surface that mistake, the editor traps at load time if a
-    ///   delegate that was assigned here has already been deallocated.
-    public weak var mediaUploadDelegate: (any MediaUploadDelegate)? {
+    /// The editor **owns** this for its lifetime and releases it on `deinit`, so you
+    /// don't need to keep a reference after assigning it. The one rule: your delegate
+    /// must not strongly retain this `EditorViewController` in return, or the two form
+    /// a retain cycle and neither is freed.
+    // Ownership here is the point: the editor holds this for its lifetime so an
+    // in-flight upload can't lose the delegate mid-request. The cycle `weak_delegate`
+    // guards against runs the other way (a delegate retaining the editor), which this
+    // property can neither create nor prevent.
+    // swiftlint:disable:next weak_delegate
+    public var mediaUploadDelegate: (any MediaUploadDelegate)? {
         didSet {
-            // Record whether a delegate was provided so the load path can tell a
-            // premature deallocation apart from a deliberate opt-out (see
-            // `startUploadServer`).
-            mediaUploadDelegateWasAssigned = mediaUploadDelegate != nil
             // Deliberate fail-fast, not a defensive check. The delegate is captured
             // into the page's initial configuration when the editor begins loading,
             // so a delegate assigned afterward would silently never take effect;
@@ -451,14 +447,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// falls back to Gutenberg's default upload behavior (the JS override won't activate
     /// because `nativeUploadPort` will be nil in GBKit).
     private func startUploadServer() async {
-        // A delegate that was provided but is already nil here was deallocated before
-        // the editor finished loading — the host didn't hold a strong reference to it.
-        // That silently disables native uploads, so trap loudly instead.
-        precondition(
-            !(mediaUploadDelegateWasAssigned && mediaUploadDelegate == nil),
-            "mediaUploadDelegate was released before the editor loaded — hold a strong reference to it."
-        )
-
+        // Nothing to route through the native server unless the host provided a
+        // delegate. The editor owns it — `mediaUploadDelegate` is strong — so there's
+        // no released-before-load case to guard against; it lives as long as the
+        // editor does.
         guard mediaUploadDelegate != nil else {
             return
         }
