@@ -155,8 +155,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// fixed identifier and must survive app relaunch, an offline queue spans sessions.
     /// Build the uploader once, hold it, and pass the same instance to each editor.
     ///
-    /// Takes precedence over the deprecated ``MediaUploadDelegate/uploadFile(at:mimeType:filename:)``:
-    /// with an uploader set, that hook is never called.
+    /// A ``mediaUploadDelegate`` can still transform the file first; only delivery
+    /// moves to the uploader.
     public private(set) var mediaUploader: (any MediaUploader)?
 
     // MARK: - Private Properties (Services)
