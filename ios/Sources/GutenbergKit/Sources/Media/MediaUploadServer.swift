@@ -192,6 +192,10 @@ final class MediaUploadServer: Sendable {
     private static func passthroughResponse(
         _ request: HTTPServer.Request, query: String, context: UploadContext
     ) async throws -> HTTPResponse {
+        // As in `processAndUpload`: don't put bytes on the wire for a torn-down
+        // editor, regardless of whether the HTTP client honors cancellation.
+        try Task.checkCancellation()
+
         Logger.uploadServer.debug("Passthrough: forwarding original request body to WordPress")
         guard let body = request.parsed.body,
               let contentType = request.parsed.header("Content-Type") else {
@@ -330,6 +334,13 @@ final class MediaUploadServer: Sendable {
                 try? FileManager.default.removeItem(at: uploadURL)
             }
         }
+
+        // The editor was torn down (or the client disconnected) while we processed.
+        // Don't start an outbound upload whose response nobody will read — it would
+        // create an attachment neither GutenbergKit nor the host knows to clean up.
+        // Checking here rather than relying on the HTTP client to notice cancellation
+        // keeps this true for a host-injected `URLSessionProtocol` that doesn't.
+        try Task.checkCancellation()
 
         // Step 2: deliver. An uploader owns delivery on the host's own stack and
         // returns the finished attachment JSON (or throws); GutenbergKit relays that
