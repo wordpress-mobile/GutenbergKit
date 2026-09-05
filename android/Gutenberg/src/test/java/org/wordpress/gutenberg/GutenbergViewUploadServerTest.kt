@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mockito.mock
@@ -22,10 +23,10 @@ class GutenbergViewUploadServerTest {
 
     private val testScope = TestScope()
 
-    private fun makeView(): GutenbergView {
+    private fun makeView(authHeader: String = "Bearer test", siteApiRoot: String = "https://example.com/wp-json/"): GutenbergView {
         val config = EditorConfiguration
-            .builder("https://example.com", "https://example.com/wp-json/")
-            .setAuthHeader("Bearer test")
+            .builder("https://example.com", siteApiRoot)
+            .setAuthHeader(authHeader)
             .build()
         return GutenbergView(
             config,
@@ -87,6 +88,56 @@ class GutenbergViewUploadServerTest {
             idle()
             assertNull(
                 "with no delegate, no upload server should be started",
+                uploadServerOf(view)
+            )
+        } finally {
+            detach(view)
+        }
+    }
+
+    @Test
+    fun `an uploader without credentials is a configuration error`() {
+        // Falling back would silently drop the uploader, and its media deletes still
+        // need the internal media client to reach the configured site. (Matches iOS's
+        // precondition.)
+        val view = makeView(authHeader = "")
+        try {
+            view.mediaUploader = mock(MediaUploader::class.java)
+            val error = assertThrows(java.lang.reflect.InvocationTargetException::class.java) {
+                startLoading(view)
+            }
+            assertTrue(error.cause is IllegalStateException)
+            assertNull("no server should be left behind by the failed start", uploadServerOf(view))
+        } finally {
+            detach(view)
+        }
+    }
+
+    @Test
+    fun `an uploader without a site root is a configuration error too`() {
+        val view = makeView(siteApiRoot = "")
+        try {
+            view.mediaUploader = mock(MediaUploader::class.java)
+            val error = assertThrows(java.lang.reflect.InvocationTargetException::class.java) {
+                startLoading(view)
+            }
+            assertTrue(error.cause is IllegalStateException)
+        } finally {
+            detach(view)
+        }
+    }
+
+    @Test
+    fun `a processor without credentials just leaves the server down`() {
+        // Nothing to deliver through, so nothing to process — uploads fall to the
+        // default WebView path rather than trapping.
+        val view = makeView(authHeader = "")
+        try {
+            view.mediaProcessor = mock(MediaProcessor::class.java)
+            startLoading(view)
+            idle()
+            assertNull(
+                "a processor with no credentials should not bring up the server",
                 uploadServerOf(view)
             )
         } finally {
