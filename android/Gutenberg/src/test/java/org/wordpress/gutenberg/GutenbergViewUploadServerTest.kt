@@ -2,10 +2,12 @@ package org.wordpress.gutenberg
 
 import android.os.Looper
 import android.view.View
+import java.lang.reflect.InvocationTargetException
 import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mockito.mock
@@ -62,15 +64,15 @@ class GutenbergViewUploadServerTest {
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
     @Test
-    fun `the upload server starts when the page begins loading, capturing the delegate`() {
+    fun `the upload server starts when the page begins loading, capturing the processor`() {
         val view = makeView()
         try {
-            // A delegate provided before load is captured when the page starts.
-            view.mediaUploadDelegate = mock(MediaUploadDelegate::class.java)
+            // A processor provided before load is captured when the page starts.
+            view.mediaProcessor = mock(MediaProcessor::class.java)
             startLoading(view)
             idle()
             assertNotNull(
-                "a delegate provided before load should bring up the upload server",
+                "a processor provided before load should bring up the upload server",
                 uploadServerOf(view)
             )
         } finally {
@@ -79,14 +81,14 @@ class GutenbergViewUploadServerTest {
     }
 
     @Test
-    fun `no delegate means no upload server`() {
+    fun `no processor or uploader means no upload server`() {
         val view = makeView()
         try {
-            // No delegate provided — uploads should use the default WebView path.
+            // Nothing provided — uploads should use the default WebView path.
             startLoading(view)
             idle()
             assertNull(
-                "with no delegate, no upload server should be started",
+                "with no processor or uploader, no upload server should be started",
                 uploadServerOf(view)
             )
         } finally {
@@ -95,16 +97,85 @@ class GutenbergViewUploadServerTest {
     }
 
     @Test
-    fun `setting the delegate after the page has started loading throws`() {
+    fun `setting a media handler after the page has started loading throws`() {
         val view = makeView()
         try {
             startLoading(view)
             idle()
-            // The delegate is captured at load; a later assignment is a programmer
+            // The processor is captured at load; a later assignment is a programmer
             // error and must surface loudly rather than silently do nothing.
             assertThrows(IllegalStateException::class.java) {
-                view.mediaUploadDelegate = mock(MediaUploadDelegate::class.java)
+                view.mediaProcessor = mock(MediaProcessor::class.java)
             }
+        } finally {
+            detach(view)
+        }
+    }
+
+    @Test
+    fun `an uploader without site credentials is a configuration error`() {
+        // A mediaUploader owns uploads, but media deletes still relay to the configured
+        // site — which needs credentials to reach. Setting an uploader without them is
+        // a programmer error, surfaced loudly rather than starting a server whose every
+        // delete would fail. (A processor without credentials is fine — it just falls
+        // back to the default WebView path, covered above.)
+        val config = EditorConfiguration
+            .builder("https://example.com", "https://example.com/wp-json/")
+            .build() // deliberately no auth header
+        val view = GutenbergView(
+            config,
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+        try {
+            view.mediaUploader = mock(MediaUploader::class.java)
+            // startUploadServer runs inside onEditorPageStarted, so reflection wraps its throw.
+            val error = assertThrows(InvocationTargetException::class.java) {
+                startLoading(view)
+            }
+            assertTrue(
+                "an uploader without credentials should fail with IllegalStateException",
+                error.cause is IllegalStateException
+            )
+            assertNull(
+                "no server should be left running after the configuration error",
+                uploadServerOf(view)
+            )
+        } finally {
+            detach(view)
+        }
+    }
+
+    @Test
+    fun `an uploader without a site api root is a configuration error`() {
+        // The other arm of the same gate: an auth header is no use without a site to
+        // send it to. Both fields have to be present and usable for the internal media
+        // client to reach the configured site, so either one missing traps — iOS gates
+        // on the same pair.
+        val config = EditorConfiguration
+            .builder("https://example.com", "")
+            .setAuthHeader("Bearer token")
+            .build() // deliberately no site API root
+        val view = GutenbergView(
+            config,
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+        try {
+            view.mediaUploader = mock(MediaUploader::class.java)
+            val error = assertThrows(InvocationTargetException::class.java) {
+                startLoading(view)
+            }
+            assertTrue(
+                "an uploader without a site api root should fail with IllegalStateException",
+                error.cause is IllegalStateException
+            )
+            assertNull(
+                "no server should be left running after the configuration error",
+                uploadServerOf(view)
+            )
         } finally {
             detach(view)
         }
@@ -113,7 +184,7 @@ class GutenbergViewUploadServerTest {
     @Test
     fun `detaching the view stops and clears the upload server`() {
         val view = makeView()
-        view.mediaUploadDelegate = mock(MediaUploadDelegate::class.java)
+        view.mediaProcessor = mock(MediaProcessor::class.java)
         startLoading(view)
         idle()
         assertNotNull(uploadServerOf(view))

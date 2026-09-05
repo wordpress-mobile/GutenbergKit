@@ -5,19 +5,18 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.media.ExifInterface
 import android.util.Log
-import org.wordpress.gutenberg.MediaUploadDelegate
+import org.wordpress.gutenberg.MediaProcessor
 import org.wordpress.gutenberg.ProcessedProxyFile
 import java.io.File
 import java.io.IOException
 
 /**
- * Demo media upload delegate that resizes images to a maximum dimension of 2000px.
- *
- * Only overrides [processFile] — [uploadFile] returns null so the default uploader is used.
+ * Demo media processor that resizes images to a maximum dimension of 2000px, then
+ * lets GutenbergKit deliver the result to the configured site.
  */
-class DemoMediaUploadDelegate : MediaUploadDelegate {
+class DemoMediaProcessor : MediaProcessor {
     companion object {
-        private const val TAG = "DemoMediaUploadDelegate"
+        private const val TAG = "DemoMediaProcessor"
     }
 
     // Only non-GIF images are ever resized (see processFile), so decline

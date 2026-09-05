@@ -105,50 +105,58 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let isWarmupMode: Bool
 
     /// Set once the editor has begun loading and captured its configuration
-    /// (including ``mediaUploadDelegate``). After this, that delegate can no longer
-    /// take effect, so its setter traps if written.
+    /// (including ``mediaProcessor`` and ``mediaUploader``). After this, they can no
+    /// longer take effect, so their setters trap if written.
     private var hasStartedLoading = false
 
-    /// Whether a non-nil ``mediaUploadDelegate`` was ever assigned. Lets the load
-    /// path tell "the delegate was released before load" (a retention mistake to
-    /// trap) apart from "no delegate was configured" (a valid opt-out).
-    private var mediaUploadDelegateWasAssigned = false
-
-    /// Delegate for customizing media file processing and upload behavior.
+    /// Transforms media (resize, transcode, …) before GutenbergKit delivers it to
+    /// the configured site. The safe, common extension point — a processor never
+    /// performs the upload itself, so it cannot deliver media to the wrong place.
     ///
-    /// Provide this **before the editor loads** — typically right after `init`, the
-    /// same way the rest of the editor configuration is supplied. It is captured
-    /// once, when the editor begins loading, and injected into the page's initial
-    /// configuration; setting it afterward has no effect, so the setter traps.
+    /// Provide this **before the editor loads** — typically right after `init`. It
+    /// is captured once, when the editor begins loading; setting it afterward has no
+    /// effect, so the setter traps.
     ///
-    /// - Important: This is a `weak` reference — you must hold a strong reference to
-    ///   your delegate until the editor has loaded, or native uploads are silently
-    ///   disabled. To surface that mistake, the editor traps at load time if a
-    ///   delegate that was assigned here has already been deallocated.
-    public weak var mediaUploadDelegate: (any MediaUploadDelegate)? {
+    /// The editor **owns** this for its lifetime and releases it on `deinit`, so you
+    /// don't need to keep a reference after assigning it. The one rule: your processor
+    /// must not strongly retain this `EditorViewController` in return, or the two form
+    /// a retain cycle and neither is freed.
+    public var mediaProcessor: (any MediaProcessor)? {
         didSet {
-            // Record whether a delegate was provided so the load path can tell a
-            // premature deallocation apart from a deliberate opt-out (see
-            // `startUploadServer`).
-            mediaUploadDelegateWasAssigned = mediaUploadDelegate != nil
-            // Deliberate fail-fast, not a defensive check. The delegate is captured
-            // into the page's initial configuration when the editor begins loading,
-            // so a delegate assigned afterward would silently never take effect;
-            // trapping surfaces that misuse loudly instead of failing quietly.
-            //
-            // `hasStartedLoading` flips at the start of the async load (see
-            // `loadEditor`), which runs at or after `viewDidLoad` — so this only
-            // *widens* the safe window versus a synchronous flip. A host that
-            // follows the documented contract (set right after `init`, before
-            // presenting) can never race it; the trap fires only on a genuinely
-            // late assignment. Do not soften this to a no-op or a log — silently
-            // dropping the delegate is exactly the failure this is here to catch.
-            precondition(
-                !hasStartedLoading,
-                "mediaUploadDelegate must be set before the editor loads (e.g. right after init). "
-                    + "It is captured into the editor configuration at load; setting it afterward has no effect."
-            )
+            precondition(!hasStartedLoading, Self.lateMediaAssignmentMessage("mediaProcessor"))
         }
+    }
+
+    /// Takes over media upload on the host's own stack (background session, offline
+    /// queue, resumable transport). Setting it makes the host own every upload and
+    /// its whole lifecycle; GutenbergKit stays out of the network entirely for media.
+    ///
+    /// Same lifecycle rules as ``mediaProcessor``: set it before the editor loads.
+    /// The editor owns it for its lifetime (releasing it on `deinit`), so you needn't
+    /// retain it yourself — just don't strongly retain this `EditorViewController`
+    /// from your uploader.
+    ///
+    /// Requires site credentials in the editor configuration: media deletes always
+    /// relay to the configured site, so an uploader set without an auth header is a
+    /// configuration error and traps at load.
+    public var mediaUploader: (any MediaUploader)? {
+        didSet {
+            precondition(!hasStartedLoading, Self.lateMediaAssignmentMessage("mediaUploader"))
+        }
+    }
+
+    /// Message for the fail-fast when media handling is assigned too late.
+    ///
+    /// Deliberate fail-fast, not a defensive check: the processor/uploader is
+    /// captured into the page's initial configuration when the editor begins
+    /// loading, so one assigned afterward would silently never take effect.
+    /// `hasStartedLoading` flips at the start of the async load, which runs at or
+    /// after `viewDidLoad`, so a host that follows the contract (set right after
+    /// `init`) can never race it. Do not soften this to a no-op or a log — silently
+    /// dropping the host's media handling is exactly the failure this catches.
+    private static func lateMediaAssignmentMessage(_ name: String) -> String {
+        "\(name) must be set before the editor loads (e.g. right after init). "
+            + "It is captured into the editor configuration at load; setting it afterward has no effect."
     }
 
     // MARK: - Private Properties (Services)
@@ -384,8 +392,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     @MainActor
     private func loadEditor(dependencies: EditorDependencies) async throws {
-        // From here on the editor configuration — including `mediaUploadDelegate` —
-        // is captured, so the delegate setter traps if written after this point.
+        // From here on the editor configuration — including `mediaProcessor` and
+        // `mediaUploader` — is captured, so their setters trap if written after this point.
         self.hasStartedLoading = true
 
         self.displayActivityView()
@@ -451,28 +459,33 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// falls back to Gutenberg's default upload behavior (the JS override won't activate
     /// because `nativeUploadPort` will be nil in GBKit).
     private func startUploadServer() async {
-        // A delegate that was provided but is already nil here was deallocated before
-        // the editor finished loading — the host didn't hold a strong reference to it.
-        // That silently disables native uploads, so trap loudly instead.
-        precondition(
-            !(mediaUploadDelegateWasAssigned && mediaUploadDelegate == nil),
-            "mediaUploadDelegate was released before the editor loaded — hold a strong reference to it."
-        )
-
-        guard mediaUploadDelegate != nil else {
+        // Nothing to route through the native server unless the host provided a
+        // processor or an uploader. The editor owns whichever it was given — its
+        // `mediaProcessor`/`mediaUploader` are strong — so there's no
+        // released-before-load case to guard against; they live as long as it does.
+        guard mediaProcessor != nil || mediaUploader != nil else {
             return
         }
 
-        // The native upload server relays through DefaultMediaUploader, which needs a
-        // site root and an auth header (every host provides one — the editor injects
-        // it because the WebView has no auth cookies). Without both there is nothing
-        // to upload through, so leave the server down and let uploads fall to the
-        // default WebView path rather than start a server that could only fail.
-        guard !configuration.authHeader.isEmpty else {
+        // An InternalMediaClient does two jobs: it delivers GutenbergKit-owned
+        // uploads (when no `mediaUploader` is set), and it relays the editor's media
+        // DELETEs to the configured site — every attachment lives there, even one a
+        // host uploader delivered, so that's where its deletion goes. It needs both a
+        // site API root to address and an auth header (the editor injects the latter
+        // because the WebView has no auth cookies); with either missing, every media
+        // request it makes fails.
+        //
+        // `MediaServerCredentials` owns that check and the fail-fast behind it, so the
+        // policy is reachable from the host test suite — this file is not.
+        guard MediaServerCredentials.canStartServer(
+            siteApiRoot: configuration.siteApiRoot,
+            authHeader: configuration.authHeader,
+            hasUploader: mediaUploader != nil
+        ) else {
             return
         }
 
-        let defaultUploader = DefaultMediaUploader(
+        let internalClient = InternalMediaClient(
             httpClient: httpClient.uploadClient(),
             siteApiRoot: configuration.siteApiRoot,
             siteApiNamespace: configuration.siteApiNamespace
@@ -480,8 +493,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         do {
             self.uploadServer = try await MediaUploadServer.start(
-                uploadDelegate: mediaUploadDelegate,
-                defaultUploader: defaultUploader
+                processor: mediaProcessor,
+                uploader: mediaUploader,
+                internalClient: internalClient
             )
         } catch {
             Logger.uploadServer.error("Failed to start upload server: \(error). Falling back to default upload behavior.")
