@@ -123,13 +123,31 @@ class GutenbergView : FrameLayout {
      */
     var mediaUploadDelegate: MediaUploadDelegate? = null
         set(value) {
-            check(!hasStartedLoading) {
-                "mediaUploadDelegate must be set before the editor loads (e.g. right " +
-                    "after construction). It is captured when the page begins loading; " +
-                    "setting it afterward has no effect."
-            }
+            check(!hasStartedLoading) { lateMediaAssignmentMessage("mediaUploadDelegate") }
             field = value
         }
+
+    /**
+     * Takes over media upload on the host's own stack (background service, offline
+     * queue, resumable transport). Setting it makes the host own every upload and its
+     * whole lifecycle; GutenbergKit stays out of the network entirely for media.
+     *
+     * Same lifecycle rules as [mediaUploadDelegate]: set it before the editor loads,
+     * and this view owns it for its lifetime — so you needn't retain it yourself, just
+     * don't strongly retain this [GutenbergView] from your uploader.
+     *
+     * Takes precedence over the deprecated [MediaUploadDelegate.uploadFile]: with an
+     * uploader set, that hook is never called.
+     */
+    var mediaUploader: MediaUploader? = null
+        set(value) {
+            check(!hasStartedLoading) { lateMediaAssignmentMessage("mediaUploader") }
+            field = value
+        }
+
+    private fun lateMediaAssignmentMessage(name: String) =
+        "$name must be set before the editor loads (e.g. right after construction). " +
+            "It is captured when the page begins loading; setting it afterward has no effect."
 
     @Volatile private var uploadServer: MediaUploadServer? = null
 
@@ -671,10 +689,10 @@ class GutenbergView : FrameLayout {
     }
 
     private fun startUploadServer() {
-        // No delegate means nothing wants to customize uploads, so there's no reason
-        // to route them through the native server — leave it down and let uploads
-        // fall to the default WebView path. (Matches iOS.)
-        if (mediaUploadDelegate == null) return
+        // Nothing to route through the native server unless the host provided a
+        // delegate or an uploader — leave it down and let uploads fall to the default
+        // WebView path. (Matches iOS.)
+        if (mediaUploadDelegate == null && mediaUploader == null) return
 
         // The native upload server relays through InternalMediaClient, which needs a
         // site root and an auth header (every host provides one — the editor injects
@@ -710,6 +728,7 @@ class GutenbergView : FrameLayout {
             uploadServer = MediaUploadServer(
                 uploadDelegate = mediaUploadDelegate,
                 internalClient = internalClient,
+                uploader = mediaUploader,
                 cacheDir = context.cacheDir,
                 scope = coroutineScope
             )
