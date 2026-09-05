@@ -46,6 +46,24 @@ server.stop()
 
 Pass `nil` (or omit `port`) to let the system assign an available port — useful for tests or when running multiple servers.
 
+#### Handlers with state
+
+A closure is right for a handler that needs no state. When the handler has dependencies, conform a type to `HTTPRequestHandler` and pass it as `handler:` instead — the dependencies become stored properties and the request logic becomes instance methods, rather than statics threading a context parameter through every call.
+
+```swift
+struct MediaHandler: HTTPRequestHandler {
+    let uploader: Uploader
+
+    func handle(_ request: HTTPServer.Request) async -> HTTPResponse {
+        await uploader.upload(request.parsed.body)
+    }
+}
+
+let server = try await HTTPServer.start(name: "media", handler: MediaHandler(uploader: uploader))
+```
+
+The server retains its handler, so the handler must not be the object that owns the server — `owner → HTTPServer → handler → owner` is a cycle, and the owner's `deinit` would never run. `HTTPRequestHandler` is deliberately not `AnyObject`-constrained so a `struct` conformer sidesteps this entirely; a `final class` works too, as long as it stays a leaf.
+
 When `requiresAuthentication` is enabled (the default), each request must include a `Proxy-Authorization: Bearer <token>` header carrying the server's randomly-generated token. The server uses `Proxy-Authorization` per RFC 9110 §11.7.1 rather than `Authorization`, so the client's `Authorization` header remains available for upstream credentials (e.g. HTTP Basic auth to the remote server). Unauthenticated requests receive a `407 Proxy Authentication Required` response with a `Proxy-Authenticate: Bearer` challenge header.
 
 ### Proxying via URLSession
