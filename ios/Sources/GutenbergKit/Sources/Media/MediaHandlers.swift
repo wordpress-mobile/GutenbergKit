@@ -31,13 +31,13 @@ struct MediaUploadResponse: Sendable {
     }
 }
 
-/// The result of a delegate's ``MediaUploadDelegate/processFile(at:mimeType:filename:)``.
+/// The result of a processor's ``MediaProcessor/processFile(at:mimeType:filename:)``.
 public enum ProcessedProxyFile: Sendable {
-    /// The delegate did not modify the file; the original upload is forwarded
+    /// The processor did not modify the file; the original upload is forwarded
     /// to WordPress unchanged.
     case original
 
-    /// The delegate produced a file to upload, along with its MIME type and
+    /// The processor produced a file to upload, along with its MIME type and
     /// filename. Both are used verbatim, so a format change (e.g. transcoding
     /// MOV to MP4, or an in-place EXIF strip) must report the resulting type and
     /// filename for WordPress to store the file correctly.
@@ -46,21 +46,21 @@ public enum ProcessedProxyFile: Sendable {
 
 /// Transforms media before GutenbergKit delivers it.
 ///
-/// A delegate only changes *bytes* — GutenbergKit still uploads the result to the
+/// A processor only changes *bytes* — GutenbergKit still uploads the result to the
 /// configured site and owns the whole lifecycle (retries, cleanup). Because it never
 /// performs the upload itself, it cannot deliver media to the wrong place. Set
-/// ``EditorViewController/mediaUploadDelegate`` to resize images, transcode video,
+/// ``EditorViewController/mediaProcessor`` to resize images, transcode video,
 /// strip EXIF, etc.
 ///
 /// This is the safe, common extension point: most hosts want only this. To perform
 /// the upload yourself, conform to ``MediaUploader`` instead.
-public protocol MediaUploadDelegate: AnyObject, Sendable {
-    /// Whether this delegate might transform a file with the given metadata.
+public protocol MediaProcessor: AnyObject, Sendable {
+    /// Whether this processor might transform a file with the given metadata.
     ///
     /// A cheap, metadata-only gate the server consults *before* materializing the
     /// upload to a temp file. Return `false` to decline a file by type — e.g. an
-    /// image-only delegate returning `false` for a video — so the server forwards
-    /// the original upload to WordPress without first copying a file the delegate
+    /// image-only processor returning `false` for a video — so the server forwards
+    /// the original upload to WordPress without first copying a file the processor
     /// won't touch.
     ///
     /// Only consulted when no ``MediaUploader`` is set: an uploader takes over
@@ -81,7 +81,7 @@ public protocol MediaUploadDelegate: AnyObject, Sendable {
 }
 
 /// Default implementations.
-extension MediaUploadDelegate {
+extension MediaProcessor {
     public func handlesFile(ofType mimeType: String, named filename: String) -> Bool {
         true
     }
@@ -113,7 +113,7 @@ public struct MediaUploadField: Sendable, Hashable, Codable {
 /// Everything a ``MediaUploader`` needs to reproduce a native upload: the file to
 /// send, its metadata, the editor's non-file form fields, and the request's query.
 public struct MediaUpload: Sendable {
-    /// The file to upload — already processed, if a ``MediaUploadDelegate`` ran.
+    /// The file to upload — already processed, if a ``MediaProcessor`` ran.
     public let fileURL: URL
 
     /// The file's MIME type.

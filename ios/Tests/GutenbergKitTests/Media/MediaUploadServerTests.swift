@@ -102,9 +102,9 @@ struct MediaUploadServerTests {
 
   @Test("routes /upload with a query string and relays the query")
   func uploadWithQueryString() async throws {
-    let delegate = ProcessOnlyDelegate()
+    let delegate = ProcessOnlyProcessor()
     let mockUploader = MockInternalMediaClient()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, internalClient: mockUploader)
+    let server = try await MediaUploadServer.start(processor: delegate, internalClient: mockUploader)
     defer { server.stop() }
 
     // `@wordpress/media-utils` uploads to `/wp/v2/media?_embed=wp:featuredmedia`,
@@ -123,7 +123,7 @@ struct MediaUploadServerTests {
     let (_, response) = try await URLSession.shared.data(for: request)
     let httpResponse = try #require(response as? HTTPURLResponse)
     #expect(httpResponse.statusCode == 201)
-    // The delegate returns `.original`, so this is the passthrough branch.
+    // The processor returns `.original`, so this is the passthrough branch.
     // Pin which branch ran — `lastQuery` is recorded by both, so without this
     // the query assertion would pass even if routing collapsed onto one path.
     #expect(mockUploader.passthroughUploadCalled)
@@ -159,9 +159,9 @@ struct MediaUploadServerTests {
 
   @Test("processes with the delegate, then delivers and relays verbatim")
   func delegateProcessThenDeliver() async throws {
-    let delegate = ResizingDelegate()
+    let delegate = ResizingProcessor()
     let internalClient = MockInternalMediaClient()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, internalClient: internalClient)
+    let server = try await MediaUploadServer.start(processor: delegate, internalClient: internalClient)
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -179,7 +179,7 @@ struct MediaUploadServerTests {
     let httpResponse = try #require(response as? HTTPURLResponse)
     #expect(httpResponse.statusCode == 201)
 
-    // The delegate only transforms; GutenbergKit performs the upload.
+    // The processor only transforms; GutenbergKit performs the upload.
     #expect(internalClient.uploadCalled)
 
     // The server relays WordPress's raw response body verbatim.
@@ -192,9 +192,9 @@ struct MediaUploadServerTests {
 
   @Test("uses passthrough when delegate does not modify file")
   func delegatePassthrough() async throws {
-    let delegate = ProcessOnlyDelegate()
+    let delegate = ProcessOnlyProcessor()
     let mockUploader = MockInternalMediaClient()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, internalClient: mockUploader)
+    let server = try await MediaUploadServer.start(processor: delegate, internalClient: mockUploader)
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -225,9 +225,9 @@ struct MediaUploadServerTests {
 
   @Test("skips processing and the temp copy when the delegate declines by metadata")
   func delegateDeclinesByMetadata() async throws {
-    let delegate = DeclineByMetadataDelegate()
+    let delegate = DeclineByMetadataProcessor()
     let mockUploader = MockInternalMediaClient()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, internalClient: mockUploader)
+    let server = try await MediaUploadServer.start(processor: delegate, internalClient: mockUploader)
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -244,7 +244,7 @@ struct MediaUploadServerTests {
     let httpResponse = try #require(response as? HTTPURLResponse)
     #expect(httpResponse.statusCode == 201)
 
-    // Declined by metadata → the delegate is never asked to process (so the file
+    // Declined by metadata → the processor is never asked to process (so the file
     // was never materialized), and the upload is passed through directly.
     #expect(!delegate.processFileCalled)
     #expect(mockUploader.passthroughUploadCalled)
@@ -253,9 +253,9 @@ struct MediaUploadServerTests {
 
   @Test("forwards the delegate's processed metadata to the uploader")
   func processedMetadataForwarded() async throws {
-    let delegate = ResizingDelegate()
+    let delegate = ResizingProcessor()
     let mockUploader = MockInternalMediaClient()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, internalClient: mockUploader)
+    let server = try await MediaUploadServer.start(processor: delegate, internalClient: mockUploader)
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -270,7 +270,7 @@ struct MediaUploadServerTests {
 
     _ = try await URLSession.shared.data(for: request)
 
-    // The delegate changed the format, so the uploader must receive the new
+    // The processor changed the format, so the uploader must receive the new
     // metadata — not the original video/quicktime + clip.mov.
     #expect(mockUploader.uploadCalled)
     #expect(mockUploader.lastUploadMimeType == "video/mp4")
@@ -279,9 +279,9 @@ struct MediaUploadServerTests {
 
   @Test("deletes the delegate's processed file after upload")
   func deletesProcessedFile() async throws {
-    let delegate = ResizingDelegate()
+    let delegate = ResizingProcessor()
     let mockUploader = MockInternalMediaClient()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, internalClient: mockUploader)
+    let server = try await MediaUploadServer.start(processor: delegate, internalClient: mockUploader)
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -296,7 +296,7 @@ struct MediaUploadServerTests {
 
     _ = try await URLSession.shared.data(for: request)
 
-    // The server owns the file the delegate produced and must delete it once the
+    // The server owns the file the processor produced and must delete it once the
     // upload finishes — the defer in processAndUpload covers the success and throw
     // paths alike. A leaked processed file is a full-size temp per upload.
     let processedURL = try #require(delegate.producedURL)
@@ -453,9 +453,9 @@ struct MediaUploadServerTests {
 
   @Test("a delegate still processes the file an uploader delivers")
   func delegateProcessesForUploader() async throws {
-    let delegate = MockUploadDelegate()
+    let delegate = MockProcessor()
     let uploader = RecordingUploader()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, uploader: uploader, internalClient: MockInternalMediaClient())
+    let server = try await MediaUploadServer.start(processor: delegate, uploader: uploader, internalClient: MockInternalMediaClient())
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -469,20 +469,20 @@ struct MediaUploadServerTests {
 
     _ = try await URLSession.shared.data(for: request)
 
-    // The delegate still processes; only delivery moves to the uploader.
+    // The processor still processes; only delivery moves to the uploader.
     #expect(delegate.processFileCalled)
     #expect(uploader.received != nil)
   }
 
   @Test("an uploader sees a file the delegate's metadata gate would have declined")
   func uploaderSeesDeclinedFile() async throws {
-    // The gate exists to skip a temp copy for a file the delegate won't touch. An
+    // The gate exists to skip a temp copy for a file the processor won't touch. An
     // uploader takes over delivery for every file, so passing through here would
     // silently bypass it.
-    let delegate = DecliningDelegate()
+    let delegate = DecliningProcessor()
     let uploader = RecordingUploader()
     let internalClient = MockInternalMediaClient()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, uploader: uploader, internalClient: internalClient)
+    let server = try await MediaUploadServer.start(processor: delegate, uploader: uploader, internalClient: internalClient)
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -526,24 +526,24 @@ struct MediaUploadServerTests {
 
   @Test("retains the delegate for the server's lifetime, and releases it after")
   func retainsDelegateForServerLifetime() async throws {
-    weak var weakDelegate: MockUploadDelegate?
+    weak var weakDelegate: MockProcessor?
     var server: MediaUploadServer?
     do {
-      let delegate = MockUploadDelegate()
+      let delegate = MockProcessor()
       weakDelegate = delegate
-      server = try await MediaUploadServer.start(uploadDelegate: delegate)
+      server = try await MediaUploadServer.start(processor: delegate)
     }
 
-    // The server owns the delegate while it runs: the host can assign one and drop
+    // The server owns the processor while it runs: the host can assign one and drop
     // its own reference, and every request still sees it.
     #expect(weakDelegate != nil)
 
     server?.stop()
     server = nil
 
-    // …and lets go when it does, so the delegate isn't leaked for the process's
+    // …and lets go when it does, so the processor isn't leaked for the process's
     // lifetime. The cycle the old `weak` was defending against runs through
-    // `EditorViewController.mediaUploadDelegate`, which this container can neither
+    // `EditorViewController.mediaProcessor`, which this container can neither
     // create nor prevent.
     //
     // Polled rather than asserted outright: the handler closure is captured by the
@@ -558,19 +558,19 @@ struct MediaUploadServerTests {
 
   @Test("still processes for a delegate the host has dropped its reference to")
   func processesForHostReleasedDelegate() async throws {
-    // The delegate is read at the admission gate and again at processFile, separated
+    // The processor is read at the admission gate and again at processFile, separated
     // by a synchronous disk copy and an unbounded processFile.
     // Held weakly, a host that dropped its reference changed the answer between
     // those reads: a file admitted for processing was forwarded unprocessed. The
     // host dropping it before the request is the same condition, deterministically.
     let mockUploader = MockInternalMediaClient()
-    var delegate: TranscodingDelegate? = TranscodingDelegate()
+    var delegate: TranscodingProcessor? = TranscodingProcessor()
     weak var weakDelegate = delegate
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, internalClient: mockUploader)
+    let server = try await MediaUploadServer.start(processor: delegate, internalClient: mockUploader)
     defer { server.stop() }
 
     // Drop the host's only strong reference. Under the documented contract the
-    // server owns the delegate from here, so the upload must still be processed.
+    // server owns the processor from here, so the upload must still be processed.
     delegate = nil
 
     let boundary = UUID().uuidString
@@ -1004,16 +1004,16 @@ private final class ThrowingUploader: MediaUploader, @unchecked Sendable {
   }
 }
 
-/// A delegate that declines every file by metadata.
-private final class DecliningDelegate: MediaUploadDelegate, @unchecked Sendable {
+/// A processor that declines every file by metadata.
+private final class DecliningProcessor: MediaProcessor, @unchecked Sendable {
   func handlesFile(ofType mimeType: String, named filename: String) -> Bool {
     false
   }
 }
 
-/// A delegate that transcodes, used to check the server holds it across the whole
+/// A processor that transcodes, used to check the server holds it across the whole
 /// request rather than re-reading a reference the host may have dropped.
-private final class TranscodingDelegate: MediaUploadDelegate, @unchecked Sendable {
+private final class TranscodingProcessor: MediaProcessor, @unchecked Sendable {
   func handlesFile(ofType mimeType: String, named filename: String) -> Bool {
     true
   }
@@ -1025,7 +1025,7 @@ private final class TranscodingDelegate: MediaUploadDelegate, @unchecked Sendabl
   }
 }
 
-private final class MockUploadDelegate: MediaUploadDelegate, @unchecked Sendable {
+private final class MockProcessor: MediaProcessor, @unchecked Sendable {
   private let lock = NSLock()
   private var _processFileCalled = false
   private var _lastMimeType: String?
@@ -1042,7 +1042,7 @@ private final class MockUploadDelegate: MediaUploadDelegate, @unchecked Sendable
   }
 }
 
-private final class ProcessOnlyDelegate: MediaUploadDelegate, @unchecked Sendable {
+private final class ProcessOnlyProcessor: MediaProcessor, @unchecked Sendable {
   private let lock = NSLock()
   private var _processFileCalled = false
 
@@ -1054,10 +1054,10 @@ private final class ProcessOnlyDelegate: MediaUploadDelegate, @unchecked Sendabl
   }
 }
 
-/// A delegate that declines every file by metadata via `handlesFile`, so the
+/// A processor that declines every file by metadata via `handlesFile`, so the
 /// server must pass through without ever materializing the file or calling
 /// `processFile`.
-private final class DeclineByMetadataDelegate: MediaUploadDelegate, @unchecked Sendable {
+private final class DeclineByMetadataProcessor: MediaProcessor, @unchecked Sendable {
   private let lock = NSLock()
   private var _processFileCalled = false
 
@@ -1071,8 +1071,8 @@ private final class DeclineByMetadataDelegate: MediaUploadDelegate, @unchecked S
   }
 }
 
-/// A delegate that produces a new file with changed metadata (e.g. a transcode).
-private final class ResizingDelegate: MediaUploadDelegate, @unchecked Sendable {
+/// A processor that produces a new file with changed metadata (e.g. a transcode).
+private final class ResizingProcessor: MediaProcessor, @unchecked Sendable {
   private let lock = NSLock()
   private var _producedURL: URL?
 
