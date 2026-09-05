@@ -121,9 +121,9 @@ class GutenbergView : FrameLayout {
      * the page begins loading, and advertised to the page then; setting it
      * afterward has no effect, so the setter throws to surface the mistake.
      */
-    var mediaUploadDelegate: MediaUploadDelegate? = null
+    var mediaProcessor: MediaProcessor? = null
         set(value) {
-            check(!hasStartedLoading) { lateMediaAssignmentMessage("mediaUploadDelegate") }
+            check(!hasStartedLoading) { lateMediaAssignmentMessage("mediaProcessor") }
             field = value
         }
 
@@ -132,11 +132,11 @@ class GutenbergView : FrameLayout {
      * queue, resumable transport). Setting it makes the host own every upload and its
      * whole lifecycle; GutenbergKit stays out of the network entirely for media.
      *
-     * Same lifecycle rules as [mediaUploadDelegate]: set it before the editor loads,
+     * Same lifecycle rules as [mediaProcessor]: set it before the editor loads,
      * and this view owns it for its lifetime — so you needn't retain it yourself, just
      * don't strongly retain this [GutenbergView] from your uploader.
      *
-     * A [mediaUploadDelegate] can still transform the file first; only delivery moves
+     * A [mediaProcessor] can still transform the file first; only delivery moves
      * to the uploader.
      */
     var mediaUploader: MediaUploader? = null
@@ -153,7 +153,7 @@ class GutenbergView : FrameLayout {
 
     /**
      * True once the editor page has begun loading and the upload server's
-     * configuration has been captured. After this the [mediaUploadDelegate] can no
+     * configuration has been captured. After this the [mediaProcessor] can no
      * longer take effect, so its setter throws.
      */
     @Volatile private var hasStartedLoading = false
@@ -656,11 +656,11 @@ class GutenbergView : FrameLayout {
 
     /**
      * Invoked when the editor page begins loading. Starts the upload server once —
-     * capturing the [mediaUploadDelegate] provided before load — then advertises
+     * capturing the [mediaProcessor] provided before load — then advertises
      * the editor globals (including the server's port and token) to the page.
      *
      * Starting the server here, on the UI thread, rather than from the
-     * [mediaUploadDelegate] setter keeps its whole lifecycle — start here, stop in
+     * [mediaProcessor] setter keeps its whole lifecycle — start here, stop in
      * [onDetachedFromWindow] — on the UI thread, so it can't race a
      * background-thread delegate assignment.
      */
@@ -692,7 +692,7 @@ class GutenbergView : FrameLayout {
         // Nothing to route through the native server unless the host provided a
         // delegate or an uploader — leave it down and let uploads fall to the default
         // WebView path. (Matches iOS.)
-        if (mediaUploadDelegate == null && mediaUploader == null) return
+        if (mediaProcessor == null && mediaUploader == null) return
 
         // The native upload server relays through InternalMediaClient, which needs a
         // site root and an auth header (every host provides one — the editor injects
@@ -726,7 +726,7 @@ class GutenbergView : FrameLayout {
                 siteApiNamespace = configuration.siteApiNamespace.toList()
             )
             uploadServer = MediaUploadServer(
-                uploadDelegate = mediaUploadDelegate,
+                processor = mediaProcessor,
                 internalClient = internalClient,
                 uploader = mediaUploader,
                 cacheDir = context.cacheDir,
