@@ -157,10 +157,11 @@ struct MediaUploadServerTests {
     #expect(httpResponse.value(forHTTPHeaderField: "Content-Type") == "text/plain")
   }
 
-  @Test("calls delegate and returns upload result")
-  func delegateProcessAndUpload() async throws {
-    let delegate = MockUploadDelegate()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate)
+  @Test("processes with the delegate, then delivers and relays verbatim")
+  func delegateProcessThenDeliver() async throws {
+    let delegate = ResizingDelegate()
+    let internalClient = MockInternalMediaClient()
+    let server = try await MediaUploadServer.start(uploadDelegate: delegate, internalClient: internalClient)
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -178,17 +179,15 @@ struct MediaUploadServerTests {
     let httpResponse = try #require(response as? HTTPURLResponse)
     #expect(httpResponse.statusCode == 201)
 
-    #expect(delegate.processFileCalled)
-    #expect(delegate.uploadFileCalled)
-    #expect(delegate.lastMimeType == "image/jpeg")
-    #expect(delegate.lastFilename == "photo.jpg")
+    // The delegate only transforms; GutenbergKit performs the upload.
+    #expect(internalClient.uploadCalled)
 
     // The server relays WordPress's raw response body verbatim.
     let object = try JSONSerialization.jsonObject(with: data)
     let json = try #require(object as? [String: Any])
-    #expect(json["id"] as? Int == 42)
-    #expect(json["source_url"] as? String == "https://example.com/photo.jpg")
-    #expect(json["media_type"] as? String == "image")
+    #expect(json["id"] as? Int == 99)
+    #expect(json["source_url"] as? String == "https://example.com/doc.pdf")
+    #expect(json["media_type"] as? String == "file")
   }
 
   @Test("uses passthrough when delegate does not modify file")
@@ -452,8 +451,8 @@ struct MediaUploadServerTests {
     #expect(received.query == "?_embed=wp:featuredmedia")
   }
 
-  @Test("an uploader takes precedence over the deprecated uploadFile hook")
-  func uploaderWinsOverDeprecatedHook() async throws {
+  @Test("a delegate still processes the file an uploader delivers")
+  func delegateProcessesForUploader() async throws {
     let delegate = MockUploadDelegate()
     let uploader = RecordingUploader()
     let server = try await MediaUploadServer.start(uploadDelegate: delegate, uploader: uploader, internalClient: MockInternalMediaClient())
@@ -472,7 +471,6 @@ struct MediaUploadServerTests {
 
     // The delegate still processes; only delivery moves to the uploader.
     #expect(delegate.processFileCalled)
-    #expect(!delegate.uploadFileCalled)
     #expect(uploader.received != nil)
   }
 
@@ -560,8 +558,8 @@ struct MediaUploadServerTests {
 
   @Test("still processes for a delegate the host has dropped its reference to")
   func processesForHostReleasedDelegate() async throws {
-    // The delegate is read at the admission gate and again at processFile and
-    // uploadFile, separated by a synchronous disk copy and an unbounded processFile.
+    // The delegate is read at the admission gate and again at processFile, separated
+    // by a synchronous disk copy and an unbounded processFile.
     // Held weakly, a host that dropped its reference changed the answer between
     // those reads: a file admitted for processing was forwarded unprocessed. The
     // host dropping it before the request is the same condition, deterministically.
@@ -1030,14 +1028,10 @@ private final class TranscodingDelegate: MediaUploadDelegate, @unchecked Sendabl
 private final class MockUploadDelegate: MediaUploadDelegate, @unchecked Sendable {
   private let lock = NSLock()
   private var _processFileCalled = false
-  private var _uploadFileCalled = false
   private var _lastMimeType: String?
-  private var _lastFilename: String?
 
   var processFileCalled: Bool { lock.withLock { _processFileCalled } }
-  var uploadFileCalled: Bool { lock.withLock { _uploadFileCalled } }
   var lastMimeType: String? { lock.withLock { _lastMimeType } }
-  var lastFilename: String? { lock.withLock { _lastFilename } }
 
   func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
     lock.withLock {
@@ -1045,15 +1039,6 @@ private final class MockUploadDelegate: MediaUploadDelegate, @unchecked Sendable
       _lastMimeType = mimeType
     }
     return .original
-  }
-
-  func uploadFile(at url: URL, mimeType: String, filename: String) async throws -> MediaUploadResponse? {
-    lock.withLock {
-      _uploadFileCalled = true
-      _lastFilename = filename
-    }
-    let json = #"{"id":42,"source_url":"https://example.com/photo.jpg","media_type":"image"}"#
-    return MediaUploadResponse(statusCode: 201, body: Data(json.utf8))
   }
 }
 

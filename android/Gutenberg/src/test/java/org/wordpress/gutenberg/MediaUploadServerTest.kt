@@ -308,10 +308,11 @@ class MediaUploadServerTest {
     // MARK: - Upload with delegate
 
     @Test
-    fun `calls delegate processFile and uploadFile`() {
-        val delegate = MockUploadDelegate()
+    fun `processes with the delegate, then delivers through the internal client`() {
+        val delegate = TranscodingDelegate()
+        val client = MockInternalMediaClient()
         server.stop()
-        server = MediaUploadServer(uploadDelegate = delegate, internalClient = null, cacheDir = tempFolder.root)
+        server = MediaUploadServer(uploadDelegate = delegate, internalClient = client, cacheDir = tempFolder.root)
 
         val boundary = "test-boundary-123"
         val body = buildMultipartBody(boundary, "photo.jpg", "image/jpeg", "fake image data".toByteArray())
@@ -327,16 +328,14 @@ class MediaUploadServerTest {
         )
 
         assertTrue("Expected 201 but got: ${response.statusLine}", response.statusLine.contains("201"))
-        assertTrue(delegate.processFileCalled)
-        assertTrue(delegate.uploadFileCalled)
-        assertEquals("image/jpeg", delegate.lastMimeType)
-        assertEquals("photo.jpg", delegate.lastFilename)
+        // The delegate only transforms; GutenbergKit performs the upload.
+        assertTrue(client.uploadCalled)
 
         // The server relays WordPress's raw response body verbatim.
         val json = JsonParser.parseString(response.body).asJsonObject
-        assertEquals(42, json.get("id").asInt)
-        assertEquals("https://example.com/photo.jpg", json.get("source_url").asString)
-        assertEquals("image", json.get("media_type").asString)
+        assertEquals(99, json.get("id").asInt)
+        assertEquals("https://example.com/doc.pdf", json.get("source_url").asString)
+        assertEquals("file", json.get("media_type").asString)
     }
 
     @Test
@@ -861,25 +860,6 @@ class MediaUploadServerTest {
 
     // MARK: - Mocks
 
-    private class MockUploadDelegate : MediaUploadDelegate {
-        @Volatile var processFileCalled = false
-        @Volatile var uploadFileCalled = false
-        @Volatile var lastMimeType: String? = null
-        @Volatile var lastFilename: String? = null
-
-        override suspend fun processFile(file: File, mimeType: String, filename: String): ProcessedProxyFile {
-            processFileCalled = true
-            lastMimeType = mimeType
-            return ProcessedProxyFile.Original
-        }
-
-        override suspend fun uploadFile(file: File, mimeType: String, filename: String): MediaUploadResponse? {
-            uploadFileCalled = true
-            lastFilename = filename
-            val json = """{"id":42,"source_url":"https://example.com/photo.jpg","media_type":"image"}"""
-            return MediaUploadResponse(201, json.toByteArray())
-        }
-    }
 
     private class ProcessOnlyDelegate : MediaUploadDelegate {
         @Volatile var processFileCalled = false

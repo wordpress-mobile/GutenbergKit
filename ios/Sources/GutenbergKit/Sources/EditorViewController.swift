@@ -129,8 +129,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// retain it yourself — just don't strongly retain this `EditorViewController`
     /// from your uploader.
     ///
-    /// Takes precedence over the deprecated ``MediaUploadDelegate/uploadFile(at:mimeType:filename:)``:
-    /// with an uploader set, that hook is never called.
+    /// A ``mediaUploadDelegate`` can still transform the file first; only delivery
+    /// moves to the uploader.
     public var mediaUploader: (any MediaUploader)? {
         didSet {
             precondition(!hasStartedLoading, Self.lateMediaAssignmentMessage("mediaUploader"))
