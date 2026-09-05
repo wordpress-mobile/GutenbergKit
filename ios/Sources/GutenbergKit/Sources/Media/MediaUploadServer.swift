@@ -391,7 +391,22 @@ final class MediaUploadServer: Sendable {
         /// Decodes the editor's non-file form parts (e.g. `post`, additionalData) into an
         /// ordered list of name/value pairs for a host uploader, so it can send them on its
         /// own `POST /wp/v2/media`. A list, not a dictionary, so repeated field names survive
-        /// in order. Values are WordPress form fields — UTF-8 text.
+        /// in order.
+        ///
+        /// The UTF-8 decode is lossless here because of an invariant worth stating, since
+        /// nothing in the type system enforces it: **the only client is the editor's
+        /// browser `FormData`.** The server binds to loopback behind a per-session token,
+        /// so nothing else can reach it; a `FormData` string value is a `USVString`, which
+        /// the browser has already made well-formed at `append` time; and its only way to
+        /// carry arbitrary bytes is a Blob, which always gets a filename and is therefore
+        /// filtered out of `extraParts` by `handleUpload`. Valid UTF-8 — including emoji
+        /// and any non-Latin script — round-trips exactly, so real captions and titles are
+        /// unaffected.
+        ///
+        /// If that ever stops holding, this decode starts substituting U+FFFD *and* the two
+        /// platforms disagree about how: for `ED A0 80`, Swift's maximal-subpart rule yields
+        /// three replacement characters where Java's decoder yields one. `MediaUploadServerTests`
+        /// pins the partition that keeps binary parts out of here.
         private static func formFields(from parts: [MultipartPart]) async throws -> [MediaUploadField] {
             var fields: [MediaUploadField] = []
             for part in parts {
@@ -674,9 +689,16 @@ class InternalMediaClient: @unchecked Sendable {
     ) throws -> (InputStream, Int) {
         // Serialize the non-file parts (post, additionalData) into the preamble
         // ahead of the streamed file. They are small, so keeping them in memory is
-        // fine; `contentLength` counts them via `preamble.count`. Field values are
-        // appended as raw bytes (not through String) so a non-UTF-8 value is
-        // forwarded verbatim rather than coerced to empty.
+        // fine; `contentLength` counts them via `preamble.count`.
+        //
+        // Field values are appended as raw bytes rather than round-tripped through
+        // `String`. This is not because malformed values are expected — they can't
+        // reach here; see the invariant on `formFields`. It is because the failable
+        // `String(data:encoding:)` returns nil on invalid UTF-8, and the obvious
+        // `?? ""` behind it would silently drop a whole field's value. Appending the
+        // bytes keeps this re-encode byte-identical to the passthrough it stands in
+        // for, so a user's upload doesn't change shape just because a processor
+        // resized the image.
         var preamble = Data()
         for field in extraFields {
             preamble.append(Data("--\(boundary)\r\n".utf8))

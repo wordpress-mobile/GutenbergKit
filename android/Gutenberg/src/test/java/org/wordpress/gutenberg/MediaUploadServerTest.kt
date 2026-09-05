@@ -336,6 +336,69 @@ class MediaUploadServerTest {
     }
 
     @Test
+    fun `keeps a filename-bearing part out of the fields handed to an uploader`() {
+        // Pins the invariant that makes the UTF-8 decode of `fields` lossless. A browser
+        // FormData can only carry arbitrary bytes as a Blob, and a Blob always gets a
+        // filename, so the partition on `filename == null` is what keeps binary out of
+        // `fields`. Change it and the decode silently substitutes U+FFFD — and does so
+        // differently from iOS.
+        //
+        // Deliberately not asserted: what becomes of the second filename-bearing part.
+        // It is currently dropped rather than relayed, which is a separate open question.
+        val uploader = MockUploader()
+        val internalClient = MockInternalMediaClient()
+        server.stop()
+        server = MediaUploadServer(
+            processor = null,
+            uploader = uploader,
+            internalClient = internalClient,
+            cacheDir = tempFolder.root
+        )
+
+        val boundary = "test-boundary-123"
+        val out = java.io.ByteArrayOutputStream()
+        // A plain field — no filename, so it belongs in `fields`.
+        out.write("--$boundary\r\n".toByteArray())
+        out.write("Content-Disposition: form-data; name=\"post\"\r\n\r\n".toByteArray())
+        out.write("123".toByteArray())
+        out.write("\r\n".toByteArray())
+        // The file.
+        out.write("--$boundary\r\n".toByteArray())
+        out.write("Content-Disposition: form-data; name=\"file\"; filename=\"photo.jpg\"\r\n".toByteArray())
+        out.write("Content-Type: image/jpeg\r\n\r\n".toByteArray())
+        out.write("fake image data".toByteArray())
+        out.write("\r\n".toByteArray())
+        // A Blob-shaped sidecar: filename present, bytes not valid UTF-8. If the
+        // partition admitted this to `fields`, the lone 0xFF would become U+FFFD.
+        out.write("--$boundary\r\n".toByteArray())
+        out.write("Content-Disposition: form-data; name=\"sidecar\"; filename=\"blob\"\r\n".toByteArray())
+        out.write("Content-Type: application/octet-stream\r\n\r\n".toByteArray())
+        out.write(byteArrayOf(0x61, 0xFF.toByte(), 0x62))
+        out.write("\r\n--$boundary--\r\n".toByteArray())
+
+        sendRawRequest(
+            method = "POST",
+            path = "/upload",
+            headers = mapOf(
+                "Relay-Authorization" to "Bearer ${server.token}",
+                "Content-Type" to "multipart/form-data; boundary=$boundary"
+            ),
+            body = out.toByteArray()
+        )
+
+        assertTrue(uploader.uploadCalled)
+        assertEquals(
+            "only filename-less parts belong in fields",
+            listOf("post"),
+            uploader.lastFields.map { it.name }
+        )
+        assertTrue(
+            "no field value should have been lossily decoded",
+            uploader.lastFields.none { it.value.contains('�') }
+        )
+    }
+
+    @Test
     fun `hands the processed file and its new metadata to the uploader`() {
         // A processor transcodes the file; the host uploader must receive the processed
         // bytes and the new metadata, not the original clip.mov.

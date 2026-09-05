@@ -554,6 +554,16 @@ internal class MediaUploadServer(
                 // Hand the host the editor's non-file fields (e.g. `post`) and query
                 // too, so its own POST can reproduce a native upload — otherwise the
                 // attachment is created unattached and `?_embed` is lost.
+                //
+                // The UTF-8 decode is lossless because of an invariant nothing enforces:
+                // the only client is the editor's browser FormData. The server binds to
+                // loopback behind a per-session token; a FormData string value is a
+                // USVString, already well-formed at append time; and its only way to carry
+                // arbitrary bytes is a Blob, which always gets a filename and so is
+                // filtered out of extraParts above. Valid UTF-8 — emoji, any script —
+                // round-trips exactly. If that stops holding this silently substitutes
+                // U+FFFD, and differently from iOS (Java reports one replacement char for
+                // ED A0 80 where Swift's maximal-subpart rule reports three).
                 val fields = extraParts.map { part ->
                     MediaUploadField(part.name, String(part.body.readBytes(), Charsets.UTF_8))
                 }
@@ -663,8 +673,11 @@ internal open class InternalMediaClient(
         val mediaType = mimeType.toMediaType()
         val builder = okhttp3.MultipartBody.Builder().setType(okhttp3.MultipartBody.FORM)
         // Preserve the non-file parts (post, additionalData) through the re-encode.
-        // Append each field's raw bytes (not via String) so a non-UTF-8 value is
-        // forwarded verbatim rather than coerced. filename=null makes it a plain
+        // Each field's raw bytes are appended rather than round-tripped through String
+        // — not because malformed values are expected (they can't reach here; see the
+        // invariant where `fields` is built), but so this re-encode stays byte-identical
+        // to the passthrough it stands in for: a user's upload shouldn't change shape
+        // just because a processor resized the image. filename=null makes it a plain
         // field, matching okhttp's String overload byte-for-byte.
         for (part in extraParts) {
             builder.addFormDataPart(part.name, null, part.body.readBytes().toRequestBody())

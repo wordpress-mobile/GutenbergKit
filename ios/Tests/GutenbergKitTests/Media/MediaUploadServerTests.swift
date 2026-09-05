@@ -593,6 +593,58 @@ struct MediaUploadServerTests {
     #expect(!mockClient.passthroughUploadCalled)
   }
 
+  @Test("keeps a filename-bearing part out of the fields handed to an uploader")
+  func filenameBearingPartsNeverReachFields() async throws {
+    // This pins the invariant that makes the UTF-8 decode in `formFields` lossless.
+    // A browser FormData can only carry arbitrary bytes as a Blob, and a Blob always
+    // gets a filename, so `handleUpload`'s partition on `filename == nil` is what keeps
+    // binary out of `fields`. Change that partition and the decode silently starts
+    // substituting U+FFFD — differently on each platform.
+    //
+    // Deliberately *not* asserted: what becomes of the second filename-bearing part.
+    // It is currently dropped rather than relayed, which is a separate open question;
+    // this test is about what must never reach `fields`.
+    let uploader = MockUploader()
+    let mockClient = MockInternalMediaClient()
+    let server = try await MediaUploadServer.start(uploader: uploader, internalClient: mockClient)
+    defer { server.stop() }
+
+    let boundary = UUID().uuidString
+    var body = Data()
+    // A plain field — no filename, so it belongs in `fields`.
+    body.append("--\(boundary)\r\n")
+    body.append("Content-Disposition: form-data; name=\"post\"\r\n\r\n")
+    body.append("123")
+    body.append("\r\n")
+    // The file.
+    body.append("--\(boundary)\r\n")
+    body.append("Content-Disposition: form-data; name=\"file\"; filename=\"photo.jpg\"\r\n")
+    body.append("Content-Type: image/jpeg\r\n\r\n")
+    body.append(Data("fake image data".utf8))
+    body.append("\r\n")
+    // A Blob-shaped sidecar: has a filename, and carries bytes that are not valid
+    // UTF-8. If the partition ever admitted this to `fields`, the lone 0xFF would
+    // become U+FFFD and the value would be silently corrupted.
+    body.append("--\(boundary)\r\n")
+    body.append("Content-Disposition: form-data; name=\"sidecar\"; filename=\"blob\"\r\n")
+    body.append("Content-Type: application/octet-stream\r\n\r\n")
+    body.append(Data([0x61, 0xFF, 0x62]))
+    body.append("\r\n--\(boundary)--\r\n")
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    request.httpBody = body
+
+    _ = try await URLSession.shared.data(for: request)
+
+    #expect(uploader.uploadCalled)
+    #expect(uploader.lastFields.map(\.name) == ["post"], "only filename-less parts belong in fields")
+    #expect(!uploader.lastFields.contains { $0.value.contains("\u{FFFD}") }, "no field value should have been lossily decoded")
+  }
+
   private func buildMultipartBody(boundary: String, filename: String, mimeType: String, data: Data, fields: [MediaUploadField] = []) -> Data {
     var body = Data()
     for field in fields {
