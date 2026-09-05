@@ -78,9 +78,18 @@ public protocol MediaUploadDelegate: AnyObject, Sendable {
     /// Upload a processed file to the remote WordPress site.
     ///
     /// Return the raw WordPress response (status code + body), which GutenbergKit
-    /// relays to the editor unchanged, or `nil` to use the default uploader. A
+    /// relays to the editor unchanged, or `nil` to use the internal media client. A
     /// host that uploads to WordPress should return the exact response it
     /// received so the editor sees a complete attachment object.
+    ///
+    /// - Warning: Returning a raw response splits one upload's HTTP across two
+    ///   owners — you perform the `POST`, but GutenbergKit's editor drives the
+    ///   `post-process` retries and orphan cleanup behind it, through the WebView
+    ///   rather than your stack. It also receives no form fields, so an attachment
+    ///   uploaded this way lands unattached to its post. Conform to ``MediaUploader``
+    ///   instead: it owns the upload end-to-end and receives a ``MediaUpload``
+    ///   carrying the fields.
+    @available(*, deprecated, message: "Conform to MediaUploader instead — it owns the upload's retries and receives the editor's form fields.")
     func uploadFile(at url: URL, mimeType: String, filename: String) async throws -> MediaUploadResponse?
 }
 
@@ -94,7 +103,96 @@ extension MediaUploadDelegate {
         .original
     }
 
+    @available(*, deprecated, message: "Conform to MediaUploader instead — it owns the upload's retries and receives the editor's form fields.")
     public func uploadFile(at url: URL, mimeType: String, filename: String) async throws -> MediaUploadResponse? {
         nil
     }
+}
+
+/// One of the editor's non-file form fields, as sent with a media upload.
+///
+/// A named type rather than a `(name, value)` tuple: tuples are not nominal, so a
+/// tuple-typed property would permanently block `Equatable`/`Hashable`/`Codable`
+/// synthesis on ``MediaUpload`` — including inside GutenbergKit, and not fixable
+/// later without a source break for every host.
+public struct MediaUploadField: Sendable, Hashable, Codable {
+    /// The field name, e.g. `post`. Not unique — a `field[]` array repeats it.
+    public let name: String
+
+    /// The field's value, decoded as UTF-8.
+    public let value: String
+
+    public init(name: String, value: String) {
+        self.name = name
+        self.value = value
+    }
+}
+
+/// Everything a ``MediaUploader`` needs to reproduce a native upload: the file to
+/// send, its metadata, the editor's non-file form fields, and the request's query.
+public struct MediaUpload: Sendable {
+    /// The file to upload — already processed, if a ``MediaUploadDelegate`` ran.
+    public let fileURL: URL
+
+    /// The file's MIME type.
+    public let mimeType: String
+
+    /// The file's name.
+    public let filename: String
+
+    /// The editor's non-file form fields, in order, each decoded as UTF-8 — most
+    /// importantly `post`, the parent post's ID, without which the attachment is
+    /// created unattached. A list, not a dictionary, so repeated field names (e.g. a
+    /// `field[]` array) survive verbatim. Send each as a form part on your
+    /// `POST /wp/v2/media`, in the given order.
+    public let fields: [MediaUploadField]
+
+    /// The request's query string (leading `?`, e.g. `?_embed=wp:featuredmedia`), or
+    /// empty. Carry it on your request so the editor gets the response it expects.
+    public let query: String
+
+    public init(fileURL: URL, mimeType: String, filename: String, fields: [MediaUploadField], query: String) {
+        self.fileURL = fileURL
+        self.mimeType = mimeType
+        self.filename = filename
+        self.fields = fields
+        self.query = query
+    }
+}
+
+/// Takes over *performing* a media upload — on the host's own stack: its own
+/// networking (say, to log every request), a background session, an offline queue,
+/// a resumable transport, its own retry policy.
+///
+/// This is a choice of *who executes the requests*, not where they go: an uploader
+/// and GutenbergKit's internal media client both target the same configured site.
+/// Setting ``EditorViewController/mediaUploader`` makes the host own that upload
+/// end-to-end — the request, its own retries, and its recovery and cleanup — with
+/// GutenbergKit out of the network entirely. Because the host does the retries
+/// itself, there's no raw response left for the editor to retry behind it. The
+/// attachment you return lives on that same configured site, where the editor reads
+/// and updates it by ID.
+public protocol MediaUploader: AnyObject, Sendable {
+    /// Upload a (possibly processed) file and return the finished WordPress
+    /// attachment JSON the editor inserts — the same object a direct
+    /// `POST /wp/v2/media` returns. Return only once the upload is genuinely done,
+    /// or `throw` on terminal failure: a returned value is taken as a completed
+    /// attachment, and there is no GutenbergKit recovery behind you.
+    ///
+    /// The ``MediaUpload`` carries the file plus the editor's form fields (e.g.
+    /// `post`) and query — send them all so the created attachment matches a native
+    /// upload rather than landing as an unattached orphan.
+    ///
+    /// That recovery is yours to run. When `POST /wp/v2/media` fatals in server-side
+    /// post-processing it returns a 5xx carrying the attachment's ID in
+    /// `x-wp-upload-attachment-id` — the attachment exists but is unfinished. Don't
+    /// re-upload; drive `POST /wp/v2/media/<id>/post-process` to completion, the way
+    /// core recovers its own uploads (up to 5 attempts), then return the finished
+    /// attachment.
+    ///
+    /// Owning the upload means owning cleanup on the server too: if post-process
+    /// can't be recovered, force-delete the orphan
+    /// (`DELETE /wp/v2/media/<id>?force=true`) before you `throw`, or it stays on the
+    /// site — neither GutenbergKit nor the editor cleans up behind you.
+    func upload(_ upload: MediaUpload) async throws -> Data
 }

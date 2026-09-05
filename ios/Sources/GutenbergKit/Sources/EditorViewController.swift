@@ -143,6 +143,22 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // swiftlint:disable:next weak_delegate
     public private(set) var mediaUploadDelegate: (any MediaUploadDelegate)?
 
+    /// Takes over media upload on the host's own stack (background session, offline
+    /// queue, resumable transport). Passing one makes the host own every upload and its
+    /// whole lifecycle; GutenbergKit stays out of the network entirely for media.
+    ///
+    /// Same ownership rules as ``mediaUploadDelegate``: supplied at `init`, held for the
+    /// editor's lifetime, and not conformed by the object that owns the editor.
+    ///
+    /// Reuse is the expected shape here, more so than for a delegate: the transports this
+    /// exists for outlive any one editor by definition — a background `URLSession` has a
+    /// fixed identifier and must survive app relaunch, an offline queue spans sessions.
+    /// Build the uploader once, hold it, and pass the same instance to each editor.
+    ///
+    /// Takes precedence over the deprecated ``MediaUploadDelegate/uploadFile(at:mimeType:filename:)``:
+    /// with an uploader set, that hook is never called.
+    public private(set) var mediaUploader: (any MediaUploader)?
+
     // MARK: - Private Properties (Services)
     private let editorService: EditorService
     private let httpClient: any EditorHTTPClientProtocol
@@ -206,6 +222,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///     object carrying the settings it needs. If you must write the retaining shape,
     ///     call ``stopMediaHandling()`` when you are done. To reuse one delegate across
     ///     editors, keep your own reference — the editor drops only its own when it goes.
+    ///   - mediaUploader: Takes over media upload on the host's own stack. Same ownership
+    ///     rules as `mediaUploadDelegate`.
     ///   - httpClient: Replaces the client used for editor and media requests.
     ///   - isWarmupMode: Loads the editor shell without dependencies, to warm WebKit.
     public init(
@@ -213,6 +231,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         dependencies: EditorDependencies? = nil,
         mediaPicker: MediaPickerController? = nil,
         mediaUploadDelegate: (any MediaUploadDelegate)? = nil,
+        mediaUploader: (any MediaUploader)? = nil,
         httpClient: EditorHTTPClient? = nil,
         isWarmupMode: Bool = false
     ) {
@@ -231,6 +250,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         self.bundleProvider = EditorAssetBundleProvider(httpClient: httpClient)
         self.mediaPicker = mediaPicker
         self.mediaUploadDelegate = mediaUploadDelegate
+        self.mediaUploader = mediaUploader
         self.lockdownModeMonitor = LockdownModeMonitor()
         self.controller = GutenbergEditorController(configuration: configuration, lockdownModeMonitor: self.lockdownModeMonitor)
 
@@ -344,7 +364,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     /// Releases the editor's media handling: stops the local upload server, drops the
-    /// host's ``mediaUploadDelegate``, and withdraws the upload endpoint from the page.
+    /// host's ``mediaUploadDelegate`` and ``mediaUploader``, and withdraws the upload
+    /// endpoint from the page.
     ///
     /// Most hosts never need this. Releasing the editor runs `deinit`, which does the
     /// same work. It is only required when the delegate holds the editor back — which
@@ -388,6 +409,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         uploadServer?.stop()
         uploadServer = nil
         mediaUploadDelegate = nil
+        mediaUploader = nil
         revokeNativeUploadEndpoint()
     }
 
@@ -557,10 +579,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// because `nativeUploadPort` will be nil in GBKit).
     private func startUploadServer() async {
         // Nothing to route through the native server unless the host provided a
-        // delegate. The editor owns it — `mediaUploadDelegate` is strong — so there's
-        // no released-before-load case to guard against; it lives as long as the
-        // editor does.
-        guard mediaUploadDelegate != nil else {
+        // delegate or an uploader. The editor owns whichever it was given — both
+        // properties are strong — so there's no released-before-load case to guard
+        // against; they live as long as it does.
+        guard mediaUploadDelegate != nil || mediaUploader != nil else {
             return
         }
 
@@ -588,6 +610,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         do {
             let server = try await MediaUploadServer.start(
                 uploadDelegate: mediaUploadDelegate,
+                uploader: mediaUploader,
                 internalClient: internalClient
             )
 
