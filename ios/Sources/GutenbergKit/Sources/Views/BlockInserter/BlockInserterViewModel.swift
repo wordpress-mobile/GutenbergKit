@@ -12,7 +12,7 @@ class BlockInserterViewModel: ObservableObject {
     @Published private(set) var isProcessingMedia = false
 
     private let allSections: [BlockInserterSection]
-    private let fileManager: MediaFileManager = .shared
+    private let fileManager: MediaFileManager
     private var processingTask: Task<[MediaInfo], Never>?
     private var cancellables = Set<AnyCancellable>()
 
@@ -21,8 +21,11 @@ class BlockInserterViewModel: ObservableObject {
         let message: String
     }
 
-    init(sections: [BlockInserterSection]) {
+    /// - Parameter fileManager: Injectable so tests can point imports at a
+    ///   temporary directory; defaults to the app-wide shared instance.
+    init(sections: [BlockInserterSection], fileManager: MediaFileManager = .shared) {
         self.allSections = sections
+        self.fileManager = fileManager
         self.sections = sections.filter { $0.category != "gbk-search-only" }
 
         setupSearchObserver()
@@ -68,36 +71,55 @@ class BlockInserterViewModel: ObservableObject {
 
     // MARK: - Media Processing
 
-    func processSelectedPhotosPickerItems(_ items: [PhotosPickerItem]) async -> [MediaInfo] {
+    func processSelectedPhotosPickerItems(_ items: [some ImportableMediaItem]) async -> [MediaInfo] {
         isProcessingMedia = true
         defer { isProcessingMedia = false }
 
         let task = Task<[MediaInfo], Never> { @MainActor in
             var results: [MediaInfo] = []
-            var anyError: Error?
+            var failureCount = 0
 
-            do {
-                for item in items {
-                    let item = try await self.fileManager.import(item)
-                    results.append(item)
+            // Import each item independently so one failure doesn't abandon the
+            // rest of the selection. A single unreadable photo — e.g. one not
+            // fully downloaded from iCloud — should skip only itself, not drop
+            // the items picked alongside it.
+            for item in items {
+                if Task.isCancelled { break }
+                do {
+                    results.append(try await self.fileManager.import(item))
+                } catch {
+                    failureCount += 1
+                    Logger.media.error("Failed to import picker selection: \(error)")
                 }
-            } catch {
-                anyError = error
-                Logger.media.error("Failed to import picker selection: \(error)")
             }
 
             guard !Task.isCancelled else {
                 return []
             }
 
-            if results.isEmpty, anyError != nil {
-                self.error = MediaError(message: EditorLocalization[.failedToLoadSelectedMedia])
-            }
+            self.error = Self.importError(
+                failureCount: failureCount,
+                successCount: results.count
+            )
 
             return results
         }
         processingTask = task
         return await task.value
+    }
+
+    /// The alert to show after importing a picker selection, or `nil` when every
+    /// item imported.
+    ///
+    /// A partial failure still surfaces an error — naming how many items were
+    /// skipped — so the dropped items aren't lost silently; a total failure
+    /// keeps the existing "nothing could be loaded" message.
+    static func importError(failureCount: Int, successCount: Int) -> MediaError? {
+        guard failureCount > 0 else { return nil }
+        if successCount == 0 {
+            return MediaError(message: EditorLocalization[.failedToLoadSelectedMedia])
+        }
+        return MediaError(message: EditorLocalization[.someSelectedMediaFailedToLoad(failureCount)])
     }
 
     func processCameraMedia(_ media: CameraMedia) async -> [MediaInfo] {
