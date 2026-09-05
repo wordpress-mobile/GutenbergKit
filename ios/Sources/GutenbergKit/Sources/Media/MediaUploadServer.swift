@@ -101,7 +101,7 @@ final class MediaUploadServer: Sendable {
         }
 
         if method == "DELETE", let attachmentId = attachmentId(fromPath: parsed.path) {
-            return await handleMediaDelete(attachmentId, query: parsed.query, context: context)
+            return await handleMediaDelete(attachmentId, query: parsed.query, internalClient: context.internalClient)
         }
 
         return errorResponse(status: 404, message: "Not found")
@@ -137,7 +137,7 @@ final class MediaUploadServer: Sendable {
         let processorWantsFile = context.processor?.handlesFile(ofType: mimeType, named: filename) ?? false
         if context.uploader == nil, !processorWantsFile {
             do {
-                return try await passthroughResponse(request, query: query, context: context)
+                return try await passthroughResponse(request, query: query, internalClient: context.internalClient)
             } catch {
                 return uploadErrorResponse(error)
             }
@@ -178,7 +178,7 @@ final class MediaUploadServer: Sendable {
             case .passthrough:
                 // Delegate didn't modify the file — forward the original request
                 // body to WordPress without re-encoding.
-                return try await passthroughResponse(request, query: query, context: context)
+                return try await passthroughResponse(request, query: query, internalClient: context.internalClient)
             }
         } catch {
             return uploadErrorResponse(error)
@@ -190,7 +190,7 @@ final class MediaUploadServer: Sendable {
     /// processor won't touch the file — it declined by metadata (`handlesFile`
     /// returned false) or `processFile` returned `.original`.
     private static func passthroughResponse(
-        _ request: HTTPServer.Request, query: String, context: UploadContext
+        _ request: HTTPServer.Request, query: String, internalClient: InternalMediaClient
     ) async throws -> HTTPResponse {
         // As in `processAndUpload`: don't put bytes on the wire for a torn-down
         // editor, regardless of whether the HTTP client honors cancellation.
@@ -201,7 +201,7 @@ final class MediaUploadServer: Sendable {
               let contentType = request.parsed.header("Content-Type") else {
             return errorResponse(status: 500, message: "Passthrough upload requires a request body and Content-Type")
         }
-        let response = try await context.internalClient.passthroughUpload(body: body, contentType: contentType, query: query)
+        let response = try await internalClient.passthroughUpload(body: body, contentType: contentType, query: query)
         return relayResponse(response)
     }
 
@@ -229,7 +229,7 @@ final class MediaUploadServer: Sendable {
     /// delivered — so its deletion is relayed to the internal media client there. See
     /// the accepted-risk note in the body.
     private static func handleMediaDelete(
-        _ attachmentId: String, query: String, context: UploadContext
+        _ attachmentId: String, query: String, internalClient: InternalMediaClient
     ) async -> HTTPResponse {
         do {
             // Relay to the internal media client (the configured site) — every attachment
@@ -241,7 +241,7 @@ final class MediaUploadServer: Sendable {
             // access, and a server-side compromise (a malicious plugin) deletes media
             // directly without the editor, so scoping this with a per-session ledger
             // buys little for the cost.
-            let response = try await context.internalClient.deleteMedia(attachmentId: attachmentId, query: query)
+            let response = try await internalClient.deleteMedia(attachmentId: attachmentId, query: query)
             return relayResponse(response)
         } catch {
             return uploadErrorResponse(error)
