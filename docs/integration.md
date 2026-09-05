@@ -246,33 +246,34 @@ val configuration = EditorConfiguration.builder()
 
 ## Media Handling
 
-The host can customize how media is processed and uploaded by supplying a
-`MediaUploadDelegate` at init:
+The host can transform media before upload by supplying a `MediaProcessor` at init.
+To take over the upload itself, supply a `MediaUploader` instead — a processor only
+changes bytes; GutenbergKit still delivers them.
 
 ```swift
 let editor = EditorViewController(
     configuration: configuration,
-    mediaUploadDelegate: ResizingDelegate(maxDimension: 2000)
+    mediaProcessor: ResizingProcessor(maxDimension: 2000)
 )
 ```
 
 ### Don't conform the object that owns the editor
 
-GutenbergKit never hands your delegate the editor: every value crossing that boundary is a
-value type — a file URL, a MIME type, a filename. So a delegate can only reach the editor
+GutenbergKit never hands your processor the editor: every value crossing that boundary is a
+value type — a file URL, a MIME type, a filename. So a processor can only reach the editor
 if you put it there.
 
 That happens when you conform the object that already holds the editor in order to drive
-it. The editor holds the delegate strongly in return — deliberately, so an in-flight upload
+it. The editor holds the processor strongly in return — deliberately, so an in-flight upload
 can't lose it mid-request — which closes a retain cycle ARC cannot break. The editor is
 never deallocated, and each one strands a bound loopback listener.
 
 ```swift
-// Leaks: coordinator -> editor -> mediaUploadDelegate -> coordinator
-final class PostEditorCoordinator: MediaUploadDelegate {
+// Leaks: coordinator -> editor -> mediaProcessor -> coordinator
+final class PostEditorCoordinator: MediaProcessor {
     var editor: EditorViewController!
     init(blog: Blog, configuration: EditorConfiguration) {
-        editor = EditorViewController(configuration: configuration, mediaUploadDelegate: self)
+        editor = EditorViewController(configuration: configuration, mediaProcessor: self)
     }
 }
 ```
@@ -287,7 +288,7 @@ final class PostEditorCoordinator {
     init(blog: Blog, configuration: EditorConfiguration) {
         editor = EditorViewController(
             configuration: configuration,
-            mediaUploadDelegate: BlogMediaDelegate(siteID: blog.dotComID, maxDimension: 2000)
+            mediaProcessor: BlogMediaProcessor(siteID: blog.dotComID, maxDimension: 2000)
         )
     }
 }
@@ -298,12 +299,12 @@ are finished with the editor. It is terminal — the editor cannot upload or del
 afterwards — so call it when the editor is going away, not when it is merely covered or
 backgrounded.
 
-### Reusing a delegate across editor sessions
+### Reusing a processor across editor sessions
 
-The editor holds the delegate for its lifetime and releases it when it goes, so a delegate
+The editor holds the processor for its lifetime and releases it when it goes, so a processor
 built for a single editor needs no reference of its own. To use the same instance for
 several editors, keep your own reference — the editor drops only its own. Sharing is also
-the safer shape: a delegate owned by something longer-lived than any editor is a leaf, so
+the safer shape: a processor owned by something longer-lived than any editor is a leaf, so
 it cannot form the cycle above and there is nothing to tear down. It may be called
 concurrently if more than one editor is live, and it must not hold on to any editor it has
 served.
