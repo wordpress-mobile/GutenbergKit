@@ -502,24 +502,95 @@ struct MediaUploadServerTests {
     #expect(FileManager.default.fileExists(atPath: fresh.path(percentEncoded: false)))
   }
 
-  @Test("does not strongly retain the processor (weak — preserves deinit teardown)")
-  func doesNotStronglyRetainProcessor() async throws {
+  @Test("retains the processor for the server's lifetime, and releases it on stop")
+  func retainsProcessorForServerLifetime() async throws {
     weak var weakProcessor: PassthroughProcessor?
-    let server: MediaUploadServer
+    var server: MediaUploadServer?
     do {
       let processor = PassthroughProcessor()
       weakProcessor = processor
       server = try await MediaUploadServer.start(processor: processor, internalClient: MockInternalMediaClient())
     }
+
+    // The server (via UploadContext) holds the processor *strongly*, matching both the
+    // editor's own ownership (see `EditorMediaHandlerOwnershipTests`) and Android's
+    // plain `val`. Holding it weakly here bought no leak protection — a host object
+    // that retains the editor already cycles through the editor's own strong
+    // `mediaProcessor` — and only risked the reference vanishing mid-request.
+    #expect(weakProcessor != nil, "the server must own its processor while it runs")
+
+    // …and releases it when the server goes away, so nothing outlives the editor.
+    // `stop()` cancels the NWListener, whose handlers are torn down asynchronously,
+    // so the final release lands a beat after `server = nil` — poll rather than
+    // assert instantly.
+    server?.stop()
+    server = nil
+    for _ in 0..<200 where weakProcessor != nil {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(weakProcessor == nil, "releasing the server must release the processor")
+  }
+
+  @Test("delivers through an uploader the host releases mid-request")
+  func uploaderReleasedMidRequestStillDelivers() async throws {
+    let mockClient = MockInternalMediaClient()
+    let gate = UnsafeMutableSendablePointer(false)
+    let didUpload = UnsafeMutableSendablePointer(false)
+    let processor = GatedProcessor(gate: gate)
+
+    // `holder` stands in for the *host's* own reference to its uploader, which the
+    // docs say it may drop after assigning. It's built in a nested scope so the
+    // `start` call's existential temporary dies with that scope; left in the test's
+    // own frame, that temporary keeps the uploader alive whatever the server does,
+    // and the test would pass vacuously. The uploader's record of having run lives in
+    // `didUpload`, off the object, so it survives the release either way.
+    let holder = UnsafeMutableSendablePointer<(any MediaUploader)?>(nil)
+    let server: MediaUploadServer
+    do {
+      let uploader = ReleasableUploader(didUpload: didUpload)
+      holder.value = uploader
+      server = try await MediaUploadServer.start(
+        processor: processor, uploader: uploader, internalClient: mockClient
+      )
+    }
     defer { server.stop() }
 
-    // The server (via UploadContext) holds the processor *weakly*, so once the only
-    // strong reference is released it deallocates. This is deliberately the opposite
-    // of the editor, which owns the processor *strongly* for its lifetime (see
-    // `EditorMediaHandlerOwnershipTests`): a strong capture here would reintroduce the
-    // EditorViewController → uploadServer → … → processor → EditorViewController cycle,
-    // so deinit would never fire and the server would never stop.
-    #expect(weakProcessor == nil)
+    let boundary = UUID().uuidString
+    let body = buildMultipartBody(
+      boundary: boundary, filename: "photo.jpg", mimeType: "image/jpeg",
+      data: Data("fake image data".utf8)
+    )
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    request.httpBody = body
+
+    let requestTask = Task { try await URLSession.shared.data(for: request) }
+
+    // Park the request inside `processFile` — past the gate that saw the uploader,
+    // before the delivery step. This is the window a real host sits in while a
+    // transcode runs.
+    while !processor.processFileStarted {
+      try await Task.sleep(for: .milliseconds(5))
+    }
+
+    // The host drops its reference mid-upload. While `UploadContext` held the uploader
+    // weakly this dropped the last one: delivery then read nil and silently uploaded
+    // through the internal client instead — breaking the "GutenbergKit out of the
+    // network entirely" contract and creating an attachment the host never learns
+    // about. The server owns the uploader now, so the request delivers as promised.
+    holder.value = nil
+
+    gate.value = true
+    let (_, response) = try await requestTask.value
+
+    let httpResponse = try #require(response as? HTTPURLResponse)
+    #expect(httpResponse.statusCode == 201)
+    #expect(didUpload.value, "the released uploader must still own delivery")
+    #expect(!mockClient.uploadCalled, "GutenbergKit must not upload behind an uploader")
+    #expect(!mockClient.passthroughUploadCalled)
   }
 
   private func buildMultipartBody(boundary: String, filename: String, mimeType: String, data: Data, fields: [(name: String, value: String)] = []) -> Data {
@@ -957,6 +1028,45 @@ private final class MockUploader: MediaUploader, @unchecked Sendable {
     }
     if let error { throw error }
     return uploadBody
+  }
+}
+
+/// Holds a request open inside `processFile` until the test opens `gate`, so the test
+/// can act while the request is parked between the admission gate and delivery.
+private final class GatedProcessor: MediaProcessor, @unchecked Sendable {
+  private let lock = NSLock()
+  private var _processFileStarted = false
+  private let gate: UnsafeMutableSendablePointer<Bool>
+
+  var processFileStarted: Bool { lock.withLock { _processFileStarted } }
+
+  init(gate: UnsafeMutableSendablePointer<Bool>) {
+    self.gate = gate
+  }
+
+  func handlesFile(ofType mimeType: String, named filename: String) -> Bool { true }
+
+  func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
+    lock.withLock { _processFileStarted = true }
+    while !gate.value {
+      try await Task.sleep(for: .milliseconds(5))
+    }
+    return .original
+  }
+}
+
+/// An uploader whose record of having run lives *outside* the object, so a test can
+/// release its last strong reference mid-request and still assert that it delivered.
+private final class ReleasableUploader: MediaUploader, @unchecked Sendable {
+  private let didUpload: UnsafeMutableSendablePointer<Bool>
+
+  init(didUpload: UnsafeMutableSendablePointer<Bool>) {
+    self.didUpload = didUpload
+  }
+
+  func upload(_ upload: MediaUpload) async throws -> Data {
+    didUpload.value = true
+    return Data(#"{"id":42,"source_url":"https://example.com/photo.jpg","media_type":"image"}"#.utf8)
   }
 }
 

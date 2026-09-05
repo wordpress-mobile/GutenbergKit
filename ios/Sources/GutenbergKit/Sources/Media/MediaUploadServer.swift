@@ -490,29 +490,28 @@ enum UploadError: Error, LocalizedError {
 // MARK: - Upload Context
 
 /// Container for the media processor, uploader, and internal media client, captured by
-/// the HTTPServer handler closure and re-read on each request.
+/// the HTTPServer handler closure and read on each request.
 ///
-/// The processor and uploader are held **weakly**. `EditorViewController` owns them
-/// for its lifetime — its `mediaProcessor` / `.mediaUploader` are strong — and owns
-/// this server too, so they stay alive for every request. The weak reference here is
-/// solely to break the cycle the server would otherwise close (`EditorViewController →
-/// uploadServer → HTTPServer → handler → UploadContext → host object →
-/// EditorViewController`) whenever the host object retains the view controller:
-/// capturing strongly would keep the view controller — and therefore the server —
-/// alive forever, so `deinit` would never stop it.
+/// Everything here is held **strongly**, so a handler that admitted a file for
+/// processing will process it, and one that gated on an uploader will deliver through
+/// it — the reads can't disagree within a request, and an in-flight upload keeps the
+/// host's handlers alive until it unwinds. This matches Android, which holds its
+/// `processor`/`uploader` as plain `val`s for the same reason.
 ///
-/// `@unchecked Sendable`: `processor`/`uploader` are assigned once at init and only
-/// read afterwards; weak-reference reads are thread-safe at runtime.
-private final class UploadContext: @unchecked Sendable {
-    weak var processor: (any MediaProcessor)?
-    weak var uploader: (any MediaUploader)?
+/// Strong is safe because `EditorViewController` owns `mediaProcessor` /
+/// `mediaUploader` strongly too. A host object that retains the view controller back
+/// already forms `EditorViewController → mediaUploader → EditorViewController`, a
+/// cycle this container can neither create nor prevent — so holding weak here bought
+/// no leak protection, only the risk of a reference vanishing mid-request. (It *was*
+/// load-bearing when the view controller held its delegate `weak` and this was the
+/// only strong path; that changed when those properties became strong.)
+///
+/// A `struct`, so it is implicitly `Sendable`: `MediaProcessor` and `MediaUploader`
+/// are `Sendable` protocols and `InternalMediaClient` is `@unchecked Sendable`.
+private struct UploadContext: Sendable {
+    let processor: (any MediaProcessor)?
+    let uploader: (any MediaUploader)?
     let internalClient: InternalMediaClient
-
-    init(processor: (any MediaProcessor)?, uploader: (any MediaUploader)?, internalClient: InternalMediaClient) {
-        self.processor = processor
-        self.uploader = uploader
-        self.internalClient = internalClient
-    }
 }
 
 // MARK: - Default Media Uploader
