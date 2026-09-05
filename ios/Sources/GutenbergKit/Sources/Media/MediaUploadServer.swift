@@ -453,25 +453,24 @@ enum UploadError: Error, LocalizedError {
 // MARK: - Upload Context
 
 /// Container for the upload delegate and default uploader, captured by the
-/// HTTPServer handler closure and re-read on each request.
+/// HTTPServer handler closure and read on each request.
 ///
-/// The delegate is held **weakly**. `EditorViewController.mediaUploadDelegate` is
-/// declared `weak` — the host owns the delegate's lifetime. Capturing it strongly
-/// here would silently defeat that contract and, worse, risk a retain cycle
-/// (`EditorViewController → uploadServer → HTTPServer → handler → UploadContext →
-/// delegate → EditorViewController`) that would keep the view controller — and
-/// therefore the server — alive forever, so `deinit` would never stop it.
+/// Both are held **strongly**, so a delegate that admitted a file for processing
+/// will process it — the three reads within a request can't disagree, and an
+/// in-flight upload keeps the host's delegate alive until it unwinds. This matches
+/// Android, which holds its `uploadDelegate` as a plain `val` for the same reason.
 ///
-/// `@unchecked Sendable`: `uploadDelegate` is assigned once at init and only read
-/// afterwards; weak-reference reads are thread-safe at runtime.
-private final class UploadContext: @unchecked Sendable {
-    weak var uploadDelegate: (any MediaUploadDelegate)?
+/// Strong is safe because `EditorViewController` owns `mediaUploadDelegate` strongly
+/// too. A host object that retains the view controller back already forms
+/// `EditorViewController → mediaUploadDelegate → EditorViewController`, a cycle this
+/// container can neither create nor prevent — so holding weak here bought no leak
+/// protection, only the risk of the delegate vanishing mid-request.
+///
+/// A `struct`, so it is implicitly `Sendable`: `MediaUploadDelegate` is a `Sendable`
+/// protocol and `DefaultMediaUploader` is `@unchecked Sendable`.
+private struct UploadContext: Sendable {
+    let uploadDelegate: (any MediaUploadDelegate)?
     let defaultUploader: DefaultMediaUploader?
-
-    init(uploadDelegate: (any MediaUploadDelegate)?, defaultUploader: DefaultMediaUploader?) {
-        self.uploadDelegate = uploadDelegate
-        self.defaultUploader = defaultUploader
-    }
 }
 
 // MARK: - Default Media Uploader

@@ -385,22 +385,73 @@ struct MediaUploadServerTests {
     #expect(FileManager.default.fileExists(atPath: fresh.path(percentEncoded: false)))
   }
 
-  @Test("does not strongly retain the upload delegate (weak — preserves deinit teardown)")
-  func doesNotStronglyRetainDelegate() async throws {
+  @Test("retains the delegate for the server's lifetime, and releases it after")
+  func retainsDelegateForServerLifetime() async throws {
     weak var weakDelegate: MockUploadDelegate?
-    let server: MediaUploadServer
+    var server: MediaUploadServer?
     do {
       let delegate = MockUploadDelegate()
       weakDelegate = delegate
       server = try await MediaUploadServer.start(uploadDelegate: delegate)
     }
+
+    // The server owns the delegate while it runs: the host can assign one and drop
+    // its own reference, and every request still sees it.
+    #expect(weakDelegate != nil)
+
+    server?.stop()
+    server = nil
+
+    // …and lets go when it does, so the delegate isn't leaked for the process's
+    // lifetime. The cycle the old `weak` was defending against runs through
+    // `EditorViewController.mediaUploadDelegate`, which this container can neither
+    // create nor prevent.
+    //
+    // Polled rather than asserted outright: the handler closure is captured by the
+    // listener's `newConnectionHandler`, and `NWListener.cancel()` is asynchronous —
+    // the framework holds the listener until cancellation completes, so the release
+    // trails `stop()` by a beat. A leak still fails this, just after a second.
+    for _ in 0..<100 where weakDelegate != nil {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(weakDelegate == nil)
+  }
+
+  @Test("still processes for a delegate the host has dropped its reference to")
+  func processesForHostReleasedDelegate() async throws {
+    // The delegate is read at the admission gate and again at processFile and
+    // uploadFile, separated by a synchronous disk copy and an unbounded processFile.
+    // Held weakly, a host that dropped its reference changed the answer between
+    // those reads: a file admitted for processing was forwarded unprocessed. The
+    // host dropping it before the request is the same condition, deterministically.
+    let mockUploader = MockDefaultUploader()
+    var delegate: TranscodingDelegate? = TranscodingDelegate()
+    weak var weakDelegate = delegate
+    let server = try await MediaUploadServer.start(uploadDelegate: delegate, defaultUploader: mockUploader)
     defer { server.stop() }
 
-    // UploadContext holds the delegate weakly, so releasing the host's strong
-    // reference deallocates it. A strong reference here would reintroduce the
-    // EditorViewController → uploadServer → … → delegate → EditorViewController
-    // cycle, so deinit would never fire and the server would never stop.
-    #expect(weakDelegate == nil)
+    // Drop the host's only strong reference. Under the documented contract the
+    // server owns the delegate from here, so the upload must still be processed.
+    delegate = nil
+
+    let boundary = UUID().uuidString
+    let body = buildMultipartBody(boundary: boundary, filename: "clip.mov", mimeType: "video/quicktime", data: Data("movie".utf8))
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    request.httpBody = body
+
+    _ = try await URLSession.shared.data(for: request)
+
+    // The server kept it alive, so the processed metadata reached the uploader.
+    // Against a weak container this fails with the real symptom: the passthrough
+    // branch runs and the original video/quicktime is forwarded unprocessed.
+    #expect(weakDelegate != nil)
+    #expect(mockUploader.uploadCalled)
+    #expect(mockUploader.lastUploadMimeType == "video/mp4")
+    #expect(!mockUploader.passthroughUploadCalled)
   }
 
   private func buildMultipartBody(boundary: String, filename: String, mimeType: String, data: Data) -> Data {
@@ -790,6 +841,20 @@ private func readAllFromStream(_ stream: InputStream) -> Data {
 }
 
 // MARK: - Mocks
+
+/// A delegate that transcodes, used to check the server holds it across the whole
+/// request rather than re-reading a reference the host may have dropped.
+private final class TranscodingDelegate: MediaUploadDelegate, @unchecked Sendable {
+  func handlesFile(ofType mimeType: String, named filename: String) -> Bool {
+    true
+  }
+
+  func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
+    let processed = FileManager.default.temporaryDirectory.appendingPathComponent("clip.mp4")
+    try? Data("transcoded".utf8).write(to: processed)
+    return .processed(processed, mimeType: "video/mp4", filename: "clip.mp4")
+  }
+}
 
 private final class MockUploadDelegate: MediaUploadDelegate, @unchecked Sendable {
   private let lock = NSLock()
