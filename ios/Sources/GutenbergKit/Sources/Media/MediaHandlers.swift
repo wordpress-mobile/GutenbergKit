@@ -74,6 +74,25 @@ public protocol MediaProcessor: AnyObject, Sendable {
     func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile
 }
 
+/// One of the editor's non-file form fields, as sent with a media upload.
+///
+/// A named type rather than a `(name, value)` tuple: tuples are not nominal, so a
+/// tuple-typed property would permanently block `Equatable`/`Hashable`/`Codable`
+/// synthesis on ``MediaUpload`` — including inside GutenbergKit, and not fixable
+/// later without a source break for every host.
+public struct MediaUploadField: Sendable, Hashable, Codable {
+    /// The field name, e.g. `post`. Not unique — a `field[]` array repeats it.
+    public let name: String
+
+    /// The field's value, decoded as UTF-8.
+    public let value: String
+
+    public init(name: String, value: String) {
+        self.name = name
+        self.value = value
+    }
+}
+
 /// Everything a ``MediaUploader`` needs to reproduce a native upload: the file to
 /// send, its metadata, the editor's non-file form fields, and the request's query.
 public struct MediaUpload: Sendable {
@@ -88,10 +107,10 @@ public struct MediaUpload: Sendable {
 
     /// The editor's non-file form fields, in order, each decoded as UTF-8 — most
     /// importantly `post`, the parent post's ID, without which the attachment is created
-    /// unattached. A list of `(name, value)` pairs, not a dictionary, so repeated field
-    /// names (e.g. a `field[]` array) survive verbatim. Send each as a form part on your
-    /// `POST /wp/v2/media`, in the given order.
-    public let fields: [(name: String, value: String)]
+    /// unattached. A list, not a dictionary, so repeated field names (e.g. a `field[]`
+    /// array) survive verbatim. Send each as a form part on your `POST /wp/v2/media`,
+    /// in the given order.
+    public let fields: [MediaUploadField]
 
     /// The request's query string (leading `?`, e.g. `?_embed=wp:featuredmedia`), or
     /// empty. Carry it on your request so the editor gets the response it expects.

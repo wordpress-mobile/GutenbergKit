@@ -185,7 +185,7 @@ struct MediaUploadServerTests {
     let boundary = UUID().uuidString
     let body = buildMultipartBody(
       boundary: boundary, filename: "photo.jpg", mimeType: "image/jpeg",
-      data: Data("fake image data".utf8), fields: [(name: "post", value: "123")]
+      data: Data("fake image data".utf8), fields: [MediaUploadField(name: "post", value: "123")]
     )
 
     let url = URL(string: "http://127.0.0.1:\(server.port)/upload?_embed=wp:featuredmedia")!
@@ -235,9 +235,9 @@ struct MediaUploadServerTests {
       boundary: boundary, filename: "photo.jpg", mimeType: "image/jpeg",
       data: Data("fake image data".utf8),
       fields: [
-        (name: "post", value: "123"),
-        (name: "media_folder[]", value: "12"),
-        (name: "media_folder[]", value: "45"),
+        MediaUploadField(name: "post", value: "123"),
+        MediaUploadField(name: "media_folder[]", value: "12"),
+        MediaUploadField(name: "media_folder[]", value: "45"),
       ]
     )
 
@@ -593,12 +593,12 @@ struct MediaUploadServerTests {
     #expect(!mockClient.passthroughUploadCalled)
   }
 
-  private func buildMultipartBody(boundary: String, filename: String, mimeType: String, data: Data, fields: [(name: String, value: String)] = []) -> Data {
+  private func buildMultipartBody(boundary: String, filename: String, mimeType: String, data: Data, fields: [MediaUploadField] = []) -> Data {
     var body = Data()
-    for (name, value) in fields {
+    for field in fields {
       body.append("--\(boundary)\r\n")
-      body.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
-      body.append(value)
+      body.append("Content-Disposition: form-data; name=\"\(field.name)\"\r\n\r\n")
+      body.append(field.value)
       body.append("\r\n")
     }
     body.append("--\(boundary)\r\n")
@@ -994,7 +994,7 @@ private final class MockUploader: MediaUploader, @unchecked Sendable {
   private var _uploadCalled = false
   private var _lastMimeType: String?
   private var _lastFilename: String?
-  private var _lastFields: [(name: String, value: String)] = []
+  private var _lastFields: [MediaUploadField] = []
   private var _lastQuery: String?
   private var _lastFileData: Data?
   private let uploadBody: Data
@@ -1003,7 +1003,7 @@ private final class MockUploader: MediaUploader, @unchecked Sendable {
   var uploadCalled: Bool { lock.withLock { _uploadCalled } }
   var lastMimeType: String? { lock.withLock { _lastMimeType } }
   var lastFilename: String? { lock.withLock { _lastFilename } }
-  var lastFields: [(name: String, value: String)] { lock.withLock { _lastFields } }
+  var lastFields: [MediaUploadField] { lock.withLock { _lastFields } }
   var lastQuery: String? { lock.withLock { _lastQuery } }
   var lastFileData: Data? { lock.withLock { _lastFileData } }
 

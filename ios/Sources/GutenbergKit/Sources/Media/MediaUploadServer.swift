@@ -392,10 +392,10 @@ final class MediaUploadServer: Sendable {
         /// ordered list of name/value pairs for a host uploader, so it can send them on its
         /// own `POST /wp/v2/media`. A list, not a dictionary, so repeated field names survive
         /// in order. Values are WordPress form fields — UTF-8 text.
-        private static func formFields(from parts: [MultipartPart]) async throws -> [(name: String, value: String)] {
-            var fields: [(name: String, value: String)] = []
+        private static func formFields(from parts: [MultipartPart]) async throws -> [MediaUploadField] {
+            var fields: [MediaUploadField] = []
             for part in parts {
-                fields.append((name: part.name, value: String(decoding: try await part.body.data, as: UTF8.self)))
+                fields.append(MediaUploadField(name: part.name, value: String(decoding: try await part.body.data, as: UTF8.self)))
             }
             return fields
         }

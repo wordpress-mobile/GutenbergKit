@@ -256,7 +256,7 @@ class MediaUploadServerTest {
         val boundary = "test-boundary-123"
         val body = buildMultipartBody(
             boundary, "photo.jpg", "image/jpeg", "fake image data".toByteArray(),
-            fields = listOf("post" to "123")
+            fields = listOf(MediaUploadField("post", "123"))
         )
 
         val response = sendRawRequest(
@@ -275,7 +275,7 @@ class MediaUploadServerTest {
         assertEquals("photo.jpg", uploader.lastFilename)
         // The editor's post association and query must reach the host uploader, so it
         // can reproduce a native upload (attach to the post, honor ?_embed).
-        assertEquals("123", uploader.lastFields.first { it.first == "post" }.second)
+        assertEquals("123", uploader.lastFields.first { it.name == "post" }.value)
         assertEquals("?_embed=wp:featuredmedia", uploader.lastQuery)
         // …and the actual file bytes the editor sent — the host uploads them itself.
         assertEquals("fake image data", uploader.lastFileBytes?.decodeToString())
@@ -308,7 +308,11 @@ class MediaUploadServerTest {
         val boundary = "test-boundary-123"
         val body = buildMultipartBody(
             boundary, "photo.jpg", "image/jpeg", "fake image data".toByteArray(),
-            fields = listOf("post" to "123", "media_folder[]" to "12", "media_folder[]" to "45")
+            fields = listOf(
+                MediaUploadField("post", "123"),
+                MediaUploadField("media_folder[]", "12"),
+                MediaUploadField("media_folder[]", "45")
+            )
         )
 
         val response = sendRawRequest(
@@ -326,9 +330,9 @@ class MediaUploadServerTest {
         // Both repeated values survive, in order — not collapsed to the last.
         assertEquals(
             listOf("12", "45"),
-            uploader.lastFields.filter { it.first == "media_folder[]" }.map { it.second }
+            uploader.lastFields.filter { it.name == "media_folder[]" }.map { it.value }
         )
-        assertEquals("123", uploader.lastFields.first { it.first == "post" }.second)
+        assertEquals("123", uploader.lastFields.first { it.name == "post" }.value)
     }
 
     @Test
@@ -904,7 +908,7 @@ class MediaUploadServerTest {
         filename: String,
         mimeType: String,
         data: ByteArray,
-        fields: List<Pair<String, String>> = emptyList()
+        fields: List<MediaUploadField> = emptyList()
     ): ByteArray {
         val out = java.io.ByteArrayOutputStream()
         for ((name, value) in fields) {
@@ -935,7 +939,7 @@ class MediaUploadServerTest {
         @Volatile var uploadCalled = false
         @Volatile var lastMimeType: String? = null
         @Volatile var lastFilename: String? = null
-        @Volatile var lastFields: List<Pair<String, String>> = emptyList()
+        @Volatile var lastFields: List<MediaUploadField> = emptyList()
         @Volatile var lastQuery: String? = null
         @Volatile var lastFileBytes: ByteArray? = null
 

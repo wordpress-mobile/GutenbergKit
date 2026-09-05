@@ -99,6 +99,22 @@ interface MediaProcessor {
 }
 
 /**
+ * One of the editor's non-file form fields, as sent with a media upload.
+ *
+ * A named type rather than a `Pair`, so the two platforms describe this the same way
+ * and reading a field says `name`/`value` rather than `first`/`second`. (On iOS the
+ * equivalent change is load-bearing: a tuple there would block Equatable/Hashable/
+ * Codable synthesis on [MediaUpload] permanently.)
+ *
+ * @property name The field name, e.g. `post`. Not unique — a `field[]` array repeats it.
+ * @property value The field's value, decoded as UTF-8.
+ */
+data class MediaUploadField(
+    val name: String,
+    val value: String
+)
+
+/**
  * Everything a [MediaUploader] needs to reproduce a native upload: the file to send,
  * its metadata, the editor's non-file form fields, and the request's query.
  *
@@ -107,9 +123,9 @@ interface MediaProcessor {
  * @property filename The file's name.
  * @property fields The editor's non-file form fields, in order, each decoded as UTF-8 —
  *   most importantly `post`, the parent post's ID, without which the attachment is
- *   created unattached. A list of `(name, value)` pairs, not a map, so repeated field
- *   names (e.g. a `field[]` array) survive verbatim. Send each as a form part on your
- *   `POST /wp/v2/media`, in the given order.
+ *   created unattached. A list, not a map, so repeated field names (e.g. a `field[]`
+ *   array) survive verbatim. Send each as a form part on your `POST /wp/v2/media`,
+ *   in the given order.
  * @property query The request's query string (leading `?`, e.g. `?_embed=...`), or
  *   empty. Carry it on your request so the editor gets the response it expects.
  */
@@ -117,7 +133,7 @@ data class MediaUpload(
     val file: File,
     val mimeType: String,
     val filename: String,
-    val fields: List<Pair<String, String>>,
+    val fields: List<MediaUploadField>,
     val query: String
 )
 
@@ -539,7 +555,7 @@ internal class MediaUploadServer(
                 // too, so its own POST can reproduce a native upload — otherwise the
                 // attachment is created unattached and `?_embed` is lost.
                 val fields = extraParts.map { part ->
-                    part.name to String(part.body.readBytes(), Charsets.UTF_8)
+                    MediaUploadField(part.name, String(part.body.readBytes(), Charsets.UTF_8))
                 }
                 val upload = MediaUpload(targetFile, targetMimeType, targetFilename, fields, query)
                 return UploadResult.Uploaded(MediaUploadResponse(201, up.upload(upload)))
