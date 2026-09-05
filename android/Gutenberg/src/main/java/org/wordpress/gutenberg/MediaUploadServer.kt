@@ -38,7 +38,17 @@ class MediaUploadResponse(
      * The raw response body — a WordPress REST attachment on success, or a
      * WordPress REST error object (`{ "code", "message", "data" }`) on failure.
      */
-    val body: ByteArray
+    val body: ByteArray,
+    /**
+     * The response headers to relay to the editor.
+     *
+     * `x-wp-upload-attachment-id` is the one that carries behavior: WordPress
+     * sets it on a failed upload whose attachment row was created before
+     * metadata generation fataled, and the editor's api-fetch middleware reads
+     * it to retry `post-process` and clean up the orphan. Dropping it turns a
+     * recoverable upload into a permanent failure.
+     */
+    val headers: Map<String, String> = emptyMap()
 )
 
 /**
@@ -212,15 +222,55 @@ internal class MediaUploadServer(
     }
 
     private suspend fun handleRequest(request: HttpRequest): HttpResponse {
-        // Route: only POST /upload is handled. (OPTIONS preflight is answered by
-        // the HTTP library under its permissive CORS policy.) Match on the path
-        // alone — the target carries a query string (e.g. `?_embed`) that the
-        // upload handler relays on to WordPress.
-        if (request.method.uppercase() != "POST" || request.path != "/upload") {
-            return errorResponse(404, "Not found")
+        // Routes: POST /upload, and DELETE /media/<id> for the editor's orphan
+        // cleanup. (OPTIONS preflight is answered by the HTTP library under its
+        // permissive CORS policy.) Match on the path alone — the target carries
+        // a query string (e.g. `?_embed`, `?force=true`) relayed to WordPress.
+        val method = request.method.uppercase()
+
+        if (method == "POST" && request.path == "/upload") {
+            return handleUpload(request)
         }
 
-        return handleUpload(request)
+        if (method == "DELETE") {
+            attachmentIdFromPath(request.path)?.let { attachmentId ->
+                return handleDelete(attachmentId, request.query)
+            }
+        }
+
+        return errorResponse(404, "Not found")
+    }
+
+    /**
+     * The attachment ID in a `/media/<id>` path, or `null` if the path is not one.
+     *
+     * Deliberately narrow: this server relays media operations, not arbitrary
+     * REST requests, so only a numeric attachment ID under `/media/` matches.
+     */
+    private fun attachmentIdFromPath(path: String): String? {
+        val components = path.split("/").filter { it.isNotEmpty() }
+        if (components.size != 2 || components[0] != "media") return null
+        val id = components[1]
+        return if (id.isNotEmpty() && id.all { it.isDigit() }) id else null
+    }
+
+    /**
+     * Relays the editor's orphan cleanup to WordPress.
+     *
+     * Core's media upload middleware deletes the attachment when every
+     * `post-process` retry fails. A cross-origin editor cannot issue that
+     * request directly — api-fetch tunnels `DELETE` as a `POST` carrying
+     * `X-HTTP-Method-Override`, which core's CORS allow-list omits, so the
+     * browser blocks it at preflight. Relaying it here lets the cleanup run.
+     */
+    private suspend fun handleDelete(attachmentId: String, query: String): HttpResponse {
+        val uploader = defaultUploader ?: return errorResponse(500, "No uploader configured")
+        return try {
+            relayResponse(uploader.deleteMedia(attachmentId, query))
+        } catch (e: IOException) {
+            Log.e(TAG, "Media deletion failed", e)
+            errorResponse(500, e.message ?: "Deletion failed")
+        }
     }
 
     private suspend fun handleUpload(request: HttpRequest): HttpResponse {
@@ -264,13 +314,25 @@ internal class MediaUploadServer(
     }
 
     /**
-     * Relays WordPress's exact status and body to the editor so it sees the same
-     * attachment object (or error) as a direct upload.
+     * Relays WordPress's exact status, body, and relayable headers to the editor
+     * so it sees the same attachment object (or error) as a direct upload.
+     *
+     * The headers matter for recovery: `x-wp-upload-attachment-id` is what lets
+     * the editor retry `post-process` for an upload whose metadata generation
+     * fataled server-side, rather than surfacing a permanent failure and leaving
+     * an orphaned attachment behind.
+     *
+     * The response's own `Content-Type` wins over the JSON default, matched
+     * case-insensitively — HTTP header names are case-insensitive, and
+     * [HttpResponse] serializes every entry it is given, so a plain map merge
+     * would emit the name twice for a delegate that spells it `content-type`.
      */
     private fun relayResponse(response: MediaUploadResponse): HttpResponse {
+        val hasContentType = response.headers.keys.any { it.lowercase() == "content-type" }
+        val defaults = if (hasContentType) emptyMap() else mapOf("Content-Type" to "application/json")
         return HttpResponse(
             status = response.statusCode,
-            headers = mapOf("Content-Type" to "application/json"),
+            headers = defaults + response.headers,
             body = response.body
         )
     }
@@ -479,8 +541,26 @@ internal open class DefaultMediaUploader(
      * namespacing (so it matches every other REST URL) and carrying the original
      * request query (e.g. `?_embed`) through to WordPress.
      */
-    private fun mediaEndpointUrl(query: String): String =
-        RestUrlBuilder.namespaced(siteApiRoot, siteApiNamespace.firstOrNull(), "/wp/v2/media") + query
+    private fun mediaEndpointUrl(query: String, attachmentId: String? = null): String {
+        val path = if (attachmentId != null) "/wp/v2/media/$attachmentId" else "/wp/v2/media"
+        return RestUrlBuilder.namespaced(siteApiRoot, siteApiNamespace.firstOrNull(), path) + query
+    }
+
+    /**
+     * Deletes an attachment, relaying WordPress's response verbatim.
+     *
+     * Carries the editor's query through unchanged — core's cleanup sends
+     * `?force=true`, without which WordPress trashes rather than deletes.
+     */
+    open suspend fun deleteMedia(attachmentId: String, query: String): MediaUploadResponse {
+        val request = okhttp3.Request.Builder()
+            .url(mediaEndpointUrl(query, attachmentId))
+            .addHeader("Authorization", authHeader)
+            .delete()
+            .build()
+
+        return performUpload(request)
+    }
 
     open suspend fun upload(
         file: File, mimeType: String, filename: String,
@@ -559,7 +639,11 @@ internal open class DefaultMediaUploader(
                     // holding a connection permit.
                     val result = try {
                         response.use {
-                            MediaUploadResponse(it.code, it.body?.bytes() ?: ByteArray(0))
+                            MediaUploadResponse(
+                                it.code,
+                                it.body?.bytes() ?: ByteArray(0),
+                                relayableHeaders(it)
+                            )
                         }
                     } catch (e: IOException) {
                         if (!continuation.isCancelled) continuation.resumeWithException(e)
@@ -576,5 +660,23 @@ internal open class DefaultMediaUploader(
                 }
             })
         }
+    }
+
+    /** Picks the headers to relay out of an upstream response. */
+    private fun relayableHeaders(response: okhttp3.Response): Map<String, String> =
+        RELAYABLE_HEADER_NAMES.mapNotNull { name ->
+            response.header(name)?.let { name to it }
+        }.toMap()
+
+    companion object {
+        /**
+         * The upstream headers worth relaying to the editor.
+         *
+         * Deliberately an allowlist rather than a filtered passthrough: the body
+         * is re-sent with a recomputed length, so relaying upstream entity or
+         * transport headers wholesale would risk contradicting what the server
+         * actually sends.
+         */
+        private val RELAYABLE_HEADER_NAMES = listOf("x-wp-upload-attachment-id")
     }
 }
