@@ -232,14 +232,27 @@ final class MediaUploadServer: Sendable {
             return Self.relayResponse(response)
         }
 
-        /// The attachment ID in a `/media/<id>` path, or `nil` if the path is not one.
-        ///
-        /// Deliberately narrow: this server relays media operations, not arbitrary
-        /// REST requests, so only a numeric attachment ID under `/media/` matches.
         /// The editor's non-file form parts as ordered, UTF-8-decoded fields.
         ///
         /// A list rather than a dictionary so repeated names (e.g. a `field[]` array)
         /// survive verbatim, in the order the editor sent them.
+        ///
+        /// The UTF-8 decode is lossless here because of an invariant worth stating, since
+        /// nothing in the type system enforces it: **the only client is the editor's
+        /// browser `FormData`.** The server binds to loopback behind a per-session token,
+        /// so nothing else can reach it; a `FormData` string value is a `USVString`, which
+        /// the browser has already made well-formed at `append` time; and its only way to
+        /// carry arbitrary bytes is a Blob, which always gets a filename and is therefore
+        /// filtered out of `extraParts` by `handleUpload`. Valid UTF-8 — including emoji
+        /// and any non-Latin script — round-trips exactly, so real captions and titles are
+        /// unaffected.
+        ///
+        /// If that ever stops holding, this decode starts substituting U+FFFD *and* the two
+        /// platforms disagree about how: for `ED A0 80`, Swift's maximal-subpart rule yields
+        /// three replacement characters where Java's decoder yields one. There is no single
+        /// behavior that could be documented instead, which is why the invariant is the
+        /// thing to pin. `MediaUploadServerTests` covers the partition that keeps binary
+        /// parts out of here.
         private static func formFields(from parts: [MultipartPart]) async throws -> [MediaUploadField] {
             var fields: [MediaUploadField] = []
             for part in parts {
@@ -248,6 +261,10 @@ final class MediaUploadServer: Sendable {
             return fields
         }
 
+        /// The attachment ID in a `/media/<id>` path, or `nil` if the path is not one.
+        ///
+        /// Deliberately narrow: this server relays media operations, not arbitrary
+        /// REST requests, so only a numeric attachment ID under `/media/` matches.
         private static func attachmentId(fromPath path: String) -> String? {
             let components = path.split(separator: "/", omittingEmptySubsequences: true)
             guard components.count == 2, components[0] == "media" else { return nil }
@@ -678,9 +695,15 @@ class InternalMediaClient: @unchecked Sendable {
     ) throws -> (InputStream, Int) {
         // Serialize the non-file parts (post, additionalData) into the preamble
         // ahead of the streamed file. They are small, so keeping them in memory is
-        // fine; `contentLength` counts them via `preamble.count`. Field values are
-        // appended as raw bytes (not through String) so a non-UTF-8 value is
-        // forwarded verbatim rather than coerced to empty.
+        // fine; `contentLength` counts them via `preamble.count`.
+        //
+        // Field values are appended as raw bytes rather than round-tripped through
+        // `String`. Not because malformed values are expected — they can't reach here;
+        // see the invariant on `formFields`. It is because the failable
+        // `String(data:encoding:)` returns nil on invalid UTF-8, and the obvious `?? ""`
+        // behind it would silently drop a whole field's value. Appending the bytes keeps
+        // this re-encode byte-identical to the passthrough it stands in for, so a user's
+        // upload doesn't change shape just because a processor resized the image.
         var preamble = Data()
         for field in extraFields {
             preamble.append(Data("--\(boundary)\r\n".utf8))
