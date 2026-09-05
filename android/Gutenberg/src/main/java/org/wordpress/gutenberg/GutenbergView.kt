@@ -676,7 +676,7 @@ class GutenbergView : FrameLayout {
         // fall to the default WebView path. (Matches iOS.)
         if (mediaUploadDelegate == null) return
 
-        // The native upload server relays through DefaultMediaUploader, which needs a
+        // The native upload server relays through InternalMediaClient, which needs a
         // site root and an auth header (every host provides one — the editor injects
         // it because the WebView has no auth cookies). Without both there is nothing
         // to upload through, so leave the server down and let uploads fall to the
@@ -701,7 +701,7 @@ class GutenbergView : FrameLayout {
         }
 
         try {
-            val defaultUploader = DefaultMediaUploader(
+            val internalClient = InternalMediaClient(
                 httpClient = uploadHttpClient,
                 siteApiRoot = configuration.siteApiRoot,
                 authHeader = configuration.authHeader,
@@ -709,7 +709,7 @@ class GutenbergView : FrameLayout {
             )
             uploadServer = MediaUploadServer(
                 uploadDelegate = mediaUploadDelegate,
-                defaultUploader = defaultUploader,
+                internalClient = internalClient,
                 cacheDir = context.cacheDir,
                 scope = coroutineScope
             )

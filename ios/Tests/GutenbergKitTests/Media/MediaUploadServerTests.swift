@@ -103,8 +103,8 @@ struct MediaUploadServerTests {
   @Test("routes /upload with a query string and relays the query")
   func uploadWithQueryString() async throws {
     let delegate = ProcessOnlyDelegate()
-    let mockUploader = MockDefaultUploader()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, defaultUploader: mockUploader)
+    let mockUploader = MockInternalMediaClient()
+    let server = try await MediaUploadServer.start(uploadDelegate: delegate, internalClient: mockUploader)
     defer { server.stop() }
 
     // `@wordpress/media-utils` uploads to `/wp/v2/media?_embed=wp:featuredmedia`,
@@ -141,8 +141,8 @@ struct MediaUploadServerTests {
     // Exercised through the delete relay because every response `relayResponse`
     // handles — WordPress's own included — carries a `Content-Type`, so this is
     // the ordinary path rather than an edge case.
-    let uploader = ContentTypeDeleteUploader()
-    let server = try await MediaUploadServer.start(defaultUploader: uploader)
+    let uploader = ContentTypeDeleteClient()
+    let server = try await MediaUploadServer.start(internalClient: uploader)
     defer { server.stop() }
 
     let url = URL(string: "http://127.0.0.1:\(server.port)/media/42?force=true")!
@@ -194,8 +194,8 @@ struct MediaUploadServerTests {
   @Test("uses passthrough when delegate does not modify file")
   func delegatePassthrough() async throws {
     let delegate = ProcessOnlyDelegate()
-    let mockUploader = MockDefaultUploader()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, defaultUploader: mockUploader)
+    let mockUploader = MockInternalMediaClient()
+    let server = try await MediaUploadServer.start(uploadDelegate: delegate, internalClient: mockUploader)
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -227,8 +227,8 @@ struct MediaUploadServerTests {
   @Test("skips processing and the temp copy when the delegate declines by metadata")
   func delegateDeclinesByMetadata() async throws {
     let delegate = DeclineByMetadataDelegate()
-    let mockUploader = MockDefaultUploader()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, defaultUploader: mockUploader)
+    let mockUploader = MockInternalMediaClient()
+    let server = try await MediaUploadServer.start(uploadDelegate: delegate, internalClient: mockUploader)
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -255,8 +255,8 @@ struct MediaUploadServerTests {
   @Test("forwards the delegate's processed metadata to the uploader")
   func processedMetadataForwarded() async throws {
     let delegate = ResizingDelegate()
-    let mockUploader = MockDefaultUploader()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, defaultUploader: mockUploader)
+    let mockUploader = MockInternalMediaClient()
+    let server = try await MediaUploadServer.start(uploadDelegate: delegate, internalClient: mockUploader)
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -281,8 +281,8 @@ struct MediaUploadServerTests {
   @Test("deletes the delegate's processed file after upload")
   func deletesProcessedFile() async throws {
     let delegate = ResizingDelegate()
-    let mockUploader = MockDefaultUploader()
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, defaultUploader: mockUploader)
+    let mockUploader = MockInternalMediaClient()
+    let server = try await MediaUploadServer.start(uploadDelegate: delegate, internalClient: mockUploader)
     defer { server.stop() }
 
     let boundary = UUID().uuidString
@@ -424,10 +424,10 @@ struct MediaUploadServerTests {
     // Held weakly, a host that dropped its reference changed the answer between
     // those reads: a file admitted for processing was forwarded unprocessed. The
     // host dropping it before the request is the same condition, deterministically.
-    let mockUploader = MockDefaultUploader()
+    let mockUploader = MockInternalMediaClient()
     var delegate: TranscodingDelegate? = TranscodingDelegate()
     weak var weakDelegate = delegate
-    let server = try await MediaUploadServer.start(uploadDelegate: delegate, defaultUploader: mockUploader)
+    let server = try await MediaUploadServer.start(uploadDelegate: delegate, internalClient: mockUploader)
     defer { server.stop() }
 
     // Drop the host's only strong reference. Under the documented contract the
@@ -467,7 +467,7 @@ struct MediaUploadServerTests {
 
 // MARK: - Streaming Multipart Body Tests
 
-@Suite("DefaultMediaUploader streaming multipart body")
+@Suite("InternalMediaClient streaming multipart body")
 struct MultipartBodyStreamTests {
 
   @Test("streaming output matches in-memory multipart format")
@@ -490,7 +490,7 @@ struct MultipartBodyStreamTests {
     expected.append(Data("\r\n--\(boundary)--\r\n".utf8))
 
     // Build streaming output.
-    let (stream, contentLength) = try DefaultMediaUploader.multipartBodyStream(
+    let (stream, contentLength) = try InternalMediaClient.multipartBodyStream(
       fileURL: tempFile, boundary: boundary, filename: filename, mimeType: mimeType, extraFields: []
     )
     #expect(contentLength == expected.count)
@@ -507,7 +507,7 @@ struct MultipartBodyStreamTests {
 
     // Craft a filename, field name, and MIME type that each try to smuggle a CRLF
     // and a fake header into the body relayed to WordPress.
-    let (stream, _) = try DefaultMediaUploader.multipartBodyStream(
+    let (stream, _) = try InternalMediaClient.multipartBodyStream(
       fileURL: tempFile,
       boundary: "boundary",
       filename: "evil\"\r\nX-Injected-File: 1.jpg",
@@ -542,7 +542,7 @@ struct MultipartBodyStreamTests {
     expected.append(fileContent)
     expected.append(Data("\r\n--\(boundary)--\r\n".utf8))
 
-    let (stream, contentLength) = try DefaultMediaUploader.multipartBodyStream(
+    let (stream, contentLength) = try InternalMediaClient.multipartBodyStream(
       fileURL: tempFile, boundary: boundary, filename: filename, mimeType: mimeType,
       extraFields: [("post", Data("123".utf8))]
     )
@@ -574,7 +574,7 @@ struct MultipartBodyStreamTests {
     expected.append(fileContent)
     expected.append(Data("\r\n--\(boundary)--\r\n".utf8))
 
-    let (stream, contentLength) = try DefaultMediaUploader.multipartBodyStream(
+    let (stream, contentLength) = try InternalMediaClient.multipartBodyStream(
       fileURL: tempFile, boundary: boundary, filename: filename, mimeType: mimeType,
       extraFields: [("blob", binaryValue)]
     )
@@ -590,7 +590,7 @@ struct MultipartBodyStreamTests {
     try fileContent.write(to: tempFile)
     defer { try? FileManager.default.removeItem(at: tempFile) }
 
-    let (stream, contentLength) = try DefaultMediaUploader.multipartBodyStream(
+    let (stream, contentLength) = try InternalMediaClient.multipartBodyStream(
       fileURL: tempFile, boundary: "boundary", filename: "big.bin", mimeType: "application/octet-stream", extraFields: []
     )
 
@@ -614,7 +614,7 @@ struct MultipartBodyStreamTests {
 
     let preamble = Data("PREAMBLE".utf8)
     let epilogue = Data("EPILOGUE".utf8)
-    let ok = DefaultMediaUploader.writeMultipartBody(
+    let ok = InternalMediaClient.writeMultipartBody(
       fileHandle: fileHandle, fileSize: fileContent.count,
       preamble: preamble, epilogue: epilogue, to: output
     )
@@ -641,7 +641,7 @@ struct MultipartBodyStreamTests {
     let preamble = Data("PREAMBLE".utf8)
     let epilogue = Data("EPILOGUE".utf8)
     // Claim the file is larger than it is, as if it shrank after being measured.
-    let ok = DefaultMediaUploader.writeMultipartBody(
+    let ok = InternalMediaClient.writeMultipartBody(
       fileHandle: fileHandle, fileSize: fileContent.count + 100,
       preamble: preamble, epilogue: epilogue, to: output
     )
@@ -654,17 +654,17 @@ struct MultipartBodyStreamTests {
   }
 }
 
-// MARK: - DefaultMediaUploader Relay Tests
+// MARK: - InternalMediaClient Relay Tests
 
-@Suite("DefaultMediaUploader relay")
-struct DefaultMediaUploaderRelayTests {
+@Suite("InternalMediaClient relay")
+struct InternalMediaClientRelayTests {
 
   @Test("relays a non-2xx WordPress response instead of throwing")
   func relaysErrorResponseVerbatim() async throws {
     // A WordPress REST error body, returned with a non-2xx status.
     let errorBody = Data(#"{"code":"rest_cannot_create","message":"Sorry, you are not allowed to upload this file type."}"#.utf8)
     let client = RelayStubHTTPClient(statusCode: 403, body: errorBody)
-    let uploader = DefaultMediaUploader(httpClient: client, siteApiRoot: URL(string: "https://example.com/wp-json/")!)
+    let uploader = InternalMediaClient(httpClient: client, siteApiRoot: URL(string: "https://example.com/wp-json/")!)
 
     let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("relay-\(UUID().uuidString).jpg")
     try Data("fake image".utf8).write(to: tempFile)
@@ -691,7 +691,7 @@ struct DefaultMediaUploaderRelayTests {
       body: Data(#"{"code":"rest_upload_error"}"#.utf8),
       headerFields: ["x-wp-upload-attachment-id": "4242"]
     )
-    let uploader = DefaultMediaUploader(
+    let uploader = InternalMediaClient(
       httpClient: client, siteApiRoot: URL(string: "https://example.com/wp-json/")!)
 
     let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent(
@@ -714,7 +714,7 @@ struct DefaultMediaUploaderRelayTests {
       body: Data("{}".utf8),
       headerFields: ["X-Powered-By": "PHP/8.2", "Set-Cookie": "session=secret"]
     )
-    let uploader = DefaultMediaUploader(
+    let uploader = InternalMediaClient(
       httpClient: client, siteApiRoot: URL(string: "https://example.com/wp-json/")!)
 
     let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent(
@@ -732,7 +732,7 @@ struct DefaultMediaUploaderRelayTests {
   @Test("deletes an attachment, carrying the namespace and force query")
   func deletesAttachment() async throws {
     let client = URLCapturingHTTPClient()
-    let uploader = DefaultMediaUploader(
+    let uploader = InternalMediaClient(
       httpClient: client,
       siteApiRoot: URL(string: "https://example.com/wp-json")!,
       siteApiNamespace: ["sites/123"]
@@ -748,7 +748,7 @@ struct DefaultMediaUploaderRelayTests {
   @Test("carries the namespace and request query through to the media endpoint")
   func forwardsNamespaceAndQuery() async throws {
     let client = URLCapturingHTTPClient()
-    let uploader = DefaultMediaUploader(
+    let uploader = InternalMediaClient(
       httpClient: client,
       siteApiRoot: URL(string: "https://example.com/wp-json")!,
       siteApiNamespace: ["sites/123"]
@@ -771,7 +771,7 @@ struct DefaultMediaUploaderRelayTests {
 
 /// An HTTP client whose `performRaw` relays a canned response without validating
 /// status, while `perform` throws on a non-2xx — mirroring the real
-/// `EditorHTTPClient`. Lets a test prove `DefaultMediaUploader` routes uploads
+/// `EditorHTTPClient`. Lets a test prove `InternalMediaClient` routes uploads
 /// through `performRaw` (relay) rather than `perform` (throw).
 private struct RelayStubHTTPClient: EditorHTTPClientProtocol {
   let statusCode: Int
@@ -931,7 +931,7 @@ private final class ResizingDelegate: MediaUploadDelegate, @unchecked Sendable {
   }
 }
 
-private final class MockDefaultUploader: DefaultMediaUploader, @unchecked Sendable {
+private final class MockInternalMediaClient: InternalMediaClient, @unchecked Sendable {
   private let lock = NSLock()
   private var _uploadCalled = false
   private var _passthroughUploadCalled = false
@@ -975,7 +975,7 @@ private final class MockDefaultUploader: DefaultMediaUploader, @unchecked Sendab
 
 /// A default uploader whose delete response carries its own `Content-Type`, so the
 /// relay must override the JSON default rather than emit the header twice.
-private final class ContentTypeDeleteUploader: DefaultMediaUploader, @unchecked Sendable {
+private final class ContentTypeDeleteClient: InternalMediaClient, @unchecked Sendable {
   init() {
     super.init(httpClient: MockHTTPClient(), siteApiRoot: URL(string: "https://example.com/wp-json/")!)
   }
