@@ -8,7 +8,7 @@ import Testing
 /// Pins that ``EditorViewController/stopMediaHandling()`` opens the ownership cycle a host
 /// can form, and that a host which doesn't form one needs nothing.
 ///
-/// The editor holds `mediaUploadDelegate` strongly so an in-flight upload can't lose it
+/// The editor holds `mediaProcessor` strongly so an in-flight upload can't lose it
 /// mid-request. The cost is that a host which holds the editor back closes a cycle ARC
 /// cannot break — and `deinit`, which does this work on every other path, is exactly what
 /// a cycle prevents. `stopMediaHandling()` is the way out, and it has to be the host's
@@ -21,13 +21,13 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
     static let testApiRoot = URL(string: "https://test.example.com/wp-json/wp/v2")!
 
     @MainActor
-    @Test("stopMediaHandling frees the editor and the host delegate that owns it")
+    @Test("stopMediaHandling frees the editor and the host processor that owns it")
     func stopMediaHandlingBreaksTheOwnershipCycle() async {
         weak var weakEditor: EditorViewController?
-        weak var weakHost: EditorOwningDelegate?
+        weak var weakHost: EditorOwningProcessor?
 
         do {
-            let host = EditorOwningDelegate(configuration: makeConfiguration())
+            let host = EditorOwningProcessor(configuration: makeConfiguration())
             weakEditor = host.editor
             weakHost = host
             host.editor.stopMediaHandling()
@@ -35,19 +35,19 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
 
         await waitForRelease { weakHost == nil && weakEditor == nil }
 
-        #expect(weakHost == nil, "host delegate leaked — stopMediaHandling did not release it")
-        #expect(weakEditor == nil, "EditorViewController leaked — cycle through mediaUploadDelegate")
+        #expect(weakHost == nil, "host processor leaked — stopMediaHandling did not release it")
+        #expect(weakEditor == nil, "EditorViewController leaked — cycle through mediaProcessor")
     }
 
     @MainActor
     @Test("a host that does not retain the editor is freed without stopMediaHandling")
-    func standaloneDelegateIsFreed() async {
+    func standaloneProcessorIsFreed() async {
         weak var weakEditor: EditorViewController?
 
         do {
             let editor = EditorViewController(
                 configuration: makeConfiguration(),
-                mediaUploadDelegate: StandaloneDelegate()
+                mediaProcessor: StandaloneProcessor()
             )
             weakEditor = editor
         }
@@ -69,10 +69,10 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
     }
 }
 
-/// The shape that cycles: owns the editor *and* is its delegate. Hosts reach for this
+/// The shape that cycles: owns the editor *and* is its processor. Hosts reach for this
 /// because the coordinator driving the editor already has the site context.
 @MainActor
-private final class EditorOwningDelegate: MediaUploadDelegate {
+private final class EditorOwningProcessor: MediaProcessor {
     /// Implicitly unwrapped so `self` can be passed as the editor's delegate: every stored
     /// property then has a value (nil) on entry to `init`, which is what makes `self`
     /// available there. Taking the delegate at `init` doesn't prevent this shape — it just
@@ -80,7 +80,7 @@ private final class EditorOwningDelegate: MediaUploadDelegate {
     private(set) var editor: EditorViewController!
 
     init(configuration: EditorConfiguration) {
-        editor = EditorViewController(configuration: configuration, mediaUploadDelegate: self)
+        editor = EditorViewController(configuration: configuration, mediaProcessor: self)
     }
 
     nonisolated func handlesFile(ofType mimeType: String, named filename: String) -> Bool { false }
@@ -90,7 +90,7 @@ private final class EditorOwningDelegate: MediaUploadDelegate {
     }
 }
 
-private final class StandaloneDelegate: MediaUploadDelegate {
+private final class StandaloneProcessor: MediaProcessor {
     func handlesFile(ofType mimeType: String, named filename: String) -> Bool { false }
 
     func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
