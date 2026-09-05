@@ -7,7 +7,7 @@ import Foundation
 /// this check, which already diverged silently between iOS and Android once. Living
 /// here, it is reachable from the host test suite.
 enum MediaServerCredentials {
-    /// Whether a ``DefaultMediaUploader`` built from this configuration could actually
+    /// Whether a ``InternalMediaClient`` built from this configuration could actually
     /// reach the site.
     ///
     /// Both fields are required. The uploader delivers GutenbergKit's uploads to the

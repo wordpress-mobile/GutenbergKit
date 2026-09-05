@@ -33,7 +33,7 @@ class MediaUploadServerTest {
 
     @Before
     fun setUp() {
-        server = MediaUploadServer(uploadDelegate = null, defaultUploader = null, cacheDir = tempFolder.root)
+        server = MediaUploadServer(uploadDelegate = null, internalClient = null, cacheDir = tempFolder.root)
     }
 
     @After
@@ -53,7 +53,7 @@ class MediaUploadServerTest {
     fun `stop cancels an internally-created scope but leaves a caller-supplied one alone`() {
         // No scope supplied → the server owns one, which stop() must cancel.
         val owningServer =
-            MediaUploadServer(uploadDelegate = null, defaultUploader = null, cacheDir = tempFolder.root)
+            MediaUploadServer(uploadDelegate = null, internalClient = null, cacheDir = tempFolder.root)
         val ownedScope = ownedScopeOf(owningServer)
         assertNotNull("server should own a scope when none is supplied", ownedScope)
         assertTrue(ownedScope!!.isActive)
@@ -64,7 +64,7 @@ class MediaUploadServerTest {
         val callerScope = CoroutineScope(Dispatchers.IO)
         val borrowingServer = MediaUploadServer(
             uploadDelegate = null,
-            defaultUploader = null,
+            internalClient = null,
             cacheDir = tempFolder.root,
             scope = callerScope
         )
@@ -150,9 +150,9 @@ class MediaUploadServerTest {
         // Exercised through the delete relay because every response relayResponse
         // handles — WordPress's own included — carries a `Content-Type`, so this is
         // the ordinary path rather than an edge case.
-        val uploader = ContentTypeDeleteUploader()
+        val uploader = ContentTypeDeleteClient()
         server.stop()
-        server = MediaUploadServer(uploadDelegate = null, defaultUploader = uploader, cacheDir = tempFolder.root)
+        server = MediaUploadServer(uploadDelegate = null, internalClient = uploader, cacheDir = tempFolder.root)
 
         val response = sendRawRequest(
             method = "DELETE",
@@ -171,9 +171,9 @@ class MediaUploadServerTest {
     @Test
     fun `routes upload with a query string and relays the query`() {
         val delegate = ProcessOnlyDelegate()
-        val mockUploader = MockDefaultUploader()
+        val mockUploader = MockInternalMediaClient()
         server.stop()
-        server = MediaUploadServer(uploadDelegate = delegate, defaultUploader = mockUploader, cacheDir = tempFolder.root)
+        server = MediaUploadServer(uploadDelegate = delegate, internalClient = mockUploader, cacheDir = tempFolder.root)
 
         // `@wordpress/media-utils` uploads to `/wp/v2/media?_embed=wp:featuredmedia`,
         // so the middleware forwards that query on to the native server. Routing must
@@ -206,7 +206,7 @@ class MediaUploadServerTest {
     fun `calls delegate processFile and uploadFile`() {
         val delegate = MockUploadDelegate()
         server.stop()
-        server = MediaUploadServer(uploadDelegate = delegate, defaultUploader = null, cacheDir = tempFolder.root)
+        server = MediaUploadServer(uploadDelegate = delegate, internalClient = null, cacheDir = tempFolder.root)
 
         val boundary = "test-boundary-123"
         val body = buildMultipartBody(boundary, "photo.jpg", "image/jpeg", "fake image data".toByteArray())
@@ -237,9 +237,9 @@ class MediaUploadServerTest {
     @Test
     fun `forwards the delegate's processed metadata to the uploader`() {
         val delegate = TranscodingDelegate()
-        val mockUploader = MockDefaultUploader()
+        val mockUploader = MockInternalMediaClient()
         server.stop()
-        server = MediaUploadServer(uploadDelegate = delegate, defaultUploader = mockUploader, cacheDir = tempFolder.root)
+        server = MediaUploadServer(uploadDelegate = delegate, internalClient = mockUploader, cacheDir = tempFolder.root)
 
         val boundary = "test-boundary-meta"
         val body = buildMultipartBody(boundary, "clip.mov", "video/quicktime", "movie".toByteArray())
@@ -264,9 +264,9 @@ class MediaUploadServerTest {
     @Test
     fun `deletes the delegate's processed file after upload`() {
         val delegate = TranscodingDelegate()
-        val mockUploader = MockDefaultUploader()
+        val mockUploader = MockInternalMediaClient()
         server.stop()
-        server = MediaUploadServer(uploadDelegate = delegate, defaultUploader = mockUploader, cacheDir = tempFolder.root)
+        server = MediaUploadServer(uploadDelegate = delegate, internalClient = mockUploader, cacheDir = tempFolder.root)
 
         val boundary = "test-boundary-cleanup"
         val body = buildMultipartBody(boundary, "clip.mov", "video/quicktime", "movie".toByteArray())
@@ -305,7 +305,7 @@ class MediaUploadServerTest {
         server.stop()
         server = MediaUploadServer(
             uploadDelegate = null,
-            defaultUploader = null,
+            internalClient = null,
             cacheDir = tempFolder.root,
             ioDispatcher = Dispatchers.Unconfined
         )
@@ -319,10 +319,10 @@ class MediaUploadServerTest {
     @Test
     fun `uses passthrough when delegate does not modify file`() {
         val delegate = ProcessOnlyDelegate()
-        val mockUploader = MockDefaultUploader()
+        val mockUploader = MockInternalMediaClient()
 
         server.stop()
-        server = MediaUploadServer(uploadDelegate = delegate, defaultUploader = mockUploader, cacheDir = tempFolder.root)
+        server = MediaUploadServer(uploadDelegate = delegate, internalClient = mockUploader, cacheDir = tempFolder.root)
 
         val boundary = "test-boundary-456"
         val body = buildMultipartBody(boundary, "doc.pdf", "application/pdf", "fake pdf data".toByteArray())
@@ -350,10 +350,10 @@ class MediaUploadServerTest {
     @Test
     fun `skips processing and the temp copy when the delegate declines by metadata`() {
         val delegate = DeclineByMetadataDelegate()
-        val mockUploader = MockDefaultUploader()
+        val mockUploader = MockInternalMediaClient()
 
         server.stop()
-        server = MediaUploadServer(uploadDelegate = delegate, defaultUploader = mockUploader, cacheDir = tempFolder.root)
+        server = MediaUploadServer(uploadDelegate = delegate, internalClient = mockUploader, cacheDir = tempFolder.root)
 
         val boundary = "test-boundary-decline"
         val body = buildMultipartBody(boundary, "clip.mov", "video/quicktime", "fake movie".toByteArray())
@@ -376,10 +376,10 @@ class MediaUploadServerTest {
         assertFalse(mockUploader.uploadCalled)
     }
 
-    // MARK: - DefaultMediaUploader
+    // MARK: - InternalMediaClient
 
     @Test
-    fun `DefaultMediaUploader relays the WordPress response`() {
+    fun `InternalMediaClient relays the WordPress response`() {
         val mockWpServer = MockWebServer()
         val wpBody =
             """{"id":1,"source_url":"https://example.com/u.jpg","media_type":"image"}"""
@@ -392,7 +392,7 @@ class MediaUploadServerTest {
         mockWpServer.start()
 
         val wpBaseUrl = mockWpServer.url("/wp-json/").toString()
-        val uploader = DefaultMediaUploader(
+        val uploader = InternalMediaClient(
             httpClient = okhttp3.OkHttpClient(),
             siteApiRoot = wpBaseUrl,
             authHeader = "Bearer test-token"
@@ -417,13 +417,13 @@ class MediaUploadServerTest {
     }
 
     @Test
-    fun `DefaultMediaUploader relays a WordPress error response instead of throwing`() {
+    fun `InternalMediaClient relays a WordPress error response instead of throwing`() {
         val mockWpServer = MockWebServer()
         mockWpServer.enqueue(MockResponse().setResponseCode(500).setBody("Internal error"))
         mockWpServer.start()
 
         val wpBaseUrl = mockWpServer.url("/wp-json/").toString()
-        val uploader = DefaultMediaUploader(
+        val uploader = InternalMediaClient(
             httpClient = okhttp3.OkHttpClient(),
             siteApiRoot = wpBaseUrl,
             authHeader = "Bearer test-token"
@@ -442,7 +442,7 @@ class MediaUploadServerTest {
     }
 
     @Test
-    fun `DefaultMediaUploader relays the upload attachment ID header`() {
+    fun `InternalMediaClient relays the upload attachment ID header`() {
         // WordPress sets this header on an upload whose attachment row was
         // created before metadata generation fataled. The editor reads it to
         // retry post-process and clean up the orphan, so it must survive the
@@ -457,7 +457,7 @@ class MediaUploadServerTest {
         )
         mockWpServer.start()
 
-        val uploader = DefaultMediaUploader(
+        val uploader = InternalMediaClient(
             httpClient = okhttp3.OkHttpClient(),
             siteApiRoot = mockWpServer.url("/wp-json/").toString(),
             authHeader = "Bearer test-token"
@@ -475,12 +475,12 @@ class MediaUploadServerTest {
     }
 
     @Test
-    fun `DefaultMediaUploader deletes an attachment carrying namespace and force query`() {
+    fun `InternalMediaClient deletes an attachment carrying namespace and force query`() {
         val mockWpServer = MockWebServer()
         mockWpServer.enqueue(MockResponse().setResponseCode(200).setBody("""{"deleted":true}"""))
         mockWpServer.start()
 
-        val uploader = DefaultMediaUploader(
+        val uploader = InternalMediaClient(
             httpClient = okhttp3.OkHttpClient(),
             siteApiRoot = mockWpServer.url("/wp-json/").toString(),
             authHeader = "Bearer test-token",
@@ -498,12 +498,12 @@ class MediaUploadServerTest {
     }
 
     @Test
-    fun `DefaultMediaUploader normalizes an unslashed root and namespace`() {
+    fun `InternalMediaClient normalizes an unslashed root and namespace`() {
         val mockWpServer = MockWebServer()
         mockWpServer.enqueue(MockResponse().setResponseCode(201).setBody("{}"))
         mockWpServer.start()
 
-        val uploader = DefaultMediaUploader(
+        val uploader = InternalMediaClient(
             httpClient = okhttp3.OkHttpClient(),
             siteApiRoot = mockWpServer.url("/wp-json").toString(), // no trailing slash
             authHeader = "Bearer test-token",
@@ -535,7 +535,7 @@ class MediaUploadServerTest {
         )
         mockWpServer.start()
 
-        val uploader = DefaultMediaUploader(
+        val uploader = InternalMediaClient(
             httpClient = okhttp3.OkHttpClient(),
             siteApiRoot = mockWpServer.url("/wp-json/").toString(),
             authHeader = "Bearer test-token"
@@ -563,12 +563,12 @@ class MediaUploadServerTest {
     }
 
     @Test
-    fun `DefaultMediaUploader re-encode preserves extra parts and query`() {
+    fun `InternalMediaClient re-encode preserves extra parts and query`() {
         val mockWpServer = MockWebServer()
         mockWpServer.enqueue(MockResponse().setResponseCode(201).setBody("{}"))
         mockWpServer.start()
 
-        val uploader = DefaultMediaUploader(
+        val uploader = InternalMediaClient(
             httpClient = okhttp3.OkHttpClient(),
             siteApiRoot = mockWpServer.url("/wp-json/").toString(),
             authHeader = "Bearer test-token"
@@ -603,7 +603,7 @@ class MediaUploadServerTest {
         mockWpServer.enqueue(MockResponse().setResponseCode(201).setBody("{}"))
         mockWpServer.start()
 
-        val uploader = DefaultMediaUploader(
+        val uploader = InternalMediaClient(
             httpClient = okhttp3.OkHttpClient(),
             siteApiRoot = mockWpServer.url("/wp-json/").toString(),
             authHeader = "Bearer test-token"
@@ -818,7 +818,7 @@ class MediaUploadServerTest {
      * lowercased, so the relay must override the JSON default rather than emit
      * the header twice.
      */
-    private class ContentTypeDeleteUploader : DefaultMediaUploader(
+    private class ContentTypeDeleteClient : InternalMediaClient(
         httpClient = okhttp3.OkHttpClient(),
         siteApiRoot = "https://example.com/wp-json/",
         authHeader = "Bearer mock"
@@ -830,7 +830,7 @@ class MediaUploadServerTest {
         )
     }
 
-    private class MockDefaultUploader : DefaultMediaUploader(
+    private class MockInternalMediaClient : InternalMediaClient(
         httpClient = okhttp3.OkHttpClient(),
         siteApiRoot = "https://example.com/wp-json/",
         authHeader = "Bearer mock"
