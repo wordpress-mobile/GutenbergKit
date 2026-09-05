@@ -66,7 +66,7 @@ class GutenbergViewUploadServerTest {
         val view = makeView()
         try {
             // A delegate provided before load is captured when the page starts.
-            view.mediaUploadDelegate = mock(MediaUploadDelegate::class.java)
+            view.mediaProcessor = mock(MediaProcessor::class.java)
             startLoading(view)
             idle()
             assertNotNull(
@@ -103,7 +103,7 @@ class GutenbergViewUploadServerTest {
             // The delegate is captured at load; a later assignment is a programmer
             // error and must surface loudly rather than silently do nothing.
             assertThrows(IllegalStateException::class.java) {
-                view.mediaUploadDelegate = mock(MediaUploadDelegate::class.java)
+                view.mediaProcessor = mock(MediaProcessor::class.java)
             }
         } finally {
             detach(view)
@@ -113,7 +113,7 @@ class GutenbergViewUploadServerTest {
     @Test
     fun `detaching the view stops and clears the upload server`() {
         val view = makeView()
-        view.mediaUploadDelegate = mock(MediaUploadDelegate::class.java)
+        view.mediaProcessor = mock(MediaProcessor::class.java)
         startLoading(view)
         idle()
         assertNotNull(uploadServerOf(view))
