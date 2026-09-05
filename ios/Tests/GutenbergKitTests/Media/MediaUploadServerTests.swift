@@ -131,6 +131,32 @@ struct MediaUploadServerTests {
     #expect(mockUploader.lastQuery == "?_embed=wp:featuredmedia")
   }
 
+  @Test("relays the uploader's own Content-Type instead of emitting it twice")
+  func relayedContentTypeWins() async throws {
+    // `HTTPResponse` serializes every header it is given, so appending the JSON
+    // default unconditionally would put `Content-Type` on the wire twice.
+    // URLSession joins repeated headers with a comma, which is what a regression
+    // looks like here.
+    //
+    // Exercised through the delete relay because every response `relayResponse`
+    // handles — WordPress's own included — carries a `Content-Type`, so this is
+    // the ordinary path rather than an edge case.
+    let uploader = ContentTypeDeleteUploader()
+    let server = try await MediaUploadServer.start(defaultUploader: uploader)
+    defer { server.stop() }
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/media/42?force=true")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "DELETE"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+
+    let (_, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+
+    #expect(httpResponse.statusCode == 200)
+    #expect(httpResponse.value(forHTTPHeaderField: "Content-Type") == "text/plain")
+  }
+
   @Test("calls delegate and returns upload result")
   func delegateProcessAndUpload() async throws {
     let delegate = MockUploadDelegate()
@@ -879,6 +905,22 @@ private final class MockDefaultUploader: DefaultMediaUploader, @unchecked Sendab
   private func mockResponse() -> MediaUploadResponse {
     let json = #"{"id":99,"source_url":"https://example.com/doc.pdf","media_type":"file"}"#
     return MediaUploadResponse(statusCode: 201, body: Data(json.utf8))
+  }
+}
+
+/// A default uploader whose delete response carries its own `Content-Type`, so the
+/// relay must override the JSON default rather than emit the header twice.
+private final class ContentTypeDeleteUploader: DefaultMediaUploader, @unchecked Sendable {
+  init() {
+    super.init(httpClient: MockHTTPClient(), siteApiRoot: URL(string: "https://example.com/wp-json/")!)
+  }
+
+  override func deleteMedia(attachmentId: String, query: String) async throws -> MediaUploadResponse {
+    MediaUploadResponse(
+      statusCode: 200,
+      body: Data("deleted".utf8),
+      headers: ["Content-Type": "text/plain"]
+    )
   }
 }
 
