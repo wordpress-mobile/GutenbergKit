@@ -136,8 +136,8 @@ class GutenbergView : FrameLayout {
      * and this view owns it for its lifetime — so you needn't retain it yourself, just
      * don't strongly retain this [GutenbergView] from your uploader.
      *
-     * Takes precedence over the deprecated [MediaUploadDelegate.uploadFile]: with an
-     * uploader set, that hook is never called.
+     * A [mediaUploadDelegate] can still transform the file first; only delivery moves
+     * to the uploader.
      */
     var mediaUploader: MediaUploader? = null
         set(value) {
