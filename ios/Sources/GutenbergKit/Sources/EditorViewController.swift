@@ -105,11 +105,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let isWarmupMode: Bool
 
     /// Set once the editor has begun loading and captured its configuration
-    /// (including ``mediaUploadDelegate``). After this, that delegate can no longer
+    /// (including ``mediaProcessor``). After this, that processor can no longer
     /// take effect, so its setter traps if written.
     private var hasStartedLoading = false
 
-    /// Delegate for transforming media before upload — resize, transcode, strip EXIF.
+    /// Transforms media before upload — resize, transcode, strip EXIF.
     ///
     /// To perform the upload yourself, set ``mediaUploader`` instead.
     ///
@@ -119,7 +119,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// configuration; setting it afterward has no effect, so the setter traps.
     ///
     /// The editor **owns** this for its lifetime and releases it on `deinit`, so you
-    /// don't need to keep a reference after assigning it. The one rule: your delegate
+    /// don't need to keep a reference after assigning it. The one rule: your processor
     /// must not strongly retain this `EditorViewController` in return, or the two form
     /// a retain cycle and neither is freed.
     //
@@ -127,16 +127,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // doc comment above from this property, leaving it undocumented.)
     //
     // Ownership here is the point: the editor holds this for its lifetime so an
-    // in-flight upload can't lose the delegate mid-request. `weak_delegate` is not
-    // wrong about the risk it names: strong here is precisely what lets a delegate
-    // that retains the editor back close a cycle ARC cannot break, and `weak` would
-    // rule that out. It is a deliberate trade — losing the delegate mid-request was
-    // the failure actually being hit — not an oversight. #630 drops the class
-    // requirement from the protocol so a host can conform with a value type.
-    // swiftlint:disable:next weak_delegate
-    public var mediaUploadDelegate: (any MediaUploadDelegate)? {
+    // in-flight upload can't lose the processor mid-request. Strong here is what
+    // lets a conformer that retains the editor back close a cycle ARC cannot break,
+    // so it is a deliberate trade — losing the processor mid-request was the failure
+    // actually being hit — not an oversight. The protocol is no longer class-bound,
+    // so a host can sidestep that cycle with a value type.
+    public var mediaProcessor: (any MediaProcessor)? {
         didSet {
-            precondition(!hasStartedLoading, Self.lateMediaAssignmentMessage("mediaUploadDelegate"))
+            precondition(!hasStartedLoading, Self.lateMediaAssignmentMessage("mediaProcessor"))
         }
     }
 
@@ -144,12 +142,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// queue, resumable transport). Setting it makes the host own every upload and its
     /// whole lifecycle; GutenbergKit stays out of the network entirely for media.
     ///
-    /// Same lifecycle rules as ``mediaUploadDelegate``: set it before the editor loads.
+    /// Same lifecycle rules as ``mediaProcessor``: set it before the editor loads.
     /// The editor owns it for its lifetime (releasing it on `deinit`), so you needn't
     /// retain it yourself — just don't strongly retain this `EditorViewController`
     /// from your uploader.
     ///
-    /// A ``mediaUploadDelegate`` can still transform the file first; only delivery
+    /// A ``mediaProcessor`` can still transform the file first; only delivery
     /// moves to the uploader.
     public var mediaUploader: (any MediaUploader)? {
         didSet {
@@ -404,8 +402,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     @MainActor
     private func loadEditor(dependencies: EditorDependencies) async throws {
-        // From here on the editor configuration — including `mediaUploadDelegate` —
-        // is captured, so the delegate setter traps if written after this point.
+        // From here on the editor configuration — including `mediaProcessor` —
+        // is captured, so the processor setter traps if written after this point.
         self.hasStartedLoading = true
 
         self.displayActivityView()
@@ -472,10 +470,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// because `nativeUploadPort` will be nil in GBKit).
     private func startUploadServer() async {
         // Nothing to route through the native server unless the host provided a
-        // delegate or an uploader. The editor owns whichever it was given — both
+        // processor or an uploader. The editor owns whichever it was given — both
         // properties are strong — so there's no released-before-load case to guard
         // against; they live as long as it does.
-        guard mediaUploadDelegate != nil || mediaUploader != nil else {
+        guard mediaProcessor != nil || mediaUploader != nil else {
             return
         }
 
@@ -502,7 +500,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         do {
             self.uploadServer = try await MediaUploadServer.start(
-                uploadDelegate: mediaUploadDelegate,
+                processor: mediaProcessor,
                 uploader: mediaUploader,
                 internalClient: internalClient
             )
