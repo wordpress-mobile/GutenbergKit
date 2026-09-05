@@ -557,7 +557,7 @@ struct MediaUploadServerTests {
     // The server-side half of the ownership story, and the one nothing else covers.
     // `EditorViewController.stopMediaHandling()` clears its own properties *and* stops
     // the server, because releasing only one leaves the loop routed through the other:
-    // `listener -> newConnectionHandler -> handler -> UploadContext -> processor -> server`.
+    // `listener -> newConnectionHandler -> Handler -> processor -> server`.
     //
     // Polled rather than asserted outright, unlike `retainsDelegateForServerLifetime`:
     // `releaseConnectionHandler()` opens the loop on the caller's thread, but it is not
