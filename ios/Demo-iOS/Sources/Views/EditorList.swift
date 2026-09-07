@@ -9,6 +9,11 @@ struct EditorList: View {
     @State private var showDebugSettings = false
     @State private var showMediaProxyServer = false
 
+    // Debug automation: jump straight to the Local WordPress editor when
+    // launched with GUTENBERG_AUTO_START_LOCAL_WP=1 (see SitePreparationView).
+    @State private var autoOpenLocalWordPress =
+        ProcessInfo.processInfo.environment["GUTENBERG_AUTO_START_LOCAL_WP"] == "1"
+
     @State var configurationToDelete: ConfigurationItem?
     @State private var errorMessage: String?
 
@@ -90,6 +95,9 @@ struct EditorList: View {
         }
         .navigationDestination(isPresented: $showMediaProxyServer) {
             MediaProxyServerView()
+        }
+        .navigationDestination(isPresented: $autoOpenLocalWordPress) {
+            SitePreparationView(site: .localWordPress)
         }
         .navigationTitle("GutenbergKit")
         .toolbar {

@@ -10,6 +10,11 @@ struct SitePreparationView: View {
     @State
     private var viewModel: SitePreparationViewModel
 
+    // Debug automation: start the editor as soon as the configuration is
+    // ready when launched with GUTENBERG_AUTO_START_LOCAL_WP=1.
+    @State
+    private var didAutoStart = false
+
     init(site: ConfigurationItem) {
         self.viewModel = SitePreparationViewModel(configurationItem: site)
     }
@@ -41,6 +46,14 @@ struct SitePreparationView: View {
         .navigationTitle("Editor Configuration")
         .onAppear {
             self.viewModel.startLoading()
+        }
+        .onChange(of: viewModel.editorConfiguration) { _, newValue in
+            guard newValue != nil,
+                  !didAutoStart,
+                  ProcessInfo.processInfo.environment["GUTENBERG_AUTO_START_LOCAL_WP"] == "1"
+            else { return }
+            didAutoStart = true
+            viewModel.buildAndLoadConfiguration(navigation: navigation)
         }
     }
 

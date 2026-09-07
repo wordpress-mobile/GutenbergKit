@@ -8,7 +8,7 @@ import Testing
 /// Covers the split read-timeout model: the pre-body phase (headers + drain) is
 /// bounded by `readTimeout`, while an accepted body is bounded by the generous
 /// `bodyReadTimeout` plus the per-read `idleTimeout`. Also covers rejecting an
-/// auth-exempt `OPTIONS` request that carries a body.
+/// auth-exempt CORS preflight that carries a body.
 @Suite("HTTPServer Timeouts")
 struct HTTPServerTimeoutTests {
 
@@ -72,54 +72,57 @@ struct HTTPServerTimeoutTests {
         #expect(elapsed < .seconds(3))               // reaped by the 500ms idle timeout, not the 10s ceiling
     }
 
-    @Test("auth-exempt OPTIONS carrying a body is rejected with 400")
-    func optionsWithBodyReturns400() async throws {
+    @Test("auth-exempt preflight carrying a body is rejected with 400")
+    func preflightWithBodyReturns400() async throws {
         let server = try await HTTPServer.start(
             name: "options-with-body",
-            requiresAuthentication: true
+            requiresAuthentication: true,
+            cors: .permissive
         ) { _ in
             HTTPResponse(status: 200, body: Data("OK\n".utf8))
         }
         defer { server.stop() }
 
-        // A real CORS preflight is bodyless; an OPTIONS with a body must not be
+        // A real CORS preflight is bodyless; one with a body must not be
         // read/drained on the auth-exempt path.
-        let raw = "OPTIONS /test HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 5\r\n\r\nhello"
+        let raw = "OPTIONS /test HTTP/1.1\r\nHost: 127.0.0.1\r\nAccess-Control-Request-Method: POST\r\nContent-Length: 5\r\n\r\nhello"
         let response = try await sendRaw(raw, toPort: server.port)
         #expect(response.hasPrefix("HTTP/1.1 400"))
     }
 
-    @Test("auth-exempt OPTIONS with an oversized body is rejected with 400, not drained")
-    func optionsWithOversizedBodyReturns400() async throws {
+    @Test("auth-exempt preflight with an oversized body is rejected with 400, not drained")
+    func preflightWithOversizedBodyReturns400() async throws {
         let server = try await HTTPServer.start(
             name: "options-oversized-body",
             requiresAuthentication: true,
-            maxRequestBodySize: 16
+            maxRequestBodySize: 16,
+            cors: .permissive
         ) { _ in
             HTTPResponse(status: 200, body: Data("OK\n".utf8))
         }
         defer { server.stop() }
 
         // Content-Length exceeds the max body size, so the parser would otherwise
-        // enter the drain path — the OPTIONS-with-body guard must reject it first.
-        let raw = "OPTIONS /test HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 1000\r\n\r\n"
+        // enter the drain path — the preflight-with-body guard must reject it first.
+        let raw = "OPTIONS /test HTTP/1.1\r\nHost: 127.0.0.1\r\nAccess-Control-Request-Method: POST\r\nContent-Length: 1000\r\n\r\n"
         let response = try await sendRaw(raw, toPort: server.port)
         #expect(response.hasPrefix("HTTP/1.1 400"))
     }
 
-    @Test("bodyless OPTIONS preflight still succeeds")
+    @Test("bodyless OPTIONS preflight is still answered")
     func bodylessOptionsSucceeds() async throws {
         let server = try await HTTPServer.start(
             name: "options-bodyless",
-            requiresAuthentication: true
+            requiresAuthentication: true,
+            cors: .permissive
         ) { _ in
             HTTPResponse(status: 200, body: Data("OK\n".utf8))
         }
         defer { server.stop() }
 
-        let raw = "OPTIONS /test HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
+        let raw = "OPTIONS /test HTTP/1.1\r\nHost: 127.0.0.1\r\nAccess-Control-Request-Method: GET\r\n\r\n"
         let response = try await sendRaw(raw, toPort: server.port)
-        #expect(response.hasPrefix("HTTP/1.1 200"))
+        #expect(response.hasPrefix("HTTP/1.1 204"))
     }
 
     // MARK: - Start timeout

@@ -5,130 +5,120 @@ import { onNetworkRequest, getGBKit } from './bridge';
 import { debug } from './logger';
 
 /**
- * Initializes the global fetch interceptor.
- * Wraps window.fetch to log all network requests and responses.
- * Only overrides window.fetch if network logging is enabled in config.
+ * A `fetch` wrapper that reports every request and response to the native host,
+ * or `null` when network logging is not enabled.
  *
- * @return {void}
+ * Reporting is fire-and-forget: the response is returned as soon as it arrives
+ * and its body is serialized afterwards from a clone, so logging never delays
+ * or locks the response the caller sees.
+ *
+ * @return {import('./fetch-chain').FetchWrapper|null} The wrapper.
  */
-export function initializeFetchInterceptor() {
-	// Don't initialize if already done
-	if ( window.__fetchInterceptorInitialized ) {
-		return;
+export function createLoggingFetchWrapper() {
+	if ( ! getGBKit().enableNetworkLogging ) {
+		debug( 'Network logging disabled' );
+		return null;
 	}
 
-	const config = getGBKit();
+	return ( next ) =>
+		async function ( input, init ) {
+			const startTime = performance.now();
+			const requestDetails = extractRequestDetails( input, init );
 
-	// Only override window.fetch if network logging is enabled
-	if ( ! config.enableNetworkLogging ) {
-		debug( 'Network logging disabled, fetch interceptor not initialized' );
-		return;
-	}
+			let requestBody = null;
+			let clonedRequest = null;
 
-	const originalFetch = window.fetch;
-
-	window.fetch = async function ( input, init ) {
-		const startTime = performance.now();
-		const requestDetails = extractRequestDetails( input, init );
-
-		let requestBody = null;
-		let clonedRequest = null;
-
-		// Try to read request body if present
-		try {
-			if ( init?.body ) {
-				// Body is provided in init options
-				if ( typeof init.body === 'string' ) {
-					requestBody = init.body;
-				} else {
-					requestBody = serializeRequestBody( init.body );
+			// Try to read request body if present
+			try {
+				if ( init?.body ) {
+					// Body is provided in init options
+					if ( typeof init.body === 'string' ) {
+						requestBody = init.body;
+					} else {
+						requestBody = serializeRequestBody( init.body );
+					}
+				} else if ( input instanceof Request ) {
+					// Body might be in Request object - clone to read it
+					clonedRequest = input.clone();
+					requestBody = await serializeBody( clonedRequest );
 				}
-			} else if ( input instanceof Request ) {
-				// Body might be in Request object - clone to read it
-				clonedRequest = input.clone();
-				requestBody = await serializeBody( clonedRequest );
+			} catch ( error ) {
+				debug( `Error reading request body: ${ error.message }` );
+				requestBody = `[Error reading request body: ${ error.message }]`;
 			}
-		} catch ( error ) {
-			debug( `Error reading request body: ${ error.message }` );
-			requestBody = `[Error reading request body: ${ error.message }]`;
-		}
 
-		let response;
-		let responseStatus;
-		let responseHeaders = {};
+			let response;
+			let responseStatus;
+			let responseHeaders = {};
 
-		try {
-			// Call original fetch
-			response = await originalFetch( input, init );
+			try {
+				response = await next( input, init );
 
-			// Capture response metadata immediately
-			const responseClone = response.clone();
-			responseStatus = response.status;
-			const responseStatusText =
-				response.statusText || getStatusText( response.status );
-			responseHeaders = serializeHeaders( response.headers );
-			const duration = Math.round( performance.now() - startTime );
+				// Capture response metadata immediately
+				const responseClone = response.clone();
+				responseStatus = response.status;
+				const responseStatusText =
+					response.statusText || getStatusText( response.status );
+				responseHeaders = serializeHeaders( response.headers );
+				const duration = Math.round( performance.now() - startTime );
 
-			// Log asynchronously without blocking the response return
-			// This prevents Android WebView Response locking issues
-			serializeBody( responseClone )
-				.then( ( body ) => {
-					onNetworkRequest( {
-						url: requestDetails.url,
-						method: requestDetails.method,
-						requestHeaders: serializeHeaders(
-							requestDetails.headers
-						),
-						requestBody,
-						status: responseStatus,
-						statusText: responseStatusText,
-						responseHeaders,
-						responseBody: body,
-						duration,
+				// Log asynchronously without blocking the response return
+				// This prevents Android WebView Response locking issues
+				serializeBody( responseClone )
+					.then( ( body ) => {
+						onNetworkRequest( {
+							url: requestDetails.url,
+							method: requestDetails.method,
+							requestHeaders: serializeHeaders(
+								requestDetails.headers
+							),
+							requestBody,
+							status: responseStatus,
+							statusText: responseStatusText,
+							responseHeaders,
+							responseBody: body,
+							duration,
+						} );
+					} )
+					.catch( ( error ) => {
+						// Log without body if reading fails
+						onNetworkRequest( {
+							url: requestDetails.url,
+							method: requestDetails.method,
+							requestHeaders: serializeHeaders(
+								requestDetails.headers
+							),
+							requestBody,
+							status: responseStatus,
+							statusText: responseStatusText,
+							responseHeaders,
+							responseBody: `[Error reading body: ${ error.message }]`,
+							duration,
+						} );
 					} );
-				} )
-				.catch( ( error ) => {
-					// Log without body if reading fails
-					onNetworkRequest( {
-						url: requestDetails.url,
-						method: requestDetails.method,
-						requestHeaders: serializeHeaders(
-							requestDetails.headers
-						),
-						requestBody,
-						status: responseStatus,
-						statusText: responseStatusText,
-						responseHeaders,
-						responseBody: `[Error reading body: ${ error.message }]`,
-						duration,
-					} );
+
+				// Return response immediately - don't wait for body serialization
+				return response;
+			} catch ( error ) {
+				// Log failed request
+				const duration = Math.round( performance.now() - startTime );
+
+				onNetworkRequest( {
+					url: requestDetails.url,
+					method: requestDetails.method,
+					requestHeaders: serializeHeaders( requestDetails.headers ),
+					requestBody,
+					status: 0,
+					statusText: '',
+					responseHeaders: {},
+					responseBody: `[Network error: ${ error.message }]`,
+					duration,
 				} );
 
-			// Return response immediately - don't wait for body serialization
-			return response;
-		} catch ( error ) {
-			// Log failed request
-			const duration = Math.round( performance.now() - startTime );
-
-			onNetworkRequest( {
-				url: requestDetails.url,
-				method: requestDetails.method,
-				requestHeaders: serializeHeaders( requestDetails.headers ),
-				requestBody,
-				status: 0,
-				statusText: '',
-				responseHeaders: {},
-				responseBody: `[Network error: ${ error.message }]`,
-				duration,
-			} );
-
-			// Re-throw the error
-			throw error;
-		}
-	};
-
-	window.__fetchInterceptorInitialized = true;
-	debug( 'Fetch interceptor initialized' );
+				// Re-throw the error
+				throw error;
+			}
+		};
 }
 
 /**
