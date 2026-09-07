@@ -29,7 +29,10 @@ extension Logger {
     /// Logs editor localization activity
     static let localization = Logger(subsystem: "GutenbergKit", category: "localization")
 
-    /// Logs upload server activity
+    /// Logs the editor's local server lifecycle
+    static let localServer = Logger(subsystem: "GutenbergKit", category: "local-server")
+
+    /// Logs upload route activity
     static let uploadServer = Logger(subsystem: "GutenbergKit", category: "upload-server")
 
     /// Logs REST relay activity
