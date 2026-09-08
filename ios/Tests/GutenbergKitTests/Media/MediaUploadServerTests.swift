@@ -416,7 +416,7 @@ struct MediaUploadServerTests {
     // host dropping it before the request is the same condition, deterministically.
     let mockUploader = MockDefaultUploader()
     var delegate: TranscodingDelegate? = TranscodingDelegate()
-    weak var weakDelegate = delegate
+    weak let weakDelegate = delegate
     let server = try await MediaUploadServer.start(uploadDelegate: delegate, defaultUploader: mockUploader)
     defer { server.stop() }
 
