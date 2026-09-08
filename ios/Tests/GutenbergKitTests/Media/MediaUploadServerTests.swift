@@ -637,7 +637,7 @@ struct MediaUploadServerTests {
     // those reads: a file admitted for processing was forwarded unprocessed. The
     // host dropping it before the request is the same condition, deterministically.
     let mockUploader = MockInternalMediaClient()
-    var delegate: TranscodingProcessor? = TranscodingProcessor()
+    var delegate: ResizingProcessor? = ResizingProcessor()
     weak var weakDelegate = delegate
     let server = try await MediaUploadServer.start(processor: delegate, internalClient: mockUploader)
     defer { server.stop() }
@@ -1069,7 +1069,7 @@ private final class RecordingUploader: MediaUploader, @unchecked Sendable {
 
 /// An uploader whose delivery fails terminally, as one would after exhausting its own
 /// post-process recovery and force-deleting the orphan.
-private final class ThrowingUploader: MediaUploader, @unchecked Sendable {
+private final class ThrowingUploader: MediaUploader {
   struct Failure: Error {}
 
   func upload(_ upload: MediaUpload) async throws -> Data {
@@ -1078,23 +1078,9 @@ private final class ThrowingUploader: MediaUploader, @unchecked Sendable {
 }
 
 /// A processor that declines every file by metadata.
-private final class DecliningProcessor: MediaProcessor, @unchecked Sendable {
+private final class DecliningProcessor: MediaProcessor {
   func handlesFile(ofType mimeType: String, named filename: String) -> Bool {
     false
-  }
-}
-
-/// A processor that transcodes, used to check the server holds it across the whole
-/// request rather than re-reading a reference the host may have dropped.
-private final class TranscodingProcessor: MediaProcessor, @unchecked Sendable {
-  func handlesFile(ofType mimeType: String, named filename: String) -> Bool {
-    true
-  }
-
-  func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
-    let processed = FileManager.default.temporaryDirectory.appendingPathComponent("clip.mp4")
-    try? Data("transcoded".utf8).write(to: processed)
-    return .processed(processed, mimeType: "video/mp4", filename: "clip.mp4")
   }
 }
 
