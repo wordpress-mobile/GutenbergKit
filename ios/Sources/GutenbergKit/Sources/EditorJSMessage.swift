@@ -35,6 +35,8 @@ struct EditorJSMessage {
         case onEditorFeaturedImageChanged
         /// The editor logged an exception.
         case onEditorExceptionLogged
+        /// The editor crashed and its JS bridge methods are gone.
+        case onEditorUnavailable
         /// The user tapped the inserter button.
         case showBlockInserter
         /// User requested the Media Library.
