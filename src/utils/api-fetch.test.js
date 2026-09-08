@@ -194,6 +194,71 @@ describe( 'api-fetch credentials handling', () => {
 		} );
 	} );
 
+	describe( 'siteIndexMiddleware', () => {
+		const indexPath = '/?_fields=name,home,url,image_sizes';
+
+		it( 'resolves the REST index locally on namespaced sites', async () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://public-api.example.com/',
+				siteApiNamespace: [ 'sites/123/' ],
+				namespaceExcludedPaths: [],
+				siteURL: 'https://example.com/',
+			} );
+
+			const result = await apiFetch( { path: indexPath } );
+
+			expect( global.fetch ).not.toHaveBeenCalled();
+			expect( result ).toEqual( { home: 'https://example.com' } );
+		} );
+
+		it( 'resolves an empty record when the site URL is unknown', async () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://public-api.example.com/',
+				siteApiNamespace: [ 'sites/123/' ],
+				namespaceExcludedPaths: [],
+			} );
+
+			const result = await apiFetch( { path: '/' } );
+
+			expect( global.fetch ).not.toHaveBeenCalled();
+			expect( result ).toEqual( {} );
+		} );
+
+		it( 'requests the REST index from sites without a namespace', async () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://example.com/wp-json/',
+				siteApiNamespace: [],
+				namespaceExcludedPaths: [],
+				siteURL: 'https://example.com/',
+			} );
+
+			await apiFetch( { path: indexPath } );
+
+			expect( global.fetch ).toHaveBeenCalled();
+			const [ url ] = global.fetch.mock.calls[ 0 ];
+			expect( url ).toMatch(
+				/^https:\/\/example\.com\/wp-json\/\?_fields=/
+			);
+		} );
+
+		it( 'lets non-index requests through on namespaced sites', async () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://public-api.example.com/',
+				siteApiNamespace: [ 'sites/123/' ],
+				namespaceExcludedPaths: [],
+				siteURL: 'https://example.com/',
+			} );
+
+			try {
+				await apiFetch( { path: '/wp/v2/posts' } );
+			} catch ( error ) {
+				// Ignore errors from the actual fetch
+			}
+
+			expect( global.fetch ).toHaveBeenCalled();
+		} );
+	} );
+
 	it( 'should preserve other headers when adding Authorization', async () => {
 		bridge.getGBKit.mockReturnValue( {
 			siteApiRoot: 'https://example.com/wp-json/',
