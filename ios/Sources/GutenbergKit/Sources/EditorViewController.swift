@@ -116,6 +116,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// that case — a `View` is inflated, not constructed by the host, so there is no
     /// initializer to put this in.)
     ///
+    /// The rest of this describes a **reference-type** conformer, which is what a host
+    /// that needs to observe or reuse its processor will write. ``MediaProcessor`` is not
+    /// class-bound, and a value-type conformer is copied at `init` — see the protocol's
+    /// documentation for what that changes.
+    ///
     /// The editor holds this strongly for its lifetime, so a processor built for a single
     /// editor needs no reference of its own. **To reuse one across editor sessions, keep
     /// your own reference to it.** The editor's release — on `deinit`, or on
