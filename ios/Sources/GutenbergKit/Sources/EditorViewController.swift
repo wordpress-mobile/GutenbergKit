@@ -245,6 +245,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         config.applicationNameForUserAgent = "GutenbergKit/\(GutenbergKitVersion.version)"
 
         self.webView = GBWebView(frame: .zero, configuration: config)
+        self.webView.isFindInteractionEnabled = true
         self.webView.scrollView.keyboardDismissMode = .interactive
 
         self.isWarmupMode = isWarmupMode
@@ -556,6 +557,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         guard isReady else { return }
         evaluate("editor.redo();")
     }
+
+    public func presentFindNavigator() {
+        webView.findInteraction?.presentFindNavigator(showingReplace: false)
+    }
+
 
     /// Dismisses the topmost modal dialog or menu in the editor
     public func dismissTopModal() {
