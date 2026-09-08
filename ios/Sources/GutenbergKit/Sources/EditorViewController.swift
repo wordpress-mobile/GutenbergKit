@@ -121,9 +121,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// must not strongly retain this `EditorViewController` in return, or the two form
     /// a retain cycle and neither is freed.
     // Ownership here is the point: the editor holds this for its lifetime so an
-    // in-flight upload can't lose the delegate mid-request. The cycle `weak_delegate`
-    // guards against runs the other way (a delegate retaining the editor), which this
-    // property can neither create nor prevent.
+    // in-flight upload can't lose the delegate mid-request. `weak_delegate` is not
+    // wrong about the risk it names: strong here is precisely what lets a delegate
+    // that retains the editor back close a cycle ARC cannot break, and `weak` would
+    // rule that out. It is a deliberate trade — losing the delegate mid-request was
+    // the failure actually being hit — not an oversight. #630 drops the class
+    // requirement from the protocol so a host can conform with a value type.
     // swiftlint:disable:next weak_delegate
     public var mediaUploadDelegate: (any MediaUploadDelegate)? {
         didSet {
