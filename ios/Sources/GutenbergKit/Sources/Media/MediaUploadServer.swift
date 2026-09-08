@@ -453,25 +453,27 @@ enum UploadError: Error, LocalizedError {
 // MARK: - Upload Context
 
 /// Container for the upload delegate and default uploader, captured by the
-/// HTTPServer handler closure and re-read on each request.
+/// HTTPServer handler closure and read on each request.
 ///
-/// The delegate is held **weakly**. `EditorViewController.mediaUploadDelegate` is
-/// declared `weak` — the host owns the delegate's lifetime. Capturing it strongly
-/// here would silently defeat that contract and, worse, risk a retain cycle
-/// (`EditorViewController → uploadServer → HTTPServer → handler → UploadContext →
-/// delegate → EditorViewController`) that would keep the view controller — and
-/// therefore the server — alive forever, so `deinit` would never stop it.
+/// Both are held **strongly**, so a delegate that admitted a file for processing
+/// will process it — the three reads within a request can't disagree, and an
+/// in-flight upload keeps the host's delegate alive until it unwinds. This matches
+/// Android, which holds its `uploadDelegate` as a plain `val` for the same reason.
 ///
-/// `@unchecked Sendable`: `uploadDelegate` is assigned once at init and only read
-/// afterwards; weak-reference reads are thread-safe at runtime.
-private final class UploadContext: @unchecked Sendable {
-    weak var uploadDelegate: (any MediaUploadDelegate)?
+/// Strong is safe *given* `EditorViewController` now owns `mediaUploadDelegate`
+/// strongly too — but be exact about what that trades away. Weak here did break one
+/// ring: every other edge in `EditorViewController → uploadServer → HTTPServer →
+/// listener → newConnectionHandler → handler → UploadContext → delegate` is strong,
+/// so this was its only weak link. What it could not break is the shorter ring
+/// straight through the property. A host that retains the view controller back now
+/// leaks either way, so weak here buys a partial guard in exchange for the delegate
+/// vanishing mid-request — which is the failure that was actually being hit.
+///
+/// A `struct`, so it is implicitly `Sendable`: `MediaUploadDelegate` is a `Sendable`
+/// protocol and `DefaultMediaUploader` is `@unchecked Sendable`.
+private struct UploadContext: Sendable {
+    let uploadDelegate: (any MediaUploadDelegate)?
     let defaultUploader: DefaultMediaUploader?
-
-    init(uploadDelegate: (any MediaUploadDelegate)?, defaultUploader: DefaultMediaUploader?) {
-        self.uploadDelegate = uploadDelegate
-        self.defaultUploader = defaultUploader
-    }
 }
 
 // MARK: - Default Media Uploader
