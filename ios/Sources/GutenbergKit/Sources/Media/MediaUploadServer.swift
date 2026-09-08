@@ -30,12 +30,13 @@ final class MediaUploadServer: Sendable {
     ///
     /// - Parameters:
     ///   - uploadDelegate: Optional delegate for customizing file processing and upload.
-    ///   - defaultUploader: Fallback uploader used when no delegate provides `uploadFile`.
+    ///   - internalClient: GutenbergKit's own client for the configured site. Delivers
+    ///     uploads when no delegate provides `uploadFile`, and every media delete.
     ///   - maxRequestBodySize: The maximum allowed request body size in bytes.
     ///     Requests exceeding this limit receive a 413 response. Defaults to 4 GB.
     static func start(
         uploadDelegate: (any MediaUploadDelegate)? = nil,
-        defaultUploader: DefaultMediaUploader? = nil,
+        internalClient: InternalMediaClient? = nil,
         maxRequestBodySize: Int64 = HTTPRequestParser.defaultMaxBodySize
     ) async throws -> MediaUploadServer {
         // Sweep temp files orphaned by a prior crash, off the editor-startup
@@ -45,7 +46,7 @@ final class MediaUploadServer: Sendable {
             cleanOrphanedUploads()
         }
 
-        let context = UploadContext(uploadDelegate: uploadDelegate, defaultUploader: defaultUploader)
+        let context = UploadContext(uploadDelegate: uploadDelegate, internalClient: internalClient)
 
         // A generous ceiling for receiving the upload body. The body read is
         // primarily bounded by the per-read idle timeout (which reaps a stalled
@@ -98,7 +99,7 @@ final class MediaUploadServer: Sendable {
         }
 
         if method == "DELETE", let attachmentId = attachmentId(fromPath: parsed.path) {
-            return await handleDelete(attachmentId, query: parsed.query, context: context)
+            return await handleDelete(attachmentId, query: parsed.query, internalClient: context.internalClient)
         }
 
         return errorResponse(status: 404, message: "Not found")
@@ -132,7 +133,7 @@ final class MediaUploadServer: Sendable {
         // upload (e.g. a video handed to an image-only delegate).
         guard context.uploadDelegate?.handlesFile(ofType: mimeType, named: filename) ?? false else {
             do {
-                return try await passthroughResponse(request, query: query, context: context)
+                return try await passthroughResponse(request, query: query, internalClient: context.internalClient)
             } catch {
                 return uploadErrorResponse(error)
             }
@@ -172,7 +173,7 @@ final class MediaUploadServer: Sendable {
             case .passthrough:
                 // Delegate didn't modify the file — forward the original request
                 // body to WordPress without re-encoding.
-                return try await passthroughResponse(request, query: query, context: context)
+                return try await passthroughResponse(request, query: query, internalClient: context.internalClient)
             }
         } catch {
             return uploadErrorResponse(error)
@@ -184,7 +185,7 @@ final class MediaUploadServer: Sendable {
     /// the file — it declined by metadata (`handlesFile` returned false) or
     /// `processFile` returned `.original`.
     private static func passthroughResponse(
-        _ request: HTTPServer.Request, query: String, context: UploadContext
+        _ request: HTTPServer.Request, query: String, internalClient: InternalMediaClient?
     ) async throws -> HTTPResponse {
         // As in `processAndUpload`: don't put bytes on the wire for a torn-down
         // editor, regardless of whether the HTTP client honors cancellation.
@@ -193,10 +194,10 @@ final class MediaUploadServer: Sendable {
         Logger.uploadServer.debug("Passthrough: forwarding original request body to WordPress")
         guard let body = request.parsed.body,
               let contentType = request.parsed.header("Content-Type"),
-              let defaultUploader = context.defaultUploader else {
+              let internalClient else {
             return errorResponse(status: 500, message: UploadError.noUploader.localizedDescription)
         }
-        let response = try await defaultUploader.passthroughUpload(body: body, contentType: contentType, query: query)
+        let response = try await internalClient.passthroughUpload(body: body, contentType: contentType, query: query)
         return relayResponse(response)
     }
 
@@ -220,13 +221,13 @@ final class MediaUploadServer: Sendable {
     /// `X-HTTP-Method-Override`, which core's CORS allow-list omits, so the
     /// browser blocks it at preflight. Relaying it here lets the cleanup run.
     private static func handleDelete(
-        _ attachmentId: String, query: String, context: UploadContext
+        _ attachmentId: String, query: String, internalClient: InternalMediaClient?
     ) async -> HTTPResponse {
-        guard let defaultUploader = context.defaultUploader else {
+        guard let internalClient else {
             return errorResponse(status: 500, message: UploadError.noUploader.localizedDescription)
         }
         do {
-            let response = try await defaultUploader.deleteMedia(attachmentId: attachmentId, query: query)
+            let response = try await internalClient.deleteMedia(attachmentId: attachmentId, query: query)
             return relayResponse(response)
         } catch {
             return uploadErrorResponse(error)
@@ -272,7 +273,7 @@ final class MediaUploadServer: Sendable {
 
     /// Result of the delegate processing + upload pipeline.
     private enum UploadResult {
-        /// The delegate (or default uploader) completed the upload; carries the
+        /// The delegate (or the internal media client) completed the upload; carries the
         /// raw WordPress response to relay.
         case uploaded(MediaUploadResponse)
         /// The delegate didn't modify the file and `uploadFile` returned nil.
@@ -328,13 +329,13 @@ final class MediaUploadServer: Sendable {
         if let delegate = context.uploadDelegate,
            let result = try await delegate.uploadFile(at: uploadURL, mimeType: uploadMimeType, filename: uploadFilename) {
             return .uploaded(result)
-        } else if let defaultUploader = context.defaultUploader {
+        } else if let internalClient = context.internalClient {
             // Unmodified — forward the original request body directly, skipping
             // multipart re-encoding.
             if case .original = processed {
                 return .passthrough
             }
-            let result = try await defaultUploader.upload(fileURL: uploadURL, mimeType: uploadMimeType, filename: uploadFilename, extraParts: extraParts, query: query)
+            let result = try await internalClient.upload(fileURL: uploadURL, mimeType: uploadMimeType, filename: uploadFilename, extraParts: extraParts, query: query)
             return .uploaded(result)
         } else {
             throw UploadError.noUploader
@@ -454,7 +455,7 @@ enum UploadError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .noUploader: "No upload delegate or default uploader configured"
+        case .noUploader: "No upload delegate or internal media client configured"
         case .streamReadFailed: "Failed to read upload stream"
         case .streamWriteFailed: "Failed to write upload to disk"
         }
@@ -463,13 +464,16 @@ enum UploadError: Error, LocalizedError {
 
 // MARK: - Upload Context
 
-/// Container for the upload delegate and default uploader, captured by the
+/// Container for the upload delegate and the internal media client, captured by the
 /// HTTPServer handler closure and read on each request.
 ///
 /// Both are held **strongly**, so a delegate that admitted a file for processing
 /// will process it — the three reads within a request can't disagree, and an
-/// in-flight upload keeps the host's delegate alive until it unwinds. This matches
-/// Android, which holds its `uploadDelegate` as a plain `val` for the same reason.
+/// in-flight upload keeps the host's delegate alive until it unwinds. That lifetime
+/// comes from the handler closure, which the listener retains for the server's
+/// lifetime; it therefore holds just as well on the paths that take the client
+/// alone rather than the whole context. This matches Android, which holds its
+/// `uploadDelegate` as a plain `val` for the same reason.
 ///
 /// Strong is safe *given* `EditorViewController` now owns `mediaUploadDelegate`
 /// strongly too — but be exact about what that trades away. Weak here did break one
@@ -481,16 +485,22 @@ enum UploadError: Error, LocalizedError {
 /// vanishing mid-request — which is the failure that was actually being hit.
 ///
 /// A `struct`, so it is implicitly `Sendable`: `MediaUploadDelegate` is a `Sendable`
-/// protocol and `DefaultMediaUploader` is `@unchecked Sendable`.
+/// protocol and `InternalMediaClient` is `@unchecked Sendable`.
 private struct UploadContext: Sendable {
     let uploadDelegate: (any MediaUploadDelegate)?
-    let defaultUploader: DefaultMediaUploader?
+    let internalClient: InternalMediaClient?
 }
 
-// MARK: - Default Media Uploader
+// MARK: - Internal Media Client
 
-/// Uploads files to the WordPress REST API using site credentials from EditorConfiguration.
-class DefaultMediaUploader: @unchecked Sendable {
+/// GutenbergKit's own client for the configured site, built from the site credentials
+/// in `EditorConfiguration`.
+///
+/// Not an implementation of any host-facing protocol — it is the thing that actually
+/// performs GutenbergKit's media requests. It delivers uploads the host did not take
+/// over, and relays the editor's media deletes: the editor only ever asks to delete
+/// `/wp/v2/media/<id>` on the configured site, so that is where the relay sends it.
+class InternalMediaClient: @unchecked Sendable {
     private let httpClient: EditorHTTPClientProtocol
     private let siteApiRoot: URL
     private let siteApiNamespace: String?
