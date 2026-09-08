@@ -55,7 +55,24 @@ public enum ProcessedProxyFile: Sendable {
 ///
 /// This is the safe, common extension point: most hosts want only this. To perform
 /// the upload yourself, conform to ``MediaUploader`` instead.
-public protocol MediaProcessor: AnyObject, Sendable {
+///
+/// Deliberately **not** class-bound. ``EditorViewController`` holds its processor
+/// strongly for its own lifetime, so a conformer that holds the view controller back
+/// closes a retain cycle ARC cannot break — neither object is freed, and the editor
+/// stops tearing down its upload server. Dropping the class requirement lets you
+/// conform with a `struct` capturing only what the transform needs, which is the
+/// shape that avoids this; a class-bound `Delegate` invited the opposite. Note a
+/// value type is not automatic protection — a `struct` that stores the view
+/// controller cycles just the same. The rule is simply: do not hold it back.
+///
+/// A value-type conformer is **copied** on assignment, and the editor captures that
+/// copy once, when it begins loading. Mutating your own instance afterwards changes
+/// nothing the editor will run, and re-assigning the property to push the new value
+/// traps — the setter rejects every write once loading has started, in release as
+/// well as debug. So configure a `struct` conformer at init and treat it as frozen;
+/// if you need settings the host can change while an editor is open, read them
+/// inside `processFile` through a reference the conformer captures.
+public protocol MediaProcessor: Sendable {
     /// Whether this processor might transform a file with the given metadata.
     ///
     /// A cheap, metadata-only gate the server consults *before* materializing the
@@ -156,7 +173,16 @@ public struct MediaUpload: Sendable {
 /// itself, there's no raw response left for the editor to retry behind it. The
 /// attachment you return lives on that same configured site, where the editor reads
 /// and updates it by ID.
-public protocol MediaUploader: AnyObject, Sendable {
+///
+/// Deliberately **not** class-bound, for the same reason as ``MediaProcessor``: the
+/// editor holds its uploader strongly, so a conformer that holds the view controller
+/// back forms a retain cycle neither object escapes. The operative rule is that one:
+/// do not store the ``EditorViewController``. A value type does not enforce it — a
+/// `struct` holding the view controller cycles the same way — and it carries the same
+/// copy-on-assignment caveat described on ``MediaProcessor``. An uploader that owns a
+/// queue, a background session, or a retry counter wants a class; capture it behind a
+/// reference either way.
+public protocol MediaUploader: Sendable {
     /// Upload a (possibly processed) file and return the finished WordPress
     /// attachment JSON the editor inserts — the same object a direct
     /// `POST /wp/v2/media` returns. Return only once the upload is genuinely done,
