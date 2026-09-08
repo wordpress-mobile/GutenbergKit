@@ -388,32 +388,22 @@ struct MediaUploadServerTests {
   @Test("retains the delegate for the server's lifetime, and releases it after")
   func retainsDelegateForServerLifetime() async throws {
     weak var weakDelegate: MockUploadDelegate?
-    var server: MediaUploadServer?
     do {
       let delegate = MockUploadDelegate()
       weakDelegate = delegate
-      server = try await MediaUploadServer.start(uploadDelegate: delegate)
+      let server = try await MediaUploadServer.start(uploadDelegate: delegate)
+      defer { server.stop() }
+
+      // The server owns the delegate while it runs: the host can assign one and drop
+      // its own reference, and every request still sees it.
+      #expect(weakDelegate != nil)
     }
 
-    // The server owns the delegate while it runs: the host can assign one and drop
-    // its own reference, and every request still sees it.
-    #expect(weakDelegate != nil)
-
-    server?.stop()
-    server = nil
-
-    // …and lets go when it does, so the delegate isn't leaked for the process's
-    // lifetime. The cycle the old `weak` was defending against runs through
-    // `EditorViewController.mediaUploadDelegate`, which this container can neither
-    // create nor prevent.
-    //
-    // Polled rather than asserted outright: the handler closure is captured by the
-    // listener's `newConnectionHandler`, and `NWListener.cancel()` is asynchronous —
-    // the framework holds the listener until cancellation completes, so the release
-    // trails `stop()` by a beat. A leak still fails this, just after a second.
-    for _ in 0..<100 where weakDelegate != nil {
-      try await Task.sleep(for: .milliseconds(10))
-    }
+    // …and lets go when it stops, so the delegate isn't leaked for the process's
+    // lifetime. Asserted outright rather than polled: `HTTPServer.stop()` clears the
+    // listener's `newConnectionHandler`, which is what holds the handler closure and
+    // through it this delegate, so the release lands synchronously on this thread
+    // instead of trailing an asynchronous `NWListener` cancellation onto its queue.
     #expect(weakDelegate == nil)
   }
 

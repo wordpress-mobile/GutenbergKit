@@ -305,13 +305,33 @@ public final class HTTPServer: Sendable {
     /// are currently executing will receive a `CancellationError`.
     public func stop() {
         listener.cancel()
+        releaseConnectionHandler()
         connectionTasks.cancelAll()
         Logger.httpServer.info("HTTP server stopped")
     }
 
     deinit {
         listener.cancel()
+        releaseConnectionHandler()
         connectionTasks.cancelAll()
+    }
+
+    /// Drops the connection handler so teardown releases what it captured *here*,
+    /// on the caller's thread.
+    ///
+    /// `newConnectionHandler` retains the request handler, and through it whatever
+    /// the caller's closure captured. `cancel()` alone does not drop the block:
+    /// Network.framework holds the listener until cancellation completes on its own
+    /// queue, so the final release — and therefore the captured object's `deinit` —
+    /// lands there rather than wherever `stop()` was called. For GutenbergKit's
+    /// upload server that means a host's media handler could be deallocated off the
+    /// main thread on a path that started in `EditorViewController.deinit`.
+    ///
+    /// Clearing it after `cancel()` rather than before is deliberate: the listener is
+    /// already torn down, so there is no window in which it is live but has no handler
+    /// to hand a connection to.
+    private func releaseConnectionHandler() {
+        listener.newConnectionHandler = nil
     }
 
     /// The library's default response for a parse error: the mapped status code
