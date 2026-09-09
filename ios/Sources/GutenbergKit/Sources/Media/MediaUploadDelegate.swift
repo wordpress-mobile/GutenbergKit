@@ -8,7 +8,8 @@ import Foundation
 /// upload, so every consumer — image sub-sizes, attachment links, error notices —
 /// behaves identically to a non-native upload.
 struct MediaUploadResponse: Sendable {
-    /// The HTTP status code WordPress (or the host's upload service) returned.
+    /// The HTTP status code WordPress returned, or 201 for an upload a
+    /// ``MediaUploader`` delivered.
     let statusCode: Int
 
     /// The raw response body — a WordPress REST attachment on success, or a
@@ -63,8 +64,9 @@ public protocol MediaUploadDelegate: AnyObject, Sendable {
     /// the original upload to WordPress without first copying a file the delegate
     /// won't touch.
     ///
-    /// Only consulted when no ``MediaUploader`` is set: an uploader takes over
-    /// delivery for every file, so there is no passthrough to decline to.
+    /// With a ``MediaUploader`` set this can't decline the upload itself — an
+    /// uploader delivers every file, so there is no passthrough to fall to — but it
+    /// still gates `processFile`: a declined file reaches the uploader unprocessed.
     ///
     /// Defaults to `true`: every file is materialized and the full pipeline runs.
     /// A `true` here is not a commitment — `processFile` may still return

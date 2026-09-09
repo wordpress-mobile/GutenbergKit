@@ -113,8 +113,10 @@ class GutenbergView : FrameLayout {
     var requestInterceptor: GutenbergRequestInterceptor = DefaultGutenbergRequestInterceptor()
 
     /**
-     * Optional delegate for customizing media upload behavior (resize, transcode,
-     * custom upload).
+     * Optional delegate for transforming media before upload (resize, transcode,
+     * strip EXIF).
+     *
+     * To perform the upload yourself, set [mediaUploader] instead.
      *
      * Provide this **before the editor loads** — typically right after
      * construction (e.g. in the `AndroidView` factory). It is captured once, when

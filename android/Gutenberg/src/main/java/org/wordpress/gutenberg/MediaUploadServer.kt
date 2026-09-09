@@ -34,7 +34,10 @@ import okio.source
  * behaves identically to a non-native upload.
  */
 internal class MediaUploadResponse(
-    /** The HTTP status code WordPress (or the host's upload service) returned. */
+    /**
+     * The HTTP status code WordPress returned, or 201 for an upload a
+     * [MediaUploader] delivered.
+     */
     val statusCode: Int,
     /**
      * The raw response body — a WordPress REST attachment on success, or a
@@ -91,8 +94,9 @@ interface MediaUploadDelegate {
      * the original upload to WordPress without first copying a file the delegate
      * won't touch.
      *
-     * Only consulted when no [MediaUploader] is set: an uploader takes over delivery
-     * for every file, so there is no passthrough to decline to.
+     * With a [MediaUploader] set this can't decline the upload itself — an uploader
+     * delivers every file, so there is no passthrough to fall to — but it still gates
+     * [processFile]: a declined file reaches the uploader unprocessed.
      *
      * Defaults to true: every file is materialized and the full pipeline runs. A
      * true here is not a commitment — [processFile] may still return
@@ -109,7 +113,6 @@ interface MediaUploadDelegate {
      * stores it with the correct extension and type.
      */
     suspend fun processFile(file: File, mimeType: String, filename: String): ProcessedProxyFile = ProcessedProxyFile.Original
-
 }
 
 /**
@@ -363,8 +366,8 @@ internal class MediaUploadServer(
 
         // Ask the delegate — from metadata alone — whether it will touch a file
         // like this. If not, forward the original upload to WordPress directly,
-        // skipping a full temp-file copy of a file the delegate won't process or
-        // upload (e.g. a video handed to an image-only delegate).
+        // skipping a full temp-file copy of a file the delegate won't process
+        // (e.g. a video handed to an image-only delegate).
         // An uploader takes over delivery for *every* file, so with one set there is no
         // passthrough to fall to and the gate can't decline the upload outright. It
         // still decides whether processFile runs, though — a declined file is handed to
@@ -584,7 +587,7 @@ internal class MediaUploadServer(
             }
 
             val result = internalClient?.upload(targetFile, targetMimeType, targetFilename, extraParts, query)
-                ?: error("No upload delegate or internal media client configured")
+                ?: error("No media uploader or internal media client configured")
             return UploadResult.Uploaded(result)
         } finally {
             // The processed file (if the delegate produced a new one) is ours to

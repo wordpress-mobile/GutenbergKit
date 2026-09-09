@@ -104,7 +104,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Used by `EditorViewController.warmup()` to reduce first-render latency.
     private let isWarmupMode: Bool
 
-    /// Customizes media file processing and upload behavior.
+    /// Delegate for transforming media before upload — resize, transcode, strip EXIF.
+    ///
+    /// To perform the upload yourself, pass a ``mediaUploader`` instead.
     ///
     /// Supplied at `init`, with the rest of the editor's configuration, because that is
     /// when it takes effect: the delegate is captured into the page's initial
