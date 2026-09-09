@@ -105,7 +105,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let isWarmupMode: Bool
 
     /// Set once the editor has begun loading and captured its configuration
-    /// (including ``mediaUploadDelegate``). After this, that delegate can no longer
+    /// (including ``mediaProcessor``). After this, that delegate can no longer
     /// take effect, so its setter traps if written.
     private var hasStartedLoading = false
 
@@ -132,9 +132,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // the failure actually being hit — not an oversight. #630 drops the class
     // requirement from the protocol so a host can conform with a value type.
     // swiftlint:disable:next weak_delegate
-    public var mediaUploadDelegate: (any MediaUploadDelegate)? {
+    public var mediaProcessor: (any MediaProcessor)? {
         didSet {
-            precondition(!hasStartedLoading, Self.lateMediaAssignmentMessage("mediaUploadDelegate"))
+            precondition(!hasStartedLoading, Self.lateMediaAssignmentMessage("mediaProcessor"))
         }
     }
 
@@ -142,12 +142,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// queue, resumable transport). Setting it makes the host own every upload and its
     /// whole lifecycle; GutenbergKit stays out of the network entirely for media.
     ///
-    /// Same lifecycle rules as ``mediaUploadDelegate``: set it before the editor loads.
+    /// Same lifecycle rules as ``mediaProcessor``: set it before the editor loads.
     /// The editor owns it for its lifetime (releasing it on `deinit`), so you needn't
     /// retain it yourself — just don't strongly retain this `EditorViewController`
     /// from your uploader.
     ///
-    /// A ``mediaUploadDelegate`` can still transform the file first; only delivery
+    /// A ``mediaProcessor`` can still transform the file first; only delivery
     /// moves to the uploader.
     public var mediaUploader: (any MediaUploader)? {
         didSet {
@@ -402,8 +402,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     @MainActor
     private func loadEditor(dependencies: EditorDependencies) async throws {
-        // From here on the editor configuration — including `mediaUploadDelegate` —
-        // is captured, so the delegate setter traps if written after this point.
+        // From here on the editor configuration — including `mediaProcessor` —
+        // is captured, so the processor setter traps if written after this point.
         self.hasStartedLoading = true
 
         self.displayActivityView()
@@ -473,7 +473,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // delegate or an uploader. The editor owns whichever it was given — both
         // properties are strong — so there's no released-before-load case to guard
         // against; they live as long as it does.
-        guard mediaUploadDelegate != nil || mediaUploader != nil else {
+        guard mediaProcessor != nil || mediaUploader != nil else {
             return
         }
 
@@ -500,7 +500,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         do {
             self.uploadServer = try await MediaUploadServer.start(
-                uploadDelegate: mediaUploadDelegate,
+                processor: mediaProcessor,
                 uploader: mediaUploader,
                 internalClient: internalClient
             )
