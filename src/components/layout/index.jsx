@@ -27,7 +27,13 @@ export default function Layout( props ) {
 	const { pluginLoadFailed, ...editorProps } = props;
 
 	return (
-		<ErrorBoundary canCopyContent>
+		// `canCopyContent` is deliberately omitted. Its "Copy contents" button
+		// reads the post through `getEditedPostContent()` at click time, but the
+		// boundary sits above `EditorProvider`, whose unmount clears the post
+		// pointer — so it always copies an empty string. Native hosts cover this
+		// fallback with their own crash UI; the button only ever appeared to
+		// offer a recovery that does not work.
+		<ErrorBoundary>
 			<SlotFillProvider>
 				<PopoverSlots />
 				<OfflineIndicator />

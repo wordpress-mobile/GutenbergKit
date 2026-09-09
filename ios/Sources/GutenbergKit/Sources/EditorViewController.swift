@@ -171,6 +171,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// View controller that displays error information when loading fails.
     private var errorViewController: UIHostingController<AnyView>?
 
+    /// View controller covering the editor after it crashes.
+    private var editorCrashViewController: UIHostingController<AnyView>?
+
     /// Stores the contextId from the most recent `openMediaLibrary` JS call.
     /// Passed back to JavaScript when media selection completes.
     private var currentMediaContextId: String?
@@ -913,7 +916,72 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// raises an uncaught `TypeError` inside the web view.
     private func didLoseEditor() {
         self.isReady = false
+        self.displayEditorCrash()
         delegate?.editorDidBecomeUnavailable(self)
+    }
+
+    /// Reloads the editor after it has crashed.
+    ///
+    /// The reloaded editor starts from whatever the host returns from
+    /// ``EditorViewControllerDelegate/editorDidRequestLatestContent(_:)``, so
+    /// work up to the host's last autosave survives the reload.
+    ///
+    /// Readiness is restored only once the editor emits `onEditorLoaded` again,
+    /// so bridge calls stay refused until it is genuinely usable.
+    public func reloadEditor() {
+        hideEditorCrash()
+        displayActivityView()
+        webView.reload()
+    }
+
+    /// Covers the editor with a native notice offering to reload.
+    ///
+    /// The web view still renders Gutenberg's own error fallback underneath.
+    /// That fallback is built for the desktop editor — it offers to copy the
+    /// post contents, which returns nothing once the provider unmounts, and to
+    /// copy a stack trace — so the editor is covered rather than left showing
+    /// two competing error states.
+    @MainActor
+    private func displayEditorCrash() {
+        guard editorCrashViewController == nil else { return }
+
+        let crashView = ContentUnavailableView {
+            Label(
+                EditorLocalization[.editorCrashedTitle],
+                systemImage: "exclamationmark.arrow.circlepath"
+            )
+        } description: {
+            Text(EditorLocalization[.editorCrashedDescription])
+        } actions: {
+            Button(EditorLocalization[.editorCrashedReload]) { [weak self] in
+                self?.reloadEditor()
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .background(Color(uiColor: .systemBackground))
+
+        let controller = UIHostingController(rootView: AnyView(crashView))
+        editorCrashViewController = controller
+
+        addChild(controller)
+        controller.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(controller.view)
+        view.bringSubviewToFront(controller.view)
+        NSLayoutConstraint.activate([
+            controller.view.topAnchor.constraint(equalTo: view.topAnchor),
+            controller.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            controller.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            controller.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
+        controller.didMove(toParent: self)
+    }
+
+    @MainActor
+    private func hideEditorCrash() {
+        editorCrashViewController?.willMove(toParent: nil)
+        editorCrashViewController?.view.removeFromSuperview()
+        editorCrashViewController?.removeFromParent()
+        editorCrashViewController = nil
     }
 
     // MARK: - Warmup
