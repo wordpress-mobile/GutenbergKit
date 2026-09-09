@@ -13,4 +13,15 @@
     <string name="gbk_block_inserter_photos">Photos</string>
     <string name="gbk_block_inserter_camera">Camera</string>
     <string name="gbk_block_inserter_camera_unavailable">Camera not available on this device</string>
+
+    <!-- Editor states -->
+    <string name="gbk_editor_crashed_title">The editor stopped working</string>
+    <!--
+      Deliberately makes no claim about whether the user's work was saved.
+      Whether anything was persisted depends entirely on the host: some mirror
+      the editor's content continuously, others read it only when the user
+      saves, and the editor cannot tell which.
+    -->
+    <string name="gbk_editor_crashed_description">Reload the editor to continue editing.</string>
+    <string name="gbk_editor_crashed_reload">Reload Editor</string>
 </resources>
