@@ -531,13 +531,16 @@ struct MediaUploadServerTests {
   func retainsDelegateForServerLifetime() async throws {
     weak var weakDelegate: ProcessOnlyProcessor?
     do {
-      let delegate = ProcessOnlyProcessor()
+      var delegate: ProcessOnlyProcessor? = ProcessOnlyProcessor()
       weakDelegate = delegate
       let server = try await MediaUploadServer.start(processor: delegate)
       defer { server.stop() }
 
       // The server owns the delegate while it runs: the host can assign one and drop
-      // its own reference, and every request still sees it.
+      // its own reference, and every request still sees it. The host reference has to
+      // go *before* the assert, or the local satisfies it and the server's ownership
+      // is never what is under test — held weakly, this is already nil here.
+      delegate = nil
       #expect(weakDelegate != nil)
     }
 
