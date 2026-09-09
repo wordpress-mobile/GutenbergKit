@@ -188,7 +188,9 @@ public protocol MediaUploader: AnyObject, Sendable {
     /// `x-wp-upload-attachment-id` — the attachment exists but is unfinished. Don't
     /// re-upload; drive `POST /wp/v2/media/<id>/post-process` to completion, the way
     /// core recovers its own uploads (up to 5 attempts), then return the finished
-    /// attachment.
+    /// attachment. That request needs a body of `{"action": "create-image-subsizes"}`
+    /// — core registers `action` as **required**, so a post-process request without
+    /// it fails with a 400 every time rather than recovering.
     ///
     /// Owning the upload means owning cleanup on the server too: if post-process
     /// can't be recovered, force-delete the orphan

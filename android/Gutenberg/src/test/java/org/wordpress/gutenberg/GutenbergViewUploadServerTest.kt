@@ -95,6 +95,39 @@ class GutenbergViewUploadServerTest {
     }
 
     @Test
+    fun `the upload server starts for an uploader with no delegate`() {
+        val view = makeView()
+        try {
+            // An uploader alone must bring the server up: it is the only route the
+            // editor has to the host's upload stack. Without this, `startUploadServer`
+            // could drop the `mediaUploader` clause from its gate and stay green.
+            view.mediaUploader = mock(MediaUploader::class.java)
+            startLoading(view)
+            idle()
+            assertNotNull(
+                "an uploader provided before load should bring up the upload server",
+                uploadServerOf(view)
+            )
+        } finally {
+            detach(view) // stops the server, releasing the bound socket
+        }
+    }
+
+    @Test
+    fun `setting the uploader after the page has started loading throws`() {
+        val view = makeView()
+        try {
+            startLoading(view)
+            idle()
+            assertThrows(IllegalStateException::class.java) {
+                view.mediaUploader = mock(MediaUploader::class.java)
+            }
+        } finally {
+            detach(view)
+        }
+    }
+
+    @Test
     fun `setting the delegate after the page has started loading throws`() {
         val view = makeView()
         try {
