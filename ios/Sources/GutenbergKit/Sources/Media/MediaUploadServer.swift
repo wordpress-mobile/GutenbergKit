@@ -287,7 +287,7 @@ final class MediaUploadServer: Sendable {
         /// The uploader, delegate, or internal media client completed the upload;
         /// carries the raw WordPress response to relay.
         case uploaded(MediaUploadResponse)
-        /// The delegate didn't modify the file and `uploadFile` returned nil.
+        /// The delegate didn't modify the file, so the original body is forwarded.
         /// The caller should forward the original request body to WordPress.
         case passthrough
     }
@@ -356,12 +356,7 @@ final class MediaUploadServer: Sendable {
             return .uploaded(MediaUploadResponse(statusCode: 201, body: attachment))
         }
 
-        // The deprecated delegate path: the host performs the POST but returns the raw
-        // response, leaving the editor to drive post-process recovery behind it.
-        if let delegate = context.uploadDelegate,
-           let result = try await deprecatedUploadFile(delegate, uploadURL, uploadMimeType, uploadFilename) {
-            return .uploaded(result)
-        } else if let internalClient = context.internalClient {
+        if let internalClient = context.internalClient {
             // Unmodified — forward the original request body directly, skipping
             // multipart re-encoding.
             if case .original = processed {
@@ -384,17 +379,6 @@ final class MediaUploadServer: Sendable {
             fields.append(MediaUploadField(name: part.name, value: String(decoding: try await part.body.data, as: UTF8.self)))
         }
         return fields
-    }
-
-    /// Calls the deprecated `uploadFile` hook from one place.
-    ///
-    /// This deliberately leaves one deprecation warning in GutenbergKit's own build:
-    /// the marker exists to tell *hosts* to migrate, and supporting the hook until it
-    /// is removed means calling it. The warning marks the code that goes with it.
-    private static func deprecatedUploadFile(
-        _ delegate: any MediaUploadDelegate, _ url: URL, _ mimeType: String, _ filename: String
-    ) async throws -> MediaUploadResponse? {
-        try await delegate.uploadFile(at: url, mimeType: mimeType, filename: filename)
     }
 
     private static func errorResponse(status: Int, message: String) -> HTTPResponse {
