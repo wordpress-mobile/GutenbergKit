@@ -175,6 +175,7 @@ class GutenbergView : FrameLayout {
     private var featuredImageChangeListener: FeaturedImageChangeListener? = null
     private var openMediaLibraryListener: OpenMediaLibraryListener? = null
     private var editorDidBecomeAvailableListener: EditorAvailableListener? = null
+    private var editorDidBecomeUnavailableListener: EditorUnavailableListener? = null
     private var logJsExceptionListener: LogJsExceptionListener? = null
     private var autocompleterTriggeredListener: AutocompleterTriggeredListener? = null
     private var modalDialogStateListener: ModalDialogStateListener? = null
@@ -251,6 +252,10 @@ class GutenbergView : FrameLayout {
 
     fun setEditorDidBecomeAvailable(listener: EditorAvailableListener?) {
         editorDidBecomeAvailableListener = listener
+    }
+
+    fun setEditorDidBecomeUnavailable(listener: EditorUnavailableListener?) {
+        editorDidBecomeUnavailableListener = listener
     }
 
     constructor(context: Context) : this(
@@ -792,6 +797,22 @@ class GutenbergView : FrameLayout {
         fun onEditorAvailable(view: GutenbergView?)
     }
 
+    /**
+     * Notified when the editor crashes and is no longer usable.
+     *
+     * The editor's `ErrorBoundary` caught an error and replaced the editor with a
+     * fallback notice. React unmounted the editor, which deleted every JavaScript
+     * `editor` API, so calls to them are refused from this point until the editor
+     * reloads.
+     *
+     * The editor cannot recover on its own. Hosts should disable the controls that
+     * depend on it — history, editor mode — while leaving those that read from
+     * their own persisted copy, such as saving and closing, available.
+     */
+    fun interface EditorUnavailableListener {
+        fun onEditorUnavailable(view: GutenbergView?)
+    }
+
     interface LogJsExceptionListener {
         fun onLogJsException(exception: GutenbergJsException)
     }
@@ -916,6 +937,23 @@ class GutenbergView : FrameLayout {
                     }, 100)
                 }
             }
+        }
+    }
+
+    /**
+     * The editor's `ErrorBoundary` caught an error, so React unmounted the editor
+     * and deleted every `window.editor.*` bridge method.
+     *
+     * Readiness is reset until the editor reloads and emits `onEditorLoaded`
+     * again. Without this, calls keep reaching a web view that can no longer
+     * answer them.
+     */
+    @JavascriptInterface
+    fun onEditorUnavailable() {
+        Log.e("GutenbergView", "EditorUnavailable received in native code")
+        isEditorLoaded = false
+        handler.post {
+            editorDidBecomeUnavailableListener?.onEditorUnavailable(this)
         }
     }
 
@@ -1169,6 +1207,7 @@ class GutenbergView : FrameLayout {
         openMediaLibraryListener = null
         logJsExceptionListener = null
         editorDidBecomeAvailableListener = null
+        editorDidBecomeUnavailableListener = null
         filePathCallback = null
         onFileChooserRequested = null
         autocompleterTriggeredListener = null

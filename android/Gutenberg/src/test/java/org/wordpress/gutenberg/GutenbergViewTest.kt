@@ -386,4 +386,44 @@ class GutenbergViewTest {
             result
         )
     }
+
+    @Test
+    fun `onEditorUnavailable notifies the listener`() {
+        var notified: GutenbergView? = null
+        gutenbergView.setEditorDidBecomeUnavailable { view -> notified = view }
+
+        gutenbergView.onEditorUnavailable()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(gutenbergView, notified)
+    }
+
+    @Test
+    fun `onEditorUnavailable stops content reads from reaching the web view`() {
+        gutenbergView.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        gutenbergView.onEditorUnavailable()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        // Asserting on the callback would pass either way — Robolectric's shadow
+        // WebView never invokes the ValueCallback. Assert the call never reaches
+        // the web view at all.
+        val shadowWebView = shadowOf(gutenbergView.editorWebView)
+        val lastEvaluated = shadowWebView.lastEvaluatedJavascript
+
+        gutenbergView.getTitleAndContent(
+            "original content",
+            object : GutenbergView.TitleAndContentCallback {
+                override fun onResult(title: CharSequence, content: CharSequence) = Unit
+            }
+        )
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "a crashed editor must not be asked for content",
+            lastEvaluated,
+            shadowWebView.lastEvaluatedJavascript
+        )
+    }
 }
