@@ -453,7 +453,7 @@ struct MediaUploadServerTests {
 
   @Test("a delegate still processes the file an uploader delivers")
   func delegateProcessesForUploader() async throws {
-    let delegate = MockUploadDelegate()
+    let delegate = ProcessOnlyDelegate()
     let uploader = RecordingUploader()
     let server = try await MediaUploadServer.start(uploadDelegate: delegate, uploader: uploader, internalClient: MockInternalMediaClient())
     defer { server.stop() }
@@ -529,9 +529,9 @@ struct MediaUploadServerTests {
 
   @Test("retains the delegate for the server's lifetime, and releases it after")
   func retainsDelegateForServerLifetime() async throws {
-    weak var weakDelegate: MockUploadDelegate?
+    weak var weakDelegate: ProcessOnlyDelegate?
     do {
-      let delegate = MockUploadDelegate()
+      let delegate = ProcessOnlyDelegate()
       weakDelegate = delegate
       let server = try await MediaUploadServer.start(uploadDelegate: delegate)
       defer { server.stop() }
@@ -1011,23 +1011,6 @@ private final class TranscodingDelegate: MediaUploadDelegate, @unchecked Sendabl
     let processed = FileManager.default.temporaryDirectory.appendingPathComponent("clip.mp4")
     try? Data("transcoded".utf8).write(to: processed)
     return .processed(processed, mimeType: "video/mp4", filename: "clip.mp4")
-  }
-}
-
-private final class MockUploadDelegate: MediaUploadDelegate, @unchecked Sendable {
-  private let lock = NSLock()
-  private var _processFileCalled = false
-  private var _lastMimeType: String?
-
-  var processFileCalled: Bool { lock.withLock { _processFileCalled } }
-  var lastMimeType: String? { lock.withLock { _lastMimeType } }
-
-  func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
-    lock.withLock {
-      _processFileCalled = true
-      _lastMimeType = mimeType
-    }
-    return .original
   }
 }
 

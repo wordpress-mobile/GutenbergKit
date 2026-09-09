@@ -109,7 +109,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// take effect, so its setter traps if written.
     private var hasStartedLoading = false
 
-    /// Delegate for customizing media file processing and upload behavior.
+    /// Delegate for transforming media before upload — resize, transcode, strip EXIF.
+    ///
+    /// To perform the upload yourself, set ``mediaUploader`` instead.
     ///
     /// Provide this **before the editor loads** — typically right after `init`, the
     /// same way the rest of the editor configuration is supplied. It is captured

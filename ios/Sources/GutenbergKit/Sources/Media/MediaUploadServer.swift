@@ -29,10 +29,10 @@ final class MediaUploadServer: Sendable {
     /// Creates and starts a new upload server.
     ///
     /// - Parameters:
-    ///   - uploadDelegate: Optional delegate for customizing file processing and upload.
+    ///   - uploadDelegate: Optional delegate for transforming files before upload.
     ///   - uploader: Optional host uploader that performs the upload on its own stack.
     ///   - internalClient: GutenbergKit's own client for the configured site. Delivers
-    ///     uploads when no host uploader or delegate does, and every media delete.
+    ///     uploads when no host uploader does, and every media delete.
     ///   - maxRequestBodySize: The maximum allowed request body size in bytes.
     ///     Requests exceeding this limit receive a 413 response. Defaults to 4 GB.
     static func start(
@@ -284,7 +284,7 @@ final class MediaUploadServer: Sendable {
 
     /// Result of the delegate processing + upload pipeline.
     private enum UploadResult {
-        /// The uploader, delegate, or internal media client completed the upload;
+        /// The uploader or internal media client completed the upload;
         /// carries the raw WordPress response to relay.
         case uploaded(MediaUploadResponse)
         /// The delegate didn't modify the file, so the original body is forwarded.
@@ -494,7 +494,7 @@ enum UploadError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .noUploader: "No upload delegate or internal media client configured"
+        case .noUploader: "No media uploader or internal media client configured"
         case .streamReadFailed: "Failed to read upload stream"
         case .streamWriteFailed: "Failed to write upload to disk"
         }

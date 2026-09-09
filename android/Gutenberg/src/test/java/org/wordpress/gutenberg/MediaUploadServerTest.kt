@@ -894,7 +894,6 @@ class MediaUploadServerTest {
 
     // MARK: - Mocks
 
-
     private class ProcessOnlyDelegate : MediaUploadDelegate {
         @Volatile var processFileCalled = false
 
