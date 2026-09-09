@@ -448,6 +448,40 @@ class GutenbergViewTest {
         assertTrue("because the editor is not ready", callback.errors.first() is EditorNotReadyException)
     }
 
+    @Test
+    fun `onEditorUnavailable notifies the listener`() {
+        var notified: GutenbergView? = null
+        gutenbergView.setEditorDidBecomeUnavailable { view -> notified = view }
+
+        gutenbergView.onEditorUnavailable()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(gutenbergView, notified)
+    }
+
+    @Test
+    fun `onEditorUnavailable stops content reads from reaching the web view`() {
+        gutenbergView.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        gutenbergView.onEditorUnavailable()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val shadowWebView = shadowOf(gutenbergView.editorWebView)
+        val lastEvaluated = shadowWebView.lastEvaluatedJavascript
+        val callback = RecordingTitleAndContentCallback()
+
+        gutenbergView.getTitleAndContent("original content", callback)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "a crashed editor must not be asked for content",
+            lastEvaluated,
+            shadowWebView.lastEvaluatedJavascript
+        )
+        assertTrue("the host is told the editor is not ready", callback.errors.single() is EditorNotReadyException)
+    }
+
     private class RecordingTitleAndContentCallback : GutenbergView.TitleAndContentCallback {
         val errors = mutableListOf<Throwable>()
         var results = 0
