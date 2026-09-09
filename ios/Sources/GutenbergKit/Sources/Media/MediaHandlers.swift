@@ -32,13 +32,13 @@ struct MediaUploadResponse: Sendable {
     }
 }
 
-/// The result of a delegate's ``MediaUploadDelegate/processFile(at:mimeType:filename:)``.
+/// The result of a processor's ``MediaProcessor/processFile(at:mimeType:filename:)``.
 public enum ProcessedProxyFile: Sendable {
-    /// The delegate did not modify the file; the original upload is forwarded
+    /// The processor did not modify the file; the original upload is forwarded
     /// to WordPress unchanged.
     case original
 
-    /// The delegate produced a file to upload, along with its MIME type and
+    /// The processor produced a file to upload, along with its MIME type and
     /// filename. Both are used verbatim, so a format change (e.g. transcoding
     /// MOV to MP4, or an in-place EXIF strip) must report the resulting type and
     /// filename for WordPress to store the file correctly.
@@ -47,21 +47,38 @@ public enum ProcessedProxyFile: Sendable {
 
 /// Transforms media before GutenbergKit delivers it.
 ///
-/// A delegate only changes *bytes* — GutenbergKit still uploads the result to the
+/// A processor only changes *bytes* — GutenbergKit still uploads the result to the
 /// configured site and owns the whole lifecycle (retries, cleanup). Because it never
 /// performs the upload itself, it cannot deliver media to the wrong place. Set
-/// ``EditorViewController/mediaUploadDelegate`` to resize images, transcode video,
+/// ``EditorViewController/mediaProcessor`` to resize images, transcode video,
 /// strip EXIF, etc.
 ///
 /// This is the safe, common extension point: most hosts want only this. To perform
 /// the upload yourself, conform to ``MediaUploader`` instead.
-public protocol MediaUploadDelegate: AnyObject, Sendable {
-    /// Whether this delegate might transform a file with the given metadata.
+///
+/// Deliberately **not** class-bound. ``EditorViewController`` holds its processor
+/// strongly for its own lifetime, so a conformer that holds the view controller back
+/// closes a retain cycle ARC cannot break — neither object is freed, and the editor
+/// stops tearing down its upload server. Dropping the class requirement lets you
+/// conform with a `struct` capturing only what the transform needs, which is the
+/// shape that avoids this; a class-bound `Delegate` invited the opposite. Note a
+/// value type is not automatic protection — a `struct` that stores the view
+/// controller cycles just the same. The rule is simply: do not hold it back.
+///
+/// A value-type conformer is **copied** on assignment, and the editor captures that
+/// copy once, when it begins loading. Mutating your own instance afterwards changes
+/// nothing the editor will run, and re-assigning the property to push the new value
+/// traps — the setter rejects every write once loading has started, in release as
+/// well as debug. So configure a `struct` conformer at init and treat it as frozen;
+/// if you need settings the host can change while an editor is open, read them
+/// inside `processFile` through a reference the conformer captures.
+public protocol MediaProcessor: Sendable {
+    /// Whether this processor might transform a file with the given metadata.
     ///
     /// A cheap, metadata-only gate the server consults *before* materializing the
     /// upload to a temp file. Return `false` to decline a file by type — e.g. an
-    /// image-only delegate returning `false` for a video — so the server forwards
-    /// the original upload to WordPress without first copying a file the delegate
+    /// image-only processor returning `false` for a video — so the server forwards
+    /// the original upload to WordPress without first copying a file the processor
     /// won't touch.
     ///
     /// With a ``MediaUploader`` set this can't decline the upload itself — an
@@ -83,7 +100,7 @@ public protocol MediaUploadDelegate: AnyObject, Sendable {
 }
 
 /// Default implementations.
-extension MediaUploadDelegate {
+extension MediaProcessor {
     public func handlesFile(ofType mimeType: String, named filename: String) -> Bool {
         true
     }
@@ -115,7 +132,7 @@ public struct MediaUploadField: Sendable, Hashable, Codable {
 /// Everything a ``MediaUploader`` needs to reproduce a native upload: the file to
 /// send, its metadata, the editor's non-file form fields, and the request's query.
 public struct MediaUpload: Sendable {
-    /// The file to upload — already processed, if a ``MediaUploadDelegate`` ran.
+    /// The file to upload — already processed, if a ``MediaProcessor`` ran.
     public let fileURL: URL
 
     /// The file's MIME type.
@@ -156,7 +173,16 @@ public struct MediaUpload: Sendable {
 /// itself, there's no raw response left for the editor to retry behind it. The
 /// attachment you return lives on that same configured site, where the editor reads
 /// and updates it by ID.
-public protocol MediaUploader: AnyObject, Sendable {
+///
+/// Deliberately **not** class-bound, for the same reason as ``MediaProcessor``: the
+/// editor holds its uploader strongly, so a conformer that holds the view controller
+/// back forms a retain cycle neither object escapes. The operative rule is that one:
+/// do not store the ``EditorViewController``. A value type does not enforce it — a
+/// `struct` holding the view controller cycles the same way — and it carries the same
+/// copy-on-assignment caveat described on ``MediaProcessor``. An uploader that owns a
+/// queue, a background session, or a retry counter wants a class; capture it behind a
+/// reference either way.
+public protocol MediaUploader: Sendable {
     /// Upload a (possibly processed) file and return the finished WordPress
     /// attachment JSON the editor inserts — the same object a direct
     /// `POST /wp/v2/media` returns. Return only once the upload is genuinely done,
