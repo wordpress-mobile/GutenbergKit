@@ -909,6 +909,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// raises an uncaught `TypeError` inside the web view.
     private func didLoseEditor() {
         self.isReady = false
+        delegate?.editorDidBecomeUnavailable(self)
     }
 
     // MARK: - Warmup
