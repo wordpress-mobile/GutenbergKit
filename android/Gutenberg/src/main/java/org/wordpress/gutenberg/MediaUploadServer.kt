@@ -6,6 +6,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -117,9 +119,12 @@ interface MediaUploadDelegate {
      * Implement [MediaUploader] instead — it owns the upload end-to-end and receives a
      * [MediaUpload] carrying the fields.
      */
+    // No ReplaceWith: it takes a replacement *expression* the IDE substitutes for the
+    // call, and there is none that means "implement a different interface" — the
+    // quick-fix would drop the arguments and leave a type name where a
+    // MediaUploadResponse? was expected. The message carries the guidance instead.
     @Deprecated(
-        "Implement MediaUploader instead — it owns the upload's retries and receives the editor's form fields.",
-        ReplaceWith("MediaUploader")
+        "Implement MediaUploader instead — it owns the upload's retries and receives the editor's form fields."
     )
     suspend fun uploadFile(file: File, mimeType: String, filename: String): MediaUploadResponse? = null
 }
@@ -187,7 +192,9 @@ interface MediaUploader {
      * `x-wp-upload-attachment-id` — the attachment exists but is unfinished. Don't
      * re-upload; drive `POST /wp/v2/media/<id>/post-process` to completion, the way
      * core recovers its own uploads (up to 5 attempts), then return the finished
-     * attachment.
+     * attachment. That request needs a body of `{"action": "create-image-subsizes"}` —
+     * core registers `action` as **required**, so a post-process request without it
+     * fails with a 400 every time rather than recovering.
      *
      * Owning the upload means owning cleanup on the server too: if post-process can't
      * be recovered, force-delete the orphan (`DELETE /wp/v2/media/<id>?force=true`)
@@ -332,15 +339,6 @@ internal class MediaUploadServer(
      * Deliberately narrow: this server relays media operations, not arbitrary
      * REST requests, so only a numeric attachment ID under `/media/` matches.
      */
-    /**
-     * The editor's non-file form parts as ordered, UTF-8-decoded fields.
-     *
-     * A list rather than a map so repeated names (e.g. a `field[]` array) survive
-     * verbatim, in the order the editor sent them.
-     */
-    private fun formFields(parts: List<MultipartPart>): List<MediaUploadField> =
-        parts.map { MediaUploadField(it.name, String(it.body.readBytes(), Charsets.UTF_8)) }
-
     private fun attachmentIdFromPath(path: String): String? {
         val components = path.split("/").filter { it.isNotEmpty() }
         if (components.size != 2 || components[0] != "media") return null
@@ -358,9 +356,9 @@ internal class MediaUploadServer(
      * browser blocks it at preflight. Relaying it here lets the cleanup run.
      */
     private suspend fun handleDelete(attachmentId: String, query: String): HttpResponse {
-        val uploader = internalClient ?: return errorResponse(500, "No internal media client configured")
+        val client = internalClient ?: return errorResponse(500, "No internal media client configured")
         return try {
-            relayResponse(uploader.deleteMedia(attachmentId, query))
+            relayResponse(client.deleteMedia(attachmentId, query))
         } catch (e: IOException) {
             Log.e(TAG, "Media deletion failed", e)
             errorResponse(500, e.message ?: "Deletion failed")
@@ -385,16 +383,20 @@ internal class MediaUploadServer(
         // skipping a full temp-file copy of a file the delegate won't process or
         // upload (e.g. a video handed to an image-only delegate).
         // An uploader takes over delivery for *every* file, so with one set there is no
-        // passthrough to fall to: only the delegate's metadata gate can decline a file,
-        // and only when no uploader is configured.
-        if (uploader == null && uploadDelegate?.handlesFile(mimeType, filename) != true) {
+        // passthrough to fall to and the gate can't decline the upload outright. It
+        // still decides whether processFile runs, though — a declined file is handed to
+        // the uploader unprocessed rather than to a delegate that said it won't touch it
+        // — so the answer is carried into processAndUpload rather than short-circuited
+        // away here. Asked exactly once per upload, matching iOS.
+        val delegateWantsFile = uploadDelegate?.handlesFile(mimeType, filename) == true
+        if (uploader == null && !delegateWantsFile) {
             return passthroughResponse(request, query)
         }
 
         val tempFile = writePartToTempFile(filePart)
             ?: return errorResponse(500, "Failed to save file")
 
-        return processAndRespond(request, tempFile, filePart, extraParts, query)
+        return processAndRespond(request, tempFile, filePart, extraParts, query, delegateWantsFile)
     }
 
     @Suppress("TooGenericExceptionCaught")
@@ -478,11 +480,12 @@ internal class MediaUploadServer(
     @Suppress("TooGenericExceptionCaught")
     private suspend fun processAndRespond(
         request: HttpRequest, tempFile: File, filePart: MultipartPart,
-        extraParts: List<MultipartPart>, query: String
+        extraParts: List<MultipartPart>, query: String, delegateWantsFile: Boolean
     ): HttpResponse {
         try {
             val uploadResult = processAndUpload(
-                tempFile, filePart.contentType, filePart.filename ?: "upload", extraParts, query
+                tempFile, filePart.contentType, filePart.filename ?: "upload",
+                extraParts, query, delegateWantsFile
             )
             val response = when (uploadResult) {
                 is UploadResult.Uploaded -> {
@@ -527,18 +530,29 @@ internal class MediaUploadServer(
     private suspend fun performPassthroughUpload(request: HttpRequest, query: String): MediaUploadResponse {
         val body = request.body
         val contentType = request.header("Content-Type")
-        val uploader = internalClient
-        if (body == null || contentType == null || uploader == null) {
-            throw MediaUploadException("Passthrough upload requires a request body, Content-Type, and internal media client")
+        val client = internalClient
+        if (body == null || contentType == null || client == null) {
+            throw MediaUploadException(
+                "Passthrough upload requires a request body, Content-Type, and internal media client"
+            )
         }
-        return uploader.passthroughUpload(body, contentType, query)
+        return client.passthroughUpload(body, contentType, query)
     }
 
     private suspend fun processAndUpload(
         file: File, mimeType: String, filename: String,
-        extraParts: List<MultipartPart>, query: String
+        extraParts: List<MultipartPart>, query: String, delegateWantsFile: Boolean
     ): UploadResult {
-        val processed = uploadDelegate?.processFile(file, mimeType, filename) ?: ProcessedProxyFile.Original
+        // Process (resize, transcode, etc.) — but only for a file the delegate's
+        // metadata gate accepted. handlesFile returning false is the delegate saying it
+        // won't touch a file like this, so handing it one anyway would break the
+        // contract the gate documents. With an uploader set the file still gets
+        // delivered; it just skips processing on its way there.
+        val processed = if (delegateWantsFile) {
+            uploadDelegate?.processFile(file, mimeType, filename) ?: ProcessedProxyFile.Original
+        } else {
+            ProcessedProxyFile.Original
+        }
 
         // Resolve the file to upload and its metadata. Processed uses the
         // delegate's values verbatim, so a format change is reported to WordPress.
@@ -559,6 +573,13 @@ internal class MediaUploadServer(
         }
 
         try {
+            // The editor was torn down (or the client disconnected) while we processed.
+            // Don't put an upload on the wire whose response nobody will read — it would
+            // create an attachment neither GutenbergKit nor the host knows to clean up.
+            // Checking here rather than relying on the delivery path to notice keeps this
+            // true for a host uploader that isn't cancellation-cooperative. (Matches iOS.)
+            currentCoroutineContext().ensureActive()
+
             // An uploader owns delivery on the host's own stack and returns the finished
             // attachment JSON (or throws); GutenbergKit relays that as a success and
             // never runs its own recovery behind it.
@@ -597,6 +618,15 @@ internal class MediaUploadServer(
             }
         }
     }
+
+    /**
+     * The editor's non-file form parts as ordered, UTF-8-decoded fields.
+     *
+     * A list rather than a map so repeated names (e.g. a `field[]` array) survive
+     * verbatim, in the order the editor sent them.
+     */
+    private fun formFields(parts: List<MultipartPart>): List<MediaUploadField> =
+        parts.map { MediaUploadField(it.name, String(it.body.readBytes(), Charsets.UTF_8)) }
 
     // MARK: - Response Building
 

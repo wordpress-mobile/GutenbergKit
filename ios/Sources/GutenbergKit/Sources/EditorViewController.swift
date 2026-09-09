@@ -120,6 +120,24 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// don't need to keep a reference after assigning it. The one rule: your delegate
     /// must not strongly retain this `EditorViewController` in return, or the two form
     /// a retain cycle and neither is freed.
+    //
+    // (This plain `//` block must stay non-blank: a blank line here would sever the
+    // doc comment above from this property, leaving it undocumented.)
+    //
+    // Ownership here is the point: the editor holds this for its lifetime so an
+    // in-flight upload can't lose the delegate mid-request. `weak_delegate` is not
+    // wrong about the risk it names: strong here is precisely what lets a delegate
+    // that retains the editor back close a cycle ARC cannot break, and `weak` would
+    // rule that out. It is a deliberate trade — losing the delegate mid-request was
+    // the failure actually being hit — not an oversight. #630 drops the class
+    // requirement from the protocol so a host can conform with a value type.
+    // swiftlint:disable:next weak_delegate
+    public var mediaUploadDelegate: (any MediaUploadDelegate)? {
+        didSet {
+            precondition(!hasStartedLoading, Self.lateMediaAssignmentMessage("mediaUploadDelegate"))
+        }
+    }
+
     /// Takes over media upload on the host's own stack (background session, offline
     /// queue, resumable transport). Setting it makes the host own every upload and its
     /// whole lifecycle; GutenbergKit stays out of the network entirely for media.
@@ -149,20 +167,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private static func lateMediaAssignmentMessage(_ name: String) -> String {
         "\(name) must be set before the editor loads (e.g. right after init). "
             + "It is captured into the editor configuration at load; setting it afterward has no effect."
-    }
-
-    // Ownership here is the point: the editor holds this for its lifetime so an
-    // in-flight upload can't lose the delegate mid-request. `weak_delegate` is not
-    // wrong about the risk it names: strong here is precisely what lets a delegate
-    // that retains the editor back close a cycle ARC cannot break, and `weak` would
-    // rule that out. It is a deliberate trade — losing the delegate mid-request was
-    // the failure actually being hit — not an oversight. #630 drops the class
-    // requirement from the protocol so a host can conform with a value type.
-    // swiftlint:disable:next weak_delegate
-    public var mediaUploadDelegate: (any MediaUploadDelegate)? {
-        didSet {
-            precondition(!hasStartedLoading, Self.lateMediaAssignmentMessage("mediaUploadDelegate"))
-        }
     }
 
     // MARK: - Private Properties (Services)

@@ -481,7 +481,7 @@ struct MediaUploadServerTests {
     // The gate exists to skip a temp copy for a file the delegate won't touch. An
     // uploader takes over delivery for every file, so passing through here would
     // silently bypass it.
-    let delegate = DecliningDelegate()
+    let delegate = DeclineByMetadataDelegate()
     let uploader = RecordingUploader()
     let internalClient = MockInternalMediaClient()
     let server = try await MediaUploadServer.start(uploadDelegate: delegate, uploader: uploader, internalClient: internalClient)
@@ -500,6 +500,9 @@ struct MediaUploadServerTests {
 
     #expect(uploader.received?.filename == "clip.mov")
     #expect(!internalClient.passthroughUploadCalled)
+    // ...but a declined file must still not reach `processFile`: `handlesFile`
+    // returning false is the delegate saying it won't touch a file like this.
+    #expect(!delegate.processFileCalled)
   }
 
   @Test("an uploader that throws surfaces as a failure, with no GutenbergKit retry")
@@ -982,7 +985,10 @@ private final class RecordingUploader: MediaUploader, @unchecked Sendable {
 
   func upload(_ upload: MediaUpload) async throws -> Data {
     lock.withLock { _received = upload }
-    return Data(#"{"id":7,"source_url":"https://example.com/photo.jpg","media_type":"image"}"#.utf8)
+    // Shaped like a real attachment: the editor's `transformAttachment` reads
+    // `title.raw`, so an example without it would model a body that fails in the
+    // editor.
+    return Data(#"{"id":7,"source_url":"https://example.com/photo.jpg","media_type":"image","title":{"raw":"photo"},"caption":{"raw":""}}"#.utf8)
   }
 }
 
@@ -993,13 +999,6 @@ private final class ThrowingUploader: MediaUploader, @unchecked Sendable {
 
   func upload(_ upload: MediaUpload) async throws -> Data {
     throw Failure()
-  }
-}
-
-/// A delegate that declines every file by metadata.
-private final class DecliningDelegate: MediaUploadDelegate, @unchecked Sendable {
-  func handlesFile(ofType mimeType: String, named filename: String) -> Bool {
-    false
   }
 }
 
@@ -1059,9 +1058,10 @@ private final class ProcessOnlyDelegate: MediaUploadDelegate, @unchecked Sendabl
   }
 }
 
-/// A delegate that declines every file by metadata via `handlesFile`, so the
-/// server must pass through without ever materializing the file or calling
-/// `processFile`.
+/// A delegate that declines every file by metadata via `handlesFile`. With no
+/// uploader the server must pass through without ever materializing the file; with
+/// one, delivery still happens but `processFile` must not be called.
+/// `processFileCalled` pins both.
 private final class DeclineByMetadataDelegate: MediaUploadDelegate, @unchecked Sendable {
   private let lock = NSLock()
   private var _processFileCalled = false

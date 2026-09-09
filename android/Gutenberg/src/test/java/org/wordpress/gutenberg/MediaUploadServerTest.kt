@@ -245,15 +245,47 @@ class MediaUploadServerTest {
     }
 
     @Test
+    fun `an uploader takes precedence over the deprecated uploadFile hook`() {
+        // Both set: the uploader owns delivery and the deprecated hook must not run.
+        // The delegate still processes — only delivery moves to the uploader.
+        val uploader = RecordingUploader()
+        val delegate = MockUploadDelegate()
+        val client = MockInternalMediaClient()
+        server.stop()
+        server = MediaUploadServer(
+            uploadDelegate = delegate, internalClient = client, uploader = uploader,
+            cacheDir = tempFolder.root
+        )
+
+        val boundary = "test-boundary-precedence"
+        val body = buildMultipartBody(boundary, "photo.jpg", "image/jpeg", "data".toByteArray())
+        sendRawRequest(
+            method = "POST",
+            path = "/upload",
+            headers = mapOf(
+                "Relay-Authorization" to "Bearer ${server.token}",
+                "Content-Type" to "multipart/form-data; boundary=$boundary"
+            ),
+            body = body
+        )
+
+        assertNotNull(uploader.received)
+        assertFalse(delegate.uploadFileCalled)
+        assertTrue(delegate.processFileCalled)
+        assertFalse(client.uploadCalled)
+    }
+
+    @Test
     fun `an uploader sees a file the delegate's metadata gate would have declined`() {
         // The gate exists to skip a temp copy for a file the delegate won't touch. An
         // uploader takes over delivery for every file, so passing through here would
         // silently bypass it.
         val uploader = RecordingUploader()
         val client = MockInternalMediaClient()
+        val delegate = DeclineByMetadataDelegate()
         server.stop()
         server = MediaUploadServer(
-            uploadDelegate = DecliningDelegate(), internalClient = client, uploader = uploader,
+            uploadDelegate = delegate, internalClient = client, uploader = uploader,
             cacheDir = tempFolder.root
         )
 
@@ -271,6 +303,9 @@ class MediaUploadServerTest {
 
         assertEquals("clip.mov", uploader.received?.filename)
         assertFalse(client.passthroughUploadCalled)
+        // ...but a declined file must still not reach processFile: handlesFile
+        // returning false is the delegate saying it won't touch a file like this.
+        assertFalse(delegate.processFileCalled)
     }
 
     @Test
@@ -873,6 +908,7 @@ class MediaUploadServerTest {
             return ProcessedProxyFile.Original
         }
 
+        @Suppress("OVERRIDE_DEPRECATION")
         override suspend fun uploadFile(file: File, mimeType: String, filename: String): MediaUploadResponse? {
             uploadFileCalled = true
             lastFilename = filename
@@ -891,8 +927,9 @@ class MediaUploadServerTest {
     }
 
     /**
-     * Declines every file by metadata via [handlesFile], so the server must pass
-     * through without materializing the file or calling [processFile].
+     * Declines every file by metadata via [handlesFile]. With no uploader the server
+     * must pass through without materializing the file; with one, delivery still
+     * happens but [processFile] must not be called. [processFileCalled] pins both.
      */
     private class DeclineByMetadataDelegate : MediaUploadDelegate {
         @Volatile var processFileCalled = false
@@ -941,13 +978,13 @@ class MediaUploadServerTest {
 
         override suspend fun upload(upload: MediaUpload): ByteArray {
             received = upload
-            return """{"id":7,"source_url":"https://example.com/photo.jpg","media_type":"image"}""".toByteArray()
+            // Shaped like a real attachment: the editor's `transformAttachment`
+            // reads `title.raw`, so an example without it would model a body that
+            // fails in the editor.
+            val attachment = """{"id":7,"source_url":"https://example.com/photo.jpg",""" +
+                """"media_type":"image","title":{"raw":"photo"},"caption":{"raw":""}}"""
+            return attachment.toByteArray()
         }
-    }
-
-    /** A delegate that declines every file by metadata. */
-    private class DecliningDelegate : MediaUploadDelegate {
-        override fun handlesFile(mimeType: String, filename: String) = false
     }
 
     private class MockInternalMediaClient : InternalMediaClient(
