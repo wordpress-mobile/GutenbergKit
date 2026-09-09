@@ -58,6 +58,7 @@ import rs.wordpress.api.kotlin.WpRequestResult
 import uniffi.wp_api.PostEndpointType
 import uniffi.wp_api.PostUpdateParams
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 class EditorActivity : ComponentActivity() {
 
@@ -367,6 +368,14 @@ private suspend fun persistPost(
                 callback = object : GutenbergView.TitleAndContentCallback {
                     override fun onResult(title: CharSequence, content: CharSequence) {
                         if (cont.isActive) cont.resume(title to content)
+                    }
+
+                    override fun onError() {
+                        if (cont.isActive) {
+                            cont.resumeWithException(
+                                IllegalStateException("Could not read the editor content")
+                            )
+                        }
                     }
                 }
             )
