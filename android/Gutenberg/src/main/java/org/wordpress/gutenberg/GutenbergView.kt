@@ -959,8 +959,51 @@ class GutenbergView : FrameLayout {
     fun onEditorUnavailable() {
         Log.e("GutenbergView", "EditorUnavailable received in native code")
         isEditorLoaded = false
+        showEditorCrashPhase()
         handler.post {
             editorDidBecomeUnavailableListener?.onEditorUnavailable(this)
+        }
+    }
+
+    /**
+     * Reloads the editor after it has crashed.
+     *
+     * The reloaded editor starts from whatever the host returns from
+     * [LatestContentProvider], so work up to the host's last autosave survives
+     * the reload. Readiness is restored only once the editor emits
+     * `onEditorLoaded` again.
+     */
+    fun reloadEditor() {
+        handler.post {
+            didFireEditorLoaded = false
+            showSpinnerPhase()
+            webView.reload()
+        }
+    }
+
+    /**
+     * Covers the editor with a notice offering to reload.
+     *
+     * The web view still renders Gutenberg's own error fallback underneath.
+     * That fallback is built for the desktop editor — it offers to copy the post
+     * contents, which returns nothing once the provider unmounts, and to copy a
+     * stack trace — so the editor is covered rather than left showing two
+     * competing error states.
+     */
+    private fun showEditorCrashPhase() {
+        handler.post {
+            progressView.visibility = GONE
+            spinnerView.visibility = GONE
+            errorView.setActionableState(
+                titleResId = R.string.gbk_editor_crashed_title,
+                descriptionResId = R.string.gbk_editor_crashed_description,
+                actionResId = R.string.gbk_editor_crashed_reload,
+                onAction = { reloadEditor() }
+            )
+            errorView.alpha = 0f
+            errorView.visibility = VISIBLE
+            errorView.animate().alpha(1f).setDuration(200).start()
+            webView.alpha = 0f
         }
     }
 
