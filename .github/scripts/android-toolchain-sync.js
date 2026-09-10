@@ -12,6 +12,8 @@ import { readFile } from 'fs/promises';
 const UPSTREAM = 'wordpress-mobile/WordPress-Android';
 const UPSTREAM_REF = 'trunk';
 const ISSUE_TITLE = 'Android toolchain drift with WordPress-Android';
+// Starts every tracking issue's body, so the issue is found even if retitled.
+const ISSUE_MARKER = '<!-- android-toolchain-sync';
 
 // `local` and `upstream` name the same version in each repository's catalog;
 // the keys differ between them. `blocking` marks versions the composite build
@@ -100,15 +102,20 @@ export default async function reportToolchainDrift( {
 	);
 
 	const { owner, repo } = context.repo;
-	const openIssues = await github.paginate( github.rest.issues.listForRepo, {
+	// Newest first, so the first match is the most recent tracking issue.
+	const issues = await github.paginate( github.rest.issues.listForRepo, {
 		owner,
 		repo,
-		state: 'open',
+		state: 'all',
+		creator: 'github-actions[bot]',
 		per_page: 100,
 	} );
-	const existing = openIssues.find(
-		( issue ) => ! issue.pull_request && issue.title === ISSUE_TITLE
+	const tracking = issues.filter(
+		( issue ) =>
+			! issue.pull_request &&
+			normalizeBody( issue.body ).startsWith( ISSUE_MARKER )
 	);
+	const existing = tracking.find( ( issue ) => issue.state === 'open' );
 
 	if ( drifted.length === 0 ) {
 		core.info( 'Toolchain versions are in sync.' );
@@ -124,16 +131,17 @@ export default async function reportToolchainDrift( {
 				repo,
 				issue_number: existing.number,
 				state: 'closed',
+				state_reason: 'completed',
 			} );
 		}
 		return;
 	}
 
-	const body = buildIssueBody( rows, drifted, context );
+	const marker = issueMarker( drifted );
+	const body = `${ marker }\n${ buildIssueBody( rows, drifted, context ) }`;
 
 	if ( existing ) {
-		// GitHub stores issue bodies with CRLF line endings.
-		if ( ( existing.body ?? '' ).replace( /\r\n/g, '\n' ) === body ) {
+		if ( normalizeBody( existing.body ) === body ) {
 			core.info( `Issue #${ existing.number } is already up to date.` );
 			return;
 		}
@@ -144,6 +152,17 @@ export default async function reportToolchainDrift( {
 			body,
 		} );
 		core.info( `Updated issue #${ existing.number }.` );
+		return;
+	}
+
+	const [ latest ] = tracking;
+	if (
+		latest?.state_reason === 'not_planned' &&
+		normalizeBody( latest.body ).startsWith( `${ marker }\n` )
+	) {
+		core.info(
+			`Issue #${ latest.number } was closed as not planned for these versions.`
+		);
 		return;
 	}
 
@@ -260,6 +279,27 @@ function readWrapperVersion( properties, source ) {
 }
 
 /**
+ * GitHub stores issue bodies with CRLF line endings.
+ *
+ * @param {string|null} body Issue body from the API.
+ * @return {string} The body with LF line endings.
+ */
+function normalizeBody( body ) {
+	return ( body ?? '' ).replace( /\r\n/g, '\n' );
+}
+
+/**
+ * @param {Object[]} drifted The tracked versions that differ.
+ * @return {string} A hidden comment identifying the issue and its versions.
+ */
+function issueMarker( drifted ) {
+	const versions = drifted.map(
+		( row ) => `${ row.name }=${ row.ours }/${ row.theirs }`
+	);
+	return `${ ISSUE_MARKER } ${ versions.join( ' ' ) } -->`;
+}
+
+/**
  * @param {Object[]} rows    Every compared version.
  * @param {Object[]} drifted The tracked versions that differ.
  * @param {Object}   context Workflow run context.
@@ -293,6 +333,8 @@ function buildIssueBody( rows, drifted, context ) {
 	}
 
 	lines.push(
+		'',
+		'To defer this, close the issue as not planned. A new one opens only when these versions change.',
 		'',
 		`<sub>Opened by [\`${ context.workflow }\`](https://github.com/${ owner }/${ repo }/blob/trunk/.github/workflows/android-toolchain-sync.yml).</sub>`
 	);
