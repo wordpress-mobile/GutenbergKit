@@ -8,6 +8,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.annotation.StringRes
+import androidx.core.view.ViewCompat
 import androidx.core.widget.TextViewCompat
 import org.wordpress.gutenberg.R
 
@@ -58,6 +59,7 @@ class EditorErrorView @JvmOverloads constructor(
             gravity = Gravity.CENTER
             TextViewCompat.setTextAppearance(this, android.R.style.TextAppearance_Material_Subhead)
             text = "Failed to load editor"
+            ViewCompat.setAccessibilityHeading(this, true)
         }
 
         // Create description
