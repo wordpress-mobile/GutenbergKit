@@ -405,6 +405,7 @@ class GutenbergViewTest {
                 }
             }
         )
+        assertTrue("the error is posted to the main thread, not reported inline", errors.isEmpty())
         shadowOf(Looper.getMainLooper()).idle()
 
         assertEquals("the host is told the read failed", 1, errors.size)
