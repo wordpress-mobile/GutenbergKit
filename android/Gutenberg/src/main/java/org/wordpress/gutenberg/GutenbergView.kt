@@ -757,9 +757,8 @@ class GutenbergView : FrameLayout {
         fun onResult(title: CharSequence, content: CharSequence)
 
         /**
-         * The editor could not be read. Most often the editor crashed and its
-         * `window.editor.*` bridge methods were torn down, so the evaluation
-         * returned no usable value.
+         * The editor could not be read, so there is no title or content to
+         * report.
          *
          * A failed read is not an empty post: hosts must leave the last known
          * title and content in place rather than persisting anything derived
@@ -768,8 +767,11 @@ class GutenbergView : FrameLayout {
          * Defaults to a no-op. A host that has not adopted it simply receives
          * no callback at all, so its own timeout path applies — still safe,
          * just slower than handling this directly.
+         *
+         * @param error [EditorNotReadyException] when the editor has not
+         * loaded, or a [JSONException] when its result could not be read.
          */
-        fun onError() {}
+        fun onError(error: Throwable) {}
     }
 
     interface ContentChangeListener {
@@ -854,17 +856,15 @@ class GutenbergView : FrameLayout {
             // Report rather than returning silently, so both ways this call can
             // fail look the same to the host. A host awaiting a callback would
             // otherwise wait out its own timeout here, or never resume at all.
-            callback.onError()
+            callback.onError(EditorNotReadyException())
             return
         }
         handler.post {
             webView.evaluateJavascript("editor.getTitleAndContent($completeComposition);") { result ->
-                val fields = parseTitleAndContent(result, originalContent)
-                if (fields == null) {
-                    callback.onError()
-                } else {
-                    callback.onResult(fields.first, fields.second)
-                }
+                parseTitleAndContent(result, originalContent).fold(
+                    onSuccess = { (title, content) -> callback.onResult(title, content) },
+                    onFailure = { error -> callback.onError(error) }
+                )
             }
         }
     }
@@ -1306,10 +1306,17 @@ class GutenbergView : FrameLayout {
 }
 
 /**
- * Parses the result of `editor.getTitleAndContent`, returning `null` when it
- * cannot be read.
+ * Reported when the editor is read before it has loaded.
+ */
+class EditorNotReadyException : IllegalStateException(
+    "The editor is not ready. Wait for onEditorAvailable before calling bridge methods."
+)
+
+/**
+ * Parses the result of `editor.getTitleAndContent`, failing when it cannot be
+ * read.
  *
- * Returning `null` rather than a partially defaulted pair is the point. A crashed
+ * Failing rather than returning a partially defaulted pair is the point. A crashed
  * editor leaves `window.editor` an empty object, so the evaluation yields the
  * string `"null"`; substituting `""` for the title there is indistinguishable
  * from the user clearing it, and the host persists it over their own.
@@ -1318,14 +1325,14 @@ class GutenbergView : FrameLayout {
 internal fun parseTitleAndContent(
     result: String?,
     originalContent: CharSequence
-): Pair<CharSequence, CharSequence>? = try {
+): Result<Pair<CharSequence, CharSequence>> = try {
     val json = JSONObject(result.orEmpty())
     val title: CharSequence = json.getString("title")
     val updatedContent: CharSequence = json.getString("content")
-    title to if (json.getBoolean("changed")) updatedContent else originalContent
+    Result.success(title to if (json.getBoolean("changed")) updatedContent else originalContent)
 } catch (e: JSONException) {
     Log.e("GutenbergView", "Received invalid JSON from editor.getTitleAndContent", e)
-    null
+    Result.failure(e)
 }
 
 data class Media(

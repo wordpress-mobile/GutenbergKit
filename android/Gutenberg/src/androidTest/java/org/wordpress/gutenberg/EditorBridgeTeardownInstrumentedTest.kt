@@ -5,7 +5,6 @@ import android.webkit.WebViewClient
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -76,9 +75,9 @@ class EditorBridgeTeardownInstrumentedTest {
     fun theTornDownBridgeResultIsRejectedRatherThanReadAsAnEmptyTitle() {
         val result = evaluateAgainstTornDownBridge(GET_TITLE_AND_CONTENT)
 
-        assertNull(
+        assertTrue(
             "a failed read must not resolve to a title the host would persist",
-            parseTitleAndContent(result, ORIGINAL_CONTENT)
+            parseTitleAndContent(result, ORIGINAL_CONTENT).isFailure
         )
     }
 

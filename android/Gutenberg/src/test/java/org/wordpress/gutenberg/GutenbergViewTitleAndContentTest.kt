@@ -1,7 +1,8 @@
 package org.wordpress.gutenberg
 
+import org.json.JSONException
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -16,20 +17,20 @@ class GutenbergViewTitleAndContentTest {
     private val originalContent = "<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->"
 
     @Test
-    fun `returns null when the bridge method is gone`() {
-        assertNull(parseTitleAndContent("null", originalContent))
+    fun `fails when the bridge method is gone`() {
+        assertUnreadable("null")
     }
 
     @Test
-    fun `returns null for a malformed result`() {
-        assertNull(parseTitleAndContent("undefined", originalContent))
-        assertNull(parseTitleAndContent("", originalContent))
-        assertNull(parseTitleAndContent(null, originalContent))
+    fun `fails for a malformed result`() {
+        assertUnreadable("undefined")
+        assertUnreadable("")
+        assertUnreadable(null)
     }
 
     @Test
-    fun `returns null when expected fields are absent`() {
-        assertNull(parseTitleAndContent("""{"title":"Only a title"}""", originalContent))
+    fun `fails when expected fields are absent`() {
+        assertUnreadable("""{"title":"Only a title"}""")
     }
 
     @Test
@@ -37,10 +38,10 @@ class GutenbergViewTitleAndContentTest {
         val fields = parseTitleAndContent(
             """{"title":"New title","content":"New body","changed":true}""",
             originalContent
-        )
+        ).getOrThrow()
 
-        assertEquals("New title", fields?.first)
-        assertEquals("New body", fields?.second)
+        assertEquals("New title", fields.first)
+        assertEquals("New body", fields.second)
     }
 
     @Test
@@ -48,10 +49,10 @@ class GutenbergViewTitleAndContentTest {
         val fields = parseTitleAndContent(
             """{"title":"New title","content":"ignored","changed":false}""",
             originalContent
-        )
+        ).getOrThrow()
 
-        assertEquals("New title", fields?.first)
-        assertEquals(originalContent, fields?.second)
+        assertEquals("New title", fields.first)
+        assertEquals(originalContent, fields.second)
     }
 
     /**
@@ -64,9 +65,16 @@ class GutenbergViewTitleAndContentTest {
         val fields = parseTitleAndContent(
             """{"title":"","content":"Body","changed":true}""",
             originalContent
-        )
+        ).getOrThrow()
 
-        assertEquals("", fields?.first)
-        assertEquals("Body", fields?.second)
+        assertEquals("", fields.first)
+        assertEquals("Body", fields.second)
+    }
+
+    private fun assertUnreadable(result: String?) {
+        assertTrue(
+            "expected <$result> to fail with a JSONException",
+            parseTitleAndContent(result, originalContent).exceptionOrNull() is JSONException
+        )
     }
 }

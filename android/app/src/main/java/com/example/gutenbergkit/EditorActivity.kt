@@ -370,10 +370,10 @@ private suspend fun persistPost(
                         if (cont.isActive) cont.resume(title to content)
                     }
 
-                    override fun onError() {
+                    override fun onError(error: Throwable) {
                         if (cont.isActive) {
                             cont.resumeWithException(
-                                IllegalStateException("Could not read the editor content")
+                                IllegalStateException("Could not read the editor content", error)
                             )
                         }
                     }

@@ -390,7 +390,7 @@ class GutenbergViewTest {
     @Test
     fun `getTitleAndContent reports an error when the editor has not loaded`() {
         // The fixture has never received onEditorLoaded, so the read cannot proceed.
-        var errors = 0
+        val errors = mutableListOf<Throwable>()
         var results = 0
 
         gutenbergView.getTitleAndContent(
@@ -400,14 +400,15 @@ class GutenbergViewTest {
                     results++
                 }
 
-                override fun onError() {
-                    errors++
+                override fun onError(error: Throwable) {
+                    errors += error
                 }
             }
         )
         shadowOf(Looper.getMainLooper()).idle()
 
-        assertEquals("the host is told the read failed", 1, errors)
+        assertEquals("the host is told the read failed", 1, errors.size)
+        assertTrue("because the editor is not ready", errors.first() is EditorNotReadyException)
         assertEquals("no content is reported", 0, results)
     }
 }
