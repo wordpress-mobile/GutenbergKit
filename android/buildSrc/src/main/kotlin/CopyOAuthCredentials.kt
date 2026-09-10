@@ -13,8 +13,7 @@ import org.gradle.api.tasks.TaskAction
  *
  * Modelled as a task with a [DirectoryProperty] output rather than a plain
  * `Copy` so it can be handed to AGP's `sources.assets.addGeneratedSourceDirectory`,
- * which wires the task dependency for us. AGP 9 removed the
- * `applicationVariants`/`mergeAssetsProvider` API the wiring previously used.
+ * which wires the task dependency for us.
  */
 abstract class CopyOAuthCredentials : DefaultTask() {
     @get:InputFile
