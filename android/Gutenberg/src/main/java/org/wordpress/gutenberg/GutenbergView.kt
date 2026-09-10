@@ -851,6 +851,10 @@ class GutenbergView : FrameLayout {
     fun getTitleAndContent(originalContent: CharSequence, callback: TitleAndContentCallback, completeComposition: Boolean = false) {
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
+            // Report rather than returning silently, so both ways this call can
+            // fail look the same to the host. A host awaiting a callback would
+            // otherwise wait out its own timeout here, or never resume at all.
+            callback.onError()
             return
         }
         handler.post {
