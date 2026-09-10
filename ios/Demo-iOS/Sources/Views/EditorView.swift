@@ -14,16 +14,16 @@ private extension Logger {
     static let demo = Logger(subsystem: "GutenbergKit-Demo", category: "media-upload")
 }
 
-/// Throws from a selector the block list reads outside the per-block error
-/// boundaries, so the crash reaches the editor-level `ErrorBoundary` rather than
-/// a single block's.
+/// Throws from the selector the editor reads to choose between the visual and
+/// code editors, so the crash reaches the editor-level `ErrorBoundary` in either
+/// mode rather than a single block's error boundary.
 private let triggerEditorCrashScript = """
     (() => {
-        const blockEditor = wp.data.select('core/block-editor');
-        blockEditor.getBlockOrder = () => {
+        const editor = wp.data.select('core/editor');
+        editor.getEditorMode = () => {
             throw new Error('Editor crash triggered from the demo app');
         };
-        wp.data.dispatch('core/block-editor').updateSettings({});
+        wp.data.dispatch('core/editor').updateEditorSettings({});
     })();
     """
 
