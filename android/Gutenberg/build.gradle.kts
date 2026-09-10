@@ -138,14 +138,3 @@ project.afterEvaluate {
         }
     }
 }
-
-// Wire the generator into every task that reads the `main` source set's
-// sources: Kotlin compilation and the source-jar tasks AGP creates for the
-// maven publication. AGP's source-set DSL only accepts a path string for
-// `srcDir`, so the dependency can't be inferred from the source set itself.
-tasks.matching {
-    val name = it.name
-    (name.startsWith("compile") && name.endsWith("Kotlin")) ||
-        (name.startsWith("source") && name.endsWith("Jar"))
-}.configureEach { dependsOn(generateSupportedLocales) }
-
