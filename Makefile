@@ -235,6 +235,13 @@ format: npm-dependencies ## Format code
 lint-js: npm-dependencies ## Lint JavaScript code
 	npm run lint:js
 
+# Reads `package-lock.json`, not the installed tree, so it needs no
+# `npm-dependencies` prerequisite -- which would otherwise report on a stale
+# `node_modules` whenever one already exists.
+.PHONY: check-wp-packages
+check-wp-packages: ## Fail if any @wordpress package is installed more than once
+	npm run check:wp-packages
+
 .PHONY: lint-fix-js
 lint-js-fix: npm-dependencies ## Lint and auto-fix JavaScript code
 	npm run lint:js:fix
