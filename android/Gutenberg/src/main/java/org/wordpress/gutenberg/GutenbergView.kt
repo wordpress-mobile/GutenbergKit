@@ -970,10 +970,11 @@ class GutenbergView : FrameLayout {
      *
      * The reloaded editor starts from whatever the host returns from
      * [LatestContentProvider], so work up to the host's last autosave survives
-     * the reload. Readiness is restored only once the editor emits
-     * `onEditorLoaded` again.
+     * the reload. Readiness is reset immediately and restored only once the
+     * editor emits `onEditorLoaded` again.
      */
     fun reloadEditor() {
+        isEditorLoaded = false
         handler.post {
             didFireEditorLoaded = false
             showSpinnerPhase()
