@@ -216,6 +216,7 @@ playwright-report/
 wp-env/mu-plugins/*
 !wp-env/mu-plugins/gutenbergkit-cors.php
 !wp-env/mu-plugins/gutenbergkit-jetpack-blocks.php
+!wp-env/mu-plugins/gutenbergkit-media-failure.php
 
 # Claude
 .claude/settings.local.json
