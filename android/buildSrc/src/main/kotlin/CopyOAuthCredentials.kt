@@ -18,7 +18,7 @@ import org.gradle.api.tasks.TaskAction
  */
 abstract class CopyOAuthCredentials : DefaultTask() {
     @get:InputFile
-    @get:PathSensitive(PathSensitivity.NONE)
+    @get:PathSensitive(PathSensitivity.NAME_ONLY)
     abstract val credentials: RegularFileProperty
 
     @get:OutputDirectory
