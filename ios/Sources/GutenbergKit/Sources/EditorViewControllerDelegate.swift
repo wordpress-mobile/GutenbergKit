@@ -32,6 +32,9 @@ public protocol EditorViewControllerDelegate: AnyObject {
     ///
     /// - warning: Content already retrieved remains valid; do not treat this as
     /// the editor reporting empty content.
+    ///
+    /// - note: This can be called without a preceding ``editorDidLoad(_:)`` when
+    /// the editor crashes before it finishes loading.
     func editorDidBecomeUnavailable(_ viewController: EditorViewController)
 
     /// Notifies the client about the new edits.
