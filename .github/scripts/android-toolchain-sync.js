@@ -47,14 +47,6 @@ export default async function reportToolchainDrift( {
 		github,
 		'gradle/libs.versions.toml'
 	);
-	const localWrapper = await readFile(
-		'android/gradle/wrapper/gradle-wrapper.properties',
-		'utf8'
-	);
-	const upstreamWrapper = await fetchUpstream(
-		github,
-		'gradle/wrapper/gradle-wrapper.properties'
-	);
 
 	const rows = TRACKED.map( ( entry ) => ( {
 		name: entry.name,
@@ -69,8 +61,19 @@ export default async function reportToolchainDrift( {
 	rows.push( {
 		name: 'Gradle',
 		blocking: false,
-		ours: readWrapperVersion( localWrapper, 'GutenbergKit' ),
-		theirs: readWrapperVersion( upstreamWrapper, UPSTREAM ),
+		ours: await readGradleVersion(
+			readFile(
+				'android/gradle/wrapper/gradle-wrapper.properties',
+				'utf8'
+			),
+			'GutenbergKit',
+			core
+		),
+		theirs: await readGradleVersion(
+			fetchUpstream( github, 'gradle/wrapper/gradle-wrapper.properties' ),
+			UPSTREAM,
+			core
+		),
 	} );
 
 	for ( const row of rows ) {
@@ -116,9 +119,11 @@ export default async function reportToolchainDrift( {
 		'| --- | --- | --- | --- |',
 		...rows.map(
 			( row ) =>
-				`| ${ row.name } | \`${ row.ours }\` | \`${
-					row.theirs
-				}\` | ${ formatStatus( row ) } |`
+				`| ${ row.name } | ${ formatVersion(
+					row.ours
+				) } | ${ formatVersion( row.theirs ) } | ${ formatStatus(
+					row
+				) } |`
 		),
 	].join( '\n' );
 
@@ -215,15 +220,43 @@ function readCatalogVersion( toml, key, source ) {
 		if ( line.trim().startsWith( '[' ) ) {
 			break;
 		}
-		const match = line.match( /^\s*([\w.-]+)\s*=\s*['"]([^'"]+)['"]/ );
-		if ( match && match[ 1 ] === key ) {
-			return match[ 2 ];
+		const entry = line.match( /^\s*(['"]?)([\w.-]+)\1\s*=(.*)$/ );
+		if ( entry?.[ 2 ] !== key ) {
+			continue;
 		}
+		// Either a plain version or a rich one, e.g. `{ strictly = "1.0" }`.
+		const version = entry[ 3 ].match(
+			/^\s*['"]([^'"]+)['"]|\b(?:strictly|require|prefer)\s*=\s*['"]([^'"]+)['"]/
+		);
+		if ( ! version ) {
+			throw new Error(
+				`Unrecognized '${ key }' version in ${ source }: ${ entry[ 3 ].trim() }`
+			);
+		}
+		return version[ 1 ] ?? version[ 2 ];
 	}
 	throw new Error(
 		`No '${ key }' entry under [versions] in ${ source }. ` +
 			'The catalog key was probably renamed — update TRACKED in this script.'
 	);
+}
+
+/**
+ * Reads the Gradle wrapper version without failing the run. Gradle is only
+ * reported, so an unreadable wrapper must not hide AGP or Kotlin drift.
+ *
+ * @param {Promise<string>} properties Wrapper properties contents.
+ * @param {string}          source     Repository name for messages.
+ * @param {Object}          core       GitHub Actions toolkit.
+ * @return {Promise<string|null>} The Gradle version, or `null` if unreadable.
+ */
+async function readGradleVersion( properties, source, core ) {
+	try {
+		return readWrapperVersion( await properties, source );
+	} catch ( error ) {
+		core.warning( error.message );
+		return null;
+	}
 }
 
 /**
@@ -234,7 +267,9 @@ function readCatalogVersion( toml, key, source ) {
  * @return {string} The Gradle version.
  */
 function readWrapperVersion( properties, source ) {
-	const match = properties.match( /gradle-(\d+(?:\.\d+)+)-(?:all|bin)\.zip/ );
+	const match = properties.match(
+		/^\s*distributionUrl\s*=.*\/gradle-([^/]+)-(?:all|bin)\.zip\s*$/m
+	);
 	if ( ! match ) {
 		throw new Error( `No distributionUrl version in ${ source }.` );
 	}
@@ -242,13 +277,24 @@ function readWrapperVersion( properties, source ) {
 }
 
 /**
- * @param {Object}  row          Version comparison.
- * @param {string}  row.ours     GutenbergKit's version.
- * @param {string}  row.theirs   WordPress-Android's version.
- * @param {boolean} row.blocking Whether a mismatch breaks the composite build.
+ * @param {string|null} version A version, or `null` if unreadable.
+ * @return {string} The table cell.
+ */
+function formatVersion( version ) {
+	return version ? `\`${ version }\`` : 'unknown';
+}
+
+/**
+ * @param {Object}      row          Version comparison.
+ * @param {string|null} row.ours     GutenbergKit's version.
+ * @param {string|null} row.theirs   WordPress-Android's version.
+ * @param {boolean}     row.blocking Whether a mismatch breaks the composite build.
  * @return {string} The table status cell.
  */
 function formatStatus( row ) {
+	if ( ! row.ours || ! row.theirs ) {
+		return 'could not be read';
+	}
 	if ( row.ours === row.theirs ) {
 		return 'in sync';
 	}
