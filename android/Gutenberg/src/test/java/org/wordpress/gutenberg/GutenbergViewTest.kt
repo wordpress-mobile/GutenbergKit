@@ -426,4 +426,27 @@ class GutenbergViewTest {
             shadowWebView.lastEvaluatedJavascript
         )
     }
+
+    @Test
+    fun `onEditorUnavailable stops history commands from reaching the web view`() {
+        gutenbergView.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        gutenbergView.onEditorUnavailable()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val shadowWebView = shadowOf(gutenbergView.editorWebView)
+        val lastEvaluated = shadowWebView.lastEvaluatedJavascript
+
+        gutenbergView.undo()
+        gutenbergView.redo()
+        gutenbergView.dismissTopModal()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "a crashed editor must not be sent commands its bridge can no longer answer",
+            lastEvaluated,
+            shadowWebView.lastEvaluatedJavascript
+        )
+    }
 }

@@ -884,18 +884,21 @@ class GutenbergView : FrameLayout {
     }
 
     fun undo() {
+        if (!isEditorLoaded) return
         handler.post {
             webView.evaluateJavascript("editor.undo();", null)
         }
     }
 
     fun redo() {
+        if (!isEditorLoaded) return
         handler.post {
             webView.evaluateJavascript("editor.redo();", null)
         }
     }
 
     fun dismissTopModal() {
+        if (!isEditorLoaded) return
         handler.post {
             webView.evaluateJavascript("editor.dismissTopModal();", null)
         }
