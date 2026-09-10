@@ -4,6 +4,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import org.json.JSONException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -12,15 +13,10 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * Pins what a real [WebView] hands back once the editor's bridge is gone.
+ * Pins what a real [WebView] returns for [getTitleAndContentScript] once the
+ * editor's bridge is gone, and that [parseTitleAndContent] reports it as a failed
+ * read.
  *
- * When the editor's `ErrorBoundary` catches, React unmounts the editor and
- * `useHostBridge`'s cleanup deletes every `window.editor.*` method, while
- * `window.editor` survives as an empty object because it is assigned at module
- * scope. `GutenbergView.isEditorLoaded` is never reset, so `getTitleAndContent`
- * still reaches the web view in that state.
- *
- * The exact string returned here is what [parseTitleAndContent] has to reject.
  * A unit test asserting `"null"` in isolation would keep passing even if the
  * platform started returning something else, which is why this runs on a device.
  *
@@ -32,6 +28,19 @@ import java.util.concurrent.TimeUnit
 class EditorBridgeTeardownInstrumentedTest {
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
+
+    @Test
+    fun aTornDownBridgeIsReportedAsAFailedRead() {
+        val result = evaluateAgainstTornDownBridge(
+            getTitleAndContentScript(completeComposition = true)
+        )
+
+        assertEquals("null", result)
+        assertTrue(
+            "a failed read must not resolve to a title the host would persist",
+            parseTitleAndContent(result, ORIGINAL_CONTENT).exceptionOrNull() is JSONException
+        )
+    }
 
     private fun evaluateAgainstTornDownBridge(script: String): String {
         lateinit var webView: WebView
@@ -49,41 +58,30 @@ class EditorBridgeTeardownInstrumentedTest {
                 null, "<html><body></body></html>", "text/html", "utf-8", null
             )
         }
-        assertTrue("page loaded", loaded.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
 
-        val result = arrayOfNulls<String>(1)
-        val evaluated = CountDownLatch(1)
-        instrumentation.runOnMainSync {
-            // The post-crash bridge: the object remains, the methods are gone.
-            webView.evaluateJavascript("window.editor = {};", null)
-            webView.evaluateJavascript(script) { value ->
-                result[0] = value
-                evaluated.countDown()
+        try {
+            assertTrue("page loaded", loaded.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+
+            val result = arrayOfNulls<String>(1)
+            val evaluated = CountDownLatch(1)
+            instrumentation.runOnMainSync {
+                // The post-crash bridge: the object remains, the methods are gone.
+                webView.evaluateJavascript("window.editor = {};", null)
+                webView.evaluateJavascript(script) { value ->
+                    result[0] = value
+                    evaluated.countDown()
+                }
             }
+            assertTrue("script evaluated", evaluated.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+
+            return result[0]!!
+        } finally {
+            instrumentation.runOnMainSync { webView.destroy() }
         }
-        assertTrue("script evaluated", evaluated.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
-
-        return result[0]!!
-    }
-
-    @Test
-    fun evaluateJavaScriptYieldsNullWhenTheBridgeMethodIsGone() {
-        assertEquals("null", evaluateAgainstTornDownBridge(GET_TITLE_AND_CONTENT))
-    }
-
-    @Test
-    fun theTornDownBridgeResultIsRejectedRatherThanReadAsAnEmptyTitle() {
-        val result = evaluateAgainstTornDownBridge(GET_TITLE_AND_CONTENT)
-
-        assertTrue(
-            "a failed read must not resolve to a title the host would persist",
-            parseTitleAndContent(result, ORIGINAL_CONTENT).isFailure
-        )
     }
 
     private companion object {
         const val TIMEOUT_SECONDS = 10L
-        const val GET_TITLE_AND_CONTENT = "editor.getTitleAndContent(true);"
         const val ORIGINAL_CONTENT = "<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->"
     }
 }

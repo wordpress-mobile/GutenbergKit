@@ -858,7 +858,7 @@ class GutenbergView : FrameLayout {
             return
         }
         handler.post {
-            webView.evaluateJavascript("editor.getTitleAndContent($completeComposition);") { result ->
+            webView.evaluateJavascript(getTitleAndContentScript(completeComposition)) { result ->
                 parseTitleAndContent(result, originalContent).fold(
                     onSuccess = { (title, content) -> callback.onResult(title, content) },
                     onFailure = { error -> callback.onError(error) }
@@ -1309,6 +1309,14 @@ class GutenbergView : FrameLayout {
 class EditorNotReadyException : IllegalStateException(
     "The editor is not ready. Wait for onEditorAvailable before calling bridge methods."
 )
+
+/**
+ * The script `getTitleAndContent` evaluates, shared so tests run exactly what the
+ * editor is sent.
+ */
+@VisibleForTesting
+internal fun getTitleAndContentScript(completeComposition: Boolean): String =
+    "editor.getTitleAndContent($completeComposition);"
 
 /**
  * Parses the result of `editor.getTitleAndContent`, failing when it cannot be
