@@ -1001,6 +1001,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             controller.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
         controller.didMove(toParent: self)
+
+        // The web view stays in the hierarchy underneath the notice, so hide it
+        // from VoiceOver and move focus to the notice.
+        webView.accessibilityElementsHidden = true
+        UIAccessibility.post(notification: .screenChanged, argument: controller.view)
     }
 
     @MainActor
@@ -1009,6 +1014,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         editorCrashViewController?.view.removeFromSuperview()
         editorCrashViewController?.removeFromParent()
         editorCrashViewController = nil
+        webView.accessibilityElementsHidden = false
     }
 
     // MARK: - Warmup
