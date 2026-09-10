@@ -161,12 +161,13 @@ fun EditorScreen(
     var hasUndoState by remember { mutableStateOf(false) }
     var hasRedoState by remember { mutableStateOf(false) }
     var isCodeEditorEnabled by remember { mutableStateOf(false) }
+    var isEditorAvailable by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
     var gutenbergViewRef by remember { mutableStateOf<GutenbergView?>(null) }
     val saveScope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    val canSave = !isSaving && accountId != null && configuration.postId != null
+    val canSave = isEditorAvailable && !isSaving && accountId != null && configuration.postId != null
 
     BackHandler(enabled = isModalDialogOpen) {
         gutenbergViewRef?.dismissTopModal()
@@ -193,7 +194,7 @@ fun EditorScreen(
                 actions = {
                     IconButton(
                         onClick = { gutenbergViewRef?.undo() },
-                        enabled = hasUndoState && !isModalDialogOpen
+                        enabled = isEditorAvailable && hasUndoState && !isModalDialogOpen
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Undo,
@@ -202,7 +203,7 @@ fun EditorScreen(
                     }
                     IconButton(
                         onClick = { gutenbergViewRef?.redo() },
-                        enabled = hasRedoState && !isModalDialogOpen
+                        enabled = isEditorAvailable && hasRedoState && !isModalDialogOpen
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Redo,
@@ -241,7 +242,7 @@ fun EditorScreen(
                     Box {
                         IconButton(
                             onClick = { showMenu = true },
-                            enabled = !isModalDialogOpen
+                            enabled = isEditorAvailable && !isModalDialogOpen
                         ) {
                             Icon(
                                 imageVector = Icons.Default.MoreVert,
@@ -292,6 +293,12 @@ fun EditorScreen(
                     )
 
                     gutenbergViewRef = this
+                    setEditorDidBecomeAvailable { isEditorAvailable = true }
+                    // Disables history, the overflow menu, and saving until the editor
+                    // reloads. The demo saves by reading the editor, which a crashed
+                    // editor cannot answer; hosts that save from their own persisted
+                    // copy can keep saving available.
+                    setEditorDidBecomeUnavailable { isEditorAvailable = false }
                     setModalDialogStateListener(object : GutenbergView.ModalDialogStateListener {
                         override fun onModalDialogOpened(dialogType: String) {
                             isModalDialogOpen = true

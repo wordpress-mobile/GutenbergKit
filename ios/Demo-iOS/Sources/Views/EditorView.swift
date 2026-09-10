@@ -83,12 +83,12 @@ struct EditorView: View {
                 .disabled(!viewModel.hasRedo)
                 .accessibilityLabel("Redo")
             }
-            .disabled(viewModel.isModalDialogOpen)
+            .disabled(!viewModel.isEditorReady || viewModel.isModalDialogOpen)
         }
 
         ToolbarItemGroup(placement: .topBarTrailing) {
             moreMenu
-                .disabled(viewModel.isModalDialogOpen)
+                .disabled(!viewModel.isEditorReady || viewModel.isModalDialogOpen)
         }
 
         ToolbarItem(placement: .topBarTrailing) {
@@ -221,6 +221,14 @@ private struct _EditorView: UIViewControllerRepresentable {
 
         func editorDidLoad(_ viewContoller: EditorViewController) {
             viewModel.isEditorReady = true
+        }
+
+        func editorDidBecomeUnavailable(_ viewController: EditorViewController) {
+            // Disables history, the More menu, and saving until the editor reloads.
+            // The demo saves by reading the editor, which a crashed editor cannot
+            // answer; hosts that save from their own persisted copy can keep saving
+            // available.
+            viewModel.isEditorReady = false
         }
 
         func editor(_ viewContoller: EditorViewController, didDisplayInitialContent content: String) {
