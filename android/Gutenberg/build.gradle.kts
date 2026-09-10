@@ -14,7 +14,10 @@ val generateSupportedLocales = tasks.register<GenerateSupportedLocales>("generat
 }
 
 androidComponents.onVariants { variant ->
-    variant.sources.kotlin?.addGeneratedSourceDirectory(
+    val kotlinSources = checkNotNull(variant.sources.kotlin) {
+        "Variant ${variant.name} has no Kotlin sources to add SupportedLocales to"
+    }
+    kotlinSources.addGeneratedSourceDirectory(
         generateSupportedLocales,
         GenerateSupportedLocales::outputDirectory,
     )
