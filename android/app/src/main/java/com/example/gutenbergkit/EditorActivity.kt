@@ -59,16 +59,16 @@ import uniffi.wp_api.PostEndpointType
 import uniffi.wp_api.PostUpdateParams
 import kotlin.coroutines.resume
 
-// Throws from a selector the block list reads outside the per-block error
-// boundaries, so the crash reaches the editor-level `ErrorBoundary` rather than
-// a single block's.
+// Throws from the selector the editor reads to choose between the visual and
+// code editors, so the crash reaches the editor-level `ErrorBoundary` in either
+// mode rather than a single block's error boundary.
 private const val TRIGGER_EDITOR_CRASH_SCRIPT = """
     (() => {
-        const blockEditor = wp.data.select('core/block-editor');
-        blockEditor.getBlockOrder = () => {
+        const editor = wp.data.select('core/editor');
+        editor.getEditorMode = () => {
             throw new Error('Editor crash triggered from the demo app');
         };
-        wp.data.dispatch('core/block-editor').updateSettings({});
+        wp.data.dispatch('core/editor').updateEditorSettings({});
     })();
 """
 
