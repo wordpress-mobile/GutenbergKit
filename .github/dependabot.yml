@@ -24,3 +24,31 @@ updates:
           ruby-minor-and-patch:
               update-types: ['minor', 'patch']
       open-pull-requests-limit: 5
+
+    - package-ecosystem: 'gradle'
+      directory: '/android'
+      schedule:
+          interval: 'weekly'
+      groups:
+          gradle-minor-and-patch:
+              update-types: ['minor', 'patch']
+      open-pull-requests-limit: 5
+      ignore:
+          # The Android Gradle Plugin and Kotlin must match WordPress-Android
+          # exactly, not track their own latest release. WordPress-Android
+          # includes this project as a composite build, and Gradle refuses to
+          # run one that spans two AGP versions; for Kotlin, the newer plugin
+          # silently wins the classpath for both halves of that build. The
+          # `Android toolchain sync` workflow watches WordPress-Android and
+          # opens an issue when either drifts.
+          - dependency-name: 'com.android.application'
+          - dependency-name: 'com.android.library'
+          - dependency-name: 'org.jetbrains.kotlin.*'
+          # A new Gradle major is adopted alongside the AGP upgrade that
+          # requires it, not ahead of the AGP version pinned above.
+          - dependency-name: 'gradle-wrapper'
+            update-types: ['version-update:semver-major']
+          # Published to a private S3 Maven repo with a versioning scheme
+          # Dependabot cannot resolve.
+          - dependency-name: 'rs.wordpress.api:android'
+          - dependency-name: 'com.automattic.android.publish-to-s3'
