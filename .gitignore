@@ -192,10 +192,6 @@ local.properties
 /android/buildSrc/.gradle
 /android/.kotlin
 /android/.idea
-# Daemon JVM criteria, which Android Studio writes when the Gradle JDK setting
-# changes. Committing it would pin every contributor and CI agent to one JDK,
-# downloading it if absent — WordPress-Android pins no daemon JVM either.
-/android/gradle/gradle-daemon-jvm.properties
 wp_com_oauth_credentials.json
 
 ## Production Build Products
