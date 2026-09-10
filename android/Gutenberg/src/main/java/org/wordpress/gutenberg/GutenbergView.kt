@@ -30,6 +30,7 @@ import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.ProgressBar
 import android.widget.Toast
+import androidx.annotation.VisibleForTesting
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
 import kotlinx.coroutines.CoroutineScope
@@ -95,7 +96,7 @@ const val ASSET_PATH_INDEX = "/assets/index.html"
  */
 class GutenbergView : FrameLayout {
     private val webView: WebView
-    private var isEditorLoaded = false
+    @Volatile private var isEditorLoaded = false
     private var didFireEditorLoaded = false
     private lateinit var assetLoader: WebViewAssetLoader
     private lateinit var assetAuthority: String
@@ -754,6 +755,23 @@ class GutenbergView : FrameLayout {
 
     interface TitleAndContentCallback {
         fun onResult(title: CharSequence, content: CharSequence)
+
+        /**
+         * The editor could not be read, so there is no title or content to
+         * report.
+         *
+         * A failed read is not an empty post: hosts must leave the last known
+         * title and content in place rather than persisting anything derived
+         * from this call.
+         *
+         * Defaults to a no-op. A host that has not adopted it simply receives
+         * no callback at all, so its own timeout path applies — still safe,
+         * just slower than handling this directly.
+         *
+         * @param error [EditorNotReadyException] when the editor has not
+         * loaded, or a [JSONException] when its result could not be read.
+         */
+        fun onError(error: Throwable) {}
     }
 
     interface ContentChangeListener {
@@ -835,29 +853,16 @@ class GutenbergView : FrameLayout {
     fun getTitleAndContent(originalContent: CharSequence, callback: TitleAndContentCallback, completeComposition: Boolean = false) {
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
+            // Posted so the error arrives on the main thread, as a read's result does.
+            handler.post { callback.onError(EditorNotReadyException()) }
             return
         }
         handler.post {
-            webView.evaluateJavascript("editor.getTitleAndContent($completeComposition);") { result ->
-                var lastUpdatedTitle: CharSequence? = null
-                var lastUpdatedContent: CharSequence? = null
-                var changed = false
-                try {
-                    val jsonObject = JSONObject(result)
-                    lastUpdatedTitle = jsonObject.getString("title")
-                    lastUpdatedContent = jsonObject.getString("content")
-                    changed = jsonObject.getBoolean("changed")
-                } catch (e: JSONException) {
-                    Log.e("GutenbergView", "Received invalid JSON from editor.getTitleAndContent")
-                }
-
-                val title = lastUpdatedTitle ?: ""
-                val content = if (changed) {
-                    lastUpdatedContent ?: ""
-                } else {
-                    originalContent
-                }
-                callback.onResult(title, content)
+            webView.evaluateJavascript(getTitleAndContentScript(completeComposition)) { result ->
+                parseTitleAndContent(result, originalContent).fold(
+                    onSuccess = { (title, content) -> callback.onResult(title, content) },
+                    onFailure = { error -> callback.onError(error) }
+                )
             }
         }
     }
@@ -1295,6 +1300,44 @@ class GutenbergView : FrameLayout {
             warmupRunnable = null
         }
     }
+}
+
+/**
+ * Reported when the editor is read before it has loaded.
+ */
+class EditorNotReadyException : IllegalStateException(
+    "The editor is not ready. Wait for onEditorAvailable before calling bridge methods."
+)
+
+/**
+ * The script `getTitleAndContent` evaluates, shared so tests run exactly what the
+ * editor is sent.
+ */
+@VisibleForTesting
+internal fun getTitleAndContentScript(completeComposition: Boolean): String =
+    "editor.getTitleAndContent($completeComposition);"
+
+/**
+ * Parses the result of `editor.getTitleAndContent`, failing when it cannot be
+ * read.
+ *
+ * Failing rather than returning a partially defaulted pair is the point. A crashed
+ * editor leaves `window.editor` an empty object, so the evaluation yields the
+ * string `"null"`; substituting `""` for the title there is indistinguishable
+ * from the user clearing it, and the host persists it over their own.
+ */
+@VisibleForTesting
+internal fun parseTitleAndContent(
+    result: String?,
+    originalContent: CharSequence
+): Result<Pair<CharSequence, CharSequence>> = try {
+    val json = JSONObject(result.orEmpty())
+    val title: CharSequence = json.getString("title")
+    val updatedContent: CharSequence = json.getString("content")
+    Result.success(title to if (json.getBoolean("changed")) updatedContent else originalContent)
+} catch (e: JSONException) {
+    Log.e("GutenbergView", "Received invalid JSON from editor.getTitleAndContent", e)
+    Result.failure(e)
 }
 
 data class Media(

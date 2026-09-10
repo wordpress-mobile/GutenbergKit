@@ -221,6 +221,10 @@ gutenbergView.getTitleAndContent(
         override fun onResult(title: CharSequence, content: CharSequence) {
             // Use title and content
         }
+
+        override fun onError(error: Throwable) {
+            // Keep the last known title and content rather than saving
+        }
     },
     completeComposition = true
 )
