@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { useRef, useCallback } from '@wordpress/element';
+import { useRef, useCallback, useEffect } from '@wordpress/element';
 
 /**
  * Internal dependencies
@@ -24,6 +24,7 @@ export function useEditorReady() {
 	const editorVisible = useRef( false );
 	const notified = useRef( false );
 	const observerRef = useRef( null );
+	const frameRef = useRef( null );
 
 	const tryNotify = useCallback( () => {
 		if (
@@ -34,9 +35,13 @@ export function useEditorReady() {
 			notified.current = true;
 			// Defer one frame so the browser has painted the editor content
 			// before the native host starts the fade-in animation.
-			requestAnimationFrame( editorLoaded );
+			frameRef.current = requestAnimationFrame( editorLoaded );
 		}
 	}, [] );
+
+	// An editor that crashes before the deferred frame runs must not report
+	// itself loaded after the host has been told it is unavailable.
+	useEffect( () => () => cancelAnimationFrame( frameRef.current ), [] );
 
 	const markBridgeReady = useCallback( () => {
 		bridgeReady.current = true;
