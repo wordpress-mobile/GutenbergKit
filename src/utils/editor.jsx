@@ -10,6 +10,7 @@ import { registerCoreBlocks } from '@wordpress/block-library';
 import { unregisterDisallowedBlocks } from './blocks';
 import { getGBKit, getPost } from './bridge';
 import { getDefaultEditorSettings } from './editor-settings';
+import { reportEditorCrashesToHost } from './editor-crash-reporting';
 
 /**
  * Configure editor settings and styles, and render the editor.
@@ -42,6 +43,7 @@ export async function initializeEditor( {
 
 	registerCoreBlocks();
 	unregisterDisallowedBlocks( allowedBlockTypes );
+	reportEditorCrashesToHost();
 
 	const post = await getPost();
 

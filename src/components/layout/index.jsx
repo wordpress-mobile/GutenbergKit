@@ -9,7 +9,6 @@ import { SlotFillProvider } from '@wordpress/components';
  * Internal dependencies
  */
 import Editor from '../editor';
-import { useHostExceptionLogging } from './use-host-exception-logging';
 import { onEditorContentChanged } from '../../utils/bridge';
 import EditorLoadNotice from '../editor-load-notice';
 import OfflineIndicator from '../offline-indicator';
@@ -26,10 +25,6 @@ import './style.scss';
  */
 export default function Layout( props ) {
 	const { pluginLoadFailed, ...editorProps } = props;
-
-	// Registered here, outside the ErrorBoundary, so the listener survives the
-	// crash it reports.
-	useHostExceptionLogging();
 
 	return (
 		<ErrorBoundary canCopyContent>
