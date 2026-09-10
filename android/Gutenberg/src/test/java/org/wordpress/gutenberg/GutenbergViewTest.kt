@@ -3,6 +3,7 @@ package org.wordpress.gutenberg
 import android.content.Intent
 import android.net.Uri
 import android.os.Looper
+import android.view.View
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -568,6 +569,30 @@ class GutenbergViewTest {
         shadowOf(Looper.getMainLooper()).idle()
 
         assertFalse("picks from the inserter can no longer reach the editor", inserter.isShowing)
+    }
+
+    @Test
+    fun `onEditorUnavailable hides the web view until the editor reloads`() {
+        gutenbergView.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        gutenbergView.onEditorUnavailable()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "the crashed editor must not receive touches or TalkBack focus",
+            View.INVISIBLE,
+            gutenbergView.editorWebView.visibility
+        )
+
+        gutenbergView.reloadEditor()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "the reloading editor must be visible so it can render and signal readiness",
+            View.VISIBLE,
+            gutenbergView.editorWebView.visibility
+        )
     }
 
     @Test

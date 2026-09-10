@@ -363,6 +363,7 @@ class GutenbergView : FrameLayout {
             spinnerView.animate().alpha(1f).setDuration(200).start()
             errorView.visibility = GONE
             webView.alpha = 0f
+            webView.visibility = VISIBLE
         }
     }
 
@@ -378,6 +379,7 @@ class GutenbergView : FrameLayout {
                 progressView.visibility = GONE
             }.start()
             errorView.visibility = GONE
+            webView.visibility = VISIBLE
             webView.animate().alpha(1f).setDuration(200).start()
         }
     }
@@ -1021,6 +1023,8 @@ class GutenbergView : FrameLayout {
             errorView.visibility = VISIBLE
             errorView.animate().alpha(1f).setDuration(200).start()
             webView.alpha = 0f
+            // Transparency alone leaves the web view reachable by touch and TalkBack.
+            webView.visibility = INVISIBLE
         }
     }
 
