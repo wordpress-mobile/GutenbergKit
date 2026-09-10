@@ -800,6 +800,10 @@ class GutenbergView : FrameLayout {
     /**
      * Notified when the editor crashes and is no longer usable.
      *
+     * This can be called without a preceding
+     * [EditorAvailableListener.onEditorAvailable] when the editor crashes before
+     * it finishes loading.
+     *
      * The editor's `ErrorBoundary` caught an error and replaced the editor with a
      * fallback notice. React unmounted the editor, which deleted every JavaScript
      * `editor` API, so calls to them are refused from this point until the editor
