@@ -37,7 +37,9 @@ android {
     // extension up as the legacy `com.android.build.gradle.LibraryExtension`.
     // AGP 9's new DSL no longer registers that type, so the plugin's own
     // `singleVariant` call silently no-ops and the `release` component is
-    // never created. Drop this once the plugin supports AGP 9.
+    // never created. Remove this when upgrading to a plugin release that fixes
+    // Automattic/publish-to-s3-gradle-plugin#42: AGP rejects declaring the
+    // same variant twice, so keeping both breaks configuration.
     publishing {
         singleVariant("release") {
             withSourcesJar()
