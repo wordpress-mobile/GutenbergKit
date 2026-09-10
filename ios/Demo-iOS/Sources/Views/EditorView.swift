@@ -14,6 +14,19 @@ private extension Logger {
     static let demo = Logger(subsystem: "GutenbergKit-Demo", category: "media-upload")
 }
 
+/// Throws from a selector the block list reads outside the per-block error
+/// boundaries, so the crash reaches the editor-level `ErrorBoundary` rather than
+/// a single block's.
+private let triggerEditorCrashScript = """
+    (() => {
+        const blockEditor = wp.data.select('core/block-editor');
+        blockEditor.getBlockOrder = () => {
+            throw new Error('Editor crash triggered from the demo app');
+        };
+        wp.data.dispatch('core/block-editor').updateSettings({});
+    })();
+    """
+
 struct EditorView: View {
     private let configuration: EditorConfiguration
     private let dependencies: EditorDependencies?
@@ -100,6 +113,12 @@ struct EditorView: View {
                     systemImage: viewModel.isCodeEditorEnabled ? "doc.richtext" : "curlybraces"
                 )
             })
+
+            Button(role: .destructive) {
+                viewModel.perform(.triggerCrash)
+            } label: {
+                Label("Trigger Editor Crash", systemImage: "exclamationmark.triangle")
+            }
         } label: {
             Image(systemName: "ellipsis")
         }
@@ -144,6 +163,8 @@ private struct _EditorView: UIViewControllerRepresentable {
             switch $0 {
             case .redo: viewController?.redo()
             case .undo: viewController?.undo()
+            case .triggerCrash:
+                viewController?.webView.evaluateJavaScript(triggerEditorCrashScript, completionHandler: nil)
             }
         }
 
@@ -377,6 +398,7 @@ private final class EditorViewModel {
     enum Action {
         case undo
         case redo
+        case triggerCrash
     }
 
     var perform: (_ action: Action) -> Void = { _ in assertionFailure() }
