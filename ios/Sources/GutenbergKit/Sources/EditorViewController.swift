@@ -579,6 +579,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // MARK: - Internal (JavaScript)
 
     private func evaluate(_ javascript: String, isCritical: Bool = false) {
+        // The editor's bridge methods exist only while it is loaded. Calling them
+        // otherwise fails with a raw `TypeError` that `handleError` would show in
+        // an alert.
+        guard isReady else { return }
         webView.evaluateJavaScript(javascript) { [weak self] _, error in
             guard let self, let error else { return }
             self.handleError(error, isCritical: isCritical)
@@ -798,6 +802,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                     return
                 }
                 delegate?.editor(self, didLogException: editorException)
+            case .onEditorUnavailable:
+                didLoseEditor()
             case .showBlockInserter:
                 let body = try message.decode(EditorJSMessage.ShowBlockInserterBody.self)
                 showBlockInserter(data: body)
@@ -894,6 +900,20 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         print("gutenbergkit-measure_editor-first-render:", duration)
 
         delegate?.editorDidLoad(self)
+    }
+
+    /// Called when the editor JavaScript emits the `onEditorUnavailable` message.
+    ///
+    /// The editor's `ErrorBoundary` caught an error and replaced the editor with
+    /// a fallback notice. React unmounted the editor, which deleted every
+    /// `window.editor.*` bridge method, so readiness is reset until the editor
+    /// reloads and emits `onEditorLoaded` again.
+    ///
+    /// Without this, `isReady` stays `true` and every subsequent bridge call
+    /// raises an uncaught `TypeError` inside the web view.
+    private func didLoseEditor() {
+        self.isReady = false
+        delegate?.editorDidBecomeUnavailable(self)
     }
 
     // MARK: - Warmup

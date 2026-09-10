@@ -19,6 +19,24 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// Called after an error that prevents the editor from loading is displayed.
     func editor(_ viewController: EditorViewController, didFailToLoad error: Error)
 
+    /// Notifies the client that the editor crashed and is no longer usable.
+    ///
+    /// The editor's `ErrorBoundary` caught an error and replaced the editor with a
+    /// fallback notice. React unmounted the editor, which deleted every JavaScript
+    /// `editor` API, so calls to them are refused from this point until the editor
+    /// reloads.
+    ///
+    /// The editor cannot recover on its own. Clients should disable the controls
+    /// that depend on it — history, editor mode — while leaving those that read
+    /// from their own persisted copy, such as saving and closing, available.
+    ///
+    /// - warning: Content already retrieved remains valid; do not treat this as
+    /// the editor reporting empty content.
+    ///
+    /// - note: This can be called without a preceding ``editorDidLoad(_:)`` when
+    /// the editor crashes before it finishes loading.
+    func editorDidBecomeUnavailable(_ viewController: EditorViewController)
+
     /// Notifies the client about the new edits.
     ///
     /// - note: To get the latest content, call ``EditorViewController/getTitleAndContent()``.
@@ -79,6 +97,7 @@ public protocol EditorViewControllerDelegate: AnyObject {
 
 extension EditorViewControllerDelegate {
     public func editor(_ viewController: EditorViewController, didFailToLoad error: Error) {}
+    public func editorDidBecomeUnavailable(_ viewController: EditorViewController) {}
 }
 
 #endif
