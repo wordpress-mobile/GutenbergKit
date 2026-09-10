@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.jetbrains.kotlin.android)
     alias(libs.plugins.jetbrains.kotlin.compose)
 }
 
@@ -20,27 +19,25 @@ val wpEnvCredentials: Map<String, String> = run {
     }
 }
 
+// Copy shared OAuth credentials into Android assets so they're available at runtime.
+// Only wired up when the file exists — the app handles the missing-file case gracefully.
+val oauthCredentialsFile = rootProject.file("../wp_com_oauth_credentials.json")
+if (oauthCredentialsFile.exists()) {
+    val copyOAuthCredentials = tasks.register<CopyOAuthCredentials>("copyOAuthCredentials") {
+        credentials.set(oauthCredentialsFile)
+    }
+
+    androidComponents.onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(
+            copyOAuthCredentials,
+            CopyOAuthCredentials::outputDirectory,
+        )
+    }
+}
+
 android {
     namespace = "com.example.gutenbergkit"
     compileSdk = 36
-
-    // Copy shared OAuth credentials into Android assets so they're available at runtime.
-    // Only registered when the file exists — the app handles the missing-file case gracefully.
-    val oauthCredentialsFile = rootProject.file("../wp_com_oauth_credentials.json")
-    if (oauthCredentialsFile.exists()) {
-        val copyOAuthCredentials by tasks.registering(Copy::class) {
-            from(oauthCredentialsFile)
-            into(layout.buildDirectory.dir("generated/oauth-assets"))
-        }
-
-        sourceSets["main"].assets.srcDir(copyOAuthCredentials.map { it.destinationDir })
-
-        applicationVariants.configureEach {
-            mergeAssetsProvider.configure {
-                dependsOn(copyOAuthCredentials)
-            }
-        }
-    }
 
     defaultConfig {
         applicationId = "com.example.gutenbergkit"
@@ -72,9 +69,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
-    }
-    kotlinOptions {
-        jvmTarget = "1.8"
     }
     buildFeatures {
         compose = true

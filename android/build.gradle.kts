@@ -11,9 +11,13 @@ ext {
 
 plugins {
     alias(libs.plugins.android.application) apply false
-    alias(libs.plugins.jetbrains.kotlin.android) apply false
-    alias(libs.plugins.jetbrains.kotlin.serialization) apply false
     alias(libs.plugins.android.library) apply false
+    // Pins the Kotlin Gradle plugin for the whole build. AGP 9 bundles its own
+    // (older) copy, whose Parcelize sub-plugin only recognises the legacy
+    // `BaseExtension` DSL and so silently skips AGP 9 projects.
+    alias(libs.plugins.jetbrains.kotlin.compose) apply false
+    alias(libs.plugins.jetbrains.kotlin.parcelize) apply false
+    alias(libs.plugins.jetbrains.kotlin.serialization) apply false
     alias(libs.plugins.detekt) apply false
 }
 
