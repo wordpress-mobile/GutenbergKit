@@ -96,7 +96,7 @@ const val ASSET_PATH_INDEX = "/assets/index.html"
  */
 class GutenbergView : FrameLayout {
     private val webView: WebView
-    private var isEditorLoaded = false
+    @Volatile private var isEditorLoaded = false
     private var didFireEditorLoaded = false
     private lateinit var assetLoader: WebViewAssetLoader
     private lateinit var assetAuthority: String
