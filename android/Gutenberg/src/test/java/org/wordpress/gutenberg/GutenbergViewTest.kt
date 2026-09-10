@@ -497,4 +497,44 @@ class GutenbergViewTest {
             shadowWebView.lastEvaluatedJavascript
         )
     }
+
+    @Test
+    fun `textEditorEnabled waits for the editor to load`() {
+        val shadowWebView = shadowOf(gutenbergView.editorWebView)
+        val lastEvaluated = shadowWebView.lastEvaluatedJavascript
+
+        gutenbergView.textEditorEnabled = true
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "an editor that has not loaded must not be asked to switch modes",
+            lastEvaluated,
+            shadowWebView.lastEvaluatedJavascript
+        )
+    }
+
+    @Test
+    fun `onEditorLoaded restores the code editor`() {
+        // Content keeps `onEditorLoaded` from focusing the editor, which would
+        // otherwise be the last script evaluated.
+        val view = GutenbergView(
+            EditorConfiguration.builder("https://example.com", "https://example.com/wp-json/")
+                .setContent("<!-- wp:paragraph --><p>Hello</p><!-- /wp:paragraph -->")
+                .setEnableOfflineMode(true)
+                .build(),
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+        view.textEditorEnabled = true
+
+        view.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "the web editor starts in visual mode, so code editor mode must be restored",
+            "editor.switchEditorMode('text');",
+            shadowOf(view.editorWebView).lastEvaluatedJavascript
+        )
+    }
 }

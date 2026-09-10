@@ -204,6 +204,8 @@ class GutenbergView : FrameLayout {
     var textEditorEnabled: Boolean = false
         set(value) {
             field = value
+            // Applied by `onEditorLoaded` once the editor is ready.
+            if (!isEditorLoaded) return
             val mode = if (value) "text" else "visual"
             handler.post {
                 webView.evaluateJavascript("editor.switchEditorMode('$mode');", null)
@@ -933,6 +935,11 @@ class GutenbergView : FrameLayout {
                 if (!isConnected) dispatchConnectivityEvent(false)
             }
             if(!didFireEditorLoaded) {
+                // The web editor always starts in visual mode, so restore code
+                // editor mode when the host enabled it, including after a reload.
+                if (textEditorEnabled) {
+                    webView.evaluateJavascript("editor.switchEditorMode('text');", null)
+                }
                 editorDidBecomeAvailableListener?.onEditorAvailable(this)
                 this.didFireEditorLoaded = true
                 showReadyPhase()
