@@ -579,6 +579,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // MARK: - Internal (JavaScript)
 
     private func evaluate(_ javascript: String, isCritical: Bool = false) {
+        // The editor's bridge methods exist only while it is loaded. Calling them
+        // otherwise fails with a raw `TypeError` that `handleError` would show in
+        // an alert.
+        guard isReady else { return }
         webView.evaluateJavaScript(javascript) { [weak self] _, error in
             guard let self, let error else { return }
             self.handleError(error, isCritical: isCritical)
