@@ -12,6 +12,7 @@ import { initializeEditor } from './editor';
 import { getGBKit, getPost } from './bridge';
 import { getDefaultEditorSettings } from './editor-settings';
 import { unregisterDisallowedBlocks } from './blocks';
+import { reportEditorCrashesToHost } from './editor-crash-reporting';
 
 vi.mock( '@wordpress/blocks' );
 vi.mock( '@wordpress/editor' );
@@ -20,6 +21,7 @@ vi.mock( '@wordpress/block-library' );
 vi.mock( './blocks' );
 vi.mock( './bridge' );
 vi.mock( './editor-settings' );
+vi.mock( './editor-crash-reporting' );
 vi.mock( '../components/layout', () => ( {
 	default: () => null,
 } ) );
@@ -151,5 +153,11 @@ describe( 'initializeEditor', () => {
 		initializeEditor();
 
 		expect( registerCoreBlocks ).toHaveBeenCalled();
+	} );
+
+	it( 'should report editor crashes to the host before rendering', () => {
+		initializeEditor();
+
+		expect( reportEditorCrashesToHost ).toHaveBeenCalled();
 	} );
 } );
