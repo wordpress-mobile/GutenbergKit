@@ -952,6 +952,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 EditorLocalization[.editorCrashedTitle],
                 systemImage: "exclamationmark.arrow.circlepath"
             )
+            .accessibilityAddTraits(.isHeader)
         } description: {
             Text(EditorLocalization[.editorCrashedDescription])
         } actions: {
