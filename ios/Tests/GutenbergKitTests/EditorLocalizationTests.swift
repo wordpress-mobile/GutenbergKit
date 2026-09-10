@@ -43,6 +43,14 @@ struct EditorLocalizationTests {
     }
 
     @Test
+    func defaultsPluralizeSkippedMediaCounts() {
+        withLocalization {
+            #expect(EditorLocalization[.someSelectedMediaFailedToLoad(1)].hasPrefix("1 item "))
+            #expect(EditorLocalization[.someSelectedMediaFailedToLoad(3)].hasPrefix("3 items "))
+        }
+    }
+
+    @Test
     func subscriptUsesTheDefaultsWithoutAHostOverride() {
         withLocalization {
             #expect(EditorLocalization[.showMore] == "Show More")
