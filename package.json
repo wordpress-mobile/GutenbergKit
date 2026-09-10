@@ -51,7 +51,7 @@
 		"@wordpress/format-library": "^5.41.0",
 		"@wordpress/global-styles-engine": "^1.9.0",
 		"@wordpress/hooks": "^4.38.0",
-		"@wordpress/html-entities": "^4.38.0",
+		"@wordpress/html-entities": "^4.50.0",
 		"@wordpress/i18n": "^6.11.0",
 		"@wordpress/icons": "^11.5.0",
 		"@wordpress/is-shallow-equal": "^5.38.0",
