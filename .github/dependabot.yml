@@ -43,7 +43,11 @@ updates:
           # opens an issue when either drifts.
           - dependency-name: 'com.android.application'
           - dependency-name: 'com.android.library'
-          - dependency-name: 'org.jetbrains.kotlin*'
+          - dependency-name: 'org.jetbrains.kotlin.*'
+          # A new Gradle major is adopted alongside the AGP upgrade that
+          # requires it, not ahead of the AGP version pinned above.
+          - dependency-name: 'gradle-wrapper'
+            update-types: ['version-update:semver-major']
           # Published to a private S3 Maven repo with a versioning scheme
           # Dependabot cannot resolve.
           - dependency-name: 'rs.wordpress.api:android'
