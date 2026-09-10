@@ -14,15 +14,31 @@ const UPSTREAM_REF = 'trunk';
 const ISSUE_TITLE = 'Android toolchain drift with WordPress-Android';
 
 // `local` and `upstream` name the same version in each repository's catalog;
-// the keys differ between them. `blocking` marks versions that break the
-// composite build outright, as opposed to ones worth reporting.
+// the keys differ between them. `blocking` marks versions the composite build
+// needs to match, and `impact` describes what goes wrong when they don't.
 const TRACKED = [
-	{ name: 'AGP', local: 'agp', upstream: 'agp', blocking: true },
+	{
+		name: 'AGP',
+		local: 'agp',
+		upstream: 'agp',
+		blocking: true,
+		impact: ( { ours, theirs } ) => [
+			'**AGP:** `./gradlew` in WordPress-Android fails during configuration:',
+			'',
+			'```',
+			`Using multiple versions of the Android Gradle Plugin [${ theirs }, ${ ours }] across Gradle builds is not allowed.`,
+			'Affected builds: [:, :android].',
+			'```',
+		],
+	},
 	{
 		name: 'Kotlin',
 		local: 'kotlin',
 		upstream: 'kotlin-main',
 		blocking: true,
+		impact: () => [
+			'**Kotlin:** the build still configures, but the newer Kotlin Gradle plugin silently wins the classpath for both builds, so one of them compiles with a Kotlin version it is not tested against.',
+		],
 	},
 ];
 
@@ -49,15 +65,14 @@ export default async function reportToolchainDrift( {
 	);
 
 	const rows = TRACKED.map( ( entry ) => ( {
-		name: entry.name,
-		blocking: entry.blocking,
+		...entry,
 		ours: readCatalogVersion( localCatalog, entry.local, 'GutenbergKit' ),
 		theirs: readCatalogVersion( upstreamCatalog, entry.upstream, UPSTREAM ),
 	} ) );
 
-	// Gradle itself is reported but never blocking: a composite build runs on
-	// the root build's wrapper, so this only matters if GutenbergKit starts
-	// requiring a newer Gradle than WordPress-Android provides.
+	// Gradle alone never opens an issue, since a composite build runs on the
+	// root build's wrapper. It is still reported because each AGP release
+	// requires a minimum Gradle version that this repository's build must meet.
 	rows.push( {
 		name: 'Gradle',
 		blocking: false,
@@ -114,39 +129,7 @@ export default async function reportToolchainDrift( {
 		return;
 	}
 
-	const table = [
-		'| Version | GutenbergKit | WordPress-Android | |',
-		'| --- | --- | --- | --- |',
-		...rows.map(
-			( row ) =>
-				`| ${ row.name } | ${ formatVersion(
-					row.ours
-				) } | ${ formatVersion( row.theirs ) } | ${ formatStatus(
-					row
-				) } |`
-		),
-	].join( '\n' );
-
-	const agp = rows.find( ( row ) => row.name === 'AGP' );
-	const body = [
-		`[${ UPSTREAM }](https://github.com/${ UPSTREAM }/blob/${ UPSTREAM_REF }/gradle/libs.versions.toml)` +
-			' has moved ahead of this repository.',
-		'',
-		table,
-		'',
-		'Until these match, `./gradlew` in WordPress-Android fails during configuration for',
-		'anyone who sets `localGutenbergKitPath` in `local-builds.gradle`:',
-		'',
-		'```',
-		`Using multiple versions of the Android Gradle Plugin [${ agp.theirs }, ${ agp.ours }] across Gradle builds is not allowed.`,
-		'Affected builds: [:, :android].',
-		'```',
-		'',
-		'Update `android/gradle/libs.versions.toml` to the WordPress-Android versions above.',
-		'Note that AGP upgrades have needed source changes beyond the version bump.',
-		'',
-		`<sub>Opened by [\`${ context.workflow }\`](https://github.com/${ owner }/${ repo }/blob/trunk/.github/workflows/android-toolchain-sync.yml).</sub>`,
-	].join( '\n' );
+	const body = buildIssueBody( rows, drifted, context );
 
 	if ( existing ) {
 		// GitHub stores issue bodies with CRLF line endings.
@@ -277,6 +260,64 @@ function readWrapperVersion( properties, source ) {
 }
 
 /**
+ * @param {Object[]} rows    Every compared version.
+ * @param {Object[]} drifted The tracked versions that differ.
+ * @param {Object}   context Workflow run context.
+ * @return {string} The issue body.
+ */
+function buildIssueBody( rows, drifted, context ) {
+	const { owner, repo } = context.repo;
+	const lines = [
+		`This repository's Android toolchain no longer matches [${ UPSTREAM }](https://github.com/${ UPSTREAM }/blob/${ UPSTREAM_REF }/gradle/libs.versions.toml).`,
+		'',
+		'| Version | GutenbergKit | WordPress-Android | |',
+		'| --- | --- | --- | --- |',
+		...rows.map( formatRow ),
+		'',
+		"For anyone who sets `localGutenbergKitPath` in WordPress-Android's `local-builds.gradle`:",
+		'',
+		...drifted.flatMap( ( row ) => [ ...row.impact( row ), '' ] ),
+		'Align `android/gradle/libs.versions.toml` with WordPress-Android. If this repository is ahead, WordPress-Android needs the same upgrade instead.',
+	];
+
+	if ( drifted.some( ( row ) => row.name === 'AGP' ) ) {
+		lines.push(
+			'AGP upgrades have needed source changes beyond the version bump.'
+		);
+		const gradle = rows.find( ( row ) => row.name === 'Gradle' );
+		if ( gradle.theirs && gradle.ours !== gradle.theirs ) {
+			lines.push(
+				`Each AGP release also requires a minimum Gradle version, so update \`android/gradle/wrapper/gradle-wrapper.properties\` alongside it; WordPress-Android uses Gradle \`${ gradle.theirs }\`.`
+			);
+		}
+	}
+
+	lines.push(
+		'',
+		`<sub>Opened by [\`${ context.workflow }\`](https://github.com/${ owner }/${ repo }/blob/trunk/.github/workflows/android-toolchain-sync.yml).</sub>`
+	);
+	return lines.join( '\n' );
+}
+
+/**
+ * @param {Object}      row          Version comparison.
+ * @param {string}      row.name     Toolchain component.
+ * @param {string|null} row.ours     GutenbergKit's version.
+ * @param {string|null} row.theirs   WordPress-Android's version.
+ * @param {boolean}     row.blocking Whether the composite build needs a match.
+ * @return {string} The Markdown table row.
+ */
+function formatRow( row ) {
+	const cells = [
+		row.name,
+		formatVersion( row.ours ),
+		formatVersion( row.theirs ),
+		formatStatus( row ),
+	];
+	return `| ${ cells.join( ' | ' ) } |`;
+}
+
+/**
  * @param {string|null} version A version, or `null` if unreadable.
  * @return {string} The table cell.
  */
@@ -288,7 +329,7 @@ function formatVersion( version ) {
  * @param {Object}      row          Version comparison.
  * @param {string|null} row.ours     GutenbergKit's version.
  * @param {string|null} row.theirs   WordPress-Android's version.
- * @param {boolean}     row.blocking Whether a mismatch breaks the composite build.
+ * @param {boolean}     row.blocking Whether the composite build needs a match.
  * @return {string} The table status cell.
  */
 function formatStatus( row ) {
@@ -298,5 +339,5 @@ function formatStatus( row ) {
 	if ( row.ours === row.theirs ) {
 		return 'in sync';
 	}
-	return row.blocking ? '**drifted**' : 'differs (not blocking)';
+	return row.blocking ? '**drifted**' : 'differs';
 }
