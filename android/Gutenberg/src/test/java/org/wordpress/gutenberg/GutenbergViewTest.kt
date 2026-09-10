@@ -569,4 +569,27 @@ class GutenbergViewTest {
 
         assertFalse("picks from the inserter can no longer reach the editor", inserter.isShowing)
     }
+
+    @Test
+    fun `reloadEditor stops history commands until the editor loads again`() {
+        gutenbergView.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        gutenbergView.reloadEditor()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val shadowWebView = shadowOf(gutenbergView.editorWebView)
+        val lastEvaluated = shadowWebView.lastEvaluatedJavascript
+
+        gutenbergView.undo()
+        gutenbergView.redo()
+        gutenbergView.dismissTopModal()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "a reloading editor must not be sent commands before it loads again",
+            lastEvaluated,
+            shadowWebView.lastEvaluatedJavascript
+        )
+    }
 }
