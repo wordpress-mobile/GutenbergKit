@@ -57,6 +57,7 @@ import org.wordpress.gutenberg.model.EditorDependenciesSerializer
 import rs.wordpress.api.kotlin.WpRequestResult
 import uniffi.wp_api.PostEndpointType
 import uniffi.wp_api.PostUpdateParams
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -416,6 +417,8 @@ private suspend fun persistPost(
                 context.getString(R.string.save_failed_generic)
             }
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Log.e("EditorActivity", "Failed to persist post $postId", e)
         context.getString(R.string.save_failed_with_reason, e.message ?: "unknown error")
