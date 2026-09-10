@@ -7,11 +7,7 @@ import org.junit.Test
 
 /**
  * Covers how `GutenbergView` interprets the result of `editor.getTitleAndContent`.
- *
- * The case that matters is a failed read. When the editor's `ErrorBoundary`
- * catches, React unmounts the editor and deletes every `window.editor.*` method,
- * so the evaluation returns the string `"null"`. Treating that as an empty title
- * let the host persist it over the user's own — locally, and then on the server.
+ * See [parseTitleAndContent] for why an unreadable result must fail.
  */
 class GutenbergViewTitleAndContentTest {
     private val originalContent = "<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->"
@@ -56,9 +52,7 @@ class GutenbergViewTitleAndContentTest {
     }
 
     /**
-     * A title the user genuinely cleared must still come through. The fix has to
-     * separate "the read failed" from "the title is empty", or it would trade one
-     * bug for a different kind of data loss.
+     * A title the user cleared is a successful read and must still be reported.
      */
     @Test
     fun `reports a deliberately emptied title`() {

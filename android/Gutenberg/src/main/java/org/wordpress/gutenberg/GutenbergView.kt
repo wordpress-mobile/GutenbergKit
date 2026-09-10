@@ -867,7 +867,6 @@ class GutenbergView : FrameLayout {
         }
     }
 
-
     fun undo() {
         handler.post {
             webView.evaluateJavascript("editor.undo();", null)
