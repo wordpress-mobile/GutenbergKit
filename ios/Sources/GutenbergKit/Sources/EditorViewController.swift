@@ -859,10 +859,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     fileprivate func controllerWebContentProcessDidTerminate(_ controller: GutenbergEditorController) {
-        // Reset readiness so JS bridge calls are blocked until the editor
-        // re-emits onEditorLoaded after the reload completes.
-        self.isReady = false
-        webView.reload()
+        // Reload through the same path as a crash so any crash notice is cleared
+        // rather than left covering the reloaded editor.
+        reloadEditor()
     }
 
     // MARK: - Loading Complete: Editor Ready
@@ -920,16 +919,19 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         delegate?.editorDidBecomeUnavailable(self)
     }
 
-    /// Reloads the editor after it has crashed.
+    /// Reloads the editor, showing the loading indicator until it is ready again.
     ///
     /// The reloaded editor starts from whatever the host returns from
     /// ``EditorViewControllerDelegate/editorDidRequestLatestContent(_:)``, so
     /// work up to the host's last autosave survives the reload.
     ///
-    /// Readiness is restored only once the editor emits `onEditorLoaded` again,
-    /// so bridge calls stay refused until it is genuinely usable.
+    /// Readiness is reset immediately and restored only once the editor emits
+    /// `onEditorLoaded` again, so bridge calls stay refused until it is
+    /// genuinely usable.
     public func reloadEditor() {
+        isReady = false
         hideEditorCrash()
+        webView.alpha = 0
         displayActivityView()
         webView.reload()
     }
