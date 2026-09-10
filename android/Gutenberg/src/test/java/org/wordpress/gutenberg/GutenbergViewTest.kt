@@ -3,6 +3,7 @@ package org.wordpress.gutenberg
 import android.content.Intent
 import android.net.Uri
 import android.os.Looper
+import android.view.View
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -29,7 +30,7 @@ import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], manifest = Config.NONE)
+@Config(sdk = [28])
 class GutenbergViewTest {
     @Mock
     private lateinit var mockWebView: WebView
@@ -447,6 +448,93 @@ class GutenbergViewTest {
             "a crashed editor must not be sent commands its bridge can no longer answer",
             lastEvaluated,
             shadowWebView.lastEvaluatedJavascript
+        )
+    }
+
+    @Test
+    fun `onEditorUnavailable hides the web view until the editor reloads`() {
+        gutenbergView.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        gutenbergView.onEditorUnavailable()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "the crashed editor must not receive touches or TalkBack focus",
+            View.INVISIBLE,
+            gutenbergView.editorWebView.visibility
+        )
+
+        gutenbergView.reloadEditor()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "the reloading editor must be visible so it can render and signal readiness",
+            View.VISIBLE,
+            gutenbergView.editorWebView.visibility
+        )
+    }
+
+    @Test
+    fun `reloadEditor stops history commands until the editor loads again`() {
+        gutenbergView.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        gutenbergView.reloadEditor()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val shadowWebView = shadowOf(gutenbergView.editorWebView)
+        val lastEvaluated = shadowWebView.lastEvaluatedJavascript
+
+        gutenbergView.undo()
+        gutenbergView.redo()
+        gutenbergView.dismissTopModal()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "a reloading editor must not be sent commands before it loads again",
+            lastEvaluated,
+            shadowWebView.lastEvaluatedJavascript
+        )
+    }
+
+    @Test
+    fun `textEditorEnabled waits for the editor to load`() {
+        val shadowWebView = shadowOf(gutenbergView.editorWebView)
+        val lastEvaluated = shadowWebView.lastEvaluatedJavascript
+
+        gutenbergView.textEditorEnabled = true
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "an editor that has not loaded must not be asked to switch modes",
+            lastEvaluated,
+            shadowWebView.lastEvaluatedJavascript
+        )
+    }
+
+    @Test
+    fun `onEditorLoaded restores the code editor`() {
+        // Content keeps `onEditorLoaded` from focusing the editor, which would
+        // otherwise be the last script evaluated.
+        val view = GutenbergView(
+            EditorConfiguration.builder("https://example.com", "https://example.com/wp-json/")
+                .setContent("<!-- wp:paragraph --><p>Hello</p><!-- /wp:paragraph -->")
+                .setEnableOfflineMode(true)
+                .build(),
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+        view.textEditorEnabled = true
+
+        view.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "the web editor starts in visual mode, so code editor mode must be restored",
+            "editor.switchEditorMode('text');",
+            shadowOf(view.editorWebView).lastEvaluatedJavascript
         )
     }
 }

@@ -86,6 +86,9 @@ android {
     testOptions {
         unitTests {
             isReturnDefaultValues = true
+            // The editor's error states read their strings from resources, so
+            // Robolectric needs the merged resources to construct those views.
+            isIncludeAndroidResources = true
             all {
                 // Make the shared test fixtures available to fixture-driven tests.
                 val fixturesDir = rootProject.file("../test-fixtures/http")

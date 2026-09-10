@@ -204,6 +204,8 @@ class GutenbergView : FrameLayout {
     var textEditorEnabled: Boolean = false
         set(value) {
             field = value
+            // Applied by `onEditorLoaded` once the editor is ready.
+            if (!isEditorLoaded) return
             val mode = if (value) "text" else "visual"
             handler.post {
                 webView.evaluateJavascript("editor.switchEditorMode('$mode');", null)
@@ -353,6 +355,7 @@ class GutenbergView : FrameLayout {
             spinnerView.animate().alpha(1f).setDuration(200).start()
             errorView.visibility = GONE
             webView.alpha = 0f
+            webView.visibility = VISIBLE
         }
     }
 
@@ -368,6 +371,7 @@ class GutenbergView : FrameLayout {
                 progressView.visibility = GONE
             }.start()
             errorView.visibility = GONE
+            webView.visibility = VISIBLE
             webView.animate().alpha(1f).setDuration(200).start()
         }
     }
@@ -388,6 +392,8 @@ class GutenbergView : FrameLayout {
             errorView.visibility = VISIBLE
             errorView.animate().alpha(1f).setDuration(200).start()
             webView.alpha = 0f
+            // Transparency alone leaves the web view reachable by touch and TalkBack.
+            webView.visibility = INVISIBLE
         }
     }
 
@@ -809,9 +815,12 @@ class GutenbergView : FrameLayout {
      * `editor` API, so calls to them are refused from this point until the editor
      * reloads.
      *
-     * The editor cannot recover on its own. Hosts should disable the controls that
-     * depend on it — history, editor mode — while leaving those that read from
-     * their own persisted copy, such as saving and closing, available.
+     * GutenbergKit covers the editor with a notice offering to reload it, and
+     * hosts can also call [GutenbergView.reloadEditor]. Until it reloads, hosts
+     * should disable the controls that depend on the editor — history, editor
+     * mode — while leaving those that read from their own persisted copy, such as
+     * saving and closing, available. Re-enable them the next time
+     * [EditorAvailableListener.onEditorAvailable] is called.
      */
     fun interface EditorUnavailableListener {
         fun onEditorUnavailable(view: GutenbergView?)
@@ -928,6 +937,11 @@ class GutenbergView : FrameLayout {
                 if (!isConnected) dispatchConnectivityEvent(false)
             }
             if(!didFireEditorLoaded) {
+                // The web editor always starts in visual mode, so restore code
+                // editor mode when the host enabled it, including after a reload.
+                if (textEditorEnabled) {
+                    webView.evaluateJavascript("editor.switchEditorMode('text');", null)
+                }
                 editorDidBecomeAvailableListener?.onEditorAvailable(this)
                 this.didFireEditorLoaded = true
                 showReadyPhase()
@@ -959,8 +973,54 @@ class GutenbergView : FrameLayout {
     fun onEditorUnavailable() {
         Log.e("GutenbergView", "EditorUnavailable received in native code")
         isEditorLoaded = false
+        showEditorCrashPhase()
         handler.post {
             editorDidBecomeUnavailableListener?.onEditorUnavailable(this)
+        }
+    }
+
+    /**
+     * Reloads the editor after it has crashed.
+     *
+     * The reloaded editor starts from whatever the host returns from
+     * [LatestContentProvider], so work up to the host's last autosave survives
+     * the reload. Readiness is reset immediately and restored only once the
+     * editor emits `onEditorLoaded` again.
+     */
+    fun reloadEditor() {
+        isEditorLoaded = false
+        handler.post {
+            didFireEditorLoaded = false
+            showSpinnerPhase()
+            webView.reload()
+        }
+    }
+
+    /**
+     * Covers the editor with a notice offering to reload.
+     *
+     * The web view still renders Gutenberg's own error fallback underneath.
+     * That fallback is built for the desktop editor — it offers to copy the post
+     * contents, which returns nothing once the provider unmounts, and to copy a
+     * stack trace — so the editor is covered rather than left showing two
+     * competing error states.
+     */
+    private fun showEditorCrashPhase() {
+        handler.post {
+            progressView.visibility = GONE
+            spinnerView.visibility = GONE
+            errorView.setActionableState(
+                titleResId = R.string.gbk_editor_crashed_title,
+                descriptionResId = R.string.gbk_editor_crashed_description,
+                actionResId = R.string.gbk_editor_crashed_reload,
+                onAction = { reloadEditor() }
+            )
+            errorView.alpha = 0f
+            errorView.visibility = VISIBLE
+            errorView.animate().alpha(1f).setDuration(200).start()
+            webView.alpha = 0f
+            // Transparency alone leaves the web view reachable by touch and TalkBack.
+            webView.visibility = INVISIBLE
         }
     }
 
