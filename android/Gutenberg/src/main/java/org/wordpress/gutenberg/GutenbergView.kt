@@ -811,9 +811,12 @@ class GutenbergView : FrameLayout {
      * `editor` API, so calls to them are refused from this point until the editor
      * reloads.
      *
-     * The editor cannot recover on its own. Hosts should disable the controls that
-     * depend on it — history, editor mode — while leaving those that read from
-     * their own persisted copy, such as saving and closing, available.
+     * GutenbergKit covers the editor with a notice offering to reload it, and
+     * hosts can also call [GutenbergView.reloadEditor]. Until it reloads, hosts
+     * should disable the controls that depend on the editor — history, editor
+     * mode — while leaving those that read from their own persisted copy, such as
+     * saving and closing, available. Re-enable them the next time
+     * [EditorAvailableListener.onEditorAvailable] is called.
      */
     fun interface EditorUnavailableListener {
         fun onEditorUnavailable(view: GutenbergView?)
