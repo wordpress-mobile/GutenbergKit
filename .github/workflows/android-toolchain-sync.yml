@@ -12,6 +12,10 @@ on:
         - cron: '0 6 * * 1' # Weekly on Monday at 6am UTC
     workflow_dispatch:
 
+# Overlapping runs could each find no issue and open duplicates.
+concurrency:
+    group: ${{ github.workflow }}
+
 jobs:
     compare:
         name: Compare with WordPress-Android
