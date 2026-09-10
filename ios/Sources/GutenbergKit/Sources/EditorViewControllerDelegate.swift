@@ -26,9 +26,12 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// `editor` API, so calls to them are refused from this point until the editor
     /// reloads.
     ///
-    /// The editor cannot recover on its own. Clients should disable the controls
-    /// that depend on it — history, editor mode — while leaving those that read
-    /// from their own persisted copy, such as saving and closing, available.
+    /// GutenbergKit covers the editor with a notice offering to reload it, and
+    /// clients can also call ``EditorViewController/reloadEditor()``. Until it
+    /// reloads, clients should disable the controls that depend on the editor —
+    /// history, editor mode — while leaving those that read from their own
+    /// persisted copy, such as saving and closing, available. Re-enable them the
+    /// next time ``editorDidLoad(_:)`` is called.
     ///
     /// - warning: Content already retrieved remains valid; do not treat this as
     /// the editor reporting empty content.
