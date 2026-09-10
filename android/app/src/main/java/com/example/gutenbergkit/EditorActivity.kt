@@ -61,6 +61,19 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+// Throws from a selector the block list reads outside the per-block error
+// boundaries, so the crash reaches the editor-level `ErrorBoundary` rather than
+// a single block's.
+private const val TRIGGER_EDITOR_CRASH_SCRIPT = """
+    (() => {
+        const blockEditor = wp.data.select('core/block-editor');
+        blockEditor.getBlockOrder = () => {
+            throw new Error('Editor crash triggered from the demo app');
+        };
+        wp.data.dispatch('core/block-editor').updateSettings({});
+    })();
+"""
+
 class EditorActivity : ComponentActivity() {
 
     companion object {
@@ -246,6 +259,16 @@ fun EditorScreen(
                                 onClick = {
                                     isCodeEditorEnabled = !isCodeEditorEnabled
                                     gutenbergViewRef?.textEditorEnabled = isCodeEditorEnabled
+                                    showMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.trigger_editor_crash)) },
+                                onClick = {
+                                    gutenbergViewRef?.editorWebView?.evaluateJavascript(
+                                        TRIGGER_EDITOR_CRASH_SCRIPT,
+                                        null
+                                    )
                                     showMenu = false
                                 }
                             )
