@@ -43,12 +43,16 @@ export default async function reportToolchainDrift( {
 		'android/gradle/libs.versions.toml',
 		'utf8'
 	);
-	const upstreamCatalog = await fetchUpstream( 'gradle/libs.versions.toml' );
+	const upstreamCatalog = await fetchUpstream(
+		github,
+		'gradle/libs.versions.toml'
+	);
 	const localWrapper = await readFile(
 		'android/gradle/wrapper/gradle-wrapper.properties',
 		'utf8'
 	);
 	const upstreamWrapper = await fetchUpstream(
+		github,
 		'gradle/wrapper/gradle-wrapper.properties'
 	);
 
@@ -168,26 +172,26 @@ export default async function reportToolchainDrift( {
 /**
  * Reads a file from WordPress-Android's tracked branch.
  *
- * @param {string} path Repository-relative file path.
+ * @param {Object} github Authenticated Octokit client.
+ * @param {string} path   Repository-relative file path.
  * @return {Promise<string>} The file contents.
  */
-async function fetchUpstream( path ) {
-	const response = await fetch( upstreamUrl( path ) );
-	if ( ! response.ok ) {
+async function fetchUpstream( github, path ) {
+	const [ owner, repo ] = UPSTREAM.split( '/' );
+	try {
+		const { data } = await github.rest.repos.getContent( {
+			owner,
+			repo,
+			path,
+			ref: UPSTREAM_REF,
+			mediaType: { format: 'raw' },
+		} );
+		return data;
+	} catch ( error ) {
 		throw new Error(
-			`Could not read ${ path } from ${ UPSTREAM }@${ UPSTREAM_REF }: ` +
-				`${ response.status } ${ response.statusText }`
+			`Could not read ${ path } from ${ UPSTREAM }@${ UPSTREAM_REF }: ${ error.message }`
 		);
 	}
-	return response.text();
-}
-
-/**
- * @param {string} path Repository-relative file path.
- * @return {string} The raw file URL on WordPress-Android's tracked branch.
- */
-function upstreamUrl( path ) {
-	return `https://raw.githubusercontent.com/${ UPSTREAM }/${ UPSTREAM_REF }/${ path }`;
 }
 
 /**
