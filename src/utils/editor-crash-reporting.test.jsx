@@ -21,6 +21,10 @@ vi.mock( './bridge', () => ( {
 	logException: vi.fn(),
 } ) );
 
+vi.mock( './logger', () => ( {
+	error: vi.fn(),
+} ) );
+
 // Mirrors the lifecycle of `@wordpress/editor`'s `ErrorBoundary`, which cannot
 // be imported under Vitest.
 class ErrorBoundary extends Component {
@@ -96,6 +100,17 @@ describe( 'reportEditorCrashesToHost', () => {
 
 	it( 'registers its listener once', () => {
 		reportEditorCrashesToHost();
+		reportEditorCrashesToHost();
+
+		doAction( 'editor.ErrorBoundary.errorLogged', new Error( 'Boom' ) );
+
+		expect( editorUnavailable ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'notifies the host even when logging the crash fails', () => {
+		logException.mockImplementationOnce( () => {
+			throw new Error( 'Logging failed' );
+		} );
 		reportEditorCrashesToHost();
 
 		doAction( 'editor.ErrorBoundary.errorLogged', new Error( 'Boom' ) );

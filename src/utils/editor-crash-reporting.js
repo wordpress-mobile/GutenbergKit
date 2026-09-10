@@ -7,6 +7,7 @@ import { addAction, hasAction } from '@wordpress/hooks';
  * Internal dependencies
  */
 import { editorUnavailable, logException } from './bridge';
+import { error } from './logger';
 
 const ERROR_LOGGED_ACTION = 'editor.ErrorBoundary.errorLogged';
 const NAMESPACE = 'GutenbergKit';
@@ -30,11 +31,18 @@ export function reportEditorCrashesToHost() {
 		return;
 	}
 
-	addAction( ERROR_LOGGED_ACTION, NAMESPACE, ( error ) => {
-		logException( error, {
-			isHandled: true,
-			handledBy: ERROR_LOGGED_ACTION,
-		} );
-		editorUnavailable();
+	addAction( ERROR_LOGGED_ACTION, NAMESPACE, ( exception ) => {
+		try {
+			logException( exception, {
+				isHandled: true,
+				handledBy: ERROR_LOGGED_ACTION,
+			} );
+		} catch ( loggingError ) {
+			error( 'Failed to log the editor crash', loggingError );
+		} finally {
+			// Failing to log the crash must not stop the host from learning that
+			// the editor is gone.
+			editorUnavailable();
+		}
 	} );
 }
