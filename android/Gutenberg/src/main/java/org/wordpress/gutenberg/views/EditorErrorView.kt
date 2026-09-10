@@ -10,7 +10,6 @@ import android.widget.TextView
 import androidx.annotation.StringRes
 import androidx.core.view.ViewCompat
 import androidx.core.widget.TextViewCompat
-import org.wordpress.gutenberg.R
 
 /**
  * A view displaying an error state with an icon, title, and description.
@@ -36,7 +35,7 @@ class EditorErrorView @JvmOverloads constructor(
     private val descriptionText: TextView
     private val actionButton: Button
 
-    /// Restored by [setError] after [setActionableState] has replaced the title.
+    /** Restored by [setError] after [setActionableState] has replaced the title. */
     private val loadFailedTitle: CharSequence
 
     init {
