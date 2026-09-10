@@ -885,6 +885,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         self.hideActivityView()
         self.isReady = true
 
+        // The web editor always starts in visual mode, so restore code editor
+        // mode when the host enabled it, including after a reload.
+        if isCodeEditorEnabled {
+            evaluate("editor.switchEditorMode('text');")
+        }
+
         // Fade in the WebView now that navigation is complete
         UIView.animate(withDuration: 0.2, delay: 0.1, options: [.allowUserInteraction]) {
             self.webView.alpha = 1
