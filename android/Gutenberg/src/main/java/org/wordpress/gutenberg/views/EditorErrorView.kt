@@ -10,6 +10,7 @@ import android.widget.TextView
 import androidx.annotation.StringRes
 import androidx.core.view.ViewCompat
 import androidx.core.widget.TextViewCompat
+import org.wordpress.gutenberg.R
 
 /**
  * A view displaying an error state with an icon, title, and description.
@@ -45,7 +46,7 @@ class EditorErrorView @JvmOverloads constructor(
         // Create error icon
         icon = ImageView(context).apply {
             layoutParams = LayoutParams(dpToPx(48), dpToPx(48))
-            setImageResource(android.R.drawable.ic_dialog_alert)
+            setImageResource(R.drawable.gbk_ic_editor_error)
         }
 
         // Create title
