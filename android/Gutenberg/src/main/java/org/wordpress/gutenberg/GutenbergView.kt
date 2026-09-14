@@ -777,15 +777,11 @@ class GutenbergView : FrameLayout {
          * title and content in place rather than persisting anything derived
          * from this call.
          *
-         * Defaults to a no-op. A host that has not adopted it simply receives
-         * no callback at all, so its own timeout path applies — still safe,
-         * just slower than handling this directly.
-         *
          * @param error [EditorNotReadyException] when the editor has not
          * loaded or the view has been detached, or a [JSONException] when its
          * result could not be read.
          */
-        fun onError(error: Throwable) {}
+        fun onError(error: Throwable)
     }
 
     interface ContentChangeListener {
