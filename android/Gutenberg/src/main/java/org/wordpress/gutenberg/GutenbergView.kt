@@ -48,6 +48,7 @@ import org.wordpress.gutenberg.views.EditorErrorView
 import org.wordpress.gutenberg.views.EditorProgressView
 import java.util.Collections
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 const val DEFAULT_ASSET_DOMAIN = "appassets.androidplatform.net"
 const val ASSET_PATH_INDEX = "/assets/index.html"
@@ -104,6 +105,14 @@ class GutenbergView : FrameLayout {
     private lateinit var dependencies: EditorDependencies
 
     private val handler = Handler(Looper.getMainLooper())
+
+    /**
+     * [getTitleAndContent] calls awaiting a result, keyed by a token per call.
+     * Removing a read claims it, so it reports once even if [onDetachedFromWindow]
+     * fails it first.
+     */
+    private val pendingTitleAndContentReads = ConcurrentHashMap<Any, TitleAndContentCallback>()
+
     private var connectivityManager: ConnectivityManager? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     @Volatile private var lastKnownConnectivity: Boolean? = null
@@ -753,6 +762,10 @@ class GutenbergView : FrameLayout {
         webView.evaluateJavascript("editor.setTitle('$encodedTitle');", null)
     }
 
+    /**
+     * Receives the result of [getTitleAndContent]. Each read reports [onResult] or
+     * [onError] once, and no later than when the view is detached.
+     */
     interface TitleAndContentCallback {
         fun onResult(title: CharSequence, content: CharSequence)
 
@@ -769,7 +782,8 @@ class GutenbergView : FrameLayout {
          * just slower than handling this directly.
          *
          * @param error [EditorNotReadyException] when the editor has not
-         * loaded, or a [JSONException] when its result could not be read.
+         * loaded or the view has been detached, or a [JSONException] when its
+         * result could not be read.
          */
         fun onError(error: Throwable) {}
     }
@@ -851,14 +865,21 @@ class GutenbergView : FrameLayout {
     )
 
     fun getTitleAndContent(originalContent: CharSequence, callback: TitleAndContentCallback, completeComposition: Boolean = false) {
+        // Tracked before readiness is checked, so a read racing teardown is either
+        // failed by `onDetachedFromWindow` or finds the editor unloaded.
+        val read = Any()
+        pendingTitleAndContentReads[read] = callback
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
             // Posted so the error arrives on the main thread, as a read's result does.
-            handler.post { callback.onError(EditorNotReadyException()) }
+            handler.post {
+                if (pendingTitleAndContentReads.remove(read) != null) callback.onError(EditorNotReadyException())
+            }
             return
         }
         handler.post {
             webView.evaluateJavascript(getTitleAndContentScript(completeComposition)) { result ->
+                if (pendingTitleAndContentReads.remove(read) == null) return@evaluateJavascript
                 parseTitleAndContent(result, originalContent).fold(
                     onSuccess = { (title, content) -> callback.onResult(title, content) },
                     onFailure = { error -> callback.onError(error) }
@@ -1183,8 +1204,18 @@ class GutenbergView : FrameLayout {
         latestContentProvider = null
         blockInserterDialog?.dismiss()
         blockInserterDialog = null
+        // Reads from here on report the editor as not ready. Pending reads are failed
+        // only after the handler is cleared, so none loses its error to the clear.
+        isEditorLoaded = false
         handler.removeCallbacksAndMessages(null)
         webView.destroy()
+        failPendingTitleAndContentReads()
+    }
+
+    private fun failPendingTitleAndContentReads() {
+        pendingTitleAndContentReads.keys.forEach { read ->
+            pendingTitleAndContentReads.remove(read)?.onError(EditorNotReadyException())
+        }
     }
 
     // Network Monitoring
@@ -1303,7 +1334,8 @@ class GutenbergView : FrameLayout {
 }
 
 /**
- * Reported when the editor is read before it has loaded.
+ * Reported when the editor is read before it has loaded, or after the view is
+ * detached.
  */
 class EditorNotReadyException : IllegalStateException(
     "The editor is not ready. Wait for onEditorAvailable before calling bridge methods."
