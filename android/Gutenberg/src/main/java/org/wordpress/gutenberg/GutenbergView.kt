@@ -214,7 +214,6 @@ class GutenbergView : FrameLayout {
     var textEditorEnabled: Boolean = false
         set(value) {
             field = value
-            // Applied by `onEditorLoaded` once the editor is ready.
             if (!isEditorLoaded) return
             val mode = if (value) "text" else "visual"
             handler.post {

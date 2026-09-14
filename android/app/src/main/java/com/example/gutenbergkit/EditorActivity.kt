@@ -296,10 +296,6 @@ fun EditorScreen(
 
                     gutenbergViewRef = this
                     setEditorDidBecomeAvailable { isEditorAvailable = true }
-                    // Disables history, the overflow menu, and saving until the editor
-                    // reloads. The demo saves by reading the editor, which a crashed
-                    // editor cannot answer; hosts that save from their own persisted
-                    // copy can keep saving available.
                     setEditorDidBecomeUnavailable { isEditorAvailable = false }
                     setModalDialogStateListener(object : GutenbergView.ModalDialogStateListener {
                         override fun onModalDialogOpened(dialogType: String) {
