@@ -981,7 +981,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let crashView = ContentUnavailableView {
             Label(
                 EditorLocalization[.editorCrashedTitle],
-                systemImage: "exclamationmark.arrow.circlepath"
+                systemImage: "exclamationmark.circle"
             )
             .accessibilityAddTraits(.isHeader)
         } description: {
