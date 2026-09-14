@@ -1,13 +1,20 @@
 package org.wordpress.gutenberg.views
 
 import android.content.Context
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.util.AttributeSet
+import android.util.TypedValue
 import android.view.Gravity
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.annotation.AttrRes
+import androidx.annotation.ColorInt
 import androidx.annotation.StringRes
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import androidx.core.view.ViewCompat
 import androidx.core.widget.TextViewCompat
 import org.wordpress.gutenberg.R
@@ -79,6 +86,7 @@ class EditorErrorView @JvmOverloads constructor(
                 topMargin = dpToPx(16)
             }
             visibility = GONE
+            applyHostPrimaryColor(this)
         }
 
         addView(icon)
@@ -124,6 +132,35 @@ class EditorErrorView @JvmOverloads constructor(
     private fun clearAction() {
         actionButton.setOnClickListener(null)
         actionButton.visibility = GONE
+    }
+
+    /**
+     * Colors [button] with the host theme's primary color, so it matches the
+     * host's other primary actions instead of the platform's gray default.
+     */
+    private fun applyHostPrimaryColor(button: Button) {
+        val primary = themeColor(androidx.appcompat.R.attr.colorPrimary)
+            ?: themeColor(android.R.attr.colorPrimary)
+            ?: return
+        val onPrimary = themeColor(com.google.android.material.R.attr.colorOnPrimary)
+            ?: mostLegibleTextColor(primary)
+
+        button.backgroundTintList = ColorStateList.valueOf(primary)
+        button.setTextColor(onPrimary)
+    }
+
+    private fun themeColor(@AttrRes attr: Int): Int? {
+        val value = TypedValue()
+        if (!context.theme.resolveAttribute(attr, value, true)) return null
+        return if (value.resourceId != 0) ContextCompat.getColor(context, value.resourceId) else value.data
+    }
+
+    @ColorInt
+    private fun mostLegibleTextColor(@ColorInt background: Int): Int {
+        val opaqueBackground = ColorUtils.setAlphaComponent(background, 255)
+        val whiteContrast = ColorUtils.calculateContrast(Color.WHITE, opaqueBackground)
+        val blackContrast = ColorUtils.calculateContrast(Color.BLACK, opaqueBackground)
+        return if (whiteContrast >= blackContrast) Color.WHITE else Color.BLACK
     }
 
     private fun dpToPx(dp: Int): Int {
