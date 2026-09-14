@@ -991,6 +991,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 self?.reloadEditor()
             }
             .buttonStyle(.borderedProminent)
+            // Follow the tint the host sets on the editor's view hierarchy, as
+            // UIKit controls do, rather than the app's global accent color.
+            .tint(Color(uiColor: view.tintColor))
         }
         .background(Color(uiColor: .systemBackground))
 
