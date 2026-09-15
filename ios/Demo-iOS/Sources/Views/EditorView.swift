@@ -305,8 +305,29 @@ private struct _EditorView: UIViewControllerRepresentable {
             mimeType.hasPrefix("image/") && mimeType != "image/gif"
         }
 
-        /// Resizes images to a maximum dimension of 2000px before upload.
+        /// Adds a visible marker after the demo's existing image processing.
         nonisolated func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
+            let result = try await resizeFile(at: url, mimeType: mimeType, filename: filename)
+            guard handlesFile(ofType: mimeType, named: filename) else {
+                return result
+            }
+
+            let imageURL: URL
+            switch result {
+            case .original: imageURL = url
+            case let .processed(processedURL, _, _): imageURL = processedURL
+            }
+            guard let labeledURL = addProcessingLabel(to: imageURL) else {
+                return result
+            }
+            if imageURL != url {
+                try? FileManager.default.removeItem(at: imageURL)
+            }
+            return .processed(labeledURL, mimeType: mimeType, filename: filename)
+        }
+
+        /// Resizes images to a maximum dimension of 2000px before upload.
+        private nonisolated func resizeFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
             guard mimeType.hasPrefix("image/"), mimeType != "image/gif" else {
                 return .original
             }
@@ -356,6 +377,54 @@ private struct _EditorView: UIViewControllerRepresentable {
             Logger.demo.info("Resized image from \(Int(width))x\(Int(height)) to fit \(Int(maxDimension))px")
             // Same format, so the original mimeType/filename carry over.
             return .processed(outputURL, mimeType: mimeType, filename: filename)
+        }
+
+        private nonisolated func addProcessingLabel(to url: URL) -> URL? {
+            guard let image = UIImage(contentsOfFile: url.path),
+                  let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  let sourceType = CGImageSourceGetType(source) else {
+                return nil
+            }
+
+            let size = image.size
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            let markedImage = UIGraphicsImageRenderer(size: size, format: format).image { context in
+                image.draw(at: .zero)
+
+                let fontSize = min(size.width * 0.045, size.height * 0.12)
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.boldSystemFont(ofSize: fontSize),
+                    .foregroundColor: UIColor.red
+                ]
+                let label = "Processed natively" as NSString
+                let textSize = label.size(withAttributes: attributes)
+                let padding = fontSize * 0.3
+                let textRect = CGRect(
+                    x: (size.width - textSize.width) / 2,
+                    y: padding * 2,
+                    width: textSize.width,
+                    height: textSize.height
+                )
+                context.cgContext.setFillColor(UIColor.white.cgColor)
+                context.cgContext.fill(textRect.insetBy(dx: -padding, dy: -padding))
+                label.draw(in: textRect, withAttributes: attributes)
+            }
+            guard let processedImage = markedImage.cgImage else {
+                return nil
+            }
+
+            let outputURL = url.deletingLastPathComponent()
+                .appending(component: "labeled-\(url.lastPathComponent)")
+            guard let destination = CGImageDestinationCreateWithURL(outputURL as CFURL, sourceType, 1, nil) else {
+                return nil
+            }
+            CGImageDestinationAddImage(destination, processedImage, nil)
+            guard CGImageDestinationFinalize(destination) else {
+                try? FileManager.default.removeItem(at: outputURL)
+                return nil
+            }
+            return outputURL
         }
     }
 }
