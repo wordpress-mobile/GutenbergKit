@@ -890,6 +890,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // Reload through the same path as a crash so any crash notice is cleared
         // rather than left covering the reloaded editor.
         reloadEditor()
+        // The editor stays gone until that reload finishes, so the host disables
+        // the controls that depend on it, as it does for a crash. Readiness is
+        // already reset, so the calls those controls would make are refused.
+        delegate?.editorDidBecomeUnavailable(self)
     }
 
     // MARK: - Loading Complete: Editor Ready
