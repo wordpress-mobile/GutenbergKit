@@ -22,11 +22,20 @@ import { error } from '../../utils/logger';
 export default class EditorErrorBoundary extends Component {
 	state = { hasError: false };
 
+	hasReportedCrash = false;
+
 	static getDerivedStateFromError() {
 		return { hasError: true };
 	}
 
 	componentDidCatch( exception, { componentStack } ) {
+		// React keeps rendering a crashed component's siblings, and each one that
+		// also throws calls this again. Report the crash to the host once.
+		if ( this.hasReportedCrash ) {
+			return;
+		}
+		this.hasReportedCrash = true;
+
 		try {
 			logException( exception, {
 				context: { componentStack },

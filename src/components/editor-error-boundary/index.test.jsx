@@ -100,6 +100,18 @@ describe( 'EditorErrorBoundary', () => {
 		expect( editorUnavailable ).toHaveBeenCalledTimes( 1 );
 	} );
 
+	it( 'reports a crash once when several components throw', () => {
+		render(
+			<EditorErrorBoundary>
+				<CrashOnRender />
+				<CrashOnRender />
+			</EditorErrorBoundary>
+		);
+
+		expect( logException ).toHaveBeenCalledTimes( 1 );
+		expect( editorUnavailable ).toHaveBeenCalledTimes( 1 );
+	} );
+
 	it( 'does not report an error contained by a nested boundary', () => {
 		render(
 			<EditorErrorBoundary>
