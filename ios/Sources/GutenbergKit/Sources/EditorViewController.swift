@@ -1151,12 +1151,10 @@ extension EditorViewController {
 
     @MainActor
     func displayError(_ error: Error) {
-        let view = ContentUnavailableView {
-            Label(EditorLocalization[.editorError], systemImage: "exclamationmark.circle")
-                .accessibilityAddTraits(.isHeader)
-        } description: {
-            Text(error.localizedDescription)
-        }
+        let view = EditorErrorView(
+            title: EditorLocalization[.editorError],
+            description: error.localizedDescription
+        )
 
         self.errorViewController = UIHostingController(rootView: AnyView(view))
         self.displayAndCenterView(errorViewController!.view)
