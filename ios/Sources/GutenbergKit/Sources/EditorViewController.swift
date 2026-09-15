@@ -966,6 +966,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// genuinely usable.
     private func reloadEditor() {
         isReady = false
+        // Picks made in an open inserter cannot reach the reloaded page, which has
+        // no `window.blockInserter` until the editor opens one again. A crash has
+        // dismissed it already; ending the web content process has not.
+        dismissBlockInserter()
         hideEditorCrash()
         // A reload that did not follow a crash never unmounted the editor's open
         // dialogs, so report them closed rather than leave navigation blocked.
