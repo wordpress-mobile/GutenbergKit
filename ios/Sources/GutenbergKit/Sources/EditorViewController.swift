@@ -84,7 +84,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// The fetched or provided editor dependencies (settings, assets, preload data).
     private var dependencies: EditorDependencies?
-    private var dependencyTaskHandle: Task<Void, Never>?
 
     /// Error encountered while loading dependencies.
     private var error: Error? {
@@ -299,16 +298,30 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             self.loadEditorWithoutDependencies()
         }
 
+        // Neither branch's task is cancellable, deliberately. Each is started
+        // once, from here, and nothing restarts it, so cancelling one strands
+        // the editor for the rest of its life. `viewDidDisappear` used to cancel
+        // the async fetch, and it is not a teardown signal — it fires whenever
+        // the editor is merely covered. Presenting a media picker over a
+        // still-loading editor therefore replaced the progress view with the
+        // load-error screen and reported `didFailToLoad`, permanently; the same
+        // cancellation landing a moment later, mid `startUploadServer()`,
+        // silently disabled native uploads for the session instead.
+        //
+        // There is no better place to cancel from. `isBeingDismissed` and
+        // `isMovingFromParent` read `false` here in every real hosting shape,
+        // because hosts install this controller as a child and UIKit sets those
+        // flags on an ancestor instead. `deinit` is a genuine teardown signal,
+        // but it is unreachable while either task is running: `self?.method()`
+        // holds a strong `self` for the duration of the call, so the editor
+        // always outlives its own load.
+        //
+        // That is also why leaving them to run costs nothing. The work is
+        // bounded by the fetch, the editor is freed the moment it ends, and
+        // `[weak self]` keeps a task that has not started yet from resurrecting
+        // an editor that was released first.
         if let dependencies {
             // FAST PATH: Dependencies were provided at init() - load immediately.
-            //
-            // Deliberately NOT tracked in `dependencyTaskHandle`: `viewDidDisappear`
-            // cancels that handle to abort the async dependency *fetch*, but the
-            // fast path is cheap local work that must run to completion — a
-            // transient disappearance (e.g. a modal presented over the editor)
-            // cancelling it mid `startUploadServer()` silently disabled native
-            // uploads for the session. `[weak self]` still makes it a no-op once
-            // the controller is torn down.
             Task(priority: .userInitiated) { [weak self] in
                 do {
                     try await self?.loadEditor(dependencies: dependencies)
@@ -318,7 +331,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             }
         } else {
             // ASYNC FLOW: No dependencies - fetch them asynchronously
-            self.dependencyTaskHandle = Task(priority: .userInitiated) { [weak self] in
+            Task(priority: .userInitiated) { [weak self] in
                 await self?.prepareEditor()
             }
         }
@@ -332,11 +345,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     public override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         removeNavigationOverlay()
-    }
-
-    public override func viewDidDisappear(_ animated: Bool) {
-        super.viewDidDisappear(animated)
-        self.dependencyTaskHandle?.cancel()
     }
 
     deinit {
