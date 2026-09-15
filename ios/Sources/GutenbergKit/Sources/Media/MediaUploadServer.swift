@@ -67,8 +67,63 @@ final class MediaUploadServer: Sendable {
             }
         )
 
-        return MediaUploadServer(server: server, cleanupTask: cleanupTask)
+        let uploadServer = MediaUploadServer(server: server, cleanupTask: cleanupTask)
+        #if DEBUG
+        countServerStarted(delegate: uploadDelegate)
+        #endif
+        return uploadServer
     }
+
+#if DEBUG
+    // MARK: - Leak Census (DEBUG)
+
+    /// Counts live servers so a host that leaks editors finds out in its own debug build.
+    ///
+    /// Every live server is a bound loopback `NWListener`. There is one per editor and the
+    /// editor stops it on `deinit`, so returning to zero is the normal outcome — monotone
+    /// growth is the ownership cycle described on
+    /// ``EditorViewController/stopMediaHandling()``. Nothing else produces it:
+    /// `EditorViewController.warmup()` passes no delegate, so it never starts a server.
+    ///
+    /// This population is the only detectable symptom of that cycle. A `deinit` assertion
+    /// on the editor cannot work — a cycle is precisely what stops `deinit` from running —
+    /// and no UIKit callback distinguishes teardown from being covered or re-parented.
+    ///
+    /// Logged, never fatal. The threshold is a heuristic, and crashing a host's debug
+    /// build over a heuristic is a worse trade than the leak it reports.
+    private static let censusLock = NSLock()
+    // Guarded by `censusLock` on every access.
+    nonisolated(unsafe) private static var liveServerCount = 0
+
+    /// Live servers tolerated before the count reads as a leak. Two editors can briefly
+    /// overlap across a push or a modal transition; four is not a shape hosts produce.
+    private static let liveServerLeakThreshold = 4
+
+    private static func countServerStarted(delegate: (any MediaUploadDelegate)?) {
+        let count = censusLock.withLock {
+            liveServerCount += 1
+            return liveServerCount
+        }
+
+        guard count >= liveServerLeakThreshold else { return }
+
+        let name = delegate.map { String(describing: type(of: $0)) } ?? "the host's delegate"
+        Logger.uploadServer.fault(
+            """
+            \(count, privacy: .public) media upload servers are live, one bound loopback \
+            listener each. Editors are leaking: a host that both owns EditorViewController \
+            and is its own media upload delegate (\(name, privacy: .public)) forms a retain \
+            cycle ARC cannot break, so the editor's deinit never runs. Call \
+            EditorViewController.stopMediaHandling() when you are done with the editor, or \
+            keep the delegate a leaf object that doesn't reference the editor.
+            """
+        )
+    }
+
+    deinit {
+        Self.censusLock.withLock { Self.liveServerCount -= 1 }
+    }
+#endif
 
     private init(server: HTTPServer, cleanupTask: Task<Void, Never>) {
         self.server = server
