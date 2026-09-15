@@ -197,6 +197,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         return view
     }()
 
+    /// Modal dialogs the editor reports open, so a reload can report them closed.
+    private var openModalDialogs: Set<String> = []
+
     /// Renders HTML previews for block patterns in the block inserter.
     private lazy var htmlPreviewManager: HTMLPreviewManager = {
         guard let dependencies else {
@@ -841,10 +844,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 delegate?.editor(self, didTriggerAutocompleter: body.type)
             case .onModalDialogOpened:
                 let body = try message.decode(EditorJSMessage.ModalDialogBody.self)
+                openModalDialogs.insert(body.dialogType)
                 showNavigationOverlay()
                 delegate?.editor(self, didOpenModalDialog: body.dialogType)
             case .onModalDialogClosed:
                 let body = try message.decode(EditorJSMessage.ModalDialogBody.self)
+                openModalDialogs.remove(body.dialogType)
                 hideNavigationOverlay()
                 delegate?.editor(self, didCloseModalDialog: body.dialogType)
             case .log:
@@ -962,6 +967,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private func reloadEditor() {
         isReady = false
         hideEditorCrash()
+        // A reload that did not follow a crash never unmounted the editor's open
+        // dialogs, so report them closed rather than leave navigation blocked.
+        hideNavigationOverlay()
+        openModalDialogs.forEach { delegate?.editor(self, didCloseModalDialog: $0) }
+        openModalDialogs.removeAll()
         webView.alpha = 0
         displayActivityView()
         webView.reload()
