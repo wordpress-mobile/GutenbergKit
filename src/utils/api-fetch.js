@@ -10,6 +10,7 @@ import { __ } from '@wordpress/i18n';
  */
 import { getGBKit, POST_FALLBACKS } from './bridge';
 import { info, error as logError } from './logger';
+import { nativeMediaProcessingMiddleware } from './native-media-processing';
 
 /**
  * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
@@ -33,6 +34,7 @@ export function configureApiFetch() {
 	apiFetch.use( filterEndpointsMiddleware );
 	apiFetch.use( nativeMediaUploadMiddleware );
 	apiFetch.use( mediaUploadMiddleware );
+	apiFetch.use( nativeMediaProcessingMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
 	apiFetch.use( siteIndexMiddleware );
 	apiFetch.use(
