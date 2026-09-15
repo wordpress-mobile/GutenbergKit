@@ -971,32 +971,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         delegate?.editorDidBecomeUnavailable(self)
     }
 
-    /// Reloads the editor, showing the loading indicator until it is ready again.
-    ///
-    /// The reloaded editor starts from the content the delegate returns from
-    /// ``EditorViewControllerDelegate/editorDidRequestLatestContent(_:)``, or
-    /// from the content it was opened with when that returns `nil`.
-    ///
-    /// Readiness is reset immediately and restored only once the editor emits
-    /// `onEditorLoaded` again, so bridge calls stay refused until it is
-    /// genuinely usable.
-    private func reloadEditor() {
-        isReady = false
-        // Picks made in an open inserter cannot reach the reloaded page, which has
-        // no `window.blockInserter` until the editor opens one again. A crash has
-        // dismissed it already; ending the web content process has not.
-        dismissBlockInserter()
-        hideEditorCrash()
-        // A reload that did not follow a crash never unmounted the editor's open
-        // dialogs, so report them closed rather than leave navigation blocked.
-        hideNavigationOverlay()
-        openModalDialogs.forEach { delegate?.editor(self, didCloseModalDialog: $0) }
-        openModalDialogs.removeAll()
-        webView.alpha = 0
-        displayActivityView()
-        webView.reload()
-    }
-
     /// Covers the editor with a native notice offering to reload.
     ///
     /// The web view still shows the editor's error message underneath, so it is
@@ -1043,6 +1017,32 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // The web view stays in the hierarchy underneath the notice, so hide it
         // from VoiceOver. The notice moves focus to its title when it appears.
         webView.accessibilityElementsHidden = true
+    }
+
+    /// Reloads the editor, showing the loading indicator until it is ready again.
+    ///
+    /// The reloaded editor starts from the content the delegate returns from
+    /// ``EditorViewControllerDelegate/editorDidRequestLatestContent(_:)``, or
+    /// from the content it was opened with when that returns `nil`.
+    ///
+    /// Readiness is reset immediately and restored only once the editor emits
+    /// `onEditorLoaded` again, so bridge calls stay refused until it is
+    /// genuinely usable.
+    private func reloadEditor() {
+        isReady = false
+        // Picks made in an open inserter cannot reach the reloaded page, which has
+        // no `window.blockInserter` until the editor opens one again. A crash has
+        // dismissed it already; ending the web content process has not.
+        dismissBlockInserter()
+        hideEditorCrash()
+        // A reload that did not follow a crash never unmounted the editor's open
+        // dialogs, so report them closed rather than leave navigation blocked.
+        hideNavigationOverlay()
+        openModalDialogs.forEach { delegate?.editor(self, didCloseModalDialog: $0) }
+        openModalDialogs.removeAll()
+        webView.alpha = 0
+        displayActivityView()
+        webView.reload()
     }
 
     @MainActor
