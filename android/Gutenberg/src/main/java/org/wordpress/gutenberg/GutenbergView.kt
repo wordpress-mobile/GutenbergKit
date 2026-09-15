@@ -750,21 +750,13 @@ class GutenbergView : FrameLayout {
     }
 
     fun setContent(newContent: String) {
-        if (!isEditorLoaded) {
-            Log.e("GutenbergView", "You can't change the editor content until it has loaded")
-            return
-        }
         val encodedContent = newContent.encodeForEditor()
-        webView.evaluateJavascript("editor.setContent('$encodedContent');", null)
+        evaluateIfLoaded("editor.setContent('$encodedContent');")
     }
 
     fun setTitle(newTitle: String) {
-        if (!isEditorLoaded) {
-            Log.e("GutenbergView", "You can't change the editor content until it has loaded")
-            return
-        }
         val encodedTitle = newTitle.encodeForEditor()
-        webView.evaluateJavascript("editor.setTitle('$encodedTitle');", null)
+        evaluateIfLoaded("editor.setTitle('$encodedTitle');")
     }
 
     /**
@@ -910,34 +902,34 @@ class GutenbergView : FrameLayout {
     }
 
     fun undo() {
-        if (!isEditorLoaded) return
-        handler.post {
-            webView.evaluateJavascript("editor.undo();", null)
-        }
+        evaluateIfLoaded("editor.undo();")
     }
 
     fun redo() {
-        if (!isEditorLoaded) return
-        handler.post {
-            webView.evaluateJavascript("editor.redo();", null)
-        }
+        evaluateIfLoaded("editor.redo();")
     }
 
     fun dismissTopModal() {
-        if (!isEditorLoaded) return
-        handler.post {
-            webView.evaluateJavascript("editor.dismissTopModal();", null)
-        }
+        evaluateIfLoaded("editor.dismissTopModal();")
     }
 
     fun appendTextAtCursor(text: String) {
+        val encodedText = text.encodeForEditor()
+        evaluateIfLoaded("editor.appendTextAtCursor(decodeURIComponent('$encodedText'));")
+    }
+
+    /**
+     * Evaluates [script] in the editor on the main thread, or refuses it when the
+     * editor has not loaded. The editor's bridge methods exist only while it is
+     * loaded, so a refused call would otherwise fail inside the web view.
+     */
+    private fun evaluateIfLoaded(script: String) {
         if (!isEditorLoaded) {
-            Log.e("GutenbergView", "You can't append text until the editor has loaded")
+            Log.d(TAG, "Refused ${script.substringBefore('(')} because the editor is not ready")
             return
         }
-        val encodedText = text.encodeForEditor()
         handler.post {
-            webView.evaluateJavascript("editor.appendTextAtCursor(decodeURIComponent('$encodedText'));", null)
+            webView.evaluateJavascript(script, null)
         }
     }
 
@@ -1054,11 +1046,6 @@ class GutenbergView : FrameLayout {
     }
 
     fun setMediaUploadAttachment(media: String) {
-        if (!isEditorLoaded) {
-            Log.e("GutenbergView", "You can't change the editor content until it has loaded")
-            return
-        }
-
         val contextId = currentMediaContextId
         if (contextId == null) {
             Log.e("GutenbergView", "setMediaUploadAttachment called without contextId")
@@ -1066,26 +1053,17 @@ class GutenbergView : FrameLayout {
         }
 
         val escapedContextId = contextId.replace("'", "\\'")
-        webView.evaluateJavascript("editor.setMediaUploadAttachment($media, '$escapedContextId');", null)
+        evaluateIfLoaded("editor.setMediaUploadAttachment($media, '$escapedContextId');")
 
         currentMediaContextId = null
     }
 
     private fun insertBlock(blockId: String) {
-        if (!isEditorLoaded) return
-        handler.post {
-            webView.evaluateJavascript(
-                "window.blockInserter?.insertBlock(${JSONObject.quote(blockId)});",
-                null,
-            )
-        }
+        evaluateIfLoaded("window.blockInserter?.insertBlock(${JSONObject.quote(blockId)});")
     }
 
     private fun dismissBlockInserter() {
-        if (!isEditorLoaded) return
-        handler.post {
-            webView.evaluateJavascript("window.blockInserter?.onClose?.();", null)
-        }
+        evaluateIfLoaded("window.blockInserter?.onClose?.();")
     }
 
     @JavascriptInterface

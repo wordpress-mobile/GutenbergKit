@@ -517,4 +517,41 @@ class GutenbergViewTest {
             shadowWebView.lastEvaluatedJavascript
         )
     }
+
+    @Test
+    fun `onEditorUnavailable stops content changes from reaching the web view`() {
+        gutenbergView.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        gutenbergView.onEditorUnavailable()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val shadowWebView = shadowOf(gutenbergView.editorWebView)
+        val lastEvaluated = shadowWebView.lastEvaluatedJavascript
+
+        gutenbergView.setTitle("Title")
+        gutenbergView.setContent("<p>Content</p>")
+        gutenbergView.appendTextAtCursor("Text")
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "a crashed editor must not be sent content its bridge can no longer apply",
+            lastEvaluated,
+            shadowWebView.lastEvaluatedJavascript
+        )
+    }
+
+    @Test
+    fun `setTitle reaches a loaded editor`() {
+        gutenbergView.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        gutenbergView.setTitle("Title")
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertTrue(
+            "a loaded editor must receive the title",
+            shadowOf(gutenbergView.editorWebView).lastEvaluatedJavascript?.startsWith("editor.setTitle(") == true
+        )
+    }
 }
