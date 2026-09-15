@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { useRef, useCallback, useEffect } from '@wordpress/element';
+import { useRef, useCallback, useLayoutEffect } from '@wordpress/element';
 
 /**
  * Internal dependencies
@@ -40,8 +40,11 @@ export function useEditorReady() {
 	}, [] );
 
 	// An editor that crashes before the deferred frame runs must not report
-	// itself loaded after the host has been told it is unavailable.
-	useEffect( () => () => cancelAnimationFrame( frameRef.current ), [] );
+	// itself loaded after the host has been told it is unavailable. Cancelling in
+	// a layout effect runs while React commits the crash, before the error
+	// boundary's `componentDidCatch` reports it; a passive effect runs a task
+	// later, leaving the frame free to fire in between.
+	useLayoutEffect( () => () => cancelAnimationFrame( frameRef.current ), [] );
 
 	const markBridgeReady = useCallback( () => {
 		bridgeReady.current = true;
