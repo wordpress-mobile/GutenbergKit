@@ -508,10 +508,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func _setContent(_ content: String) {
-        guard self.isReady else {
-            return
-        }
-
         let escapedString = content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
         evaluate("editor.setContent('\(escapedString)');", isCritical: true)
     }
@@ -547,26 +543,23 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Steps backwards in the editor history state
     public func undo() {
-        guard isReady else { return }
         evaluate("editor.undo();")
     }
 
     /// Steps forwards in the editor history state
     public func redo() {
-        guard isReady else { return }
         evaluate("editor.redo();")
     }
 
     /// Dismisses the topmost modal dialog or menu in the editor
     public func dismissTopModal() {
-        guard isReady else { return }
         evaluate("editor.dismissTopModal();")
     }
 
     /// Enables code editor.
     public var isCodeEditorEnabled: Bool = false {
         didSet {
-            guard isCodeEditorEnabled != oldValue, isReady else { return }
+            guard isCodeEditorEnabled != oldValue else { return }
             evaluate("editor.switchEditorMode('\(isCodeEditorEnabled ? "text" : "visual")');")
         }
     }
@@ -582,7 +575,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // The editor's bridge methods exist only while it is loaded. Calling them
         // otherwise fails with a raw `TypeError` that `handleError` would show in
         // an alert.
-        guard isReady else { return }
+        guard isReady else {
+            let command = String(javascript.prefix { $0 != "(" })
+            Logger.bridge.debug("Refused \(command, privacy: .public) because the editor is not ready")
+            return
+        }
         webView.evaluateJavaScript(javascript) { [weak self] _, error in
             guard let self, let error else { return }
             self.handleError(error, isCritical: isCritical)
@@ -732,7 +729,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     /// - parameter text: The text to append at the cursor position.
     public func appendTextAtCursor(_ text: String) {
-        guard isReady else { return }
         let escapedText = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? text
         evaluate("editor.appendTextAtCursor(decodeURIComponent('\(escapedText)'));")
     }
