@@ -40,6 +40,9 @@ struct EditorViewControllerLifecycleTests: MakesTestFixtures {
     @Test("the in-flight fetch keeps the editor alive until it finishes")
     func theInFlightFetchKeepsTheEditorAlive() async throws {
         let session = ParkedURLSession()
+        // The `release()` below is the test's trigger; this is the safety net for
+        // the throwing calls before it. `release()` is idempotent.
+        defer { session.release() }
         var editor: EditorViewController? = makeEditor(session: session)
         weak let releasedEditor = editor
 
@@ -103,7 +106,8 @@ private final class ParkedURLSession: URLSessionProtocol, @unchecked Sendable {
     }
 
     /// Suspends until `release()` or until the calling task is cancelled.
-    private func park<T>() async throws -> T {
+    /// `Never` because every exit throws — it satisfies both return types.
+    private func park() async throws -> Never {
         lock.withLock { started = true }
         while !isReleased {
             do {
