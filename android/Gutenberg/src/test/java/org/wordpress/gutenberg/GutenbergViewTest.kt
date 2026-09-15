@@ -19,6 +19,7 @@ import org.mockito.MockitoAnnotations
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowDialog
 import org.robolectric.annotation.Config
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -29,7 +30,7 @@ import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], manifest = Config.NONE)
+@Config(sdk = [28])
 class GutenbergViewTest {
     @Mock
     private lateinit var mockWebView: WebView
@@ -553,5 +554,19 @@ class GutenbergViewTest {
             "a loaded editor must receive the title",
             shadowOf(gutenbergView.editorWebView).lastEvaluatedJavascript?.startsWith("editor.setTitle(") == true
         )
+    }
+
+    @Test
+    fun `onEditorUnavailable dismisses the block inserter`() {
+        gutenbergView.onEditorLoaded()
+        gutenbergView.showBlockInserter("{}")
+        shadowOf(Looper.getMainLooper()).idle()
+        val inserter = ShadowDialog.getLatestDialog()
+        assertTrue("the inserter is open before the crash", inserter.isShowing)
+
+        gutenbergView.onEditorUnavailable()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertFalse("picks from the inserter can no longer reach the editor", inserter.isShowing)
     }
 }

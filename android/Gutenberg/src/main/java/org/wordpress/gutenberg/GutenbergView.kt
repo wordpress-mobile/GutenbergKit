@@ -974,6 +974,8 @@ class GutenbergView : FrameLayout {
         Log.e("GutenbergView", "EditorUnavailable received in native code")
         isEditorLoaded = false
         handler.post {
+            // Picks made in an open inserter can no longer reach the editor.
+            blockInserterDialog?.dismiss()
             editorDidBecomeUnavailableListener?.onEditorUnavailable(this)
         }
     }
