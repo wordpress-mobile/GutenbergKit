@@ -39,9 +39,6 @@ class EditorErrorView @JvmOverloads constructor(
     private val descriptionText: TextView
     private val actionButton: Button
 
-    /** Restored by [setError] after [setActionableState] has replaced the title. */
-    private val loadFailedTitle: CharSequence
-
     init {
         orientation = VERTICAL
         gravity = Gravity.CENTER
@@ -61,7 +58,7 @@ class EditorErrorView @JvmOverloads constructor(
             }
             gravity = Gravity.CENTER
             TextViewCompat.setTextAppearance(this, android.R.style.TextAppearance_Material_Subhead)
-            text = "Failed to load editor"
+            text = context.getText(R.string.gbk_editor_load_failed_title)
             ViewCompat.setAccessibilityHeading(this, true)
         }
 
@@ -88,8 +85,6 @@ class EditorErrorView @JvmOverloads constructor(
         addView(titleText)
         addView(descriptionText)
         addView(actionButton)
-
-        loadFailedTitle = titleText.text
     }
 
     /**
@@ -98,8 +93,9 @@ class EditorErrorView @JvmOverloads constructor(
      * @param error The exception that caused the failure.
      */
     fun setError(error: Throwable) {
-        setTitle(loadFailedTitle)
-        descriptionText.text = error.message ?: "Unknown error"
+        setTitle(context.getText(R.string.gbk_editor_load_failed_title))
+        descriptionText.text =
+            error.message ?: context.getString(R.string.gbk_editor_load_failed_unknown_error)
         clearAction()
     }
 
