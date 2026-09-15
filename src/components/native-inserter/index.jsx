@@ -420,6 +420,15 @@ export default function NativeBlockInserterButton( {
 		onToggle,
 	] );
 
+	// Picks from a native inserter still open when the editor unmounts, such as
+	// when it crashes, must not reach the unmounted editor's callbacks.
+	useEffect(
+		() => () => {
+			delete window.blockInserter;
+		},
+		[]
+	);
+
 	// Watch for controlled open state changes
 	useEffect( () => {
 		// Only trigger when transitioning from false to true
