@@ -21,8 +21,8 @@ public protocol EditorViewControllerDelegate: AnyObject {
 
     /// Notifies the client that the editor crashed and is no longer usable.
     ///
-    /// The editor's `ErrorBoundary` caught an error and replaced the editor with a
-    /// fallback notice. React unmounted the editor, which deleted every JavaScript
+    /// The editor's error boundary caught an error and replaced the editor with an
+    /// error message. React unmounted the editor, which deleted every JavaScript
     /// `editor` API, so calls to them are refused from this point until the editor
     /// reloads.
     ///

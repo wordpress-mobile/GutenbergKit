@@ -904,8 +904,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Called when the editor JavaScript emits the `onEditorUnavailable` message.
     ///
-    /// The editor's `ErrorBoundary` caught an error and replaced the editor with
-    /// a fallback notice. React unmounted the editor, which deleted every
+    /// The editor's error boundary caught an error and replaced the editor with
+    /// an error message. React unmounted the editor, which deleted every
     /// `window.editor.*` bridge method, so readiness is reset until the editor
     /// reloads and emits `onEditorLoaded` again.
     ///

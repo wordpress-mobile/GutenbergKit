@@ -34,9 +34,9 @@ export function useModalDialogState( isModalVisible, dialogType ) {
 		}
 	}, [ isModalVisible, dialogType ] );
 
-	// The editor can unmount with a dialog still open, most notably when its
-	// `ErrorBoundary` catches. Report the dialog closed so the host does not
-	// keep its navigation disabled for a dialog that no longer exists.
+	// The editor can unmount with a dialog still open, most notably when
+	// `EditorErrorBoundary` catches. Report the dialog closed so the host
+	// does not keep its navigation disabled for a dialog that no longer exists.
 	useEffect(
 		() => () => {
 			if ( isModalVisibleRef.current ) {

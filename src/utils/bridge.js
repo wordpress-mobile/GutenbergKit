@@ -45,7 +45,7 @@ export function editorLoaded() {
 /**
  * Notifies the native host that the editor is no longer usable.
  *
- * Dispatched when the editor's `ErrorBoundary` catches an error, which
+ * Dispatched when `EditorErrorBoundary` catches an error, which
  * unmounts the editor and tears down the `window.editor` bridge methods.
  * The host must stop calling those methods until the editor reloads.
  *

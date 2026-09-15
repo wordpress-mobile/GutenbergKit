@@ -13,6 +13,7 @@ import './style.scss';
 import { useSyncHistoryControls } from './use-sync-history-controls';
 import { useHostBridge } from './use-host-bridge';
 import { useEditorReady } from './use-editor-ready';
+import { useHostExceptionLogging } from './use-host-exception-logging';
 import { useEditorSetup } from './use-editor-setup';
 import { useMediaUpload } from './use-media-upload';
 import TextEditor from '../text-editor';
@@ -40,6 +41,7 @@ export default function Editor( { post, children, hideTitle } ) {
 	useHostBridge( post, editorRef, markBridgeReady );
 	useSyncFeaturedImage();
 	useSyncHistoryControls();
+	useHostExceptionLogging();
 	useEditorSetup( post );
 	useMediaUpload();
 	useDevModeNotice();
