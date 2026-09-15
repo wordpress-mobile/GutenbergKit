@@ -411,6 +411,7 @@ class GutenbergView : FrameLayout {
             webView.alpha = 0f
             // Transparency alone leaves the web view reachable by touch and TalkBack.
             webView.visibility = INVISIBLE
+            errorView.focusTitleForAccessibility()
         }
     }
 

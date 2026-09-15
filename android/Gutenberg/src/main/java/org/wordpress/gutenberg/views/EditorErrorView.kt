@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -97,7 +98,7 @@ class EditorErrorView @JvmOverloads constructor(
      * @param error The exception that caused the failure.
      */
     fun setError(error: Throwable) {
-        titleText.text = loadFailedTitle
+        setTitle(loadFailedTitle)
         descriptionText.text = error.message ?: "Unknown error"
         clearAction()
     }
@@ -116,11 +117,25 @@ class EditorErrorView @JvmOverloads constructor(
         @StringRes actionResId: Int,
         onAction: () -> Unit
     ) {
-        titleText.setText(titleResId)
+        setTitle(context.getText(titleResId))
         descriptionText.setText(descriptionResId)
         actionButton.setText(actionResId)
         actionButton.setOnClickListener { onAction() }
         actionButton.visibility = VISIBLE
+    }
+
+    /**
+     * Moves TalkBack focus to the title, since this view replaces content that
+     * could have held it.
+     */
+    fun focusTitleForAccessibility() {
+        titleText.performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null)
+    }
+
+    private fun setTitle(title: CharSequence) {
+        titleText.text = title
+        // TalkBack announces the pane title when this view appears.
+        ViewCompat.setAccessibilityPaneTitle(this, title)
     }
 
     private fun clearAction() {
