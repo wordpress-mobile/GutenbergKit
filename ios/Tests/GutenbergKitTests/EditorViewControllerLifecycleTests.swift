@@ -17,8 +17,11 @@ struct EditorViewControllerLifecycleTests: MakesTestFixtures {
     @Test("covering the editor leaves the dependency fetch running")
     func coveringTheEditorDoesNotCancelTheDependencyFetch() async throws {
         let session = ParkedURLSession()
-        let editor = makeEditor(session: session)
+        let configuration = makeIsolatedConfiguration()
+        // Before the release so it runs after it — `defer`s unwind in reverse.
+        defer { removeStorage(for: configuration) }
         defer { session.release() }
+        let editor = makeEditor(configuration: configuration, session: session)
 
         _ = editor.view  // triggers `viewDidLoad`, which starts the fetch
         try await session.waitUntilStarted()
@@ -40,10 +43,12 @@ struct EditorViewControllerLifecycleTests: MakesTestFixtures {
     @Test("the in-flight fetch keeps the editor alive until it finishes")
     func theInFlightFetchKeepsTheEditorAlive() async throws {
         let session = ParkedURLSession()
+        let configuration = makeIsolatedConfiguration()
+        defer { removeStorage(for: configuration) }
         // The `release()` below is the test's trigger; this is the safety net for
         // the throwing calls before it. `release()` is idempotent.
         defer { session.release() }
-        var editor: EditorViewController? = makeEditor(session: session)
+        var editor: EditorViewController? = makeEditor(configuration: configuration, session: session)
         weak let releasedEditor = editor
 
         _ = editor?.view
@@ -62,18 +67,31 @@ struct EditorViewControllerLifecycleTests: MakesTestFixtures {
         #expect(releasedEditor == nil, "the editor should be freed once the fetch ends")
     }
 
-    /// An editor whose every network call lands in `session`, on a site whose
-    /// `siteId` (the host) no earlier run can have cached, so the fetch is
-    /// guaranteed to reach the network rather than being served from disk.
-    @MainActor
-    private func makeEditor(session: ParkedURLSession) -> EditorViewController {
-        let configuration = makeConfiguration(
+    /// A unique `siteId` per call, so no earlier run's cache can serve the fetch.
+    /// Pair every call with `removeStorage(for:)` — nothing else reclaims it.
+    private func makeIsolatedConfiguration() -> EditorConfiguration {
+        makeConfiguration(
             siteURL: URL(string: "https://\(UUID().uuidString).example.invalid")!
         )
-        return EditorViewController(
+    }
+
+    /// An editor whose every network call lands in `session`.
+    @MainActor
+    private func makeEditor(
+        configuration: EditorConfiguration,
+        session: ParkedURLSession
+    ) -> EditorViewController {
+        EditorViewController(
             configuration: configuration,
             httpClient: EditorHTTPClient(urlSession: session, authHeader: configuration.authHeader)
         )
+    }
+
+    /// `EditorViewController` has no seam to redirect its storage roots the way
+    /// `MakesTestFixtures.makeService` does, so the test cleans up behind itself.
+    private func removeStorage(for configuration: EditorConfiguration) {
+        try? FileManager.default.removeItem(at: Paths.storageRoot(for: configuration))
+        try? FileManager.default.removeItem(at: Paths.cacheRoot(for: configuration))
     }
 }
 
