@@ -1007,6 +1007,9 @@ class GutenbergView : FrameLayout {
      */
     internal fun reloadEditor() {
         isEditorLoaded = false
+        // The reload replaces the page these reads were sent to, so their results
+        // may never arrive.
+        failPendingTitleAndContentReads()
         handler.post {
             showSpinnerPhase()
             webView.reload()

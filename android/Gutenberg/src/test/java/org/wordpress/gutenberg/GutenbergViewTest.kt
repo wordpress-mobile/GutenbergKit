@@ -651,6 +651,23 @@ class GutenbergViewTest {
     }
 
     @Test
+    fun `reloadEditor fails reads still waiting on the page it replaces`() {
+        gutenbergView.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+        val callback = RecordingTitleAndContentCallback()
+        gutenbergView.getTitleAndContent("original content", callback)
+        // Robolectric's shadow WebView never invokes the ValueCallback, like a page
+        // replaced before it answers.
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue("the read is still waiting", callback.errors.isEmpty())
+
+        gutenbergView.reloadEditor()
+
+        assertEquals("the host is told the read failed", 1, callback.errors.size)
+        assertTrue("because the editor is not ready", callback.errors.first() is EditorNotReadyException)
+    }
+
+    @Test
     fun `textEditorEnabled waits for the editor to load`() {
         val shadowWebView = shadowOf(gutenbergView.editorWebView)
         val lastEvaluated = shadowWebView.lastEvaluatedJavascript
