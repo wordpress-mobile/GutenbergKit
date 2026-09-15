@@ -175,6 +175,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Passed back to JavaScript when media selection completes.
     private var currentMediaContextId: String?
 
+    /// The native block inserter, while it is presented.
+    private weak var blockInserterController: UIViewController?
+
     // MARK: - Private Properties (Timing)
 
     /// Timestamp captured at initialization for measuring first-render performance.
@@ -655,6 +658,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             sheet.preferredCornerRadius = 26
         }
 
+        blockInserterController = host
         present(host, animated: true)
     }
 
@@ -684,15 +688,20 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func insertBlockFromInserter(_ blockID: String) {
-        evaluate("window.blockInserter.insertBlock('\(blockID)')")
+        evaluate("window.blockInserter?.insertBlock('\(blockID)')")
     }
 
     private func insertMediaFromInserter(_ selection: [MediaInfo]) async {
         guard !selection.isEmpty else { return }
+        // `callAsyncJavaScript` does not go through `evaluate()`, so check readiness here.
+        guard isReady else {
+            Logger.bridge.debug("Refused inserting media because the editor is not ready")
+            return
+        }
         do {
             let object = try makeJavaScriptCompatibleDictionary(with: selection)
             _ = try await webView.callAsyncJavaScript(
-                "window.blockInserter.insertMedia(selection)",
+                "window.blockInserter?.insertMedia(selection)",
                 arguments: ["selection": object],
                 in: nil,
                 contentWorld: .page
@@ -704,7 +713,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     private func insertPatternFromInserter(_ patternName: String) {
         let escapedName = patternName.replacingOccurrences(of: "'", with: "\\'")
-        evaluate("window.blockInserter.insertPattern('\(escapedName)')")
+        evaluate("window.blockInserter?.insertPattern('\(escapedName)')")
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
@@ -909,6 +918,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// raises an uncaught `TypeError` inside the web view.
     private func didLoseEditor() {
         self.isReady = false
+        // Picks made in an open inserter can no longer reach the editor.
+        blockInserterController?.presentingViewController?.dismiss(animated: true)
         delegate?.editorDidBecomeUnavailable(self)
     }
 
