@@ -386,4 +386,78 @@ class GutenbergViewTest {
             result
         )
     }
+
+    @Test
+    fun `getTitleAndContent reports an error when the editor has not loaded`() {
+        // The fixture has never received onEditorLoaded, so the read cannot proceed.
+        val callback = RecordingTitleAndContentCallback()
+
+        gutenbergView.getTitleAndContent("original content", callback)
+        assertTrue("the error is posted to the main thread, not reported inline", callback.errors.isEmpty())
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals("the host is told the read failed", 1, callback.errors.size)
+        assertTrue("because the editor is not ready", callback.errors.first() is EditorNotReadyException)
+        assertEquals("no content is reported", 0, callback.results)
+    }
+
+    @Test
+    fun `getTitleAndContent reports its queued error when the view detaches first`() {
+        val callback = RecordingTitleAndContentCallback()
+
+        gutenbergView.getTitleAndContent("original content", callback)
+        // Detaching clears the main thread queue holding the error.
+        shadowOf(gutenbergView).callOnDetachedFromWindow()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals("the host is told the read failed, once", 1, callback.errors.size)
+        assertTrue("because the editor is not ready", callback.errors.first() is EditorNotReadyException)
+        assertEquals("no content is reported", 0, callback.results)
+    }
+
+    @Test
+    fun `getTitleAndContent reports an error when the view detaches before the web view answers`() {
+        gutenbergView.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+        val callback = RecordingTitleAndContentCallback()
+
+        gutenbergView.getTitleAndContent("original content", callback)
+        // Robolectric's shadow WebView never invokes the ValueCallback, like a web
+        // view destroyed mid-read.
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue("the read is still waiting", callback.errors.isEmpty())
+
+        shadowOf(gutenbergView).callOnDetachedFromWindow()
+
+        assertEquals("the host is told the read failed", 1, callback.errors.size)
+        assertTrue("because the editor is not ready", callback.errors.first() is EditorNotReadyException)
+        assertEquals("no content is reported", 0, callback.results)
+    }
+
+    @Test
+    fun `getTitleAndContent reports an error when called after the view detaches`() {
+        gutenbergView.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(gutenbergView).callOnDetachedFromWindow()
+        val callback = RecordingTitleAndContentCallback()
+
+        gutenbergView.getTitleAndContent("original content", callback)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals("the host is told the read failed", 1, callback.errors.size)
+        assertTrue("because the editor is not ready", callback.errors.first() is EditorNotReadyException)
+    }
+
+    private class RecordingTitleAndContentCallback : GutenbergView.TitleAndContentCallback {
+        val errors = mutableListOf<Throwable>()
+        var results = 0
+
+        override fun onResult(title: CharSequence, content: CharSequence) {
+            results++
+        }
+
+        override fun onError(error: Throwable) {
+            errors += error
+        }
+    }
 }
