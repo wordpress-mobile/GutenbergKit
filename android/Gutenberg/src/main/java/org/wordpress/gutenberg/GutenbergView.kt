@@ -959,6 +959,11 @@ class GutenbergView : FrameLayout {
         Log.i("GutenbergView", "EditorLoaded received in native code")
         isEditorLoaded = true
         handler.post {
+            // The editor can become unavailable before this runs, which resets
+            // readiness and shows the crash notice. Carrying on would report the
+            // editor available again and replace that notice with the ready phase.
+            if (!isEditorLoaded) return@post
+
             lastKnownConnectivity?.let { isConnected ->
                 if (!isConnected) dispatchConnectivityEvent(false)
             }
