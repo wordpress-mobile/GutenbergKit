@@ -1007,15 +1007,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         controller.view.tintAdjustmentMode = .normal
         let tint = Color(uiColor: controller.view.tintColor)
 
-        let crashView = ContentUnavailableView {
-            Label(
-                EditorLocalization[.editorCrashedTitle],
-                systemImage: "exclamationmark.circle"
-            )
-            .accessibilityAddTraits(.isHeader)
-        } description: {
-            Text(EditorLocalization[.editorCrashedDescription])
-        } actions: {
+        let crashView = EditorErrorView(
+            title: EditorLocalization[.editorCrashedTitle],
+            description: EditorLocalization[.editorCrashedDescription]
+        ) {
             Button(EditorLocalization[.editorCrashedReload]) { [weak self] in
                 self?.reloadEditor()
             }
@@ -1026,9 +1021,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         controller.rootView = AnyView(crashView)
 
         // The web view stays in the hierarchy underneath the notice, so hide it
-        // from VoiceOver and move focus to the notice.
+        // from VoiceOver. The notice moves focus to its title when it appears.
         webView.accessibilityElementsHidden = true
-        UIAccessibility.post(notification: .screenChanged, argument: controller.view)
     }
 
     @MainActor
