@@ -202,6 +202,10 @@ private struct _EditorView: UIViewControllerRepresentable {
             viewModel.isEditorReady = true
         }
 
+        func editorDidBecomeUnavailable(_ viewController: EditorViewController) {
+            viewModel.isEditorReady = false
+        }
+
         func editor(_ viewContoller: EditorViewController, didDisplayInitialContent content: String) {
             // No-op for demo
         }

@@ -97,7 +97,6 @@ public protocol EditorViewControllerDelegate: AnyObject {
 
 extension EditorViewControllerDelegate {
     public func editor(_ viewController: EditorViewController, didFailToLoad error: Error) {}
-    public func editorDidBecomeUnavailable(_ viewController: EditorViewController) {}
 }
 
 #endif
