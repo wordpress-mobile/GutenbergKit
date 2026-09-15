@@ -677,6 +677,24 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
+    /// Dismisses the block inserter and any picker it presented.
+    ///
+    /// Dismisses the inserter itself rather than asking its presenting view
+    /// controller, which belongs to the host. Asked again while the inserter is
+    /// still closing, that view controller dismisses itself instead, which can
+    /// close the host's editor.
+    private func dismissBlockInserter() {
+        guard let inserter = blockInserterController else { return }
+        guard inserter.presentedViewController != nil else {
+            inserter.dismiss(animated: true)
+            return
+        }
+        // While a picker is presented, dismissing the inserter closes only the picker.
+        inserter.dismiss(animated: false) {
+            inserter.dismiss(animated: true)
+        }
+    }
+
     // MARK: - UIAdaptivePresentationControllerDelegate
 
     public func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
@@ -919,7 +937,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private func didLoseEditor() {
         self.isReady = false
         // Picks made in an open inserter can no longer reach the editor.
-        blockInserterController?.presentingViewController?.dismiss(animated: true)
+        dismissBlockInserter()
         delegate?.editorDidBecomeUnavailable(self)
     }
 
