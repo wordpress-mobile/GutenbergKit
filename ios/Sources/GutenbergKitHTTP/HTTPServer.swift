@@ -251,11 +251,29 @@ public final class HTTPServer: Sendable {
                 for await state in states {
                     switch state {
                     case .ready:
-                        listener.stateUpdateHandler = nil
                         guard let p = listener.port else {
+                            listener.stateUpdateHandler = nil
                             throw HTTPServerError.failedToStart
                         }
                         let server = HTTPServer(listener: listener, port: p.rawValue, queue: queue, token: token, connectionTasks: connectionTasks, cleanupTask: cleanupTask)
+                        // Replace rather than clear: the start race needs nothing more
+                        // yielded into `states`, but a listener dying afterwards is worth a
+                        // line in the log. Best-effort — a state arriving before this
+                        // assignment is still missed. `.cancelled` is skipped because
+                        // `stop()` and `deinit` are its only causes.
+                        let port = p.rawValue
+                        listener.stateUpdateHandler = { state in
+                            switch state {
+                            case .failed(let error):
+                                let description = String(describing: error)
+                                Logger.httpServer.error("Listener on port \(port, privacy: .public) failed after a successful start: \(description, privacy: .public)")
+                            case .waiting(let error):
+                                let description = String(describing: error)
+                                Logger.httpServer.warning("Listener on port \(port, privacy: .public) is waiting after a successful start: \(description, privacy: .public)")
+                            default:
+                                break
+                            }
+                        }
                         Logger.httpServer.info("HTTP server started on port \(p.rawValue)")
                         return server
                     case .failed(let error):
