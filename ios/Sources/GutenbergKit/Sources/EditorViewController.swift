@@ -959,7 +959,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Readiness is reset immediately and restored only once the editor emits
     /// `onEditorLoaded` again, so bridge calls stay refused until it is
     /// genuinely usable.
-    public func reloadEditor() {
+    private func reloadEditor() {
         isReady = false
         hideEditorCrash()
         webView.alpha = 0
