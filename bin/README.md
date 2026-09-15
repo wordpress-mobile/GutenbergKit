@@ -88,3 +88,19 @@ Prepares translations for the GutenbergKit project. This script is typically run
 ```bash
 make prep-translations
 ```
+
+### `check-wordpress-package-duplicates.js`
+
+Fails when any `@wordpress` package is installed more than once in the production dependency graph. The editor exposes these packages on `window.wp` for plugin scripts, which only works when each package is a single module instance. A nested second copy brings its own React contexts, data stores, and private APIs, and nothing at runtime reports the split.
+
+The check reads `package-lock.json` rather than the installed tree, so it describes what a fresh `npm ci` produces, requires no `node_modules`, and counts separate installs rather than distinct versions — two copies of the same version are still two module instances.
+
+Packages listed in the script's `KNOWN_DUPLICATES` are reported as warnings instead of failures. Each entry should be removed once the underlying version mismatch is resolved, typically by bumping the `@wordpress` packages together; an entry that no longer applies fails the check rather than lingering to mask a future regression.
+
+An entry is a deliberate exception rather than a fix, and is warranted when the coordinated bump genuinely has to wait — a security advisory that moves one package alone, for instance. The cost is that the editor ships a known split: for a package holding a store, context, or registry, plugin scripts receive a different instance than the editor's own components, with nothing at runtime to signal it. Record the follow-up work alongside the entry.
+
+#### Usage
+
+```bash
+make check-wp-packages
+```

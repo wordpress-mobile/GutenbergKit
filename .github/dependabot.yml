@@ -4,6 +4,21 @@ updates:
       directory: '/'
       schedule:
           interval: 'weekly'
+      groups:
+          # The editor exposes @wordpress packages on window.wp as single
+          # instances, so they must move together like a Gutenberg release.
+          # Bumping them one at a time leaves mismatched ranges that nest
+          # duplicate copies.
+          #
+          # Scoped to production dependencies, matching `make
+          # check-wp-packages`: dev tooling (eslint-plugin, env,
+          # prettier-config, dependency-extraction-webpack-plugin) never
+          # reaches the bundle, and because Dependabot ships a group
+          # atomically, a breaking tooling major would hold back every
+          # runtime bump alongside it.
+          wordpress-packages:
+              patterns: ['@wordpress/*']
+              dependency-type: 'production'
       ignore:
           - dependency-name: 'eslint' # eslint@>=9.x.x blocked by https://github.com/WordPress/gutenberg/issues/64782
             update-types: ['version-update:semver-major']

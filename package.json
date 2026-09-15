@@ -12,6 +12,7 @@
 		"dev:force": "vite --host --force",
 		"dev:tools": "react-devtools",
 		"build": "vite --emptyOutDir build",
+		"check:wp-packages": "node bin/check-wordpress-package-duplicates.js",
 		"format": "prettier --write .",
 		"generate-version": "node bin/generate-version.js",
 		"lint:js": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
