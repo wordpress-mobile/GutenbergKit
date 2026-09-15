@@ -985,26 +985,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private func displayEditorCrash() {
         guard editorCrashViewController == nil else { return }
 
-        let crashView = ContentUnavailableView {
-            Label(
-                EditorLocalization[.editorCrashedTitle],
-                systemImage: "exclamationmark.circle"
-            )
-            .accessibilityAddTraits(.isHeader)
-        } description: {
-            Text(EditorLocalization[.editorCrashedDescription])
-        } actions: {
-            Button(EditorLocalization[.editorCrashedReload]) { [weak self] in
-                self?.reloadEditor()
-            }
-            .buttonStyle(.borderedProminent)
-            // Follow the tint the host sets on the editor's view hierarchy, as
-            // UIKit controls do, rather than the app's global accent color.
-            .tint(Color(uiColor: view.tintColor))
-        }
-        .background(Color(uiColor: .systemBackground))
-
-        let controller = UIHostingController(rootView: AnyView(crashView))
+        let controller = UIHostingController(rootView: AnyView(EmptyView()))
         editorCrashViewController = controller
 
         addChild(controller)
@@ -1018,6 +999,31 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             controller.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
         controller.didMove(toParent: self)
+
+        // Follow the tint the host sets on the editor's view hierarchy, as UIKit
+        // controls do, rather than the app's global accent color. A presentation
+        // covering the editor dims the tint its views inherit, so read it from the
+        // notice's own view undimmed, or the button would stay gray afterward.
+        controller.view.tintAdjustmentMode = .normal
+        let tint = Color(uiColor: controller.view.tintColor)
+
+        let crashView = ContentUnavailableView {
+            Label(
+                EditorLocalization[.editorCrashedTitle],
+                systemImage: "exclamationmark.circle"
+            )
+            .accessibilityAddTraits(.isHeader)
+        } description: {
+            Text(EditorLocalization[.editorCrashedDescription])
+        } actions: {
+            Button(EditorLocalization[.editorCrashedReload]) { [weak self] in
+                self?.reloadEditor()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(tint)
+        }
+        .background(Color(uiColor: .systemBackground))
+        controller.rootView = AnyView(crashView)
 
         // The web view stays in the hierarchy underneath the notice, so hide it
         // from VoiceOver and move focus to the notice.
