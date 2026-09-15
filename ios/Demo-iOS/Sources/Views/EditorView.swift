@@ -137,6 +137,7 @@ private struct _EditorView: UIViewControllerRepresentable {
         viewController.delegate = context.coordinator
         if enableNativeMediaUpload {
             viewController.mediaUploadDelegate = context.coordinator
+            viewController.experimentalNativeMediaProcessing = true
         }
         viewController.webView.isInspectable = true
 
