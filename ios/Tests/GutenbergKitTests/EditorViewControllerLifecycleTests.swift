@@ -7,13 +7,7 @@ import Testing
 import UIKit
 
 /// Covers what the editor does with its in-flight dependency fetch as it leaves
-/// the screen.
-///
-/// The fetch has exactly one starting point — the "no dependencies" branch of
-/// `viewDidLoad` — and nothing restarts it, so cancelling it strands the editor
-/// on its error screen for good. `viewDidDisappear` is not a teardown signal: it
-/// fires whenever the editor is merely covered, which is what presenting a media
-/// picker over a still-loading editor does.
+/// the screen. Nothing restarts the fetch, so cancelling it is terminal.
 @Suite("EditorViewController dependency fetch lifecycle")
 struct EditorViewControllerLifecycleTests: MakesTestFixtures {
     static let testSiteURL = URL(string: "https://test.example.com")!
@@ -29,8 +23,10 @@ struct EditorViewControllerLifecycleTests: MakesTestFixtures {
         _ = editor.view  // triggers `viewDidLoad`, which starts the fetch
         try await session.waitUntilStarted()
 
-        // Stands in for a modal presented over the editor. UIKit sends this pair
-        // for any covering presentation, not just for teardown.
+        // Stands in for a full-screen modal or a push over the editor. The
+        // "calling -viewWillDisappear: directly is not supported" warning is
+        // expected: `beginAppearanceTransition` delivers nothing to a windowless,
+        // parentless controller, so it would pass against the regression.
         editor.viewWillDisappear(false)
         editor.viewDidDisappear(false)
 
@@ -38,10 +34,8 @@ struct EditorViewControllerLifecycleTests: MakesTestFixtures {
         #expect(!cancelled)
     }
 
-    /// The invariant that makes leaving the fetch running safe, and that rules
-    /// `deinit` out as a place to cancel it from: the task's `self?.prepareEditor()`
-    /// holds a strong `self` for the duration of the call, so a released editor
-    /// outlives the fetch and is freed the moment it finishes.
+    /// Why `deinit` is not a place to cancel from: `self?.prepareEditor()` holds a
+    /// strong `self` for the call, so a released editor outlives its own fetch.
     @MainActor
     @Test("the in-flight fetch keeps the editor alive until it finishes")
     func theInFlightFetchKeepsTheEditorAlive() async throws {

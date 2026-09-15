@@ -298,28 +298,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             self.loadEditorWithoutDependencies()
         }
 
-        // Neither branch's task is cancellable, deliberately. Each is started
-        // once, from here, and nothing restarts it, so cancelling one strands
-        // the editor for the rest of its life. `viewDidDisappear` used to cancel
-        // the async fetch, and it is not a teardown signal — it fires whenever
-        // the editor is merely covered. Presenting a media picker over a
-        // still-loading editor therefore replaced the progress view with the
-        // load-error screen and reported `didFailToLoad`, permanently; the same
-        // cancellation landing a moment later, mid `startUploadServer()`,
-        // silently disabled native uploads for the session instead.
-        //
-        // There is no better place to cancel from. `isBeingDismissed` and
-        // `isMovingFromParent` read `false` here in every real hosting shape,
-        // because hosts install this controller as a child and UIKit sets those
-        // flags on an ancestor instead. `deinit` is a genuine teardown signal,
-        // but it is unreachable while either task is running: `self?.method()`
-        // holds a strong `self` for the duration of the call, so the editor
-        // always outlives its own load.
-        //
-        // That is also why leaving them to run costs nothing. The work is
-        // bounded by the fetch, the editor is freed the moment it ends, and
-        // `[weak self]` keeps a task that has not started yet from resurrecting
-        // an editor that was released first.
+        // Deliberately not cancellable — nothing restarts the fetch, and
+        // `viewDidDisappear` fires when the editor is merely covered. See #651.
         if let dependencies {
             // FAST PATH: Dependencies were provided at init() - load immediately.
             Task(priority: .userInitiated) { [weak self] in
