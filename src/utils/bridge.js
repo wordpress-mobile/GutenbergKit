@@ -330,13 +330,10 @@ export async function requestLatestContent() {
 /**
  * Retrieves the current post data from the native host
  *
- * Always requests content from the native host first, as it maintains the
- * latest content via autosave. Falls back to `window.GBKit.post` only if the
- * native bridge is unavailable (e.g., dev mode).
- *
- * Note: `window.GBKit.post.title/content` are "initial values" injected at
- * WebView load. After a WebView refresh, these may be stale. The native host
- * has the authoritative content from autosave.
+ * Requests the latest content from the native host first. When the host
+ * provides none, including when no native bridge is available (e.g., dev mode),
+ * falls back to `window.GBKit.post`: the content the editor was opened with,
+ * which is stale once the editor reloads after edits.
  *
  * @return {Promise<Post>} The post object.
  */

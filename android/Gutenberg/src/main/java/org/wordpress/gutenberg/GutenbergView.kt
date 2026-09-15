@@ -875,16 +875,17 @@ class GutenbergView : FrameLayout {
     }
 
     /**
-     * Provides the latest persisted content for recovery after WebView refresh.
+     * Provides the content the editor starts from when its page loads.
      *
-     * When the WebView reinitializes (e.g., due to OS memory pressure or page refresh),
-     * the editor requests the latest content from this provider. The host app should
-     * return the most recently persisted title and content from autosave.
+     * Asked each time the editor page loads, including when it reloads after a
+     * crash. Return the newest title and content the host holds, including
+     * anything saved during this session.
      */
     interface LatestContentProvider {
         /**
-         * Returns the most recently persisted title and content from autosave.
-         * @return LatestContent if available, null if no persisted content exists.
+         * Returns the newest title and content the host holds.
+         * @return LatestContent, or null to start from the content the editor was
+         * opened with, discarding any edits made since.
          */
         fun getLatestContent(): LatestContent?
     }
@@ -1009,10 +1010,10 @@ class GutenbergView : FrameLayout {
     /**
      * Reloads the editor after it has crashed.
      *
-     * The reloaded editor starts from whatever the host returns from
-     * [LatestContentProvider], so work up to the host's last autosave survives
-     * the reload. Readiness is reset immediately and restored only once the
-     * editor emits `onEditorLoaded` again.
+     * The reloaded editor starts from the content [LatestContentProvider]
+     * returns, or from the content it was opened with when there is none.
+     * Readiness is reset immediately and restored only once the editor emits
+     * `onEditorLoaded` again.
      */
     internal fun reloadEditor() {
         isEditorLoaded = false

@@ -957,9 +957,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Reloads the editor, showing the loading indicator until it is ready again.
     ///
-    /// The reloaded editor starts from whatever the host returns from
-    /// ``EditorViewControllerDelegate/editorDidRequestLatestContent(_:)``, so
-    /// work up to the host's last autosave survives the reload.
+    /// The reloaded editor starts from the content the delegate returns from
+    /// ``EditorViewControllerDelegate/editorDidRequestLatestContent(_:)``, or
+    /// from the content it was opened with when that returns `nil`.
     ///
     /// Readiness is reset immediately and restored only once the editor emits
     /// `onEditorLoaded` again, so bridge calls stay refused until it is
