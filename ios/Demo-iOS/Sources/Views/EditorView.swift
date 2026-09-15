@@ -15,8 +15,8 @@ private extension Logger {
 }
 
 /// Throws from the selector the editor reads to choose between the visual and
-/// code editors, so the crash reaches the editor-level `ErrorBoundary` in either
-/// mode rather than a single block's error boundary.
+/// code editors, so the crash reaches the editor's error boundary in either mode
+/// rather than a single block's.
 private let triggerEditorCrashScript = """
     (() => {
         const editor = wp.data.select('core/editor');

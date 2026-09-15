@@ -1014,11 +1014,8 @@ class GutenbergView : FrameLayout {
     /**
      * Covers the editor with a notice offering to reload.
      *
-     * The web view still renders Gutenberg's own error fallback underneath.
-     * That fallback is built for the desktop editor — it offers to copy the post
-     * contents, which returns nothing once the provider unmounts, and to copy a
-     * stack trace — so the editor is covered rather than left showing two
-     * competing error states.
+     * The web view still shows the editor's error message underneath, so it is
+     * covered rather than left showing two competing error states.
      */
     private fun showEditorCrashPhase() {
         handler.post {

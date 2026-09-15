@@ -969,11 +969,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Covers the editor with a native notice offering to reload.
     ///
-    /// The web view still renders Gutenberg's own error fallback underneath.
-    /// That fallback is built for the desktop editor — it offers to copy the
-    /// post contents, which returns nothing once the provider unmounts, and to
-    /// copy a stack trace — so the editor is covered rather than left showing
-    /// two competing error states.
+    /// The web view still shows the editor's error message underneath, so it is
+    /// covered rather than left showing two competing error states.
     @MainActor
     private func displayEditorCrash() {
         guard editorCrashViewController == nil else { return }
