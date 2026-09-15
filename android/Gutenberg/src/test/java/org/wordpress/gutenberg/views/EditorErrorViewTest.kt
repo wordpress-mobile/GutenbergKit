@@ -2,11 +2,13 @@ package org.wordpress.gutenberg.views
 
 import android.view.ContextThemeWrapper
 import android.widget.Button
+import android.widget.TextView
 import androidx.annotation.StyleRes
 import androidx.core.view.ViewCompat
 import com.google.android.material.button.MaterialButton
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -35,7 +37,7 @@ class EditorErrorViewTest {
     }
 
     @Test
-    fun `title is the pane title TalkBack announces`() {
+    fun `title is announced by moving focus, not by a pane title`() {
         val view = EditorErrorView(themedContext(com.google.android.material.R.style.Theme_MaterialComponents_Light))
 
         view.setActionableState(
@@ -47,8 +49,11 @@ class EditorErrorViewTest {
 
         assertEquals(
             view.context.getString(R.string.gbk_editor_crashed_title),
-            ViewCompat.getAccessibilityPaneTitle(view)?.toString()
+            title(view).text.toString()
         )
+        // A pane title announces when the view appears, and focusTitleForAccessibility
+        // reads the title it lands on, so setting both reads the title twice.
+        assertNull(ViewCompat.getAccessibilityPaneTitle(view))
     }
 
     private fun themedContext(@StyleRes theme: Int) =
@@ -56,4 +61,8 @@ class EditorErrorViewTest {
 
     private fun actionButton(view: EditorErrorView): Button =
         (0 until view.childCount).map(view::getChildAt).filterIsInstance<Button>().single()
+
+    // The action button is a TextView too, so the title is the first that is not one.
+    private fun title(view: EditorErrorView): TextView =
+        (0 until view.childCount).map(view::getChildAt).filterIsInstance<TextView>().first { it !is Button }
 }

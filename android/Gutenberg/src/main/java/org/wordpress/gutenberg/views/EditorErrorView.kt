@@ -127,6 +127,10 @@ class EditorErrorView @JvmOverloads constructor(
     /**
      * Moves TalkBack focus to the title, since this view replaces content that
      * could have held it.
+     *
+     * This is what announces the view, which is why it sets no accessibility
+     * pane title: that announces on appearance, so TalkBack would read the title
+     * once for the pane and again for the focus landing on it.
      */
     fun focusTitleForAccessibility() {
         titleText.performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null)
@@ -134,8 +138,6 @@ class EditorErrorView @JvmOverloads constructor(
 
     private fun setTitle(title: CharSequence) {
         titleText.text = title
-        // TalkBack announces the pane title when this view appears.
-        ViewCompat.setAccessibilityPaneTitle(this, title)
     }
 
     private fun clearAction() {
