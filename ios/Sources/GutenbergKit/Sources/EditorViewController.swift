@@ -100,6 +100,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// - Important: JS `editor` APIs are only safe to call after this becomes `true`.
     private var isReady: Bool = false
 
+    /// Whether opening the editor has already placed the caret in its content.
+    ///
+    /// Autofocus belongs to opening the editor, not to the reload after a crash:
+    /// ``focus(force:)`` decides from the content the editor was opened with,
+    /// which a reload can replace with newer content from the host, so repeating
+    /// it would raise the keyboard over a restored post.
+    private var hasAutofocused = false
+
     /// When `true`, loads editor HTML without dependencies for WebKit prewarming.
     /// Used by `EditorViewController.warmup()` to reduce first-render latency.
     private let isWarmupMode: Bool
@@ -928,10 +936,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             self.webView.alpha = 1
         }
 
-        // If lockdown mode was detected, show the sheet — skip autofocus entirely
-        // since the editor may not function correctly with Lockdown Mode restrictions.
-        if !lockdownModeMonitor.isLockdownModeEnabled {
-            self.focus()
+        if !hasAutofocused {
+            hasAutofocused = true
+
+            // If lockdown mode was detected, show the sheet — skip autofocus entirely
+            // since the editor may not function correctly with Lockdown Mode restrictions.
+            if !lockdownModeMonitor.isLockdownModeEnabled {
+                self.focus()
+            }
         }
         lockdownModeMonitor.presentSheetIfNeeded(onDismiss: {})
 
