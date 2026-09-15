@@ -99,6 +99,16 @@ class GutenbergView : FrameLayout {
     private val webView: WebView
     @Volatile private var isEditorLoaded = false
     private var didFireEditorLoaded = false
+
+    /**
+     * Whether opening the editor has already placed the caret in its content.
+     *
+     * Unlike [didFireEditorLoaded], this survives a reload. Autofocus decides
+     * from the content the editor was opened with, which a reload can replace
+     * with newer content from the host, so repeating it would pop the keyboard
+     * over a restored post.
+     */
+    private var hasAutofocused = false
     private lateinit var assetLoader: WebViewAssetLoader
     private lateinit var assetAuthority: String
     private val configuration: EditorConfiguration
@@ -977,7 +987,9 @@ class GutenbergView : FrameLayout {
                 this.didFireEditorLoaded = true
                 showReadyPhase()
 
-                if (configuration.content.isEmpty()) {
+                if (!hasAutofocused && configuration.content.isEmpty()) {
+                    hasAutofocused = true
+
                     // Focus the editor content
                     webView.evaluateJavascript("editor.focus();", null)
 
