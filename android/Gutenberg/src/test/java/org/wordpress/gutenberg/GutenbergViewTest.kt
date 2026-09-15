@@ -619,6 +619,38 @@ class GutenbergViewTest {
     }
 
     @Test
+    fun `a reloaded page is not ready until it loads even if the replaced page loads late`() {
+        var available = false
+        gutenbergView.setEditorDidBecomeAvailable { available = true }
+        gutenbergView.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        // The page a reload replaces can still report itself loaded.
+        gutenbergView.reloadEditor()
+        gutenbergView.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+        available = false
+
+        val webView = gutenbergView.editorWebView
+        webView.webViewClient.onPageStarted(webView, null, null)
+        val shadowWebView = shadowOf(webView)
+        val lastEvaluated = shadowWebView.lastEvaluatedJavascript
+        gutenbergView.undo()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "the new page must not be sent commands before it loads",
+            lastEvaluated,
+            shadowWebView.lastEvaluatedJavascript
+        )
+
+        gutenbergView.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertTrue("the new page must report itself available once it loads", available)
+    }
+
+    @Test
     fun `textEditorEnabled waits for the editor to load`() {
         val shadowWebView = shadowOf(gutenbergView.editorWebView)
         val lastEvaluated = shadowWebView.lastEvaluatedJavascript

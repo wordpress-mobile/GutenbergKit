@@ -672,6 +672,10 @@ class GutenbergView : FrameLayout {
      * background-thread delegate assignment.
      */
     private fun onEditorPageStarted() {
+        // Readiness belongs to the page: a new page, including one a reload starts,
+        // is not ready until it reports `onEditorLoaded`.
+        isEditorLoaded = false
+        didFireEditorLoaded = false
         if (!hasStartedLoading) {
             hasStartedLoading = true
             startUploadServer()
@@ -1004,7 +1008,6 @@ class GutenbergView : FrameLayout {
     internal fun reloadEditor() {
         isEditorLoaded = false
         handler.post {
-            didFireEditorLoaded = false
             showSpinnerPhase()
             webView.reload()
         }
