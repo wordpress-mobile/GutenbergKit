@@ -389,6 +389,14 @@ class GutenbergView : FrameLayout {
      * Transitions to the error phase (loading failed).
      */
     private fun showErrorPhase(error: Throwable) {
+        showErrorView { setError(error) }
+    }
+
+    /**
+     * Replaces the editor and any loading indicator with [errorView], after
+     * [configure] sets its content.
+     */
+    private fun showErrorView(configure: EditorErrorView.() -> Unit) {
         handler.post {
             progressView.animate().alpha(0f).setDuration(200).withEndAction {
                 progressView.visibility = GONE
@@ -396,7 +404,7 @@ class GutenbergView : FrameLayout {
             spinnerView.animate().alpha(0f).setDuration(200).withEndAction {
                 spinnerView.visibility = GONE
             }.start()
-            errorView.setError(error)
+            errorView.configure()
             errorView.alpha = 0f
             errorView.visibility = VISIBLE
             errorView.animate().alpha(1f).setDuration(200).start()
@@ -1023,21 +1031,13 @@ class GutenbergView : FrameLayout {
      * covered rather than left showing two competing error states.
      */
     private fun showEditorCrashPhase() {
-        handler.post {
-            progressView.visibility = GONE
-            spinnerView.visibility = GONE
-            errorView.setActionableState(
+        showErrorView {
+            setActionableState(
                 titleResId = R.string.gbk_editor_crashed_title,
                 descriptionResId = R.string.gbk_editor_crashed_description,
                 actionResId = R.string.gbk_editor_crashed_reload,
                 onAction = { reloadEditor() }
             )
-            errorView.alpha = 0f
-            errorView.visibility = VISIBLE
-            errorView.animate().alpha(1f).setDuration(200).start()
-            webView.alpha = 0f
-            // Transparency alone leaves the web view reachable by touch and TalkBack.
-            webView.visibility = INVISIBLE
         }
     }
 
