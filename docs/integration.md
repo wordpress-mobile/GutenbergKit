@@ -244,6 +244,70 @@ val configuration = EditorConfiguration.builder()
     .build()
 ```
 
+## Media Handling
+
+The host can customize how media is processed and uploaded by supplying a
+`MediaUploadDelegate` at init:
+
+```swift
+let editor = EditorViewController(
+    configuration: configuration,
+    mediaUploadDelegate: ResizingDelegate(maxDimension: 2000)
+)
+```
+
+### Don't conform the object that owns the editor
+
+GutenbergKit never hands your delegate the editor: every value crossing that boundary is a
+value type — a file URL, a MIME type, a filename. So a delegate can only reach the editor
+if you put it there.
+
+That happens when you conform the object that already holds the editor in order to drive
+it. The editor holds the delegate strongly in return — deliberately, so an in-flight upload
+can't lose it mid-request — which closes a retain cycle ARC cannot break. The editor is
+never deallocated, and each one strands a bound loopback listener.
+
+```swift
+// Leaks: coordinator -> editor -> mediaUploadDelegate -> coordinator
+final class PostEditorCoordinator: MediaUploadDelegate {
+    var editor: EditorViewController!
+    init(blog: Blog, configuration: EditorConfiguration) {
+        editor = EditorViewController(configuration: configuration, mediaUploadDelegate: self)
+    }
+}
+```
+
+Use a leaf object instead. Nothing is lost: `processFile` is called off the main actor, so
+it could not have touched your coordinator's state regardless — whatever it needs is
+already separable:
+
+```swift
+final class PostEditorCoordinator {
+    private let editor: EditorViewController
+    init(blog: Blog, configuration: EditorConfiguration) {
+        editor = EditorViewController(
+            configuration: configuration,
+            mediaUploadDelegate: BlogMediaDelegate(siteID: blog.dotComID, maxDimension: 2000)
+        )
+    }
+}
+```
+
+If your design genuinely requires the retaining shape, call `stopMediaHandling()` when you
+are finished with the editor. It is terminal — the editor cannot upload or delete media
+afterwards — so call it when the editor is going away, not when it is merely covered or
+backgrounded.
+
+### Reusing a delegate across editor sessions
+
+The editor holds the delegate for its lifetime and releases it when it goes, so a delegate
+built for a single editor needs no reference of its own. To use the same instance for
+several editors, keep your own reference — the editor drops only its own. Sharing is also
+the safer shape: a delegate owned by something longer-lived than any editor is a leaf, so
+it cannot form the cycle above and there is nothing to tear down. It may be called
+concurrently if more than one editor is live, and it must not hold on to any editor it has
+served.
+
 ## Common Patterns
 
 ### Plugin Support

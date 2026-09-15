@@ -133,11 +133,12 @@ private struct _EditorView: UIViewControllerRepresentable {
     }
 
     func makeUIViewController(context: Context) -> EditorViewController {
-        let viewController = EditorViewController(configuration: configuration, dependencies: dependencies)
+        let viewController = EditorViewController(
+            configuration: configuration,
+            dependencies: dependencies,
+            mediaUploadDelegate: enableNativeMediaUpload ? context.coordinator : nil
+        )
         viewController.delegate = context.coordinator
-        if enableNativeMediaUpload {
-            viewController.mediaUploadDelegate = context.coordinator
-        }
         viewController.webView.isInspectable = true
 
         viewModel.perform = { [weak viewController] in
