@@ -1,0 +1,36 @@
+name: Android Toolchain Sync
+
+# WordPress-Android includes this project as a composite build when a developer
+# sets `localGutenbergKitPath`. Gradle refuses to run a composite build that
+# spans two Android Gradle Plugin versions, so an AGP bump there breaks local
+# builds here until this repository follows. Dependabot cannot do that work —
+# it upgrades toward the newest release, while these versions have to match
+# WordPress-Android — so this job watches for the drift and files an issue.
+
+on:
+    schedule:
+        - cron: '0 6 * * 1' # Weekly on Monday at 6am UTC
+    workflow_dispatch:
+
+# Overlapping runs could each find no issue and open duplicates.
+concurrency:
+    group: ${{ github.workflow }}
+
+jobs:
+    compare:
+        name: Compare with WordPress-Android
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            issues: write
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Compare toolchain versions and report drift
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      const { default: reportToolchainDrift } = await import(
+                          `${process.env.GITHUB_WORKSPACE}/.github/scripts/android-toolchain-sync.js`
+                      );
+                      await reportToolchainDrift({ github, context, core });
