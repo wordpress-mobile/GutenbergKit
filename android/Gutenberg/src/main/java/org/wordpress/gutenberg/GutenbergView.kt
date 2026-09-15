@@ -1025,6 +1025,23 @@ class GutenbergView : FrameLayout {
     }
 
     /**
+     * Covers the editor with a notice offering to reload.
+     *
+     * The web view still shows the editor's error message underneath, so it is
+     * covered rather than left showing two competing error states.
+     */
+    private fun showEditorCrashPhase() {
+        showErrorView {
+            setActionableState(
+                titleResId = R.string.gbk_editor_crashed_title,
+                descriptionResId = R.string.gbk_editor_crashed_description,
+                actionResId = R.string.gbk_editor_crashed_reload,
+                onAction = { reloadEditor() }
+            )
+        }
+    }
+
+    /**
      * Reloads the editor after it has crashed.
      *
      * The reloaded editor starts from the content [LatestContentProvider]
@@ -1040,23 +1057,6 @@ class GutenbergView : FrameLayout {
         handler.post {
             showSpinnerPhase()
             webView.reload()
-        }
-    }
-
-    /**
-     * Covers the editor with a notice offering to reload.
-     *
-     * The web view still shows the editor's error message underneath, so it is
-     * covered rather than left showing two competing error states.
-     */
-    private fun showEditorCrashPhase() {
-        showErrorView {
-            setActionableState(
-                titleResId = R.string.gbk_editor_crashed_title,
-                descriptionResId = R.string.gbk_editor_crashed_description,
-                actionResId = R.string.gbk_editor_crashed_reload,
-                onAction = { reloadEditor() }
-            )
         }
     }
 
