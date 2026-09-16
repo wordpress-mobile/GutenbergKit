@@ -190,6 +190,46 @@ struct MediaUploadServerTests {
     #expect(json["media_type"] as? String == "file")
   }
 
+  /// Pins the one capability dropping `: AnyObject` exists to deliver: a value type can
+  /// conform, and the server actually calls it.
+  ///
+  /// Every other conformer in the tree is a class, so without this nothing exercises the
+  /// boxed-existential path — copied into `UploadContext`, captured by the `@Sendable`
+  /// handler closure, read again at `processFile`. Re-imposing a class requirement, or
+  /// breaking that path, would otherwise compile and pass green and surface only in a
+  /// host's build.
+  ///
+  /// Asserts through the client's recorded metadata rather than state on the processor,
+  /// because a `struct` witnessing a non-mutating requirement cannot record anything —
+  /// which is the point.
+  @Test("a value-type processor is admitted, called, and its result delivered")
+  func valueTypeProcessorRuns() async throws {
+    let internalClient = MockInternalMediaClient()
+    let server = try await MediaUploadServer.start(
+      processor: ValueTypeProcessor(), internalClient: internalClient
+    )
+    defer { server.stop() }
+
+    let boundary = UUID().uuidString
+    let body = buildMultipartBody(
+      boundary: boundary, filename: "clip.mov", mimeType: "video/quicktime",
+      data: Data("movie".utf8)
+    )
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    request.httpBody = body
+
+    _ = try await URLSession.shared.data(for: request)
+
+    // The transcoded metadata could only come from `processFile` having run.
+    #expect(internalClient.uploadCalled)
+    #expect(internalClient.lastUploadMimeType == "video/mp4")
+    #expect(internalClient.lastUploadFilename == "clip.mp4")
+  }
+
   @Test("uses passthrough when processor does not modify file")
   func processorPassthrough() async throws {
     let processor = ProcessOnlyProcessor()
@@ -1086,6 +1126,17 @@ private final class DeclineByMetadataProcessor: MediaProcessor, @unchecked Senda
 }
 
 /// A processor that produces a new file with changed metadata (e.g. a transcode).
+/// A value-type processor. `struct`, and `Sendable` without `@unchecked` — both are the
+/// point: this is the shape ``MediaProcessor``'s documentation now recommends.
+private struct ValueTypeProcessor: MediaProcessor {
+  func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
+    let processed = url.deletingLastPathComponent()
+      .appending(component: "value-\(UUID().uuidString).mp4")
+    try Data("transcoded".utf8).write(to: processed)
+    return .processed(processed, mimeType: "video/mp4", filename: "clip.mp4")
+  }
+}
+
 private final class ResizingProcessor: MediaProcessor, @unchecked Sendable {
   private let lock = NSLock()
   private var _producedURL: URL?
