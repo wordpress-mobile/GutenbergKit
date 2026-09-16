@@ -245,15 +245,15 @@ class MediaUploadServerTest {
     }
 
     @Test
-    fun `a delegate still processes the file an uploader delivers`() {
-        // With both set, the delegate still processes — only delivery moves to
+    fun `a processor still processes the file an uploader delivers`() {
+        // With both set, the processor still processes — only delivery moves to
         // the uploader.
         val uploader = RecordingUploader()
-        val delegate = ProcessOnlyProcessor()
+        val processor = ProcessOnlyProcessor()
         val client = MockInternalMediaClient()
         server.stop()
         server = MediaUploadServer(
-            processor = delegate, internalClient = client, uploader = uploader,
+            processor = processor, internalClient = client, uploader = uploader,
             cacheDir = tempFolder.root
         )
 
@@ -270,21 +270,21 @@ class MediaUploadServerTest {
         )
 
         assertNotNull(uploader.received)
-        assertTrue(delegate.processFileCalled)
+        assertTrue(processor.processFileCalled)
         assertFalse(client.uploadCalled)
     }
 
     @Test
-    fun `an uploader sees a file the delegate's metadata gate would have declined`() {
+    fun `an uploader sees a file the processor's metadata gate would have declined`() {
         // The gate exists to skip a temp copy for a file the processor won't touch. An
         // uploader takes over delivery for every file, so passing through here would
         // silently bypass it.
         val uploader = RecordingUploader()
         val client = MockInternalMediaClient()
-        val delegate = DeclineByMetadataProcessor()
+        val processor = DeclineByMetadataProcessor()
         server.stop()
         server = MediaUploadServer(
-            processor = delegate, internalClient = client, uploader = uploader,
+            processor = processor, internalClient = client, uploader = uploader,
             cacheDir = tempFolder.root
         )
 
@@ -304,15 +304,15 @@ class MediaUploadServerTest {
         assertFalse(client.passthroughUploadCalled)
         // ...but a declined file must still not reach processFile: handlesFile
         // returning false is the processor saying it won't touch a file like this.
-        assertFalse(delegate.processFileCalled)
+        assertFalse(processor.processFileCalled)
     }
 
     @Test
     fun `routes upload with a query string and relays the query`() {
-        val delegate = ProcessOnlyProcessor()
+        val processor = ProcessOnlyProcessor()
         val mockUploader = MockInternalMediaClient()
         server.stop()
-        server = MediaUploadServer(processor = delegate, internalClient = mockUploader, cacheDir = tempFolder.root)
+        server = MediaUploadServer(processor = processor, internalClient = mockUploader, cacheDir = tempFolder.root)
 
         // `@wordpress/media-utils` uploads to `/wp/v2/media?_embed=wp:featuredmedia`,
         // so the middleware forwards that query on to the native server. Routing must
@@ -339,14 +339,14 @@ class MediaUploadServerTest {
         assertEquals("?_embed=wp:featuredmedia", mockUploader.lastQuery)
     }
 
-    // MARK: - Upload with delegate
+    // MARK: - Upload with processor
 
     @Test
-    fun `processes with the delegate, then delivers through the internal client`() {
-        val delegate = TranscodingProcessor()
+    fun `processes with the processor, then delivers through the internal client`() {
+        val processor = TranscodingProcessor()
         val client = MockInternalMediaClient()
         server.stop()
-        server = MediaUploadServer(processor = delegate, internalClient = client, cacheDir = tempFolder.root)
+        server = MediaUploadServer(processor = processor, internalClient = client, cacheDir = tempFolder.root)
 
         val boundary = "test-boundary-123"
         val body = buildMultipartBody(boundary, "photo.jpg", "image/jpeg", "fake image data".toByteArray())
@@ -373,11 +373,11 @@ class MediaUploadServerTest {
     }
 
     @Test
-    fun `forwards the delegate's processed metadata to the uploader`() {
-        val delegate = TranscodingProcessor()
+    fun `forwards the processor's processed metadata to the uploader`() {
+        val processor = TranscodingProcessor()
         val mockUploader = MockInternalMediaClient()
         server.stop()
-        server = MediaUploadServer(processor = delegate, internalClient = mockUploader, cacheDir = tempFolder.root)
+        server = MediaUploadServer(processor = processor, internalClient = mockUploader, cacheDir = tempFolder.root)
 
         val boundary = "test-boundary-meta"
         val body = buildMultipartBody(boundary, "clip.mov", "video/quicktime", "movie".toByteArray())
@@ -400,11 +400,11 @@ class MediaUploadServerTest {
     }
 
     @Test
-    fun `deletes the delegate's processed file after upload`() {
-        val delegate = TranscodingProcessor()
+    fun `deletes the processor's processed file after upload`() {
+        val processor = TranscodingProcessor()
         val mockUploader = MockInternalMediaClient()
         server.stop()
-        server = MediaUploadServer(processor = delegate, internalClient = mockUploader, cacheDir = tempFolder.root)
+        server = MediaUploadServer(processor = processor, internalClient = mockUploader, cacheDir = tempFolder.root)
 
         val boundary = "test-boundary-cleanup"
         val body = buildMultipartBody(boundary, "clip.mov", "video/quicktime", "movie".toByteArray())
@@ -422,7 +422,7 @@ class MediaUploadServerTest {
         // The server owns the file the processor produced and must delete it once the
         // upload finishes — the finally in processAndUpload covers success and throw
         // paths alike. A leaked processed file is a full-size temp per upload.
-        val processed = requireNotNull(delegate.producedFile) { "processFile was not called" }
+        val processed = requireNotNull(processor.producedFile) { "processFile was not called" }
         assertFalse("Processed temp file should be deleted after upload", processed.exists())
     }
 
@@ -455,12 +455,12 @@ class MediaUploadServerTest {
     // MARK: - Fallback to the internal media client
 
     @Test
-    fun `uses passthrough when delegate does not modify file`() {
-        val delegate = ProcessOnlyProcessor()
+    fun `uses passthrough when processor does not modify file`() {
+        val processor = ProcessOnlyProcessor()
         val mockUploader = MockInternalMediaClient()
 
         server.stop()
-        server = MediaUploadServer(processor = delegate, internalClient = mockUploader, cacheDir = tempFolder.root)
+        server = MediaUploadServer(processor = processor, internalClient = mockUploader, cacheDir = tempFolder.root)
 
         val boundary = "test-boundary-456"
         val body = buildMultipartBody(boundary, "doc.pdf", "application/pdf", "fake pdf data".toByteArray())
@@ -476,7 +476,7 @@ class MediaUploadServerTest {
         )
 
         assertTrue("Expected 201 but got: ${response.statusLine}", response.statusLine.contains("201"))
-        assertTrue(delegate.processFileCalled)
+        assertTrue(processor.processFileCalled)
         // Passthrough: original body forwarded directly, not re-encoded.
         assertTrue(mockUploader.passthroughUploadCalled)
         assertFalse(mockUploader.uploadCalled)
@@ -486,12 +486,12 @@ class MediaUploadServerTest {
     }
 
     @Test
-    fun `skips processing and the temp copy when the delegate declines by metadata`() {
-        val delegate = DeclineByMetadataProcessor()
+    fun `skips processing and the temp copy when the processor declines by metadata`() {
+        val processor = DeclineByMetadataProcessor()
         val mockUploader = MockInternalMediaClient()
 
         server.stop()
-        server = MediaUploadServer(processor = delegate, internalClient = mockUploader, cacheDir = tempFolder.root)
+        server = MediaUploadServer(processor = processor, internalClient = mockUploader, cacheDir = tempFolder.root)
 
         val boundary = "test-boundary-decline"
         val body = buildMultipartBody(boundary, "clip.mov", "video/quicktime", "fake movie".toByteArray())
@@ -509,7 +509,7 @@ class MediaUploadServerTest {
         assertTrue("Expected 201 but got: ${response.statusLine}", response.statusLine.contains("201"))
         // Declined by metadata → the processor is never asked to process (so the
         // file was never materialized), and the upload is passed through directly.
-        assertFalse(delegate.processFileCalled)
+        assertFalse(processor.processFileCalled)
         assertTrue(mockUploader.passthroughUploadCalled)
         assertFalse(mockUploader.uploadCalled)
     }
@@ -921,7 +921,7 @@ class MediaUploadServerTest {
 
     /** A processor that produces a new file with changed metadata (e.g. a transcode). */
     private class TranscodingProcessor : MediaProcessor {
-        /** The processed file this delegate wrote, for cleanup assertions. */
+        /** The processed file this processor wrote, for cleanup assertions. */
         @Volatile var producedFile: File? = null
 
         override suspend fun processFile(file: File, mimeType: String, filename: String): ProcessedProxyFile {

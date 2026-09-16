@@ -68,7 +68,7 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
     /// `upload(_:)` was never called for any file, with nothing logged.
     ///
     /// Android pins the same gate (`GutenbergViewUploadServerTest`, "the upload server
-    /// starts for an uploader with no delegate"); iOS had no equivalent, which is why the
+    /// starts for an uploader with no processor"); iOS had no equivalent, which is why the
     /// drift survived three commits with a green suite.
     @MainActor
     @Test(
@@ -119,9 +119,9 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
 /// because the coordinator driving the editor already has the site context.
 @MainActor
 private final class EditorOwningProcessor: MediaProcessor {
-    /// Implicitly unwrapped so `self` can be passed as the editor's delegate: every stored
+    /// Implicitly unwrapped so `self` can be passed as the editor's processor: every stored
     /// property then has a value (nil) on entry to `init`, which is what makes `self`
-    /// available there. Taking the delegate at `init` doesn't prevent this shape — it just
+    /// available there. Taking the processor at `init` doesn't prevent this shape — it just
     /// moves where the host writes it.
     private(set) var editor: EditorViewController!
 
