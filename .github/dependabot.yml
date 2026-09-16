@@ -59,10 +59,17 @@ updates:
           # run one that spans two AGP versions; for Kotlin, the newer plugin
           # silently wins the classpath for both halves of that build. The
           # `Android toolchain sync` workflow watches WordPress-Android and
-          # opens an issue when either drifts.
+          # opens an issue when any of these drift.
           - dependency-name: 'com.android.application'
           - dependency-name: 'com.android.library'
           - dependency-name: 'org.jetbrains.kotlin.*'
+          # The Compose compiler ships inside
+          # `org.jetbrains.kotlin.plugin.compose`, which follows the Kotlin
+          # version pinned above, so the BOM has to come from the same release
+          # cycle. The Gutenberg library also declares it, which puts every
+          # Compose artifact it resolves on WordPress-Android's runtime
+          # classpath, where the higher version wins for both.
+          - dependency-name: 'androidx.compose:compose-bom'
           # A new Gradle major is adopted alongside the AGP upgrade that
           # requires it, not ahead of the AGP version pinned above.
           - dependency-name: 'gradle-wrapper'
