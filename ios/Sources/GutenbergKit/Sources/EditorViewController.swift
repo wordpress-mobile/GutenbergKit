@@ -562,7 +562,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         webView.findInteraction?.presentFindNavigator(showingReplace: false)
     }
 
-
     /// Dismisses the topmost modal dialog or menu in the editor
     public func dismissTopModal() {
         guard isReady else { return }
