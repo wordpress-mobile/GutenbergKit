@@ -586,10 +586,22 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         )
 
         do {
-            self.uploadServer = try await MediaUploadServer.start(
+            let server = try await MediaUploadServer.start(
                 uploadDelegate: mediaUploadDelegate,
                 defaultUploader: defaultUploader
             )
+
+            // `stopMediaHandling()` can land while the bind is in flight: it is a
+            // main-actor call and this is suspended. It clears the delegate, so a nil one
+            // here means media handling was stopped after this started, and storing the
+            // server would undo a terminal call — the page would be handed a port that was
+            // just withdrawn, and in the cycle the call exists for, `deinit` never runs to
+            // stop it.
+            guard mediaUploadDelegate != nil else {
+                server.stop()
+                return
+            }
+            self.uploadServer = server
         } catch {
             Logger.uploadServer.error("Failed to start upload server: \(error). Falling back to default upload behavior.")
         }
