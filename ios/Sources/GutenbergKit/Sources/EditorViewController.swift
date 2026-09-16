@@ -120,6 +120,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// ``stopMediaHandling()`` — drops only *its* reference: a delegate the host still
     /// holds survives to be passed to the next editor, and one nobody else holds does not.
     ///
+    /// That release is not always prompt, and not always on the main thread. A request in
+    /// flight holds its own reference until it unwinds, so if this editor is the delegate's
+    /// last owner, the delegate is freed when the host's `processFile` returns — on the
+    /// task's executor, not the caller's thread. Keep a reference of your own if that
+    /// matters to the conformer.
+    ///
     /// Sharing an instance is the safer shape rather than a compromise. A delegate owned
     /// by something longer-lived than any editor is a leaf, so the cycle below cannot form
     /// and there is nothing to call. Two caveats when you do: it may be called
@@ -347,7 +353,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// running, stranding a bound loopback `NWListener` for every editor opened.
     ///
     /// Terminal, not a pause: this editor cannot upload or delete media afterwards, and
-    /// any upload in flight is cancelled. Call it when the editor is going away — not
+    /// any upload in flight is cancelled — though cancellation is cooperative, so a
+    /// `processFile` that ignores it runs to completion and holds the delegate until it
+    /// returns. Call it when the editor is going away — not
     /// when it is covered, backgrounded, or otherwise coming back. Calling it more than
     /// once is safe.
     ///
