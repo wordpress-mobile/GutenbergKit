@@ -410,6 +410,44 @@ struct MediaUploadServerTests {
     #expect(weakDelegate == nil)
   }
 
+  @Test("stopping frees a delegate that holds the server back")
+  func stopReleasesDelegateThatRetainsTheServer() async throws {
+    // The server-side half of the ownership story, and the one nothing else covers.
+    // `EditorViewController.stopMediaHandling()` clears its own properties *and* stops
+    // the server, because releasing only one leaves the loop routed through the other:
+    // `listener -> newConnectionHandler -> handler -> UploadContext -> delegate -> server`.
+    //
+    // Polled rather than asserted outright, unlike `retainsDelegateForServerLifetime`:
+    // `releaseConnectionHandler()` opens the loop on the caller's thread, but it is not
+    // the only thing that does. Cancelling an `NWListener` also releases the blocks it
+    // captured, for a deployment target of iOS 16 or later (this package requires 17) —
+    // rdar://89677097, documented in the macOS 13 release notes — and that release lands
+    // on the listener's own queue. Confirmed by no-op'ing `releaseConnectionHandler()`:
+    // the delegate is still freed, a poll tick later. Before that OS change the blocks
+    // were held for the listener's lifetime, so a lowered deployment target hangs here
+    // instead of quietly stranding listeners.
+    weak var weakDelegate: ServerRetainingDelegate?
+    var server: MediaUploadServer?
+
+    do {
+      let delegate = ServerRetainingDelegate()
+      weakDelegate = delegate
+      let started = try await MediaUploadServer.start(uploadDelegate: delegate)
+      delegate.server = started  // closes the loop: server -> handler -> delegate -> server
+      server = started
+    }
+
+    #expect(weakDelegate != nil, "the server should own the delegate while it runs")
+
+    server?.stop()
+    server = nil
+
+    for _ in 0..<100 where weakDelegate != nil {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(weakDelegate == nil, "delegate leaked — stopping did not release the handler's references")
+  }
+
   @Test("still processes for a delegate the host has dropped its reference to")
   func processesForHostReleasedDelegate() async throws {
     // The delegate is read at the admission gate and again at processFile and
@@ -997,5 +1035,17 @@ private struct MockHTTPClient: EditorHTTPClientProtocol {
 private extension Data {
   mutating func append(_ string: String) {
     append(string.data(using: .utf8)!)
+  }
+}
+
+/// Holds the server that owns it, closing `server -> handler -> delegate -> server`.
+/// Only `stop()` — which drops the listener's captured blocks — opens it.
+private final class ServerRetainingDelegate: MediaUploadDelegate, @unchecked Sendable {
+  var server: MediaUploadServer?
+
+  func handlesFile(ofType mimeType: String, named filename: String) -> Bool { false }
+
+  func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
+    .original
   }
 }
