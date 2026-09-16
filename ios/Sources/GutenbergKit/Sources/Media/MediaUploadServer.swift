@@ -67,8 +67,63 @@ final class MediaUploadServer: Sendable {
             }
         )
 
-        return MediaUploadServer(server: server, cleanupTask: cleanupTask)
+        let uploadServer = MediaUploadServer(server: server, cleanupTask: cleanupTask)
+        #if DEBUG
+        countServerStarted(delegate: uploadDelegate)
+        #endif
+        return uploadServer
     }
+
+#if DEBUG
+    // MARK: - Leak Census (DEBUG)
+
+    /// Counts live servers so a host that leaks editors finds out in its own debug build.
+    ///
+    /// Every live server is a bound loopback `NWListener`. There is one per editor and the
+    /// editor stops it on `deinit`, so returning to zero is the normal outcome — monotone
+    /// growth is the ownership cycle described on
+    /// ``EditorViewController/stopMediaHandling()``. Nothing else produces it:
+    /// `EditorViewController.warmup()` passes no delegate, so it never starts a server.
+    ///
+    /// This population is the only detectable symptom of that cycle. A `deinit` assertion
+    /// on the editor cannot work — a cycle is precisely what stops `deinit` from running —
+    /// and no UIKit callback distinguishes teardown from being covered or re-parented.
+    ///
+    /// Logged, never fatal. The threshold is a heuristic, and crashing a host's debug
+    /// build over a heuristic is a worse trade than the leak it reports.
+    private static let censusLock = NSLock()
+    // Guarded by `censusLock` on every access.
+    nonisolated(unsafe) private static var liveServerCount = 0
+
+    /// Live servers tolerated before the count reads as a leak. Two editors can briefly
+    /// overlap across a push or a modal transition; four is not a shape hosts produce.
+    private static let liveServerLeakThreshold = 4
+
+    private static func countServerStarted(delegate: (any MediaUploadDelegate)?) {
+        let count = censusLock.withLock {
+            liveServerCount += 1
+            return liveServerCount
+        }
+
+        guard count >= liveServerLeakThreshold else { return }
+
+        let name = delegate.map { String(describing: type(of: $0)) } ?? "the host's delegate"
+        Logger.uploadServer.fault(
+            """
+            \(count, privacy: .public) media upload servers are live, one bound loopback \
+            listener each. Editors are leaking: a host that both owns EditorViewController \
+            and is its own media upload delegate (\(name, privacy: .public)) forms a retain \
+            cycle ARC cannot break, so the editor's deinit never runs. Call \
+            EditorViewController.stopMediaHandling() when you are done with the editor, or \
+            keep the delegate a leaf object that doesn't reference the editor.
+            """
+        )
+    }
+
+    deinit {
+        Self.censusLock.withLock { Self.liveServerCount -= 1 }
+    }
+#endif
 
     private init(server: HTTPServer, cleanupTask: Task<Void, Never>) {
         self.server = server
@@ -186,6 +241,10 @@ final class MediaUploadServer: Sendable {
     private static func passthroughResponse(
         _ request: HTTPServer.Request, query: String, context: UploadContext
     ) async throws -> HTTPResponse {
+        // As in `processAndUpload`: don't put bytes on the wire for a torn-down
+        // editor, regardless of whether the HTTP client honors cancellation.
+        try Task.checkCancellation()
+
         Logger.uploadServer.debug("Passthrough: forwarding original request body to WordPress")
         guard let body = request.parsed.body,
               let contentType = request.parsed.header("Content-Type"),
@@ -312,6 +371,13 @@ final class MediaUploadServer: Sendable {
                 try? FileManager.default.removeItem(at: uploadURL)
             }
         }
+
+        // The editor was torn down (or the client disconnected) while we processed.
+        // Don't start an outbound upload whose response nobody will read — it would
+        // create an attachment neither GutenbergKit nor the host knows to clean up.
+        // Checking here rather than relying on the HTTP client to notice cancellation
+        // keeps this true for a host-injected `URLSessionProtocol` that doesn't.
+        try Task.checkCancellation()
 
         // Step 2: Upload to remote WordPress
         if let delegate = context.uploadDelegate,
@@ -453,25 +519,27 @@ enum UploadError: Error, LocalizedError {
 // MARK: - Upload Context
 
 /// Container for the upload delegate and default uploader, captured by the
-/// HTTPServer handler closure and re-read on each request.
+/// HTTPServer handler closure and read on each request.
 ///
-/// The delegate is held **weakly**. `EditorViewController.mediaUploadDelegate` is
-/// declared `weak` — the host owns the delegate's lifetime. Capturing it strongly
-/// here would silently defeat that contract and, worse, risk a retain cycle
-/// (`EditorViewController → uploadServer → HTTPServer → handler → UploadContext →
-/// delegate → EditorViewController`) that would keep the view controller — and
-/// therefore the server — alive forever, so `deinit` would never stop it.
+/// Both are held **strongly**, so a delegate that admitted a file for processing
+/// will process it — the three reads within a request can't disagree, and an
+/// in-flight upload keeps the host's delegate alive until it unwinds. This matches
+/// Android, which holds its `uploadDelegate` as a plain `val` for the same reason.
 ///
-/// `@unchecked Sendable`: `uploadDelegate` is assigned once at init and only read
-/// afterwards; weak-reference reads are thread-safe at runtime.
-private final class UploadContext: @unchecked Sendable {
-    weak var uploadDelegate: (any MediaUploadDelegate)?
+/// Strong is safe *given* `EditorViewController` now owns `mediaUploadDelegate`
+/// strongly too — but be exact about what that trades away. Weak here did break one
+/// ring: every other edge in `EditorViewController → uploadServer → HTTPServer →
+/// listener → newConnectionHandler → handler → UploadContext → delegate` is strong,
+/// so this was its only weak link. What it could not break is the shorter ring
+/// straight through the property. A host that retains the view controller back now
+/// leaks either way, so weak here buys a partial guard in exchange for the delegate
+/// vanishing mid-request — which is the failure that was actually being hit.
+///
+/// A `struct`, so it is implicitly `Sendable`: `MediaUploadDelegate` is a `Sendable`
+/// protocol and `DefaultMediaUploader` is `@unchecked Sendable`.
+private struct UploadContext: Sendable {
+    let uploadDelegate: (any MediaUploadDelegate)?
     let defaultUploader: DefaultMediaUploader?
-
-    init(uploadDelegate: (any MediaUploadDelegate)?, defaultUploader: DefaultMediaUploader?) {
-        self.uploadDelegate = uploadDelegate
-        self.defaultUploader = defaultUploader
-    }
 }
 
 // MARK: - Default Media Uploader

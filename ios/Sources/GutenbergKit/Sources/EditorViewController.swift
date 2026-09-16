@@ -104,52 +104,44 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Used by `EditorViewController.warmup()` to reduce first-render latency.
     private let isWarmupMode: Bool
 
-    /// Set once the editor has begun loading and captured its configuration
-    /// (including ``mediaUploadDelegate``). After this, that delegate can no longer
-    /// take effect, so its setter traps if written.
-    private var hasStartedLoading = false
-
-    /// Whether a non-nil ``mediaUploadDelegate`` was ever assigned. Lets the load
-    /// path tell "the delegate was released before load" (a retention mistake to
-    /// trap) apart from "no delegate was configured" (a valid opt-out).
-    private var mediaUploadDelegateWasAssigned = false
-
-    /// Delegate for customizing media file processing and upload behavior.
+    /// Customizes media file processing and upload behavior.
     ///
-    /// Provide this **before the editor loads** — typically right after `init`, the
-    /// same way the rest of the editor configuration is supplied. It is captured
-    /// once, when the editor begins loading, and injected into the page's initial
-    /// configuration; setting it afterward has no effect, so the setter traps.
+    /// Supplied at `init`, with the rest of the editor's configuration, because that is
+    /// when it takes effect: the delegate is captured into the page's initial
+    /// configuration as the editor begins loading. Taking it there rather than through a
+    /// settable property leaves no window in which a host can hand one over too late for
+    /// it to ever run. (Android keeps a settable property and a fail-fast for exactly
+    /// that case — a `View` is inflated, not constructed by the host, so there is no
+    /// initializer to put this in.)
     ///
-    /// - Important: This is a `weak` reference — you must hold a strong reference to
-    ///   your delegate until the editor has loaded, or native uploads are silently
-    ///   disabled. To surface that mistake, the editor traps at load time if a
-    ///   delegate that was assigned here has already been deallocated.
-    public weak var mediaUploadDelegate: (any MediaUploadDelegate)? {
-        didSet {
-            // Record whether a delegate was provided so the load path can tell a
-            // premature deallocation apart from a deliberate opt-out (see
-            // `startUploadServer`).
-            mediaUploadDelegateWasAssigned = mediaUploadDelegate != nil
-            // Deliberate fail-fast, not a defensive check. The delegate is captured
-            // into the page's initial configuration when the editor begins loading,
-            // so a delegate assigned afterward would silently never take effect;
-            // trapping surfaces that misuse loudly instead of failing quietly.
-            //
-            // `hasStartedLoading` flips at the start of the async load (see
-            // `loadEditor`), which runs at or after `viewDidLoad` — so this only
-            // *widens* the safe window versus a synchronous flip. A host that
-            // follows the documented contract (set right after `init`, before
-            // presenting) can never race it; the trap fires only on a genuinely
-            // late assignment. Do not soften this to a no-op or a log — silently
-            // dropping the delegate is exactly the failure this is here to catch.
-            precondition(
-                !hasStartedLoading,
-                "mediaUploadDelegate must be set before the editor loads (e.g. right after init). "
-                    + "It is captured into the editor configuration at load; setting it afterward has no effect."
-            )
-        }
-    }
+    /// The editor holds this strongly for its lifetime, so a delegate built for a single
+    /// editor needs no reference of its own. **To reuse one across editor sessions, keep
+    /// your own reference to it.** The editor's release — on `deinit`, or on
+    /// ``stopMediaHandling()`` — drops only *its* reference: a delegate the host still
+    /// holds survives to be passed to the next editor, and one nobody else holds does not.
+    ///
+    /// That release is not always prompt, and not always on the main thread. A request in
+    /// flight holds its own reference until it unwinds, so if this editor is the delegate's
+    /// last owner, the delegate is freed when the host's `processFile` returns — on the
+    /// task's executor, not the caller's thread. Keep a reference of your own if that
+    /// matters to the conformer.
+    ///
+    /// Sharing an instance is the safer shape rather than a compromise. A delegate owned
+    /// by something longer-lived than any editor is a leaf, so the cycle below cannot form
+    /// and there is nothing to call. Two caveats when you do: it may be called
+    /// concurrently if more than one editor is live, and it must not hold on to any editor
+    /// it has served.
+    ///
+    /// The one rule: **don't conform the object that owns this editor.** Nothing here
+    /// hands a delegate the editor — every value crossing this boundary is a value type —
+    /// so the only way one reaches the editor is if you store it there, which is what
+    /// happens when the coordinator that drives the editor also conforms. Holding this
+    /// strongly is deliberate — losing the delegate mid-request was the failure actually
+    /// being hit — but it means that shape closes a cycle ARC cannot break, and the editor
+    /// cannot detect its own teardown to break it for you. If you must write it, call
+    /// ``stopMediaHandling()`` when you are done with the editor.
+    // swiftlint:disable:next weak_delegate
+    public private(set) var mediaUploadDelegate: (any MediaUploadDelegate)?
 
     // MARK: - Private Properties (Services)
     private let editorService: EditorService
@@ -200,10 +192,27 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         return HTMLPreviewManager(themeStyles: dependencies.editorSettings.themeStyles)
     }()
 
+    /// Creates an editor.
+    ///
+    /// - Parameters:
+    ///   - configuration: Site, post, and editor settings to load with.
+    ///   - dependencies: Pre-fetched editor dependencies. Pass them when you have them —
+    ///     the editor fetches its own otherwise, behind a progress bar.
+    ///   - mediaPicker: Supplies media from the host's own picker.
+    ///   - mediaUploadDelegate: Customizes media processing and upload. **Don't conform
+    ///     the object that owns this editor.** Nothing here hands the delegate the editor,
+    ///     so the only way one reaches it is if you store it there — and the editor holds
+    ///     the delegate strongly in return, closing a cycle ARC cannot break. Use a leaf
+    ///     object carrying the settings it needs. If you must write the retaining shape,
+    ///     call ``stopMediaHandling()`` when you are done. To reuse one delegate across
+    ///     editors, keep your own reference — the editor drops only its own when it goes.
+    ///   - httpClient: Replaces the client used for editor and media requests.
+    ///   - isWarmupMode: Loads the editor shell without dependencies, to warm WebKit.
     public init(
         configuration: EditorConfiguration,
         dependencies: EditorDependencies? = nil,
         mediaPicker: MediaPickerController? = nil,
+        mediaUploadDelegate: (any MediaUploadDelegate)? = nil,
         httpClient: EditorHTTPClient? = nil,
         isWarmupMode: Bool = false
     ) {
@@ -221,6 +230,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         )
         self.bundleProvider = EditorAssetBundleProvider(httpClient: httpClient)
         self.mediaPicker = mediaPicker
+        self.mediaUploadDelegate = mediaUploadDelegate
         self.lockdownModeMonitor = LockdownModeMonitor()
         self.controller = GutenbergEditorController(configuration: configuration, lockdownModeMonitor: self.lockdownModeMonitor)
 
@@ -333,14 +343,113 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         self.dependencyTaskHandle?.cancel()
     }
 
-    deinit {
-        // Stop the upload server when the editor is permanently torn down.
+    /// Releases the editor's media handling: stops the local upload server, drops the
+    /// host's ``mediaUploadDelegate``, and withdraws the upload endpoint from the page.
+    ///
+    /// Most hosts never need this. Releasing the editor runs `deinit`, which does the
+    /// same work. It is only required when the delegate holds the editor back — which
+    /// happens if you conformed the object that owns it, the one shape the delegate
+    /// documentation asks you to avoid — because that cycle keeps `deinit` from ever
+    /// running, stranding a bound loopback `NWListener` for every editor opened.
+    ///
+    /// Terminal, not a pause: this editor cannot upload or delete media afterwards, and
+    /// any upload in flight is cancelled — though cancellation is cooperative, so a
+    /// `processFile` that ignores it runs to completion and holds the delegate until it
+    /// returns. Call it when the editor is going away — not
+    /// when it is covered, backgrounded, or otherwise coming back. Calling it more than
+    /// once is safe.
+    ///
+    /// Scoped to this editor. It drops this editor's reference, so a delegate you share
+    /// across editors keeps working for the others.
+    public func stopMediaHandling() {
+        // Host-driven, and the reason is narrower than "UIKit can't tell us". It can.
         //
-        // This deliberately does NOT happen in `viewDidDisappear`, which also
-        // fires when another view controller is merely pushed or presented over
-        // the editor. `HTTPServer.stop()` cancels the `NWListener`, which is
-        // terminal and has no restart path — stopping on disappear left uploads
-        // permanently broken once the user returned to the editor.
+        // The editor's own `isBeingDismissed`/`isMovingFromParent` read false — they are
+        // true on an ancestor, because the editor is a child view controller in every
+        // real host — but walking to that ancestor works, and WordPress-iOS already ships
+        // `isBeingDismissedDirectlyOrByAncestor()` for it. Pair it with an orphan check
+        // (`parent`, `presentingViewController`, `presentedViewController` and
+        // `viewIfLoaded?.window` all nil) at `viewDidDisappear`, and a probe across
+        // fourteen hosting shapes fires correctly on every dismissal and pop — including
+        // this editor's shape in WordPress-iOS — without a single false positive on being
+        // covered, tab-switched, re-parented by a `UIPageViewController`, or left behind
+        // by a cancelled interactive pop. Detaching and being covered are distinguishable.
+        //
+        // What is *not* observable is whether a detachment is permanent. A host may
+        // re-present or re-attach the same editor instance later, and at the moment of
+        // the callback that is indistinguishable from the last one. Because this call is
+        // terminal — the listener cannot restart and the page is told to stop using it —
+        // guessing wrong permanently disables media in an editor that survived, which is
+        // strictly worse than the leak it would have prevented.
+        //
+        // So this stays the host's call while the action is terminal. Make the endpoint
+        // recoverable (have the page request the port over the bridge instead of baking
+        // it in at document start) and the trade reverses.
+        uploadServer?.stop()
+        uploadServer = nil
+        mediaUploadDelegate = nil
+        revokeNativeUploadEndpoint()
+    }
+
+    /// Withdraws the loopback endpoint from the page so media requests fall back to the
+    /// WebView's default path instead of failing against a port nothing is listening on.
+    ///
+    /// `nativeMediaUploadMiddleware` re-reads `nativeUploadPort`/`nativeUploadToken` on
+    /// every request and skips the native path when no port is advertised — but it
+    /// deliberately does *not* retry a failed native upload directly, on the stated
+    /// assumption that an advertised port is a reachable one ("cleared on stop"). Until
+    /// this existed nothing cleared it, so stopping the server left every image insert
+    /// failing with a connection error on a working connection.
+    ///
+    /// Three copies hold the endpoint and all three have to go: the live page, the
+    /// `localStorage` copy `getGBKit()` falls back to, and the injected user script,
+    /// which would otherwise restore the dead port verbatim at the next document start
+    /// — including the reload that recovers a terminated WebContent process.
+    private func revokeNativeUploadEndpoint() {
+        webView.evaluateJavaScript(
+            """
+            if (window.GBKit) {
+                window.GBKit.nativeUploadPort = null;
+                window.GBKit.nativeUploadToken = null;
+            }
+            try {
+                const stored = JSON.parse(localStorage.getItem('GBKit') || '{}');
+                stored.nativeUploadPort = null;
+                stored.nativeUploadToken = null;
+                localStorage.setItem('GBKit', JSON.stringify(stored));
+            } catch (error) {}
+            """
+        ) { _, error in
+            // Logged rather than surfaced: this runs while the editor is going away, so
+            // there is no one to tell. Silence would be worse than noise — a failure here
+            // leaves the live page pointed at a port nothing is listening on, which is the
+            // exact failure this method exists to prevent.
+            if let error {
+                Logger.uploadServer.error("Failed to withdraw the native upload endpoint from the page: \(error)")
+            }
+        }
+
+        // Rebuilt with `uploadServer` already nil, so the replacement advertises no
+        // endpoint. The load path is the only other `addUserScript` call site, so removing
+        // all of them drops exactly the script being replaced.
+        webView.configuration.userContentController.removeAllUserScripts()
+        guard let dependencies else { return }
+        do {
+            webView.configuration.userContentController.addUserScript(
+                try buildEditorConfiguration(dependencies: dependencies)
+            )
+        } catch {
+            // The load path lets this throw and aborts; here the page is already up, so
+            // the cost is narrower and lands later: the next document start gets no
+            // `window.GBKit` at all rather than one with a stale port.
+            Logger.uploadServer.error("Failed to rebuild the editor configuration after stopping media handling: \(error)")
+        }
+    }
+
+    deinit {
+        // The ordinary path: with no cycle, ARC releases the delegate when the editor
+        // goes and this stops the server. A host that retains the editor from its own
+        // delegate never reaches here — `stopMediaHandling()` is its way out.
         uploadServer?.stop()
     }
 
@@ -384,10 +493,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     @MainActor
     private func loadEditor(dependencies: EditorDependencies) async throws {
-        // From here on the editor configuration — including `mediaUploadDelegate` —
-        // is captured, so the delegate setter traps if written after this point.
-        self.hasStartedLoading = true
-
         self.displayActivityView()
 
         // Set asset bundle for the URL scheme handler to serve cached plugin/theme assets
@@ -451,14 +556,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// falls back to Gutenberg's default upload behavior (the JS override won't activate
     /// because `nativeUploadPort` will be nil in GBKit).
     private func startUploadServer() async {
-        // A delegate that was provided but is already nil here was deallocated before
-        // the editor finished loading — the host didn't hold a strong reference to it.
-        // That silently disables native uploads, so trap loudly instead.
-        precondition(
-            !(mediaUploadDelegateWasAssigned && mediaUploadDelegate == nil),
-            "mediaUploadDelegate was released before the editor loaded — hold a strong reference to it."
-        )
-
+        // Nothing to route through the native server unless the host provided a
+        // delegate. The editor owns it — `mediaUploadDelegate` is strong — so there's
+        // no released-before-load case to guard against; it lives as long as the
+        // editor does.
         guard mediaUploadDelegate != nil else {
             return
         }
@@ -485,10 +586,22 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         )
 
         do {
-            self.uploadServer = try await MediaUploadServer.start(
+            let server = try await MediaUploadServer.start(
                 uploadDelegate: mediaUploadDelegate,
                 defaultUploader: defaultUploader
             )
+
+            // `stopMediaHandling()` can land while the bind is in flight: it is a
+            // main-actor call and this is suspended. It clears the delegate, so a nil one
+            // here means media handling was stopped after this started, and storing the
+            // server would undo a terminal call — the page would be handed a port that was
+            // just withdrawn, and in the cycle the call exists for, `deinit` never runs to
+            // stop it.
+            guard mediaUploadDelegate != nil else {
+                server.stop()
+                return
+            }
+            self.uploadServer = server
         } catch {
             Logger.uploadServer.error("Failed to start upload server: \(error). Falling back to default upload behavior.")
         }
