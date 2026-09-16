@@ -4,6 +4,21 @@
 	"homepage": "https://github.com/wordpress-mobile/GutenbergKit",
 	"version": "0.20.0-alpha.0",
 	"type": "module",
+	"engines": {
+		"node": ">=24.18.0",
+		"npm": ">=11.16.0"
+	},
+	"devEngines": {
+		"runtime": {
+			"name": "node",
+			"version": ">=24.18.0"
+		},
+		"packageManager": {
+			"name": "npm",
+			"version": ">=11.16.0",
+			"onFail": "error"
+		}
+	},
 	"scripts": {
 		"clean": "npm run clean:dist && npm run clean:l10n",
 		"clean:dist": "rm -rf dist",
