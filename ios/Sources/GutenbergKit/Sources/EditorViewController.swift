@@ -283,8 +283,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             webView.topAnchor.constraint(equalTo: view.topAnchor),
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            webView.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
+            webViewBottomToSafeArea
         ])
+        observeKeyboardVisibility()
 
         // WebView starts hidden and fades in when editor navigation completes
         webView.alpha = 0
@@ -322,6 +323,107 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     public override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         setupNavigationOverlay()
+    }
+
+    public override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // The find navigator can be dismissed without any accompanying keyboard
+        // notification, so re-evaluate on layout as well.
+        updateWebViewBottomConstraint()
+    }
+
+    // MARK: - Web View Bottom Inset
+
+    /// Pins the web view above the software keyboard.
+    private lazy var webViewBottomToKeyboard = webView.bottomAnchor.constraint(
+        equalTo: view.keyboardLayoutGuide.topAnchor
+    )
+
+    /// Pins the web view to the bottom of the view, used whenever nothing is
+    /// docked above it.
+    ///
+    /// `UIKeyboardLayoutGuide` folds the system find navigator into the region
+    /// it tracks. When the navigator and the keyboard are dismissed together,
+    /// the guide never receives a final update and stays short by the
+    /// navigator's height, stranding the web view above the bottom of the
+    /// screen. Swapping to the safe area whenever neither the keyboard nor the
+    /// navigator is present sidesteps the stale value without changing how the
+    /// keyboard itself is tracked.
+    private lazy var webViewBottomToSafeArea = webView.bottomAnchor.constraint(
+        equalTo: view.safeAreaLayoutGuide.bottomAnchor
+    )
+
+    private var isKeyboardVisible = false
+
+    private func observeKeyboardVisibility() {
+        let center = NotificationCenter.default
+        center.addObserver(
+            self,
+            selector: #selector(keyboardWillShow),
+            name: UIResponder.keyboardWillShowNotification,
+            object: nil
+        )
+        center.addObserver(
+            self,
+            selector: #selector(keyboardWillHide(_:)),
+            name: UIResponder.keyboardWillHideNotification,
+            object: nil
+        )
+        center.addObserver(
+            self,
+            selector: #selector(keyboardDidHide),
+            name: UIResponder.keyboardDidHideNotification,
+            object: nil
+        )
+    }
+
+    @objc private func keyboardWillShow() {
+        isKeyboardVisible = true
+        updateWebViewBottomConstraint()
+    }
+
+    @objc private func keyboardWillHide(_ notification: Notification) {
+        isKeyboardVisible = false
+        updateWebViewBottomConstraint()
+
+        // The find navigator still reports itself visible at this point, so the
+        // pass above cannot yet tell that nothing is left docked at the bottom.
+        // It flips one run loop later, while the keyboard is still animating
+        // away, so re-check then and borrow the keyboard's own duration: the web
+        // view grows alongside the keyboard instead of leaving a gap that snaps
+        // shut once the keyboard has gone.
+        let duration = notification.userInfo?[
+            UIResponder.keyboardAnimationDurationUserInfoKey
+        ] as? TimeInterval ?? 0.25
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.updateWebViewBottomConstraint() else { return }
+            UIView.animate(withDuration: duration) {
+                self.view.layoutIfNeeded()
+            }
+        }
+    }
+
+    /// Final safety net for hosts where the check above still runs too early.
+    @objc private func keyboardDidHide() {
+        isKeyboardVisible = false
+        updateWebViewBottomConstraint()
+    }
+
+    /// - Returns: Whether the active constraint changed.
+    @discardableResult
+    private func updateWebViewBottomConstraint() -> Bool {
+        let isFindNavigatorVisible = webView.findInteraction?.isFindNavigatorVisible ?? false
+        let shouldTrackKeyboard = isKeyboardVisible || isFindNavigatorVisible
+        guard shouldTrackKeyboard != webViewBottomToKeyboard.isActive else { return false }
+
+        if shouldTrackKeyboard {
+            webViewBottomToSafeArea.isActive = false
+            webViewBottomToKeyboard.isActive = true
+        } else {
+            webViewBottomToKeyboard.isActive = false
+            webViewBottomToSafeArea.isActive = true
+        }
+        return true
     }
 
     public override func viewWillDisappear(_ animated: Bool) {
