@@ -113,14 +113,17 @@ final class MediaUploadServer: Sendable {
 
         guard count >= liveServerLeakThreshold else { return }
 
-        let name = processor.map { String(describing: type(of: $0)) }
-            ?? uploader.map { String(describing: type(of: $0)) }
-            ?? "the host's media handler"
+        // Name every handler that was supplied, not just the first. With both set the
+        // retainer is as likely to be the uploader, and naming only the processor sends
+        // the reader to audit an object that may be a value type holding nothing at all.
+        let names = [processor.map { String(describing: type(of: $0)) },
+                     uploader.map { String(describing: type(of: $0)) }].compactMap { $0 }
+        let name = names.isEmpty ? "the host's media handler" : names.joined(separator: ", ")
         Logger.uploadServer.fault(
             """
             \(count, privacy: .public) media upload servers are live, one bound loopback \
             listener each. Editors are leaking: a host that both owns EditorViewController \
-            and is its own media handler (\(name, privacy: .public)) forms a retain \
+            and is one of its own media handlers (\(name, privacy: .public)) forms a retain \
             cycle ARC cannot break, so the editor's deinit never runs. Call \
             EditorViewController.stopMediaHandling() when you are done with the editor, or \
             keep the handler a leaf object that doesn't reference the editor.
