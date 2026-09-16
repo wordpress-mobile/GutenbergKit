@@ -418,16 +418,31 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 stored.nativeUploadToken = null;
                 localStorage.setItem('GBKit', JSON.stringify(stored));
             } catch (error) {}
-            """,
-            completionHandler: nil
-        )
+            """
+        ) { _, error in
+            // Logged rather than surfaced: this runs while the editor is going away, so
+            // there is no one to tell. Silence would be worse than noise — a failure here
+            // leaves the live page pointed at a port nothing is listening on, which is the
+            // exact failure this method exists to prevent.
+            if let error {
+                Logger.uploadServer.error("Failed to withdraw the native upload endpoint from the page: \(error)")
+            }
+        }
 
         // Rebuilt with `uploadServer` already nil, so the replacement advertises no
-        // endpoint. This is the only `addUserScript` call site, so removing all of them
-        // drops exactly the script being replaced.
+        // endpoint. The load path is the only other `addUserScript` call site, so removing
+        // all of them drops exactly the script being replaced.
         webView.configuration.userContentController.removeAllUserScripts()
-        if let dependencies, let editorConfig = try? buildEditorConfiguration(dependencies: dependencies) {
-            webView.configuration.userContentController.addUserScript(editorConfig)
+        guard let dependencies else { return }
+        do {
+            webView.configuration.userContentController.addUserScript(
+                try buildEditorConfiguration(dependencies: dependencies)
+            )
+        } catch {
+            // The load path lets this throw and aborts; here the page is already up, so
+            // the cost is narrower and lands later: the next document start gets no
+            // `window.GBKit` at all rather than one with a stale port.
+            Logger.uploadServer.error("Failed to rebuild the editor configuration after stopping media handling: \(error)")
         }
     }
 
