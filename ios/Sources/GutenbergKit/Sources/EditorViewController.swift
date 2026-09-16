@@ -172,7 +172,18 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let controller: GutenbergEditorController
     private let bundleProvider: EditorAssetBundleProvider
     private let lockdownModeMonitor: LockdownModeMonitor
-    private var uploadServer: MediaUploadServer?
+    /// Whether the host supplied anything for the native upload server to route.
+    ///
+    /// Read twice by `startUploadServer()` — once before starting, once after the bind
+    /// returns — and the two reads have to agree. They did not: the first gained
+    /// `mediaUploader` and the second was left checking the processor alone, so an
+    /// uploader-only host bound a listener, immediately stopped it, and fell back to the
+    /// WebView path with nothing logged. One property, so they cannot disagree again.
+    private var hasMediaHandling: Bool {
+        mediaProcessor != nil || mediaUploader != nil
+    }
+
+    private(set) var uploadServer: MediaUploadServer?
 
     // MARK: - Private Properties (UI)
 
@@ -583,12 +594,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// The server binds to localhost on a random port. If it fails to start, the editor
     /// falls back to Gutenberg's default upload behavior (the JS override won't activate
     /// because `nativeUploadPort` will be nil in GBKit).
-    private func startUploadServer() async {
+    func startUploadServer() async {
         // Nothing to route through the native server unless the host provided a
         // processor or an uploader. The editor owns whichever it was given — both
         // properties are strong — so there's no released-before-load case to guard
         // against; they live as long as it does.
-        guard mediaProcessor != nil || mediaUploader != nil else {
+        guard hasMediaHandling else {
             return
         }
 
@@ -626,7 +637,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             // this started, and storing the server would undo a terminal call — the page
             // would be handed a port that was just withdrawn, and in the cycle the call
             // exists for, `deinit` never runs to stop it.
-            guard mediaProcessor != nil else {
+            guard hasMediaHandling else {
                 server.stop()
                 return
             }
