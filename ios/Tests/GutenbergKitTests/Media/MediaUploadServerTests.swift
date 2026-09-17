@@ -194,7 +194,7 @@ struct MediaUploadServerTests {
   /// conform, and the server actually calls it.
   ///
   /// Every other conformer in the tree is a class, so without this nothing exercises the
-  /// boxed-existential path — copied into `UploadContext`, captured by the `@Sendable`
+  /// boxed-existential path — copied into `Handler`, captured by the `@Sendable`
   /// handler closure, read again at `processFile`. Re-imposing a class requirement, or
   /// breaking that path, would otherwise compile and pass green and surface only in a
   /// host's build.
@@ -597,7 +597,7 @@ struct MediaUploadServerTests {
     // The server-side half of the ownership story, and the one nothing else covers.
     // `EditorViewController.stopMediaHandling()` clears its own properties *and* stops
     // the server, because releasing only one leaves the loop routed through the other:
-    // `listener -> newConnectionHandler -> handler -> UploadContext -> processor -> server`.
+    // `listener -> newConnectionHandler -> Handler -> processor -> server`.
     //
     // Polled rather than asserted outright, unlike `retainsProcessorForServerLifetime`:
     // `releaseConnectionHandler()` opens the loop on the caller's thread, but it is not
