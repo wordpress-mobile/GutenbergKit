@@ -41,12 +41,7 @@ const NODE_MODULES = 'node_modules/';
  * visible. An entry that no longer applies fails the check rather than
  * lingering to mask a future regression.
  */
-const KNOWN_DUPLICATES = {
-	// Dependabot bumped commands, components, and preferences past the
-	// icons range required by block-editor and editor. Resolves once the
-	// @wordpress packages are bumped together to a single release.
-	'@wordpress/icons': true,
-};
+const KNOWN_DUPLICATES = {};
 
 process.exitCode = checkForDuplicateInstalls();
 
