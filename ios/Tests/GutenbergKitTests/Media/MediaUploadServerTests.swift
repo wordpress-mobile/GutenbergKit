@@ -491,6 +491,76 @@ struct MediaUploadServerTests {
     #expect(received.query == "?_embed=wp:featuredmedia")
   }
 
+  @Test("keeps a binary Blob part out of an uploader's fields")
+  func binaryPartExcludedFromFields() async throws {
+    // Pin rule 3: a Blob always has a filename, so it's dropped before the decode.
+    let uploader = RecordingUploader()
+    let server = try await MediaUploadServer.start(uploader: uploader, internalClient: MockInternalMediaClient())
+    defer { server.stop() }
+
+    let boundary = UUID().uuidString
+    var body = Data()
+    // Ordered as `uploadToServer` emits it: the file first, then additionalData.
+    body.append("--\(boundary)\r\n")
+    body.append("Content-Disposition: form-data; name=\"file\"; filename=\"photo.jpg\"\r\n")
+    body.append("Content-Type: image/jpeg\r\n\r\n")
+    body.append(Data("fake image data".utf8))
+    body.append("\r\n--\(boundary)\r\n")
+    body.append("Content-Disposition: form-data; name=\"post\"\r\n\r\n")
+    body.append("42\r\n")
+    // A Blob-shaped part: it has a filename, and its bytes are not valid UTF-8.
+    body.append("--\(boundary)\r\n")
+    body.append("Content-Disposition: form-data; name=\"blob\"; filename=\"blob\"\r\n")
+    body.append("Content-Type: application/octet-stream\r\n\r\n")
+    body.append(Data([0xED, 0xA0, 0x80]))
+    body.append("\r\n--\(boundary)--\r\n")
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    request.httpBody = body
+
+    _ = try await URLSession.shared.data(for: request)
+
+    // The Blob is dropped rather than decoded, and `file` is still the file.
+    let received = try #require(uploader.received)
+    #expect(received.filename == "photo.jpg")
+    #expect(received.fields == [MediaUploadField(name: "post", value: "42")])
+  }
+
+  @Test("round-trips a non-Latin field value exactly")
+  func nonLatinFieldRoundTrips() async throws {
+    // The other half: valid UTF-8 round-trips, so real captions and titles survive.
+    let uploader = RecordingUploader()
+    let server = try await MediaUploadServer.start(uploader: uploader, internalClient: MockInternalMediaClient())
+    defer { server.stop() }
+
+    let caption = "Grüße 🎉 日本語"
+    let boundary = UUID().uuidString
+    var body = Data()
+    body.append("--\(boundary)\r\n")
+    body.append("Content-Disposition: form-data; name=\"caption\"\r\n\r\n")
+    body.append("\(caption)\r\n")
+    body.append("--\(boundary)\r\n")
+    body.append("Content-Disposition: form-data; name=\"file\"; filename=\"photo.jpg\"\r\n")
+    body.append("Content-Type: image/jpeg\r\n\r\n")
+    body.append(Data("fake image data".utf8))
+    body.append("\r\n--\(boundary)--\r\n")
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    request.httpBody = body
+
+    _ = try await URLSession.shared.data(for: request)
+
+    #expect(uploader.received?.fields == [MediaUploadField(name: "caption", value: caption)])
+  }
+
   @Test("a processor still processes the file an uploader delivers")
   func processorRunsForUploader() async throws {
     let processor = ProcessOnlyProcessor()
