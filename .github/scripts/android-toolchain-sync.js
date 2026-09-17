@@ -25,7 +25,7 @@ const TRACKED = [
 		upstream: 'agp',
 		blocking: true,
 		impact: ( { ours, theirs } ) => [
-			'**AGP:** a composite build fails during configuration:',
+			'**AGP:** `./gradlew` in WordPress-Android fails during configuration:',
 			'',
 			'```',
 			`Using multiple versions of the Android Gradle Plugin [${ theirs }, ${ ours }] across Gradle builds is not allowed.`,
@@ -39,18 +39,7 @@ const TRACKED = [
 		upstream: 'kotlin-main',
 		blocking: true,
 		impact: () => [
-			'**Kotlin:** a composite build still configures, but the newer Kotlin Gradle plugin silently wins the classpath for both builds, so one of them compiles with a Kotlin version it is not tested against.',
-		],
-	},
-	{
-		name: 'Compose BOM',
-		local: 'composeBom',
-		upstream: 'androidx-compose-bom',
-		blocking: true,
-		impact: () => [
-			'**Compose BOM:** the Compose compiler ships inside `org.jetbrains.kotlin.plugin.compose`, which follows the Kotlin version above, so a BOM from another release cycle pairs Compose runtime artifacts with a compiler that was not built for them.',
-			'',
-			"Unlike AGP and Kotlin, this one reaches the published library too: `:Gutenberg` declares the BOM, so every Compose artifact it resolves lands on WordPress-Android's runtime classpath, where the higher version wins for both.",
+			'**Kotlin:** the build still configures, but the newer Kotlin Gradle plugin silently wins the classpath for both builds, so one of them compiles with a Kotlin version it is not tested against.',
 		],
 	},
 ];
@@ -325,7 +314,7 @@ function buildIssueBody( rows, drifted, context ) {
 		'| --- | --- | --- | --- |',
 		...rows.map( formatRow ),
 		'',
-		'What the drift affects, a composite build being WordPress-Android with `localGutenbergKitPath` set in `local-builds.gradle`:',
+		"For anyone who sets `localGutenbergKitPath` in WordPress-Android's `local-builds.gradle`:",
 		'',
 		...drifted.flatMap( ( row ) => [ ...row.impact( row ), '' ] ),
 		'Align `android/gradle/libs.versions.toml` with WordPress-Android. If this repository is ahead, WordPress-Android needs the same upgrade instead.',
