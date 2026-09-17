@@ -299,6 +299,66 @@ are finished with the editor. It is terminal — the editor cannot upload or del
 afterwards — so call it when the editor is going away, not when it is merely covered or
 backgrounded.
 
+### Android: permit cleartext to localhost
+
+**Android hosts must add localhost to their network security configuration, or native
+media handling will silently not run.**
+
+GutenbergKit serves media through a loopback HTTP server, which the editor reaches over
+cleartext `http://localhost`. Apps targeting API 28 or above deny cleartext by default, so
+without an entry the WebView blocks every upload request with
+`ERR_CLEARTEXT_NOT_PERMITTED` before it leaves the page. `GutenbergView` detects this and
+leaves the server down, so uploads fall back to the WebView's own path rather than failing
+against a server they can never reach.
+
+The failure is quiet by design — media still uploads — so the symptom is that your
+`MediaProcessor` or `MediaUploader` is simply never called. The only signal is a warning
+in logcat:
+
+```
+Cleartext to localhost is not permitted, so the native media upload server can't be
+reached from the WebView. Permit cleartext to localhost in the app's network security
+config to enable native media processing.
+```
+
+Add a `domain-config` to the file referenced by your `<application>`'s
+`android:networkSecurityConfig`:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>
+```
+
+This narrows cleartext to loopback only. It does not permit cleartext anywhere else — the
+rest of the app keeps whatever `base-config` (or the platform default) already applies.
+
+#### Why GutenbergKit can't ship this for you
+
+`android:networkSecurityConfig` is a single-valued attribute on `<application>`: an app
+has exactly one, and the XML files do not merge. A library that declares it collides with
+the host's, and the manifest merger fails the build until the app adds
+`tools:replace="android:networkSecurityConfig"` — which then discards the library's
+version entirely. It also collides with _other_ libraries that declare one; the WordPress
+Rust API client already does. And for a host that has no config of its own, a library's
+file would silently become the app's entire network security policy, replacing any
+certificate pinning or trust anchors it would otherwise have had.
+
+So the attribute has to be the app's. Only the app can arbitrate between the libraries
+that want a say in it.
+
+#### Devices running Android 16 and above
+
+API 36 added an implicit cleartext-permitted configuration for localhost, applied when the
+app's own config does not already name it. On those devices native media handling works
+without the entry above. GutenbergKit supports API 24 and up, so the entry is still
+required in practice — and it remains correct on Android 16, where naming localhost
+explicitly simply takes precedence over the implicit one.
+
 ### Reusing a processor across editor sessions
 
 The editor holds the processor for its lifetime and releases it when it goes, so a processor

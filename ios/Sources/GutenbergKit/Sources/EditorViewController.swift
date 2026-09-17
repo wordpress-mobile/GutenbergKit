@@ -252,6 +252,15 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         httpClient: EditorHTTPClient? = nil,
         isWarmupMode: Bool = false
     ) {
+        // A `mediaUploader` needs site credentials for its media deletes. Check it here,
+        // where the host hands it over, rather than at server start: the stack trace
+        // names the caller's own line, and the mistake can't hide until the page loads.
+        MediaServerCredentials.requireCredentialsForUploader(
+            siteApiRoot: configuration.siteApiRoot,
+            authHeader: configuration.authHeader,
+            hasUploader: mediaUploader != nil
+        )
+
         let httpClient = httpClient ?? EditorHTTPClient(
             urlSession: URLSession.shared,
             authHeader: configuration.authHeader
@@ -609,8 +618,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // to upload through, so leave the server down and let uploads fall to the
         // default WebView path rather than start a server that could only fail.
         //
-        // `MediaServerCredentials` owns the check so it is reachable from the host
-        // test suite — this file is not.
+        // Only a `mediaProcessor` can reach this return: a `mediaUploader` without
+        // usable credentials already trapped in `init`, so by here it has credentials.
+        //
+        // `MediaServerCredentials` owns both the predicate and that trap so they are
+        // reachable from the host test suite — this file is not.
         guard MediaServerCredentials.areUsable(
             siteApiRoot: configuration.siteApiRoot,
             authHeader: configuration.authHeader
