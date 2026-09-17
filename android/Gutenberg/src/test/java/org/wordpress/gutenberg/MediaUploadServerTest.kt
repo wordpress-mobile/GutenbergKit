@@ -169,6 +169,146 @@ class MediaUploadServerTest {
     }
 
     @Test
+    fun `an uploader performs the upload and its result is relayed`() {
+        val uploader = RecordingUploader()
+        val client = MockInternalMediaClient()
+        server.stop()
+        server = MediaUploadServer(
+            uploadDelegate = null, internalClient = client, uploader = uploader, cacheDir = tempFolder.root
+        )
+
+        val boundary = "test-boundary-uploader"
+        val body = buildMultipartBody(boundary, "photo.jpg", "image/jpeg", "fake image data".toByteArray())
+        val response = sendRawRequest(
+            method = "POST",
+            path = "/upload",
+            headers = mapOf(
+                "Relay-Authorization" to "Bearer ${server.token}",
+                "Content-Type" to "multipart/form-data; boundary=$boundary"
+            ),
+            body = body
+        )
+
+        assertTrue("Expected 201 but got: ${response.statusLine}", response.statusLine.contains("201"))
+        assertTrue(response.body.contains("\"id\":7"))
+        // GutenbergKit stays out of the network when a host uploader is set.
+        assertFalse(client.uploadCalled)
+        assertFalse(client.passthroughUploadCalled)
+        assertEquals("photo.jpg", uploader.received?.filename)
+        assertEquals("image/jpeg", uploader.received?.mimeType)
+    }
+
+    @Test
+    fun `an uploader receives the editor's form fields in order, and the query`() {
+        // Without `post` the attachment is created unattached, and repeated names (a
+        // `field[]` array) must survive as repeats rather than collapse into a map.
+        val uploader = RecordingUploader()
+        server.stop()
+        server = MediaUploadServer(
+            uploadDelegate = null, internalClient = MockInternalMediaClient(), uploader = uploader,
+            cacheDir = tempFolder.root
+        )
+
+        val boundary = "test-boundary-fields"
+        val body = java.io.ByteArrayOutputStream().apply {
+            for ((name, value) in listOf("post" to "42", "tags[]" to "a", "tags[]" to "b")) {
+                write("--$boundary\r\n".toByteArray())
+                write("Content-Disposition: form-data; name=\"$name\"\r\n\r\n".toByteArray())
+                write("$value\r\n".toByteArray())
+            }
+            write("--$boundary\r\n".toByteArray())
+            write("Content-Disposition: form-data; name=\"file\"; filename=\"photo.jpg\"\r\n".toByteArray())
+            write("Content-Type: image/jpeg\r\n\r\n".toByteArray())
+            write("fake image data".toByteArray())
+            write("\r\n--$boundary--\r\n".toByteArray())
+        }.toByteArray()
+
+        sendRawRequest(
+            method = "POST",
+            path = "/upload?_embed=wp:featuredmedia",
+            headers = mapOf(
+                "Relay-Authorization" to "Bearer ${server.token}",
+                "Content-Type" to "multipart/form-data; boundary=$boundary"
+            ),
+            body = body
+        )
+
+        assertEquals(
+            listOf(
+                MediaUploadField("post", "42"),
+                MediaUploadField("tags[]", "a"),
+                MediaUploadField("tags[]", "b")
+            ),
+            uploader.received?.fields
+        )
+        assertEquals("?_embed=wp:featuredmedia", uploader.received?.query)
+    }
+
+    @Test
+    fun `an uploader takes precedence over the deprecated uploadFile hook`() {
+        // Both set: the uploader owns delivery and the deprecated hook must not run.
+        // The delegate still processes — only delivery moves to the uploader.
+        val uploader = RecordingUploader()
+        val delegate = MockUploadDelegate()
+        val client = MockInternalMediaClient()
+        server.stop()
+        server = MediaUploadServer(
+            uploadDelegate = delegate, internalClient = client, uploader = uploader,
+            cacheDir = tempFolder.root
+        )
+
+        val boundary = "test-boundary-precedence"
+        val body = buildMultipartBody(boundary, "photo.jpg", "image/jpeg", "data".toByteArray())
+        sendRawRequest(
+            method = "POST",
+            path = "/upload",
+            headers = mapOf(
+                "Relay-Authorization" to "Bearer ${server.token}",
+                "Content-Type" to "multipart/form-data; boundary=$boundary"
+            ),
+            body = body
+        )
+
+        assertNotNull(uploader.received)
+        assertFalse(delegate.uploadFileCalled)
+        assertTrue(delegate.processFileCalled)
+        assertFalse(client.uploadCalled)
+    }
+
+    @Test
+    fun `an uploader sees a file the delegate's metadata gate would have declined`() {
+        // The gate exists to skip a temp copy for a file the delegate won't touch. An
+        // uploader takes over delivery for every file, so passing through here would
+        // silently bypass it.
+        val uploader = RecordingUploader()
+        val client = MockInternalMediaClient()
+        val delegate = DeclineByMetadataDelegate()
+        server.stop()
+        server = MediaUploadServer(
+            uploadDelegate = delegate, internalClient = client, uploader = uploader,
+            cacheDir = tempFolder.root
+        )
+
+        val boundary = "test-boundary-declined"
+        val body = buildMultipartBody(boundary, "clip.mov", "video/quicktime", "movie".toByteArray())
+        sendRawRequest(
+            method = "POST",
+            path = "/upload",
+            headers = mapOf(
+                "Relay-Authorization" to "Bearer ${server.token}",
+                "Content-Type" to "multipart/form-data; boundary=$boundary"
+            ),
+            body = body
+        )
+
+        assertEquals("clip.mov", uploader.received?.filename)
+        assertFalse(client.passthroughUploadCalled)
+        // ...but a declined file must still not reach processFile: handlesFile
+        // returning false is the delegate saying it won't touch a file like this.
+        assertFalse(delegate.processFileCalled)
+    }
+
+    @Test
     fun `routes upload with a query string and relays the query`() {
         val delegate = ProcessOnlyDelegate()
         val mockUploader = MockInternalMediaClient()
@@ -768,6 +908,7 @@ class MediaUploadServerTest {
             return ProcessedProxyFile.Original
         }
 
+        @Suppress("OVERRIDE_DEPRECATION")
         override suspend fun uploadFile(file: File, mimeType: String, filename: String): MediaUploadResponse? {
             uploadFileCalled = true
             lastFilename = filename
@@ -786,8 +927,9 @@ class MediaUploadServerTest {
     }
 
     /**
-     * Declines every file by metadata via [handlesFile], so the server must pass
-     * through without materializing the file or calling [processFile].
+     * Declines every file by metadata via [handlesFile]. With no uploader the server
+     * must pass through without materializing the file; with one, delivery still
+     * happens but [processFile] must not be called. [processFileCalled] pins both.
      */
     private class DeclineByMetadataDelegate : MediaUploadDelegate {
         @Volatile var processFileCalled = false
@@ -828,6 +970,21 @@ class MediaUploadServerTest {
             "deleted".toByteArray(),
             mapOf("content-type" to "text/plain")
         )
+    }
+
+    /** Records the [MediaUpload] it is handed, and returns a finished attachment. */
+    private class RecordingUploader : MediaUploader {
+        @Volatile var received: MediaUpload? = null
+
+        override suspend fun upload(upload: MediaUpload): ByteArray {
+            received = upload
+            // Shaped like a real attachment: the editor's `transformAttachment`
+            // reads `title.raw`, so an example without it would model a body that
+            // fails in the editor.
+            val attachment = """{"id":7,"source_url":"https://example.com/photo.jpg",""" +
+                """"media_type":"image","title":{"raw":"photo"},"caption":{"raw":""}}"""
+            return attachment.toByteArray()
+        }
     }
 
     private class MockInternalMediaClient : InternalMediaClient(
