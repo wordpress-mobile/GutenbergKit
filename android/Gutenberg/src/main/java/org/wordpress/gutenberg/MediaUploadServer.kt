@@ -603,6 +603,22 @@ internal class MediaUploadServer(
      *
      * A list rather than a map so repeated names (e.g. a `field[]` array) survive
      * verbatim, in the order the editor sent them.
+     *
+     * This decode can't mangle anything, but only because of who is on the other end —
+     * nothing in the code enforces it. Three things have to stay true:
+     *
+     * 1. Only the editor's own web page can reach this server. It listens on loopback,
+     *    and every request has to carry a per-session token.
+     * 2. Text the editor puts in a form field is already valid Unicode. The browser
+     *    guarantees that when the value is set, so it cannot hand us bad bytes.
+     * 3. The only way a browser can put *raw* bytes in a form is a file or a Blob, and
+     *    those always arrive with a filename. Anything with a filename is handled as the
+     *    file, never as a field — so raw bytes never reach this decode.
+     *
+     * If one of those stops being true, bad bytes quietly turn into replacement
+     * characters, and the platforms don't even agree on how many: ED A0 80 becomes one
+     * of them here and three on iOS. There is no single behavior worth documenting, so
+     * the tests pin rule 3 instead.
      */
     private fun formFields(parts: List<MultipartPart>): List<MediaUploadField> =
         parts.map { MediaUploadField(it.name, String(it.body.readBytes(), Charsets.UTF_8)) }
@@ -697,10 +713,10 @@ internal open class InternalMediaClient(
     ): MediaUploadResponse {
         val mediaType = mimeType.toMediaType()
         val builder = okhttp3.MultipartBody.Builder().setType(okhttp3.MultipartBody.FORM)
-        // Preserve the non-file parts (post, additionalData) through the re-encode.
-        // Append each field's raw bytes (not via String) so a non-UTF-8 value is
-        // forwarded verbatim rather than coerced. filename=null makes it a plain
-        // field, matching okhttp's String overload byte-for-byte.
+        // Non-file parts (post, additionalData) have to survive the re-encode unchanged:
+        // appending raw bytes keeps them byte-for-byte identical to the plain passthrough,
+        // and filename=null makes each a plain field, exactly what okhttp's String overload
+        // would emit. (Bad bytes can't get here; see formFields.)
         for (part in extraParts) {
             builder.addFormDataPart(part.name, null, part.body.readBytes().toRequestBody())
         }
