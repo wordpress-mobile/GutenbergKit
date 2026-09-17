@@ -26,7 +26,7 @@ okhttp = "4.12.0"
 detekt = "1.23.8"
 buildkite-test-collector = "0.4.0"
 androidsvg = "1.4"
-json = "20240303"
+json = "20260814"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
