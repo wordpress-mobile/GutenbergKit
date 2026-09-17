@@ -127,7 +127,7 @@ interface MediaUploadDelegate {
  */
 internal class MediaUploadServer(
     private val uploadDelegate: MediaUploadDelegate?,
-    private val defaultUploader: DefaultMediaUploader?,
+    private val internalClient: InternalMediaClient?,
     cacheDir: File? = null,
     scope: CoroutineScope? = null,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO
@@ -264,7 +264,7 @@ internal class MediaUploadServer(
      * browser blocks it at preflight. Relaying it here lets the cleanup run.
      */
     private suspend fun handleDelete(attachmentId: String, query: String): HttpResponse {
-        val uploader = defaultUploader ?: return errorResponse(500, "No uploader configured")
+        val uploader = internalClient ?: return errorResponse(500, "No internal media client configured")
         return try {
             relayResponse(uploader.deleteMedia(attachmentId, query))
         } catch (e: IOException) {
@@ -407,11 +407,12 @@ internal class MediaUploadServer(
             throw e // Never swallow coroutine cancellation.
         } catch (e: Exception) {
             // Any other failure — IOException from the upload call, JSON parse
-            // errors, a throwing host delegate, or "no uploader configured" —
-            // must still be answered WITH CORS headers. Otherwise it escapes to
-            // HttpServer's header-less 500 fallback and the browser rejects the
-            // preflighted cross-origin fetch with an opaque "Failed to fetch",
-            // hiding the real error from the editor (mirrors the iOS catch-all).
+            // errors, a throwing host delegate, or "no internal media client
+            // configured" — must still be answered WITH CORS headers. Otherwise
+            // it escapes to HttpServer's header-less 500 fallback and the browser
+            // rejects the preflighted cross-origin fetch with an opaque "Failed to
+            // fetch", hiding the real error from the editor (mirrors the iOS
+            // catch-all).
             Log.e(TAG, "Upload failed", e)
             return errorResponse(500, e.message ?: "Upload failed")
         } finally {
@@ -429,9 +430,9 @@ internal class MediaUploadServer(
     private suspend fun performPassthroughUpload(request: HttpRequest, query: String): MediaUploadResponse {
         val body = request.body
         val contentType = request.header("Content-Type")
-        val uploader = defaultUploader
+        val uploader = internalClient
         if (body == null || contentType == null || uploader == null) {
-            throw MediaUploadException("Passthrough upload requires a request body, Content-Type, and default uploader")
+            throw MediaUploadException("Passthrough upload requires a request body, Content-Type, and internal media client")
         }
         return uploader.passthroughUpload(body, contentType, query)
     }
@@ -472,8 +473,8 @@ internal class MediaUploadServer(
                 return UploadResult.Passthrough
             }
 
-            val result = defaultUploader?.upload(targetFile, targetMimeType, targetFilename, extraParts, query)
-                ?: error("No upload delegate or default uploader configured")
+            val result = internalClient?.upload(targetFile, targetMimeType, targetFilename, extraParts, query)
+                ?: error("No upload delegate or internal media client configured")
             return UploadResult.Uploaded(result)
         } finally {
             // The processed file (if the delegate produced a new one) is ours to
@@ -528,9 +529,15 @@ internal class MediaUploadServer(
 internal class MediaUploadException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 /**
- * Uploads files to the WordPress REST API using OkHttp.
+ * GutenbergKit's own client for the configured site, built from the site credentials
+ * in the editor configuration.
+ *
+ * Not an implementation of any host-facing interface — it is the thing that actually
+ * performs GutenbergKit's media requests. It delivers uploads the host did not take
+ * over, and relays the editor's media deletes: the editor only ever asks to delete
+ * `/wp/v2/media/<id>` on the configured site, so that is where the relay sends it.
  */
-internal open class DefaultMediaUploader(
+internal open class InternalMediaClient(
     private val httpClient: okhttp3.OkHttpClient,
     private val siteApiRoot: String,
     private val authHeader: String,
