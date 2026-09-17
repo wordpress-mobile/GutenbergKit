@@ -104,60 +104,64 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Used by `EditorViewController.warmup()` to reduce first-render latency.
     private let isWarmupMode: Bool
 
-    /// Delegate for transforming media before upload — resize, transcode, strip EXIF.
+    /// Transforms media before upload — resize, transcode, strip EXIF.
     ///
     /// To perform the upload yourself, pass a ``mediaUploader`` instead.
     ///
     /// Supplied at `init`, with the rest of the editor's configuration, because that is
-    /// when it takes effect: the delegate is captured into the page's initial
+    /// when it takes effect: the processor is captured into the page's initial
     /// configuration as the editor begins loading. Taking it there rather than through a
     /// settable property leaves no window in which a host can hand one over too late for
     /// it to ever run. (Android keeps a settable property and a fail-fast for exactly
     /// that case — a `View` is inflated, not constructed by the host, so there is no
     /// initializer to put this in.)
     ///
-    /// The editor holds this strongly for its lifetime, so a delegate built for a single
+    /// The rest of this describes a **reference-type** conformer, which is what a host
+    /// that needs to observe or reuse its processor will write. ``MediaProcessor`` is not
+    /// class-bound, and a value-type conformer is copied at `init` — see the protocol's
+    /// documentation for what that changes.
+    ///
+    /// The editor holds this strongly for its lifetime, so a processor built for a single
     /// editor needs no reference of its own. **To reuse one across editor sessions, keep
     /// your own reference to it.** The editor's release — on `deinit`, or on
-    /// ``stopMediaHandling()`` — drops only *its* reference: a delegate the host still
+    /// ``stopMediaHandling()`` — drops only *its* reference: a processor the host still
     /// holds survives to be passed to the next editor, and one nobody else holds does not.
     ///
     /// That release is not always prompt, and not always on the main thread. A request in
-    /// flight holds its own reference until it unwinds, so if this editor is the delegate's
-    /// last owner, the delegate is freed when the host's `processFile` returns — on the
+    /// flight holds its own reference until it unwinds, so if this editor is the processor's
+    /// last owner, the processor is freed when the host's `processFile` returns — on the
     /// task's executor, not the caller's thread. Keep a reference of your own if that
     /// matters to the conformer.
     ///
-    /// Sharing an instance is the safer shape rather than a compromise. A delegate owned
+    /// Sharing an instance is the safer shape rather than a compromise. A processor owned
     /// by something longer-lived than any editor is a leaf, so the cycle below cannot form
     /// and there is nothing to call. Two caveats when you do: it may be called
     /// concurrently if more than one editor is live, and it must not hold on to any editor
     /// it has served.
     ///
     /// The one rule: **don't conform the object that owns this editor.** Nothing here
-    /// hands a delegate the editor — every value crossing this boundary is a value type —
+    /// hands a processor the editor — every value crossing this boundary is a value type —
     /// so the only way one reaches the editor is if you store it there, which is what
     /// happens when the coordinator that drives the editor also conforms. Holding this
-    /// strongly is deliberate — losing the delegate mid-request was the failure actually
+    /// strongly is deliberate — losing the processor mid-request was the failure actually
     /// being hit — but it means that shape closes a cycle ARC cannot break, and the editor
     /// cannot detect its own teardown to break it for you. If you must write it, call
     /// ``stopMediaHandling()`` when you are done with the editor.
-    // swiftlint:disable:next weak_delegate
-    public private(set) var mediaUploadDelegate: (any MediaUploadDelegate)?
+    public private(set) var mediaProcessor: (any MediaProcessor)?
 
     /// Takes over media upload on the host's own stack (background session, offline
     /// queue, resumable transport). Passing one makes the host own every upload and its
     /// whole lifecycle; GutenbergKit stays out of the network entirely for media.
     ///
-    /// Same ownership rules as ``mediaUploadDelegate``: supplied at `init`, held for the
+    /// Same ownership rules as ``mediaProcessor``: supplied at `init`, held for the
     /// editor's lifetime, and not conformed by the object that owns the editor.
     ///
-    /// Reuse is the expected shape here, more so than for a delegate: the transports this
+    /// Reuse is the expected shape here, more so than for a processor: the transports this
     /// exists for outlive any one editor by definition — a background `URLSession` has a
     /// fixed identifier and must survive app relaunch, an offline queue spans sessions.
     /// Build the uploader once, hold it, and pass the same instance to each editor.
     ///
-    /// A ``mediaUploadDelegate`` can still transform the file first; only delivery
+    /// A ``mediaProcessor`` can still transform the file first; only delivery
     /// moves to the uploader.
     public private(set) var mediaUploader: (any MediaUploader)?
 
@@ -168,7 +172,18 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let controller: GutenbergEditorController
     private let bundleProvider: EditorAssetBundleProvider
     private let lockdownModeMonitor: LockdownModeMonitor
-    private var uploadServer: MediaUploadServer?
+    /// Whether the host supplied anything for the native upload server to route.
+    ///
+    /// Read twice by `startUploadServer()` — once before starting, once after the bind
+    /// returns — and the two reads have to agree. They did not: the first gained
+    /// `mediaUploader` and the second was left checking the processor alone, so an
+    /// uploader-only host bound a listener, immediately stopped it, and fell back to the
+    /// WebView path with nothing logged. One property, so they cannot disagree again.
+    private var hasMediaHandling: Bool {
+        mediaProcessor != nil || mediaUploader != nil
+    }
+
+    private(set) var uploadServer: MediaUploadServer?
 
     // MARK: - Private Properties (UI)
 
@@ -217,22 +232,22 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///   - dependencies: Pre-fetched editor dependencies. Pass them when you have them —
     ///     the editor fetches its own otherwise, behind a progress bar.
     ///   - mediaPicker: Supplies media from the host's own picker.
-    ///   - mediaUploadDelegate: Customizes media processing and upload. **Don't conform
-    ///     the object that owns this editor.** Nothing here hands the delegate the editor,
-    ///     so the only way one reaches it is if you store it there — and the editor holds
-    ///     the delegate strongly in return, closing a cycle ARC cannot break. Use a leaf
+    ///   - mediaProcessor: Transforms media before upload. **Don't conform the object
+    ///     that owns this editor.** Nothing here hands the processor the editor, so the
+    ///     only way one reaches it is if you store it there — and the editor holds the
+    ///     processor strongly in return, closing a cycle ARC cannot break. Use a leaf
     ///     object carrying the settings it needs. If you must write the retaining shape,
-    ///     call ``stopMediaHandling()`` when you are done. To reuse one delegate across
-    ///     editors, keep your own reference — the editor drops only its own when it goes.
+    ///     call ``stopMediaHandling()`` when you are done. See ``mediaProcessor`` for the
+    ///     lifetime rules, including what a value-type conformer does differently.
     ///   - mediaUploader: Takes over media upload on the host's own stack. Same ownership
-    ///     rules as `mediaUploadDelegate`.
+    ///     rules as `mediaProcessor`.
     ///   - httpClient: Replaces the client used for editor and media requests.
     ///   - isWarmupMode: Loads the editor shell without dependencies, to warm WebKit.
     public init(
         configuration: EditorConfiguration,
         dependencies: EditorDependencies? = nil,
         mediaPicker: MediaPickerController? = nil,
-        mediaUploadDelegate: (any MediaUploadDelegate)? = nil,
+        mediaProcessor: (any MediaProcessor)? = nil,
         mediaUploader: (any MediaUploader)? = nil,
         httpClient: EditorHTTPClient? = nil,
         isWarmupMode: Bool = false
@@ -251,7 +266,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         )
         self.bundleProvider = EditorAssetBundleProvider(httpClient: httpClient)
         self.mediaPicker = mediaPicker
-        self.mediaUploadDelegate = mediaUploadDelegate
+        self.mediaProcessor = mediaProcessor
         self.mediaUploader = mediaUploader
         self.lockdownModeMonitor = LockdownModeMonitor()
         self.controller = GutenbergEditorController(configuration: configuration, lockdownModeMonitor: self.lockdownModeMonitor)
@@ -366,23 +381,23 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     /// Releases the editor's media handling: stops the local upload server, drops the
-    /// host's ``mediaUploadDelegate`` and ``mediaUploader``, and withdraws the upload
+    /// host's ``mediaProcessor`` and ``mediaUploader``, and withdraws the upload
     /// endpoint from the page.
     ///
     /// Most hosts never need this. Releasing the editor runs `deinit`, which does the
-    /// same work. It is only required when the delegate holds the editor back — which
-    /// happens if you conformed the object that owns it, the one shape the delegate
-    /// documentation asks you to avoid — because that cycle keeps `deinit` from ever
+    /// same work. It is only required when a handler holds the editor back — which
+    /// happens if you conformed the object that owns it, the one shape ``mediaProcessor``
+    /// asks you to avoid — because that cycle keeps `deinit` from ever
     /// running, stranding a bound loopback `NWListener` for every editor opened.
     ///
     /// Terminal, not a pause: this editor cannot upload or delete media afterwards, and
     /// any upload in flight is cancelled — though cancellation is cooperative, so a
-    /// `processFile` that ignores it runs to completion and holds the delegate until it
+    /// `processFile` that ignores it runs to completion and holds the processor until it
     /// returns. Call it when the editor is going away — not
     /// when it is covered, backgrounded, or otherwise coming back. Calling it more than
     /// once is safe.
     ///
-    /// Scoped to this editor. It drops this editor's reference, so a delegate you share
+    /// Scoped to this editor. It drops this editor's reference, so a handler you share
     /// across editors keeps working for the others.
     public func stopMediaHandling() {
         // Host-driven, and the reason is narrower than "UIKit can't tell us". It can.
@@ -410,7 +425,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // it in at document start) and the trade reverses.
         uploadServer?.stop()
         uploadServer = nil
-        mediaUploadDelegate = nil
+        mediaProcessor = nil
         mediaUploader = nil
         revokeNativeUploadEndpoint()
     }
@@ -471,9 +486,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     deinit {
-        // The ordinary path: with no cycle, ARC releases the delegate when the editor
+        // The ordinary path: with no cycle, ARC releases the handlers when the editor
         // goes and this stops the server. A host that retains the editor from its own
-        // delegate never reaches here — `stopMediaHandling()` is its way out.
+        // handler never reaches here — `stopMediaHandling()` is its way out.
         uploadServer?.stop()
     }
 
@@ -579,12 +594,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// The server binds to localhost on a random port. If it fails to start, the editor
     /// falls back to Gutenberg's default upload behavior (the JS override won't activate
     /// because `nativeUploadPort` will be nil in GBKit).
-    private func startUploadServer() async {
+    func startUploadServer() async {
         // Nothing to route through the native server unless the host provided a
-        // delegate or an uploader. The editor owns whichever it was given — both
+        // processor or an uploader. The editor owns whichever it was given — both
         // properties are strong — so there's no released-before-load case to guard
         // against; they live as long as it does.
-        guard mediaUploadDelegate != nil || mediaUploader != nil else {
+        guard hasMediaHandling else {
             return
         }
 
@@ -611,18 +626,18 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         do {
             let server = try await MediaUploadServer.start(
-                uploadDelegate: mediaUploadDelegate,
+                processor: mediaProcessor,
                 uploader: mediaUploader,
                 internalClient: internalClient
             )
 
             // `stopMediaHandling()` can land while the bind is in flight: it is a
-            // main-actor call and this is suspended. It clears the delegate, so a nil one
-            // here means media handling was stopped after this started, and storing the
-            // server would undo a terminal call — the page would be handed a port that was
-            // just withdrawn, and in the cycle the call exists for, `deinit` never runs to
-            // stop it.
-            guard mediaUploadDelegate != nil else {
+            // main-actor call and this is suspended. It clears both handlers, so the
+            // entry guard's condition failing here means media handling was stopped after
+            // this started, and storing the server would undo a terminal call — the page
+            // would be handed a port that was just withdrawn, and in the cycle the call
+            // exists for, `deinit` never runs to stop it.
+            guard hasMediaHandling else {
                 server.stop()
                 return
             }

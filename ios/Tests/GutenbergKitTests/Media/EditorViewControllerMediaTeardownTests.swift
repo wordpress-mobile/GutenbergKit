@@ -8,7 +8,7 @@ import Testing
 /// Pins that ``EditorViewController/stopMediaHandling()`` opens the ownership cycle a host
 /// can form, and that a host which doesn't form one needs nothing.
 ///
-/// The editor holds `mediaUploadDelegate` strongly so an in-flight upload can't lose it
+/// The editor holds `mediaProcessor` strongly so an in-flight upload can't lose it
 /// mid-request. The cost is that a host which holds the editor back closes a cycle ARC
 /// cannot break — and `deinit`, which does this work on every other path, is exactly what
 /// a cycle prevents. `stopMediaHandling()` is the way out, and it has to be the host's
@@ -21,13 +21,13 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
     static let testApiRoot = URL(string: "https://test.example.com/wp-json/wp/v2")!
 
     @MainActor
-    @Test("stopMediaHandling frees the editor and the host delegate that owns it")
+    @Test("stopMediaHandling frees the editor and the host processor that owns it")
     func stopMediaHandlingBreaksTheOwnershipCycle() async {
         weak var weakEditor: EditorViewController?
-        weak var weakHost: EditorOwningDelegate?
+        weak var weakHost: EditorOwningProcessor?
 
         do {
-            let host = EditorOwningDelegate(configuration: makeConfiguration())
+            let host = EditorOwningProcessor(configuration: makeConfiguration())
             weakEditor = host.editor
             weakHost = host
             host.editor.stopMediaHandling()
@@ -35,19 +35,19 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
 
         await waitForRelease { weakHost == nil && weakEditor == nil }
 
-        #expect(weakHost == nil, "host delegate leaked — stopMediaHandling did not release it")
-        #expect(weakEditor == nil, "EditorViewController leaked — cycle through mediaUploadDelegate")
+        #expect(weakHost == nil, "host processor leaked — stopMediaHandling did not release it")
+        #expect(weakEditor == nil, "EditorViewController leaked — cycle through mediaProcessor")
     }
 
     @MainActor
     @Test("a host that does not retain the editor is freed without stopMediaHandling")
-    func standaloneDelegateIsFreed() async {
+    func standaloneProcessorIsFreed() async {
         weak var weakEditor: EditorViewController?
 
         do {
             let editor = EditorViewController(
                 configuration: makeConfiguration(),
-                mediaUploadDelegate: StandaloneDelegate()
+                mediaProcessor: StandaloneProcessor()
             )
             weakEditor = editor
         }
@@ -55,6 +55,52 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         await waitForRelease { weakEditor == nil }
 
         #expect(weakEditor == nil, "EditorViewController leaked — nothing here retains it")
+    }
+
+    // MARK: - Which handlers bring the server up
+
+    /// The regression this pins: `startUploadServer()` reads "did the host supply a
+    /// handler" twice — once before starting, once after the bind returns — and the two
+    /// reads drifted. The first gained `mediaUploader`, the second kept checking the
+    /// processor alone, so an uploader-only host bound a listener and then immediately
+    /// stopped it. `uploadServer` stayed nil, the page was advertised `nativeUploadPort:
+    /// nil`, and `api-fetch.js` fell through to the plain WebView path — so the host's
+    /// `upload(_:)` was never called for any file, with nothing logged.
+    ///
+    /// Android pins the same gate (`GutenbergViewUploadServerTest`, "the upload server
+    /// starts for an uploader with no processor"); iOS had no equivalent, which is why the
+    /// drift survived three commits with a green suite.
+    @MainActor
+    @Test(
+        "the upload server starts for whichever handler the host supplied",
+        .enabled(if: canBindUploadServer),
+        arguments: [
+            ("uploader only", false, true),
+            ("processor only", true, false),
+            ("both", true, true)
+        ]
+    )
+    func uploadServerStartsForAnyHandler(_ label: String, processor: Bool, uploader: Bool) async {
+        let editor = EditorViewController(
+            configuration: makeConfiguration(),
+            mediaProcessor: processor ? StandaloneProcessor() : nil,
+            mediaUploader: uploader ? InertUploader() : nil
+        )
+        defer { editor.stopMediaHandling() }
+
+        await editor.startUploadServer()
+
+        #expect(editor.uploadServer != nil, "\(label): no upload server, so the host's media handling never runs")
+    }
+
+    @MainActor
+    @Test("no handler leaves the upload server down", .enabled(if: canBindUploadServer))
+    func noHandlerLeavesServerDown() async {
+        let editor = EditorViewController(configuration: makeConfiguration())
+
+        await editor.startUploadServer()
+
+        #expect(editor.uploadServer == nil, "started a server with nothing to route through it")
     }
 
     /// Polls instead of asserting outright, because a `UIViewController` can sit in an
@@ -69,18 +115,18 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
     }
 }
 
-/// The shape that cycles: owns the editor *and* is its delegate. Hosts reach for this
+/// The shape that cycles: owns the editor *and* is its processor. Hosts reach for this
 /// because the coordinator driving the editor already has the site context.
 @MainActor
-private final class EditorOwningDelegate: MediaUploadDelegate {
-    /// Implicitly unwrapped so `self` can be passed as the editor's delegate: every stored
+private final class EditorOwningProcessor: MediaProcessor {
+    /// Implicitly unwrapped so `self` can be passed as the editor's processor: every stored
     /// property then has a value (nil) on entry to `init`, which is what makes `self`
-    /// available there. Taking the delegate at `init` doesn't prevent this shape — it just
+    /// available there. Taking the processor at `init` doesn't prevent this shape — it just
     /// moves where the host writes it.
     private(set) var editor: EditorViewController!
 
     init(configuration: EditorConfiguration) {
-        editor = EditorViewController(configuration: configuration, mediaUploadDelegate: self)
+        editor = EditorViewController(configuration: configuration, mediaProcessor: self)
     }
 
     nonisolated func handlesFile(ofType mimeType: String, named filename: String) -> Bool { false }
@@ -90,7 +136,7 @@ private final class EditorOwningDelegate: MediaUploadDelegate {
     }
 }
 
-private final class StandaloneDelegate: MediaUploadDelegate {
+private final class StandaloneProcessor: MediaProcessor {
     func handlesFile(ofType mimeType: String, named filename: String) -> Bool { false }
 
     func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
@@ -99,3 +145,29 @@ private final class StandaloneDelegate: MediaUploadDelegate {
 }
 
 #endif
+
+/// Supplied only to bring the upload server up; never invoked by these tests.
+private struct InertUploader: MediaUploader {
+    func upload(_ upload: MediaUpload) async throws -> Data { Data() }
+}
+
+/// Whether `HTTPServer` can bind here — it cannot in some sandboxes, and these tests
+/// assert on a real listener.
+private let canBindUploadServer: Bool = {
+    let result = UnsafeSendableBox(false)
+    let semaphore = DispatchSemaphore(value: 0)
+    Task {
+        if let server = try? await MediaUploadServer.start() {
+            server.stop()
+            result.value = true
+        }
+        semaphore.signal()
+    }
+    semaphore.wait()
+    return result.value
+}()
+
+private final class UnsafeSendableBox<T>: @unchecked Sendable {
+    var value: T
+    init(_ value: T) { self.value = value }
+}
