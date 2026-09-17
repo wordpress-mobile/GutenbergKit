@@ -38,7 +38,3 @@ Existing patches should be described and justified here.
 ### `react-autosize-textarea`
 
 -   Fix CJS/ESM interop issue where Vite's esbuild pre-bundling wraps the `__esModule`-flagged default export as a module object instead of the actual React component, causing the `PlainText` component to crash. The patch removes the `__esModule` flag and switches from `exports["default"]` to `module.exports`, matching [Gutenberg's upstream fix](https://github.com/WordPress/gutenberg/pull/73822).
-
-### `@wordpress/rich-text`
-
--   Fix `preventFocusCapture` causing uneditable text blocks on touch devices when scrolling by swiping outside of the block canvas--e.g., along the edge of the screen.

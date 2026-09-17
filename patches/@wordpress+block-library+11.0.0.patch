@@ -1,0 +1,13 @@
+diff --git a/node_modules/@wordpress/block-library/build-module/image/image.mjs b/node_modules/@wordpress/block-library/build-module/image/image.mjs
+index 797901d..4a29ba1 100644
+--- a/node_modules/@wordpress/block-library/build-module/image/image.mjs
++++ b/node_modules/@wordpress/block-library/build-module/image/image.mjs
+@@ -372,7 +372,7 @@ function Image({
+   const hasNonContentControls = blockEditingMode === "default";
+   const isContentOnlyMode = blockEditingMode === "contentOnly";
+   const showDimensionsControls = allowResize && hasNonContentControls;
+-  const isResizable = allowResize && hasNonContentControls && !isWideAligned && isLargeViewport;
++  const isResizable = allowResize && hasNonContentControls && !isWideAligned;
+   const isUploading = !!temporaryURL || isSideloading;
+   const imageSizeOptions = imageSizes.filter(
+     ({ slug }) => image?.media_details?.sizes?.[slug]?.source_url
