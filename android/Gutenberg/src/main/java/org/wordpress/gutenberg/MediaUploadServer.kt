@@ -33,8 +33,11 @@ import okio.source
  * so every consumer — image sub-sizes, attachment links, error notices —
  * behaves identically to a non-native upload.
  */
-class MediaUploadResponse(
-    /** The HTTP status code WordPress (or the host's upload service) returned. */
+internal class MediaUploadResponse(
+    /**
+     * The HTTP status code WordPress returned, or 201 for an upload a
+     * [MediaUploader] delivered.
+     */
     val statusCode: Int,
     /**
      * The raw response body — a WordPress REST attachment on success, or a
@@ -70,23 +73,30 @@ sealed class ProcessedProxyFile {
 }
 
 /**
- * Interface for customizing media upload behavior.
+ * Transforms media before GutenbergKit delivers it.
  *
- * The native host app can provide an implementation to resize images,
- * transcode video, or use its own upload service.
+ * A delegate only changes *bytes* — GutenbergKit still uploads the result to the
+ * configured site and owns the whole lifecycle (retries, cleanup). Because it never
+ * performs the upload itself, it cannot deliver media to the wrong place. Set
+ * [GutenbergView.mediaUploadDelegate] to resize images, transcode video, strip EXIF,
+ * etc.
+ *
+ * This is the safe, common extension point: most hosts want only this. To perform the
+ * upload yourself, implement [MediaUploader] instead.
  */
 interface MediaUploadDelegate {
     /**
-     * Whether this delegate might handle a file with the given metadata — either
-     * processing it ([processFile]) or uploading it itself ([uploadFile]).
+     * Whether this delegate might transform a file with the given metadata.
      *
      * A cheap, metadata-only gate the server consults *before* materializing the
      * upload to a temp file. Return false to decline a file by type — e.g. an
      * image-only delegate returning false for a video — so the server forwards
      * the original upload to WordPress without first copying a file the delegate
-     * won't touch. Because it gates the temp-file copy needed by *both*
-     * [processFile] and [uploadFile], return true for any file the delegate will
-     * either process or upload itself.
+     * won't touch.
+     *
+     * With a [MediaUploader] set this can't decline the upload itself — an uploader
+     * delivers every file, so there is no passthrough to fall to — but it still gates
+     * [processFile]: a declined file reaches the uploader unprocessed.
      *
      * Defaults to true: every file is materialized and the full pipeline runs. A
      * true here is not a commitment — [processFile] may still return
@@ -103,30 +113,6 @@ interface MediaUploadDelegate {
      * stores it with the correct extension and type.
      */
     suspend fun processFile(file: File, mimeType: String, filename: String): ProcessedProxyFile = ProcessedProxyFile.Original
-
-    /**
-     * Upload a processed file to the remote WordPress site.
-     *
-     * Return the raw WordPress response (status code + body), which GutenbergKit
-     * relays to the editor unchanged, or null to use the internal media client. A
-     * host that uploads to WordPress should return the exact response it received so
-     * the editor sees a complete attachment object.
-     *
-     * Returning a raw response splits one upload's HTTP across two owners: you
-     * perform the POST, but the editor drives the `post-process` retries and orphan
-     * cleanup behind it, through the WebView rather than your stack. It also receives
-     * no form fields, so an attachment uploaded this way lands unattached to its post.
-     * Implement [MediaUploader] instead — it owns the upload end-to-end and receives a
-     * [MediaUpload] carrying the fields.
-     */
-    // No ReplaceWith: it takes a replacement *expression* the IDE substitutes for the
-    // call, and there is none that means "implement a different interface" — the
-    // quick-fix would drop the arguments and leave a type name where a
-    // MediaUploadResponse? was expected. The message carries the guidance instead.
-    @Deprecated(
-        "Implement MediaUploader instead — it owns the upload's retries and receives the editor's form fields."
-    )
-    suspend fun uploadFile(file: File, mimeType: String, filename: String): MediaUploadResponse? = null
 }
 
 /**
@@ -380,8 +366,8 @@ internal class MediaUploadServer(
 
         // Ask the delegate — from metadata alone — whether it will touch a file
         // like this. If not, forward the original upload to WordPress directly,
-        // skipping a full temp-file copy of a file the delegate won't process or
-        // upload (e.g. a video handed to an image-only delegate).
+        // skipping a full temp-file copy of a file the delegate won't process
+        // (e.g. a video handed to an image-only delegate).
         // An uploader takes over delivery for *every* file, so with one set there is no
         // passthrough to fall to and the gate can't decline the upload outright. It
         // still decides whether processFile runs, though — a declined file is handed to
@@ -594,13 +580,6 @@ internal class MediaUploadServer(
                 return UploadResult.Uploaded(MediaUploadResponse(201, hostUploader.upload(upload)))
             }
 
-            // The deprecated delegate path: the host performs the POST but returns the
-            // raw response, leaving the editor to drive post-process recovery behind it.
-            @Suppress("DEPRECATION")
-            uploadDelegate?.uploadFile(targetFile, targetMimeType, targetFilename)?.let {
-                return UploadResult.Uploaded(it)
-            }
-
             // Unmodified — forward the original request body directly, skipping
             // multipart re-encoding.
             if (processed is ProcessedProxyFile.Original) {
@@ -608,7 +587,7 @@ internal class MediaUploadServer(
             }
 
             val result = internalClient?.upload(targetFile, targetMimeType, targetFilename, extraParts, query)
-                ?: error("No upload delegate or internal media client configured")
+                ?: error("No media uploader or internal media client configured")
             return UploadResult.Uploaded(result)
         } finally {
             // The processed file (if the delegate produced a new one) is ours to

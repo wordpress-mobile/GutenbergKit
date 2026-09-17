@@ -13,7 +13,7 @@ import java.io.IOException
 /**
  * Demo media upload delegate that resizes images to a maximum dimension of 2000px.
  *
- * Only overrides [processFile] — [uploadFile] returns null so the default uploader is used.
+ * Only transforms the file; GutenbergKit performs the upload.
  */
 class DemoMediaUploadDelegate : MediaUploadDelegate {
     companion object {
