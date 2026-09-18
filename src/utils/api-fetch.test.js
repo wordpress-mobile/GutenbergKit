@@ -68,7 +68,7 @@ describe( 'api-fetch credentials handling', () => {
 
 		try {
 			await apiFetch( { path: '/wp/v2/posts' } );
-		} catch ( error ) {
+		} catch {
 			// Ignore errors from the actual fetch
 		}
 
@@ -89,7 +89,7 @@ describe( 'api-fetch credentials handling', () => {
 
 		try {
 			await apiFetch( { path: '/wp/v2/posts' } );
-		} catch ( error ) {
+		} catch {
 			// Ignore errors from the actual fetch
 		}
 
@@ -113,7 +113,7 @@ describe( 'api-fetch credentials handling', () => {
 				path: '/wp/v2/posts',
 				credentials: 'include',
 			} );
-		} catch ( error ) {
+		} catch {
 			// Ignore errors from the actual fetch
 		}
 
@@ -170,7 +170,7 @@ describe( 'api-fetch credentials handling', () => {
 
 			try {
 				await apiFetch( { path: '/wp/v2/posts/99' } );
-			} catch ( error ) {
+			} catch {
 				// Ignore errors from the actual fetch
 			}
 
@@ -186,7 +186,7 @@ describe( 'api-fetch credentials handling', () => {
 
 			try {
 				await apiFetch( { path: '/wp/v2/posts/99' } );
-			} catch ( error ) {
+			} catch {
 				// Ignore errors from the actual fetch
 			}
 
@@ -251,7 +251,7 @@ describe( 'api-fetch credentials handling', () => {
 
 			try {
 				await apiFetch( { path: '/wp/v2/posts' } );
-			} catch ( error ) {
+			} catch {
 				// Ignore errors from the actual fetch
 			}
 
@@ -275,7 +275,7 @@ describe( 'api-fetch credentials handling', () => {
 					'X-Custom-Header': 'custom-value',
 				},
 			} );
-		} catch ( error ) {
+		} catch {
 			// Ignore errors from the actual fetch
 		}
 
