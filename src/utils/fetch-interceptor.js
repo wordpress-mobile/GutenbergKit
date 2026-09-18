@@ -264,7 +264,7 @@ async function serializeBody( source ) {
 			try {
 				JSON.parse( text );
 				return text;
-			} catch ( e ) {
+			} catch {
 				return text;
 			}
 		}
