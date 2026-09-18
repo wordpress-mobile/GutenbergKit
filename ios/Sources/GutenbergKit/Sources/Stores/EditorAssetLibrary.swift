@@ -9,6 +9,10 @@ public actor EditorAssetLibrary {
     private let storageRoot: URL
     private let cachePolicy: EditorCachePolicy
 
+    /// Bundle builds in flight, keyed by the directory each writes. Every service builds its own
+    /// library, so this is shared across all of them.
+    static let inFlightBuilds = InFlightTasks<URL, EditorAssetBundle>()
+
     /// Creates a new `EditorAssetLibrary` instance.
     ///
     /// - Parameters:
@@ -118,6 +122,18 @@ public actor EditorAssetLibrary {
             return .empty
         }
 
+        // Every build of one manifest writes the same directory, whichever library runs it:
+        // join a build in flight rather than race a second one into it.
+        let destination = self.bundleRoot(for: manifest.checksum).standardizedFileURL
+        return try await Self.inFlightBuilds.value(for: destination, progress: progress) { report in
+            try await self.build(manifest, reportingTo: report)
+        }
+    }
+
+    private func build(
+        _ manifest: LocalEditorAssetManifest,
+        reportingTo progress: EditorProgressCallback
+    ) async throws -> EditorAssetBundle {
         var complete = 0
 
         let tempDirectory = URL.temporaryDirectory.appending(path: UUID().uuidString)
@@ -147,9 +163,15 @@ public actor EditorAssetLibrary {
 
             for await _ in group {
                 complete += 1
-                await progress?(EditorProgress(completed: complete, total: links.count))
+                await progress(EditorProgress(completed: complete, total: links.count))
             }
         }
+
+        // The group swallows every per-asset failure, cancellation included, so a
+        // cancelled build still arrives here with assets missing. Nothing downstream
+        // checks for them — `readAssetBundles()` reads only the manifest — so publishing
+        // it would serve the gap on every later launch.
+        try Task.checkCancellation()
 
         return try bundle.copy(to: self.bundleRoot(for: bundle))
     }

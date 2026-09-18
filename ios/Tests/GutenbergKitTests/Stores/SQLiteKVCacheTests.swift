@@ -651,4 +651,33 @@ struct SQLiteKVCacheTests {
         let expected = try encoder.encode(meta)
         #expect(entry.metadata == expected)
     }
+
+    // MARK: - One instance per file
+
+    @Test("shared hands every caller the live instance for a file")
+    func sharedHandsOutOneInstancePerFile() {
+        let directory = URL.randomTemporaryDirectory
+        let capacity = Measurement<UnitInformationStorage>(value: 1, unit: .mebibytes)
+        let store = SQLiteKVCache.shared(handle: "test", directory: directory, diskCapacity: capacity)
+
+        #expect(SQLiteKVCache.shared(handle: "test", directory: directory, diskCapacity: capacity) === store)
+        #expect(SQLiteKVCache.shared(handle: "TEST", directory: directory, diskCapacity: capacity) === store)
+        #expect(SQLiteKVCache.shared(handle: "other", directory: directory, diskCapacity: capacity) !== store)
+        #expect(SQLiteKVCache.shared(handle: "test", directory: .randomTemporaryDirectory, diskCapacity: capacity) !== store)
+    }
+
+    @Test("shared opens a file afresh once no one is using it")
+    func sharedReopensAFileNoOneIsUsing() throws {
+        let directory = URL.randomTemporaryDirectory
+        let capacity = Measurement<UnitInformationStorage>(value: 1, unit: .mebibytes)
+        var store: SQLiteKVCache? = SQLiteKVCache.shared(handle: "test", directory: directory, diskCapacity: capacity)
+        try store?.put(key: "durable", storageDate: referenceDate, metadata: Data(), value: Data("v"))
+        weak let released = store
+
+        store = nil
+        #expect(released == nil, "sharing should not keep a file open")
+
+        let reopened = SQLiteKVCache.shared(handle: "test", directory: directory, diskCapacity: capacity)
+        #expect(try reopened.get(key: "durable")?.value == Data("v"))
+    }
 }

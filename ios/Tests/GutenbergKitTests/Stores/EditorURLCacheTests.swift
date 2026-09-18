@@ -444,4 +444,46 @@ struct EditorURLCacheAlwaysPolicyTests {
         let tenYearsLater = self.referenceDate.addingTimeInterval(10 * 365 * 24 * 60 * 60)
         #expect(try cache.hasData(for: testURL, httpMethod: .GET, currentDate: tenYearsLater) == true)
     }
+
+    // MARK: - One store per site
+
+    /// Every service builds its own cache for a site, so caches share a file — and two stores on
+    /// one file race their opens, the loser failing for the rest of its life. Before caches
+    /// shared a store, at least one broke in every run.
+    @Test("caches for one site can be opened and used at the same time")
+    func cachesForOneSiteCanBeUsedAtTheSameTime() async throws {
+        for _ in 0..<20 {
+            let parent = URL.randomTemporaryDirectory
+            let caches = [
+                EditorURLCache(siteId: "site", parentDirectory: parent, cachePolicy: .always),
+                EditorURLCache(siteId: "site", parentDirectory: parent, cachePolicy: .always),
+            ]
+            // Each makes its first read at the same moment, as two services starting a fetch do.
+            await withTaskGroup { group in
+                for cache in caches {
+                    group.addTask { _ = try? cache.response(for: testURL, httpMethod: .GET) }
+                }
+            }
+            for cache in caches {
+                try cache.store(makeResponse(), for: testURL, httpMethod: .GET)
+            }
+        }
+    }
+
+    @Test("caches for one site can write at the same time")
+    func cachesForOneSiteCanWriteAtTheSameTime() async throws {
+        let parent = URL.randomTemporaryDirectory
+        let caches = [
+            EditorURLCache(siteId: "site", parentDirectory: parent, cachePolicy: .always),
+            EditorURLCache(siteId: "site", parentDirectory: parent, cachePolicy: .always),
+        ]
+        try await withThrowingTaskGroup { group in
+            for index in 0..<200 {
+                let cache = caches[index % caches.count]
+                let url = testURL.appending(path: "\(index % 20)")
+                group.addTask { try cache.store(makeResponse(), for: url, httpMethod: .GET) }
+            }
+            try await group.waitForAll()
+        }
+    }
 }
