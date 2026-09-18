@@ -124,7 +124,7 @@
 		"prettier": "npm:wp-prettier@^3.0.3",
 		"react-devtools": "^8.0.0",
 		"react-devtools-core": "^7.0.1",
-		"sass-embedded": "^1.98.0",
+		"sass-embedded": "^1.104.1",
 		"vite": "^8.0.16",
 		"vitest": "^5.0.1"
 	},
