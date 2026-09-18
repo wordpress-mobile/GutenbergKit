@@ -84,7 +84,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// The fetched or provided editor dependencies (settings, assets, preload data).
     private var dependencies: EditorDependencies?
-    private var dependencyTaskHandle: Task<Void, Never>?
 
     /// Error encountered while loading dependencies.
     private var error: Error? {
@@ -351,14 +350,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         if let dependencies {
             // FAST PATH: Dependencies were provided at init() - load immediately.
-            //
-            // Deliberately NOT tracked in `dependencyTaskHandle`: `viewDidDisappear`
-            // cancels that handle to abort the async dependency *fetch*, but the
-            // fast path is cheap local work that must run to completion — a
-            // transient disappearance (e.g. a modal presented over the editor)
-            // cancelling it mid `startUploadServer()` silently disabled native
-            // uploads for the session. `[weak self]` still makes it a no-op once
-            // the controller is torn down.
+            // Not cancellable: cancelling mid-`startUploadServer()` silently disables
+            // native uploads for the session (#357).
             Task(priority: .userInitiated) { [weak self] in
                 do {
                     try await self?.loadEditor(dependencies: dependencies)
@@ -367,8 +360,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 }
             }
         } else {
-            // ASYNC FLOW: No dependencies - fetch them asynchronously
-            self.dependencyTaskHandle = Task(priority: .userInitiated) { [weak self] in
+            // ASYNC FLOW: No dependencies - fetch them, then load as above.
+            // Not cancellable either, for the same reason plus one: nothing restarts
+            // the fetch, so the editor never recovers from a cancel. Note that
+            // `viewDidDisappear` fires when the editor is merely covered. See #651.
+            Task(priority: .userInitiated) { [weak self] in
                 await self?.prepareEditor()
             }
         }
@@ -382,11 +378,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     public override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         removeNavigationOverlay()
-    }
-
-    public override func viewDidDisappear(_ animated: Bool) {
-        super.viewDidDisappear(animated)
-        self.dependencyTaskHandle?.cancel()
     }
 
     /// Releases the editor's media handling: stops the local upload server, drops the
