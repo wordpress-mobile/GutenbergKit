@@ -13,7 +13,7 @@ This guide covers how to integrate GutenbergKit into your iOS or Android app. If
 
 ### Android
 
--   **Platform**: minSdk 24 (Android 7.0), targetSdk 34
+-   **Platform**: minSdk 24 (Android 7.0). Your module must set `compileSdk` to 36 or later — the published AAR declares `minCompileSdk=36`, and Gradle fails `checkAarMetadata` below it.
 -   **Dependencies** (managed via Gradle):
     -   `androidx.webkit:webkit` - Enhanced WebView features
     -   `com.google.code.gson:gson` - JSON serialization
