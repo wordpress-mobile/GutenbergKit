@@ -3,10 +3,8 @@ name: Android Toolchain Sync
 # WordPress-Android includes this project as a composite build when a developer
 # sets `localGutenbergKitPath`. Gradle refuses to run a composite build that
 # spans two Android Gradle Plugin versions, so an AGP bump there breaks local
-# builds here until this repository follows. The Compose BOM reaches further
-# still: the published library brings its Compose artifacts onto
-# WordPress-Android's runtime classpath. Dependabot cannot do that work — it
-# upgrades toward the newest release, while these versions have to match
+# builds here until this repository follows. Dependabot cannot do that work —
+# it upgrades toward the newest release, while these versions have to match
 # WordPress-Android — so this job watches for the drift and files an issue.
 
 on:
