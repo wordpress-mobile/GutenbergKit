@@ -8,11 +8,12 @@ import OSLog
 ///
 /// Backed by `SQLiteKVCache`. The cache directory is built as
 /// `<parentDirectory>/<siteId>/`, so two caches with different `siteId`s are
-/// guaranteed-distinct backing files. The "one instance per backing file"
-/// contract from `SQLiteKVCache` still applies for the same `(siteId,
-/// parentDirectory)` pair, but the typical call pattern (one cache per
-/// `EditorService`, one service per editor view) keeps that contract by
-/// construction.
+/// guaranteed-distinct backing files. Caches for the same `(siteId,
+/// parentDirectory)` pair share one store through
+/// `SQLiteKVCache.shared(handle:directory:diskCapacity:)`, which is what keeps
+/// that store's "one instance per backing file" contract: every
+/// `EditorService` builds its own cache, and a prefetch and an editor for the
+/// same site routinely run at once.
 public struct EditorURLCache: Sendable {
     /// About enough for 10 sites of cached responses.
     private static let diskCapacity = Measurement<UnitInformationStorage>(value: 100, unit: .mebibytes)
@@ -38,7 +39,9 @@ public struct EditorURLCache: Sendable {
         parentDirectory: URL = Paths.defaultCacheRoot,
         cachePolicy: EditorCachePolicy = .always
     ) {
-        self.store = SQLiteKVCache(
+        // Shared: every service for a site builds its own cache, and two stores on one
+        // file break each other.
+        self.store = SQLiteKVCache.shared(
             handle: "editorurlcache",
             directory: parentDirectory.appending(path: siteId),
             diskCapacity: Self.diskCapacity

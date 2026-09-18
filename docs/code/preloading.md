@@ -313,6 +313,23 @@ let dependencies = try await service.prepare { progress in
 }
 ```
 
+#### Sharing Work Between Services
+
+Every `EditorService` for a site reads and writes the same on-disk caches, so there's no need to hand a service from a
+prefetch to the editor — create one for each caller. Don't call `prepare()` on a service while an earlier call on it is
+still running: progress is tracked per service, so the later call takes over the progress callback, and whichever
+finishes first stops progress for both.
+
+Services for the same site also share work while it's in flight. A request identical to one already in flight joins it
+rather than going out again, and a build of an asset bundle joins the one already running. So an editor opened before a
+prefetch finishes fetches only its own post and the `editor-assets` manifest, even when the two are for different posts.
+Requests are shared only between clients with the same `URLSession` instance, credentials, and timeout, and never from a
+client with a delegate, which expects to see every request it makes. A bundle build is shared by every service for the
+site whatever its client, just as the bundle it produces is once it's on disk.
+
+Cancelling a caller ends only that caller's wait; shared work stops once no caller is left waiting on it. `purge()`
+doesn't stop it, so work that began before a purge can still land after it.
+
 ### EditorViewController Loading Flows
 
 `EditorViewController` supports two loading flows based on whether dependencies are provided:
@@ -337,7 +354,9 @@ let editor = EditorViewController(
 )
 ```
 
-The editor displays a progress bar while fetching, then loads once complete.
+The editor displays a progress bar while fetching, then loads once complete. The fetch does not hold the
+editor: releasing it mid-fetch frees it immediately, and the fetch finishes in the background, warming the
+cache for the next editor.
 
 ### Best Practice: Prepare Early
 

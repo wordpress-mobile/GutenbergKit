@@ -651,4 +651,77 @@ struct SQLiteKVCacheTests {
         let expected = try encoder.encode(meta)
         #expect(entry.metadata == expected)
     }
+
+    // MARK: - One instance per file
+
+    @Test("shared hands every caller the live instance for a file")
+    func sharedHandsOutOneInstancePerFile() {
+        let directory = URL.randomTemporaryDirectory
+        let capacity = Measurement<UnitInformationStorage>(value: 1, unit: .mebibytes)
+        let store = SQLiteKVCache.shared(handle: "test", directory: directory, diskCapacity: capacity)
+
+        #expect(SQLiteKVCache.shared(handle: "test", directory: directory, diskCapacity: capacity) === store)
+        #expect(SQLiteKVCache.shared(handle: "TEST", directory: directory, diskCapacity: capacity) === store)
+        #expect(SQLiteKVCache.shared(handle: "other", directory: directory, diskCapacity: capacity) !== store)
+        #expect(SQLiteKVCache.shared(handle: "test", directory: .randomTemporaryDirectory, diskCapacity: capacity) !== store)
+    }
+
+    @Test("shared opens a file afresh once no one is using it")
+    func sharedReopensAFileNoOneIsUsing() throws {
+        let directory = URL.randomTemporaryDirectory
+        let capacity = Measurement<UnitInformationStorage>(value: 1, unit: .mebibytes)
+        var store: SQLiteKVCache? = SQLiteKVCache.shared(handle: "test", directory: directory, diskCapacity: capacity)
+        try store?.put(key: "durable", storageDate: referenceDate, metadata: Data(), value: Data("v"))
+        weak let released = store
+
+        store = nil
+        #expect(released == nil, "sharing should not keep a file open")
+
+        let reopened = SQLiteKVCache.shared(handle: "test", directory: directory, diskCapacity: capacity)
+        #expect(try reopened.get(key: "durable")?.value == Data("v"))
+    }
+
+    /// `shared` hands out a fresh instance the moment the last one is released, while that
+    /// one's `deinit` may still hold the file to checkpoint its WAL. Without a busy timeout the
+    /// reopen fails on that lock every time — 200 runs out of 200 — and caches the failure.
+    @Test("shared reopens a file while its last instance is still closing")
+    func sharedReopensAFileWhileItCloses() async throws {
+        let capacity = Measurement<UnitInformationStorage>(value: 1, unit: .mebibytes)
+        for _ in 0..<20 {
+            let directory = URL.randomTemporaryDirectory
+            let closing = ReleasableStore(SQLiteKVCache.shared(handle: "test", directory: directory, diskCapacity: capacity))
+            // Enough in the WAL that checkpointing it on close takes a moment.
+            for index in 0..<50 {
+                try closing.store?.put(
+                    key: "\(index)",
+                    storageDate: referenceDate,
+                    metadata: Data(),
+                    value: Data(repeating: 1, count: 4096)
+                )
+            }
+
+            async let released: Void = Task.detached { closing.release() }.value
+            async let reopened = Task.detached {
+                try SQLiteKVCache.shared(handle: "test", directory: directory, diskCapacity: capacity).get(key: "0")
+            }.value
+            await released
+            #expect(try await reopened != nil)
+        }
+    }
+}
+
+/// Holds the only reference to a store until `release()`, so a test can drop it from another task.
+private final class ReleasableStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var held: SQLiteKVCache?
+
+    init(_ store: SQLiteKVCache) {
+        held = store
+    }
+
+    var store: SQLiteKVCache? { lock.withLock { held } }
+
+    func release() {
+        lock.withLock { held = nil }
+    }
 }
