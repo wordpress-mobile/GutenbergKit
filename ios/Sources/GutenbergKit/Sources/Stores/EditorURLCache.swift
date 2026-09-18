@@ -38,7 +38,9 @@ public struct EditorURLCache: Sendable {
         parentDirectory: URL = Paths.defaultCacheRoot,
         cachePolicy: EditorCachePolicy = .always
     ) {
-        self.store = SQLiteKVCache(
+        // Shared: every service for a site builds its own cache, and two stores on one
+        // file break each other.
+        self.store = SQLiteKVCache.shared(
             handle: "editorurlcache",
             directory: parentDirectory.appending(path: siteId),
             diskCapacity: Self.diskCapacity

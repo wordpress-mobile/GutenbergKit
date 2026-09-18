@@ -28,14 +28,14 @@ import UIKit
 // │   WARMUP MODE      │  │ DEPENDENCIES       │  │ NO DEPENDENCIES               │
 // │   (isWarmupMode)   │  │ PROVIDED           │  │ (Async Flow)                  │
 // │                    │  │ (Fast Path)        │  │                               │
-// │ Load HTML without  │  │                    │  │ Spawn Task to fetch           │
+// │ Load HTML without  │  │                    │  │ Start a loader to fetch       │
 // │ any dependencies   │  │ loadEditor()       │  │ dependencies                  │
 // │ for prewarming     │  │ immediately        │  │                               │
 // └────────────────────┘  └────────────────────┘  └───────────────────────────────┘
 //                                      │                       ▼
 //                                      │          ┌───────────────────────────────┐
-//                                      │          │ prepareEditor()               │
-//                                      │          │  • Load editor dependencies   │
+//                                      │          │ EditorDependencyLoader        │
+//                                      │          │  • Fetch editor dependencies  │
 //                                      │          └───────────────────────────────┘
 //                                      │                       ▼
 //                                      │          ┌───────────────────────────────┐
@@ -66,12 +66,16 @@ import UIKit
 //
 // ## Flow 2: No Dependencies (Async Flow)
 //
-// When no dependencies are provided, the controller fetches them asynchronously.
+// When no dependencies are provided, an `EditorDependencyLoader` fetches them
+// asynchronously and hands them to the fast path. The loader holds the controller
+// only weakly, so a controller released mid-fetch is freed at once, not when the
+// fetch ends.
+//
 // This is a fallback behaviour – the host app should provide the dependencies if it can,
 // because it'll be a much better user experience.
 //
 @MainActor
-public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate, UIAdaptivePresentationControllerDelegate, UIPopoverPresentationControllerDelegate, UISheetPresentationControllerDelegate {
+public final class EditorViewController: UIViewController, GutenbergEditorControllerDelegate, EditorDependencyLoaderDelegate, UIAdaptivePresentationControllerDelegate, UIPopoverPresentationControllerDelegate, UISheetPresentationControllerDelegate {
 
     public let webView: WKWebView
     public var configuration: EditorConfiguration
@@ -84,6 +88,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// The fetched or provided editor dependencies (settings, assets, preload data).
     private var dependencies: EditorDependencies?
+
+    /// Fetches `dependencies` when none were provided at init.
+    private var dependencyLoader: EditorDependencyLoader?
 
     /// Error encountered while loading dependencies.
     private var error: Error? {
@@ -350,23 +357,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         if let dependencies {
             // FAST PATH: Dependencies were provided at init() - load immediately.
-            // Not cancellable: cancelling mid-`startUploadServer()` silently disables
-            // native uploads for the session (#357).
-            Task(priority: .userInitiated) { [weak self] in
-                do {
-                    try await self?.loadEditor(dependencies: dependencies)
-                } catch {
-                    self?.failToLoad(error)
-                }
-            }
+            startLoadingEditor(dependencies: dependencies)
         } else {
-            // ASYNC FLOW: No dependencies - fetch them, then load as above.
-            // Not cancellable either, for the same reason plus one: nothing restarts
-            // the fetch, so the editor never recovers from a cancel. Note that
-            // `viewDidDisappear` fires when the editor is merely covered. See #651.
-            Task(priority: .userInitiated) { [weak self] in
-                await self?.prepareEditor()
-            }
+            // ASYNC FLOW: No dependencies - fetch them, then take the fast path.
+            displayProgressView()
+            dependencyLoader = EditorDependencyLoader(service: editorService, delegate: self)
         }
     }
 
@@ -492,28 +487,25 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         uploadServer?.stop()
     }
 
-    /// Fetches all required dependencies and then loads the editor.
-    ///
-    /// This method is the entry point for the **Async Flow** (when no dependencies were provided at init).
-    @MainActor
-    private func prepareEditor() async {
-        self.displayProgressView()
-        defer { self.hideProgressView() }
+    // MARK: - Async Flow (EditorDependencyLoaderDelegate)
 
-        do {
-            // EditorService.prepare() fetches dependencies concurrently with progress reporting
-            let dependencies = try await self.editorService.prepare { @MainActor [weak self] progress in
-                self?.progressView.setProgress(progress, animated: true)
-            }
+    func dependencyLoader(_ loader: EditorDependencyLoader, didUpdate progress: EditorProgress) {
+        progressView.setProgress(progress, animated: true)
+    }
 
-            // Store dependencies for later use (e.g., HTMLPreviewManager)
-            self.dependencies = dependencies
+    func dependencyLoader(_ loader: EditorDependencyLoader, didLoad dependencies: EditorDependencies) {
+        hideProgressView()
 
-            // Continue to the shared loading path
-            try await self.loadEditor(dependencies: dependencies)
-        } catch {
-            self.failToLoad(error)
-        }
+        // Store dependencies for later use (e.g., HTMLPreviewManager)
+        self.dependencies = dependencies
+
+        // Continue to the shared loading path
+        startLoadingEditor(dependencies: dependencies)
+    }
+
+    func dependencyLoader(_ loader: EditorDependencyLoader, didFailWith error: any Error) {
+        hideProgressView()
+        failToLoad(error)
     }
 
     private func failToLoad(_ error: Error) {
@@ -522,6 +514,22 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     // MARK: - Shared Loading Path: Load Editor into WebView
+
+    /// Runs `loadEditor(dependencies:)` — the step both flows end on.
+    ///
+    /// Not cancellable, and it holds the editor until the load returns: cancelling it
+    /// mid-`startUploadServer()` silently disables native uploads for the session
+    /// (#357). The hold is short — the server bind is capped by
+    /// `HTTPServer.defaultStartTimeout`.
+    private func startLoadingEditor(dependencies: EditorDependencies) {
+        Task(priority: .userInitiated) { [weak self] in
+            do {
+                try await self?.loadEditor(dependencies: dependencies)
+            } catch {
+                self?.failToLoad(error)
+            }
+        }
+    }
 
     /// Loads the editor HTML into the WebView with the given dependencies.
     ///

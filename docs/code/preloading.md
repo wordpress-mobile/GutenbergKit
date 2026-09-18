@@ -313,6 +313,12 @@ let dependencies = try await service.prepare { progress in
 }
 ```
 
+Overlapping `prepare()` calls share their work, so a prefetch and an editor opened before it finishes don't download
+anything twice — even when they're for different posts. A request identical to one already in flight joins it rather
+than going out again, and two builds of the same asset bundle share one build. Cancelling a caller ends only that
+caller's wait; shared work stops once no caller is left waiting on it. A request is shared only between clients with the
+same session, credentials, and timeout, and never from a client with a delegate, which expects to see every request.
+
 ### EditorViewController Loading Flows
 
 `EditorViewController` supports two loading flows based on whether dependencies are provided:
@@ -337,7 +343,9 @@ let editor = EditorViewController(
 )
 ```
 
-The editor displays a progress bar while fetching, then loads once complete.
+The editor displays a progress bar while fetching, then loads once complete. The fetch does not hold the
+editor: releasing it mid-fetch frees it immediately, and the fetch finishes in the background, warming the
+cache for the next editor.
 
 ### Best Practice: Prepare Early
 

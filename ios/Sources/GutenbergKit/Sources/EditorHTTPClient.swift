@@ -94,6 +94,20 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
     private let delegate: EditorHTTPClientDelegate?
     private let requestTimeout: TimeInterval?
 
+    /// Requests in flight that an identical `perform(_:)` joins instead of sending again. Every
+    /// editor and service builds its own client, so this is shared across all of them.
+    static let inFlightRequests = InFlightTasks<SharedRequest, (Data, HTTPURLResponse)>()
+
+    /// A request other callers can share: the request as it goes out, and the session it goes
+    /// out on. `URLRequest`'s own `==` ignores the timeout and the network service type, so
+    /// those are compared here; it ignores the body too, but a request with one isn't shared.
+    struct SharedRequest: Hashable, Sendable {
+        let request: URLRequest
+        let timeout: TimeInterval
+        let networkServiceType: URLRequest.NetworkServiceType
+        let session: ObjectIdentifier
+    }
+
     public init(
         urlSession: URLSessionProtocol,
         authHeader: String,
@@ -106,9 +120,51 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
         self.requestTimeout = requestTimeout
     }
 
+    /// Sends `urlRequest`, throwing for a non-2xx status.
+    ///
+    /// A request identical to one already in flight joins it rather than going out again, so
+    /// callers after the same site data — an editor and a prefetch, say — pay for one round
+    /// trip. Only a safe request without a body is shared, and only between clients no delegate
+    /// is watching. Cancelling a caller ends its own wait; the request is cancelled once no
+    /// caller is left waiting on it.
     public func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
-
         let configuredRequest = self.configureRequest(urlRequest)
+        guard let sharedRequest = sharedRequest(forConfigured: configuredRequest) else {
+            return try await send(configuredRequest)
+        }
+        return try await Self.inFlightRequests.value(for: sharedRequest) { _ in
+            try await self.send(configuredRequest)
+        }
+    }
+
+    /// For tests: what `perform(_:)` shares `urlRequest` under, or `nil` if it goes out alone.
+    func sharedRequest(for urlRequest: URLRequest) -> SharedRequest? {
+        sharedRequest(forConfigured: configureRequest(urlRequest))
+    }
+
+    /// `nil` for a request that must go out alone: an unsafe method or a body, a delegate that
+    /// expects to see each request it asked for, or a session that isn't an object — a shared
+    /// request is keyed by the session's identity, which only an object keeps.
+    private func sharedRequest(forConfigured request: URLRequest) -> SharedRequest? {
+        guard delegate == nil,
+            Self.sharableMethods.contains(request.httpMethod ?? "GET"),
+            request.httpBody == nil,
+            request.httpBodyStream == nil,
+            type(of: urlSession) is AnyClass
+        else {
+            return nil
+        }
+        return SharedRequest(
+            request: request,
+            timeout: request.timeoutInterval,
+            networkServiceType: request.networkServiceType,
+            session: ObjectIdentifier(urlSession as AnyObject)
+        )
+    }
+
+    private static let sharableMethods: Set<String> = ["GET", "HEAD", "OPTIONS"]
+
+    private func send(_ configuredRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let (data, response) = try await self.urlSession.data(for: configuredRequest)
         self.delegate?.didPerformRequest(configuredRequest, response: response, data: .bytes(data))
 

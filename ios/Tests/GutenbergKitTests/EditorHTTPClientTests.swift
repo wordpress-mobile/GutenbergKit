@@ -460,6 +460,67 @@ struct EditorHTTPClientTests {
         #expect(userAgent.contains("macOS/"))
         #endif
     }
+
+    // MARK: - Sharing Tests
+
+    @Test("identical requests from clients on one session share a key")
+    func identicalRequestsShareAKey() async throws {
+        let session = SpyURLSession()
+        let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/types")!)
+        let first = await EditorHTTPClient(urlSession: session, authHeader: "Bearer a").sharedRequest(for: request)
+        let second = await EditorHTTPClient(urlSession: session, authHeader: "Bearer a").sharedRequest(for: request)
+        #expect(first != nil)
+        #expect(first == second)
+    }
+
+    @Test("requests with other credentials, sessions, or timeouts don't share")
+    func requestsWithOtherCredentialsSessionsOrTimeoutsDontShare() async throws {
+        let session = SpyURLSession()
+        let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/types")!)
+        let key = await EditorHTTPClient(urlSession: session, authHeader: "Bearer a").sharedRequest(for: request)
+
+        #expect(await EditorHTTPClient(urlSession: session, authHeader: "Bearer b").sharedRequest(for: request) != key)
+        #expect(await EditorHTTPClient(urlSession: SpyURLSession(), authHeader: "Bearer a").sharedRequest(for: request) != key)
+        #expect(await EditorHTTPClient(urlSession: session, authHeader: "Bearer a", requestTimeout: 5).sharedRequest(for: request) != key)
+    }
+
+    @Test("only safe requests without a body, from a client no delegate watches, are shared")
+    func onlySafeUnwatchedRequestsAreShared() async throws {
+        let session = SpyURLSession()
+        let client = EditorHTTPClient(urlSession: session, authHeader: "Bearer a")
+        let url = URL(string: "https://example.com/wp-json/wp/v2/settings")!
+
+        #expect(await client.sharedRequest(for: URLRequest(method: .OPTIONS, url: url)) != nil)
+        #expect(await client.sharedRequest(for: URLRequest(method: .POST, url: url)) == nil)
+
+        var withBody = URLRequest(url: url)
+        withBody.httpBody = Data("{}".utf8)
+        #expect(await client.sharedRequest(for: withBody) == nil)
+
+        let watched = EditorHTTPClient(urlSession: session, authHeader: "Bearer a", delegate: SpyHTTPClientDelegate())
+        #expect(await watched.sharedRequest(for: URLRequest(url: url)) == nil)
+    }
+
+    @Test("identical requests in flight go out once")
+    func identicalRequestsInFlightGoOutOnce() async throws {
+        let session = ParkedURLSession()
+        defer { session.release() }
+        let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/types")!)
+        let clients = [
+            EditorHTTPClient(urlSession: session, authHeader: "Bearer a"),
+            EditorHTTPClient(urlSession: session, authHeader: "Bearer a"),
+        ]
+        let key = try #require(await clients[0].sharedRequest(for: request))
+
+        let callers = clients.map { client in Task { try await client.perform(request) } }
+        try await waitUntil { EditorHTTPClient.inFlightRequests.waiterCount(for: key) == 2 }
+
+        session.release()  // fails the parked request, for every caller waiting on it
+        for caller in callers {
+            await #expect(throws: URLError.self) { try await caller.value }
+        }
+        #expect(session.requestCount == 1)
+    }
 }
 
 fileprivate extension EditorResponseData {

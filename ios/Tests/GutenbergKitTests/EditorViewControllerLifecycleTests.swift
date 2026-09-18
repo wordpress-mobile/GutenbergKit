@@ -35,33 +35,33 @@ struct EditorViewControllerLifecycleTests: MakesTestFixtures {
         #expect(!cancelled)
     }
 
-    /// Why `deinit` can't cancel the fetch: `await self?.prepareEditor()` keeps the
-    /// editor alive until the load finishes, so `deinit` only runs once it's over.
+    /// The loader owns the fetch and reaches the editor only weakly, so a released
+    /// editor is freed while its fetch is still parked — and the fetch keeps running.
     @MainActor
-    @Test("the in-flight fetch keeps the editor alive until it finishes")
-    func theInFlightFetchKeepsTheEditorAlive() async throws {
+    @Test("releasing the editor mid-fetch frees it, and leaves the fetch running")
+    func releasingTheEditorMidFetchFreesIt() async throws {
         let session = ParkedURLSession()
         let configuration = makeIsolatedConfiguration()
         defer { removeStorage(for: configuration) }
-        // Safety net if a throw skips the `release()` below; calling it twice is fine.
         defer { session.release() }
         var editor: EditorViewController? = makeEditor(configuration: configuration, session: session)
         weak let releasedEditor = editor
 
-        _ = editor?.view
+        _ = editor?.view  // triggers `viewDidLoad`, which starts the fetch
         try await session.waitUntilStarted()
 
+        // Polled rather than checked once, so it doesn't depend on exactly when UIKit
+        // lets go. The fetch stays parked throughout, so it can't be what lets go.
         editor = nil
-        try await Task.sleep(for: .milliseconds(250))
-        #expect(releasedEditor != nil, "the fetch should hold the editor alive")
-
-        session.release()
         let clock = ContinuousClock()
-        let deadline = clock.now + .seconds(10)
+        let deadline = clock.now + .seconds(2)
         while releasedEditor != nil && clock.now < deadline {
             try await Task.sleep(for: .milliseconds(20))
         }
-        #expect(releasedEditor == nil, "the editor should be freed once the fetch ends")
+        #expect(releasedEditor == nil, "the fetch should not hold the editor")
+
+        let cancelled = await session.waitUntilCancelled(timeout: .milliseconds(250))
+        #expect(!cancelled, "freeing the editor should not cancel the fetch")
     }
 
     /// A unique `siteId` per call, so no earlier run's cache can serve the fetch.
@@ -90,72 +90,6 @@ struct EditorViewControllerLifecycleTests: MakesTestFixtures {
         try? FileManager.default.removeItem(at: Paths.storageRoot(for: configuration))
         try? FileManager.default.removeItem(at: Paths.cacheRoot(for: configuration))
     }
-}
-
-/// A `URLSessionProtocol` whose requests hang until `release()`, so a fetch stays in
-/// flight for as long as the test needs. Records whether any request was cancelled.
-private final class ParkedURLSession: URLSessionProtocol, @unchecked Sendable {
-    private let lock = NSLock()
-    private var started = false
-    private var cancelled = false
-    private var released = false
-
-    private var isStarted: Bool { lock.withLock { started } }
-    private var isCancelled: Bool { lock.withLock { cancelled } }
-    private var isReleased: Bool { lock.withLock { released } }
-
-    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-        try await park()
-    }
-
-    func download(for request: URLRequest, delegate: (any URLSessionTaskDelegate)?) async throws -> (URL, URLResponse) {
-        try await park()
-    }
-
-    /// Makes every parked request fail, so the fetch ends. Always call it: a request
-    /// left parked keeps its editor alive for the rest of the run.
-    func release() {
-        lock.withLock { released = true }
-    }
-
-    /// Suspends until `release()` or until the calling task is cancelled.
-    /// `Never` because every exit throws, so it fits both methods' return types.
-    private func park() async throws -> Never {
-        lock.withLock { started = true }
-        while !isReleased {
-            do {
-                try await Task.sleep(for: .milliseconds(20))
-            } catch {
-                lock.withLock { cancelled = true }
-                throw URLError(.cancelled)
-            }
-        }
-        throw URLError(.networkConnectionLost)
-    }
-
-    func waitUntilStarted(timeout: Duration = .seconds(10)) async throws {
-        let clock = ContinuousClock()
-        let deadline = clock.now + timeout
-        while clock.now < deadline {
-            if isStarted { return }
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        throw ParkedURLSessionTimeout.requestNeverStarted
-    }
-
-    func waitUntilCancelled(timeout: Duration) async -> Bool {
-        let clock = ContinuousClock()
-        let deadline = clock.now + timeout
-        while clock.now < deadline {
-            if isCancelled { return true }
-            try? await Task.sleep(for: .milliseconds(20))
-        }
-        return isCancelled
-    }
-}
-
-private enum ParkedURLSessionTimeout: Error {
-    case requestNeverStarted
 }
 
 #endif
