@@ -11,6 +11,14 @@
 # (`build` builds everything). An unmarked name must never mean a subset —
 # that is how `test-e2e` once came to mean "web only" while reading as "all".
 #
+# Verbs name categories of operation. A verb with one member is fine when the
+# category is real (`check-` asserts invariants, not code style); it is not
+# fine when it is a synonym for a verb already in use.
+#
+# A namespace prefix may precede the verb when the targets wrap a single
+# external tool that has its own verbs, so the mapping stays obvious and the
+# family sorts together: `wp-env-start` mirrors `wp-env start`.
+#
 # Targets without a `## ` description are internal and hidden from `make help`.
 
 .DEFAULT_GOAL := help
