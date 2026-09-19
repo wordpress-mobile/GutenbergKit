@@ -70,8 +70,8 @@ install-deps: ## Install npm dependencies
 		echo "--- :white_check_mark: Skipping NPM dependencies installation (node_modules already exists). Use REFRESH_DEPS=1 to force refresh."; \
 	fi
 
-.PHONY: prep-translations
-prep-translations: ## Fetch and cache locale string files
+.PHONY: fetch-translations
+fetch-translations: ## Fetch and cache locale string files
 # Skip when `dist/` already exists — translations are baked into the
 # bundle at JS build time, so there is nothing for a downstream
 # consumer to refresh until the bundle itself is rebuilt. This matters
@@ -88,12 +88,12 @@ prep-translations: ## Fetch and cache locale string files
 # Otherwise, skip unless...
 # - src/translations doesn't contain any fetched bundles (only `.gitkeep` is committed)
 # - REFRESH_L10N is set to true or 1
-# - prep-translations was invoked directly
-	@if [ -d "dist" ] && [ "$(REFRESH_L10N)" != "true" ] && [ "$(REFRESH_L10N)" != "1" ] && ! echo "$(MAKECMDGOALS)" | grep -q "^prep-translations$$"; then \
+# - fetch-translations was invoked directly
+	@if [ -d "dist" ] && [ "$(REFRESH_L10N)" != "true" ] && [ "$(REFRESH_L10N)" != "1" ] && ! echo "$(MAKECMDGOALS)" | grep -q "^fetch-translations$$"; then \
 		echo "--- :white_check_mark: Skipping translations fetch (dist/ already built, translations baked in). Use REFRESH_L10N=1 to force refresh."; \
-	elif [ -z "$$(find src/translations -maxdepth 1 -name '*.json' -print -quit 2>/dev/null)" ] || [ "$(REFRESH_L10N)" = "true" ] || [ "$(REFRESH_L10N)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^prep-translations$$"; then \
+	elif [ -z "$$(find src/translations -maxdepth 1 -name '*.json' -print -quit 2>/dev/null)" ] || [ "$(REFRESH_L10N)" = "true" ] || [ "$(REFRESH_L10N)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^fetch-translations$$"; then \
 		echo "--- :npm: Preparing Translations"; \
-		if ! npm run prep-translations -- --force; then \
+		if ! npm run fetch-translations -- --force; then \
 			if [ "$(STRICT_L10N)" = "true" ] || [ "$(STRICT_L10N)" = "1" ]; then \
 				echo "--- :x: ERROR: Translation fetching failed and STRICT_L10N is enabled"; \
 				exit 1; \
@@ -137,7 +137,7 @@ clean: ## Remove build artifacts and translation string files
 ################################################################################
 
 .PHONY: build
-build: prep-translations ## Build the web bundle and copy it into the iOS and Android projects
+build: fetch-translations ## Build the web bundle and copy it into the iOS and Android projects
 # Skip unless...
 # - dist doesn't exist
 # - REFRESH_JS_BUILD is set to true or 1

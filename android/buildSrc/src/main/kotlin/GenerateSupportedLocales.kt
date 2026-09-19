@@ -54,13 +54,13 @@ abstract class GenerateSupportedLocales : DefaultTask() {
         }.sorted()
 
         if (locales.isEmpty()) {
-            // An empty manifest typically means `make prep-translations` was
+            // An empty manifest typically means `make fetch-translations` was
             // skipped or failed silently — `src/translations/` only had
             // `.gitkeep` when Vite scanned it. Without this guard the library
             // ships with a runtime-empty `SupportedLocales`, which resolves
             // every locale to English.
             throw GradleException(
-                "supported-locales.json is empty. Run `make prep-translations REFRESH_L10N=1` " +
+                "supported-locales.json is empty. Run `make fetch-translations REFRESH_L10N=1` " +
                     "from the repo root, then `make build`, before assembling the :Gutenberg library."
             )
         }
