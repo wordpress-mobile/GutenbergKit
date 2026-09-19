@@ -29,7 +29,7 @@ steps:
           # its log before `set -e` aborts the script.
           make prep-translations STRICT_L10N=1 > prep-translations.log 2>&1 &
           PREP_PID=$$!
-          make npm-dependencies
+          make install-deps
           PREP_STATUS=0
           wait $$PREP_PID || PREP_STATUS=$$?
           echo "--- :earth_americas: prep-translations (ran in parallel with npm ci)"
@@ -116,28 +116,28 @@ steps:
       plugins: *plugins
 
     - label: ':swift: iOS Simulator Tests'
-      key: swift-test-swift-package
+      key: swift-test-swift-simulator
       depends_on: build-react
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
-          make test-swift-package
+          make test-swift-simulator
       plugins: *plugins
 
-    - label: ':swift: Library Tests'
-      key: swift-test-library
+    - label: ':swift: Host Platform Tests'
+      key: swift-test-host
       depends_on: build-react
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
-          make test-swift-library
+          make test-swift-host
       plugins: *plugins
 
     - label: ':xcode: Build XCFramework'
       key: build-xcframework
       depends_on:
           - build-react
-          - swift-test-library
+          - swift-test-host
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
@@ -178,7 +178,7 @@ steps:
       depends_on:
           - validate-release
           - build-xcframework
-          - swift-test-swift-package
+          - swift-test-swift-simulator
           - lint-js
           - lint-swift
           - check-wp-packages
