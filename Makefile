@@ -98,7 +98,7 @@ prep-translations: ## Fetch and cache locale string files
 	fi
 
 .PHONY: e2e-dependencies
-e2e-dependencies: npm-dependencies ## Install E2E test dependencies
+e2e-dependencies: npm-dependencies ## Install E2E test dependencies (prompts to install Playwright Chromium)
 	@CHROMIUM_PATH=$$(npx playwright install --dry-run chromium 2>&1 | grep "Install location" | head -1 | sed 's/.*: *//'); \
 	if [ -d "$$CHROMIUM_PATH" ]; then \
 		echo "--- :white_check_mark: Playwright Chromium is already installed."; \
@@ -129,7 +129,7 @@ clean: ## Remove build artifacts and translation string files
 ################################################################################
 
 .PHONY: build
-build: prep-translations ## Build the project for all platforms (iOS, Android, web)
+build: prep-translations ## Build the web bundle and copy it into the iOS and Android projects
 # Skip unless...
 # - dist doesn't exist
 # - REFRESH_JS_BUILD is set to true or 1
@@ -183,7 +183,7 @@ build-resources-xcframework: build ## Build GutenbergKitResources XCFramework
 	./build_xcframework.sh
 
 .PHONY: local-android-library
-local-android-library: build ## Build the Android library to local Maven
+local-android-library: build ## Build and publish the Android library to the local Maven repository
 	@echo "--- :android: Building Library"
 	./android/gradlew -p ./android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3
 
@@ -204,7 +204,7 @@ dev-tools: npm-dependencies ## Start the React Developer Tools
 	npm run dev:tools
 
 .PHONY: preview
-preview: npm-dependencies ## Preview the production build locally
+preview: npm-dependencies build ## Preview the production build locally
 	npm run preview
 
 ################################################################################
@@ -227,7 +227,7 @@ wp-env-stop: ## Stop the local WordPress environment
 	npm run wp-env stop
 
 .PHONY: wp-env-clean
-wp-env-clean: ## Stop wp-env and remove downloaded WordPress, plugin, and theme files
+wp-env-clean: ## Stop wp-env and remove downloaded WordPress, plugin, and theme files, plus cached credentials
 	npm run wp-env destroy
 	@rm -f .wp-env.credentials.json
 # `destroy` stops only the server named by its PID file, so report anything left
@@ -243,11 +243,11 @@ wp-env-android-urls: ## Report whether WordPress emits emulator-reachable URLs, 
 ################################################################################
 
 .PHONY: format
-format: npm-dependencies ## Format code
+format: npm-dependencies ## Format all supported files in place with Prettier
 	npm run format
 
 .PHONY: lint-js
-lint-js: npm-dependencies ## Lint JavaScript code
+lint-js: npm-dependencies ## Lint JavaScript code with ESLint
 	npm run lint:js
 
 # Reads `package-lock.json`, not the installed tree, so it needs no
@@ -258,7 +258,7 @@ check-wp-packages: ## Fail if any @wordpress package is installed more than once
 	npm run check:wp-packages
 
 .PHONY: lint-js-fix
-lint-js-fix: npm-dependencies ## Lint and auto-fix JavaScript code
+lint-js-fix: npm-dependencies ## Lint and auto-fix JavaScript code with ESLint
 	npm run lint:js:fix
 
 .PHONY: lint-android
@@ -301,12 +301,12 @@ SWIFTLINT = IFS="$$(printf '\nx')"; IFS="$${IFS%x}"; \
 	swiftlint --working-directory "$(CURDIR)" --quiet
 
 .PHONY: lint-swift
-lint-swift: ## Lint Swift code
+lint-swift: ## Lint Swift code with SwiftLint
 	@echo "--- :swift: Running SwiftLint"
 	@$(SWIFTLINT) "$$@"
 
 .PHONY: lint-swift-fix
-lint-swift-fix: ## Lint and auto-fix Swift code
+lint-swift-fix: ## Lint and auto-fix Swift code with SwiftLint
 	@echo "--- :swift: Running SwiftLint (autocorrect)"
 	@$(SWIFTLINT) --fix "$$@"
 
@@ -315,7 +315,7 @@ lint-swift-fix: ## Lint and auto-fix Swift code
 ################################################################################
 
 .PHONY: test-e2e
-test-e2e: e2e-dependencies ## Run end-to-end tests
+test-e2e: e2e-dependencies ## Run web E2E tests with Playwright
 	@if [ ! -d "dist" ]; then \
 		$(MAKE) build; \
 	else \
@@ -324,7 +324,7 @@ test-e2e: e2e-dependencies ## Run end-to-end tests
 	npm run test:e2e
 
 .PHONY: test-e2e-ui
-test-e2e-ui: e2e-dependencies ## Run end-to-end tests in UI mode
+test-e2e-ui: e2e-dependencies ## Run web E2E tests with Playwright in UI mode
 	@if [ ! -d "dist" ]; then \
 		$(MAKE) build; \
 	else \
@@ -333,11 +333,11 @@ test-e2e-ui: e2e-dependencies ## Run end-to-end tests in UI mode
 	npm run test:e2e:ui
 
 .PHONY: test-js
-test-js: npm-dependencies ## Run JavaScript tests
+test-js: npm-dependencies ## Run JavaScript unit tests with Vitest
 	npm run test:unit
 
 .PHONY: test-js-watch
-test-js-watch: npm-dependencies ## Run JavaScript tests in watch mode
+test-js-watch: npm-dependencies ## Run JavaScript unit tests with Vitest in watch mode
 	npm run test:unit:watch
 
 .PHONY: test-swift-package
@@ -349,7 +349,7 @@ test-swift-library: build ## Run Swift package tests against the host platform v
 	swift test
 
 .PHONY: test-ios-e2e
-test-ios-e2e: ## Run iOS E2E tests against the production build
+test-ios-e2e: ## Run iOS demo app E2E tests against the production build
 	@if [ ! -d "dist" ]; then \
 		$(MAKE) build; \
 	else \
@@ -367,7 +367,7 @@ test-ios-e2e: ## Run iOS E2E tests against the production build
 		| xcbeautify
 
 .PHONY: test-ios-e2e-dev
-test-ios-e2e-dev: ## Run iOS E2E tests against the Vite dev server (must be running)
+test-ios-e2e-dev: ## Run iOS demo app E2E tests against the Vite dev server (must be running)
 	@if ! curl -sf http://localhost:5173 > /dev/null 2>&1; then \
 		echo "Error: Dev server is not running at http://localhost:5173"; \
 		echo "Start it first with: make dev-server"; \
@@ -384,7 +384,7 @@ test-ios-e2e-dev: ## Run iOS E2E tests against the Vite dev server (must be runn
 		| xcbeautify
 
 .PHONY: test-android
-test-android: build ## Run Android tests
+test-android: build ## Run Android library unit tests on the JVM
 # `build` short-circuits `copy-dist-android` when `dist/` already exists
 # (e.g. in CI, after extracting an upstream `dist.tar.gz`), so copy
 # explicitly here to guarantee the tests run against the current dist
@@ -427,7 +427,7 @@ define ENSURE_ANDROID_DEVICE
 endef
 
 .PHONY: test-android-e2e
-test-android-e2e: ## Run Android E2E tests against the production build
+test-android-e2e: ## Run Android demo app E2E tests against the production build
 	@if [ ! -d "dist" ]; then \
 		$(MAKE) build; \
 	else \
@@ -441,7 +441,7 @@ test-android-e2e: ## Run Android E2E tests against the production build
 	./android/gradlew -p ./android :app:connectedDebugAndroidTest
 
 .PHONY: test-android-e2e-dev
-test-android-e2e-dev: ## Run Android E2E tests against the Vite dev server (must be running)
+test-android-e2e-dev: ## Run Android demo app E2E tests against the Vite dev server (must be running)
 	@if ! curl -sf http://localhost:5173 > /dev/null 2>&1; then \
 		echo "Error: Dev server is not running at http://localhost:5173"; \
 		echo "Start it first with: make dev-server"; \
@@ -452,7 +452,7 @@ test-android-e2e-dev: ## Run Android E2E tests against the Vite dev server (must
 	./android/gradlew -p ./android :app:connectedDebugAndroidTest
 
 .PHONY: test-android-library-e2e
-test-android-library-e2e: build ## Run instrumented tests for the Gutenberg Android library module
+test-android-library-e2e: build ## Run Android library E2E tests on a device or emulator
 # `build` short-circuits `copy-dist-android` when `dist/` already exists
 # (e.g. in CI, after extracting an upstream `dist.tar.gz`), so copy
 # explicitly here to guarantee the instrumented tests run against the
