@@ -1,3 +1,26 @@
+# Target naming grammar
+#
+#   <verb>-<scope>[-<subscope>][-<kind>][-<mode>]
+#           └──────── what ────────┘    └─ how ─┘
+#
+# what  Narrows the subject, broad to narrow: android > library > e2e
+# how   Same subject, different invocation: -fix, -watch, -ui, -dev, -host
+#
+# Mark a slot when siblings compete for the same verb. Elide it only when
+# there is exactly one member, or when the unmarked form is a true superset
+# (`build` builds everything). An unmarked name must never mean a subset —
+# that is how `test-e2e` once came to mean "web only" while reading as "all".
+#
+# Verbs name categories of operation. A verb with one member is fine when the
+# category is real (`check-` asserts invariants, not code style); it is not
+# fine when it is a synonym for a verb already in use.
+#
+# A namespace prefix may precede the verb when the targets wrap a single
+# external tool that has its own verbs, so the mapping stays obvious and the
+# family sorts together: `wp-env-start` mirrors `wp-env start`.
+#
+# Targets without a `## ` description are internal and hidden from `make help`.
+
 .DEFAULT_GOAL := help
 
 SIMULATOR_DESTINATION := OS=latest,name=iPhone 17
@@ -28,27 +51,27 @@ endef
 # Utility Targets
 ################################################################################
 
-.PHONY: npm-dependencies
-npm-dependencies: ## Install npm dependencies
+.PHONY: install-deps
+install-deps: ## Install npm dependencies
 # Skip unless...
 # - node_modules doesn't exist
 # - REFRESH_DEPS is set to true or 1
-# - npm-dependencies was invoked directly (not from a recursive `$(MAKE)`)
+# - install-deps was invoked directly (not from a recursive `$(MAKE)`)
 #
 # `build`'s rebuild branch invokes this as `$(MAKE) _RECURSIVE_INVOKE=1
-# npm-dependencies`, which sets MAKECMDGOALS=npm-dependencies in the
+# install-deps`, which sets MAKECMDGOALS=install-deps in the
 # child make. Without the sentinel, that recursive call would treat
 # itself as a "direct invocation" and re-run `npm ci` every time `build`
 # rebuilds — even when node_modules is already populated.
-	@if [ ! -d "node_modules" ] || [ "$(REFRESH_DEPS)" = "true" ] || [ "$(REFRESH_DEPS)" = "1" ] || { [ -z "$(_RECURSIVE_INVOKE)" ] && echo "$(MAKECMDGOALS)" | grep -q "^npm-dependencies$$"; }; then \
+	@if [ ! -d "node_modules" ] || [ "$(REFRESH_DEPS)" = "true" ] || [ "$(REFRESH_DEPS)" = "1" ] || { [ -z "$(_RECURSIVE_INVOKE)" ] && echo "$(MAKECMDGOALS)" | grep -q "^install-deps$$"; }; then \
 		echo "--- :npm: Installing NPM Dependencies"; \
 		npm ci; \
 	else \
 		echo "--- :white_check_mark: Skipping NPM dependencies installation (node_modules already exists). Use REFRESH_DEPS=1 to force refresh."; \
 	fi
 
-.PHONY: prep-translations
-prep-translations: ## Fetch and cache locale string files
+.PHONY: fetch-translations
+fetch-translations: ## Fetch and cache locale string files
 # Skip when `dist/` already exists — translations are baked into the
 # bundle at JS build time, so there is nothing for a downstream
 # consumer to refresh until the bundle itself is rebuilt. This matters
@@ -65,12 +88,12 @@ prep-translations: ## Fetch and cache locale string files
 # Otherwise, skip unless...
 # - src/translations doesn't contain any fetched bundles (only `.gitkeep` is committed)
 # - REFRESH_L10N is set to true or 1
-# - prep-translations was invoked directly
-	@if [ -d "dist" ] && [ "$(REFRESH_L10N)" != "true" ] && [ "$(REFRESH_L10N)" != "1" ] && ! echo "$(MAKECMDGOALS)" | grep -q "^prep-translations$$"; then \
+# - fetch-translations was invoked directly
+	@if [ -d "dist" ] && [ "$(REFRESH_L10N)" != "true" ] && [ "$(REFRESH_L10N)" != "1" ] && ! echo "$(MAKECMDGOALS)" | grep -q "^fetch-translations$$"; then \
 		echo "--- :white_check_mark: Skipping translations fetch (dist/ already built, translations baked in). Use REFRESH_L10N=1 to force refresh."; \
-	elif [ -z "$$(find src/translations -maxdepth 1 -name '*.json' -print -quit 2>/dev/null)" ] || [ "$(REFRESH_L10N)" = "true" ] || [ "$(REFRESH_L10N)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^prep-translations$$"; then \
+	elif [ -z "$$(find src/translations -maxdepth 1 -name '*.json' -print -quit 2>/dev/null)" ] || [ "$(REFRESH_L10N)" = "true" ] || [ "$(REFRESH_L10N)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^fetch-translations$$"; then \
 		echo "--- :npm: Preparing Translations"; \
-		if ! npm run prep-translations -- --force; then \
+		if ! npm run fetch-translations -- --force; then \
 			if [ "$(STRICT_L10N)" = "true" ] || [ "$(STRICT_L10N)" = "1" ]; then \
 				echo "--- :x: ERROR: Translation fetching failed and STRICT_L10N is enabled"; \
 				exit 1; \
@@ -82,8 +105,8 @@ prep-translations: ## Fetch and cache locale string files
 		echo "--- :white_check_mark: Skipping translations fetch (bundles already present in src/translations). Use REFRESH_L10N=1 to force refresh."; \
 	fi
 
-.PHONY: e2e-dependencies
-e2e-dependencies: npm-dependencies ## Install E2E test dependencies
+.PHONY: install-e2e-deps
+install-e2e-deps: install-deps ## Install E2E test dependencies (prompts to install Playwright Chromium)
 	@CHROMIUM_PATH=$$(npx playwright install --dry-run chromium 2>&1 | grep "Install location" | head -1 | sed 's/.*: *//'); \
 	if [ -d "$$CHROMIUM_PATH" ]; then \
 		echo "--- :white_check_mark: Playwright Chromium is already installed."; \
@@ -114,42 +137,42 @@ clean: ## Remove build artifacts and translation string files
 ################################################################################
 
 .PHONY: build
-build: prep-translations ## Build the project for all platforms (iOS, Android, web)
+build: fetch-translations ## Build the web bundle and copy it into the iOS and Android projects
 # Skip unless...
 # - dist doesn't exist
 # - REFRESH_JS_BUILD is set to true or 1
 # - build was invoked directly
 #
-# `npm-dependencies` is invoked from inside the rebuild branch rather
+# `install-deps` is invoked from inside the rebuild branch rather
 # than declared as a Make prereq so that downstream targets which
-# depend on `build` (`test-android`, `test-swift-library`, etc.) don't
+# depend on `build` (`test-android-library`, `test-swift-host`, etc.) don't
 # trigger an `npm ci` they don't actually need when `dist/` is already
 # populated — e.g. on CI agents that just extracted an upstream
 # `dist.tar.gz` and only intend to run gradle/xcodebuild/swift.
 #
-# Targets that legitimately use node_modules (`test-e2e` via
-# `e2e-dependencies`, `lint-js`, `test-js`, etc.) declare
-# `npm-dependencies` as their own prereq.
+# Targets that legitimately use node_modules (`test-web-e2e` via
+# `install-e2e-deps`, `lint-js`, `test-js`, etc.) declare
+# `install-deps` as their own prereq.
 	@if [ ! -d "dist" ] || [ "$(REFRESH_JS_BUILD)" = "true" ] || [ "$(REFRESH_JS_BUILD)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^build$$"; then \
-		$(MAKE) _RECURSIVE_INVOKE=1 npm-dependencies && \
+		$(MAKE) _RECURSIVE_INVOKE=1 install-deps && \
 		echo "--- :node: Building Gutenberg" && \
 		npm run build && \
 		echo "--- :open_file_folder: Copying Build Products into place" && \
-		$(MAKE) copy-dist-ios && \
-		$(MAKE) copy-dist-android; \
+		$(MAKE) copy-ios-dist && \
+		$(MAKE) copy-android-dist; \
 	else \
 		echo "--- :white_check_mark: Skipping JS build (dist already exists). Use REFRESH_JS_BUILD=1 to force refresh."; \
 	fi
 
-.PHONY: copy-dist-ios
-copy-dist-ios:
+.PHONY: copy-ios-dist
+copy-ios-dist:
 	@rm -rf ./ios/Sources/GutenbergKitResources/Gutenberg/
 	@mkdir -p ./ios/Sources/GutenbergKitResources/Gutenberg
 	@cp -r ./dist/. ./ios/Sources/GutenbergKitResources/Gutenberg/
 	@touch ./ios/Sources/GutenbergKitResources/Gutenberg/.gitkeep
 
-.PHONY: copy-dist-android
-copy-dist-android:
+.PHONY: copy-android-dist
+copy-android-dist:
 	@rm -rf ./android/Gutenberg/src/main/assets/
 	@cp -r ./dist/. ./android/Gutenberg/src/main/assets
 
@@ -159,16 +182,16 @@ build-swift-package: build ## Build the Swift package for iOS
 
 .PHONY: build-resources-xcframework
 build-resources-xcframework: build ## Build GutenbergKitResources XCFramework
-# `build` short-circuits `copy-dist-ios` when `dist/` already exists (e.g. in
+# `build` short-circuits `copy-ios-dist` when `dist/` already exists (e.g. in
 # CI, after extracting an upstream dist tarball), so call it explicitly here
 # to guarantee the XCFramework ships the just-built dist rather than whatever
 # was committed at HEAD.
-	@$(MAKE) copy-dist-ios
+	@$(MAKE) copy-ios-dist
 	@echo "--- :swift: Building GutenbergKitResources XCFramework"
 	./build_xcframework.sh
 
-.PHONY: local-android-library
-local-android-library: build ## Build the Android library to local Maven
+.PHONY: publish-android-library-local
+publish-android-library-local: build ## Build and publish the Android library to the local Maven repository
 	@echo "--- :android: Building Library"
 	./android/gradlew -p ./android :gutenberg:publishToMavenLocal -exclude-task prepareToPublishToS3
 
@@ -177,19 +200,19 @@ local-android-library: build ## Build the Android library to local Maven
 ################################################################################
 
 .PHONY: dev-server
-dev-server: npm-dependencies ## Start the development server
+dev-server: install-deps ## Start the development server
 	npm run dev
 
 .PHONY: dev-server-force
-dev-server-force: npm-dependencies ## Start the development server, ignore the cache and re-bundle
+dev-server-force: install-deps ## Start the development server, ignore the cache and re-bundle
 	npm run dev:force
 
 .PHONY: dev-tools
-dev-tools: npm-dependencies ## Start the React Developer Tools
+dev-tools: install-deps ## Start the React Developer Tools
 	npm run dev:tools
 
 .PHONY: preview
-preview: npm-dependencies ## Preview the production build locally
+preview: install-deps build ## Preview the production build locally
 	npm run preview
 
 ################################################################################
@@ -197,7 +220,7 @@ preview: npm-dependencies ## Preview the production build locally
 ################################################################################
 
 .PHONY: wp-env-start
-wp-env-start: npm-dependencies ## Start the local WordPress environment
+wp-env-start: install-deps ## Start the local WordPress environment
 	@bash bin/wp-env-guard.sh; \
 	status=$$?; \
 	if [ $$status -eq 0 ]; then \
@@ -212,15 +235,15 @@ wp-env-stop: ## Stop the local WordPress environment
 	npm run wp-env stop
 
 .PHONY: wp-env-clean
-wp-env-clean: ## Stop wp-env and remove downloaded WordPress, plugin, and theme files
+wp-env-clean: ## Stop wp-env and remove downloaded WordPress, plugin, and theme files, plus cached credentials
 	npm run wp-env destroy
 	@rm -f .wp-env.credentials.json
 # `destroy` stops only the server named by its PID file, so report anything left
 # holding the port rather than letting the next start fail on it.
 	@bash bin/wp-env-guard.sh > /dev/null || true
 
-.PHONY: wp-env-android-urls
-wp-env-android-urls: ## Report whether WordPress emits emulator-reachable URLs, 10.0.2.2 instead of localhost (set via MODE=on|off)
+.PHONY: wp-env-config-android-urls
+wp-env-config-android-urls: ## Report the Android emulator URL remap, or set it with MODE=on|off
 	@MODE=$(MODE) bash bin/wp-env-android.sh
 
 ################################################################################
@@ -228,22 +251,22 @@ wp-env-android-urls: ## Report whether WordPress emits emulator-reachable URLs, 
 ################################################################################
 
 .PHONY: format
-format: npm-dependencies ## Format code
+format: install-deps ## Format all supported files in place with Prettier
 	npm run format
 
 .PHONY: lint-js
-lint-js: npm-dependencies ## Lint JavaScript code
+lint-js: install-deps ## Lint JavaScript code with ESLint
 	npm run lint:js
 
 # Reads `package-lock.json`, not the installed tree, so it needs no
-# `npm-dependencies` prerequisite -- which would otherwise report on a stale
+# `install-deps` prerequisite -- which would otherwise report on a stale
 # `node_modules` whenever one already exists.
 .PHONY: check-wp-packages
 check-wp-packages: ## Fail if any @wordpress package is installed more than once
 	npm run check:wp-packages
 
-.PHONY: lint-fix-js
-lint-js-fix: npm-dependencies ## Lint and auto-fix JavaScript code
+.PHONY: lint-js-fix
+lint-js-fix: install-deps ## Lint and auto-fix JavaScript code with ESLint
 	npm run lint:js:fix
 
 .PHONY: lint-android
@@ -286,12 +309,12 @@ SWIFTLINT = IFS="$$(printf '\nx')"; IFS="$${IFS%x}"; \
 	swiftlint --working-directory "$(CURDIR)" --quiet
 
 .PHONY: lint-swift
-lint-swift: ## Lint Swift code
+lint-swift: ## Lint Swift code with SwiftLint
 	@echo "--- :swift: Running SwiftLint"
 	@$(SWIFTLINT) "$$@"
 
 .PHONY: lint-swift-fix
-lint-swift-fix: ## Lint and auto-fix Swift code
+lint-swift-fix: ## Lint and auto-fix Swift code with SwiftLint
 	@echo "--- :swift: Running SwiftLint (autocorrect)"
 	@$(SWIFTLINT) --fix "$$@"
 
@@ -299,8 +322,8 @@ lint-swift-fix: ## Lint and auto-fix Swift code
 # Testing Targets
 ################################################################################
 
-.PHONY: test-e2e
-test-e2e: e2e-dependencies ## Run end-to-end tests
+.PHONY: test-web-e2e
+test-web-e2e: install-e2e-deps ## Run web E2E tests with Playwright
 	@if [ ! -d "dist" ]; then \
 		$(MAKE) build; \
 	else \
@@ -308,8 +331,8 @@ test-e2e: e2e-dependencies ## Run end-to-end tests
 	fi
 	npm run test:e2e
 
-.PHONY: test-e2e-ui
-test-e2e-ui: e2e-dependencies ## Run end-to-end tests in UI mode
+.PHONY: test-web-e2e-ui
+test-web-e2e-ui: install-e2e-deps ## Run web E2E tests with Playwright in UI mode
 	@if [ ! -d "dist" ]; then \
 		$(MAKE) build; \
 	else \
@@ -318,30 +341,30 @@ test-e2e-ui: e2e-dependencies ## Run end-to-end tests in UI mode
 	npm run test:e2e:ui
 
 .PHONY: test-js
-test-js: npm-dependencies ## Run JavaScript tests
+test-js: install-deps ## Run JavaScript unit tests with Vitest
 	npm run test:unit
 
 .PHONY: test-js-watch
-test-js-watch: npm-dependencies ## Run JavaScript tests in watch mode
+test-js-watch: install-deps ## Run JavaScript unit tests with Vitest in watch mode
 	npm run test:unit:watch
 
-.PHONY: test-swift-package
-test-swift-package: build ## Run Swift package tests in the iOS Simulator
+.PHONY: test-swift-simulator
+test-swift-simulator: build ## Run Swift package tests in the iOS Simulator (xcodebuild)
 	$(call XCODEBUILD_CMD, test, GutenbergKit-Package)
 
-.PHONY: test-swift-library
-test-swift-library: build ## Run Swift package tests against the host platform via `swift test`
+.PHONY: test-swift-host
+test-swift-host: build ## Run Swift package tests on the host platform (swift test)
 	swift test
 
-.PHONY: test-ios-e2e
-test-ios-e2e: ## Run iOS E2E tests against the production build
+.PHONY: test-ios-app-e2e
+test-ios-app-e2e: ## Run iOS demo app E2E tests against the production build
 	@if [ ! -d "dist" ]; then \
 		$(MAKE) build; \
 	else \
 		echo "--- :white_check_mark: Using existing build. Use 'make build REFRESH_JS_BUILD=1' to rebuild."; \
 	fi
 	@echo "--- :open_file_folder: Copying build into iOS bundle"
-	@$(MAKE) copy-dist-ios
+	@$(MAKE) copy-ios-dist
 	@echo "--- :ios: Running iOS E2E Tests (production build)"
 	@set -o pipefail && \
 		xcodebuild test \
@@ -351,8 +374,8 @@ test-ios-e2e: ## Run iOS E2E tests against the production build
 		-destination '${SIMULATOR_DESTINATION}' \
 		| xcbeautify
 
-.PHONY: test-ios-e2e-dev
-test-ios-e2e-dev: ## Run iOS E2E tests against the Vite dev server (must be running)
+.PHONY: test-ios-app-e2e-dev
+test-ios-app-e2e-dev: ## Run iOS demo app E2E tests against the Vite dev server (must be running)
 	@if ! curl -sf http://localhost:5173 > /dev/null 2>&1; then \
 		echo "Error: Dev server is not running at http://localhost:5173"; \
 		echo "Start it first with: make dev-server"; \
@@ -368,16 +391,16 @@ test-ios-e2e-dev: ## Run iOS E2E tests against the Vite dev server (must be runn
 		-destination '${SIMULATOR_DESTINATION}' \
 		| xcbeautify
 
-.PHONY: test-android
-test-android: build ## Run Android tests
-# `build` short-circuits `copy-dist-android` when `dist/` already exists
+.PHONY: test-android-library
+test-android-library: build ## Run Android library unit tests on the JVM
+# `build` short-circuits `copy-android-dist` when `dist/` already exists
 # (e.g. in CI, after extracting an upstream `dist.tar.gz`), so copy
 # explicitly here to guarantee the tests run against the current dist
 # rather than whatever was committed at HEAD.
 	@echo "--- :open_file_folder: Copying build into Android bundle"
 	@rm -rf ./android/Gutenberg/src/main/assets/
 	@cp -r ./dist/. ./android/Gutenberg/src/main/assets
-	@echo "--- :android: Running Android Tests"
+	@echo "--- :android: Running Android Library Unit Tests"
 	./android/gradlew -p ./android :gutenberg:test
 
 # Ensure an Android device or emulator is available for instrumented tests.
@@ -411,8 +434,8 @@ define ENSURE_ANDROID_DEVICE
 	fi
 endef
 
-.PHONY: test-android-e2e
-test-android-e2e: ## Run Android E2E tests against the production build
+.PHONY: test-android-app-e2e
+test-android-app-e2e: ## Run Android demo app E2E tests against the production build
 	@if [ ! -d "dist" ]; then \
 		$(MAKE) build; \
 	else \
@@ -425,8 +448,8 @@ test-android-e2e: ## Run Android E2E tests against the production build
 	@echo "--- :android: Running Android E2E Tests (production build)"
 	./android/gradlew -p ./android :app:connectedDebugAndroidTest
 
-.PHONY: test-android-e2e-dev
-test-android-e2e-dev: ## Run Android E2E tests against the Vite dev server (must be running)
+.PHONY: test-android-app-e2e-dev
+test-android-app-e2e-dev: ## Run Android demo app E2E tests against the Vite dev server (must be running)
 	@if ! curl -sf http://localhost:5173 > /dev/null 2>&1; then \
 		echo "Error: Dev server is not running at http://localhost:5173"; \
 		echo "Start it first with: make dev-server"; \
@@ -437,8 +460,8 @@ test-android-e2e-dev: ## Run Android E2E tests against the Vite dev server (must
 	./android/gradlew -p ./android :app:connectedDebugAndroidTest
 
 .PHONY: test-android-library-e2e
-test-android-library-e2e: build ## Run instrumented tests for the Gutenberg Android library module
-# `build` short-circuits `copy-dist-android` when `dist/` already exists
+test-android-library-e2e: build ## Run Android library E2E tests on a device or emulator
+# `build` short-circuits `copy-android-dist` when `dist/` already exists
 # (e.g. in CI, after extracting an upstream `dist.tar.gz`), so copy
 # explicitly here to guarantee the instrumented tests run against the
 # current dist rather than whatever was committed at HEAD.
