@@ -77,7 +77,7 @@ steps:
           echo "--- :wordpress: Starting wp-env"
           make wp-env-start
           echo "--- :performing_arts: Running E2E tests"
-          make test-e2e
+          make test-web-e2e
       plugins: *plugins
 
     - label: ':android: Publish Android Library'
@@ -110,7 +110,7 @@ steps:
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
-          make test-android
+          make test-android-library
       agents:
           queue: android
       plugins: *plugins
@@ -184,7 +184,7 @@ steps:
           - check-wp-packages
           - test-js
           - test-web-e2e
-          - test-ios-e2e
+          - test-ios-app-e2e
       if: build.env("NEW_VERSION") != null && build.branch == "trunk" && build.pull_request.id == null
       # Pass NEW_VERSION as an argument: build-level env vars set when
       # triggering aren't exposed to job runtime shells on `queue: mac`, but
@@ -193,16 +193,16 @@ steps:
       command: .buildkite/release.sh "$NEW_VERSION"
       plugins: *plugins
 
-    - label: ':ios: Test iOS E2E'
-      key: test-ios-e2e
+    - label: ':ios: Test iOS App E2E'
+      key: test-ios-app-e2e
       depends_on: build-react
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
-          make test-ios-e2e
+          make test-ios-app-e2e
       plugins: *plugins
 
-    - label: ':android: Test Android E2E'
+    - label: ':android: Test Android App E2E'
       depends_on: build-react
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -212,7 +212,7 @@ steps:
               --system-image "system-images;android-34;google_apis;arm64-v8a" \
               --device "pixel_5"
           echo "--- :android: Running Android instrumented tests"
-          make test-android-e2e
+          make test-android-app-e2e
       agents:
           queue: mac-metal
       plugins: *plugins

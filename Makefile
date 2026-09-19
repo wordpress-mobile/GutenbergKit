@@ -9,7 +9,7 @@
 # Mark a slot when siblings compete for the same verb. Elide it only when
 # there is exactly one member, or when the unmarked form is a true superset
 # (`build` builds everything). An unmarked name must never mean a subset —
-# that is how `test-e2e` came to mean "web only" while reading as "all".
+# that is how `test-e2e` once came to mean "web only" while reading as "all".
 #
 # Targets without a `## ` description are internal and hidden from `make help`.
 
@@ -137,12 +137,12 @@ build: prep-translations ## Build the web bundle and copy it into the iOS and An
 #
 # `install-deps` is invoked from inside the rebuild branch rather
 # than declared as a Make prereq so that downstream targets which
-# depend on `build` (`test-android`, `test-swift-host`, etc.) don't
+# depend on `build` (`test-android-library`, `test-swift-host`, etc.) don't
 # trigger an `npm ci` they don't actually need when `dist/` is already
 # populated — e.g. on CI agents that just extracted an upstream
 # `dist.tar.gz` and only intend to run gradle/xcodebuild/swift.
 #
-# Targets that legitimately use node_modules (`test-e2e` via
+# Targets that legitimately use node_modules (`test-web-e2e` via
 # `install-e2e-deps`, `lint-js`, `test-js`, etc.) declare
 # `install-deps` as their own prereq.
 	@if [ ! -d "dist" ] || [ "$(REFRESH_JS_BUILD)" = "true" ] || [ "$(REFRESH_JS_BUILD)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^build$$"; then \
@@ -314,8 +314,8 @@ lint-swift-fix: ## Lint and auto-fix Swift code with SwiftLint
 # Testing Targets
 ################################################################################
 
-.PHONY: test-e2e
-test-e2e: install-e2e-deps ## Run web E2E tests with Playwright
+.PHONY: test-web-e2e
+test-web-e2e: install-e2e-deps ## Run web E2E tests with Playwright
 	@if [ ! -d "dist" ]; then \
 		$(MAKE) build; \
 	else \
@@ -323,8 +323,8 @@ test-e2e: install-e2e-deps ## Run web E2E tests with Playwright
 	fi
 	npm run test:e2e
 
-.PHONY: test-e2e-ui
-test-e2e-ui: install-e2e-deps ## Run web E2E tests with Playwright in UI mode
+.PHONY: test-web-e2e-ui
+test-web-e2e-ui: install-e2e-deps ## Run web E2E tests with Playwright in UI mode
 	@if [ ! -d "dist" ]; then \
 		$(MAKE) build; \
 	else \
@@ -348,8 +348,8 @@ test-swift-simulator: build ## Run Swift package tests in the iOS Simulator (xco
 test-swift-host: build ## Run Swift package tests on the host platform (swift test)
 	swift test
 
-.PHONY: test-ios-e2e
-test-ios-e2e: ## Run iOS demo app E2E tests against the production build
+.PHONY: test-ios-app-e2e
+test-ios-app-e2e: ## Run iOS demo app E2E tests against the production build
 	@if [ ! -d "dist" ]; then \
 		$(MAKE) build; \
 	else \
@@ -366,8 +366,8 @@ test-ios-e2e: ## Run iOS demo app E2E tests against the production build
 		-destination '${SIMULATOR_DESTINATION}' \
 		| xcbeautify
 
-.PHONY: test-ios-e2e-dev
-test-ios-e2e-dev: ## Run iOS demo app E2E tests against the Vite dev server (must be running)
+.PHONY: test-ios-app-e2e-dev
+test-ios-app-e2e-dev: ## Run iOS demo app E2E tests against the Vite dev server (must be running)
 	@if ! curl -sf http://localhost:5173 > /dev/null 2>&1; then \
 		echo "Error: Dev server is not running at http://localhost:5173"; \
 		echo "Start it first with: make dev-server"; \
@@ -383,8 +383,8 @@ test-ios-e2e-dev: ## Run iOS demo app E2E tests against the Vite dev server (mus
 		-destination '${SIMULATOR_DESTINATION}' \
 		| xcbeautify
 
-.PHONY: test-android
-test-android: build ## Run Android library unit tests on the JVM
+.PHONY: test-android-library
+test-android-library: build ## Run Android library unit tests on the JVM
 # `build` short-circuits `copy-android-dist` when `dist/` already exists
 # (e.g. in CI, after extracting an upstream `dist.tar.gz`), so copy
 # explicitly here to guarantee the tests run against the current dist
@@ -392,7 +392,7 @@ test-android: build ## Run Android library unit tests on the JVM
 	@echo "--- :open_file_folder: Copying build into Android bundle"
 	@rm -rf ./android/Gutenberg/src/main/assets/
 	@cp -r ./dist/. ./android/Gutenberg/src/main/assets
-	@echo "--- :android: Running Android Tests"
+	@echo "--- :android: Running Android Library Unit Tests"
 	./android/gradlew -p ./android :gutenberg:test
 
 # Ensure an Android device or emulator is available for instrumented tests.
@@ -426,8 +426,8 @@ define ENSURE_ANDROID_DEVICE
 	fi
 endef
 
-.PHONY: test-android-e2e
-test-android-e2e: ## Run Android demo app E2E tests against the production build
+.PHONY: test-android-app-e2e
+test-android-app-e2e: ## Run Android demo app E2E tests against the production build
 	@if [ ! -d "dist" ]; then \
 		$(MAKE) build; \
 	else \
@@ -440,8 +440,8 @@ test-android-e2e: ## Run Android demo app E2E tests against the production build
 	@echo "--- :android: Running Android E2E Tests (production build)"
 	./android/gradlew -p ./android :app:connectedDebugAndroidTest
 
-.PHONY: test-android-e2e-dev
-test-android-e2e-dev: ## Run Android demo app E2E tests against the Vite dev server (must be running)
+.PHONY: test-android-app-e2e-dev
+test-android-app-e2e-dev: ## Run Android demo app E2E tests against the Vite dev server (must be running)
 	@if ! curl -sf http://localhost:5173 > /dev/null 2>&1; then \
 		echo "Error: Dev server is not running at http://localhost:5173"; \
 		echo "Start it first with: make dev-server"; \
