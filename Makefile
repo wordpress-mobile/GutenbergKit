@@ -1,3 +1,18 @@
+# Target naming grammar
+#
+#   <verb>-<scope>[-<subscope>][-<kind>][-<mode>]
+#           └──────── what ────────┘    └─ how ─┘
+#
+# what  Narrows the subject, broad to narrow: android > library > e2e
+# how   Same subject, different invocation: -fix, -watch, -ui, -dev, -host
+#
+# Mark a slot when siblings compete for the same verb. Elide it only when
+# there is exactly one member, or when the unmarked form is a true superset
+# (`build` builds everything). An unmarked name must never mean a subset —
+# that is how `test-e2e` came to mean "web only" while reading as "all".
+#
+# Targets without a `## ` description are internal and hidden from `make help`.
+
 .DEFAULT_GOAL := help
 
 SIMULATOR_DESTINATION := OS=latest,name=iPhone 17
