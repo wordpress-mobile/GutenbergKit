@@ -66,6 +66,10 @@ extension YourViewController: EditorViewControllerDelegate {
         // Editor finished loading
     }
 
+    func editorDidBecomeUnavailable(_ viewController: EditorViewController) {
+        // Editor crashed - disable controls that depend on it, such as undo and redo
+    }
+
     func editor(_ viewController: EditorViewController, didUpdateContentWithState state: EditorState) {
         // Content changed - state.isEmpty indicates if editor is empty
     }

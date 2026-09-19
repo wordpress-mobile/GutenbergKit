@@ -9,6 +9,11 @@ import { addAction, removeAction } from '@wordpress/hooks';
  */
 import { logException } from '../../utils/bridge';
 
+/**
+ * Logs errors caught by `@wordpress/editor` error boundaries nested inside the
+ * editor, such as one a plugin renders. Those leave the editor usable, so they
+ * are only logged; `EditorErrorBoundary` reports crashes of the editor itself.
+ */
 export function useHostExceptionLogging() {
 	useEffect( () => {
 		addAction(
