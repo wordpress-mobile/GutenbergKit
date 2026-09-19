@@ -23,6 +23,12 @@ Existing patches should be described and justified here.
 
 -   Enable image resizing on mobile devices by removing the `isLargeViewport` check from the `isResizable` condition in the `Image` component. The resizing feature appears to work well enough now, in contrast to the description in https://github.com/WordPress/gutenberg/issues/2675.
 
+### `@wordpress/core-data`
+
+-   Treat an unreadable REST `Allow` header as unknown rather than denied in the `canUser` resolver. The editor is served from a different origin than the site's REST API on every host, and a browser hides response headers the site does not name in `Access-Control-Expose-Headers` — WordPress names only `X-WP-Total`, `X-WP-TotalPages` and `Link`. [Gutenberg #76307](https://github.com/WordPress/gutenberg/pull/76307) (shipped in 7.42.0) began reporting every action as denied in that case, which makes `@wordpress/editor` drop `settings.mediaUpload` and removes the Upload button from every `MediaPlaceholder`. The resolver already returns early when it cannot reach the endpoint; this adds the symmetric case for a response whose header it cannot read.
+
+    Remove this patch once either lands: the same change upstream, or host-supplied user capabilities seeded into the store ([#462](https://github.com/wordpress-mobile/GutenbergKit/pull/462)), which resolves permissions without inferring them from `OPTIONS`.
+
 ### `@wordpress/editor`
 
 -   Add `./build-style/*` to the package's `exports` field to allow importing CSS files. The package added an `exports` field in [this commit](https://github.com/WordPress/gutenberg/commit/f13dcfaa60) that restricts importable paths, but omitted CSS assets. Note: Creating this patch required using `--exclude='^$'` due to a [patch-package limitation](https://github.com/ds300/patch-package/issues/250).
@@ -38,7 +44,3 @@ Existing patches should be described and justified here.
 ### `react-autosize-textarea`
 
 -   Fix CJS/ESM interop issue where Vite's esbuild pre-bundling wraps the `__esModule`-flagged default export as a module object instead of the actual React component, causing the `PlainText` component to crash. The patch removes the `__esModule` flag and switches from `exports["default"]` to `module.exports`, matching [Gutenberg's upstream fix](https://github.com/WordPress/gutenberg/pull/73822).
-
-### `@wordpress/rich-text`
-
--   Fix `preventFocusCapture` causing uneditable text blocks on touch devices when scrolling by swiping outside of the block canvas--e.g., along the edge of the screen.
