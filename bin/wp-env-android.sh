@@ -71,17 +71,21 @@ else
     CURRENT="off"
 fi
 
-echo "Android emulator URLs: $CURRENT"
+echo "Android emulator URL remap — rewrites localhost to 10.0.2.2 in WordPress's"
+echo "URL output so media, block assets, and REST links resolve in the emulator."
+echo
+echo "Status: $CURRENT"
 
 if [ "$CURRENT" = "on" ]; then
-    echo "WordPress emits 10.0.2.2 instead of localhost for media, block assets,"
-    echo "and REST links."
+    echo "WordPress emits 10.0.2.2. Reachable from the Android emulator, but not"
+    echo "from a browser or the iOS Simulator."
 else
-    echo "WordPress emits localhost URLs, reachable from a browser and the iOS"
-    echo "Simulator."
+    echo "WordPress emits localhost. Reachable from a browser and the iOS Simulator,"
+    echo "but not from the Android emulator."
 fi
 
 if [ -n "$MODE" ]; then
+    echo
     echo "Rebuild the Android app to pick up the change."
 else
     if [ "$CURRENT" = "on" ]; then
@@ -91,5 +95,5 @@ else
     fi
 
     echo
-    echo "To change it: make wp-env-android-urls MODE=$OTHER"
+    echo "To change it: make wp-env-config-android-urls MODE=$OTHER"
 fi
