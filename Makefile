@@ -242,7 +242,7 @@ lint-js: npm-dependencies ## Lint JavaScript code
 check-wp-packages: ## Fail if any @wordpress package is installed more than once
 	npm run check:wp-packages
 
-.PHONY: lint-fix-js
+.PHONY: lint-js-fix
 lint-js-fix: npm-dependencies ## Lint and auto-fix JavaScript code
 	npm run lint:js:fix
 
