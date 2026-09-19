@@ -156,14 +156,15 @@ public final class HTTPServer: Sendable {
     ///     consumers expecting large uploads should pass a generous value.
     ///   - idleTimeout: The maximum time to wait between consecutive reads before closing
     ///     the connection. Prevents slow-loris attacks. Defaults to 5 seconds.
-    ///   - startTimeout: The maximum time to wait for the listener to become ready
-    ///     before giving up with ``HTTPServerError/failedToStart``. Bounds a listener
-    ///     stuck in the `.waiting` state. Defaults to 5 seconds.
+    ///   - startTimeout: The maximum time to wait for the listener to become ready before
+    ///     throwing ``HTTPServerError/startTimeout`` — for example, when it's stuck in
+    ///     `.waiting`. Defaults to 5 seconds.
     ///   - handler: A closure invoked for each fully-parsed request. Return an ``HTTPResponse``
     ///     to send back to the client.
     /// - Returns: A running ``HTTPServer`` instance.
-    /// - Throws: ``HTTPServerError/failedToStart`` if the listener cannot bind to the port
-    ///   or does not become ready within `startTimeout`.
+    /// - Throws: ``HTTPServerError/failedToStart`` if the listener fails, for example
+    ///   because the port is already in use, or ``HTTPServerError/startTimeout`` if it
+    ///   isn't ready within `startTimeout`.
     public static func start(
         name: String,
         port: UInt16? = nil,
@@ -232,9 +233,31 @@ public final class HTTPServer: Sendable {
 
         // Bridge listener state callbacks to an AsyncStream so we can await readiness.
         // The listener is started synchronously — only the wait is async.
+        //
+        // This handler stays installed for the listener's whole life. Until the listener is
+        // ready, it passes each state to the wait below; after that, it hands them to
+        // `logStateAfterStart`. Swapping in a new handler at `.ready` would lose states:
+        // Network.framework picks the handler when it queues a state, not when it delivers
+        // it, so a state queued just before the swap would still reach the old handler,
+        // with nothing left listening for it.
+        //
+        // Nothing removes this handler, so it's released on `queue` once the listener is
+        // cancelled. Don't capture the server (that's a retain cycle) or anything whose
+        // `deinit` must run on the caller's thread (see `releaseConnectionHandler()`).
         let (states, statesContinuation) = AsyncStream.makeStream(of: NWListener.State.self)
-        listener.stateUpdateHandler = { state in
+        // `nil` until the listener is ready, then its port. It's a lock only because the
+        // handler must be `@Sendable`; the handler is only ever called on `queue`.
+        let readyPort = OSAllocatedUnfairLock<UInt16?>(initialState: nil)
+        listener.stateUpdateHandler = { [weak listener] state in
+            if let boundPort = readyPort.withLock({ $0 }) {
+                logStateAfterStart(state, port: boundPort)
+                return
+            }
             statesContinuation.yield(state)
+            if case .ready = state {
+                let boundPort = listener?.port?.rawValue ?? 0
+                readyPort.withLock { $0 = boundPort }
+            }
         }
         listener.start(queue: queue)
 
@@ -251,7 +274,6 @@ public final class HTTPServer: Sendable {
                 for await state in states {
                     switch state {
                     case .ready:
-                        listener.stateUpdateHandler = nil
                         guard let p = listener.port else {
                             throw HTTPServerError.failedToStart
                         }
@@ -259,10 +281,14 @@ public final class HTTPServer: Sendable {
                         Logger.httpServer.info("HTTP server started on port \(p.rawValue)")
                         return server
                     case .failed(let error):
-                        Logger.httpServer.error("Listener failed: \(error)")
+                        Logger.httpServer.error("Listener failed: \(error, privacy: .public)")
                         throw HTTPServerError.failedToStart
                     case .cancelled:
                         throw HTTPServerError.failedToStart
+                    case .waiting(let error):
+                        // Not a failure yet, but if the listener stays here the start
+                        // times out, and the timeout error doesn't say why. This does.
+                        Logger.httpServer.warning("Listener is waiting to start: \(error, privacy: .public)")
                     default:
                         continue
                     }
@@ -315,6 +341,27 @@ public final class HTTPServer: Sendable {
             delegate: delegate,
             handler: { await handler.handle($0) }
         )
+    }
+
+    /// Logs a `.failed` or `.waiting` that the listener reports after it's ready.
+    ///
+    /// A listener that fails after starting leaves the server handing out a `port` and
+    /// `token` that no longer work, so it's worth a line in the log. This only hears about
+    /// problems Network.framework reports, though: if the system shuts the socket down (as
+    /// iOS can for a suspended app), connections are refused but the listener still
+    /// reports `.ready`, so this is never called.
+    ///
+    /// `.cancelled` isn't logged. It only follows a call to `cancel()`, which is normal
+    /// shutdown.
+    private static func logStateAfterStart(_ state: NWListener.State, port: UInt16) {
+        switch state {
+        case .failed(let error):
+            Logger.httpServer.error("Listener on port \(port) failed after a successful start: \(error, privacy: .public)")
+        case .waiting(let error):
+            Logger.httpServer.warning("Listener on port \(port) is waiting after a successful start: \(error, privacy: .public)")
+        default:
+            break
+        }
     }
 
     /// Races `operation` against `timeout`, throwing ``HTTPServerError/startTimeout``
