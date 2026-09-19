@@ -23,6 +23,8 @@ To see all available make commands with descriptions, run:
 make help
 ```
 
+New targets follow the naming grammar documented in the header comment at the top of the `Makefile`.
+
 By default, dependencies, translations, and JS build are skipped if output directories already exist. Environment variables be used to force refresh of these steps when needed.
 
 -   `REFRESH_DEPS=1` - Force refresh of dependencies (e.g. re-install npm packages)
