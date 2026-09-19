@@ -242,8 +242,8 @@ wp-env-clean: ## Stop wp-env and remove downloaded WordPress, plugin, and theme 
 # holding the port rather than letting the next start fail on it.
 	@bash bin/wp-env-guard.sh > /dev/null || true
 
-.PHONY: wp-env-android-urls
-wp-env-android-urls: ## Report whether WordPress emits emulator-reachable URLs, 10.0.2.2 instead of localhost (set via MODE=on|off)
+.PHONY: wp-env-config-android-urls
+wp-env-config-android-urls: ## Report the Android emulator URL remap, or set it with MODE=on|off
 	@MODE=$(MODE) bash bin/wp-env-android.sh
 
 ################################################################################
