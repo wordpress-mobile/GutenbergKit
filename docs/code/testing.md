@@ -19,7 +19,7 @@ make test-js
 ### Swift (Swift Testing)
 
 ```bash
-make test-swift-package
+make test-swift-simulator
 ```
 
 ### Android (JUnit)
