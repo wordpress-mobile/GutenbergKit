@@ -26,9 +26,11 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// `editor` API, so calls to them are refused from this point until the editor
     /// reloads.
     ///
-    /// The editor cannot recover on its own. Clients should disable the controls
-    /// that depend on it — history, editor mode — while leaving those that read
-    /// from their own persisted copy, such as saving and closing, available.
+    /// GutenbergKit covers the editor with a notice offering to reload it. Until
+    /// it reloads, clients should disable the controls that depend on the editor —
+    /// history, editor mode — while leaving those that read from their own
+    /// persisted copy, such as saving and closing, available. Re-enable them the
+    /// next time ``editorDidLoad(_:)`` is called.
     ///
     /// - warning: Content already retrieved remains valid; do not treat this as
     /// the editor reporting empty content.
@@ -81,17 +83,17 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// - parameter request: The network request details including URL, headers, body, response, and timing.
     func editor(_ viewController: EditorViewController, didLogNetworkRequest request: RecordedNetworkRequest)
 
-    /// Provides the latest persisted content for recovery after WebView refresh.
+    /// Provides the content the editor starts from when its page loads.
     ///
-    /// Called when the WebView requests content during initialization. The host app should return
-    /// the most recently persisted title and content from autosave. This allows content recovery
-    /// when the WebView is re-initialized (e.g., due to OS memory pressure or page refresh).
+    /// Called each time the editor page loads, including when it reloads after a
+    /// crash or after the web content process ends. Return the newest title and
+    /// content the client holds, including anything saved during this session.
     ///
-    /// Note: The values in `EditorConfiguration.title` and `EditorConfiguration.content` are "initial values"
-    /// injected at WebView load time. After a WebView refresh, these may be stale. This delegate method
-    /// allows the host app to provide fresher content from its autosave mechanism.
+    /// Returning `nil` starts the editor from `EditorConfiguration.title` and
+    /// `EditorConfiguration.content`, the content it was opened with, so a reload
+    /// discards any edits made since.
     ///
-    /// - Returns: A tuple of (title, content), or nil if no persisted content is available.
+    /// - Returns: A tuple of (title, content), or nil to start from the initial content.
     func editorDidRequestLatestContent(_ controller: EditorViewController) -> (title: String, content: String)?
 }
 

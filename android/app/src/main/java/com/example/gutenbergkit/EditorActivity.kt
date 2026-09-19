@@ -61,6 +61,19 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+// Throws from the selector the editor reads to choose between the visual and
+// code editors, so the crash reaches the editor's error boundary in either mode
+// rather than a single block's.
+private const val TRIGGER_EDITOR_CRASH_SCRIPT = """
+    (() => {
+        const editor = wp.data.select('core/editor');
+        editor.getEditorMode = () => {
+            throw new Error('Editor crash triggered from the demo app');
+        };
+        wp.data.dispatch('core/editor').updateEditorSettings({});
+    })();
+"""
+
 class EditorActivity : ComponentActivity() {
 
     companion object {
@@ -150,12 +163,13 @@ fun EditorScreen(
     var hasUndoState by remember { mutableStateOf(false) }
     var hasRedoState by remember { mutableStateOf(false) }
     var isCodeEditorEnabled by remember { mutableStateOf(false) }
+    var isEditorAvailable by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
     var gutenbergViewRef by remember { mutableStateOf<GutenbergView?>(null) }
     val saveScope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    val canSave = !isSaving && accountId != null && configuration.postId != null
+    val canSave = isEditorAvailable && !isSaving && accountId != null && configuration.postId != null
 
     BackHandler(enabled = isModalDialogOpen) {
         gutenbergViewRef?.dismissTopModal()
@@ -182,7 +196,7 @@ fun EditorScreen(
                 actions = {
                     IconButton(
                         onClick = { gutenbergViewRef?.undo() },
-                        enabled = hasUndoState && !isModalDialogOpen
+                        enabled = isEditorAvailable && hasUndoState && !isModalDialogOpen
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Undo,
@@ -191,7 +205,7 @@ fun EditorScreen(
                     }
                     IconButton(
                         onClick = { gutenbergViewRef?.redo() },
-                        enabled = hasRedoState && !isModalDialogOpen
+                        enabled = isEditorAvailable && hasRedoState && !isModalDialogOpen
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Redo,
@@ -230,7 +244,7 @@ fun EditorScreen(
                     Box {
                         IconButton(
                             onClick = { showMenu = true },
-                            enabled = !isModalDialogOpen
+                            enabled = isEditorAvailable && !isModalDialogOpen
                         ) {
                             Icon(
                                 imageVector = Icons.Default.MoreVert,
@@ -246,6 +260,16 @@ fun EditorScreen(
                                 onClick = {
                                     isCodeEditorEnabled = !isCodeEditorEnabled
                                     gutenbergViewRef?.textEditorEnabled = isCodeEditorEnabled
+                                    showMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.trigger_editor_crash)) },
+                                onClick = {
+                                    gutenbergViewRef?.editorWebView?.evaluateJavascript(
+                                        TRIGGER_EDITOR_CRASH_SCRIPT,
+                                        null
+                                    )
                                     showMenu = false
                                 }
                             )
@@ -271,6 +295,8 @@ fun EditorScreen(
                     )
 
                     gutenbergViewRef = this
+                    setEditorDidBecomeAvailable { isEditorAvailable = true }
+                    setEditorDidBecomeUnavailable { isEditorAvailable = false }
                     setModalDialogStateListener(object : GutenbergView.ModalDialogStateListener {
                         override fun onModalDialogOpened(dialogType: String) {
                             isModalDialogOpen = true
