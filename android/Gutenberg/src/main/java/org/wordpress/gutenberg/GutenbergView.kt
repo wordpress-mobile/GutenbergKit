@@ -185,6 +185,7 @@ class GutenbergView : FrameLayout {
     private var featuredImageChangeListener: FeaturedImageChangeListener? = null
     private var openMediaLibraryListener: OpenMediaLibraryListener? = null
     private var editorDidBecomeAvailableListener: EditorAvailableListener? = null
+    private var editorDidBecomeUnavailableListener: EditorUnavailableListener? = null
     private var logJsExceptionListener: LogJsExceptionListener? = null
     private var autocompleterTriggeredListener: AutocompleterTriggeredListener? = null
     private var modalDialogStateListener: ModalDialogStateListener? = null
@@ -261,6 +262,10 @@ class GutenbergView : FrameLayout {
 
     fun setEditorDidBecomeAvailable(listener: EditorAvailableListener?) {
         editorDidBecomeAvailableListener = listener
+    }
+
+    fun setEditorDidBecomeUnavailable(listener: EditorUnavailableListener?) {
+        editorDidBecomeUnavailableListener = listener
     }
 
     constructor(context: Context) : this(
@@ -745,21 +750,13 @@ class GutenbergView : FrameLayout {
     }
 
     fun setContent(newContent: String) {
-        if (!isEditorLoaded) {
-            Log.e("GutenbergView", "You can't change the editor content until it has loaded")
-            return
-        }
         val encodedContent = newContent.encodeForEditor()
-        webView.evaluateJavascript("editor.setContent('$encodedContent');", null)
+        evaluateIfLoaded("editor.setContent('$encodedContent');")
     }
 
     fun setTitle(newTitle: String) {
-        if (!isEditorLoaded) {
-            Log.e("GutenbergView", "You can't change the editor content until it has loaded")
-            return
-        }
         val encodedTitle = newTitle.encodeForEditor()
-        webView.evaluateJavascript("editor.setTitle('$encodedTitle');", null)
+        evaluateIfLoaded("editor.setTitle('$encodedTitle');")
     }
 
     /**
@@ -818,6 +815,26 @@ class GutenbergView : FrameLayout {
 
     fun interface EditorAvailableListener {
         fun onEditorAvailable(view: GutenbergView?)
+    }
+
+    /**
+     * Notified when the editor crashes and is no longer usable.
+     *
+     * This can be called without a preceding
+     * [EditorAvailableListener.onEditorAvailable] when the editor crashes before
+     * it finishes loading.
+     *
+     * The editor's error boundary caught an error and replaced the editor with an
+     * error message. React unmounted the editor, which deleted every JavaScript
+     * `editor` API, so calls to them are refused from this point until the editor
+     * reloads.
+     *
+     * The editor cannot recover on its own. Hosts should disable the controls that
+     * depend on it — history, editor mode — while leaving those that read from
+     * their own persisted copy, such as saving and closing, available.
+     */
+    fun interface EditorUnavailableListener {
+        fun onEditorUnavailable(view: GutenbergView?)
     }
 
     interface LogJsExceptionListener {
@@ -885,31 +902,34 @@ class GutenbergView : FrameLayout {
     }
 
     fun undo() {
-        handler.post {
-            webView.evaluateJavascript("editor.undo();", null)
-        }
+        evaluateIfLoaded("editor.undo();")
     }
 
     fun redo() {
-        handler.post {
-            webView.evaluateJavascript("editor.redo();", null)
-        }
+        evaluateIfLoaded("editor.redo();")
     }
 
     fun dismissTopModal() {
-        handler.post {
-            webView.evaluateJavascript("editor.dismissTopModal();", null)
-        }
+        evaluateIfLoaded("editor.dismissTopModal();")
     }
 
     fun appendTextAtCursor(text: String) {
+        val encodedText = text.encodeForEditor()
+        evaluateIfLoaded("editor.appendTextAtCursor(decodeURIComponent('$encodedText'));")
+    }
+
+    /**
+     * Evaluates [script] in the editor on the main thread, or refuses it when the
+     * editor has not loaded. The editor's bridge methods exist only while it is
+     * loaded, so a refused call would otherwise fail inside the web view.
+     */
+    private fun evaluateIfLoaded(script: String) {
         if (!isEditorLoaded) {
-            Log.e("GutenbergView", "You can't append text until the editor has loaded")
+            Log.d(TAG, "Refused ${script.substringBefore('(')} because the editor is not ready")
             return
         }
-        val encodedText = text.encodeForEditor()
         handler.post {
-            webView.evaluateJavascript("editor.appendTextAtCursor(decodeURIComponent('$encodedText'));", null)
+            webView.evaluateJavascript(script, null)
         }
     }
 
@@ -938,6 +958,25 @@ class GutenbergView : FrameLayout {
                     }, 100)
                 }
             }
+        }
+    }
+
+    /**
+     * The editor's error boundary caught an error, so React unmounted the editor
+     * and deleted every `window.editor.*` bridge method.
+     *
+     * Readiness is reset until the editor reloads and emits `onEditorLoaded`
+     * again. Without this, calls keep reaching a web view that can no longer
+     * answer them.
+     */
+    @JavascriptInterface
+    fun onEditorUnavailable() {
+        Log.e("GutenbergView", "EditorUnavailable received in native code")
+        isEditorLoaded = false
+        handler.post {
+            // Picks made in an open inserter can no longer reach the editor.
+            blockInserterDialog?.dismiss()
+            editorDidBecomeUnavailableListener?.onEditorUnavailable(this)
         }
     }
 
@@ -1009,11 +1048,6 @@ class GutenbergView : FrameLayout {
     }
 
     fun setMediaUploadAttachment(media: String) {
-        if (!isEditorLoaded) {
-            Log.e("GutenbergView", "You can't change the editor content until it has loaded")
-            return
-        }
-
         val contextId = currentMediaContextId
         if (contextId == null) {
             Log.e("GutenbergView", "setMediaUploadAttachment called without contextId")
@@ -1021,26 +1055,17 @@ class GutenbergView : FrameLayout {
         }
 
         val escapedContextId = contextId.replace("'", "\\'")
-        webView.evaluateJavascript("editor.setMediaUploadAttachment($media, '$escapedContextId');", null)
+        evaluateIfLoaded("editor.setMediaUploadAttachment($media, '$escapedContextId');")
 
         currentMediaContextId = null
     }
 
     private fun insertBlock(blockId: String) {
-        if (!isEditorLoaded) return
-        handler.post {
-            webView.evaluateJavascript(
-                "window.blockInserter?.insertBlock(${JSONObject.quote(blockId)});",
-                null,
-            )
-        }
+        evaluateIfLoaded("window.blockInserter?.insertBlock(${JSONObject.quote(blockId)});")
     }
 
     private fun dismissBlockInserter() {
-        if (!isEditorLoaded) return
-        handler.post {
-            webView.evaluateJavascript("window.blockInserter?.onClose?.();", null)
-        }
+        evaluateIfLoaded("window.blockInserter?.onClose?.();")
     }
 
     @JavascriptInterface
@@ -1191,6 +1216,7 @@ class GutenbergView : FrameLayout {
         openMediaLibraryListener = null
         logJsExceptionListener = null
         editorDidBecomeAvailableListener = null
+        editorDidBecomeUnavailableListener = null
         filePathCallback = null
         onFileChooserRequested = null
         autocompleterTriggeredListener = null
