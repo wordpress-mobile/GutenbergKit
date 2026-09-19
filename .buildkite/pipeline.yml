@@ -13,10 +13,10 @@ steps:
       key: build-react
       command: |
           # Fail fast if any step (including the backgrounded
-          # `prep-translations`, surfaced via `wait`) returns non-zero,
+          # `fetch-translations`, surfaced via `wait`) returns non-zero,
           # rather than continuing into `make build` with partial inputs.
           set -euo pipefail
-          # `prep-translations` is pure network I/O and no longer depends
+          # `fetch-translations` is pure network I/O and no longer depends
           # on `node_modules` (uses Node's built-in `fetch`), so it can run
           # in parallel with `npm ci`. Vite reads `src/translations/` when
           # it emits locale bundles, so we wait for the fetch to complete
@@ -27,16 +27,16 @@ steps:
           # interleave with `npm ci`'s and confuse Buildkite log folding.
           # The replay happens unconditionally so a failed fetch surfaces
           # its log before `set -e` aborts the script.
-          make prep-translations STRICT_L10N=1 > prep-translations.log 2>&1 &
-          PREP_PID=$$!
+          make fetch-translations STRICT_L10N=1 > fetch-translations.log 2>&1 &
+          FETCH_PID=$$!
           make install-deps
-          PREP_STATUS=0
-          wait $$PREP_PID || PREP_STATUS=$$?
-          echo "--- :earth_americas: prep-translations (ran in parallel with npm ci)"
-          cat prep-translations.log
-          rm -f prep-translations.log
-          if [ "$$PREP_STATUS" -ne 0 ]; then
-              exit "$$PREP_STATUS"
+          FETCH_STATUS=0
+          wait $$FETCH_PID || FETCH_STATUS=$$?
+          echo "--- :earth_americas: fetch-translations (ran in parallel with npm ci)"
+          cat fetch-translations.log
+          rm -f fetch-translations.log
+          if [ "$$FETCH_STATUS" -ne 0 ]; then
+              exit "$$FETCH_STATUS"
           fi
           make build REFRESH_JS_BUILD=1
           tar -czf dist.tar.gz dist/

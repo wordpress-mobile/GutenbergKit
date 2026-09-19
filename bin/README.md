@@ -79,14 +79,14 @@ make release VERSION_TYPE=patch DRY_RUN=true
 -   `make` - for building the project
 -   Git - for version control operations
 
-### `prep-translations.js`
+### `fetch-translations.js`
 
-Prepares translations for the GutenbergKit project. This script is typically run as part of the build process.
+Fetches and caches locale string files for the GutenbergKit project. This script is typically run as part of the build process.
 
 #### Usage
 
 ```bash
-make prep-translations
+make fetch-translations
 ```
 
 ### `check-wordpress-package-duplicates.js`
