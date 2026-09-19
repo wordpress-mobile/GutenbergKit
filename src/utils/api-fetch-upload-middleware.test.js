@@ -625,6 +625,66 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		expect( next ).not.toHaveBeenCalled();
 	} );
 
+	// MARK: - Raw response passthrough
+
+	describe( 'parse: false', () => {
+		beforeEach( () => {
+			getGBKit.mockReturnValue( {
+				nativeUploadPort: 8080,
+				nativeUploadToken: 'token',
+			} );
+		} );
+
+		it( 'rejects with the Response so the attachment ID stays readable', async () => {
+			// Core's media upload middleware needs the `Response` itself to read
+			// `x-wp-upload-attachment-id` and retry post-process. Parsing the
+			// body here would hide the header.
+			const response = new Response( '{"code":"rest_upload_error"}', {
+				status: 500,
+				headers: { 'x-wp-upload-attachment-id': '4242' },
+			} );
+			global.fetch = vi.fn( () => Promise.resolve( response ) );
+
+			const options = makePostMediaOptions( makeFile() );
+			options.parse = false;
+
+			const thrown = await nativeMediaUploadMiddleware(
+				options,
+				makeNext()
+			).catch( ( error ) => error );
+
+			expect( thrown ).toBe( response );
+			expect( thrown.headers.get( 'x-wp-upload-attachment-id' ) ).toBe(
+				'4242'
+			);
+		} );
+
+		it( 'resolves with the Response on success', async () => {
+			const response = new Response( '{"id":1}', { status: 201 } );
+			global.fetch = vi.fn( () => Promise.resolve( response ) );
+
+			const options = makePostMediaOptions( makeFile() );
+			options.parse = false;
+
+			await expect(
+				nativeMediaUploadMiddleware( options, makeNext() )
+			).resolves.toBe( response );
+		} );
+
+		it( 'still parses the body when parse is not disabled', async () => {
+			global.fetch = vi.fn( () =>
+				Promise.resolve( new Response( '{"id":1}', { status: 201 } ) )
+			);
+
+			await expect(
+				nativeMediaUploadMiddleware(
+					makePostMediaOptions( makeFile() ),
+					makeNext()
+				)
+			).resolves.toEqual( { id: 1 } );
+		} );
+	} );
+
 	// MARK: - Signal forwarding
 
 	it( 'forwards abort signal to fetch', async () => {
@@ -656,5 +716,104 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		expect( global.fetch.mock.calls[ 0 ][ 1 ].signal ).toBe(
 			controller.signal
 		);
+	} );
+
+	// MARK: - Media deletion
+
+	describe( 'media deletion', () => {
+		beforeEach( () => {
+			getGBKit.mockReturnValue( {
+				nativeUploadPort: 8080,
+				nativeUploadToken: 'token',
+			} );
+		} );
+
+		it( 'routes an attachment deletion through the native server', async () => {
+			// api-fetch tunnels DELETE as POST + `X-HTTP-Method-Override`, which
+			// core's CORS allow-list omits, so a cross-origin editor cannot make
+			// this request directly. Relaying it keeps the orphan cleanup working.
+			global.fetch = vi.fn( () =>
+				Promise.resolve(
+					new Response( '{"deleted":true}', { status: 200 } )
+				)
+			);
+			const next = makeNext();
+
+			await expect(
+				nativeMediaUploadMiddleware(
+					{ method: 'DELETE', path: '/wp/v2/media/42?force=true' },
+					next
+				)
+			).resolves.toEqual( { deleted: true } );
+
+			expect( next ).not.toHaveBeenCalled();
+			const [ url, options ] = global.fetch.mock.calls[ 0 ];
+			expect( String( url ) ).toBe(
+				'http://localhost:8080/media/42?force=true'
+			);
+			expect( options.method ).toBe( 'DELETE' );
+			expect( options.headers[ 'Relay-Authorization' ] ).toBe(
+				'Bearer token'
+			);
+		} );
+
+		it( 'passes through a deletion of a non-media path', async () => {
+			global.fetch = vi.fn();
+			const next = makeNext();
+
+			nativeMediaUploadMiddleware(
+				{ method: 'DELETE', path: '/wp/v2/posts/42' },
+				next
+			);
+
+			expect( next ).toHaveBeenCalled();
+			expect( global.fetch ).not.toHaveBeenCalled();
+		} );
+
+		it( 'passes through the media collection path', async () => {
+			// `/wp/v2/media` has no attachment ID, so it is not a deletion this
+			// server relays.
+			global.fetch = vi.fn();
+			const next = makeNext();
+
+			nativeMediaUploadMiddleware(
+				{ method: 'DELETE', path: '/wp/v2/media' },
+				next
+			);
+
+			expect( next ).toHaveBeenCalled();
+			expect( global.fetch ).not.toHaveBeenCalled();
+		} );
+
+		it( 'passes through when the native server is not configured', async () => {
+			getGBKit.mockReturnValue( {} );
+			global.fetch = vi.fn();
+			const next = makeNext();
+
+			nativeMediaUploadMiddleware(
+				{ method: 'DELETE', path: '/wp/v2/media/42?force=true' },
+				next
+			);
+
+			expect( next ).toHaveBeenCalled();
+			expect( global.fetch ).not.toHaveBeenCalled();
+		} );
+
+		it( 'rejects with the parsed error body on failure', async () => {
+			global.fetch = vi.fn( () =>
+				Promise.resolve(
+					new Response( '{"code":"rest_cannot_delete"}', {
+						status: 403,
+					} )
+				)
+			);
+
+			const thrown = await nativeMediaUploadMiddleware(
+				{ method: 'DELETE', path: '/wp/v2/media/42?force=true' },
+				makeNext()
+			).catch( ( error ) => error );
+
+			expect( thrown ).toEqual( { code: 'rest_cannot_delete' } );
+		} );
 	} );
 } );
