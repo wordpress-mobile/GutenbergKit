@@ -12,6 +12,7 @@ public enum EditorLocalizableString {
     // MARK: - Media
     case failedToInsertMedia
     case failedToLoadSelectedMedia
+    case someSelectedMediaFailedToLoad(Int)
     case failedToProcessCapturedMedia
 
     // MARK: - Common
@@ -102,6 +103,10 @@ public final class EditorLocalization {
         case .insertBlock: "Insert Block"
         case .failedToInsertMedia: "Failed to insert media"
         case .failedToLoadSelectedMedia: "The selected media could not be loaded. It may not be fully downloaded to this device."
+        case .someSelectedMediaFailedToLoad(let count):
+            count == 1
+                ? "1 item could not be loaded and was skipped. It may not be fully downloaded to this device."
+                : "\(count) items could not be loaded and were skipped. They may not be fully downloaded to this device."
         case .failedToProcessCapturedMedia: "The captured media could not be processed."
         case .ok: "OK"
         case .patterns: "Patterns"
