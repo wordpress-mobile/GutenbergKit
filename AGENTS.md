@@ -94,10 +94,12 @@ time, so for local runs and the editor hook the binary version and the rule set
 cannot drift apart. To upgrade, bump `swiftlint_version` and run
 `swift package --package-path BuildTools resolve`.
 
-CI is the exception: the `:swift: SwiftLint` step runs on the shared `linter`
-agent queue, which invokes that image's own SwiftLint binary rather than the
-pinned one. If the image moves far enough ahead of `swiftlint_version`, CI can
-fail on a rule that passes locally — bump the pin to resolve it.
+CI reaches the same version by a different route. The `:swift: SwiftLint` step
+runs on the shared `linter` agent queue, where the CI toolkit's `run_swiftlint`
+reads `swiftlint_version` out of `.swiftlint.yml` and runs
+`ghcr.io/realm/swiftlint:<version>` under Docker. Local runs, the editor hook
+and CI therefore all resolve to the same single declaration, and bumping
+`swiftlint_version` moves all three together.
 
 Rules are opt-in only (`only_rules:`), mirroring WordPress-iOS so the two codebases
 stay consistent for the shared team.
