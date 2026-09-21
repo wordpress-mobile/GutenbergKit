@@ -88,7 +88,7 @@ steps:
           rm -rf ./android/Gutenberg/src/main/assets/
           cp -r ./dist/. ./android/Gutenberg/src/main/assets
           echo "--- :android: Publishing Android Library"
-          ./android/gradlew -p ./android :gutenberg:prepareToPublishToS3 $(prepare_to_publish_to_s3_params) :gutenberg:publish
+          .buildkite/publish-android-library.sh
       agents:
           queue: android
       plugins: *plugins
