@@ -1,5 +1,6 @@
 import Foundation
 import GutenbergKitHTTP
+import Network
 import OSLog
 
 /// A local HTTP server that receives file uploads from the WebView and routes
@@ -144,6 +145,81 @@ final class MediaUploadServer: Sendable {
     /// Stops the server and releases resources.
     func stop() {
         server.stop()
+    }
+
+    // MARK: - Liveness
+
+    /// Whether the port still answers, which is not the same as the listener looking healthy.
+    ///
+    /// iOS takes the listening socket away when it suspends the app — three seconds in the
+    /// background was enough on an iPhone 15 Pro running iOS 27.0 — and reports nothing:
+    /// `NWListener` still says `.ready` on the same port, and no state is delivered. Asking
+    /// the port is the only way to find out.
+    ///
+    /// The request deliberately carries no token. The server answers `407` and logs nothing,
+    /// so a check that runs on every foreground stays silent, and any answer at all means
+    /// the socket is still there. A socket the system took refuses the connection instead.
+    ///
+    /// Uses `NWConnection` rather than `URLSession` so no host's App Transport Security
+    /// settings can decide the outcome.
+    func isAnswering(timeout: Duration = .seconds(2)) async -> Bool {
+        guard let endpointPort = NWEndpoint.Port(rawValue: port) else { return false }
+        let connection = NWConnection(host: .ipv4(.loopback), port: endpointPort, using: .tcp)
+        // Cancelling makes the probe below finish as a failure, so it can't outlive this.
+        let deadline = Task {
+            try await Task.sleep(for: timeout)
+            connection.cancel()
+        }
+        defer {
+            deadline.cancel()
+            connection.cancel()
+        }
+        return await Self.ask(connection)
+    }
+
+    private static let probeQueue = DispatchQueue(label: "com.gutenbergkit.upload-server-probe")
+
+    private static func ask(_ connection: NWConnection) async -> Bool {
+        await withCheckedContinuation { continuation in
+            // A failed send reports both an error and a state change, so the answer has to
+            // be claimed once.
+            let answer = OnceFlag()
+            connection.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    let request = Data("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n".utf8)
+                    connection.send(content: request, completion: .contentProcessed { error in
+                        guard error == nil else {
+                            if answer.claim() { continuation.resume(returning: false) }
+                            return
+                        }
+                        connection.receive(minimumIncompleteLength: 1, maximumLength: 64) { data, _, _, error in
+                            let answered = error == nil && !(data ?? Data()).isEmpty
+                            if answer.claim() { continuation.resume(returning: answered) }
+                        }
+                    })
+                case .failed, .cancelled:
+                    if answer.claim() { continuation.resume(returning: false) }
+                default:
+                    break
+                }
+            }
+            connection.start(queue: probeQueue)
+        }
+    }
+
+    /// Lets exactly one of several callbacks resume a continuation.
+    private final class OnceFlag: @unchecked Sendable {
+        private let lock = NSLock()
+        private var claimed = false
+
+        func claim() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            if claimed { return false }
+            claimed = true
+            return true
+        }
     }
 
     // MARK: - Request Handling

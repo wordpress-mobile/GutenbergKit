@@ -93,6 +93,67 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         #expect(editor.uploadServer != nil, "\(label): no upload server, so the host's media handling never runs")
     }
 
+    // MARK: - Coming back from the background
+
+    /// The failure this file's sibling PR is named for. The system takes the listening
+    /// socket while the app is suspended and reports nothing, so the editor returns
+    /// advertising a port that refuses connections, and every upload in that session fails.
+    /// Stopping the server behind the editor's back leaves exactly that state.
+    @MainActor
+    @Test("an upload server whose port stopped answering is replaced", .enabled(if: canBindUploadServer))
+    func restartsAnUnreachableUploadServer() async throws {
+        let editor = EditorViewController(
+            configuration: makeConfiguration(),
+            mediaProcessor: StandaloneProcessor()
+        )
+        defer { editor.stopMediaHandling() }
+        await editor.startUploadServer()
+
+        guard let original = editor.uploadServer else {
+            Issue.record("no upload server to begin with")
+            return
+        }
+        original.stop()
+        try await waitUntilSilent(original)
+
+        await editor.restartUploadServerIfUnreachable()
+
+        guard let restarted = editor.uploadServer else {
+            Issue.record("the editor was left without a server, so uploads fall back to the WebView path")
+            return
+        }
+        #expect(restarted !== original, "kept the server whose port had stopped answering")
+        #expect(await restarted.isAnswering(), "the replacement server does not answer either")
+    }
+
+    /// The other half: a check that runs on every foreground must not churn the port, which
+    /// would mean re-advertising it to the page for no reason.
+    @MainActor
+    @Test("an upload server that still answers is left alone", .enabled(if: canBindUploadServer))
+    func leavesAnAnsweringUploadServerAlone() async {
+        let editor = EditorViewController(
+            configuration: makeConfiguration(),
+            mediaProcessor: StandaloneProcessor()
+        )
+        defer { editor.stopMediaHandling() }
+        await editor.startUploadServer()
+        let original = editor.uploadServer
+
+        await editor.restartUploadServerIfUnreachable()
+
+        #expect(editor.uploadServer === original, "replaced a server that was answering")
+    }
+
+    /// `cancel()` completes on the listener's own queue, so the socket can outlive `stop()`
+    /// by a moment.
+    private func waitUntilSilent(_ server: MediaUploadServer) async throws {
+        for _ in 0..<20 {
+            if await !server.isAnswering(timeout: .milliseconds(300)) { return }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        Issue.record("the stopped server kept answering, so this test could not set up its own premise")
+    }
+
     @MainActor
     @Test("no handler leaves the upload server down", .enabled(if: canBindUploadServer))
     func noHandlerLeavesServerDown() async {
