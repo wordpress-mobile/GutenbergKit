@@ -5,7 +5,7 @@
 Every push to `trunk` publishes both platforms automatically:
 
 -   **Android**: the `:android: Publish Android Library` step pushes a Maven artifact keyed by the commit (consumable via Git revision pins).
--   **iOS**: the `:s3: Publish XCFramework to S3` step uploads the signed XCFramework under `gutenbergkit/<commit-sha>/`, and `Publish PR XCFramework` does the same on PR builds under a `pr-build/<n>` snapshot branch.
+-   **iOS**: the `:ios: Publish XCFramework to S3` step uploads the signed XCFramework under `gutenbergkit/<commit-sha>/`, and `Publish PR XCFramework` does the same on PR builds under a `pr-build/<n>` snapshot branch.
 
 A **tagged release** is a separate, manually-triggered publish flow on top of that: it produces a stable `vX.Y.Z` tag whose `Package.swift` points at the prebuilt XCFramework on CDN, plus a GitHub Release with the XCFramework attached. SPM consumers pin the tag; everything else can pin a commit/branch.
 
@@ -60,7 +60,7 @@ Step 1 prints the SHA of the version-bump commit it just pushed. Trigger a new B
 
 Pinning the commit matters — if you leave it blank, Buildkite resolves `trunk` to HEAD at trigger time, and a concurrent merge would tag the wrong commit.
 
-The build runs a `:white_check_mark: Validate Swift release` step early on (gated on `NEW_VERSION`) that fast-fails if the tag name is malformed, if the tag or GitHub Release already exists, or if no previous release tag can be resolved to generate notes against. It logs the tag the notes will be based on, so a wrong base surfaces before anything is published. After that, the `:rocket: Publish Swift release` step:
+The build runs a `:ios: Validate Swift Release` step early on (gated on `NEW_VERSION`) that fast-fails if the tag name is malformed, if the tag or GitHub Release already exists, or if no previous release tag can be resolved to generate notes against. It logs the tag the notes will be based on, so a wrong base surfaces before anything is published. After that, the `:ios: Publish Swift Release` step:
 
 1. Rewrites `Package.swift` to consume the binary target via `.release(version:, checksum:)`
 1. Uploads the XCFramework to `s3://a8c-apps-public-artifacts/gutenbergkit/vX.Y.Z/`

@@ -8,8 +8,15 @@ env:
     # The download is flaky from CI, so skip it -- see the Test Web E2E job.
     ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
 
+# Each step carries one emoji naming the platform it builds, tests, or ships —
+# :javascript: for the web editor (there is no clean web glyph), :ios:, or
+# :android: — and a verb-first, title-case label that stands on its own.
+# Where a step runs a make target, key it by that target's name.
+#
+# Labels become GitHub check names, and the trunk ruleset requires several by
+# name, so renaming a label needs a matching ruleset update.
 steps:
-    - label: ':react: Build React App'
+    - label: ':javascript: Build Web Bundle'
       key: build-react
       command: |
           # Fail fast if any step (including the backgrounded
@@ -45,7 +52,7 @@ steps:
           - $CI_TOOLKIT_PLUGIN
           - $NVM_PLUGIN
 
-    - label: ':white_check_mark: Validate Swift release ${NEW_VERSION:-(no version)}'
+    - label: ':ios: Validate Swift Release ${NEW_VERSION:-(no version)}'
       key: validate-release
       if: build.env("NEW_VERSION") != null && build.branch == "trunk" && build.pull_request.id == null
       command: |
@@ -53,12 +60,12 @@ steps:
           bundle exec fastlane validate "version:$NEW_VERSION"
       plugins: *plugins
 
-    - label: ':eslint: Lint React App'
+    - label: ':javascript: Lint JavaScript'
       key: lint-js
       command: make lint-web
       plugins: *plugins
 
-    - label: ':npm: Check @wordpress package versions'
+    - label: ':javascript: Check @wordpress Package Versions'
       key: check-wp-packages
       command: make check-wp-packages
       plugins: *plugins
@@ -68,7 +75,7 @@ steps:
       command: make test-web-unit
       plugins: *plugins
 
-    - label: ':performing_arts: Test Web E2E'
+    - label: ':javascript: Test Web E2E'
       key: test-web-e2e
       depends_on: build-react
       command: |
@@ -100,7 +107,7 @@ steps:
           queue: android
       plugins: *plugins
 
-    - label: ':swift: SwiftLint'
+    - label: ':ios: Lint Swift'
       key: lint-swift
       command: swiftlint
       agents:
@@ -117,7 +124,7 @@ steps:
           queue: android
       plugins: *plugins
 
-    - label: ':swift: iOS Simulator Tests'
+    - label: ':ios: Test Swift Simulator'
       key: test-swift-simulator
       depends_on: build-react
       command: |
@@ -126,7 +133,7 @@ steps:
           make test-ios-library-simulator
       plugins: *plugins
 
-    - label: ':swift: Library Tests'
+    - label: ':ios: Test Swift Host'
       key: test-swift-host
       depends_on: build-react
       command: |
@@ -135,7 +142,7 @@ steps:
           make test-ios-library-host
       plugins: *plugins
 
-    - label: ':xcode: Build XCFramework'
+    - label: ':ios: Build XCFramework'
       key: build-resources-xcframework
       depends_on:
           - build-react
@@ -153,12 +160,12 @@ steps:
           - '*.xcframework.zip.checksum.txt'
       plugins: *plugins
 
-    - label: ':s3: Publish XCFramework to S3'
+    - label: ':ios: Publish XCFramework to S3'
       depends_on: build-resources-xcframework
       # This step only covers per-commit trunk uploads keyed by the commit
-      # SHA. Releases are handled by `:rocket: Publish Swift release` (gated
+      # SHA. Releases are handled by `:ios: Publish Swift Release` (gated
       # on `NEW_VERSION`), and tag pushes from that step trigger a separate
-      # tag build whose iOS upload would just duplicate the rocket step's —
+      # tag build whose iOS upload would just duplicate the release step's —
       # the `build.tag == null` clause skips it. Android publish on tag
       # builds is still load-bearing (produces the `vX.Y.Z` Maven artifact)
       # and intentionally not gated here.
@@ -170,13 +177,13 @@ steps:
           bundle exec fastlane publish_to_s3 version:$BUILDKITE_COMMIT
       plugins: *plugins
 
-    - label: ':swift: :package: Publish PR XCFramework'
+    - label: ':ios: Publish PR XCFramework'
       depends_on: build-resources-xcframework
       if: build.pull_request.id != null
       command: .buildkite/publish-pr-xcframework.sh
       plugins: *plugins
 
-    - label: ':rocket: Publish Swift release ${NEW_VERSION:-(Error: No version found!)}'
+    - label: ':ios: Publish Swift Release ${NEW_VERSION:-(Error: No version found!)}'
       depends_on:
           - validate-release
           - build-resources-xcframework
@@ -195,7 +202,7 @@ steps:
       command: .buildkite/release.sh "$NEW_VERSION"
       plugins: *plugins
 
-    - label: ':ios: Test iOS E2E'
+    - label: ':ios: Test iOS App E2E'
       key: test-ios-app-e2e
       depends_on: build-react
       command: |
@@ -204,7 +211,7 @@ steps:
           make test-ios-app-e2e
       plugins: *plugins
 
-    - label: ':android: Test Android E2E'
+    - label: ':android: Test Android App E2E'
       key: test-android-app-e2e
       depends_on: build-react
       command: |
@@ -224,7 +231,7 @@ steps:
           - 'android/app/build/outputs/androidTest-results/connected/**/*'
           - 'android/app/build/outputs/connected_android_test_additional_output/**/*'
 
-    - label: ':android: Test Android Library Instrumented'
+    - label: ':android: Test Android Library E2E'
       key: test-android-library-e2e
       depends_on: build-react
       command: |
@@ -244,7 +251,7 @@ steps:
           - 'android/Gutenberg/build/outputs/buildkite-logs/**/*'
           - 'android/Gutenberg/build/outputs/connected_android_test_additional_output/**/*'
 
-    - label: ':wastebasket: Clean up `pr-build/*` branches for closed PRs'
+    - label: ':ios: Clean Up `pr-build/*` Branches for Closed PRs'
       if: build.branch == "trunk"
       command: .buildkite/cleanup-pr-build-branches.sh
       plugins: *plugins

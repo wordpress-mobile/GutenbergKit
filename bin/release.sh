@@ -283,7 +283,7 @@ print_publish_instructions() {
     echo "'trunk' to whatever HEAD is at trigger time, and a concurrent merge"
     echo "would tag the wrong commit."
     echo
-    echo "The :rocket: 'Publish Swift release' step will build + sign the"
+    echo "The :ios: 'Publish Swift Release' step will build + sign the"
     echo "XCFramework, upload it to S3, and publish the GitHub Release —"
     echo "which also creates the $tag tag."
 }
