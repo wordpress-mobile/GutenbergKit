@@ -13,8 +13,8 @@ echo '--- :robot_face: Use bot for Git operations'
 source use-bot-for-git
 
 echo '--- :arrow_down: Downloading XCFramework artifacts'
-buildkite-agent artifact download '*.xcframework.zip' . --step "build-xcframework"
-buildkite-agent artifact download '*.xcframework.zip.checksum.txt' . --step "build-xcframework"
+buildkite-agent artifact download '*.xcframework.zip' . --step "build-resources-xcframework"
+buildkite-agent artifact download '*.xcframework.zip.checksum.txt' . --step "build-resources-xcframework"
 
 echo '--- :rubygems: Setting up Gems'
 install_gems
