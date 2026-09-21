@@ -39,7 +39,7 @@ See `docs/code/local-wordpress.md` for detailed setup instructions and troublesh
 
 The project follows WordPress coding standards for JavaScript:
 
--   **ESLint**: Uses `@wordpress/eslint-plugin/recommended` configuration
+-   **ESLint**: Flat config in `eslint.config.js`, extending `@wordpress/eslint-plugin`'s `recommended` config. Its `test-playwright` config applies to `e2e/` except the `*.test.js` files, which are vitest unit tests rather than Playwright specs.
 -   **Prettier**: Uses `@wordpress/prettier-config` for code formatting
 
 ### Function Ordering Convention
