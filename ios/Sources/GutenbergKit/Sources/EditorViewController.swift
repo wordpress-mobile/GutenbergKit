@@ -114,6 +114,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// trap) apart from "no delegate was configured" (a valid opt-out).
     private var mediaUploadDelegateWasAssigned = false
 
+    /// Prototype: transfer files through the bridge and let JavaScript upload the processed result.
+    /// Set before loading. This uses `processFile`, never the delegate's `uploadFile` hook.
+    public var experimentalNativeMediaProcessing = false {
+        didSet { precondition(!hasStartedLoading, "Configure media processing before loading the editor.") }
+    }
+
+    private let mediaProcessingBridge = MediaProcessingBridge()
+
     /// Delegate for customizing media file processing and upload behavior.
     ///
     /// Provide this **before the editor loads** — typically right after `init`, the
@@ -241,6 +249,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         // Register media file scheme handler for serving local media via gbk-media-file:// URLs
         config.setURLSchemeHandler(MediaFileSchemeHandler(), forURLScheme: MediaFileSchemeHandler.scheme)
+        config.setURLSchemeHandler(mediaProcessingBridge, forURLScheme: MediaProcessingBridge.scheme)
+        config.userContentController.addScriptMessageHandler(mediaProcessingBridge, contentWorld: .page, name: "mediaProcessing")
 
         config.applicationNameForUserAgent = "GutenbergKit/\(GutenbergKitVersion.version)"
 
@@ -342,6 +352,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // terminal and has no restart path — stopping on disappear left uploads
         // permanently broken once the user returned to the editor.
         uploadServer?.stop()
+        let processingStore = mediaProcessingBridge.store
+        Task { await processingStore.removeAll() }
     }
 
     /// Fetches all required dependencies and then loads the editor.
@@ -393,7 +405,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // Set asset bundle for the URL scheme handler to serve cached plugin/theme assets
         self.bundleProvider.set(bundle: dependencies.assetBundle)
 
-        // Start the local upload server for native media processing
+        // Select the native processing transport before injecting page configuration.
         await startUploadServer()
 
         // Build and inject editor configuration as window.GBKit
@@ -432,7 +444,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             configuration: self.configuration,
             dependencies: dependencies,
             nativeUploadPort: uploadServer.map { Int($0.port) },
-            nativeUploadToken: uploadServer?.token
+            nativeUploadToken: uploadServer?.token,
+            nativeMediaProcessing: experimentalNativeMediaProcessing && mediaUploadDelegate != nil
         )
         let stringValue = try gbkitGlobal.toString()
 
@@ -445,7 +458,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         return WKUserScript(source: jsCode, injectionTime: .atDocumentStart, forMainFrameOnly: true)
     }
 
-    /// Starts the local HTTP server for routing file uploads through native processing.
+    /// Configures the experimental processing bridge or starts the HTTP upload server.
     ///
     /// The server binds to localhost on a random port. If it fails to start, the editor
     /// falls back to Gutenberg's default upload behavior (the JS override won't activate
@@ -460,6 +473,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         )
 
         guard mediaUploadDelegate != nil else {
+            return
+        }
+
+        if experimentalNativeMediaProcessing, let mediaUploadDelegate {
+            await mediaProcessingBridge.store.configure(delegate: mediaUploadDelegate)
             return
         }
 

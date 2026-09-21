@@ -86,6 +86,9 @@ public struct GBKitGlobal: Sendable, Codable {
     /// Per-session auth token for requests to the local upload server.
     let nativeUploadToken: String?
 
+    /// Enables the experimental iOS processing bridge, followed by a JavaScript upload.
+    let nativeMediaProcessing: Bool
+
     let editorSettings: JSON?
 
     let preloadData: JSON?
@@ -104,7 +107,8 @@ public struct GBKitGlobal: Sendable, Codable {
         configuration: EditorConfiguration,
         dependencies: EditorDependencies,
         nativeUploadPort: Int? = nil,
-        nativeUploadToken: String? = nil
+        nativeUploadToken: String? = nil,
+        nativeMediaProcessing: Bool = false
     ) throws {
         self.siteURL = configuration.isOfflineModeEnabled ? nil : configuration.siteURL
         self.siteApiRoot = configuration.isOfflineModeEnabled ? nil : configuration.siteApiRoot
@@ -129,6 +133,7 @@ public struct GBKitGlobal: Sendable, Codable {
         self.enableNetworkLogging = configuration.enableNetworkLogging
         self.nativeUploadPort = nativeUploadPort
         self.nativeUploadToken = nativeUploadToken
+        self.nativeMediaProcessing = nativeMediaProcessing
         self.editorSettings = dependencies.editorSettings.jsonValue
         self.preloadData = try dependencies.preloadList?.build()
         self.editorAssets = Self.buildEditorAssets(from: dependencies.assetBundle)
