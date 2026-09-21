@@ -469,7 +469,7 @@ test-android-library-e2e: build ## Run Android library E2E tests on a device or 
 	@rm -rf ./android/Gutenberg/src/main/assets/
 	@cp -r ./dist/. ./android/Gutenberg/src/main/assets
 	$(ENSURE_ANDROID_DEVICE)
-	@echo "--- :android: Running Android Library Instrumented Tests"
+	@echo "--- :android: Running Android Library E2E Tests"
 	@mkdir -p android/Gutenberg/build/outputs/buildkite-logs
 	@adb logcat -c
 	@./android/gradlew -p ./android :Gutenberg:connectedDebugAndroidTest; \
