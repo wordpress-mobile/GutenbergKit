@@ -131,6 +131,32 @@ struct MediaUploadServerTests {
     #expect(mockUploader.lastQuery == "?_embed=wp:featuredmedia")
   }
 
+  @Test("relays the uploader's own Content-Type instead of emitting it twice")
+  func relayedContentTypeWins() async throws {
+    // `HTTPResponse` serializes every header it is given, so appending the JSON
+    // default unconditionally would put `Content-Type` on the wire twice.
+    // URLSession joins repeated headers with a comma, which is what a regression
+    // looks like here.
+    //
+    // Exercised through the delete relay because every response `relayResponse`
+    // handles — WordPress's own included — carries a `Content-Type`, so this is
+    // the ordinary path rather than an edge case.
+    let uploader = ContentTypeDeleteUploader()
+    let server = try await MediaUploadServer.start(defaultUploader: uploader)
+    defer { server.stop() }
+
+    let url = URL(string: "http://127.0.0.1:\(server.port)/media/42?force=true")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "DELETE"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+
+    let (_, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+
+    #expect(httpResponse.statusCode == 200)
+    #expect(httpResponse.value(forHTTPHeaderField: "Content-Type") == "text/plain")
+  }
+
   @Test("calls delegate and returns upload result")
   func delegateProcessAndUpload() async throws {
     let delegate = MockUploadDelegate()
@@ -604,6 +630,70 @@ struct DefaultMediaUploaderRelayTests {
     #expect(response.body == errorBody)
   }
 
+  @Test("relays the upload attachment ID header from a failed upload")
+  func relaysUploadAttachmentIdHeader() async throws {
+    // WordPress sets this header on an upload whose attachment row was created
+    // before metadata generation fataled. The editor reads it to retry
+    // post-process and clean up the orphan, so it must survive the relay.
+    let client = RelayStubHTTPClient(
+      statusCode: 500,
+      body: Data(#"{"code":"rest_upload_error"}"#.utf8),
+      headerFields: ["x-wp-upload-attachment-id": "4242"]
+    )
+    let uploader = DefaultMediaUploader(
+      httpClient: client, siteApiRoot: URL(string: "https://example.com/wp-json/")!)
+
+    let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "header-\(UUID().uuidString).jpg")
+    try Data("fake image".utf8).write(to: tempFile)
+    defer { try? FileManager.default.removeItem(at: tempFile) }
+
+    let response = try await uploader.upload(
+      fileURL: tempFile, mimeType: "image/jpeg", filename: "photo.jpg", extraParts: [], query: ""
+    )
+
+    #expect(response.statusCode == 500)
+    #expect(response.headers["x-wp-upload-attachment-id"] == "4242")
+  }
+
+  @Test("omits unrelated upstream headers from the relay")
+  func omitsUnrelatedHeaders() async throws {
+    let client = RelayStubHTTPClient(
+      statusCode: 201,
+      body: Data("{}".utf8),
+      headerFields: ["X-Powered-By": "PHP/8.2", "Set-Cookie": "session=secret"]
+    )
+    let uploader = DefaultMediaUploader(
+      httpClient: client, siteApiRoot: URL(string: "https://example.com/wp-json/")!)
+
+    let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "unrelated-\(UUID().uuidString).jpg")
+    try Data("fake image".utf8).write(to: tempFile)
+    defer { try? FileManager.default.removeItem(at: tempFile) }
+
+    let response = try await uploader.upload(
+      fileURL: tempFile, mimeType: "image/jpeg", filename: "photo.jpg", extraParts: [], query: ""
+    )
+
+    #expect(response.headers.isEmpty)
+  }
+
+  @Test("deletes an attachment, carrying the namespace and force query")
+  func deletesAttachment() async throws {
+    let client = URLCapturingHTTPClient()
+    let uploader = DefaultMediaUploader(
+      httpClient: client,
+      siteApiRoot: URL(string: "https://example.com/wp-json")!,
+      siteApiNamespace: ["sites/123"]
+    )
+
+    _ = try await uploader.deleteMedia(attachmentId: "42", query: "?force=true")
+
+    let url = try #require(client.lastURL)
+    #expect(
+      url.absoluteString == "https://example.com/wp-json/wp/v2/sites/123/media/42?force=true")
+  }
+
   @Test("carries the namespace and request query through to the media endpoint")
   func forwardsNamespaceAndQuery() async throws {
     let client = URLCapturingHTTPClient()
@@ -635,9 +725,11 @@ struct DefaultMediaUploaderRelayTests {
 private struct RelayStubHTTPClient: EditorHTTPClientProtocol {
   let statusCode: Int
   let body: Data
+  var headerFields: [String: String]?
 
   func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
-    let response = HTTPURLResponse(url: urlRequest.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
+    let response = HTTPURLResponse(
+      url: urlRequest.url!, statusCode: statusCode, httpVersion: nil, headerFields: headerFields)!
     guard (200...299).contains(statusCode) else {
       throw NSError(domain: "RelayStubHTTPClient", code: statusCode)
     }
@@ -645,7 +737,8 @@ private struct RelayStubHTTPClient: EditorHTTPClientProtocol {
   }
 
   func performRaw(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
-    let response = HTTPURLResponse(url: urlRequest.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
+    let response = HTTPURLResponse(
+      url: urlRequest.url!, statusCode: statusCode, httpVersion: nil, headerFields: headerFields)!
     return (body, response)
   }
 
@@ -812,6 +905,22 @@ private final class MockDefaultUploader: DefaultMediaUploader, @unchecked Sendab
   private func mockResponse() -> MediaUploadResponse {
     let json = #"{"id":99,"source_url":"https://example.com/doc.pdf","media_type":"file"}"#
     return MediaUploadResponse(statusCode: 201, body: Data(json.utf8))
+  }
+}
+
+/// A default uploader whose delete response carries its own `Content-Type`, so the
+/// relay must override the JSON default rather than emit the header twice.
+private final class ContentTypeDeleteUploader: DefaultMediaUploader, @unchecked Sendable {
+  init() {
+    super.init(httpClient: MockHTTPClient(), siteApiRoot: URL(string: "https://example.com/wp-json/")!)
+  }
+
+  override func deleteMedia(attachmentId: String, query: String) async throws -> MediaUploadResponse {
+    MediaUploadResponse(
+      statusCode: 200,
+      body: Data("deleted".utf8),
+      headers: ["Content-Type": "text/plain"]
+    )
   }
 }
 
