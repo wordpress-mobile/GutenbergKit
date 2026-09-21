@@ -116,7 +116,7 @@ steps:
       plugins: *plugins
 
     - label: ':swift: iOS Simulator Tests'
-      key: swift-test-swift-simulator
+      key: swift-test-swift-package
       depends_on: build-react
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -124,8 +124,8 @@ steps:
           make test-swift-simulator
       plugins: *plugins
 
-    - label: ':swift: Host Platform Tests'
-      key: swift-test-host
+    - label: ':swift: Library Tests'
+      key: swift-test-library
       depends_on: build-react
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -137,7 +137,7 @@ steps:
       key: build-xcframework
       depends_on:
           - build-react
-          - swift-test-host
+          - swift-test-library
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
@@ -178,13 +178,13 @@ steps:
       depends_on:
           - validate-release
           - build-xcframework
-          - swift-test-swift-simulator
+          - swift-test-swift-package
           - lint-js
           - lint-swift
           - check-wp-packages
           - test-js
           - test-web-e2e
-          - test-ios-app-e2e
+          - test-ios-e2e
       if: build.env("NEW_VERSION") != null && build.branch == "trunk" && build.pull_request.id == null
       # Pass NEW_VERSION as an argument: build-level env vars set when
       # triggering aren't exposed to job runtime shells on `queue: mac`, but
@@ -193,8 +193,8 @@ steps:
       command: .buildkite/release.sh "$NEW_VERSION"
       plugins: *plugins
 
-    - label: ':ios: Test iOS App E2E'
-      key: test-ios-app-e2e
+    - label: ':ios: Test iOS E2E'
+      key: test-ios-e2e
       depends_on: build-react
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -202,7 +202,7 @@ steps:
           make test-ios-app-e2e
       plugins: *plugins
 
-    - label: ':android: Test Android App E2E'
+    - label: ':android: Test Android E2E'
       depends_on: build-react
       command: |
           buildkite-agent artifact download dist.tar.gz .
