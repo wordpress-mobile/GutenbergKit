@@ -94,6 +94,7 @@ steps:
       plugins: *plugins
 
     - label: ':android: Lint Android'
+      key: lint-android
       command: make lint-android
       agents:
           queue: android
@@ -106,6 +107,7 @@ steps:
           queue: linter
 
     - label: ':android: Test Android Library'
+      key: test-android-library
       depends_on: build-react
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -116,7 +118,7 @@ steps:
       plugins: *plugins
 
     - label: ':swift: iOS Simulator Tests'
-      key: swift-test-swift-package
+      key: test-swift-simulator
       depends_on: build-react
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -125,7 +127,7 @@ steps:
       plugins: *plugins
 
     - label: ':swift: Library Tests'
-      key: swift-test-library
+      key: test-swift-host
       depends_on: build-react
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -134,10 +136,10 @@ steps:
       plugins: *plugins
 
     - label: ':xcode: Build XCFramework'
-      key: build-xcframework
+      key: build-resources-xcframework
       depends_on:
           - build-react
-          - swift-test-library
+          - test-swift-host
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
@@ -152,7 +154,7 @@ steps:
       plugins: *plugins
 
     - label: ':s3: Publish XCFramework to S3'
-      depends_on: build-xcframework
+      depends_on: build-resources-xcframework
       # This step only covers per-commit trunk uploads keyed by the commit
       # SHA. Releases are handled by `:rocket: Publish Swift release` (gated
       # on `NEW_VERSION`), and tag pushes from that step trigger a separate
@@ -169,7 +171,7 @@ steps:
       plugins: *plugins
 
     - label: ':swift: :package: Publish PR XCFramework'
-      depends_on: build-xcframework
+      depends_on: build-resources-xcframework
       if: build.pull_request.id != null
       command: .buildkite/publish-pr-xcframework.sh
       plugins: *plugins
@@ -177,14 +179,14 @@ steps:
     - label: ':rocket: Publish Swift release ${NEW_VERSION:-(Error: No version found!)}'
       depends_on:
           - validate-release
-          - build-xcframework
-          - swift-test-swift-package
+          - build-resources-xcframework
+          - test-swift-simulator
           - lint-js
           - lint-swift
           - check-wp-packages
           - test-js
           - test-web-e2e
-          - test-ios-e2e
+          - test-ios-app-e2e
       if: build.env("NEW_VERSION") != null && build.branch == "trunk" && build.pull_request.id == null
       # Pass NEW_VERSION as an argument: build-level env vars set when
       # triggering aren't exposed to job runtime shells on `queue: mac`, but
@@ -194,7 +196,7 @@ steps:
       plugins: *plugins
 
     - label: ':ios: Test iOS E2E'
-      key: test-ios-e2e
+      key: test-ios-app-e2e
       depends_on: build-react
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -203,6 +205,7 @@ steps:
       plugins: *plugins
 
     - label: ':android: Test Android E2E'
+      key: test-android-app-e2e
       depends_on: build-react
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -222,6 +225,7 @@ steps:
           - 'android/app/build/outputs/connected_android_test_additional_output/**/*'
 
     - label: ':android: Test Android Library Instrumented'
+      key: test-android-library-e2e
       depends_on: build-react
       command: |
           buildkite-agent artifact download dist.tar.gz .
