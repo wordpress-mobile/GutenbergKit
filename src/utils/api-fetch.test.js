@@ -259,6 +259,69 @@ describe( 'api-fetch credentials handling', () => {
 		} );
 	} );
 
+	describe( 'mediaPermissionsMiddleware', () => {
+		beforeEach( () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://example.com/wp-json/',
+				siteApiNamespace: [ 'wp/v2' ],
+				namespaceExcludedPaths: [],
+			} );
+		} );
+
+		it( 'fills in the Allow header when the browser hides it', async () => {
+			global.fetch = vi.fn( () =>
+				Promise.resolve( new Response( '{}', { status: 200 } ) )
+			);
+
+			const response = await apiFetch( {
+				path: '/wp/v2/media',
+				method: 'OPTIONS',
+				parse: false,
+			} );
+
+			expect( response.headers.get( 'allow' ) ).toBe( 'GET, POST' );
+		} );
+
+		it( 'keeps the Allow header WordPress sends', async () => {
+			global.fetch = vi.fn( () =>
+				Promise.resolve(
+					new Response( '{}', {
+						status: 200,
+						headers: { Allow: 'GET' },
+					} )
+				)
+			);
+
+			const response = await apiFetch( {
+				path: '/wp/v2/media',
+				method: 'OPTIONS',
+				parse: false,
+			} );
+
+			expect( response.headers.get( 'allow' ) ).toBe( 'GET' );
+		} );
+
+		it.each( [
+			[ 'a single attachment', '/wp/v2/media/123' ],
+			[ 'another collection', '/wp/v2/settings' ],
+		] )(
+			'leaves the Allow header missing for %s',
+			async ( _label, path ) => {
+				global.fetch = vi.fn( () =>
+					Promise.resolve( new Response( '{}', { status: 200 } ) )
+				);
+
+				const response = await apiFetch( {
+					path,
+					method: 'OPTIONS',
+					parse: false,
+				} );
+
+				expect( response.headers.get( 'allow' ) ).toBeNull();
+			}
+		);
+	} );
+
 	it( 'should preserve other headers when adding Authorization', async () => {
 		bridge.getGBKit.mockReturnValue( {
 			siteApiRoot: 'https://example.com/wp-json/',

@@ -15,7 +15,7 @@ import { info, error as logError } from './logger';
  * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
  */
 
-/** Matches `POST /wp/v2/media` but not sub-paths like `/wp/v2/media/123`. */
+/** Matches `/wp/v2/media` but not sub-paths like `/wp/v2/media/123`. */
 const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
 
 /**
@@ -33,6 +33,7 @@ export function configureApiFetch() {
 	apiFetch.use( filterEndpointsMiddleware );
 	apiFetch.use( nativeMediaUploadMiddleware );
 	apiFetch.use( mediaUploadMiddleware );
+	apiFetch.use( mediaPermissionsMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
 	apiFetch.use( siteIndexMiddleware );
 	apiFetch.use(
@@ -399,6 +400,41 @@ function mediaUploadMiddleware( options, next ) {
 	}
 
 	return next( options );
+}
+
+/**
+ * Middleware restoring the `Allow` header on the media permissions check.
+ *
+ * Browsers hide `Allow` from cross-origin responses, so `canUser` would report
+ * uploads as denied and the editor would remove its Upload buttons. WordPress
+ * always allows `GET` on this collection, so a missing header was hidden rather
+ * than omitted, and the user is assumed able to upload.
+ *
+ * @type {APIFetchMiddleware}
+ */
+function mediaPermissionsMiddleware( options, next ) {
+	if (
+		options.parse !== false ||
+		options.method?.toUpperCase() !== 'OPTIONS' ||
+		! options.path ||
+		! MEDIA_UPLOAD_PATH.test( options.path )
+	) {
+		return next( options );
+	}
+
+	return next( options ).then( ( response ) => {
+		if ( response.headers.has( 'allow' ) ) {
+			return response;
+		}
+
+		const headers = new Headers( response.headers );
+		headers.set( 'Allow', 'GET, POST' );
+		return new Response( response.body, {
+			status: response.status,
+			statusText: response.statusText,
+			headers,
+		} );
+	} );
 }
 
 /**
