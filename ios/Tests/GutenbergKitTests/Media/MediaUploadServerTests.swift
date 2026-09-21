@@ -32,6 +32,29 @@ private final class UnsafeMutableSendablePointer<T>: @unchecked Sendable {
 @Suite("MediaUploadServer Integration", .enabled(if: _canStartUploadServer))
 struct MediaUploadServerTests {
 
+  /// The check that makes a dead listener detectable.
+  ///
+  /// iOS takes the listening socket when it suspends the app and reports nothing — the
+  /// listener still says `.ready` on the same port — so asking the port is the only way to
+  /// find out. `stop()` stands in for the system taking it: both leave the port refusing
+  /// connections while the server object still reports one.
+  @Test("isAnswering tells a live server from one whose port is gone")
+  func isAnsweringTracksTheSocket() async throws {
+    let server = try await MediaUploadServer.start()
+    #expect(await server.isAnswering(), "a running server did not answer its own port")
+
+    server.stop()
+
+    // `cancel()` completes on the listener's own queue, so the socket can outlive the call
+    // by a moment. Poll rather than race it.
+    var stillAnswering = true
+    for _ in 0..<20 where stillAnswering {
+      stillAnswering = await server.isAnswering(timeout: .milliseconds(300))
+      if stillAnswering { try await Task.sleep(for: .milliseconds(100)) }
+    }
+    #expect(!stillAnswering, "a stopped server kept answering, so a dead port would look healthy")
+  }
+
   @Test("starts and provides a port and token")
   func startAndStop() async throws {
     let server = try await MediaUploadServer.start()
