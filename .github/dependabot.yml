@@ -44,13 +44,6 @@ updates:
       directory: '/android'
       schedule:
           interval: 'weekly'
-      groups:
-          # The Gradle wrapper is toolchain rather than a library, and a
-          # wrapper bump riding inside a group of library bumps is easy to
-          # merge without noticing. It arrives in its own pull request.
-          gradle-minor-and-patch:
-              update-types: ['minor', 'patch']
-              exclude-patterns: ['gradle-wrapper']
       open-pull-requests-limit: 5
       ignore:
           # The Android Gradle Plugin and Kotlin must match WordPress-Android
