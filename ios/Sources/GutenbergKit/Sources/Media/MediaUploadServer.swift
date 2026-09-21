@@ -274,6 +274,8 @@ final class MediaUploadServer: Sendable {
         }
 
         private func handleUpload(_ request: HTTPServer.Request) async -> HTTPResponse {
+            // Parse and find the file up front, so an assertion label can name the file and
+            // a malformed request fails without holding an assertion.
             let parts: [MultipartPart]
             do {
                 parts = try request.parsed.multipartParts()
@@ -287,6 +289,27 @@ final class MediaUploadServer: Sendable {
                 return MediaUploadServer.errorResponse(status: 400, message: "No file found in request")
             }
 
+            #if canImport(UIKit)
+            // Hold a background-task assertion for the duration of the upload so locking the
+            // phone mid-transfer doesn't immediately suspend the app — which would let iOS
+            // reclaim the loopback socket before a short upload can finish. Best-effort: the
+            // grace is fixed (~30s), so a long upload still ends when it expires. The label
+            // names the file so concurrent uploads are distinguishable in a trace — a debug
+            // aid; the OS assigns the actual, unique task identifier. See
+            // `withBackgroundActivity`.
+            return await withBackgroundActivity("gutenbergkit-media-upload: \(filePart.filename ?? "upload")") {
+                await performUpload(request, parts: parts, filePart: filePart)
+            }
+            #else
+            return await performUpload(request, parts: parts, filePart: filePart)
+            #endif
+        }
+
+        private func performUpload(
+            _ request: HTTPServer.Request,
+            parts: [MultipartPart],
+            filePart: MultipartPart
+        ) async -> HTTPResponse {
             // The non-file parts (post, additionalData) and the original query
             // (e.g. ?_embed) must reach WordPress too — relay them alongside the file.
             let extraParts = parts.filter { $0.filename == nil }

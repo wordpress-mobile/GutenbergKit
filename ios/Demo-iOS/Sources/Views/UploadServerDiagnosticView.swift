@@ -39,11 +39,14 @@ final class UploadServerDiagnostic: ObservableObject {
     @Published private(set) var events: [String] = []
     @Published private(set) var outcomes: [Outcome] = []
     @Published private(set) var isRunningSelfTest = false
+    @Published private(set) var uploadSimulationActive = false
+    @Published private(set) var backgroundTimeRemaining = ""
 
     private var server: HTTPServer?
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
     private var backgroundedAt: Date?
+    private var uploadTask: UIBackgroundTaskIdentifier = .invalid
 
     // MARK: - Lifecycle
 
@@ -74,8 +77,42 @@ final class UploadServerDiagnostic: ObservableObject {
         timer = nil
         observers.forEach(NotificationCenter.default.removeObserver)
         observers.removeAll()
+        endUploadSimulation()
         server?.stop()
         server = nil
+    }
+
+    // MARK: - Active-upload simulation (background-task assertion)
+
+    /// Holds a `UIApplication` background-task assertion — the same primitive the editor's
+    /// upload path holds while relaying a media upload. With it held, locking the phone keeps
+    /// the app running for the system's grace period (~30s) instead of suspending it, so a
+    /// short upload finishes and the loopback socket survives a brief lock.
+    func toggleUploadSimulation() {
+        uploadSimulationActive ? endUploadSimulation() : beginUploadSimulation()
+    }
+
+    private func beginUploadSimulation() {
+        uploadTask = UIApplication.shared.beginBackgroundTask(withName: "diagnostic-upload") { [weak self] in
+            Task { @MainActor in self?.endUploadSimulation() }
+        }
+        guard uploadTask != .invalid else {
+            log("Could not start a background-task assertion.")
+            return
+        }
+        uploadSimulationActive = true
+        log("Simulated upload started — holding a background-task assertion. Lock the phone now; the app should keep running (~30s) and the socket should stay ALIVE.")
+    }
+
+    private func endUploadSimulation() {
+        guard uploadSimulationActive else { return }
+        if uploadTask != .invalid {
+            UIApplication.shared.endBackgroundTask(uploadTask)
+            uploadTask = .invalid
+        }
+        uploadSimulationActive = false
+        backgroundTimeRemaining = ""
+        log("Simulated upload ended — assertion released.")
     }
 
     // MARK: - Live monitor
@@ -109,6 +146,10 @@ final class UploadServerDiagnostic: ObservableObject {
         guard let server else { reachability = .unknown; return }
         reachability = await isAnswering(port: server.port) ? .reachable : .unreachable
         power = powerLine()
+        if uploadSimulationActive {
+            let remaining = UIApplication.shared.backgroundTimeRemaining
+            backgroundTimeRemaining = remaining > 1_000_000 ? "∞ (foreground)" : "\(Int(remaining))s"
+        }
     }
 
     // MARK: - Self-test
@@ -283,6 +324,20 @@ struct UploadServerDiagnosticView: View {
                     }
                 }
                 .disabled(model.isRunningSelfTest)
+            }
+
+            Section {
+                Toggle("Simulate an active upload", isOn: Binding(
+                    get: { model.uploadSimulationActive },
+                    set: { _ in model.toggleUploadSimulation() }
+                ))
+                if model.uploadSimulationActive, !model.backgroundTimeRemaining.isEmpty {
+                    LabeledContent("Background time remaining", value: model.backgroundTimeRemaining)
+                }
+            } header: {
+                Text("Active upload")
+            } footer: {
+                Text("Holds the same background-task assertion the editor holds while relaying an upload. With it on, lock the phone: the app keeps running for the grace period, so a short upload finishes and the socket survives the brief lock.")
             }
 
             if !model.outcomes.isEmpty {
