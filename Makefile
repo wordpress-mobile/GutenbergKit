@@ -1,15 +1,17 @@
 # Target naming grammar
 #
-#   <verb>-<scope>[-<subscope>][-<kind>][-<mode>]
-#           └──────── what ────────┘    └─ how ─┘
+#   <verb>[-<what>][-<how>]
 #
-# what  Narrows the subject, broad to narrow: android > library > e2e
+# what  The subject, broad to narrow: android > library > e2e. When a verb has
+#       targets for more than one platform, each starts with its platform
+#       (web, ios, android); otherwise it starts with whatever the target acts
+#       on (`fetch-translations`).
 # how   Same subject, different invocation: -fix, -watch, -ui, -dev, -host
 #
-# Mark a slot when siblings compete for the same verb. Elide it only when
-# there is exactly one member, or when the unmarked form is a true superset
-# (`build` builds everything). An unmarked name must never mean a subset —
-# that is how `test-e2e` once came to mean "web only" while reading as "all".
+# Mark a word when siblings compete for the same verb. Elide it only when
+# there is exactly one member, or when the unmarked form is a true superset.
+# An unmarked name must never mean a subset. `build` is the one exception: it
+# builds only the web bundle, yet every other build target starts from it.
 #
 # Verbs name categories of operation. A verb with one member is fine when the
 # category is real (`check-` asserts invariants, not code style); it is not
