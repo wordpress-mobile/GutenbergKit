@@ -398,8 +398,7 @@ test-android-library: build ## Run Android library unit tests on the JVM
 # explicitly here to guarantee the tests run against the current dist
 # rather than whatever was committed at HEAD.
 	@echo "--- :open_file_folder: Copying build into Android bundle"
-	@rm -rf ./android/Gutenberg/src/main/assets/
-	@cp -r ./dist/. ./android/Gutenberg/src/main/assets
+	@$(MAKE) copy-android-dist
 	@echo "--- :android: Running Android Library Unit Tests"
 	./android/gradlew -p ./android :gutenberg:test
 
@@ -442,8 +441,7 @@ test-android-app-e2e: ## Run Android demo app E2E tests against the production b
 		echo "--- :white_check_mark: Using existing build. Use 'make build REFRESH_JS_BUILD=1' to rebuild."; \
 	fi
 	@echo "--- :open_file_folder: Copying build into Android bundle"
-	@rm -rf ./android/Gutenberg/src/main/assets/
-	@cp -r ./dist/. ./android/Gutenberg/src/main/assets
+	@$(MAKE) copy-android-dist
 	$(ENSURE_ANDROID_DEVICE)
 	@echo "--- :android: Running Android E2E Tests (production build)"
 	./android/gradlew -p ./android :app:connectedDebugAndroidTest
@@ -466,8 +464,7 @@ test-android-library-e2e: build ## Run Android library E2E tests on a device or 
 # explicitly here to guarantee the instrumented tests run against the
 # current dist rather than whatever was committed at HEAD.
 	@echo "--- :open_file_folder: Copying build into Android bundle"
-	@rm -rf ./android/Gutenberg/src/main/assets/
-	@cp -r ./dist/. ./android/Gutenberg/src/main/assets
+	@$(MAKE) copy-android-dist
 	$(ENSURE_ANDROID_DEVICE)
 	@echo "--- :android: Running Android Library E2E Tests"
 	@mkdir -p android/Gutenberg/build/outputs/buildkite-logs
