@@ -63,7 +63,7 @@ install-deps: ## Install npm dependencies
 # child make. Without the sentinel, that recursive call would treat
 # itself as a "direct invocation" and re-run `npm ci` every time `build`
 # rebuilds — even when node_modules is already populated.
-	@if [ ! -d "node_modules" ] || [ "$(REFRESH_DEPS)" = "true" ] || [ "$(REFRESH_DEPS)" = "1" ] || { [ -z "$(_RECURSIVE_INVOKE)" ] && echo "$(MAKECMDGOALS)" | grep -q "^install-deps$$"; }; then \
+	@if [ ! -d "node_modules" ] || [ "$(REFRESH_DEPS)" = "true" ] || [ "$(REFRESH_DEPS)" = "1" ] || { [ -z "$(_RECURSIVE_INVOKE)" ] && echo "$(MAKECMDGOALS)" | grep -q "^$@$$"; }; then \
 		echo "--- :npm: Installing NPM Dependencies"; \
 		npm ci; \
 	else \
@@ -89,9 +89,9 @@ fetch-translations: ## Fetch and cache locale string files
 # - src/translations doesn't contain any fetched bundles (only `.gitkeep` is committed)
 # - REFRESH_L10N is set to true or 1
 # - fetch-translations was invoked directly
-	@if [ -d "dist" ] && [ "$(REFRESH_L10N)" != "true" ] && [ "$(REFRESH_L10N)" != "1" ] && ! echo "$(MAKECMDGOALS)" | grep -q "^fetch-translations$$"; then \
+	@if [ -d "dist" ] && [ "$(REFRESH_L10N)" != "true" ] && [ "$(REFRESH_L10N)" != "1" ] && ! echo "$(MAKECMDGOALS)" | grep -q "^$@$$"; then \
 		echo "--- :white_check_mark: Skipping translations fetch (dist/ already built, translations baked in). Use REFRESH_L10N=1 to force refresh."; \
-	elif [ -z "$$(find src/translations -maxdepth 1 -name '*.json' -print -quit 2>/dev/null)" ] || [ "$(REFRESH_L10N)" = "true" ] || [ "$(REFRESH_L10N)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^fetch-translations$$"; then \
+	elif [ -z "$$(find src/translations -maxdepth 1 -name '*.json' -print -quit 2>/dev/null)" ] || [ "$(REFRESH_L10N)" = "true" ] || [ "$(REFRESH_L10N)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^$@$$"; then \
 		echo "--- :npm: Preparing Translations"; \
 		if ! npm run fetch-translations -- --force; then \
 			if [ "$(STRICT_L10N)" = "true" ] || [ "$(STRICT_L10N)" = "1" ]; then \
@@ -153,7 +153,7 @@ build: fetch-translations ## Build the web bundle and copy it into the iOS and A
 # Targets that legitimately use node_modules (`test-web-e2e` via
 # `install-e2e-deps`, `lint-js`, `test-js`, etc.) declare
 # `install-deps` as their own prereq.
-	@if [ ! -d "dist" ] || [ "$(REFRESH_JS_BUILD)" = "true" ] || [ "$(REFRESH_JS_BUILD)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^build$$"; then \
+	@if [ ! -d "dist" ] || [ "$(REFRESH_JS_BUILD)" = "true" ] || [ "$(REFRESH_JS_BUILD)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^$@$$"; then \
 		$(MAKE) _RECURSIVE_INVOKE=1 install-deps && \
 		echo "--- :node: Building Gutenberg" && \
 		npm run build && \
