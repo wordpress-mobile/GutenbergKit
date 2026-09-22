@@ -11,13 +11,13 @@ env:
 # Each step carries one emoji naming the platform it builds, tests, or ships —
 # :javascript: for the web editor (there is no clean web glyph), :ios:, or
 # :android: — and a verb-first, title-case label that stands on its own.
-# Where a step runs a make target, key it by that target's name.
+# Where a step runs or mirrors a make target, key it by that target's name.
 #
 # Labels become GitHub check names, and the trunk ruleset requires several by
 # name, so renaming a label needs a matching ruleset update.
 steps:
     - label: ':javascript: Build Web Bundle'
-      key: build-react
+      key: build
       command: |
           # Fail fast if any step (including the backgrounded
           # `fetch-translations`, surfaced via `wait`) returns non-zero,
@@ -77,7 +77,7 @@ steps:
 
     - label: ':javascript: Test Web E2E'
       key: test-web-e2e
-      depends_on: build-react
+      depends_on: build
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
@@ -88,7 +88,7 @@ steps:
       plugins: *plugins
 
     - label: ':android: Publish Android Library'
-      depends_on: build-react
+      depends_on: build
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
@@ -115,7 +115,7 @@ steps:
 
     - label: ':android: Test Android Library'
       key: test-android-library
-      depends_on: build-react
+      depends_on: build
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
@@ -126,7 +126,7 @@ steps:
 
     - label: ':ios: Test Swift Simulator'
       key: test-swift-simulator
-      depends_on: build-react
+      depends_on: build
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
@@ -135,7 +135,7 @@ steps:
 
     - label: ':ios: Test Swift Host'
       key: test-swift-host
-      depends_on: build-react
+      depends_on: build
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
@@ -145,7 +145,7 @@ steps:
     - label: ':ios: Build XCFramework'
       key: build-resources-xcframework
       depends_on:
-          - build-react
+          - build
           - test-swift-host
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -204,7 +204,7 @@ steps:
 
     - label: ':ios: Test iOS App E2E'
       key: test-ios-app-e2e
-      depends_on: build-react
+      depends_on: build
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
@@ -213,7 +213,7 @@ steps:
 
     - label: ':android: Test Android App E2E'
       key: test-android-app-e2e
-      depends_on: build-react
+      depends_on: build
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
@@ -233,7 +233,7 @@ steps:
 
     - label: ':android: Test Android Library E2E'
       key: test-android-library-e2e
-      depends_on: build-react
+      depends_on: build
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
