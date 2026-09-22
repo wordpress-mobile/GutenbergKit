@@ -13,13 +13,13 @@ Important, high-level test cases are [documented](../test-cases.md) for manual t
 Test files follow the `*.test.{js,jsx}` naming convention.
 
 ```bash
-make test-js
+make test-web-unit
 ```
 
 ### Swift (Swift Testing)
 
 ```bash
-make test-swift-simulator
+make test-ios-library-simulator
 ```
 
 ### Android (JUnit)
@@ -117,8 +117,8 @@ Lint JavaScript code using ESLint:
 
 ```bash
 # Auto-fix linting errors
-make lint-js-fix
+make lint-web-fix
 
 # Verify linting passes
-make lint-js
+make lint-web
 ```

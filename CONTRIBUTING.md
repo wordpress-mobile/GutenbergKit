@@ -19,8 +19,8 @@ Whether you're looking to write code, improve documentation, or help triage issu
 
 ## Guidelines
 
--   Run `make format` and `make lint-js` before submitting changes
--   Ensure tests pass with `make test-js`, `make test-swift-simulator`, and `make test-android-library`
+-   Run `make format` and `make lint-web` before submitting changes
+-   Ensure tests pass with `make test-web-unit`, `make test-ios-library-simulator`, and `make test-android-library`
 -   Follow the existing code style and patterns
 
 ## Releases

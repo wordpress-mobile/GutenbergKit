@@ -3,7 +3,7 @@
 # Claude Code PostToolUse hook: lint Swift code with SwiftLint after an edit.
 #
 # Reads the hook payload (JSON) on stdin. When the edited file is Swift, runs
-# `make lint-swift` so the hook uses the exact same SwiftLint binary and
+# `make lint-ios` so the hook uses the exact same SwiftLint binary and
 # configuration as the project lint command. On violations, prints them to
 # stderr and exits 2 so Claude Code feeds them back to the model for
 # self-correction.
@@ -27,7 +27,7 @@ cd "${CLAUDE_PROJECT_DIR:-.}" || exit 0
 # edit when this runs somewhere Xcode isn't available.
 command -v xcrun >/dev/null 2>&1 || exit 0
 
-out=$(make lint-swift 2>&1)
+out=$(make lint-ios 2>&1)
 status=$?
 
 # SwiftLint exits non-zero for `error`-severity violations, but only prints to

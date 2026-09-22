@@ -147,13 +147,13 @@ build: fetch-translations ## Build the web bundle and copy it into the iOS and A
 #
 # `install-deps` is invoked from inside the rebuild branch rather
 # than declared as a Make prereq so that downstream targets which
-# depend on `build` (`test-android-library`, `test-swift-host`, etc.) don't
+# depend on `build` (`test-android-library`, `test-ios-library-host`, etc.) don't
 # trigger an `npm ci` they don't actually need when `dist/` is already
 # populated — e.g. on CI agents that just extracted an upstream
 # `dist.tar.gz` and only intend to run gradle/xcodebuild/swift.
 #
 # Targets that legitimately use node_modules (`test-web-e2e` via
-# `install-e2e-deps`, `lint-js`, `test-js`, etc.) declare
+# `install-e2e-deps`, `lint-web`, `test-web-unit`, etc.) declare
 # `install-deps` as their own prereq.
 	@if [ ! -d "dist" ] || [ "$(REFRESH_JS_BUILD)" = "true" ] || [ "$(REFRESH_JS_BUILD)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^$@$$"; then \
 		$(MAKE) _RECURSIVE_INVOKE=1 install-deps && \
@@ -178,12 +178,12 @@ copy-android-dist:
 	@rm -rf ./android/Gutenberg/src/main/assets/
 	@cp -r ./dist/. ./android/Gutenberg/src/main/assets
 
-.PHONY: build-swift-package
-build-swift-package: build ## Build the Swift package for iOS
+.PHONY: build-ios-library
+build-ios-library: build ## Build the Swift package for iOS
 	$(call XCODEBUILD_CMD, build, GutenbergKit)
 
-.PHONY: build-resources-xcframework
-build-resources-xcframework: build ## Build GutenbergKitResources XCFramework
+.PHONY: build-ios-resources-xcframework
+build-ios-resources-xcframework: build ## Build GutenbergKitResources XCFramework
 # `build` short-circuits `copy-ios-dist` when `dist/` already exists (e.g. in
 # CI, after extracting an upstream dist tarball), so call it explicitly here
 # to guarantee the XCFramework ships the just-built dist rather than whatever
@@ -256,8 +256,8 @@ wp-env-config-android-urls: ## Report the Android emulator URL remap, or set it 
 format: install-deps ## Format all supported files in place with Prettier
 	npm run format
 
-.PHONY: lint-js
-lint-js: install-deps ## Lint JavaScript code with ESLint
+.PHONY: lint-web
+lint-web: install-deps ## Lint JavaScript code with ESLint
 	npm run lint:js
 
 # Reads `package-lock.json`, not the installed tree, so it needs no
@@ -267,8 +267,8 @@ lint-js: install-deps ## Lint JavaScript code with ESLint
 check-wp-packages: ## Fail if any @wordpress package is installed more than once
 	npm run check:wp-packages
 
-.PHONY: lint-js-fix
-lint-js-fix: install-deps ## Lint and auto-fix JavaScript code with ESLint
+.PHONY: lint-web-fix
+lint-web-fix: install-deps ## Lint and auto-fix JavaScript code with ESLint
 	npm run lint:js:fix
 
 .PHONY: lint-android
@@ -281,14 +281,14 @@ lint-android: ## Lint Android code with Detekt
 # plugin builds even when invoked from an environment that targets iOS.
 #
 # Set SWIFT_LINT_PATHS to lint specific files instead of the whole project, e.g.
-# `make lint-swift SWIFT_LINT_PATHS=ios/Sources/GutenbergKit/Sources/EditorService.swift`.
+# `make lint-ios SWIFT_LINT_PATHS=ios/Sources/GutenbergKit/Sources/EditorService.swift`.
 # Only files are honored — passing a directory silently falls back to linting the
 # whole project.
 #
 # Separate multiple files with newlines rather than spaces, so that paths
 # containing spaces stay intact:
 #
-#   make lint-swift SWIFT_LINT_PATHS="$(git diff --name-only -- '*.swift')"
+#   make lint-ios SWIFT_LINT_PATHS="$(git diff --name-only -- '*.swift')"
 #
 # The plugin only honors explicit paths when the last argument is an existing
 # file, so the paths must always be appended last — after flags like `--fix` — or
@@ -310,13 +310,13 @@ SWIFTLINT = IFS="$$(printf '\nx')"; IFS="$${IFS%x}"; \
 	--allow-writing-to-directory "$(CURDIR)" --allow-writing-to-package-directory \
 	swiftlint --working-directory "$(CURDIR)" --quiet
 
-.PHONY: lint-swift
-lint-swift: ## Lint Swift code with SwiftLint
+.PHONY: lint-ios
+lint-ios: ## Lint Swift code with SwiftLint
 	@echo "--- :swift: Running SwiftLint"
 	@$(SWIFTLINT) "$$@"
 
-.PHONY: lint-swift-fix
-lint-swift-fix: ## Lint and auto-fix Swift code with SwiftLint
+.PHONY: lint-ios-fix
+lint-ios-fix: ## Lint and auto-fix Swift code with SwiftLint
 	@echo "--- :swift: Running SwiftLint (autocorrect)"
 	@$(SWIFTLINT) --fix "$$@"
 
@@ -342,20 +342,20 @@ test-web-e2e-ui: install-e2e-deps ## Run web E2E tests with Playwright in UI mod
 	fi
 	npm run test:e2e:ui
 
-.PHONY: test-js
-test-js: install-deps ## Run JavaScript unit tests with Vitest
+.PHONY: test-web-unit
+test-web-unit: install-deps ## Run JavaScript unit tests with Vitest
 	npm run test:unit
 
-.PHONY: test-js-watch
-test-js-watch: install-deps ## Run JavaScript unit tests with Vitest in watch mode
+.PHONY: test-web-unit-watch
+test-web-unit-watch: install-deps ## Run JavaScript unit tests with Vitest in watch mode
 	npm run test:unit:watch
 
-.PHONY: test-swift-simulator
-test-swift-simulator: build ## Run Swift package tests in the iOS Simulator (xcodebuild)
+.PHONY: test-ios-library-simulator
+test-ios-library-simulator: build ## Run Swift package tests in the iOS Simulator (xcodebuild)
 	$(call XCODEBUILD_CMD, test, GutenbergKit-Package)
 
-.PHONY: test-swift-host
-test-swift-host: build ## Run Swift package tests on the host platform (swift test)
+.PHONY: test-ios-library-host
+test-ios-library-host: build ## Run Swift package tests on the host platform (swift test)
 	swift test
 
 .PHONY: test-ios-app-e2e

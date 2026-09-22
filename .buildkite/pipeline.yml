@@ -55,7 +55,7 @@ steps:
 
     - label: ':eslint: Lint React App'
       key: lint-js
-      command: make lint-js
+      command: make lint-web
       plugins: *plugins
 
     - label: ':npm: Check @wordpress package versions'
@@ -65,7 +65,7 @@ steps:
 
     - label: ':javascript: Test JavaScript'
       key: test-js
-      command: make test-js
+      command: make test-web-unit
       plugins: *plugins
 
     - label: ':performing_arts: Test Web E2E'
@@ -121,7 +121,7 @@ steps:
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
-          make test-swift-simulator
+          make test-ios-library-simulator
       plugins: *plugins
 
     - label: ':swift: Library Tests'
@@ -130,7 +130,7 @@ steps:
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
-          make test-swift-host
+          make test-ios-library-host
       plugins: *plugins
 
     - label: ':xcode: Build XCFramework'
@@ -143,7 +143,7 @@ steps:
           tar -xzf dist.tar.gz
           install_gems
           bundle exec fastlane set_up_signing_release
-          make build-resources-xcframework
+          make build-ios-resources-xcframework
           bundle exec fastlane xcframework_sign
           ./package_xcframework.sh
       artifact_paths:
