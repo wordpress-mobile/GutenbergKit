@@ -61,7 +61,7 @@ steps:
       plugins: *plugins
 
     - label: ':javascript: Lint JavaScript'
-      key: lint-js
+      key: lint-web
       command: make lint-web
       plugins: *plugins
 
@@ -71,7 +71,7 @@ steps:
       plugins: *plugins
 
     - label: ':javascript: Test JavaScript'
-      key: test-js
+      key: test-web-unit
       command: make test-web-unit
       plugins: *plugins
 
@@ -108,13 +108,13 @@ steps:
       plugins: *plugins
 
     - label: ':ios: Lint Swift'
-      key: lint-swift
+      key: lint-ios
       command: swiftlint
       agents:
           queue: linter
 
     - label: ':android: Test Android Library'
-      key: test-android-library
+      key: test-android-library-unit
       depends_on: build
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -125,7 +125,7 @@ steps:
       plugins: *plugins
 
     - label: ':ios: Test Swift Simulator'
-      key: test-swift-simulator
+      key: test-ios-library-simulator
       depends_on: build
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -134,7 +134,7 @@ steps:
       plugins: *plugins
 
     - label: ':ios: Test Swift Host'
-      key: test-swift-host
+      key: test-ios-library-host
       depends_on: build
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -143,10 +143,10 @@ steps:
       plugins: *plugins
 
     - label: ':ios: Build XCFramework'
-      key: build-resources-xcframework
+      key: build-ios-resources-xcframework
       depends_on:
           - build
-          - test-swift-host
+          - test-ios-library-host
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
@@ -161,7 +161,7 @@ steps:
       plugins: *plugins
 
     - label: ':ios: Publish XCFramework to S3'
-      depends_on: build-resources-xcframework
+      depends_on: build-ios-resources-xcframework
       # This step only covers per-commit trunk uploads keyed by the commit
       # SHA. Releases are handled by `:ios: Publish Swift Release` (gated
       # on `NEW_VERSION`), and tag pushes from that step trigger a separate
@@ -178,7 +178,7 @@ steps:
       plugins: *plugins
 
     - label: ':ios: Publish PR XCFramework'
-      depends_on: build-resources-xcframework
+      depends_on: build-ios-resources-xcframework
       if: build.pull_request.id != null
       command: .buildkite/publish-pr-xcframework.sh
       plugins: *plugins
@@ -186,12 +186,12 @@ steps:
     - label: ':ios: Publish Swift Release ${NEW_VERSION:-(Error: No version found!)}'
       depends_on:
           - validate-release
-          - build-resources-xcframework
-          - test-swift-simulator
-          - lint-js
-          - lint-swift
+          - build-ios-resources-xcframework
+          - test-ios-library-simulator
+          - lint-web
+          - lint-ios
           - check-wp-packages
-          - test-js
+          - test-web-unit
           - test-web-e2e
           - test-ios-app-e2e
       if: build.env("NEW_VERSION") != null && build.branch == "trunk" && build.pull_request.id == null
