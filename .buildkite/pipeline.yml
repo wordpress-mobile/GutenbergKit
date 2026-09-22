@@ -60,7 +60,7 @@ steps:
           bundle exec fastlane validate "version:$NEW_VERSION"
       plugins: *plugins
 
-    - label: ':javascript: Lint JavaScript'
+    - label: ':javascript: Lint Web'
       key: lint-web
       command: make lint-web
       plugins: *plugins
@@ -70,7 +70,7 @@ steps:
       command: make check-wp-packages
       plugins: *plugins
 
-    - label: ':javascript: Test JavaScript'
+    - label: ':javascript: Test Web Unit'
       key: test-web-unit
       command: make test-web-unit
       plugins: *plugins
@@ -107,13 +107,13 @@ steps:
           queue: android
       plugins: *plugins
 
-    - label: ':ios: Lint Swift'
+    - label: ':ios: Lint iOS'
       key: lint-ios
       command: swiftlint
       agents:
           queue: linter
 
-    - label: ':android: Test Android Library'
+    - label: ':android: Test Android Library Unit'
       key: test-android-library-unit
       depends_on: build
       command: |
@@ -124,7 +124,7 @@ steps:
           queue: android
       plugins: *plugins
 
-    - label: ':ios: Test Swift Simulator'
+    - label: ':ios: Test iOS Library Simulator'
       key: test-ios-library-simulator
       depends_on: build
       command: |
@@ -133,7 +133,7 @@ steps:
           make test-ios-library-simulator
       plugins: *plugins
 
-    - label: ':ios: Test Swift Host'
+    - label: ':ios: Test iOS Library Host'
       key: test-ios-library-host
       depends_on: build
       command: |
