@@ -23,6 +23,8 @@ To see all available make commands with descriptions, run:
 make help
 ```
 
+New targets follow the naming grammar documented in the header comment at the top of the `Makefile`.
+
 By default, dependencies, translations, and JS build are skipped if output directories already exist. Environment variables be used to force refresh of these steps when needed.
 
 -   `REFRESH_DEPS=1` - Force refresh of dependencies (e.g. re-install npm packages)
@@ -71,10 +73,10 @@ Note: Console logs should be used sparingly. For verbose or development-specific
 
 ```bash
 # Auto-fix linting errors & verify linting passes
-make lint-js-fix
+make lint-web-fix
 
 # When Swift files changed
-make lint-swift-fix
+make lint-ios-fix
 ```
 
 These commands ensure code quality and prevent lint errors from blocking commits.
@@ -85,8 +87,8 @@ Swift code is linted with SwiftLint, run via the SwiftPM plugin in the `BuildToo
 package so the linter stays out of the dependency graph of anyone consuming
 GutenbergKit via SwiftPM.
 
--   `make lint-swift` — report violations
--   `make lint-swift-fix` — auto-correct the violations SwiftLint can fix
+-   `make lint-ios` — report violations
+-   `make lint-ios-fix` — auto-correct the violations SwiftLint can fix
 
 The SwiftLint version is pinned in a single place: the `swiftlint_version` key in
 `.swiftlint.yml`. `BuildTools/Package.swift` parses that key at manifest-evaluation
@@ -102,14 +104,14 @@ stay consistent for the shared team.
 To lint specific files rather than the whole project, set `SWIFT_LINT_PATHS`:
 
 ```bash
-make lint-swift SWIFT_LINT_PATHS=ios/Sources/GutenbergKit/Sources/EditorService.swift
+make lint-ios SWIFT_LINT_PATHS=ios/Sources/GutenbergKit/Sources/EditorService.swift
 ```
 
 Separate multiple files with **newlines**, not spaces, so that paths containing
 spaces stay intact. This makes it easy to lint just the changed files:
 
 ```bash
-make lint-swift SWIFT_LINT_PATHS="$(git diff --name-only -- '*.swift')"
+make lint-ios SWIFT_LINT_PATHS="$(git diff --name-only -- '*.swift')"
 ```
 
 Each value must be a path to an existing **file**. Passing a directory (or a

@@ -13,7 +13,7 @@ When running the demo app on a physical device, the device needs to access the d
 ## Prerequisites
 
 -   Your physical device and development machine must be on the same network
--   The development server must be running (`make dev-server`)
+-   The development server must be running (`make serve-dev`)
 -   You need to know your development machine's IP address
 
 ### Finding Your Development Machine's IP Address
@@ -40,7 +40,7 @@ Look for your local network IP address (typically in the format `192.168.x.x` or
 
 ## iOS Configuration
 
-1. Start the development server by running `make dev-server`.
+1. Start the development server by running `make serve-dev`.
 2. Launch Xcode and open the `ios/Demo-iOS/Gutenberg.xcodeproj` project.
 3. Select the `Gutenberg` target.
 4. Navigate to _Product_ → _Scheme_ → _Edit Scheme_.
@@ -57,7 +57,7 @@ Look for your local network IP address (typically in the format `192.168.x.x` or
 
 ### 1. Configure the Editor URL
 
-1. Start the development server by running `make dev-server`.
+1. Start the development server by running `make serve-dev`.
 2. Launch Android Studio and open the `android` project.
 3. Modify the `android/local.properties` file to include an environment variable named `GUTENBERG_EDITOR_URL` with your development machine's IP address and port.
     - Example: `GUTENBERG_EDITOR_URL=http://192.168.1.100:5173/`

@@ -24,8 +24,8 @@ The file does not exist at "[path]" which is in the optimize deps directory. The
 
 **Solution:** Clear Vite's cache by either:
 
--   Stopping the development server and restarting it via the `make dev-server-force` command to force Vite to re-bundle dependencies.
--   Deleting the `node_modules/.vite` directory (or `node_modules` entirely) and restarting the development server via `make dev-server`.
+-   Stopping the development server and restarting it via the `make serve-dev-force` command to force Vite to re-bundle dependencies.
+-   Deleting the `node_modules/.vite` directory (or `node_modules` entirely) and restarting the development server via `make serve-dev`.
 
 You may also need to clear your browser cache to ensure no stale files are used.
 

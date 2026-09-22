@@ -13,10 +13,10 @@ steps:
       key: build-react
       command: |
           # Fail fast if any step (including the backgrounded
-          # `prep-translations`, surfaced via `wait`) returns non-zero,
+          # `fetch-translations`, surfaced via `wait`) returns non-zero,
           # rather than continuing into `make build` with partial inputs.
           set -euo pipefail
-          # `prep-translations` is pure network I/O and no longer depends
+          # `fetch-translations` is pure network I/O and no longer depends
           # on `node_modules` (uses Node's built-in `fetch`), so it can run
           # in parallel with `npm ci`. Vite reads `src/translations/` when
           # it emits locale bundles, so we wait for the fetch to complete
@@ -27,16 +27,16 @@ steps:
           # interleave with `npm ci`'s and confuse Buildkite log folding.
           # The replay happens unconditionally so a failed fetch surfaces
           # its log before `set -e` aborts the script.
-          make prep-translations STRICT_L10N=1 > prep-translations.log 2>&1 &
-          PREP_PID=$$!
-          make npm-dependencies
-          PREP_STATUS=0
-          wait $$PREP_PID || PREP_STATUS=$$?
-          echo "--- :earth_americas: prep-translations (ran in parallel with npm ci)"
-          cat prep-translations.log
-          rm -f prep-translations.log
-          if [ "$$PREP_STATUS" -ne 0 ]; then
-              exit "$$PREP_STATUS"
+          make fetch-translations STRICT_L10N=1 > fetch-translations.log 2>&1 &
+          FETCH_PID=$$!
+          make install-web-deps
+          FETCH_STATUS=0
+          wait $$FETCH_PID || FETCH_STATUS=$$?
+          echo "--- :earth_americas: fetch-translations (ran in parallel with npm ci)"
+          cat fetch-translations.log
+          rm -f fetch-translations.log
+          if [ "$$FETCH_STATUS" -ne 0 ]; then
+              exit "$$FETCH_STATUS"
           fi
           make build REFRESH_JS_BUILD=1
           tar -czf dist.tar.gz dist/
@@ -55,7 +55,7 @@ steps:
 
     - label: ':eslint: Lint React App'
       key: lint-js
-      command: make lint-js
+      command: make lint-web
       plugins: *plugins
 
     - label: ':npm: Check @wordpress package versions'
@@ -65,7 +65,7 @@ steps:
 
     - label: ':javascript: Test JavaScript'
       key: test-js
-      command: make test-js
+      command: make test-web-unit
       plugins: *plugins
 
     - label: ':performing_arts: Test Web E2E'
@@ -77,7 +77,7 @@ steps:
           echo "--- :wordpress: Starting wp-env"
           make wp-env-start
           echo "--- :performing_arts: Running E2E tests"
-          make test-e2e
+          make test-web-e2e
       plugins: *plugins
 
     - label: ':android: Publish Android Library'
@@ -110,7 +110,7 @@ steps:
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
-          make test-android
+          make test-android-library-unit
       agents:
           queue: android
       plugins: *plugins
@@ -121,7 +121,7 @@ steps:
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
-          make test-swift-package
+          make test-ios-library-simulator
       plugins: *plugins
 
     - label: ':swift: Library Tests'
@@ -130,7 +130,7 @@ steps:
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
-          make test-swift-library
+          make test-ios-library-host
       plugins: *plugins
 
     - label: ':xcode: Build XCFramework'
@@ -143,7 +143,7 @@ steps:
           tar -xzf dist.tar.gz
           install_gems
           bundle exec fastlane set_up_signing_release
-          make build-resources-xcframework
+          make build-ios-resources-xcframework
           bundle exec fastlane xcframework_sign
           ./package_xcframework.sh
       artifact_paths:
@@ -199,7 +199,7 @@ steps:
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
-          make test-ios-e2e
+          make test-ios-app-e2e
       plugins: *plugins
 
     - label: ':android: Test Android E2E'
@@ -212,7 +212,7 @@ steps:
               --system-image "system-images;android-34;google_apis;arm64-v8a" \
               --device "pixel_5"
           echo "--- :android: Running Android instrumented tests"
-          make test-android-e2e
+          make test-android-app-e2e
       agents:
           queue: mac-metal
       plugins: *plugins
