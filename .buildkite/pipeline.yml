@@ -29,7 +29,7 @@ steps:
           # its log before `set -e` aborts the script.
           make fetch-translations STRICT_L10N=1 > fetch-translations.log 2>&1 &
           FETCH_PID=$$!
-          make install-deps
+          make install-web-deps
           FETCH_STATUS=0
           wait $$FETCH_PID || FETCH_STATUS=$$?
           echo "--- :earth_americas: fetch-translations (ran in parallel with npm ci)"

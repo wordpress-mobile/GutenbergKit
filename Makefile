@@ -53,15 +53,15 @@ endef
 # Utility Targets
 ################################################################################
 
-.PHONY: install-deps
-install-deps: ## Install npm dependencies
+.PHONY: install-web-deps
+install-web-deps: ## Install npm dependencies
 # Skip unless...
 # - node_modules doesn't exist
 # - REFRESH_DEPS is set to true or 1
-# - install-deps was invoked directly (not from a recursive `$(MAKE)`)
+# - install-web-deps was invoked directly (not from a recursive `$(MAKE)`)
 #
 # `build`'s rebuild branch invokes this as `$(MAKE) _RECURSIVE_INVOKE=1
-# install-deps`, which sets MAKECMDGOALS=install-deps in the
+# install-web-deps`, which sets MAKECMDGOALS=install-web-deps in the
 # child make. Without the sentinel, that recursive call would treat
 # itself as a "direct invocation" and re-run `npm ci` every time `build`
 # rebuilds — even when node_modules is already populated.
@@ -107,8 +107,8 @@ fetch-translations: ## Fetch and cache locale string files
 		echo "--- :white_check_mark: Skipping translations fetch (bundles already present in src/translations). Use REFRESH_L10N=1 to force refresh."; \
 	fi
 
-.PHONY: install-e2e-deps
-install-e2e-deps: install-deps ## Install E2E test dependencies, including Playwright Chromium
+.PHONY: install-web-e2e-deps
+install-web-e2e-deps: install-web-deps ## Install web E2E test dependencies, including Playwright Chromium
 	@CHROMIUM_PATH=$$(npx playwright install --dry-run chromium 2>&1 | grep "Install location" | head -1 | sed 's/.*: *//'); \
 	if [ -d "$$CHROMIUM_PATH" ]; then \
 		echo "--- :white_check_mark: Playwright Chromium is already installed."; \
@@ -145,7 +145,7 @@ build: fetch-translations ## Build the web bundle and copy it into the iOS and A
 # - REFRESH_JS_BUILD is set to true or 1
 # - build was invoked directly
 #
-# `install-deps` is invoked from inside the rebuild branch rather
+# `install-web-deps` is invoked from inside the rebuild branch rather
 # than declared as a Make prereq so that downstream targets which
 # depend on `build` (`test-android-library-unit`, `test-ios-library-host`, etc.) don't
 # trigger an `npm ci` they don't actually need when `dist/` is already
@@ -153,10 +153,10 @@ build: fetch-translations ## Build the web bundle and copy it into the iOS and A
 # `dist.tar.gz` and only intend to run gradle/xcodebuild/swift.
 #
 # Targets that legitimately use node_modules (`test-web-e2e` via
-# `install-e2e-deps`, `lint-web`, `test-web-unit`, etc.) declare
-# `install-deps` as their own prereq.
+# `install-web-e2e-deps`, `lint-web`, `test-web-unit`, etc.) declare
+# `install-web-deps` as their own prereq.
 	@if [ ! -d "dist" ] || [ "$(REFRESH_JS_BUILD)" = "true" ] || [ "$(REFRESH_JS_BUILD)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^$@$$"; then \
-		$(MAKE) _RECURSIVE_INVOKE=1 install-deps && \
+		$(MAKE) _RECURSIVE_INVOKE=1 install-web-deps && \
 		echo "--- :node: Building Gutenberg" && \
 		npm run build && \
 		echo "--- :open_file_folder: Copying Build Products into place" && \
@@ -202,19 +202,19 @@ publish-android-library-local: build ## Build and publish the Android library to
 ################################################################################
 
 .PHONY: dev-server
-dev-server: install-deps ## Start the development server
+dev-server: install-web-deps ## Start the development server
 	npm run dev
 
 .PHONY: dev-server-force
-dev-server-force: install-deps ## Start the development server, ignore the cache and re-bundle
+dev-server-force: install-web-deps ## Start the development server, ignore the cache and re-bundle
 	npm run dev:force
 
 .PHONY: dev-tools
-dev-tools: install-deps ## Start the React Developer Tools
+dev-tools: install-web-deps ## Start the React Developer Tools
 	npm run dev:tools
 
 .PHONY: preview
-preview: install-deps ## Preview the production build locally
+preview: install-web-deps ## Preview the production build locally
 	npm run preview
 
 ################################################################################
@@ -222,7 +222,7 @@ preview: install-deps ## Preview the production build locally
 ################################################################################
 
 .PHONY: wp-env-start
-wp-env-start: install-deps ## Start the local WordPress environment
+wp-env-start: install-web-deps ## Start the local WordPress environment
 	@bash bin/wp-env-guard.sh; \
 	status=$$?; \
 	if [ $$status -eq 0 ]; then \
@@ -253,22 +253,22 @@ wp-env-config-android-urls: ## Report the Android emulator URL remap, or set it 
 ################################################################################
 
 .PHONY: format
-format: install-deps ## Format all supported files in place with Prettier
+format: install-web-deps ## Format all supported files in place with Prettier
 	npm run format
 
 .PHONY: lint-web
-lint-web: install-deps ## Lint JavaScript code with ESLint
+lint-web: install-web-deps ## Lint JavaScript code with ESLint
 	npm run lint:js
 
 # Reads `package-lock.json`, not the installed tree, so it needs no
-# `install-deps` prerequisite -- which would otherwise report on a stale
+# `install-web-deps` prerequisite -- which would otherwise report on a stale
 # `node_modules` whenever one already exists.
 .PHONY: check-wp-packages
 check-wp-packages: ## Fail if any @wordpress package is installed more than once
 	npm run check:wp-packages
 
 .PHONY: lint-web-fix
-lint-web-fix: install-deps ## Lint and auto-fix JavaScript code with ESLint
+lint-web-fix: install-web-deps ## Lint and auto-fix JavaScript code with ESLint
 	npm run lint:js:fix
 
 .PHONY: lint-android
@@ -325,7 +325,7 @@ lint-ios-fix: ## Lint and auto-fix Swift code with SwiftLint
 ################################################################################
 
 .PHONY: test-web-e2e
-test-web-e2e: install-e2e-deps ## Run web E2E tests with Playwright
+test-web-e2e: install-web-e2e-deps ## Run web E2E tests with Playwright
 	@if [ ! -d "dist" ]; then \
 		$(MAKE) build; \
 	else \
@@ -334,7 +334,7 @@ test-web-e2e: install-e2e-deps ## Run web E2E tests with Playwright
 	npm run test:e2e
 
 .PHONY: test-web-e2e-ui
-test-web-e2e-ui: install-e2e-deps ## Run web E2E tests with Playwright in UI mode
+test-web-e2e-ui: install-web-e2e-deps ## Run web E2E tests with Playwright in UI mode
 	@if [ ! -d "dist" ]; then \
 		$(MAKE) build; \
 	else \
@@ -343,11 +343,11 @@ test-web-e2e-ui: install-e2e-deps ## Run web E2E tests with Playwright in UI mod
 	npm run test:e2e:ui
 
 .PHONY: test-web-unit
-test-web-unit: install-deps ## Run JavaScript unit tests with Vitest
+test-web-unit: install-web-deps ## Run JavaScript unit tests with Vitest
 	npm run test:unit
 
 .PHONY: test-web-unit-watch
-test-web-unit-watch: install-deps ## Run JavaScript unit tests with Vitest in watch mode
+test-web-unit-watch: install-web-deps ## Run JavaScript unit tests with Vitest in watch mode
 	npm run test:unit:watch
 
 .PHONY: test-ios-library-simulator
