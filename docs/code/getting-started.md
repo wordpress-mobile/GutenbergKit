@@ -19,7 +19,7 @@ To see all available development commands, run `make help` (or simply `make`) in
 Install the GutenbergKit dependencies and start the development server by running the following command in your terminal:
 
 ```bash
-make dev-server
+make serve-dev
 ```
 
 Once finished, the web app can now be accessed in your browser by visiting the URL logged in your terminal. However, it is **recommended to use a native host app for testing** changes made to the editor for a more realistic experience. A demo app is included in the GutenbergKit project, along with instructions on how to use it below.
@@ -32,7 +32,7 @@ This demo app is useful for quickly testing changes made to the editor.
 
 The iOS demo app loads the development server by default.
 
-1. Start the development server by running `make dev-server`.
+1. Start the development server by running `make serve-dev`.
 1. Launch Xcode and open the `ios/Demo-iOS/Gutenberg.xcodeproj` project.
 1. Select the `Gutenberg` target.
 1. Run the app.
@@ -50,7 +50,7 @@ Alternatively, you can load a production build of the web app bundled with the G
 
 The Android demo app loads the production build of the web app bundled with the GutenbergKit package by default—i.e., the output of the project's `make build` command. It can be configured to load the development server by setting a `GUTENBERG_EDITOR_URL` environment variable in the `android/local.properties` file.
 
-1. Start the development server by running `make dev-server`.
+1. Start the development server by running `make serve-dev`.
 1. Launch Android Studio and open the `android` project.
 1. Modify the `android/local.properties` file to include an environment variable named `GUTENBERG_EDITOR_URL` with the development server URL.
 1. Run the app on an emulator.

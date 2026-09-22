@@ -66,7 +66,7 @@ Uses the Vite dev server for faster iteration — no production build required. 
 
 ```bash
 # Terminal 1
-make dev-server
+make serve-dev
 
 # Terminal 2
 make test-ios-app-e2e-dev

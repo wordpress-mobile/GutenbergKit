@@ -201,21 +201,21 @@ publish-android-library-local: build ## Build and publish the Android library to
 # Development Targets
 ################################################################################
 
-.PHONY: dev-server
-dev-server: install-web-deps ## Start the development server
+.PHONY: serve
+serve: install-web-deps ## Serve the production build locally
+	npm run preview
+
+.PHONY: serve-dev
+serve-dev: install-web-deps ## Serve the editor from the Vite development server
 	npm run dev
 
-.PHONY: dev-server-force
-dev-server-force: install-web-deps ## Start the development server, ignore the cache and re-bundle
+.PHONY: serve-dev-force
+serve-dev-force: install-web-deps ## Serve the editor from the Vite development server, ignoring the cache and re-bundling
 	npm run dev:force
 
-.PHONY: dev-tools
-dev-tools: install-web-deps ## Start the React Developer Tools
+.PHONY: start-devtools
+start-devtools: install-web-deps ## Start the React Developer Tools
 	npm run dev:tools
-
-.PHONY: preview
-preview: install-web-deps ## Preview the production build locally
-	npm run preview
 
 ################################################################################
 # Local WordPress Environment Targets (wp-env)
@@ -380,7 +380,7 @@ test-ios-app-e2e: ## Run iOS demo app E2E tests against the production build
 test-ios-app-e2e-dev: ## Run iOS demo app E2E tests against the Vite dev server (must be running)
 	@if ! curl -sf http://localhost:5173 > /dev/null 2>&1; then \
 		echo "Error: Dev server is not running at http://localhost:5173"; \
-		echo "Start it first with: make dev-server"; \
+		echo "Start it first with: make serve-dev"; \
 		exit 1; \
 	fi
 	@echo "--- :ios: Running iOS E2E Tests (dev server)"
@@ -452,7 +452,7 @@ test-android-app-e2e: ## Run Android demo app E2E tests against the production b
 test-android-app-e2e-dev: ## Run Android demo app E2E tests against the Vite dev server (must be running)
 	@if ! curl -sf http://localhost:5173 > /dev/null 2>&1; then \
 		echo "Error: Dev server is not running at http://localhost:5173"; \
-		echo "Start it first with: make dev-server"; \
+		echo "Start it first with: make serve-dev"; \
 		exit 1; \
 	fi
 	$(ENSURE_ANDROID_DEVICE)
