@@ -30,11 +30,11 @@ Once started, the **"Local WordPress"** option in both the iOS and Android demo 
 | ---------------------------------------------- | ------------------------------------------------------------- |
 | `make wp-env-start`                            | Start the environment and provision credentials               |
 | `make wp-env-stop`                             | Stop the environment                                          |
-| `make wp-env-clean`                            | Remove downloaded WordPress, plugin, and theme files          |
+| `make wp-env-clean`                            | Remove downloaded files and cached credentials                |
 | `make wp-env-config-android-urls`              | Report whether WordPress emits emulator-reachable URLs        |
 | `make wp-env-config-android-urls MODE=on\|off` | Emit `10.0.2.2` URLs for the Android emulator, or `localhost` |
 
-The site is rebuilt from scratch on every start, so stopping the environment discards any content you created. Use `make wp-env-clean` when you also want to remove the downloaded WordPress, plugin, and theme files.
+The site is rebuilt from scratch on every start, so stopping the environment discards any content you created. Use `make wp-env-clean` when you also want to remove the downloaded WordPress, plugin, and theme files, along with `.wp-env.credentials.json`.
 
 ## How It Works
 

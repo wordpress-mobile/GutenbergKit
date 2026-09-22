@@ -92,7 +92,7 @@ fetch-translations: ## Fetch and cache locale string files
 	@if [ -d "dist" ] && [ "$(REFRESH_L10N)" != "true" ] && [ "$(REFRESH_L10N)" != "1" ] && ! echo "$(MAKECMDGOALS)" | grep -q "^$@$$"; then \
 		echo "--- :white_check_mark: Skipping translations fetch (dist/ already built, translations baked in). Use REFRESH_L10N=1 to force refresh."; \
 	elif [ -z "$$(find src/translations -maxdepth 1 -name '*.json' -print -quit 2>/dev/null)" ] || [ "$(REFRESH_L10N)" = "true" ] || [ "$(REFRESH_L10N)" = "1" ] || echo "$(MAKECMDGOALS)" | grep -q "^$@$$"; then \
-		echo "--- :npm: Preparing Translations"; \
+		echo "--- :npm: Fetching Translations"; \
 		if ! npm run fetch-translations -- --force; then \
 			if [ "$(STRICT_L10N)" = "true" ] || [ "$(STRICT_L10N)" = "1" ]; then \
 				echo "--- :x: ERROR: Translation fetching failed and STRICT_L10N is enabled"; \
@@ -106,7 +106,7 @@ fetch-translations: ## Fetch and cache locale string files
 	fi
 
 .PHONY: install-e2e-deps
-install-e2e-deps: install-deps ## Install E2E test dependencies (prompts to install Playwright Chromium)
+install-e2e-deps: install-deps ## Install E2E test dependencies, including Playwright Chromium
 	@CHROMIUM_PATH=$$(npx playwright install --dry-run chromium 2>&1 | grep "Install location" | head -1 | sed 's/.*: *//'); \
 	if [ -d "$$CHROMIUM_PATH" ]; then \
 		echo "--- :white_check_mark: Playwright Chromium is already installed."; \
