@@ -147,7 +147,7 @@ build: fetch-translations ## Build the web bundle and copy it into the iOS and A
 #
 # `install-deps` is invoked from inside the rebuild branch rather
 # than declared as a Make prereq so that downstream targets which
-# depend on `build` (`test-android-library`, `test-ios-library-host`, etc.) don't
+# depend on `build` (`test-android-library-unit`, `test-ios-library-host`, etc.) don't
 # trigger an `npm ci` they don't actually need when `dist/` is already
 # populated — e.g. on CI agents that just extracted an upstream
 # `dist.tar.gz` and only intend to run gradle/xcodebuild/swift.
@@ -393,8 +393,8 @@ test-ios-app-e2e-dev: ## Run iOS demo app E2E tests against the Vite dev server 
 		-destination '${SIMULATOR_DESTINATION}' \
 		| xcbeautify
 
-.PHONY: test-android-library
-test-android-library: build ## Run Android library unit tests on the JVM
+.PHONY: test-android-library-unit
+test-android-library-unit: build ## Run Android library unit tests on the JVM
 # `build` short-circuits `copy-android-dist` when `dist/` already exists
 # (e.g. in CI, after extracting an upstream `dist.tar.gz`), so copy
 # explicitly here to guarantee the tests run against the current dist

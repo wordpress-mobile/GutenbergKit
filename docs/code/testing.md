@@ -25,7 +25,7 @@ make test-ios-library-simulator
 ### Android (JUnit)
 
 ```bash
-make test-android-library
+make test-android-library-unit
 ```
 
 ## E2E Tests

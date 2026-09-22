@@ -110,7 +110,7 @@ steps:
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
-          make test-android-library
+          make test-android-library-unit
       agents:
           queue: android
       plugins: *plugins
