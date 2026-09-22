@@ -1014,6 +1014,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         .background(Color(uiColor: .systemBackground))
         controller.rootView = AnyView(crashView)
 
+        // A crash before the editor loads leaves the loading indicator running
+        // under the notice. Remove it without animating, so the animation can't
+        // end after a quick Reload and remove the indicator that reload shows.
+        waitingView.stopAnimating()
+        waitingView.removeFromSuperview()
+
         // The web view stays in the hierarchy underneath the notice, so hide it
         // from VoiceOver. The notice moves focus to its title when it appears.
         webView.accessibilityElementsHidden = true
