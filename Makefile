@@ -212,7 +212,7 @@ dev-tools: install-deps ## Start the React Developer Tools
 	npm run dev:tools
 
 .PHONY: preview
-preview: install-deps build ## Preview the production build locally
+preview: install-deps ## Preview the production build locally
 	npm run preview
 
 ################################################################################
