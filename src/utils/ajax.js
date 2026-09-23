@@ -3,6 +3,7 @@
  */
 import { getGBKit } from './bridge';
 import { warn, debug } from './logger';
+import { stripTrailingSlash } from './url';
 
 /**
  * Configure AJAX for use without authentication cookies.
@@ -21,7 +22,7 @@ export function configureAjax() {
 	window.wp.ajax.settings = window.wp.ajax.settings || {};
 
 	const { siteURL: rawSiteURL, authHeader } = getGBKit();
-	const siteURL = rawSiteURL?.replace( /\/+$/, '' );
+	const siteURL = stripTrailingSlash( rawSiteURL );
 	configureAjaxUrl( siteURL );
 	configureAjaxAuth( siteURL, authHeader );
 	configureMediaAjax();

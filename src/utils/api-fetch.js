@@ -10,6 +10,7 @@ import { __ } from '@wordpress/i18n';
  */
 import { getGBKit, POST_FALLBACKS } from './bridge';
 import { info, error as logError } from './logger';
+import { ensureTrailingSlash, stripTrailingSlash } from './url';
 
 /**
  * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
@@ -85,7 +86,7 @@ function apiPathModifierMiddleware( options, next ) {
 		// single trailing slash.
 		options.path = options.path.replace(
 			/^(?<apiPath>\/?(?:[\w.-]+\/){2})/,
-			`$<apiPath>${ siteApiNamespace[ 0 ].replace( /\/+$/, '' ) }/`
+			`$<apiPath>${ ensureTrailingSlash( siteApiNamespace[ 0 ] ) }`
 		);
 	}
 
@@ -528,7 +529,7 @@ function siteIndexMiddleware( options, next ) {
 		return next( options );
 	}
 
-	const home = siteURL?.replace( /\/+$/, '' );
+	const home = stripTrailingSlash( siteURL );
 	return Promise.resolve( home ? { home } : {} );
 }
 
