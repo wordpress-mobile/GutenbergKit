@@ -259,6 +259,32 @@ describe( 'api-fetch credentials handling', () => {
 		} );
 	} );
 
+	describe( 'apiPathModifierMiddleware', () => {
+		/** The URL of the first `fetch` call. */
+		function requestedUrl() {
+			expect( global.fetch ).toHaveBeenCalled();
+			return String( global.fetch.mock.calls[ 0 ][ 0 ] );
+		}
+
+		// Both slash forms are supported input and must resolve to the same path;
+		// an unslashed namespace otherwise runs into the following segment:
+		// `/wp/v2/sites/123posts`. The repeated-slash case pins the quantifier.
+		it.each( [ 'sites/123', 'sites/123/', 'sites/123//' ] )(
+			'inserts the namespace %s with a single trailing slash',
+			async ( namespace ) => {
+				bridge.getGBKit.mockReturnValue( {
+					siteApiRoot: 'https://example.com/wp-json/',
+					siteApiNamespace: [ namespace ],
+					namespaceExcludedPaths: [],
+				} );
+
+				await apiFetch( { path: '/wp/v2/posts' } ).catch( () => {} );
+
+				expect( requestedUrl() ).toContain( '/wp/v2/sites/123/posts' );
+			}
+		);
+	} );
+
 	describe( 'mediaPermissionsMiddleware', () => {
 		beforeEach( () => {
 			bridge.getGBKit.mockReturnValue( {
