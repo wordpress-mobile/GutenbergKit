@@ -8,12 +8,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * Robolectric is required because [parseSvgColor] delegates to [Color.parseColor]
  * for named colours and the resulting ARGB ints are produced via [Color.argb].
  */
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28])
 class SvgIconCacheTest {
 
     // -- parseSvgColor ----------------------------------------------------
