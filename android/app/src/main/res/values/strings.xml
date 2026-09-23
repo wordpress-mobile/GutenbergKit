@@ -39,6 +39,7 @@
     <string name="save">SAVE</string>
     <string name="visual_editor">Visual editor</string>
     <string name="code_editor">Code editor</string>
+    <string name="trigger_editor_crash">Trigger editor crash</string>
     <string name="save_failed_generic">Failed to save post</string>
     <string name="save_failed_with_reason">Failed to save post: %1$s</string>
 

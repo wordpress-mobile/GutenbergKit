@@ -99,6 +99,16 @@ class GutenbergView : FrameLayout {
     private val webView: WebView
     @Volatile private var isEditorLoaded = false
     private var didFireEditorLoaded = false
+
+    /**
+     * Whether opening the editor has already placed the caret in its content.
+     *
+     * Unlike [didFireEditorLoaded], this survives a reload. Autofocus decides
+     * from the content the editor was opened with, which a reload can replace
+     * with newer content from the host, so repeating it would pop the keyboard
+     * over a restored post.
+     */
+    private var hasAutofocused = false
     private lateinit var assetLoader: WebViewAssetLoader
     private lateinit var assetAuthority: String
     private val configuration: EditorConfiguration
@@ -214,6 +224,7 @@ class GutenbergView : FrameLayout {
     var textEditorEnabled: Boolean = false
         set(value) {
             field = value
+            if (!isEditorLoaded) return
             val mode = if (value) "text" else "visual"
             handler.post {
                 webView.evaluateJavascript("editor.switchEditorMode('$mode');", null)
@@ -363,6 +374,7 @@ class GutenbergView : FrameLayout {
             spinnerView.animate().alpha(1f).setDuration(200).start()
             errorView.visibility = GONE
             webView.alpha = 0f
+            webView.visibility = VISIBLE
         }
     }
 
@@ -378,6 +390,7 @@ class GutenbergView : FrameLayout {
                 progressView.visibility = GONE
             }.start()
             errorView.visibility = GONE
+            webView.visibility = VISIBLE
             webView.animate().alpha(1f).setDuration(200).start()
         }
     }
@@ -386,6 +399,14 @@ class GutenbergView : FrameLayout {
      * Transitions to the error phase (loading failed).
      */
     private fun showErrorPhase(error: Throwable) {
+        showErrorView { setError(error) }
+    }
+
+    /**
+     * Replaces the editor and any loading indicator with [errorView], after
+     * [configure] sets its content.
+     */
+    private fun showErrorView(configure: EditorErrorView.() -> Unit) {
         handler.post {
             progressView.animate().alpha(0f).setDuration(200).withEndAction {
                 progressView.visibility = GONE
@@ -393,11 +414,14 @@ class GutenbergView : FrameLayout {
             spinnerView.animate().alpha(0f).setDuration(200).withEndAction {
                 spinnerView.visibility = GONE
             }.start()
-            errorView.setError(error)
+            errorView.configure()
             errorView.alpha = 0f
             errorView.visibility = VISIBLE
             errorView.animate().alpha(1f).setDuration(200).start()
             webView.alpha = 0f
+            // Transparency alone leaves the web view reachable by touch and TalkBack.
+            webView.visibility = INVISIBLE
+            errorView.focusTitleForAccessibility()
         }
     }
 
@@ -667,6 +691,10 @@ class GutenbergView : FrameLayout {
      * background-thread delegate assignment.
      */
     private fun onEditorPageStarted() {
+        // Readiness belongs to the page: a new page, including one a reload starts,
+        // is not ready until it reports `onEditorLoaded`.
+        isEditorLoaded = false
+        didFireEditorLoaded = false
         if (!hasStartedLoading) {
             hasStartedLoading = true
             startUploadServer()
@@ -829,9 +857,11 @@ class GutenbergView : FrameLayout {
      * `editor` API, so calls to them are refused from this point until the editor
      * reloads.
      *
-     * The editor cannot recover on its own. Hosts should disable the controls that
-     * depend on it — history, editor mode — while leaving those that read from
-     * their own persisted copy, such as saving and closing, available.
+     * GutenbergKit covers the editor with a notice offering to reload it. Until it
+     * reloads, hosts should disable the controls that depend on the editor —
+     * history, editor mode — while leaving those that read from their own
+     * persisted copy, such as saving and closing, available. Re-enable them the
+     * next time [EditorAvailableListener.onEditorAvailable] is called.
      */
     fun interface EditorUnavailableListener {
         fun onEditorUnavailable(view: GutenbergView?)
@@ -855,16 +885,17 @@ class GutenbergView : FrameLayout {
     }
 
     /**
-     * Provides the latest persisted content for recovery after WebView refresh.
+     * Provides the content the editor starts from when its page loads.
      *
-     * When the WebView reinitializes (e.g., due to OS memory pressure or page refresh),
-     * the editor requests the latest content from this provider. The host app should
-     * return the most recently persisted title and content from autosave.
+     * Asked each time the editor page loads, including when it reloads after a
+     * crash. Return the newest title and content the host holds, including
+     * anything saved during this session.
      */
     interface LatestContentProvider {
         /**
-         * Returns the most recently persisted title and content from autosave.
-         * @return LatestContent if available, null if no persisted content exists.
+         * Returns the newest title and content the host holds.
+         * @return LatestContent, or null to start from the content the editor was
+         * opened with, discarding any edits made since.
          */
         fun getLatestContent(): LatestContent?
     }
@@ -938,15 +969,27 @@ class GutenbergView : FrameLayout {
         Log.i("GutenbergView", "EditorLoaded received in native code")
         isEditorLoaded = true
         handler.post {
+            // The editor can become unavailable before this runs, which resets
+            // readiness and shows the crash notice. Carrying on would report the
+            // editor available again and replace that notice with the ready phase.
+            if (!isEditorLoaded) return@post
+
             lastKnownConnectivity?.let { isConnected ->
                 if (!isConnected) dispatchConnectivityEvent(false)
             }
             if(!didFireEditorLoaded) {
+                // The web editor always starts in visual mode, so restore code
+                // editor mode when the host enabled it, including after a reload.
+                if (textEditorEnabled) {
+                    webView.evaluateJavascript("editor.switchEditorMode('text');", null)
+                }
                 editorDidBecomeAvailableListener?.onEditorAvailable(this)
                 this.didFireEditorLoaded = true
                 showReadyPhase()
 
-                if (configuration.content.isEmpty()) {
+                if (!hasAutofocused && configuration.content.isEmpty()) {
+                    hasAutofocused = true
+
                     // Focus the editor content
                     webView.evaluateJavascript("editor.focus();", null)
 
@@ -973,10 +1016,47 @@ class GutenbergView : FrameLayout {
     fun onEditorUnavailable() {
         Log.e("GutenbergView", "EditorUnavailable received in native code")
         isEditorLoaded = false
+        showEditorCrashPhase()
         handler.post {
             // Picks made in an open inserter can no longer reach the editor.
             blockInserterDialog?.dismiss()
             editorDidBecomeUnavailableListener?.onEditorUnavailable(this)
+        }
+    }
+
+    /**
+     * Covers the editor with a notice offering to reload.
+     *
+     * The web view still shows the editor's error message underneath, so it is
+     * covered rather than left showing two competing error states.
+     */
+    private fun showEditorCrashPhase() {
+        showErrorView {
+            setActionableState(
+                titleResId = R.string.gbk_editor_crashed_title,
+                descriptionResId = R.string.gbk_editor_crashed_description,
+                actionResId = R.string.gbk_editor_crashed_reload,
+                onAction = { reloadEditor() }
+            )
+        }
+    }
+
+    /**
+     * Reloads the editor after it has crashed.
+     *
+     * The reloaded editor starts from the content [LatestContentProvider]
+     * returns, or from the content it was opened with when there is none.
+     * Readiness is reset immediately and restored only once the editor emits
+     * `onEditorLoaded` again.
+     */
+    internal fun reloadEditor() {
+        isEditorLoaded = false
+        // The reload replaces the page these reads were sent to, so their results
+        // may never arrive.
+        failPendingTitleAndContentReads()
+        handler.post {
+            showSpinnerPhase()
+            webView.reload()
         }
     }
 
