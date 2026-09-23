@@ -30,6 +30,7 @@
 		"check:wp-packages": "node bin/check-wordpress-package-duplicates.js",
 		"fetch-translations": "node bin/fetch-translations.js",
 		"format": "prettier --write .",
+		"format:check": "prettier --check .",
 		"generate-version": "node bin/generate-version.js",
 		"lint:js": "eslint . --report-unused-disable-directives --max-warnings 0",
 		"lint:js:fix": "eslint . --report-unused-disable-directives --max-warnings 0 --fix",
