@@ -175,6 +175,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Passed back to JavaScript when media selection completes.
     private var currentMediaContextId: String?
 
+    /// The native block inserter, while it is presented.
+    private weak var blockInserterController: UIViewController?
+
     // MARK: - Private Properties (Timing)
 
     /// Timestamp captured at initialization for measuring first-render performance.
@@ -508,10 +511,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func _setContent(_ content: String) {
-        guard self.isReady else {
-            return
-        }
-
         let escapedString = content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
         evaluate("editor.setContent('\(escapedString)');", isCritical: true)
     }
@@ -547,26 +546,23 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Steps backwards in the editor history state
     public func undo() {
-        guard isReady else { return }
         evaluate("editor.undo();")
     }
 
     /// Steps forwards in the editor history state
     public func redo() {
-        guard isReady else { return }
         evaluate("editor.redo();")
     }
 
     /// Dismisses the topmost modal dialog or menu in the editor
     public func dismissTopModal() {
-        guard isReady else { return }
         evaluate("editor.dismissTopModal();")
     }
 
     /// Enables code editor.
     public var isCodeEditorEnabled: Bool = false {
         didSet {
-            guard isCodeEditorEnabled != oldValue, isReady else { return }
+            guard isCodeEditorEnabled != oldValue else { return }
             evaluate("editor.switchEditorMode('\(isCodeEditorEnabled ? "text" : "visual")');")
         }
     }
@@ -579,6 +575,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // MARK: - Internal (JavaScript)
 
     private func evaluate(_ javascript: String, isCritical: Bool = false) {
+        // The editor's bridge methods exist only while it is loaded. Calling them
+        // otherwise fails with a raw `TypeError` that `handleError` would show in
+        // an alert.
+        guard isReady else {
+            let command = String(javascript.prefix { $0 != "(" })
+            Logger.bridge.debug("Refused \(command, privacy: .public) because the editor is not ready")
+            return
+        }
         webView.evaluateJavaScript(javascript) { [weak self] _, error in
             guard let self, let error else { return }
             self.handleError(error, isCritical: isCritical)
@@ -654,6 +658,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             sheet.preferredCornerRadius = 26
         }
 
+        blockInserterController = host
         present(host, animated: true)
     }
 
@@ -672,6 +677,24 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
+    /// Dismisses the block inserter and any picker it presented.
+    ///
+    /// Dismisses the inserter itself rather than asking its presenting view
+    /// controller, which belongs to the host. Asked again while the inserter is
+    /// still closing, that view controller dismisses itself instead, which can
+    /// close the host's editor.
+    private func dismissBlockInserter() {
+        guard let inserter = blockInserterController else { return }
+        guard inserter.presentedViewController != nil else {
+            inserter.dismiss(animated: true)
+            return
+        }
+        // While a picker is presented, dismissing the inserter closes only the picker.
+        inserter.dismiss(animated: false) {
+            inserter.dismiss(animated: true)
+        }
+    }
+
     // MARK: - UIAdaptivePresentationControllerDelegate
 
     public func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
@@ -683,15 +706,20 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func insertBlockFromInserter(_ blockID: String) {
-        evaluate("window.blockInserter.insertBlock('\(blockID)')")
+        evaluate("window.blockInserter?.insertBlock('\(blockID)')")
     }
 
     private func insertMediaFromInserter(_ selection: [MediaInfo]) async {
         guard !selection.isEmpty else { return }
+        // `callAsyncJavaScript` does not go through `evaluate()`, so check readiness here.
+        guard isReady else {
+            Logger.bridge.debug("Refused inserting media because the editor is not ready")
+            return
+        }
         do {
             let object = try makeJavaScriptCompatibleDictionary(with: selection)
             _ = try await webView.callAsyncJavaScript(
-                "window.blockInserter.insertMedia(selection)",
+                "window.blockInserter?.insertMedia(selection)",
                 arguments: ["selection": object],
                 in: nil,
                 contentWorld: .page
@@ -703,7 +731,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     private func insertPatternFromInserter(_ patternName: String) {
         let escapedName = patternName.replacingOccurrences(of: "'", with: "\\'")
-        evaluate("window.blockInserter.insertPattern('\(escapedName)')")
+        evaluate("window.blockInserter?.insertPattern('\(escapedName)')")
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
@@ -728,7 +756,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     /// - parameter text: The text to append at the cursor position.
     public func appendTextAtCursor(_ text: String) {
-        guard isReady else { return }
         let escapedText = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? text
         evaluate("editor.appendTextAtCursor(decodeURIComponent('\(escapedText)'));")
     }
@@ -798,6 +825,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                     return
                 }
                 delegate?.editor(self, didLogException: editorException)
+            case .onEditorUnavailable:
+                didLoseEditor()
             case .showBlockInserter:
                 let body = try message.decode(EditorJSMessage.ShowBlockInserterBody.self)
                 showBlockInserter(data: body)
@@ -894,6 +923,22 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         print("gutenbergkit-measure_editor-first-render:", duration)
 
         delegate?.editorDidLoad(self)
+    }
+
+    /// Called when the editor JavaScript emits the `onEditorUnavailable` message.
+    ///
+    /// The editor's error boundary caught an error and replaced the editor with
+    /// an error message. React unmounted the editor, which deleted every
+    /// `window.editor.*` bridge method, so readiness is reset until the editor
+    /// reloads and emits `onEditorLoaded` again.
+    ///
+    /// Without this, `isReady` stays `true` and every subsequent bridge call
+    /// raises an uncaught `TypeError` inside the web view.
+    private func didLoseEditor() {
+        self.isReady = false
+        // Picks made in an open inserter can no longer reach the editor.
+        dismissBlockInserter()
+        delegate?.editorDidBecomeUnavailable(self)
     }
 
     // MARK: - Warmup
