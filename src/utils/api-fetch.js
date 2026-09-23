@@ -25,9 +25,14 @@ const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
  * @return {void}
  */
 export function configureApiFetch() {
-	const { siteApiRoot = '', preloadData = null } = getGBKit();
+	const { siteApiRoot, preloadData = null } = getGBKit();
 
-	apiFetch.use( apiFetch.createRootURLMiddleware( siteApiRoot ) );
+	// The root is joined to request paths by concatenation, so it has to supply
+	// the separator. Hosts may configure it with or without the trailing slash,
+	// as the native URL builders accept either.
+	apiFetch.use(
+		apiFetch.createRootURLMiddleware( ensureTrailingSlash( siteApiRoot ) )
+	);
 	apiFetch.use( corsMiddleware );
 	apiFetch.use( apiPathModifierMiddleware );
 	apiFetch.use( tokenAuthMiddleware );
