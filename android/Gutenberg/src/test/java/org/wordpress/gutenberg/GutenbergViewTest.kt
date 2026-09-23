@@ -19,6 +19,7 @@ import org.mockito.MockitoAnnotations
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowDialog
 import org.robolectric.annotation.Config
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -29,7 +30,7 @@ import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], manifest = Config.NONE)
+@Config(sdk = [28])
 class GutenbergViewTest {
     @Mock
     private lateinit var mockWebView: WebView
@@ -448,6 +449,40 @@ class GutenbergViewTest {
         assertTrue("because the editor is not ready", callback.errors.first() is EditorNotReadyException)
     }
 
+    @Test
+    fun `onEditorUnavailable notifies the listener`() {
+        var notified: GutenbergView? = null
+        gutenbergView.setEditorDidBecomeUnavailable { view -> notified = view }
+
+        gutenbergView.onEditorUnavailable()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(gutenbergView, notified)
+    }
+
+    @Test
+    fun `onEditorUnavailable stops content reads from reaching the web view`() {
+        gutenbergView.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        gutenbergView.onEditorUnavailable()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val shadowWebView = shadowOf(gutenbergView.editorWebView)
+        val lastEvaluated = shadowWebView.lastEvaluatedJavascript
+        val callback = RecordingTitleAndContentCallback()
+
+        gutenbergView.getTitleAndContent("original content", callback)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "a crashed editor must not be asked for content",
+            lastEvaluated,
+            shadowWebView.lastEvaluatedJavascript
+        )
+        assertTrue("the host is told the editor is not ready", callback.errors.single() is EditorNotReadyException)
+    }
+
     private class RecordingTitleAndContentCallback : GutenbergView.TitleAndContentCallback {
         val errors = mutableListOf<Throwable>()
         var results = 0
@@ -459,5 +494,79 @@ class GutenbergViewTest {
         override fun onError(error: Throwable) {
             errors += error
         }
+    }
+
+    @Test
+    fun `onEditorUnavailable stops history commands from reaching the web view`() {
+        gutenbergView.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        gutenbergView.onEditorUnavailable()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val shadowWebView = shadowOf(gutenbergView.editorWebView)
+        val lastEvaluated = shadowWebView.lastEvaluatedJavascript
+
+        gutenbergView.undo()
+        gutenbergView.redo()
+        gutenbergView.dismissTopModal()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "a crashed editor must not be sent commands its bridge can no longer answer",
+            lastEvaluated,
+            shadowWebView.lastEvaluatedJavascript
+        )
+    }
+
+    @Test
+    fun `onEditorUnavailable stops content changes from reaching the web view`() {
+        gutenbergView.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        gutenbergView.onEditorUnavailable()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val shadowWebView = shadowOf(gutenbergView.editorWebView)
+        val lastEvaluated = shadowWebView.lastEvaluatedJavascript
+
+        gutenbergView.setTitle("Title")
+        gutenbergView.setContent("<p>Content</p>")
+        gutenbergView.appendTextAtCursor("Text")
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "a crashed editor must not be sent content its bridge can no longer apply",
+            lastEvaluated,
+            shadowWebView.lastEvaluatedJavascript
+        )
+    }
+
+    @Test
+    fun `setTitle reaches a loaded editor`() {
+        gutenbergView.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        gutenbergView.setTitle("Title")
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertTrue(
+            "a loaded editor must receive the title",
+            shadowOf(gutenbergView.editorWebView).lastEvaluatedJavascript?.startsWith("editor.setTitle(") == true
+        )
+    }
+
+    @Test
+    fun `onEditorUnavailable dismisses the block inserter`() {
+        gutenbergView.onEditorLoaded()
+        gutenbergView.showBlockInserter("{}")
+        shadowOf(Looper.getMainLooper()).idle()
+        val inserter = ShadowDialog.getLatestDialog()
+        assertTrue("the inserter is open before the crash", inserter.isShowing)
+
+        gutenbergView.onEditorUnavailable()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertFalse("picks from the inserter can no longer reach the editor", inserter.isShowing)
     }
 }
