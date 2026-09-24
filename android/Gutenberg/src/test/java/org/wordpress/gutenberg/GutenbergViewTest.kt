@@ -292,6 +292,41 @@ class GutenbergViewTest {
         assertEquals(null, GutenbergView.originAuthority("not a url"))
     }
 
+    // ===== isDevServerUrl =====
+
+    @Test
+    fun `isDevServerUrl matches the dev server's host and port`() {
+        assertTrue(
+            GutenbergView.isDevServerUrl(
+                Uri.parse("http://10.0.2.2:5173/src/index.html"),
+                "http://10.0.2.2:5173/"
+            )
+        )
+    }
+
+    @Test
+    fun `isDevServerUrl rejects another port on the dev server's host`() {
+        assertFalse(
+            GutenbergView.isDevServerUrl(Uri.parse("http://10.0.2.2:8888/"), "http://10.0.2.2:5173/")
+        )
+        assertFalse(
+            GutenbergView.isDevServerUrl(Uri.parse("http://10.0.2.2/"), "http://10.0.2.2:5173/")
+        )
+    }
+
+    @Test
+    fun `isDevServerUrl matches a dev server URL written with its default port`() {
+        // Chromium drops a default port before the URL reaches the WebViewClient.
+        assertTrue(
+            GutenbergView.isDevServerUrl(Uri.parse("http://localhost/"), "http://localhost:80/")
+        )
+    }
+
+    @Test
+    fun `isDevServerUrl rejects every URL when no dev server is configured`() {
+        assertFalse(GutenbergView.isDevServerUrl(Uri.parse("http://localhost:5173/"), ""))
+    }
+
     // ===== REST API navigation =====
 
     @Test
