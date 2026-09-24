@@ -1,5 +1,9 @@
 package org.wordpress.gutenberg
 
+import okhttp3.Headers.Companion.toHeaders
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -53,35 +57,17 @@ class HttpServerAuthenticationTests {
 
     @Test
     fun `request with valid token returns 200`() {
-        val conn = URL("http://127.0.0.1:${server.port}/test").openConnection() as HttpURLConnection
-        conn.setRequestProperty("Proxy-Authorization", "Bearer ${server.token}")
-        try {
-            assertEquals(200, conn.responseCode)
-        } finally {
-            conn.disconnect()
-        }
+        assertEquals(200, statusCode(server, "Proxy-Authorization" to "Bearer ${server.token}"))
     }
 
     @Test
     fun `request with lowercase 'bearer' scheme returns 200`() {
-        val conn = URL("http://127.0.0.1:${server.port}/test").openConnection() as HttpURLConnection
-        conn.setRequestProperty("Proxy-Authorization", "bearer ${server.token}")
-        try {
-            assertEquals(200, conn.responseCode)
-        } finally {
-            conn.disconnect()
-        }
+        assertEquals(200, statusCode(server, "Proxy-Authorization" to "bearer ${server.token}"))
     }
 
     @Test
     fun `request with uppercase 'BEARER' scheme returns 200`() {
-        val conn = URL("http://127.0.0.1:${server.port}/test").openConnection() as HttpURLConnection
-        conn.setRequestProperty("Proxy-Authorization", "BEARER ${server.token}")
-        try {
-            assertEquals(200, conn.responseCode)
-        } finally {
-            conn.disconnect()
-        }
+        assertEquals(200, statusCode(server, "Proxy-Authorization" to "BEARER ${server.token}"))
     }
 
     // Relay-Authorization (fetch()-compatible alternative)
@@ -178,15 +164,13 @@ class HttpServerAuthenticationTests {
         )
         authServer.start()
         try {
-            val conn = URL("http://127.0.0.1:${authServer.port}/test").openConnection() as HttpURLConnection
-            conn.setRequestProperty("Proxy-Authorization", "Bearer ${authServer.token}")
-            conn.setRequestProperty("Authorization", "Basic dXNlcjpwYXNz")
-            try {
-                assertEquals(200, conn.responseCode)
-                assertEquals("Basic dXNlcjpwYXNz", receivedAuth)
-            } finally {
-                conn.disconnect()
-            }
+            val status = statusCode(
+                authServer,
+                "Proxy-Authorization" to "Bearer ${authServer.token}",
+                "Authorization" to "Basic dXNlcjpwYXNz"
+            )
+            assertEquals(200, status)
+            assertEquals("Basic dXNlcjpwYXNz", receivedAuth)
         } finally {
             authServer.stop()
         }
@@ -231,28 +215,17 @@ class HttpServerAuthenticationTests {
 
     @Test
     fun `GET without Content-Length returns 200`() {
-        val conn = URL("http://127.0.0.1:${server.port}/test").openConnection() as HttpURLConnection
-        conn.setRequestProperty("Proxy-Authorization", "Bearer ${server.token}")
-        try {
-            assertEquals(200, conn.responseCode)
-        } finally {
-            conn.disconnect()
-        }
+        assertEquals(200, statusCode(server, "Proxy-Authorization" to "Bearer ${server.token}"))
     }
 
     @Test
     fun `POST with Content-Length returns 200`() {
-        val conn = URL("http://127.0.0.1:${server.port}/test").openConnection() as HttpURLConnection
-        conn.setRequestProperty("Proxy-Authorization", "Bearer ${server.token}")
-        conn.requestMethod = "POST"
-        conn.doOutput = true
-        conn.outputStream.write("hello".toByteArray())
-        conn.outputStream.flush()
-        try {
-            assertEquals(200, conn.responseCode)
-        } finally {
-            conn.disconnect()
-        }
+        val status = statusCode(
+            server,
+            "Proxy-Authorization" to "Bearer ${server.token}",
+            body = "hello"
+        )
+        assertEquals(200, status)
     }
 
     // Oversized Payloads (auth precedes drain)
@@ -295,6 +268,24 @@ class HttpServerAuthenticationTests {
         } finally {
             smallServer.stop()
         }
+    }
+
+    /**
+     * Sends a request to [target] via OkHttp and returns the status code, POSTing
+     * [body] when given. `HttpURLConnection` can't send these requests: since
+     * JDK-8384708 it strips `Proxy-Authorization` from non-proxied connections.
+     */
+    private fun statusCode(
+        target: HttpServer,
+        vararg headers: Pair<String, String>,
+        body: String? = null
+    ): Int {
+        val request = Request.Builder()
+            .url("http://127.0.0.1:${target.port}/test")
+            .headers(headers.toMap().toHeaders())
+            .apply { if (body != null) post(body.toRequestBody()) }
+            .build()
+        return httpClient.newCall(request).execute().use { it.code }
     }
 
     /** A server whose 1 KB body limit lets a 2 KB POST exercise the drain path. Its
@@ -352,6 +343,8 @@ class HttpServerAuthenticationTests {
     }
 
     companion object {
+        private val httpClient = OkHttpClient()
+
         /** Twice the oversized test server's 1 KB `maxBodySize`. */
         private const val OVERSIZED_BODY_SIZE = 2048
     }
