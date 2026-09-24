@@ -257,8 +257,9 @@ format: install-web-deps ## Format all supported files in place with Prettier
 	npm run format
 
 .PHONY: lint-web
-lint-web: install-web-deps ## Lint JavaScript code with ESLint
+lint-web: install-web-deps ## Lint JavaScript code with ESLint and check formatting with Prettier
 	npm run lint:js
+	npm run format:check
 
 # Reads `package-lock.json`, not the installed tree, so it needs no
 # `install-web-deps` prerequisite -- which would otherwise report on a stale
@@ -268,8 +269,9 @@ check-wp-packages: ## Fail if any @wordpress package is installed more than once
 	npm run check:wp-packages
 
 .PHONY: lint-web-fix
-lint-web-fix: install-web-deps ## Lint and auto-fix JavaScript code with ESLint
+lint-web-fix: install-web-deps ## Lint and auto-fix JavaScript code with ESLint and format with Prettier
 	npm run lint:js:fix
+	npm run format
 
 .PHONY: lint-android
 lint-android: ## Lint Android code with Detekt

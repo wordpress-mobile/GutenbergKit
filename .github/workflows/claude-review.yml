@@ -43,7 +43,6 @@ jobs:
                     echo "Skipping Claude for external PR from ${head_repo:-unknown}."
                   fi
 
-
     review-with-tracking:
         needs: check-pr-origin
         if: needs.check-pr-origin.outputs.is_internal == 'true'
