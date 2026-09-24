@@ -17,7 +17,7 @@ import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], manifest = Config.NONE)
+@Config(manifest = Config.NONE)
 class GutenbergViewUploadServerTest {
 
     private val testScope = TestScope()
