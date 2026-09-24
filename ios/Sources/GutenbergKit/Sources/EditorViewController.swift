@@ -462,9 +462,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     /// The configuration is session-scoped — it carries the site credential and
     /// the local server's port and tokens — so no copy of it outlives the load
-    /// that injected it. Earlier versions mirrored it into `localStorage`, which
-    /// the default website data store keeps on disk across launches; the script
-    /// removes that key so a device upgraded from one of them is scrubbed.
+    /// that injected it. Versions before #613 mirrored it into `localStorage`,
+    /// which persists across launches; the script removes that key, scrubbing an
+    /// upgraded device the next time the editor loads. Nothing reads it any
+    /// more, so the line can go once builds from before #613 are no longer in
+    /// use.
     static func configurationScript(gbkitGlobal: String) -> String {
         """
         window.GBKit = \(gbkitGlobal);

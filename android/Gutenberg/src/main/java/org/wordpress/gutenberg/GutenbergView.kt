@@ -764,6 +764,13 @@ class GutenbergView : FrameLayout {
         }
     }
 
+    /**
+     * Removes the injected configuration from the page.
+     *
+     * Call this only when tearing the view down. The editor reads its
+     * configuration from `window.GBKit` alone, so clearing it under a live
+     * editor leaves that editor without a site API root or credential.
+     */
     fun clearConfig() {
         webView.evaluateJavascript("delete window.GBKit;", null)
     }
