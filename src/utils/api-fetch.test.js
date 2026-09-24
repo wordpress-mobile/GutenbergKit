@@ -348,6 +348,138 @@ describe( 'api-fetch credentials handling', () => {
 		);
 	} );
 
+	describe( 'withNetworkRetry', () => {
+		const networkError = () =>
+			Promise.reject( new TypeError( 'Failed to fetch' ) );
+		const okResponse = () =>
+			Promise.resolve( new Response( '{"ok":true}', { status: 200 } ) );
+
+		beforeEach( () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://example.com/wp-json/',
+				siteApiNamespace: [],
+				namespaceExcludedPaths: [],
+			} );
+			vi.useFakeTimers();
+			vi.spyOn( Math, 'random' ).mockReturnValue( 0 );
+		} );
+
+		afterEach( () => {
+			vi.useRealTimers();
+			vi.restoreAllMocks();
+		} );
+
+		it.each( [ 'GET', 'HEAD', 'OPTIONS' ] )(
+			'retries a %s request that fails at the network level',
+			async ( method ) => {
+				global.fetch = vi
+					.fn()
+					.mockImplementationOnce( networkError )
+					.mockImplementationOnce( okResponse );
+
+				const request = apiFetch( {
+					path: '/wp/v2/taxonomies',
+					method,
+					parse: false,
+				} );
+				await vi.runAllTimersAsync();
+
+				expect( ( await request ).status ).toBe( 200 );
+				expect( global.fetch ).toHaveBeenCalledTimes( 2 );
+			}
+		);
+
+		it( 'waits longer before each retry', async () => {
+			global.fetch = vi
+				.fn()
+				.mockImplementationOnce( networkError )
+				.mockImplementationOnce( networkError )
+				.mockImplementationOnce( okResponse );
+
+			const request = apiFetch( { path: '/wp/v2/taxonomies' } );
+
+			await vi.advanceTimersByTimeAsync( 499 );
+			expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+			await vi.advanceTimersByTimeAsync( 1 );
+			expect( global.fetch ).toHaveBeenCalledTimes( 2 );
+			await vi.advanceTimersByTimeAsync( 1999 );
+			expect( global.fetch ).toHaveBeenCalledTimes( 2 );
+			await vi.advanceTimersByTimeAsync( 1 );
+
+			expect( await request ).toEqual( { ok: true } );
+			expect( global.fetch ).toHaveBeenCalledTimes( 3 );
+		} );
+
+		it( 'rejects with the network error once retries run out', async () => {
+			global.fetch = vi.fn( networkError );
+
+			const request = apiFetch( { path: '/wp/v2/taxonomies' } );
+			const assertion = expect( request ).rejects.toMatchObject( {
+				code: 'fetch_error',
+			} );
+			await vi.runAllTimersAsync();
+
+			await assertion;
+			expect( global.fetch ).toHaveBeenCalledTimes( 3 );
+		} );
+
+		it( 'does not retry a request that changes server state', async () => {
+			global.fetch = vi.fn( networkError );
+
+			const request = apiFetch( {
+				path: '/wp/v2/posts',
+				method: 'POST',
+				data: {},
+			} );
+
+			await expect( request ).rejects.toMatchObject( {
+				code: 'fetch_error',
+			} );
+			expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'does not retry an error response from the server', async () => {
+			global.fetch = vi.fn( () =>
+				Promise.resolve(
+					new Response( '{"code":"rest_forbidden"}', {
+						status: 403,
+					} )
+				)
+			);
+
+			await expect(
+				apiFetch( { path: '/wp/v2/taxonomies' } )
+			).rejects.toMatchObject( { code: 'rest_forbidden' } );
+			expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'does not retry while the device is offline', async () => {
+			vi.spyOn( navigator, 'onLine', 'get' ).mockReturnValue( false );
+			global.fetch = vi.fn( networkError );
+
+			await expect(
+				apiFetch( { path: '/wp/v2/taxonomies' } )
+			).rejects.toMatchObject( { code: 'offline_error' } );
+			expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'does not retry an aborted request', async () => {
+			const controller = new AbortController();
+			global.fetch = vi.fn( () => {
+				controller.abort();
+				return networkError();
+			} );
+
+			await expect(
+				apiFetch( {
+					path: '/wp/v2/taxonomies',
+					signal: controller.signal,
+				} )
+			).rejects.toMatchObject( { code: 'fetch_error' } );
+			expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+		} );
+	} );
+
 	it( 'should preserve other headers when adding Authorization', async () => {
 		bridge.getGBKit.mockReturnValue( {
 			siteApiRoot: 'https://example.com/wp-json/',

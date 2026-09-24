@@ -9,14 +9,21 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import { getGBKit, POST_FALLBACKS } from './bridge';
-import { info, error as logError } from './logger';
+import { info, warn, error as logError } from './logger';
 
 /**
  * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
+ * @typedef {import('@wordpress/api-fetch').FetchHandler} FetchHandler
  */
 
 /** Matches `/wp/v2/media` but not sub-paths like `/wp/v2/media/123`. */
 const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
+
+/** Methods safe to repeat because they do not change server state. */
+const RETRYABLE_METHODS = [ 'GET', 'HEAD', 'OPTIONS' ];
+
+/** Base delay before each retry; jitter of up to the same amount is added. */
+const RETRY_DELAYS_MS = [ 500, 2000 ];
 
 /**
  * Initializes the API fetch configuration and middleware.
@@ -38,6 +45,9 @@ export function configureApiFetch() {
 	apiFetch.use( siteIndexMiddleware );
 	apiFetch.use(
 		apiFetch.createPreloadingMiddleware( preloadData ?? defaultPreloadData )
+	);
+	apiFetch.setFetchHandler(
+		withNetworkRetry( apiFetch.defaultFetchHandler )
 	);
 }
 
@@ -544,6 +554,66 @@ function isRestIndexPath( path ) {
 	}
 	const pathname = path.split( '?' )[ 0 ];
 	return pathname === '' || pathname === '/';
+}
+
+/**
+ * Wraps a fetch handler to retry read-only requests that fail at the network
+ * level.
+ *
+ * Some hosts rate-limit the burst of requests sent while the editor loads,
+ * answering the CORS preflight with a 429 the browser cannot read. api-fetch
+ * reports that as a `fetch_error`, and core-data caches some failed
+ * resolutions, such as entity configs, for the rest of the session. A single
+ * throttled request can therefore break a block until the editor reloads.
+ *
+ * Wrapping the fetch handler rather than adding a middleware retries each
+ * network request once, including the pages `fetchAllMiddleware` requests.
+ *
+ * Exported for testing only.
+ *
+ * @param {FetchHandler} fetchHandler The handler performing the request.
+ * @return {FetchHandler} The handler with retries.
+ */
+export function withNetworkRetry( fetchHandler ) {
+	return async ( options ) => {
+		const method = ( options.method ?? 'GET' ).toUpperCase();
+		if ( ! RETRYABLE_METHODS.includes( method ) ) {
+			return fetchHandler( options );
+		}
+
+		for ( let attempt = 0; ; attempt++ ) {
+			try {
+				return await fetchHandler( options );
+			} catch ( err ) {
+				if (
+					err?.code !== 'fetch_error' ||
+					attempt >= RETRY_DELAYS_MS.length ||
+					options.signal?.aborted
+				) {
+					throw err;
+				}
+
+				warn(
+					`Retrying ${ method } ${
+						options.url ?? options.path
+					} after a network error`
+				);
+				// Jitter spreads out requests that failed in the same burst.
+				const delay = RETRY_DELAYS_MS[ attempt ];
+				await wait( delay + Math.random() * delay );
+			}
+		}
+	};
+}
+
+/**
+ * Resolves after the given delay.
+ *
+ * @param {number} ms Delay in milliseconds.
+ * @return {Promise<void>} Resolves once the delay has elapsed.
+ */
+function wait( ms ) {
+	return new Promise( ( resolve ) => setTimeout( resolve, ms ) );
 }
 
 const defaultPreloadData = {
