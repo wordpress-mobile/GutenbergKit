@@ -449,7 +449,7 @@ class GutenbergView : FrameLayout {
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
-                onEditorPageStarted()
+                onEditorPageStarted(url)
             }
 
             override fun shouldInterceptRequest(
@@ -678,25 +678,50 @@ class GutenbergView : FrameLayout {
     }
 
     /**
-     * Invoked when the editor page begins loading. Starts the upload server once —
-     * capturing the [mediaUploadDelegate] provided before load — then advertises
-     * the editor globals (including the server's port and token) to the page.
+     * Invoked when a page begins loading in the main frame. Starts the upload server
+     * once — capturing the [mediaUploadDelegate] provided before load — then
+     * advertises the editor globals (including the server's port and token) to the
+     * page.
      *
      * Starting the server here, on the UI thread, rather than from the
      * [mediaUploadDelegate] setter keeps its whole lifecycle — start here, stop in
      * [onDetachedFromWindow] — on the UI thread, so it can't race a
      * background-thread delegate assignment.
      */
-    private fun onEditorPageStarted() {
+    private fun onEditorPageStarted(url: String?) {
         // Readiness belongs to the page: a new page, including one a reload starts,
         // is not ready until it reports `onEditorLoaded`.
         isEditorLoaded = false
         didFireEditorLoaded = false
+
+        // The globals carry the site credential and the upload server's token, so
+        // they go to the editor document alone. `shouldOverrideUrlLoading` admits
+        // other pages into this frame, and on Android the editor shares an origin
+        // with the site, so the destination is checked rather than assumed.
+        if (!isEditorUrl(url)) return
+
         if (!hasStartedLoading) {
             hasStartedLoading = true
             startUploadServer()
         }
         setGlobalJavaScriptVariables()
+    }
+
+    /**
+     * Whether [url] is the editor document this view loaded.
+     *
+     * A configured dev server replaces the bundled assets as the editor, mirroring
+     * the URL [loadEditor] chooses, so only one of the two can match.
+     */
+    private fun isEditorUrl(url: String?): Boolean {
+        if (url.isNullOrEmpty()) return false
+        val uri = Uri.parse(url)
+
+        if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
+            return isDevServerUrl(uri, BuildConfig.GUTENBERG_EDITOR_URL)
+        }
+
+        return uri.authority == assetAuthority && uri.path?.startsWith("/assets/") == true
     }
 
     private fun setGlobalJavaScriptVariables() {

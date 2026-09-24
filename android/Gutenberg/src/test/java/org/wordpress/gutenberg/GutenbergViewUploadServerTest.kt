@@ -20,6 +20,17 @@ import org.wordpress.gutenberg.model.EditorDependencies
 @Config(manifest = Config.NONE)
 class GutenbergViewUploadServerTest {
 
+    private companion object {
+        /**
+         * The editor document for [makeView]'s site, which the globals are scoped to.
+         *
+         * Mirrors the fallback in `loadEditor`, so this holds whether or not a local
+         * `GUTENBERG_EDITOR_URL` dev server is configured.
+         */
+        val EDITOR_URL = BuildConfig.GUTENBERG_EDITOR_URL
+            .ifEmpty { "https://example.com/assets/index.html" }
+    }
+
     private val testScope = TestScope()
 
     private fun makeView(): GutenbergView {
@@ -46,10 +57,13 @@ class GutenbergViewUploadServerTest {
      * `onPageStarted`) to simulate the editor page beginning to load — the point at
      * which the delegate is captured and the upload server starts.
      */
-    private fun startLoading(view: GutenbergView) {
-        val method = GutenbergView::class.java.getDeclaredMethod("onEditorPageStarted")
+    private fun startLoading(view: GutenbergView, url: String = EDITOR_URL) {
+        val method = GutenbergView::class.java.getDeclaredMethod(
+            "onEditorPageStarted",
+            String::class.java
+        )
         method.isAccessible = true
-        method.invoke(view)
+        method.invoke(view, url)
     }
 
     /** Invokes the protected `onDetachedFromWindow` lifecycle callback. */
