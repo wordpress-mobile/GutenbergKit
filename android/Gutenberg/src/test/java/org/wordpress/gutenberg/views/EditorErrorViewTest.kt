@@ -14,11 +14,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
-import org.robolectric.annotation.Config
 import org.wordpress.gutenberg.R
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28])
 class EditorErrorViewTest {
 
     @Test
