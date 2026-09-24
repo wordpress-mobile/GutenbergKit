@@ -469,7 +469,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         """
         window.GBKit = \(gbkitGlobal);
         localStorage.removeItem('GBKit');
-        "done";
         """
     }
 
