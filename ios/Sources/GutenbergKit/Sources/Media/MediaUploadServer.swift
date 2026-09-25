@@ -280,8 +280,6 @@ final class MediaUploadServer: Sendable {
         }
 
         private func handleUpload(_ request: HTTPServer.Request) async -> HTTPResponse {
-            // Parse and find the file up front, so an assertion label can name the file and
-            // a malformed request fails without holding an assertion.
             let parts: [MultipartPart]
             do {
                 parts = try request.parsed.multipartParts()
@@ -295,27 +293,6 @@ final class MediaUploadServer: Sendable {
                 return MediaUploadServer.errorResponse(status: 400, message: "No file found in request")
             }
 
-            #if canImport(UIKit)
-            // Hold a background-task assertion for the duration of the upload so locking the
-            // phone mid-transfer doesn't immediately suspend the app — which would let iOS
-            // reclaim the loopback socket before a short upload can finish. Best-effort: the
-            // grace is fixed (~30s), so a long upload still ends when it expires. The label
-            // names the file so concurrent uploads are distinguishable in a trace — a debug
-            // aid; the OS assigns the actual, unique task identifier. See
-            // `withBackgroundActivity`.
-            return await withBackgroundActivity("gutenbergkit-media-upload: \(filePart.filename ?? "upload")") {
-                await performUpload(request, parts: parts, filePart: filePart)
-            }
-            #else
-            return await performUpload(request, parts: parts, filePart: filePart)
-            #endif
-        }
-
-        private func performUpload(
-            _ request: HTTPServer.Request,
-            parts: [MultipartPart],
-            filePart: MultipartPart
-        ) async -> HTTPResponse {
             // The non-file parts (post, additionalData) and the original query
             // (e.g. ?_embed) must reach WordPress too — relay them alongside the file.
             let extraParts = parts.filter { $0.filename == nil }
@@ -609,7 +586,8 @@ final class MediaUploadServer: Sendable {
     /// Answers the server's recoverable parse errors (e.g. an over-limit body)
     /// with the same JSON `{code, message}` shape the editor expects, so the
     /// middleware surfaces a real message ("The file is too large…") instead of a
-    /// generic parse-failure. A leaf object — the HTTP server retains it.
+    /// generic parse-failure, and keeps the app running while a connection is
+    /// served. A leaf object — the HTTP server retains it.
     private final class ServerDelegate: HTTPServerDelegate {
         func response(forRecoverableParseError error: HTTPRequestParseError) -> HTTPResponse {
             let message: String = switch error {
@@ -617,6 +595,26 @@ final class MediaUploadServer: Sendable {
             default: "\(error.httpStatusText)"
             }
             return MediaUploadServer.errorResponse(status: error.httpStatus, message: message)
+        }
+
+        /// Holds a background-task assertion from the first byte of the request to the
+        /// last byte of the response, so locking the phone mid-upload doesn't suspend the
+        /// app at either end of the exchange.
+        ///
+        /// Wrapping only the handler misses both ends. The file arrives from the WebView
+        /// before the handler runs, and WordPress's answer is written back after it
+        /// returns. An app suspended in the second gap has already created the attachment,
+        /// and if iOS reclaims the socket before the app resumes, the editor never hears
+        /// about it: it shows a failure, and a retry makes a duplicate.
+        ///
+        /// Best-effort: the grace is fixed (~30s), so a long upload still ends when it
+        /// expires. See `withBackgroundActivity`.
+        func withConnectionActivity(_ body: () async -> Void) async {
+            #if !os(macOS)
+            await withBackgroundActivity("gutenbergkit-media-upload", body)
+            #else
+            await body()
+            #endif
         }
     }
 

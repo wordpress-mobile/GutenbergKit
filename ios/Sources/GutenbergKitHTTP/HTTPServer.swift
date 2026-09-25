@@ -459,158 +459,173 @@ public final class HTTPServer: Sendable {
                 connectionCounter.decrement()
             }
 
-            do {
-                let parser = HTTPRequestParser(maxBodySize: maxRequestBodySize, tempDirectory: tempDirectory)
-                var request: ParsedHTTPRequest!
-                let duration = try await ContinuousClock().measure {
-                    // Phase 1 (pre-body): receive and validate headers, authenticate,
-                    // and drain any oversized body — all bounded by `readTimeout`. This is
-                    // the unauthenticated-reachable portion of the request, so it keeps a
-                    // strict total-duration cap.
-                    let partial = try await Self.withReadTimeout(readTimeout) { () -> ParsedHTTPRequest in
-                        // Receive headers only.
-                        try await Self.receiveUntil(\.hasHeaders, parser: parser, on: connection, idleTimeout: idleTimeout)
+            // Everything this connection does, from the first byte of the request to the
+            // last byte of the response, runs inside the delegate's activity. See
+            // `HTTPServerDelegate.withConnectionActivity(_:)`.
+            await Self.withConnectionActivity(of: delegate) {
+                do {
+                    let parser = HTTPRequestParser(maxBodySize: maxRequestBodySize, tempDirectory: tempDirectory)
+                    var request: ParsedHTTPRequest!
+                    let duration = try await ContinuousClock().measure {
+                        // Phase 1 (pre-body): receive and validate headers, authenticate,
+                        // and drain any oversized body — all bounded by `readTimeout`. This is
+                        // the unauthenticated-reachable portion of the request, so it keeps a
+                        // strict total-duration cap.
+                        let partial = try await Self.withReadTimeout(readTimeout) { () -> ParsedHTTPRequest in
+                            // Receive headers only.
+                            try await Self.receiveUntil(\.hasHeaders, parser: parser, on: connection, idleTimeout: idleTimeout)
 
-                        // Validate headers (triggers full RFC validation).
-                        guard let partial = try parser.parseRequest() else {
-                            throw HTTPServerError.connectionClosed
+                            // Validate headers (triggers full RFC validation).
+                            guard let partial = try parser.parseRequest() else {
+                                throw HTTPServerError.connectionClosed
+                            }
+
+                            // Check auth on headers alone, before draining or consuming any
+                            // body bytes — an unauthenticated client must not be able to make
+                            // the server read (and discard) an arbitrarily large body, and the
+                            // handler must never see an unauthenticated request. OPTIONS is
+                            // exempt because CORS preflight requests never include credentials
+                            // (Fetch spec §3.3.5).
+                            if requiresAuthentication && partial.method.uppercased() != "OPTIONS" {
+                                guard authenticate(partial, token: token) else {
+                                    throw HTTPServerError.authenticationFailed
+                                }
+                            }
+
+                            // Reject auth-exempt OPTIONS that carry a body. Real CORS preflight
+                            // requests are bodyless; a body on the auth-exempt path would
+                            // otherwise be read/drained without authentication — and the
+                            // accepted-body read below is bounded only by the idle timeout.
+                            if partial.method.uppercased() == "OPTIONS", (parser.expectedBodyLength ?? 0) > 0 {
+                                throw HTTPServerError.unexpectedBody
+                            }
+
+                            // Drain the oversized body before responding so the (authenticated)
+                            // client receives the 413 instead of a connection reset
+                            // (RFC 9110 §15.5.14). Still bounded by `readTimeout`.
+                            if parser.state == .draining {
+                                try await Self.receiveUntil(\.isComplete, parser: parser, on: connection, idleTimeout: idleTimeout)
+                            }
+
+                            return partial
                         }
 
-                        // Check auth on headers alone, before draining or consuming any
-                        // body bytes — an unauthenticated client must not be able to make
-                        // the server read (and discard) an arbitrarily large body, and the
-                        // handler must never see an unauthenticated request. OPTIONS is
-                        // exempt because CORS preflight requests never include credentials
-                        // (Fetch spec §3.3.5).
-                        if requiresAuthentication && partial.method.uppercased() != "OPTIONS" {
-                            guard authenticate(partial, token: token) else {
-                                throw HTTPServerError.authenticationFailed
+                        // If the parser detected a recoverable error (e.g. payload too
+                        // large, drained above), stop reading and let the post-measure
+                        // branch answer it via the delegate. `request` is the body-less
+                        // partial; the main handler is never invoked for it.
+                        if parser.parseError != nil {
+                            request = partial
+                            return
+                        }
+
+                        // Reject body-bearing methods without Content-Length. We don't support
+                        // Transfer-Encoding: chunked, so Content-Length is the only way to
+                        // determine body size.
+                        let upperMethod = partial.method.uppercased()
+                        if ["POST", "PUT", "PATCH"].contains(upperMethod) && partial.header("Content-Length") == nil {
+                            throw HTTPServerError.lengthRequired
+                        }
+
+                        // Phase 2 (accepted body): the client is authenticated, so read the body
+                        // bounded by `bodyReadTimeout` (a generous backstop) plus the per-read
+                        // `idleTimeout`. A large upload that streams steadily is never failed on
+                        // total duration — only a genuine stall (idle) or the generous ceiling
+                        // ends it.
+                        if !parser.state.isComplete {
+                            try await Self.withReadTimeout(bodyReadTimeout) {
+                                try await Self.receiveUntil(\.isComplete, parser: parser, on: connection, idleTimeout: idleTimeout)
                             }
                         }
 
-                        // Reject auth-exempt OPTIONS that carry a body. Real CORS preflight
-                        // requests are bodyless; a body on the auth-exempt path would
-                        // otherwise be read/drained without authentication — and the
-                        // accepted-body read below is bounded only by the idle timeout.
-                        if partial.method.uppercased() == "OPTIONS", (parser.expectedBodyLength ?? 0) > 0 {
-                            throw HTTPServerError.unexpectedBody
+                        guard let complete = try parser.parseRequest(), complete.isComplete else {
+                            throw HTTPServerError.connectionClosed
                         }
+                        request = complete
+                    }
 
-                        // Drain the oversized body before responding so the (authenticated)
-                        // client receives the 413 instead of a connection reset
-                        // (RFC 9110 §15.5.14). Still bounded by `readTimeout`.
-                        if parser.state == .draining {
-                            try await Self.receiveUntil(\.isComplete, parser: parser, on: connection, idleTimeout: idleTimeout)
+                    // A recoverable parse error (payload too large, drained above): the
+                    // request was never fully read, so it must not reach the handler.
+                    // The library owns the response — the delegate customizes the body if
+                    // it wants, otherwise a correct generic error. `send` stamps CORS.
+                    let response: HTTPResponse
+                    if let parseError = parser.parseError {
+                        response = delegate?.response(forRecoverableParseError: parseError)
+                            ?? Self.defaultErrorResponse(for: parseError)
+                    } else if cors == .permissive, request.method.uppercased() == "OPTIONS" {
+                        // Under a permissive CORS policy the library answers the OPTIONS
+                        // preflight itself; the send layer stamps the CORS headers.
+                        response = HTTPResponse(status: 204)
+                    } else {
+                        // Run the handler, but race it against the peer closing the
+                        // connection. Once the request has been fully read, no bytes
+                        // flow on this connection until the response is sent, so a
+                        // handler that awaits slow outbound work — the media-upload
+                        // relay awaiting `POST /wp/v2/media` — leaves the connection
+                        // idle. If the client (the editor WebView) aborts the upload
+                        // during that window, nothing here would otherwise notice, and
+                        // the outbound request would run to completion, creating an
+                        // orphaned attachment that a retry then duplicates. Watching for
+                        // the close and cancelling the handler propagates cancellation
+                        // through structured concurrency to the outbound URLSession
+                        // task, so a cancelled upload is actually cancelled.
+                        switch await Self.runHandler(
+                            handler,
+                            Request(parsed: request, parseDuration: duration),
+                            racingCloseOf: connection
+                        ) {
+                        case .completed(let handlerResponse):
+                            response = handlerResponse
+                        case .clientDisconnected:
+                            Logger.httpServer.debug("\(request.method) \(request.target) → client disconnected before response; cancelled in-flight handler")
+                            connection.cancel()
+                            return
                         }
-
-                        return partial
                     }
-
-                    // If the parser detected a recoverable error (e.g. payload too
-                    // large, drained above), stop reading and let the post-measure
-                    // branch answer it via the delegate. `request` is the body-less
-                    // partial; the main handler is never invoked for it.
-                    if parser.parseError != nil {
-                        request = partial
-                        return
-                    }
-
-                    // Reject body-bearing methods without Content-Length. We don't support
-                    // Transfer-Encoding: chunked, so Content-Length is the only way to
-                    // determine body size.
-                    let upperMethod = partial.method.uppercased()
-                    if ["POST", "PUT", "PATCH"].contains(upperMethod) && partial.header("Content-Length") == nil {
-                        throw HTTPServerError.lengthRequired
-                    }
-
-                    // Phase 2 (accepted body): the client is authenticated, so read the body
-                    // bounded by `bodyReadTimeout` (a generous backstop) plus the per-read
-                    // `idleTimeout`. A large upload that streams steadily is never failed on
-                    // total duration — only a genuine stall (idle) or the generous ceiling
-                    // ends it.
-                    if !parser.state.isComplete {
-                        try await Self.withReadTimeout(bodyReadTimeout) {
-                            try await Self.receiveUntil(\.isComplete, parser: parser, on: connection, idleTimeout: idleTimeout)
-                        }
-                    }
-
-                    guard let complete = try parser.parseRequest(), complete.isComplete else {
-                        throw HTTPServerError.connectionClosed
-                    }
-                    request = complete
+                    // The handler type is non-throwing and maps cancellation to a 500,
+                    // so if the connection task was cancelled while it ran (server stop /
+                    // editor teardown), honor that here rather than writing a doomed
+                    // response: propagate so the outer handler just closes the connection.
+                    try Task.checkCancellation()
+                    await send(response, on: connection, cors: cors)
+                    let (sec, atto) = duration.components
+                    let ms = Double(sec) * 1000.0 + Double(atto) / 1_000_000_000_000_000.0
+                    Logger.httpServer.debug("\(request.method) \(request.target) → \(response.status) (\(String(format: "%.1f", ms))ms)")
+                } catch HTTPServerError.authenticationFailed {
+                    await send(HTTPResponse(status: 407, headers: [("Content-Type", "text/plain"), ("Proxy-Authenticate", "Bearer")]), on: connection, cors: cors)
+                } catch HTTPServerError.lengthRequired {
+                    await send(HTTPResponse(status: 411, statusText: "Length Required", body: Data("Length Required".utf8)), on: connection, cors: cors)
+                } catch HTTPServerError.unexpectedBody {
+                    Logger.httpServer.warning("Rejected auth-exempt request carrying a body")
+                    await send(HTTPResponse(status: 400, statusText: "Bad Request", body: Data("Unexpected request body".utf8)), on: connection, cors: cors)
+                } catch is CancellationError {
+                    Logger.httpServer.debug("Connection cancelled during shutdown")
+                    connection.cancel()
+                } catch HTTPServerError.readTimeout {
+                    Logger.httpServer.warning("Read timeout, closing connection")
+                    await send(HTTPResponse(status: 408, statusText: "Request Timeout", body: Data("Request Timeout".utf8)), on: connection, cors: cors)
+                } catch let error as HTTPRequestParseError {
+                    // Fatal parse error (malformed framing, smuggling-relevant, etc.):
+                    // always answered by the library, never routed to the delegate.
+                    Logger.httpServer.error("Parse error: \(error)")
+                    await send(Self.defaultErrorResponse(for: error), on: connection, cors: cors)
+                } catch {
+                    Logger.httpServer.error("Unexpected error: \(error)")
+                    await send(HTTPResponse(status: 400, statusText: "Bad Request", body: Data("Malformed HTTP request".utf8)), on: connection, cors: cors)
                 }
-
-                // A recoverable parse error (payload too large, drained above): the
-                // request was never fully read, so it must not reach the handler.
-                // The library owns the response — the delegate customizes the body if
-                // it wants, otherwise a correct generic error. `send` stamps CORS.
-                let response: HTTPResponse
-                if let parseError = parser.parseError {
-                    response = delegate?.response(forRecoverableParseError: parseError)
-                        ?? Self.defaultErrorResponse(for: parseError)
-                } else if cors == .permissive, request.method.uppercased() == "OPTIONS" {
-                    // Under a permissive CORS policy the library answers the OPTIONS
-                    // preflight itself; the send layer stamps the CORS headers.
-                    response = HTTPResponse(status: 204)
-                } else {
-                    // Run the handler, but race it against the peer closing the
-                    // connection. Once the request has been fully read, no bytes
-                    // flow on this connection until the response is sent, so a
-                    // handler that awaits slow outbound work — the media-upload
-                    // relay awaiting `POST /wp/v2/media` — leaves the connection
-                    // idle. If the client (the editor WebView) aborts the upload
-                    // during that window, nothing here would otherwise notice, and
-                    // the outbound request would run to completion, creating an
-                    // orphaned attachment that a retry then duplicates. Watching for
-                    // the close and cancelling the handler propagates cancellation
-                    // through structured concurrency to the outbound URLSession
-                    // task, so a cancelled upload is actually cancelled.
-                    switch await Self.runHandler(
-                        handler,
-                        Request(parsed: request, parseDuration: duration),
-                        racingCloseOf: connection
-                    ) {
-                    case .completed(let handlerResponse):
-                        response = handlerResponse
-                    case .clientDisconnected:
-                        Logger.httpServer.debug("\(request.method) \(request.target) → client disconnected before response; cancelled in-flight handler")
-                        connection.cancel()
-                        return
-                    }
-                }
-                // The handler type is non-throwing and maps cancellation to a 500,
-                // so if the connection task was cancelled while it ran (server stop /
-                // editor teardown), honor that here rather than writing a doomed
-                // response: propagate so the outer handler just closes the connection.
-                try Task.checkCancellation()
-                await send(response, on: connection, cors: cors)
-                let (sec, atto) = duration.components
-                let ms = Double(sec) * 1000.0 + Double(atto) / 1_000_000_000_000_000.0
-                Logger.httpServer.debug("\(request.method) \(request.target) → \(response.status) (\(String(format: "%.1f", ms))ms)")
-            } catch HTTPServerError.authenticationFailed {
-                await send(HTTPResponse(status: 407, headers: [("Content-Type", "text/plain"), ("Proxy-Authenticate", "Bearer")]), on: connection, cors: cors)
-            } catch HTTPServerError.lengthRequired {
-                await send(HTTPResponse(status: 411, statusText: "Length Required", body: Data("Length Required".utf8)), on: connection, cors: cors)
-            } catch HTTPServerError.unexpectedBody {
-                Logger.httpServer.warning("Rejected auth-exempt request carrying a body")
-                await send(HTTPResponse(status: 400, statusText: "Bad Request", body: Data("Unexpected request body".utf8)), on: connection, cors: cors)
-            } catch is CancellationError {
-                Logger.httpServer.debug("Connection cancelled during shutdown")
-                connection.cancel()
-            } catch HTTPServerError.readTimeout {
-                Logger.httpServer.warning("Read timeout, closing connection")
-                await send(HTTPResponse(status: 408, statusText: "Request Timeout", body: Data("Request Timeout".utf8)), on: connection, cors: cors)
-            } catch let error as HTTPRequestParseError {
-                // Fatal parse error (malformed framing, smuggling-relevant, etc.):
-                // always answered by the library, never routed to the delegate.
-                Logger.httpServer.error("Parse error: \(error)")
-                await send(Self.defaultErrorResponse(for: error), on: connection, cors: cors)
-            } catch {
-                Logger.httpServer.error("Unexpected error: \(error)")
-                await send(HTTPResponse(status: 400, statusText: "Bad Request", body: Data("Malformed HTTP request".utf8)), on: connection, cors: cors)
             }
         }
         connectionTasks.track(taskID, task)
+    }
+
+    /// Runs `body` inside the delegate's ``HTTPServerDelegate/withConnectionActivity(_:)``,
+    /// or on its own when the server has no delegate.
+    private static func withConnectionActivity(
+        of delegate: HTTPServerDelegate?,
+        _ body: () async -> Void
+    ) async {
+        guard let delegate else { return await body() }
+        await delegate.withConnectionActivity(body)
     }
 
     /// Runs `operation` under a total-duration timeout, racing it against a sleep

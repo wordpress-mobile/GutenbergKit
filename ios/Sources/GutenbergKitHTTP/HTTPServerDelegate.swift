@@ -30,11 +30,29 @@ public protocol HTTPServerDelegate: AnyObject, Sendable {
     /// Fatal parse errors (malformed framing, header smuggling, etc.) are always
     /// answered by the library and never routed here.
     func response(forRecoverableParseError error: HTTPRequestParseError) -> HTTPResponse
+
+    /// Runs `body`, which serves one connection: reading the request, running the
+    /// handler, and writing the response. The server's own responses (407, 408, 413,
+    /// and so on) are written inside it too.
+    ///
+    /// `body` returns once the response has been handed to the network stack, so
+    /// anything wrapped around it covers the whole exchange with the client. That's
+    /// what makes it the place to keep the process alive for a connection, e.g. with
+    /// a background-task assertion. Wrapping only the handler would miss both ends:
+    /// the client sending the request body before the handler runs, and the server
+    /// writing the response after it returns.
+    ///
+    /// The default runs `body` and nothing else.
+    func withConnectionActivity(_ body: () async -> Void) async
 }
 
 public extension HTTPServerDelegate {
     func response(forRecoverableParseError error: HTTPRequestParseError) -> HTTPResponse {
         HTTPServer.defaultErrorResponse(for: error)
+    }
+
+    func withConnectionActivity(_ body: () async -> Void) async {
+        await body()
     }
 }
 
