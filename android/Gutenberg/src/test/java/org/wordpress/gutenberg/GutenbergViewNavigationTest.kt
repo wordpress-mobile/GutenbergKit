@@ -193,6 +193,20 @@ class GutenbergViewNavigationTest {
     }
 
     @Test
+    fun `onPageStarted withholds the configuration from another bundled asset page`() {
+        // The asset loader serves every page the host app bundles, not only the editor.
+        val siteView = configuredSiteView()
+        val webView = siteView.editorWebView
+
+        webView.webViewClient.onPageStarted(webView, "https://example.com/assets/support.html", null)
+
+        assertNull(
+            "a bundled page other than the editor must not receive the site credential",
+            shadowOf(webView).lastEvaluatedJavascript
+        )
+    }
+
+    @Test
     fun `onPageStarted withholds the configuration from an asset path the network served`() {
         val siteView = configuredSiteView()
         val webView = siteView.editorWebView

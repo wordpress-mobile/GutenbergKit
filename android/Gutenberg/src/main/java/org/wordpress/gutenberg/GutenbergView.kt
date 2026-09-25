@@ -757,7 +757,8 @@ class GutenbergView : FrameLayout {
             return isDevServerUrl(uri, BuildConfig.GUTENBERG_EDITOR_URL)
         }
 
-        return isAssetUrl(uri)
+        // The host app's own bundled pages are asset URLs too, but not the editor.
+        return isAssetUrl(uri) && uri.path == ASSET_PATH_INDEX
     }
 
     private fun setGlobalJavaScriptVariables() {
