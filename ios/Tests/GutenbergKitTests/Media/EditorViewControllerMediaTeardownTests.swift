@@ -95,10 +95,10 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
 
     // MARK: - Coming back from the background
 
-    /// The failure this file's sibling PR is named for. The system takes the listening
-    /// socket while the app is suspended and reports nothing, so the editor returns
-    /// advertising a port that refuses connections, and every upload in that session fails.
-    /// Stopping the server behind the editor's back leaves exactly that state.
+    /// The failure this file's sibling PR is named for. Once the device can idle-sleep, the
+    /// system reclaims a suspended app's listening socket and reports nothing, so the editor
+    /// returns advertising a port that refuses connections, and every upload in that session
+    /// fails. Stopping the server behind the editor's back leaves exactly that state.
     @MainActor
     @Test("an upload server whose port stopped answering is replaced", .enabled(if: canBindUploadServer))
     func restartsAnUnreachableUploadServer() async throws {

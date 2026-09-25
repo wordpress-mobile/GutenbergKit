@@ -328,8 +328,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // Set up Lockdown Mode monitoring with foreground detection
         lockdownModeMonitor.setup(presentingViewController: self)
 
-        // The upload server's listening socket doesn't survive the app being suspended,
-        // so check it on the way back. See `restartUploadServerIfUnreachable()`.
+        // Once the device can idle-sleep, iOS reclaims a suspended app's sockets, the
+        // upload server's listener included, so check it on the way back. See
+        // `restartUploadServerIfUnreachable()`.
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleWillEnterForeground),
@@ -441,12 +442,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Restarts the upload server if its port stopped answering while the app was away.
     ///
-    /// The system takes the listening socket when it suspends the app, and says nothing:
-    /// the listener still reports `.ready` on the same port, so watching listener state
-    /// never finds out (see ``MediaUploadServer/isAnswering(timeout:)``). Asking the port is
-    /// the only way, and this is the only thing between a backgrounded editor and uploads
-    /// that fail for the rest of its session, because the page holds a port that has
-    /// stopped working and `nativeMediaUploadMiddleware` doesn't retry.
+    /// Once nothing is keeping the device awake — an unplugged phone locked and left to
+    /// idle — iOS reclaims the sockets of suspended apps, and says nothing: the listener
+    /// still reports `.ready` on the same port, so watching listener state never finds out
+    /// (see ``MediaUploadServer/isAnswering(timeout:)``). Suspension alone doesn't do it, so
+    /// how long the app was away doesn't tell us either. Asking the port is the only way,
+    /// and this is the only thing between a reclaimed socket and uploads that fail for the
+    /// rest of the session, because the page holds a port that has stopped working and
+    /// `nativeMediaUploadMiddleware` doesn't retry.
     ///
     /// If the restart fails, the endpoint is withdrawn instead, which is the existing
     /// fallback: uploads go the WebView's own way rather than to a dead port.
