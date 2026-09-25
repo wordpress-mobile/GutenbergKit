@@ -622,7 +622,9 @@ class GutenbergView : FrameLayout {
         val apiAuthority = originAuthority(configuration.siteApiRoot) ?: return false
         if (url.authority != apiAuthority) return false
 
-        if (url.getQueryParameter("rest_route") != null) return true
+        // WordPress ignores an empty route, including `0`, and serves an ordinary page.
+        val restRoute = url.getQueryParameter("rest_route")
+        if (!restRoute.isNullOrEmpty() && restRoute != "0") return true
 
         val apiRoot = Uri.parse(configuration.siteApiRoot)
         val apiRootPath = apiRoot.path.orEmpty().trimEnd('/')

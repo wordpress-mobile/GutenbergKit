@@ -87,6 +87,18 @@ class GutenbergViewNavigationTest {
     }
 
     @Test
+    fun `shouldOverrideUrlLoading blocks a site page with an empty rest_route`() {
+        // WordPress ignores an empty route and serves the page with the site's theme.
+        listOf(
+            "https://example.com/a-page/?rest_route",
+            "https://example.com/a-page/?rest_route=",
+            "https://example.com/a-page/?rest_route=0"
+        ).forEach { url ->
+            assertTrue("$url should open externally", opensExternally(configuredSiteView(), url))
+        }
+    }
+
+    @Test
     fun `shouldOverrideUrlLoading blocks site pages when the API root has no path`() {
         // A root of `/` prefixes every path on the site, so it is no evidence that a
         // URL is the API. Such a root is matched by its `rest_route` form alone.
