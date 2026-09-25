@@ -1,14 +1,11 @@
 package org.wordpress.gutenberg
 
-import okhttp3.Headers.Companion.toHeaders
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import java.net.HttpURLConnection
+import java.net.Socket
 import java.net.URL
 
 class HttpServerAuthenticationTests {
@@ -45,29 +42,24 @@ class HttpServerAuthenticationTests {
 
     @Test
     fun `request with wrong token returns 407`() {
-        val conn = URL("http://127.0.0.1:${server.port}/test").openConnection() as HttpURLConnection
-        conn.setRequestProperty("Proxy-Authorization", "Bearer wrong-token")
-        try {
-            assertEquals(407, conn.responseCode)
-            assertEquals("Bearer", conn.getHeaderField("Proxy-Authenticate"))
-        } finally {
-            conn.disconnect()
-        }
+        val response = send(server, listOf("Proxy-Authorization" to "Bearer wrong-token"))
+        assertEquals(407, response.status)
+        assertEquals("Bearer", response.headers["proxy-authenticate"])
     }
 
     @Test
     fun `request with valid token returns 200`() {
-        assertEquals(200, statusCode(server, "Proxy-Authorization" to "Bearer ${server.token}"))
+        assertEquals(200, send(server, listOf("Proxy-Authorization" to "Bearer ${server.token}")).status)
     }
 
     @Test
     fun `request with lowercase 'bearer' scheme returns 200`() {
-        assertEquals(200, statusCode(server, "Proxy-Authorization" to "bearer ${server.token}"))
+        assertEquals(200, send(server, listOf("Proxy-Authorization" to "bearer ${server.token}")).status)
     }
 
     @Test
     fun `request with uppercase 'BEARER' scheme returns 200`() {
-        assertEquals(200, statusCode(server, "Proxy-Authorization" to "BEARER ${server.token}"))
+        assertEquals(200, send(server, listOf("Proxy-Authorization" to "BEARER ${server.token}")).status)
     }
 
     // Relay-Authorization (fetch()-compatible alternative)
@@ -137,13 +129,14 @@ class HttpServerAuthenticationTests {
 
     @Test
     fun `Proxy-Authorization takes precedence over Relay-Authorization`() {
-        java.net.Socket("127.0.0.1", server.port).use { sock ->
-            val raw = "GET /test HTTP/1.1\r\nHost: 127.0.0.1\r\nProxy-Authorization: Bearer ${server.token}\r\nRelay-Authorization: Bearer wrong\r\n\r\n"
-            sock.getOutputStream().write(raw.toByteArray())
-            sock.getOutputStream().flush()
-            val statusLine = sock.getInputStream().bufferedReader().readLine()
-            assertEquals("HTTP/1.1 200 OK", statusLine)
-        }
+        val response = send(
+            server,
+            listOf(
+                "Proxy-Authorization" to "Bearer ${server.token}",
+                "Relay-Authorization" to "Bearer wrong"
+            )
+        )
+        assertEquals(200, response.status)
     }
 
     // Authorization Passthrough
@@ -164,12 +157,14 @@ class HttpServerAuthenticationTests {
         )
         authServer.start()
         try {
-            val status = statusCode(
+            val response = send(
                 authServer,
-                "Proxy-Authorization" to "Bearer ${authServer.token}",
-                "Authorization" to "Basic dXNlcjpwYXNz"
+                listOf(
+                    "Proxy-Authorization" to "Bearer ${authServer.token}",
+                    "Authorization" to "Basic dXNlcjpwYXNz"
+                )
             )
-            assertEquals(200, status)
+            assertEquals(200, response.status)
             assertEquals("Basic dXNlcjpwYXNz", receivedAuth)
         } finally {
             authServer.stop()
@@ -180,13 +175,7 @@ class HttpServerAuthenticationTests {
 
     @Test
     fun `OPTIONS without token returns 200 (CORS preflight exempt from auth)`() {
-        java.net.Socket("127.0.0.1", server.port).use { sock ->
-            val raw = "OPTIONS /test HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
-            sock.getOutputStream().write(raw.toByteArray())
-            sock.getOutputStream().flush()
-            val statusLine = sock.getInputStream().bufferedReader().readLine()
-            assertEquals("HTTP/1.1 200 OK", statusLine)
-        }
+        assertEquals(200, send(server, emptyList(), method = "OPTIONS").status)
     }
 
     @Test
@@ -203,29 +192,28 @@ class HttpServerAuthenticationTests {
 
     @Test
     fun `POST without Content-Length returns 411`() {
-        // HttpURLConnection always adds Content-Length, so use a raw socket.
-        java.net.Socket("127.0.0.1", server.port).use { sock ->
-            val raw = "POST /test HTTP/1.1\r\nHost: 127.0.0.1\r\nProxy-Authorization: Bearer ${server.token}\r\n\r\n"
-            sock.getOutputStream().write(raw.toByteArray())
-            sock.getOutputStream().flush()
-            val statusLine = sock.getInputStream().bufferedReader().readLine()
-            assertEquals("HTTP/1.1 411 Length Required", statusLine)
-        }
+        val response = send(
+            server,
+            listOf("Proxy-Authorization" to "Bearer ${server.token}"),
+            method = "POST"
+        )
+        assertEquals(411, response.status)
     }
 
     @Test
     fun `GET without Content-Length returns 200`() {
-        assertEquals(200, statusCode(server, "Proxy-Authorization" to "Bearer ${server.token}"))
+        assertEquals(200, send(server, listOf("Proxy-Authorization" to "Bearer ${server.token}")).status)
     }
 
     @Test
     fun `POST with Content-Length returns 200`() {
-        val status = statusCode(
+        val response = send(
             server,
-            "Proxy-Authorization" to "Bearer ${server.token}",
-            body = "hello"
+            listOf("Proxy-Authorization" to "Bearer ${server.token}"),
+            method = "POST",
+            body = "hello".toByteArray()
         )
-        assertEquals(200, status)
+        assertEquals(200, response.status)
     }
 
     // Oversized Payloads (auth precedes drain)
@@ -234,17 +222,19 @@ class HttpServerAuthenticationTests {
     fun `oversized request without token returns 407, not 413`() {
         val smallServer = oversizedTestServer()
         try {
-            val conn = oversizedPost(smallServer)
-            try {
-                // Auth is checked on headers alone, before the oversized body is
-                // drained or the handler runs — so the request is rejected with
-                // 407, not answered with the library's 413. An unauthenticated
-                // client must not be able to make the server read (and discard)
-                // an arbitrarily large body.
-                assertEquals(407, conn.responseCode)
-            } finally {
-                conn.disconnect()
-            }
+            // Auth is checked on headers alone, before the oversized body is
+            // drained or the handler runs — so the request is rejected with
+            // 407, not answered with the library's 413. An unauthenticated
+            // client must not be able to make the server read (and discard)
+            // an arbitrarily large body. The body is declared but never sent,
+            // so a server that read it before checking auth would never answer.
+            val response = send(
+                smallServer,
+                emptyList(),
+                method = "POST",
+                contentLength = OVERSIZED_BODY_SIZE
+            )
+            assertEquals(407, response.status)
         } finally {
             smallServer.stop()
         }
@@ -254,39 +244,67 @@ class HttpServerAuthenticationTests {
     fun `oversized request with valid token is answered 413 by the library, bypassing the handler`() {
         val smallServer = oversizedTestServer()
         try {
-            val conn = oversizedPost(smallServer) {
-                it.setRequestProperty("Proxy-Authorization", "Bearer ${smallServer.token}")
-            }
-            try {
-                // The library answers a recoverable parse error itself; the handler
-                // (which would return 200 "OK") is never invoked for a rejected
-                // request.
-                assertEquals(413, conn.responseCode)
-            } finally {
-                conn.disconnect()
-            }
+            // The library answers a recoverable parse error itself; the handler
+            // (which would return 200 "OK") is never invoked for a rejected
+            // request.
+            val response = send(
+                smallServer,
+                listOf("Proxy-Authorization" to "Bearer ${smallServer.token}"),
+                method = "POST",
+                body = ByteArray(OVERSIZED_BODY_SIZE)
+            )
+            assertEquals(413, response.status)
         } finally {
             smallServer.stop()
         }
     }
 
     /**
-     * Sends a request to [target] via OkHttp and returns the status code, POSTing
-     * [body] when given. `HttpURLConnection` can't send these requests: since
-     * JDK-8384708 it strips `Proxy-Authorization` from non-proxied connections.
+     * Sends a request to [target] over a raw socket. `HttpURLConnection` can't
+     * send `Proxy-Authorization`: since JDK-8384708 it strips that header from
+     * non-proxied connections.
+     *
+     * Sends `Content-Length` only when [contentLength] is set, which defaults to
+     * [body]'s size. Headers are flushed before the body so the server can act on
+     * them before the body arrives, as it would with a real client.
      */
-    private fun statusCode(
+    private fun send(
         target: HttpServer,
-        vararg headers: Pair<String, String>,
-        body: String? = null
-    ): Int {
-        val request = Request.Builder()
-            .url("http://127.0.0.1:${target.port}/test")
-            .headers(headers.toMap().toHeaders())
-            .apply { if (body != null) post(body.toRequestBody()) }
-            .build()
-        return httpClient.newCall(request).execute().use { it.code }
+        headers: List<Pair<String, String>>,
+        method: String = "GET",
+        body: ByteArray? = null,
+        contentLength: Int? = body?.size
+    ): RawResponse {
+        Socket("127.0.0.1", target.port).use { sock ->
+            sock.soTimeout = SOCKET_TIMEOUT_MS
+            val head = buildString {
+                append("$method /test HTTP/1.1\r\nHost: 127.0.0.1\r\n")
+                headers.forEach { (name, value) -> append("$name: $value\r\n") }
+                if (contentLength != null) append("Content-Length: $contentLength\r\n")
+                append("\r\n")
+            }
+            val output = sock.getOutputStream()
+            output.write(head.toByteArray())
+            output.flush()
+            body?.let {
+                output.write(it)
+                output.flush()
+            }
+
+            val reader = sock.getInputStream().bufferedReader()
+            val status = reader.readLine().split(" ")[1].toInt()
+            val responseHeaders = generateSequence { reader.readLine() }
+                .takeWhile { it.isNotEmpty() }
+                .associate { line ->
+                    val (name, value) = line.split(":", limit = 2)
+                    name.trim().lowercase() to value.trim()
+                }
+            return RawResponse(status, responseHeaders)
+        }
     }
+
+    /** A response's status code and headers, keyed by lowercase name. */
+    private class RawResponse(val status: Int, val headers: Map<String, String>)
 
     /** A server whose 1 KB body limit lets a 2 KB POST exercise the drain path. Its
      *  handler only ever answers valid requests — a rejected (oversized) request is
@@ -301,20 +319,6 @@ class HttpServerAuthenticationTests {
         )
         smallServer.start()
         return smallServer
-    }
-
-    /** Sends a 2 KB POST to [smallServer], applying [configure] before writing the body. */
-    private fun oversizedPost(
-        smallServer: HttpServer,
-        configure: (HttpURLConnection) -> Unit = {}
-    ): HttpURLConnection {
-        val conn = URL("http://127.0.0.1:${smallServer.port}/test").openConnection() as HttpURLConnection
-        conn.requestMethod = "POST"
-        configure(conn)
-        conn.doOutput = true
-        conn.setFixedLengthStreamingMode(OVERSIZED_BODY_SIZE)
-        conn.outputStream.use { it.write(ByteArray(OVERSIZED_BODY_SIZE)) }
-        return conn
     }
 
     // Auth Disabled
@@ -343,9 +347,10 @@ class HttpServerAuthenticationTests {
     }
 
     companion object {
-        private val httpClient = OkHttpClient()
-
         /** Twice the oversized test server's 1 KB `maxBodySize`. */
         private const val OVERSIZED_BODY_SIZE = 2048
+
+        /** Fails a test that gets no response rather than hanging it. */
+        private const val SOCKET_TIMEOUT_MS = 5000
     }
 }
