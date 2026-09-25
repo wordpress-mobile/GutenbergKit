@@ -109,6 +109,22 @@ class GutenbergViewUploadServerTest {
     }
 
     @Test
+    fun `a non-editor page does not start the upload server`() {
+        val view = makeView()
+        try {
+            view.mediaUploadDelegate = mock(MediaUploadDelegate::class.java)
+            startLoading(view, "https://example.com/assets/support.html")
+            idle()
+            assertNull(
+                "only the editor document should bring up the upload server",
+                uploadServerOf(view)
+            )
+        } finally {
+            detach(view)
+        }
+    }
+
+    @Test
     fun `setting the delegate after the page has started loading throws`() {
         val view = makeView()
         try {
