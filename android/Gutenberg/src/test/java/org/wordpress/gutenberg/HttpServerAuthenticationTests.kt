@@ -292,7 +292,8 @@ class HttpServerAuthenticationTests {
             }
 
             val reader = sock.getInputStream().bufferedReader()
-            val status = reader.readLine().split(" ")[1].toInt()
+            val statusLine = checkNotNull(reader.readLine()) { "Server closed the connection without a response" }
+            val status = statusLine.split(" ")[1].toInt()
             val responseHeaders = generateSequence { reader.readLine() }
                 .takeWhile { it.isNotEmpty() }
                 .associate { line ->
