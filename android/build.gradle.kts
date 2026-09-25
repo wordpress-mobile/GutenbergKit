@@ -6,7 +6,7 @@ if (localPropertiesFile.exists()) {
 }
 
 ext {
-    set("gutenbergEditorUrl", localProperties.getProperty("GUTENBERG_EDITOR_URL") ?: "")
+    set("gutenbergEditorUrl", localProperties.getProperty("GUTENBERG_EDITOR_URL")?.trim() ?: "")
 }
 
 plugins {
