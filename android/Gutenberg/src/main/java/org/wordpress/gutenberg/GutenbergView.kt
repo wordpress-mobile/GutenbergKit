@@ -518,11 +518,8 @@ class GutenbergView : FrameLayout {
                 }
 
                 // Allow local development server if configured
-                if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
-                    val editorUrl = Uri.parse(BuildConfig.GUTENBERG_EDITOR_URL)
-                    if (url.host == editorUrl.host) {
-                        return false
-                    }
+                if (isDevServerUrl(url, BuildConfig.GUTENBERG_EDITOR_URL)) {
+                    return false
                 }
 
                 // For all other URLs, open in external browser
@@ -1398,6 +1395,19 @@ class GutenbergView : FrameLayout {
             val host = uri.host ?: return null
             val defaultPort = if (uri.scheme == "http") 80 else 443
             return if (uri.port != -1 && uri.port != defaultPort) "$host:${uri.port}" else host
+        }
+
+        /**
+         * Whether [url] is on the local development server at [editorUrl]. Compares
+         * host and port so another port on the same host, such as a local WordPress
+         * site beside the dev server, isn't treated as the dev server.
+         *
+         * Returns false when [editorUrl] has no host (unset or missing a scheme), so
+         * host-less URLs like `mailto:` never match it.
+         */
+        internal fun isDevServerUrl(url: Uri, editorUrl: String): Boolean {
+            val devServerAuthority = originAuthority(editorUrl) ?: return false
+            return url.authority == devServerAuthority
         }
 
         private const val ASSET_LOADING_TIMEOUT_MS = 5000L
