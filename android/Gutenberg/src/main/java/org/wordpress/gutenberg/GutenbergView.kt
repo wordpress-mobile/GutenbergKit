@@ -111,6 +111,7 @@ class GutenbergView : FrameLayout {
     private var hasAutofocused = false
     private lateinit var assetLoader: WebViewAssetLoader
     private lateinit var assetAuthority: String
+    private lateinit var assetScheme: String
     private val configuration: EditorConfiguration
     private lateinit var dependencies: EditorDependencies
 
@@ -501,7 +502,7 @@ class GutenbergView : FrameLayout {
                 // Allow asset URLs (restrict to the asset path prefix so that
                 // arbitrary site pages don't load inside the WebView when the
                 // asset authority matches the site authority)
-                if (url.authority == assetAuthority && url.path?.startsWith("/assets/") == true) {
+                if (isAssetUrl(url)) {
                     return false
                 }
 
@@ -610,6 +611,15 @@ class GutenbergView : FrameLayout {
     }
 
     /**
+     * Whether [url] is served by [assetLoader]. Only the scheme it serves counts, as
+     * the other scheme on the same authority reaches the site over the network.
+     */
+    private fun isAssetUrl(url: Uri): Boolean =
+        url.scheme == assetScheme &&
+            url.authority == assetAuthority &&
+            url.path?.startsWith("/assets/") == true
+
+    /**
      * Whether [url] addresses this site's REST API, by either root a host can
      * configure: a path root such as `/wp-json/`, or the `rest_route` query form
      * used when pretty permalinks are unavailable.
@@ -678,8 +688,8 @@ class GutenbergView : FrameLayout {
 
         initializeWebView()
 
-        val scheme = if (isLocalHttpSite) "http" else "https"
-        val assetUrl = "$scheme://$assetAuthority$ASSET_PATH_INDEX"
+        assetScheme = if (isLocalHttpSite) "http" else "https"
+        val assetUrl = "$assetScheme://$assetAuthority$ASSET_PATH_INDEX"
         val editorUrl = BuildConfig.GUTENBERG_EDITOR_URL.ifEmpty {
             assetUrl
         }
@@ -747,7 +757,7 @@ class GutenbergView : FrameLayout {
             return isDevServerUrl(uri, BuildConfig.GUTENBERG_EDITOR_URL)
         }
 
-        return uri.authority == assetAuthority && uri.path?.startsWith("/assets/") == true
+        return isAssetUrl(uri)
     }
 
     private fun setGlobalJavaScriptVariables() {

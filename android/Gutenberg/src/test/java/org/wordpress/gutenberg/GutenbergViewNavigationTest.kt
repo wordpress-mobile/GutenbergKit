@@ -154,6 +154,15 @@ class GutenbergViewNavigationTest {
     }
 
     @Test
+    fun `shouldOverrideUrlLoading blocks asset paths over a scheme the asset loader does not serve`() {
+        // An https site's assets are served over https alone, so the same path over
+        // http goes to the site over the network.
+        val result = opensExternally(configuredSiteView(), "http://example.com/assets/index.html")
+
+        assertTrue("an asset path over the other scheme should open externally", result)
+    }
+
+    @Test
     fun `onPageStarted injects the configuration into the editor document`() {
         val siteView = configuredSiteView()
         val webView = siteView.editorWebView
@@ -179,6 +188,19 @@ class GutenbergViewNavigationTest {
         // Nothing evaluated at all, so an injection followed by another script still fails.
         assertNull(
             "a non-editor page must not receive the site credential",
+            shadowOf(webView).lastEvaluatedJavascript
+        )
+    }
+
+    @Test
+    fun `onPageStarted withholds the configuration from an asset path the network served`() {
+        val siteView = configuredSiteView()
+        val webView = siteView.editorWebView
+
+        webView.webViewClient.onPageStarted(webView, "http://example.com/assets/index.html", null)
+
+        assertNull(
+            "a network-served page must not receive the site credential",
             shadowOf(webView).lastEvaluatedJavascript
         )
     }
