@@ -99,9 +99,9 @@ class GutenbergViewNavigationTest {
 
     @Test
     fun `onPageStarted withholds the configuration from a non-editor page`() {
-        // `shouldOverrideUrlLoading` admits some site URLs into this frame, and on
-        // Android the editor shares an origin with the site, so a page served by the
-        // site's theme and plugins can load here. It must not receive the credential.
+        // Some loads never pass `shouldOverrideUrlLoading` (POST forms, history, a
+        // host's `loadUrl`), so a site page can still reach this frame. It must not
+        // receive the credential.
         val siteView = configuredSiteView()
         val webView = siteView.editorWebView
 
