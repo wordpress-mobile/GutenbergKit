@@ -640,6 +640,7 @@ class GutenbergView : FrameLayout {
         // avoid accidentally downgrading asset traffic for production sites.
         val siteUri = Uri.parse(configuration.siteURL)
         val isLocalHttpSite = siteUri.scheme == "http" && siteUri.host in LOCAL_HOSTS
+        assetScheme = if (isLocalHttpSite) "http" else "https"
         assetLoader = WebViewAssetLoader.Builder()
             .setDomain(assetAuthority)
             .setHttpAllowed(isLocalHttpSite)
@@ -651,7 +652,6 @@ class GutenbergView : FrameLayout {
 
         initializeWebView()
 
-        assetScheme = if (isLocalHttpSite) "http" else "https"
         val assetUrl = "$assetScheme://$assetAuthority$ASSET_PATH_INDEX"
         val editorUrl = BuildConfig.GUTENBERG_EDITOR_URL.ifEmpty {
             assetUrl
