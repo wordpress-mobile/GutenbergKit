@@ -81,6 +81,30 @@ struct MediaUploadServerTests {
     )
   }
 
+  /// No connection may wait for the main thread, and that includes the probe.
+  ///
+  /// The foreground check probes the port as the app comes back, which is when the main
+  /// thread is busiest: launching a WebView's content process can hold it for seconds. A
+  /// connection that waited for it would time the probe out, and the check would restart a
+  /// healthy server, cancelling any upload on it.
+  @Test("a connection is served while the main thread is busy")
+  func servesWhileTheMainThreadIsBusy() async throws {
+    let server = try await MediaUploadServer.start()
+    defer { server.stop() }
+
+    let release = DispatchSemaphore(value: 0)
+    defer { release.signal() }
+    // Returns once the main thread is blocked, and leaves it blocked until `release`.
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      DispatchQueue.main.async {
+        continuation.resume()
+        _ = release.wait(timeout: .now() + 5)
+      }
+    }
+
+    #expect(await server.isAnswering(timeout: .seconds(1)), "the connection waited for the busy main thread")
+  }
+
   @Test("starts and provides a port and token")
   func startAndStop() async throws {
     let server = try await MediaUploadServer.start()

@@ -46,7 +46,8 @@ final class UploadServerDiagnostic: ObservableObject {
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
     private var backgroundedAt: Date?
-    private var uploadTask: UIBackgroundTaskIdentifier = .invalid
+    /// Signalled to release the simulated upload's expiring activity.
+    private var uploadActivityRelease: DispatchSemaphore?
 
     // MARK: - Lifecycle
 
@@ -84,7 +85,7 @@ final class UploadServerDiagnostic: ObservableObject {
 
     // MARK: - Active-upload simulation (background-task assertion)
 
-    /// Holds a `UIApplication` background-task assertion — the same primitive the editor's
+    /// Holds a `ProcessInfo` expiring activity — the same primitive the editor's
     /// upload path holds while relaying a media upload. With it held, locking the phone keeps
     /// the app running for the system's grace period (~30s) instead of suspending it, so a
     /// short upload finishes and the loopback socket survives a brief lock.
@@ -93,23 +94,30 @@ final class UploadServerDiagnostic: ObservableObject {
     }
 
     private func beginUploadSimulation() {
-        uploadTask = UIApplication.shared.beginBackgroundTask(withName: "diagnostic-upload") { [weak self] in
-            Task { @MainActor in self?.endUploadSimulation() }
-        }
-        guard uploadTask != .invalid else {
-            log("Could not start a background-task assertion.")
-            return
-        }
+        // The activity lasts as long as the block runs, so the block waits on `release`.
+        // If the system expires the activity, or can't grant it, it calls the block with
+        // `expired` set, and that call lets any waiting one return.
+        let release = DispatchSemaphore(value: 0)
+        uploadActivityRelease = release
         uploadSimulationActive = true
+        ProcessInfo.processInfo.performExpiringActivity(withReason: "diagnostic-upload") { [weak self] expired in
+            guard expired else {
+                release.wait()
+                return
+            }
+            release.signal()
+            Task { @MainActor in
+                self?.log("The system expired the background-task assertion.")
+                self?.endUploadSimulation()
+            }
+        }
         log("Simulated upload started — holding a background-task assertion. Lock the phone now; the app should keep running (~30s) and the socket should stay ALIVE.")
     }
 
     private func endUploadSimulation() {
         guard uploadSimulationActive else { return }
-        if uploadTask != .invalid {
-            UIApplication.shared.endBackgroundTask(uploadTask)
-            uploadTask = .invalid
-        }
+        uploadActivityRelease?.signal()
+        uploadActivityRelease = nil
         uploadSimulationActive = false
         backgroundTimeRemaining = ""
         log("Simulated upload ended — assertion released.")
