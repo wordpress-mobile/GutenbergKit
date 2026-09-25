@@ -121,6 +121,26 @@ class GutenbergViewNavigationTest {
     }
 
     @Test
+    fun `shouldOverrideUrlLoading matches an API root without a trailing slash by whole path segments`() {
+        val siteView = GutenbergView(
+            EditorConfiguration.builder("https://example.com", "https://example.com/wp-json")
+                .build(),
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+
+        assertFalse(
+            "the API should load in the WebView",
+            opensExternally(siteView, "https://example.com/wp-json/wp/v2/posts")
+        )
+        assertTrue(
+            "a page whose slug merely starts with the root should open externally",
+            opensExternally(siteView, "https://example.com/wp-json-tutorial/")
+        )
+    }
+
+    @Test
     fun `onPageStarted injects the configuration into the editor document`() {
         val siteView = configuredSiteView()
         val webView = siteView.editorWebView

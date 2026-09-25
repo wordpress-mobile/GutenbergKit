@@ -625,13 +625,14 @@ class GutenbergView : FrameLayout {
         if (url.getQueryParameter("rest_route") != null) return true
 
         val apiRoot = Uri.parse(configuration.siteApiRoot)
-        val apiRootPath = apiRoot.path.orEmpty()
+        val apiRootPath = apiRoot.path.orEmpty().trimEnd('/')
+        val path = url.path.orEmpty()
         // A `rest_route` root reaches the API through its query alone; its path, such
         // as `/index.php`, also serves the site's ordinary pages. A root of `/` would
         // match every path on the site, so it is no evidence either.
         return apiRoot.getQueryParameter("rest_route") == null &&
-            apiRootPath.length > 1 &&
-            url.path?.startsWith(apiRootPath) == true
+            apiRootPath.isNotEmpty() &&
+            (path == apiRootPath || path.startsWith("$apiRootPath/"))
     }
 
     /**
