@@ -226,8 +226,9 @@ class HttpServerAuthenticationTests {
             // drained or the handler runs — so the request is rejected with
             // 407, not answered with the library's 413. An unauthenticated
             // client must not be able to make the server read (and discard)
-            // an arbitrarily large body. The body is declared but never sent,
-            // so a server that read it before checking auth would never answer.
+            // an arbitrarily large body. The body is declared but never sent, so
+            // a server that read it before checking auth would wait for it and
+            // answer 408 when its idle timeout expires.
             val response = send(
                 smallServer,
                 emptyList(),
@@ -351,7 +352,11 @@ class HttpServerAuthenticationTests {
         /** Twice the oversized test server's 1 KB `maxBodySize`. */
         private const val OVERSIZED_BODY_SIZE = 2048
 
-        /** Fails a test that gets no response rather than hanging it. */
-        private const val SOCKET_TIMEOUT_MS = 5000
+        /**
+         * Fails a test that gets no response rather than hanging it. Longer than
+         * the server's idle timeout, so a server that times out first is reported
+         * by its 408 rather than by a client-side timeout.
+         */
+        private const val SOCKET_TIMEOUT_MS = HttpServer.DEFAULT_IDLE_TIMEOUT_MS * 2
     }
 }
