@@ -13,6 +13,11 @@ import MagicString from 'magic-string';
  */
 import { defaultRequestToExternal } from '@wordpress/dependency-extraction-webpack-plugin/lib/util';
 
+/**
+ * Internal dependencies
+ */
+import { siteProxy } from './bin/vite-site-proxy';
+
 // Stub for Node.js modules imported by PostCSS via @wordpress/block-editor.
 // PostCSS marks these as `false` in its `browser` field, but the direct file
 // path imports (e.g., `postcss/lib/processor`) bypass that field.
@@ -38,6 +43,7 @@ export default defineConfig( {
 		wordPressExternals(),
 		reactDevTools(),
 		emitSupportedLocalesManifest(),
+		siteProxy(),
 	],
 	root: 'src',
 	css: {

@@ -10,6 +10,7 @@ import { __ } from '@wordpress/i18n';
  */
 import { getGBKit, POST_FALLBACKS } from './bridge';
 import { info, error as logError } from './logger';
+import { toSiteProxyUrl } from './site-proxy';
 
 /**
  * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
@@ -26,7 +27,9 @@ const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
 export function configureApiFetch() {
 	const { siteApiRoot = '', preloadData = null } = getGBKit();
 
-	apiFetch.use( apiFetch.createRootURLMiddleware( siteApiRoot ) );
+	apiFetch.use(
+		apiFetch.createRootURLMiddleware( toSiteProxyUrl( siteApiRoot ) )
+	);
 	apiFetch.use( corsMiddleware );
 	apiFetch.use( apiPathModifierMiddleware );
 	apiFetch.use( tokenAuthMiddleware );

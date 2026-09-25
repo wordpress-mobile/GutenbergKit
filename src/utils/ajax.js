@@ -3,6 +3,7 @@
  */
 import { getGBKit } from './bridge';
 import { warn, debug } from './logger';
+import { toSiteProxyUrl } from './site-proxy';
 
 /**
  * Configure AJAX for use without authentication cookies.
@@ -69,6 +70,13 @@ function configureAjaxAuth( siteURL, authHeader ) {
 	window.jQuery.ajaxPrefilter( function ( options ) {
 		if ( ! isSameOrigin( options.url, siteOrigin ) ) {
 			return;
+		}
+
+		const proxyUrl = toSiteProxyUrl( options.url );
+		if ( proxyUrl !== options.url ) {
+			options.url = proxyUrl;
+			// jQuery resolves `crossDomain` before running prefilters.
+			options.crossDomain = false;
 		}
 
 		const originalBeforeSend = options.beforeSend;

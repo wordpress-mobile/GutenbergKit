@@ -171,6 +171,37 @@ describe( 'configureAjax', () => {
 			);
 		} );
 
+		it( 'should route same-site requests through the dev server proxy', () => {
+			vi.stubEnv( 'GBK_SITE_PROXY_PATH', '/__site-proxy' );
+			bridge.getGBKit.mockReturnValue( {
+				siteURL: 'https://example.com',
+				authHeader: 'Bearer test-token',
+			} );
+
+			configureAjax();
+
+			const prefilter = mockJQueryAjaxPrefilter.mock.calls[ 0 ][ 0 ];
+			const options = {
+				url: 'https://example.com/wp-admin/admin-ajax.php',
+				crossDomain: true,
+			};
+			prefilter( options );
+			vi.unstubAllEnvs();
+
+			expect( options.url ).toBe(
+				`${ window.location.origin }/__site-proxy/https/example.com/wp-admin/admin-ajax.php`
+			);
+			expect( options.crossDomain ).toBe( false );
+
+			const mockXhr = { setRequestHeader: vi.fn() };
+			options.beforeSend( mockXhr );
+
+			expect( mockXhr.setRequestHeader ).toHaveBeenCalledWith(
+				'Authorization',
+				'Bearer test-token'
+			);
+		} );
+
 		it( 'should not inject auth header for cross-origin requests', () => {
 			bridge.getGBKit.mockReturnValue( {
 				siteURL: 'https://example.com',
