@@ -151,10 +151,12 @@ final class MediaUploadServer: Sendable {
 
     /// Whether the port still answers, which is not the same as the listener looking healthy.
     ///
-    /// iOS takes the listening socket away when it suspends the app — three seconds in the
-    /// background was enough on an iPhone 15 Pro running iOS 27.0 — and reports nothing:
-    /// `NWListener` still says `.ready` on the same port, and no state is delivered. Asking
-    /// the port is the only way to find out.
+    /// Once the device becomes eligible for idle sleep, iOS reclaims the sockets of suspended
+    /// apps and reports nothing: `NWListener` still says `.ready` on the same port, and no
+    /// state is delivered. Suspension alone isn't enough — on an iPhone 15 Pro running
+    /// iOS 27.0 the socket survived 27 minutes in the background while plugged in, and was
+    /// gone after 6 minutes locked, unplugged, and left to idle. Asking the port is the only
+    /// way to find out.
     ///
     /// The request deliberately carries no token. The server answers `407` and logs nothing,
     /// so a check that runs on every foreground stays silent, and any answer at all means

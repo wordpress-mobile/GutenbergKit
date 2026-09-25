@@ -34,10 +34,10 @@ struct MediaUploadServerTests {
 
   /// The check that makes a dead listener detectable.
   ///
-  /// iOS takes the listening socket when it suspends the app and reports nothing — the
-  /// listener still says `.ready` on the same port — so asking the port is the only way to
-  /// find out. `stop()` stands in for the system taking it: both leave the port refusing
-  /// connections while the server object still reports one.
+  /// Once the device can idle-sleep, iOS reclaims a suspended app's listening socket and
+  /// reports nothing — the listener still says `.ready` on the same port — so asking the
+  /// port is the only way to find out. `stop()` stands in for the system reclaiming it: both
+  /// leave the port refusing connections while the server object still reports one.
   @Test("isAnswering tells a live server from one whose port is gone")
   func isAnsweringTracksTheSocket() async throws {
     let server = try await MediaUploadServer.start()
