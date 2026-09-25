@@ -55,6 +55,32 @@ struct MediaUploadServerTests {
     #expect(!stillAnswering, "a stopped server kept answering, so a dead port would look healthy")
   }
 
+  /// A dead port has to be reported promptly, not when the probe gives up.
+  ///
+  /// The foreground check runs while the page still holds the old port, so for as long as
+  /// the probe takes to decide, uploads go to a port that refuses them. A refused connection
+  /// doesn't fail an `NWConnection` — it waits in `.waiting(ECONNREFUSED)` to retry when the
+  /// network path changes, which on loopback it never does — so a probe that only treats
+  /// `.failed` as dead gets its answer from the timeout.
+  @Test("isAnswering reports a refused port without waiting out its timeout")
+  func isAnsweringFailsFastOnARefusedPort() async throws {
+    let server = try await MediaUploadServer.start()
+    server.stop()
+    try await waitUntilRefused(port: server.port)
+
+    let timeout = Duration.seconds(5)
+    var answered = true
+    let elapsed = await ContinuousClock().measure {
+      answered = await server.isAnswering(timeout: timeout)
+    }
+
+    #expect(!answered, "a refused port was reported as answering")
+    #expect(
+      elapsed < .seconds(1),
+      "took \(elapsed) to report a refused port — it waited out the \(timeout) timeout"
+    )
+  }
+
   @Test("starts and provides a port and token")
   func startAndStop() async throws {
     let server = try await MediaUploadServer.start()
@@ -758,6 +784,35 @@ struct MediaUploadServerTests {
     #expect(mockUploader.uploadCalled)
     #expect(mockUploader.lastUploadMimeType == "video/mp4")
     #expect(!mockUploader.passthroughUploadCalled)
+  }
+
+  /// Waits until the port refuses connections, checked with a plain BSD `connect()` so the
+  /// probe under test isn't also what decides the port is dead.
+  private func waitUntilRefused(port: UInt16) async throws {
+    for _ in 0..<50 {
+      if connectionIsRefused(port: port) { return }
+      try await Task.sleep(for: .milliseconds(20))
+    }
+    Issue.record("port \(port) never started refusing connections after stop()")
+  }
+
+  /// A blocking loopback `connect()` reports a refusal immediately, as `ECONNREFUSED`.
+  private func connectionIsRefused(port: UInt16) -> Bool {
+    let descriptor = socket(AF_INET, SOCK_STREAM, 0)
+    guard descriptor >= 0 else { return false }
+    defer { close(descriptor) }
+
+    var address = sockaddr_in()
+    address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+    address.sin_family = sa_family_t(AF_INET)
+    address.sin_port = port.bigEndian
+    address.sin_addr.s_addr = inet_addr("127.0.0.1")
+    let result = withUnsafePointer(to: &address) {
+      $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+        connect(descriptor, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+      }
+    }
+    return result == -1 && errno == ECONNREFUSED
   }
 
   private func buildMultipartBody(boundary: String, filename: String, mimeType: String, data: Data) -> Data {
