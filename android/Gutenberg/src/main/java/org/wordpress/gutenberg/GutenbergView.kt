@@ -714,10 +714,10 @@ class GutenbergView : FrameLayout {
     }
 
     /**
-     * Invoked when a page begins loading in the main frame. Starts the upload server
-     * once — capturing the [mediaUploadDelegate] provided before load — then
-     * advertises the editor globals (including the server's port and token) to the
-     * page.
+     * Invoked when any page begins loading in the main frame. Resets readiness for
+     * every page; for the editor document alone, starts the upload server once —
+     * capturing the [mediaUploadDelegate] provided before load — then advertises the
+     * editor globals (including the server's port and token).
      *
      * Starting the server here, on the UI thread, rather than from the
      * [mediaUploadDelegate] setter keeps its whole lifecycle — start here, stop in
