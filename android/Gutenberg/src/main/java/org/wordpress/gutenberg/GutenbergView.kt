@@ -707,12 +707,8 @@ class GutenbergView : FrameLayout {
             nativeUploadToken = uploadServer?.token
         )
         val gbKitJson = gbKit.toJsonString()
-        val gbKitConfig = """
-            window.GBKit = $gbKitJson;
-            localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
-        """.trimIndent()
 
-        webView.evaluateJavascript(gbKitConfig, null)
+        webView.evaluateJavascript("window.GBKit = $gbKitJson;", null)
     }
 
     private fun startUploadServer() {
@@ -765,13 +761,15 @@ class GutenbergView : FrameLayout {
         }
     }
 
+    /**
+     * Removes the injected configuration from the page.
+     *
+     * Call this only when tearing the view down. The editor reads its
+     * configuration from `window.GBKit` alone, so clearing it under a live
+     * editor leaves that editor without a site API root or credential.
+     */
     fun clearConfig() {
-        val jsCode = """
-            delete window.GBKit;
-            localStorage.removeItem('GBKit');
-        """.trimIndent()
-
-        webView.evaluateJavascript(jsCode, null)
+        webView.evaluateJavascript("delete window.GBKit;", null)
     }
 
     fun setContent(newContent: String) {
