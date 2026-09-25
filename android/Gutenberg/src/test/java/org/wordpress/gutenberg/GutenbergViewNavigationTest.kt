@@ -104,6 +104,23 @@ class GutenbergViewNavigationTest {
     }
 
     @Test
+    fun `shouldOverrideUrlLoading blocks site pages under a rest_route API root's path`() {
+        // Without pretty permalinks the root is `/index.php?rest_route=/`, and
+        // `/index.php` also serves the site's ordinary pages.
+        val siteView = GutenbergView(
+            EditorConfiguration.builder("https://example.com", "https://example.com/index.php?rest_route=/")
+                .build(),
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+
+        val result = opensExternally(siteView, "https://example.com/index.php?p=1")
+
+        assertTrue("a page under a rest_route root's path should open externally", result)
+    }
+
+    @Test
     fun `onPageStarted injects the configuration into the editor document`() {
         val siteView = configuredSiteView()
         val webView = siteView.editorWebView
