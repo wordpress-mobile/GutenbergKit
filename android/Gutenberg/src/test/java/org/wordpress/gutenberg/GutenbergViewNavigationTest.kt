@@ -4,6 +4,7 @@ import android.net.Uri
 import android.webkit.WebResourceRequest
 import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -175,9 +176,10 @@ class GutenbergViewNavigationTest {
 
         webView.webViewClient.onPageStarted(webView, "https://example.com/wp-json/wp/v2/posts", null)
 
-        assertFalse(
+        // Nothing evaluated at all, so an injection followed by another script still fails.
+        assertNull(
             "a non-editor page must not receive the site credential",
-            shadowOf(webView).lastEvaluatedJavascript.orEmpty().contains("secret-credential")
+            shadowOf(webView).lastEvaluatedJavascript
         )
     }
 }
