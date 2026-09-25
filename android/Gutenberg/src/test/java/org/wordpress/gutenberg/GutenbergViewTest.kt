@@ -327,6 +327,13 @@ class GutenbergViewTest {
         assertFalse(GutenbergView.isDevServerUrl(Uri.parse("http://localhost:5173/"), ""))
     }
 
+    @Test
+    fun `isDevServerUrl rejects host-less URLs when the dev server URL has no host`() {
+        // Without a scheme, the dev server URL has no authority, and neither do these.
+        assertFalse(GutenbergView.isDevServerUrl(Uri.parse("mailto:a@example.com"), "10.0.2.2:5173"))
+        assertFalse(GutenbergView.isDevServerUrl(Uri.parse("tel:5551234"), "10.0.2.2:5173"))
+    }
+
     // ===== REST API navigation =====
 
     @Test

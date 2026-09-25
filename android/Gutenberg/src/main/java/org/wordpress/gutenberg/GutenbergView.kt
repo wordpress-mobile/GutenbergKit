@@ -1399,11 +1399,16 @@ class GutenbergView : FrameLayout {
 
         /**
          * Whether [url] is on the local development server at [editorUrl]. Compares
-         * origin authorities so another port on the same host, such as a local
-         * WordPress site beside the dev server, isn't treated as the dev server.
+         * host and port so another port on the same host, such as a local WordPress
+         * site beside the dev server, isn't treated as the dev server.
+         *
+         * Returns false when [editorUrl] has no host (unset or missing a scheme), so
+         * host-less URLs like `mailto:` never match it.
          */
-        internal fun isDevServerUrl(url: Uri, editorUrl: String): Boolean =
-            editorUrl.isNotEmpty() && url.authority == originAuthority(editorUrl)
+        internal fun isDevServerUrl(url: Uri, editorUrl: String): Boolean {
+            val devServerAuthority = originAuthority(editorUrl) ?: return false
+            return url.authority == devServerAuthority
+        }
 
         private const val ASSET_LOADING_TIMEOUT_MS = 5000L
 
