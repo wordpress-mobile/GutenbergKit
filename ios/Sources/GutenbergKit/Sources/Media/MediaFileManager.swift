@@ -26,8 +26,11 @@ actor MediaFileManager {
 
     /// Imports a photo picker item and saves it to the uploads directory.
     ///
+    /// Takes ``ImportableMediaItem`` rather than `PhotosPickerItem` directly so the
+    /// import path can be exercised with a mock under test.
+    ///
     /// - Returns: MediaInfo with a `gbk-media-file://` URL and detected media type
-    func `import`(_ item: PhotosPickerItem) async throws -> MediaInfo {
+    func `import`(_ item: some ImportableMediaItem) async throws -> MediaInfo {
         let data: Data?
         do {
             data = try await item.loadTransferable(type: Data.self)
