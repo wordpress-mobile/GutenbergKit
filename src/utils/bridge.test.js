@@ -6,7 +6,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 /**
  * Internal dependencies
  */
-import { requestLatestContent, getPost, showBlockInserter } from './bridge';
+import {
+	requestLatestContent,
+	getPost,
+	showBlockInserter,
+	getGBKit,
+} from './bridge';
 
 vi.mock( './logger.js', () => ( {
 	error: vi.fn(),
@@ -543,5 +548,37 @@ describe( 'showBlockInserter', () => {
 
 		expect( editorDelegate.showBlockInserter ).toHaveBeenCalledTimes( 1 );
 		expect( postMessage ).toHaveBeenCalledTimes( 1 );
+	} );
+} );
+
+describe( 'getGBKit', () => {
+	let originalGBKit;
+
+	beforeEach( () => {
+		originalGBKit = window.GBKit;
+	} );
+
+	afterEach( () => {
+		window.GBKit = originalGBKit;
+	} );
+
+	it( 'returns the live window.GBKit, so a native update to it is seen by the next read', () => {
+		window.GBKit = {
+			nativeUploadPort: 12345,
+			nativeUploadToken: 'old-token',
+		};
+		expect( getGBKit().nativeUploadPort ).toBe( 12345 );
+
+		// What `syncNativeUploadEndpoint()` evaluates in the page after the
+		// upload server is restarted on a new port.
+		Object.assign( window.GBKit, {
+			nativeUploadPort: 23456,
+			nativeUploadToken: 'new-token',
+		} );
+
+		expect( getGBKit() ).toMatchObject( {
+			nativeUploadPort: 23456,
+			nativeUploadToken: 'new-token',
+		} );
 	} );
 } );

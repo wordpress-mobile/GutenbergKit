@@ -220,6 +220,44 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		expect( options.body ).toBeInstanceOf( FormData );
 	} );
 
+	it( 'reads the endpoint on every request, so a restarted server is picked up', async () => {
+		const next = makeNext();
+		global.fetch = vi.fn( () =>
+			Promise.resolve( {
+				ok: true,
+				json: () => Promise.resolve( { id: 42 } ),
+			} )
+		);
+
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 12345,
+			nativeUploadToken: 'old-token',
+		} );
+		await nativeMediaUploadMiddleware(
+			makePostMediaOptions( makeFile() ),
+			next
+		);
+
+		// What the native side advertises after replacing a server whose
+		// socket iOS reclaimed. Nothing re-registers the middleware, so it
+		// only reaches the new server by reading the endpoint afresh.
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 23456,
+			nativeUploadToken: 'new-token',
+		} );
+		await nativeMediaUploadMiddleware(
+			makePostMediaOptions( makeFile() ),
+			next
+		);
+
+		expect( global.fetch ).toHaveBeenCalledTimes( 2 );
+		const [ url, options ] = global.fetch.mock.calls[ 1 ];
+		expect( url ).toBe( 'http://localhost:23456/upload' );
+		expect( options.headers[ 'Relay-Authorization' ] ).toBe(
+			'Bearer new-token'
+		);
+	} );
+
 	it( 'forwards the original body and query to the native server', async () => {
 		getGBKit.mockReturnValue( {
 			nativeUploadPort: 12345,
@@ -507,8 +545,9 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		expect( typeof error.message ).toBe( 'string' );
 		expect( error.message.length ).toBeGreaterThan( 0 );
 
-		// No silent fallback to a direct re-upload — retrying a non-idempotent
-		// POST could duplicate the attachment.
+		// No retry and no silent fallback to a direct re-upload — repeating a
+		// non-idempotent POST could duplicate the attachment.
+		expect( global.fetch ).toHaveBeenCalledTimes( 1 );
 		expect( next ).not.toHaveBeenCalled();
 	} );
 
