@@ -241,7 +241,9 @@ final class UploadServerDiagnostic: ObservableObject {
                             if once.claim() { continuation.resume(returning: answered) }
                         }
                     })
-                case .failed, .cancelled:
+                // A refused connection waits in `.waiting(ECONNREFUSED)` rather than failing;
+                // on loopback there's no path change to wait for, so it means dead.
+                case .waiting, .failed, .cancelled:
                     if once.claim() { continuation.resume(returning: false) }
                 default:
                     break

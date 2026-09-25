@@ -200,7 +200,11 @@ final class MediaUploadServer: Sendable {
                             if answer.claim() { continuation.resume(returning: answered) }
                         }
                     })
-                case .failed, .cancelled:
+                // A refused connection doesn't fail: it waits in `.waiting(ECONNREFUSED)` to
+                // retry when the network path changes, which on loopback it never does. So
+                // `.waiting` means nothing is listening — treating it as anything else only
+                // delays the same answer until the timeout.
+                case .waiting, .failed, .cancelled:
                     if answer.claim() { continuation.resume(returning: false) }
                 default:
                     break
