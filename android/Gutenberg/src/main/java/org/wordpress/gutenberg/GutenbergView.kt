@@ -506,22 +506,13 @@ class GutenbergView : FrameLayout {
                     return false
                 }
 
-                // Allow WordPress.com REST API
-                if (url.host == "public-api.wordpress.com") {
-                    return false
-                }
-
-                // Allow WordPress REST API
-                if (isSiteRestApiUrl(url)) {
-                    return false
-                }
-
                 // Allow local development server if configured
                 if (isDevServerUrl(url, BuildConfig.GUTENBERG_EDITOR_URL)) {
                     return false
                 }
 
-                // For all other URLs, open in external browser
+                // For all other URLs, open in external browser. This includes the site's
+                // REST API: the editor reaches it by fetch, which never passes through here.
                 val intent = Intent(Intent.ACTION_VIEW, url)
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 view?.context?.startActivity(intent)
@@ -618,35 +609,6 @@ class GutenbergView : FrameLayout {
         url.scheme == assetScheme &&
             url.authority == assetAuthority &&
             url.path?.startsWith("/assets/") == true
-
-    /**
-     * Whether [url] addresses this site's REST API, by either root a host can
-     * configure: a path root such as `/wp-json/`, or the `rest_route` query form
-     * used when pretty permalinks are unavailable.
-     *
-     * Matched against the configured root rather than by substring. The site serves
-     * ordinary pages from the same origin, and a path or query that merely contains
-     * `/wp-json/` or `rest_route=` belongs to one of those, not to the API.
-     */
-    private fun isSiteRestApiUrl(url: Uri): Boolean {
-        val apiAuthority = originAuthority(configuration.siteApiRoot) ?: return false
-        if (url.authority != apiAuthority) return false
-
-        // A `rest_route` parameter overrides the route a path root sets, and WordPress
-        // ignores an empty one, including `0`, to serve an ordinary page.
-        val restRoute = url.getQueryParameter("rest_route")
-        if (restRoute != null) return restRoute.isNotEmpty() && restRoute != "0"
-
-        val apiRoot = Uri.parse(configuration.siteApiRoot)
-        val apiRootPath = apiRoot.path.orEmpty().trimEnd('/')
-        val path = url.path.orEmpty()
-        // A `rest_route` root reaches the API through its query alone; its path, such
-        // as `/index.php`, also serves the site's ordinary pages. A root of `/` would
-        // match every path on the site, so it is no evidence either.
-        return apiRoot.getQueryParameter("rest_route") == null &&
-            apiRootPath.isNotEmpty() &&
-            (path == apiRootPath || path.startsWith("$apiRootPath/"))
-    }
 
     /**
      * Loads the editor with the given dependencies.
