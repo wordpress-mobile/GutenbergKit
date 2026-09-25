@@ -453,9 +453,19 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     /// If the restart fails, the endpoint is withdrawn instead, which is the existing
     /// fallback: uploads go the WebView's own way rather than to a dead port.
-    func restartUploadServerIfUnreachable() async {
+    ///
+    /// - Parameter isAnswering: Asks a server whether its port still answers. Tests pass
+    ///   their own, to decide when each check resumes.
+    func restartUploadServerIfUnreachable(
+        isAnswering: (MediaUploadServer) async -> Bool = { await $0.isAnswering() }
+    ) async {
         guard let server = uploadServer else { return }
-        guard await !server.isAnswering() else { return }
+        guard await !isAnswering(server) else { return }
+
+        // Another check can run while this one waits on the probe: two foregrounds in quick
+        // succession start one each. If that one has already replaced `server`, replacing it
+        // again throws away the server it just started, along with any upload sent to it.
+        guard uploadServer === server else { return }
 
         Logger.uploadServer.warning(
             "Upload server on port \(server.port) stopped answering while the app was in the background; restarting it"

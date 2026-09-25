@@ -145,6 +145,47 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         #expect(editor.uploadServer === original, "replaced a server that was answering")
     }
 
+    /// Checks can overlap: every foreground starts one, and each waits on its probe. When
+    /// both find the port dead, only the first may restart the server. The second resumes
+    /// holding a verdict about a server that has already been replaced, and acting on it
+    /// throws away the fresh one, along with any upload the page has already sent to it.
+    ///
+    /// The probes answer only when the test says so, so the second check resumes after the
+    /// first has finished restarting — the order that loses the fresh server.
+    @MainActor
+    @Test(
+        "a check that resumes after another restarted the server leaves the new one alone",
+        .enabled(if: canBindUploadServer)
+    )
+    func overlappingChecksRestartTheServerOnce() async throws {
+        let editor = EditorViewController(
+            configuration: makeConfiguration(),
+            mediaProcessor: StandaloneProcessor()
+        )
+        defer { editor.stopMediaHandling() }
+        await editor.startUploadServer()
+        let original = try #require(editor.uploadServer)
+        original.stop()
+        try await waitUntilSilent(original)
+
+        let firstProbe = HeldProbe()
+        let secondProbe = HeldProbe()
+        let firstCheck = Task { await editor.restartUploadServerIfUnreachable(isAnswering: firstProbe.ask) }
+        let secondCheck = Task { await editor.restartUploadServerIfUnreachable(isAnswering: secondProbe.ask) }
+        try await firstProbe.waitUntilAsked()
+        try await secondProbe.waitUntilAsked()
+
+        firstProbe.answer(false)
+        await firstCheck.value
+        let restarted = try #require(editor.uploadServer, "the first check left the editor without a server")
+        #expect(restarted !== original, "the first check didn't replace the dead server")
+
+        secondProbe.answer(false)
+        await secondCheck.value
+        #expect(editor.uploadServer === restarted, "the late check replaced the server the first one had just started")
+        #expect(await restarted.isAnswering(), "the server the first check started no longer answers")
+    }
+
     /// What the page goes through between losing the socket and the restart, run in the
     /// editor's own `WKWebView` from a `file://` page, which is where the editor loads from.
     ///
@@ -344,6 +385,30 @@ private struct NativeUploadOutcome: CustomStringConvertible {
     var description: String {
         let result = status.map { "HTTP \($0)" } ?? error ?? "nothing"
         return "\(result) from port \(port.map(String.init) ?? "none") after \(Int(milliseconds))ms"
+    }
+}
+
+/// A port probe that answers only when the test tells it to, so the test decides when the
+/// check waiting on it resumes.
+@MainActor
+private final class HeldProbe {
+    private var pending: CheckedContinuation<Bool, Never>?
+
+    func ask(_ server: MediaUploadServer) async -> Bool {
+        await withCheckedContinuation { pending = $0 }
+    }
+
+    func answer(_ isAnswering: Bool) {
+        pending?.resume(returning: isAnswering)
+        pending = nil
+    }
+
+    func waitUntilAsked() async throws {
+        for _ in 0..<200 {
+            if pending != nil { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        Issue.record("the check never asked its probe")
     }
 }
 
