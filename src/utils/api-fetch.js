@@ -8,7 +8,12 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
-import { getGBKit, POST_FALLBACKS } from './bridge';
+import {
+	canCheckUploadServer,
+	checkUploadServer,
+	getGBKit,
+	POST_FALLBACKS,
+} from './bridge';
 import { info, error as logError } from './logger';
 
 /**
@@ -279,80 +284,44 @@ function nativeMediaUpload( options, port, token ) {
 	// body with only `file` would drop the post association and additionalData.
 	const query = requestQuery( options.path );
 
+	return sendNativeUpload( options, query, { port, token }, true );
+}
+
+/**
+ * Sends a media upload to the native upload server — and once more, if the
+ * request fails at the transport layer and the host confirms WordPress never
+ * received it.
+ *
+ * @param {Object}  options        The api-fetch options.
+ * @param {string}  query          The request's query, relayed to WordPress.
+ * @param {Object}  endpoint       The native upload server to send to.
+ * @param {number}  endpoint.port  Its port.
+ * @param {string}  endpoint.token Its bearer token.
+ * @param {boolean} mayRetry       Whether a failed attempt may be sent again.
+ * @return {Promise} The relayed upload.
+ */
+function sendNativeUpload( options, query, { port, token }, mayRetry ) {
+	// Each attempt gets its own ID, which the host records as it starts passing
+	// the upload on to WordPress. Only a host that can answer
+	// `checkUploadServer` gets one: a server that doesn't expect the header
+	// would reject the CORS preflight that carries it.
+	const uploadId = canCheckUploadServer() ? createUploadId() : undefined;
+	const headers = { 'Relay-Authorization': `Bearer ${ token }` };
+	if ( uploadId ) {
+		headers[ 'Relay-Upload-ID' ] = uploadId;
+	}
+
 	// Use the two-argument form of `.then()` so the rejection handler catches
 	// *only* a connection-level failure of the `fetch()` itself — not errors
 	// thrown while handling a response (those must surface as real failures).
 	return fetch( `http://localhost:${ port }/upload${ query }`, {
 		method: 'POST',
-		headers: {
-			'Relay-Authorization': `Bearer ${ token }`,
-		},
+		headers,
 		body: options.body,
 		signal: options.signal,
 	} ).then(
-		( response ) => {
-			// `parse: false` asks for raw `Response` semantics. Core's media
-			// upload middleware runs above this one and makes exactly that
-			// request so it can read `x-wp-upload-attachment-id` off a failed
-			// upload and retry `post-process`. Honor it by resolving or
-			// rejecting with the `Response` itself, leaving the parsing (and
-			// the recovery decision) to that middleware — parsing here would
-			// hide the header and turn a recoverable upload into a permanent
-			// failure.
-			if ( options.parse === false ) {
-				if ( ! response.ok ) {
-					// A handoff to core's post-process retry, not an outcome —
-					// core reads `x-wp-upload-attachment-id` off this response and
-					// may still recover. Stay silent (as `nativeMediaDelete` does)
-					// rather than reporting a failure that hasn't happened yet.
-					return Promise.reject( response );
-				}
-				return response;
-			}
-
-			// The native server relays WordPress's response verbatim. On a
-			// non-2xx, mirror @wordpress/api-fetch: reject with the parsed WP
-			// error body ({ code, message, data }) so @wordpress/media-utils
-			// surfaces WordPress's real message. On success, return WordPress's
-			// attachment object unchanged so every consumer behaves exactly as
-			// it would for a non-native upload.
-			if ( ! response.ok ) {
-				return response
-					.json()
-					.catch( () => {
-						// An abort during the body read rejects json() too; surface
-						// the cancellation, not an "invalid response" error.
-						if ( options.signal?.aborted ) {
-							throw uploadAbortError( options.signal );
-						}
-						return invalidUploadResponseError();
-					} )
-					.then( ( body ) => {
-						logError( 'Native upload failed', body );
-						// Throw the parsed body verbatim, even if it isn't the usual
-						// WordPress `{ code, message, data }` shape. This is
-						// deliberate: it mirrors `@wordpress/api-fetch`'s
-						// `parseAndThrowError`, so a native-relayed error reaches
-						// consumers identically to a direct upload's. We intentionally
-						// don't reshape or second-guess a non-standard error body.
-						throw body;
-					} );
-			}
-			// A 2xx with a non-JSON body (e.g. an HTML error page injected by an
-			// intermediary) rejects json(); normalize it the same way as the
-			// non-ok path rather than surfacing a raw SyntaxError.
-			return response.json().catch( () => {
-				// An abort during the body read rejects json(); surface the
-				// cancellation rather than an "invalid response" error notice.
-				if ( options.signal?.aborted ) {
-					throw uploadAbortError( options.signal );
-				}
-				const error = invalidUploadResponseError();
-				logError( 'Native upload returned an invalid response', error );
-				throw error;
-			} );
-		},
-		( connectionError ) => {
+		( response ) => handleNativeUploadResponse( response, options ),
+		async ( connectionError ) => {
 			// A caller-initiated cancellation must propagate as the cancellation,
 			// never be retried. Detect it via `signal.aborted` — the cancellation
 			// *state* — rather than `connectionError.name === 'AbortError'`: the
@@ -368,41 +337,142 @@ function nativeMediaUpload( options, port, token ) {
 				throw uploadAbortError( options.signal );
 			}
 			// Otherwise the loopback upload server is unreachable at the transport
-			// layer. We deliberately do NOT fall back to a direct re-upload:
-			// reachability is gated proactively upstream — this middleware's guard
-			// skips the native path when no port is advertised, and the native side
-			// only advertises a port the WebView can actually reach (server running
-			// + cleartext-to-localhost permitted, cleared on stop). So reaching here
-			// means the server died out-of-band after a valid start; retrying a
-			// non-idempotent POST /wp/v2/media could duplicate the attachment if the
-			// native server had already relayed it to WordPress.
+			// layer, typically because iOS took its socket. We deliberately do NOT
+			// fall back to a direct re-upload or retry blindly: from here, a
+			// connection refused before the server saw anything looks the same as
+			// one cut off after it relayed the file to WordPress, and repeating a
+			// non-idempotent POST /wp/v2/media in the second case would duplicate
+			// the attachment.
 			logError(
 				'Native upload failed at the transport layer',
 				connectionError
 			);
-			// Normalize to the same `{ code, message }` shape
-			// `@wordpress/api-fetch`'s default handler produces for a failed fetch,
-			// so a native-upload transport failure surfaces to consumers (which key
-			// off `error.code` and show `error.message`) exactly like a direct
-			// upload's would — not as a raw, code-less TypeError with an
-			// untranslated message. Same codes and strings as api-fetch, so the
-			// existing translations apply.
-			if ( ! globalThis.navigator.onLine ) {
-				throw {
-					code: 'offline_error',
-					message: __(
-						'Unable to connect. Please check your Internet connection.'
-					),
-				};
+
+			// The host can tell the two apart. Asking also gets a lost server
+			// replaced, even with the app in the foreground where nothing else
+			// would notice, and the endpoint re-advertised for later uploads.
+			const check = await checkUploadServer( uploadId );
+			if ( options.signal?.aborted ) {
+				throw uploadAbortError( options.signal );
 			}
-			throw {
-				code: 'fetch_error',
-				message: __(
-					'Could not get a valid response from the server.'
-				),
-			};
+			if ( mayRetry && check?.retry && check.port ) {
+				info( 'Sending the upload again: it never reached WordPress' );
+				return sendNativeUpload( options, query, check, false );
+			}
+
+			throw nativeUploadTransportError();
 		}
 	);
+}
+
+/**
+ * A random ID for one attempt at an upload, sent as `Relay-Upload-ID`.
+ *
+ * @return {string} 32 hex characters.
+ */
+function createUploadId() {
+	const bytes = globalThis.crypto.getRandomValues( new Uint8Array( 16 ) );
+	return Array.from( bytes, ( byte ) =>
+		byte.toString( 16 ).padStart( 2, '0' )
+	).join( '' );
+}
+
+/**
+ * Turns the native server's response to an upload into what api-fetch's
+ * callers expect.
+ *
+ * @param {Response} response The native server's response.
+ * @param {Object}   options  The api-fetch options.
+ * @return {Promise} The attachment, or a rejection shaped like api-fetch's.
+ */
+function handleNativeUploadResponse( response, options ) {
+	// `parse: false` asks for raw `Response` semantics. Core's media
+	// upload middleware runs above this one and makes exactly that
+	// request so it can read `x-wp-upload-attachment-id` off a failed
+	// upload and retry `post-process`. Honor it by resolving or
+	// rejecting with the `Response` itself, leaving the parsing (and
+	// the recovery decision) to that middleware — parsing here would
+	// hide the header and turn a recoverable upload into a permanent
+	// failure.
+	if ( options.parse === false ) {
+		if ( ! response.ok ) {
+			// A handoff to core's post-process retry, not an outcome —
+			// core reads `x-wp-upload-attachment-id` off this response and
+			// may still recover. Stay silent (as `nativeMediaDelete` does)
+			// rather than reporting a failure that hasn't happened yet.
+			return Promise.reject( response );
+		}
+		return response;
+	}
+
+	// The native server relays WordPress's response verbatim. On a
+	// non-2xx, mirror @wordpress/api-fetch: reject with the parsed WP
+	// error body ({ code, message, data }) so @wordpress/media-utils
+	// surfaces WordPress's real message. On success, return WordPress's
+	// attachment object unchanged so every consumer behaves exactly as
+	// it would for a non-native upload.
+	if ( ! response.ok ) {
+		return response
+			.json()
+			.catch( () => {
+				// An abort during the body read rejects json() too; surface
+				// the cancellation, not an "invalid response" error.
+				if ( options.signal?.aborted ) {
+					throw uploadAbortError( options.signal );
+				}
+				return invalidUploadResponseError();
+			} )
+			.then( ( body ) => {
+				logError( 'Native upload failed', body );
+				// Throw the parsed body verbatim, even if it isn't the usual
+				// WordPress `{ code, message, data }` shape. This is
+				// deliberate: it mirrors `@wordpress/api-fetch`'s
+				// `parseAndThrowError`, so a native-relayed error reaches
+				// consumers identically to a direct upload's. We intentionally
+				// don't reshape or second-guess a non-standard error body.
+				throw body;
+			} );
+	}
+	// A 2xx with a non-JSON body (e.g. an HTML error page injected by an
+	// intermediary) rejects json(); normalize it the same way as the
+	// non-ok path rather than surfacing a raw SyntaxError.
+	return response.json().catch( () => {
+		// An abort during the body read rejects json(); surface the
+		// cancellation rather than an "invalid response" error notice.
+		if ( options.signal?.aborted ) {
+			throw uploadAbortError( options.signal );
+		}
+		const error = invalidUploadResponseError();
+		logError( 'Native upload returned an invalid response', error );
+		throw error;
+	} );
+}
+
+/**
+ * The error for an upload that couldn't reach the native server.
+ *
+ * Normalized to the same `{ code, message }` shape `@wordpress/api-fetch`'s
+ * default handler produces for a failed fetch, so a native-upload transport
+ * failure surfaces to consumers (which key off `error.code` and show
+ * `error.message`) exactly like a direct upload's would — not as a raw,
+ * code-less TypeError with an untranslated message. Same codes and strings as
+ * api-fetch, so the existing translations apply.
+ *
+ * @return {{code: string, message: string}} The error.
+ */
+function nativeUploadTransportError() {
+	if ( ! globalThis.navigator.onLine ) {
+		return {
+			code: 'offline_error',
+			message: __(
+				'Unable to connect. Please check your Internet connection.'
+			),
+		};
+	}
+	return {
+		code: 'fetch_error',
+		message: __( 'Could not get a valid response from the server.' ),
+	};
 }
 
 /**
@@ -488,6 +558,10 @@ function nativeMediaDelete( options, port, token ) {
 				'Native media deletion failed at the transport layer',
 				connectionError
 			);
+			// Same server as uploads, so ask for the same check (see
+			// `sendNativeUpload`). The deletion isn't retried: it's core's
+			// best-effort cleanup, and the check's answer is only about uploads.
+			checkUploadServer();
 			throw {
 				code: 'fetch_error',
 				message: __(

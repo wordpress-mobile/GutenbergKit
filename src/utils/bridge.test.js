@@ -11,6 +11,8 @@ import {
 	getPost,
 	showBlockInserter,
 	getGBKit,
+	canCheckUploadServer,
+	checkUploadServer,
 } from './bridge';
 
 vi.mock( './logger.js', () => ( {
@@ -580,5 +582,56 @@ describe( 'getGBKit', () => {
 			nativeUploadPort: 23456,
 			nativeUploadToken: 'new-token',
 		} );
+	} );
+} );
+
+describe( 'checkUploadServer', () => {
+	let originalWindow;
+
+	beforeEach( () => {
+		originalWindow = {
+			webkit: window.webkit,
+			editorDelegate: window.editorDelegate,
+		};
+		delete window.webkit;
+		delete window.editorDelegate;
+	} );
+
+	afterEach( () => {
+		window.webkit = originalWindow.webkit;
+		window.editorDelegate = originalWindow.editorDelegate;
+	} );
+
+	function installHandler( postMessage ) {
+		window.webkit = {
+			messageHandlers: { checkUploadServer: { postMessage } },
+		};
+	}
+
+	it( 'asks the iOS host about the failed upload and resolves with its answer', async () => {
+		const answer = { retry: true, port: 23456, token: 'new-token' };
+		const postMessage = vi.fn( () => Promise.resolve( answer ) );
+		installHandler( postMessage );
+
+		expect( canCheckUploadServer() ).toBe( true );
+		await expect( checkUploadServer( 'abc123' ) ).resolves.toEqual(
+			answer
+		);
+		// The handler name and body are the contract with `EditorViewController`.
+		expect( postMessage ).toHaveBeenCalledWith( { uploadId: 'abc123' } );
+	} );
+
+	it( 'resolves with null on a host that can’t check its server', async () => {
+		// Android has an upload server but nothing that answers this.
+		window.editorDelegate = {};
+
+		expect( canCheckUploadServer() ).toBe( false );
+		await expect( checkUploadServer( 'abc123' ) ).resolves.toBeNull();
+	} );
+
+	it( 'resolves with null when the host fails to answer', async () => {
+		installHandler( vi.fn( () => Promise.reject( new Error( 'gone' ) ) ) );
+
+		await expect( checkUploadServer( 'abc123' ) ).resolves.toBeNull();
 	} );
 } );

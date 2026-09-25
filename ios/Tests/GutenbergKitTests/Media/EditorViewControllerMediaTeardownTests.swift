@@ -244,6 +244,92 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         #expect(uploader.uploads == 2)
     }
 
+    // MARK: - While the app is in the foreground
+
+    /// The socket can also go while the app is in the foreground: the kernel defuncts every
+    /// process's sockets when it runs out of network buffers, and no foreground transition
+    /// follows to trigger the check. So a failed request makes the page ask for the check
+    /// itself (`checkUploadServer()` in `bridge.js`), and the answer says whether the failed
+    /// upload may be sent again, which it may only if no server ever began it.
+    ///
+    /// The requests go through the editor's real script message handler, so this covers the
+    /// handler name and the shape of the reply the page relies on, as well as the check.
+    @MainActor
+    @Test(
+        "the page's check replaces a lost server, and clears only an upload that never got through",
+        .enabled(if: canBindUploadServer)
+    )
+    func pageCheckReplacesALostServer() async throws {
+        let uploader = CountingUploader()
+        let session = ParkedURLSession()
+        defer { session.release() }
+        let configuration = makeConfiguration(siteURL: URL(string: "https://\(UUID().uuidString).example.invalid")!)
+        defer {
+            try? FileManager.default.removeItem(at: Paths.storageRoot(for: configuration))
+            try? FileManager.default.removeItem(at: Paths.cacheRoot(for: configuration))
+        }
+        let editor = EditorViewController(
+            configuration: configuration,
+            mediaUploader: uploader,
+            httpClient: EditorHTTPClient(urlSession: session, authHeader: configuration.authHeader)
+        )
+        defer { editor.stopMediaHandling() }
+
+        // Connects the page's messages to the editor. The dependency fetch this starts stays
+        // parked, so the editor never loads a page of its own over this one.
+        _ = editor.view
+        try await session.waitUntilStarted()
+
+        await editor.startUploadServer()
+        let original = try #require(editor.uploadServer)
+        // What the injected user script sets at document start.
+        try await editor.webView.callAsyncJavaScript(
+            "window.GBKit = { nativeUploadPort: port, nativeUploadToken: token };",
+            arguments: ["port": Int(original.port), "token": original.token],
+            contentWorld: .page
+        )
+
+        // An upload gets through, then the socket goes.
+        let sent = try await sendNativeUpload(from: editor.webView, uploadID: "sent")
+        #expect(sent.status == 201, "the upload never worked, so the rest proves nothing: \(sent)")
+        original.stop()
+        try await waitUntilSilent(original)
+
+        // The page asks about an upload the old server never saw.
+        let unsent = try await askToCheckUploadServer(from: editor.webView, uploadID: "never-sent")
+        let restarted = try #require(editor.uploadServer)
+        #expect(restarted !== original, "kept the server whose port had stopped answering")
+        #expect(unsent == UploadServerCheck(port: restarted.port, token: restarted.token, mayRetry: true))
+
+        // The page sends it again, and it lands on the new server.
+        let retried = try await sendNativeUpload(from: editor.webView, uploadID: "retry")
+        #expect(retried.port == Int(restarted.port), "the page still holds the old port")
+        #expect(retried.status == 201, "the upload sent again didn't land: \(retried)")
+
+        // The upload that got through before the socket went is never cleared for a retry.
+        let again = try await askToCheckUploadServer(from: editor.webView, uploadID: "sent")
+        #expect(!again.mayRetry, "cleared an upload that had already reached the uploader")
+        #expect(editor.uploadServer === restarted, "replaced a server that was answering")
+        #expect(uploader.uploads == 2)
+    }
+
+    /// Sends the page's `checkUploadServer` request the way `checkUploadServer()` in
+    /// `bridge.js` does, and decodes the editor's answer.
+    @MainActor
+    private func askToCheckUploadServer(from webView: WKWebView, uploadID: String) async throws -> UploadServerCheck {
+        let result = try await webView.callAsyncJavaScript(
+            "return await window.webkit.messageHandlers.checkUploadServer.postMessage({ uploadId });",
+            arguments: ["uploadId": uploadID],
+            contentWorld: .page
+        )
+        let reply = try #require(result as? [String: Any], "the editor didn't answer")
+        return UploadServerCheck(
+            port: (reply["port"] as? Int).flatMap(UInt16.init(exactly:)),
+            token: reply["token"] as? String,
+            mayRetry: try #require(reply["retry"] as? Bool, "the answer has no retry flag")
+        )
+    }
+
     /// Loads an empty `file://` page, the origin the editor itself runs from.
     @MainActor
     private func loadFilePage(in webView: WKWebView) async throws {
@@ -263,19 +349,24 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         Issue.record("the file:// page never finished loading")
     }
 
-    /// Sends the request `nativeMediaUploadMiddleware` sends for `POST /wp/v2/media`.
+    /// Sends the request `nativeMediaUploadMiddleware` sends for `POST /wp/v2/media`,
+    /// with `uploadID` as its `Relay-Upload-ID` if there is one.
     @MainActor
-    private func sendNativeUpload(from webView: WKWebView) async throws -> NativeUploadOutcome {
+    private func sendNativeUpload(from webView: WKWebView, uploadID: String? = nil) async throws -> NativeUploadOutcome {
         let result = try await webView.callAsyncJavaScript(
             """
             const { nativeUploadPort: port, nativeUploadToken: token } = window.GBKit;
             const body = new FormData();
             body.append('file', new File(['not really a jpeg'], 'photo.jpg', { type: 'image/jpeg' }));
+            const headers = { 'Relay-Authorization': `Bearer ${token}` };
+            if (uploadID) {
+                headers['Relay-Upload-ID'] = uploadID;
+            }
             const started = performance.now();
             try {
                 const response = await fetch(`http://localhost:${port}/upload`, {
                     method: 'POST',
-                    headers: { 'Relay-Authorization': `Bearer ${token}` },
+                    headers,
                     body,
                 });
                 return { port, status: response.status, milliseconds: performance.now() - started };
@@ -283,6 +374,7 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
                 return { port, error: `${error.name}: ${error.message}`, milliseconds: performance.now() - started };
             }
             """,
+            arguments: ["uploadID": uploadID ?? NSNull()],
             contentWorld: .page
         )
         let outcome = try #require(result as? [String: Any])

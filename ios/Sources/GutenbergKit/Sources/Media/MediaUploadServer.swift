@@ -21,6 +21,9 @@ final class MediaUploadServer: Sendable {
     /// Per-session auth token for validating incoming requests.
     let token: String
 
+    /// The request header carrying the page's ID for an upload. See ``UploadLedger``.
+    static let uploadIDHeader = "Relay-Upload-ID"
+
     private let server: HTTPServer
 
     /// Sweeps crash-orphaned upload temp files off the editor-startup path.
@@ -34,12 +37,16 @@ final class MediaUploadServer: Sendable {
     ///   - uploader: Optional host uploader that performs the upload on its own stack.
     ///   - internalClient: GutenbergKit's own client for the configured site. Delivers
     ///     uploads when no host uploader does, and every media delete.
+    ///   - ledger: Records which uploads this server has begun passing on to WordPress,
+    ///     so the page can safely retry one that never got that far. Pass the same ledger
+    ///     to a server that replaces this one.
     ///   - maxRequestBodySize: The maximum allowed request body size in bytes.
     ///     Requests exceeding this limit receive a 413 response. Defaults to 4 GB.
     static func start(
         processor: (any MediaProcessor)? = nil,
         uploader: (any MediaUploader)? = nil,
         internalClient: InternalMediaClient? = nil,
+        ledger: UploadLedger = UploadLedger(),
         maxRequestBodySize: Int64 = HTTPRequestParser.defaultMaxBodySize
     ) async throws -> MediaUploadServer {
         // Sweep temp files orphaned by a prior crash, off the editor-startup
@@ -49,7 +56,7 @@ final class MediaUploadServer: Sendable {
             cleanOrphanedUploads()
         }
 
-        let handler = Handler(processor: processor, uploader: uploader, internalClient: internalClient)
+        let handler = Handler(processor: processor, uploader: uploader, internalClient: internalClient, ledger: ledger)
 
         // A generous ceiling for receiving the upload body. The body read is
         // primarily bounded by the per-read idle timeout (which reaps a stalled
@@ -258,6 +265,7 @@ final class MediaUploadServer: Sendable {
         let processor: (any MediaProcessor)?
         let uploader: (any MediaUploader)?
         let internalClient: InternalMediaClient?
+        let ledger: UploadLedger
 
         func handle(_ request: HTTPServer.Request) async -> HTTPResponse {
             let parsed = request.parsed
@@ -291,6 +299,14 @@ final class MediaUploadServer: Sendable {
             // Find the file part (the first part with a filename).
             guard let filePart = parts.first(where: { $0.filename != nil }) else {
                 return MediaUploadServer.errorResponse(status: 400, message: "No file found in request")
+            }
+
+            // Nothing below has reached WordPress yet. If the page has given up on this
+            // upload, it may already be sending the file again, so this copy must stop here.
+            // Nobody reads the response: the page's connection for it is gone.
+            guard ledger.begin(request.parsed.header(MediaUploadServer.uploadIDHeader)) else {
+                Logger.uploadServer.info("Dropped an upload the editor had already given up on")
+                return MediaUploadServer.errorResponse(status: 409, message: "The editor gave up on this upload")
             }
 
             // The non-file parts (post, additionalData) and the original query
