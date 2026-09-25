@@ -93,7 +93,10 @@ class GutenbergViewNavigationTest {
         listOf(
             "https://example.com/a-page/?rest_route",
             "https://example.com/a-page/?rest_route=",
-            "https://example.com/a-page/?rest_route=0"
+            "https://example.com/a-page/?rest_route=0",
+            // The parameter overrides the route the API root's path would set.
+            "https://example.com/wp-json/?rest_route=",
+            "https://example.com/wp-json/wp/v2/posts?rest_route=0"
         ).forEach { url ->
             assertTrue("$url should open externally", opensExternally(configuredSiteView(), url))
         }
