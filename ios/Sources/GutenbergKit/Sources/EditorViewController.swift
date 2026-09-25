@@ -328,6 +328,16 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // Set up Lockdown Mode monitoring with foreground detection
         lockdownModeMonitor.setup(presentingViewController: self)
 
+        // Once the device can idle-sleep, iOS reclaims a suspended app's sockets, the
+        // upload server's listener included, so check it on the way back. See
+        // `restartUploadServerIfUnreachable()`.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWillEnterForeground),
+            name: UIApplication.willEnterForegroundNotification,
+            object: nil
+        )
+
         // FIXME: implement with CSS (bottom toolbar)
         webView.scrollView.verticalScrollIndicatorInsets = UIEdgeInsets(top: 0, left: 0, bottom: 47, right: 0)
 
@@ -427,11 +437,60 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         uploadServer = nil
         mediaProcessor = nil
         mediaUploader = nil
-        revokeNativeUploadEndpoint()
+        syncNativeUploadEndpoint()
     }
 
-    /// Withdraws the loopback endpoint from the page so media requests fall back to the
-    /// WebView's default path instead of failing against a port nothing is listening on.
+    /// Restarts the upload server if its port stopped answering while the app was away.
+    ///
+    /// Once nothing is keeping the device awake — an unplugged phone locked and left to
+    /// idle — iOS reclaims the sockets of suspended apps, and says nothing: the listener
+    /// still reports `.ready` on the same port, so watching listener state never finds out
+    /// (see ``MediaUploadServer/isAnswering(timeout:)``). Suspension alone doesn't do it, so
+    /// how long the app was away doesn't tell us either. Asking the port is the only way,
+    /// and this is the only thing between a reclaimed socket and uploads that fail for the
+    /// rest of the session, because the page holds a port that has stopped working and
+    /// `nativeMediaUploadMiddleware` doesn't retry.
+    ///
+    /// If the restart fails, the endpoint is withdrawn instead, which is the existing
+    /// fallback: uploads go the WebView's own way rather than to a dead port.
+    ///
+    /// - Parameter isAnswering: Asks a server whether its port still answers. Tests pass
+    ///   their own, to decide when each check resumes.
+    func restartUploadServerIfUnreachable(
+        isAnswering: (MediaUploadServer) async -> Bool = { await $0.isAnswering() }
+    ) async {
+        guard let server = uploadServer else { return }
+        guard await !isAnswering(server) else { return }
+
+        // Another check can run while this one waits on the probe: two foregrounds in quick
+        // succession start one each. If that one has already replaced `server`, replacing it
+        // again throws away the server it just started, along with any upload sent to it.
+        guard uploadServer === server else { return }
+
+        Logger.uploadServer.warning(
+            "Upload server on port \(server.port) stopped answering while the app was in the background; restarting it"
+        )
+        server.stop()
+        uploadServer = nil
+        await startUploadServer()
+        syncNativeUploadEndpoint()
+
+        if let restarted = uploadServer {
+            Logger.uploadServer.info("Upload server restarted on port \(restarted.port)")
+        }
+    }
+
+    @objc private func handleWillEnterForeground() {
+        Task { @MainActor [weak self] in
+            await self?.restartUploadServerIfUnreachable()
+        }
+    }
+
+    /// Tells the page which loopback endpoint to use, or that there is none.
+    ///
+    /// With no server, media requests fall back to the WebView's default path instead of
+    /// failing against a port nothing is listening on. With a restarted one, they reach the
+    /// new port instead of the old, dead one.
     ///
     /// `nativeMediaUploadMiddleware` re-reads `nativeUploadPort`/`nativeUploadToken` on
     /// every request and skips the native path when no port is advertised — but it
@@ -440,37 +499,45 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// this existed nothing cleared it, so stopping the server left every image insert
     /// failing with a connection error on a working connection.
     ///
-    /// Three copies hold the endpoint and all three have to go: the live page, the
+    /// Three copies hold the endpoint and all three have to change: the live page, the
     /// `localStorage` copy `getGBKit()` falls back to, and the injected user script,
-    /// which would otherwise restore the dead port verbatim at the next document start
+    /// which would otherwise restore the old port verbatim at the next document start
     /// — including the reload that recovers a terminated WebContent process.
-    private func revokeNativeUploadEndpoint() {
+    private func syncNativeUploadEndpoint() {
+        var endpoint: [String: Any] = ["nativeUploadPort": NSNull(), "nativeUploadToken": NSNull()]
+        if let uploadServer {
+            endpoint["nativeUploadPort"] = Int(uploadServer.port)
+            endpoint["nativeUploadToken"] = uploadServer.token
+        }
+        guard let encoded = try? JSONSerialization.data(withJSONObject: endpoint),
+              let literal = String(data: encoded, encoding: .utf8) else { return }
+
         webView.evaluateJavaScript(
             """
-            if (window.GBKit) {
-                window.GBKit.nativeUploadPort = null;
-                window.GBKit.nativeUploadToken = null;
-            }
-            try {
-                const stored = JSON.parse(localStorage.getItem('GBKit') || '{}');
-                stored.nativeUploadPort = null;
-                stored.nativeUploadToken = null;
-                localStorage.setItem('GBKit', JSON.stringify(stored));
-            } catch (error) {}
+            (() => {
+                const endpoint = \(literal);
+                if (window.GBKit) {
+                    Object.assign(window.GBKit, endpoint);
+                }
+                try {
+                    const stored = JSON.parse(localStorage.getItem('GBKit') || '{}');
+                    localStorage.setItem('GBKit', JSON.stringify({ ...stored, ...endpoint }));
+                } catch (error) {}
+            })();
             """
         ) { _, error in
-            // Logged rather than surfaced: this runs while the editor is going away, so
-            // there is no one to tell. Silence would be worse than noise — a failure here
+            // Logged rather than surfaced: on the withdrawal path the editor is going away,
+            // so there is no one to tell. Silence would be worse than noise — a failure here
             // leaves the live page pointed at a port nothing is listening on, which is the
             // exact failure this method exists to prevent.
             if let error {
-                Logger.uploadServer.error("Failed to withdraw the native upload endpoint from the page: \(error)")
+                Logger.uploadServer.error("Failed to update the native upload endpoint in the page: \(error)")
             }
         }
 
-        // Rebuilt with `uploadServer` already nil, so the replacement advertises no
-        // endpoint. The load path is the only other `addUserScript` call site, so removing
-        // all of them drops exactly the script being replaced.
+        // Rebuilt from the current `uploadServer`, so the replacement advertises whatever
+        // it is now — a new port, or none. The load path is the only other `addUserScript`
+        // call site, so removing all of them drops exactly the script being replaced.
         webView.configuration.userContentController.removeAllUserScripts()
         guard let dependencies else { return }
         do {
@@ -481,7 +548,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             // The load path lets this throw and aborts; here the page is already up, so
             // the cost is narrower and lands later: the next document start gets no
             // `window.GBKit` at all rather than one with a stale port.
-            Logger.uploadServer.error("Failed to rebuild the editor configuration after stopping media handling: \(error)")
+            Logger.uploadServer.error("Failed to rebuild the editor configuration after changing the upload endpoint: \(error)")
         }
     }
 

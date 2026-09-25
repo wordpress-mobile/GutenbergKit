@@ -4,6 +4,7 @@ import Testing
 @testable import GutenbergKit
 
 #if canImport(UIKit)
+import WebKit
 
 /// Pins that ``EditorViewController/stopMediaHandling()`` opens the ownership cycle a host
 /// can form, and that a host which doesn't form one needs nothing.
@@ -93,6 +94,216 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         #expect(editor.uploadServer != nil, "\(label): no upload server, so the host's media handling never runs")
     }
 
+    // MARK: - Coming back from the background
+
+    /// The failure this file's sibling PR is named for. Once the device can idle-sleep, the
+    /// system reclaims a suspended app's listening socket and reports nothing, so the editor
+    /// returns advertising a port that refuses connections, and every upload in that session
+    /// fails. Stopping the server behind the editor's back leaves exactly that state.
+    @MainActor
+    @Test("an upload server whose port stopped answering is replaced", .enabled(if: canBindUploadServer))
+    func restartsAnUnreachableUploadServer() async throws {
+        let editor = EditorViewController(
+            configuration: makeConfiguration(),
+            mediaProcessor: StandaloneProcessor()
+        )
+        defer { editor.stopMediaHandling() }
+        await editor.startUploadServer()
+
+        guard let original = editor.uploadServer else {
+            Issue.record("no upload server to begin with")
+            return
+        }
+        original.stop()
+        try await waitUntilSilent(original)
+
+        await editor.restartUploadServerIfUnreachable()
+
+        guard let restarted = editor.uploadServer else {
+            Issue.record("the editor was left without a server, so uploads fall back to the WebView path")
+            return
+        }
+        #expect(restarted !== original, "kept the server whose port had stopped answering")
+        #expect(await restarted.isAnswering(), "the replacement server does not answer either")
+    }
+
+    /// The other half: a check that runs on every foreground must not churn the port, which
+    /// would mean re-advertising it to the page for no reason.
+    @MainActor
+    @Test("an upload server that still answers is left alone", .enabled(if: canBindUploadServer))
+    func leavesAnAnsweringUploadServerAlone() async {
+        let editor = EditorViewController(
+            configuration: makeConfiguration(),
+            mediaProcessor: StandaloneProcessor()
+        )
+        defer { editor.stopMediaHandling() }
+        await editor.startUploadServer()
+        let original = editor.uploadServer
+
+        await editor.restartUploadServerIfUnreachable()
+
+        #expect(editor.uploadServer === original, "replaced a server that was answering")
+    }
+
+    /// Checks can overlap: every foreground starts one, and each waits on its probe. When
+    /// both find the port dead, only the first may restart the server. The second resumes
+    /// holding a verdict about a server that has already been replaced, and acting on it
+    /// throws away the fresh one, along with any upload the page has already sent to it.
+    ///
+    /// The probes answer only when the test says so, so the second check resumes after the
+    /// first has finished restarting — the order that loses the fresh server.
+    @MainActor
+    @Test(
+        "a check that resumes after another restarted the server leaves the new one alone",
+        .enabled(if: canBindUploadServer)
+    )
+    func overlappingChecksRestartTheServerOnce() async throws {
+        let editor = EditorViewController(
+            configuration: makeConfiguration(),
+            mediaProcessor: StandaloneProcessor()
+        )
+        defer { editor.stopMediaHandling() }
+        await editor.startUploadServer()
+        let original = try #require(editor.uploadServer)
+        original.stop()
+        try await waitUntilSilent(original)
+
+        let firstProbe = HeldProbe()
+        let secondProbe = HeldProbe()
+        let firstCheck = Task { await editor.restartUploadServerIfUnreachable(isAnswering: firstProbe.ask) }
+        let secondCheck = Task { await editor.restartUploadServerIfUnreachable(isAnswering: secondProbe.ask) }
+        try await firstProbe.waitUntilAsked()
+        try await secondProbe.waitUntilAsked()
+
+        firstProbe.answer(false)
+        await firstCheck.value
+        let restarted = try #require(editor.uploadServer, "the first check left the editor without a server")
+        #expect(restarted !== original, "the first check didn't replace the dead server")
+
+        secondProbe.answer(false)
+        await secondCheck.value
+        #expect(editor.uploadServer === restarted, "the late check replaced the server the first one had just started")
+        #expect(await restarted.isAnswering(), "the server the first check started no longer answers")
+    }
+
+    /// What the page goes through between losing the socket and the restart, run in the
+    /// editor's own `WKWebView` from a `file://` page, which is where the editor loads from.
+    ///
+    /// An upload sent in that window fails, reaching nothing; the window closes promptly; and
+    /// the next upload after the restart lands on the new port. The request is the one
+    /// `nativeMediaUploadMiddleware` sends, built from `window.GBKit`. The middleware's own
+    /// part is covered in JS: that it reads the endpoint on every request
+    /// (`api-fetch-upload-middleware.test.js`) from the live `window.GBKit`
+    /// (`bridge.test.js`), and that it neither retries a rejected `fetch` nor falls back to
+    /// the WebView's own upload.
+    @MainActor
+    @Test(
+        "an upload sent before the restart fails, and the next one lands on the new port",
+        .enabled(if: canBindUploadServer)
+    )
+    func uploadFailsUntilTheRestartThenLands() async throws {
+        let uploader = CountingUploader()
+        let editor = EditorViewController(configuration: makeConfiguration(), mediaUploader: uploader)
+        defer { editor.stopMediaHandling() }
+        await editor.startUploadServer()
+        let original = try #require(editor.uploadServer)
+
+        try await loadFilePage(in: editor.webView)
+        // What the injected user script sets at document start.
+        try await editor.webView.callAsyncJavaScript(
+            "window.GBKit = { nativeUploadPort: port, nativeUploadToken: token };",
+            arguments: ["port": Int(original.port), "token": original.token],
+            contentWorld: .page
+        )
+
+        let beforeLoss = try await sendNativeUpload(from: editor.webView)
+        #expect(beforeLoss.status == 201, "the upload never worked, so the rest proves nothing: \(beforeLoss)")
+
+        original.stop()
+        try await waitUntilSilent(original)
+
+        let duringLoss = try await sendNativeUpload(from: editor.webView)
+        #expect(duringLoss.port == Int(original.port))
+        #expect(duringLoss.error != nil, "an upload to the dead port didn't fail: \(duringLoss)")
+        // Failing is the point; failing *promptly* rules out WebKit holding the request open
+        // and presenting a hang instead.
+        #expect(duringLoss.milliseconds < 1000, "the upload to the dead port hung: \(duringLoss)")
+        #expect(uploader.uploads == 1, "the upload sent to the dead port reached the uploader")
+
+        // Until this returns, the page holds the dead port and every upload fails like the
+        // one above, so its duration is how long that lasts after the app comes back.
+        let restartDuration = await ContinuousClock().measure {
+            await editor.restartUploadServerIfUnreachable()
+        }
+        #expect(restartDuration < .seconds(1), "took \(restartDuration) to replace the dead server")
+        let restarted = try #require(editor.uploadServer)
+
+        let afterRestart = try await sendNativeUpload(from: editor.webView)
+        #expect(afterRestart.port == Int(restarted.port), "the page still holds the old port")
+        #expect(afterRestart.status == 201, "the upload after the restart didn't land: \(afterRestart)")
+        #expect(uploader.uploads == 2)
+    }
+
+    /// Loads an empty `file://` page, the origin the editor itself runs from.
+    @MainActor
+    private func loadFilePage(in webView: WKWebView) async throws {
+        let directory = URL.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let page = directory.appending(path: "index.html")
+        try Data("<!doctype html><title>upload recovery</title>".utf8).write(to: page)
+
+        webView.loadFileURL(page, allowingReadAccessTo: directory)
+        for _ in 0..<200 {
+            let loaded = try? await webView.evaluateJavaScript(
+                "location.protocol === 'file:' && document.readyState === 'complete'"
+            ) as? Bool
+            if loaded == true { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        Issue.record("the file:// page never finished loading")
+    }
+
+    /// Sends the request `nativeMediaUploadMiddleware` sends for `POST /wp/v2/media`.
+    @MainActor
+    private func sendNativeUpload(from webView: WKWebView) async throws -> NativeUploadOutcome {
+        let result = try await webView.callAsyncJavaScript(
+            """
+            const { nativeUploadPort: port, nativeUploadToken: token } = window.GBKit;
+            const body = new FormData();
+            body.append('file', new File(['not really a jpeg'], 'photo.jpg', { type: 'image/jpeg' }));
+            const started = performance.now();
+            try {
+                const response = await fetch(`http://localhost:${port}/upload`, {
+                    method: 'POST',
+                    headers: { 'Relay-Authorization': `Bearer ${token}` },
+                    body,
+                });
+                return { port, status: response.status, milliseconds: performance.now() - started };
+            } catch (error) {
+                return { port, error: `${error.name}: ${error.message}`, milliseconds: performance.now() - started };
+            }
+            """,
+            contentWorld: .page
+        )
+        let outcome = try #require(result as? [String: Any])
+        return NativeUploadOutcome(
+            port: outcome["port"] as? Int,
+            status: outcome["status"] as? Int,
+            error: outcome["error"] as? String,
+            milliseconds: outcome["milliseconds"] as? Double ?? -1
+        )
+    }
+
+    /// `cancel()` completes on the listener's own queue, so the socket can outlive `stop()`
+    /// by a moment.
+    private func waitUntilSilent(_ server: MediaUploadServer) async throws {
+        for _ in 0..<20 {
+            if await !server.isAnswering(timeout: .milliseconds(300)) { return }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        Issue.record("the stopped server kept answering, so this test could not set up its own premise")
+    }
+
     @MainActor
     @Test("no handler leaves the upload server down", .enabled(if: canBindUploadServer))
     func noHandlerLeavesServerDown() async {
@@ -149,6 +360,56 @@ private final class StandaloneProcessor: MediaProcessor {
 /// Supplied only to bring the upload server up; never invoked by these tests.
 private struct InertUploader: MediaUploader {
     func upload(_ upload: MediaUpload) async throws -> Data { Data() }
+}
+
+/// Counts the uploads that reach it, and returns a finished attachment.
+private final class CountingUploader: MediaUploader, @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var uploads: Int { lock.withLock { count } }
+
+    func upload(_ upload: MediaUpload) async throws -> Data {
+        lock.withLock { count += 1 }
+        return Data(#"{"id":7,"source_url":"https://example.com/photo.jpg","title":{"raw":"photo"}}"#.utf8)
+    }
+}
+
+/// What a WebView upload came back with: an HTTP status, or the error `fetch` rejected with.
+private struct NativeUploadOutcome: CustomStringConvertible {
+    let port: Int?
+    let status: Int?
+    let error: String?
+    let milliseconds: Double
+
+    var description: String {
+        let result = status.map { "HTTP \($0)" } ?? error ?? "nothing"
+        return "\(result) from port \(port.map(String.init) ?? "none") after \(Int(milliseconds))ms"
+    }
+}
+
+/// A port probe that answers only when the test tells it to, so the test decides when the
+/// check waiting on it resumes.
+@MainActor
+private final class HeldProbe {
+    private var pending: CheckedContinuation<Bool, Never>?
+
+    func ask(_ server: MediaUploadServer) async -> Bool {
+        await withCheckedContinuation { pending = $0 }
+    }
+
+    func answer(_ isAnswering: Bool) {
+        pending?.resume(returning: isAnswering)
+        pending = nil
+    }
+
+    func waitUntilAsked() async throws {
+        for _ in 0..<200 {
+            if pending != nil { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        Issue.record("the check never asked its probe")
+    }
 }
 
 /// Whether `HTTPServer` can bind here — it cannot in some sandboxes, and these tests

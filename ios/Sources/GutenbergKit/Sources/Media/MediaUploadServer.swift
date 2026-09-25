@@ -1,5 +1,6 @@
 import Foundation
 import GutenbergKitHTTP
+import Network
 import OSLog
 
 /// A local HTTP server that receives file uploads from the WebView and routes
@@ -144,6 +145,87 @@ final class MediaUploadServer: Sendable {
     /// Stops the server and releases resources.
     func stop() {
         server.stop()
+    }
+
+    // MARK: - Liveness
+
+    /// Whether the port still answers, which is not the same as the listener looking healthy.
+    ///
+    /// Once the device becomes eligible for idle sleep, iOS reclaims the sockets of suspended
+    /// apps and reports nothing: `NWListener` still says `.ready` on the same port, and no
+    /// state is delivered. Suspension alone isn't enough — on an iPhone 15 Pro running
+    /// iOS 27.0 the socket survived 27 minutes in the background while plugged in, and was
+    /// gone after 6 minutes locked, unplugged, and left to idle. Asking the port is the only
+    /// way to find out.
+    ///
+    /// The request deliberately carries no token. The server answers `407` and logs nothing,
+    /// so a check that runs on every foreground stays silent, and any answer at all means
+    /// the socket is still there. A socket the system took refuses the connection instead.
+    ///
+    /// Uses `NWConnection` rather than `URLSession` so no host's App Transport Security
+    /// settings can decide the outcome.
+    func isAnswering(timeout: Duration = .seconds(2)) async -> Bool {
+        guard let endpointPort = NWEndpoint.Port(rawValue: port) else { return false }
+        let connection = NWConnection(host: .ipv4(.loopback), port: endpointPort, using: .tcp)
+        // Cancelling makes the probe below finish as a failure, so it can't outlive this.
+        let deadline = Task {
+            try await Task.sleep(for: timeout)
+            connection.cancel()
+        }
+        defer {
+            deadline.cancel()
+            connection.cancel()
+        }
+        return await Self.ask(connection)
+    }
+
+    private static let probeQueue = DispatchQueue(label: "com.gutenbergkit.upload-server-probe")
+
+    private static func ask(_ connection: NWConnection) async -> Bool {
+        await withCheckedContinuation { continuation in
+            // A failed send reports both an error and a state change, so the answer has to
+            // be claimed once.
+            let answer = OnceFlag()
+            connection.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    let request = Data("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n".utf8)
+                    connection.send(content: request, completion: .contentProcessed { error in
+                        guard error == nil else {
+                            if answer.claim() { continuation.resume(returning: false) }
+                            return
+                        }
+                        connection.receive(minimumIncompleteLength: 1, maximumLength: 64) { data, _, _, error in
+                            let answered = error == nil && !(data ?? Data()).isEmpty
+                            if answer.claim() { continuation.resume(returning: answered) }
+                        }
+                    })
+                // A refused connection doesn't fail: it waits in `.waiting(ECONNREFUSED)` to
+                // retry when the network path changes, which on loopback it never does. So
+                // `.waiting` means nothing is listening — treating it as anything else only
+                // delays the same answer until the timeout.
+                case .waiting, .failed, .cancelled:
+                    if answer.claim() { continuation.resume(returning: false) }
+                default:
+                    break
+                }
+            }
+            connection.start(queue: probeQueue)
+        }
+    }
+
+    /// Lets exactly one of several callbacks resume a continuation.
+    private final class OnceFlag: @unchecked Sendable {
+        private let lock = NSLock()
+        private var claimed = false
+
+        func claim() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            if claimed { return false }
+            claimed = true
+            return true
+        }
     }
 
     // MARK: - Request Handling
@@ -504,7 +586,8 @@ final class MediaUploadServer: Sendable {
     /// Answers the server's recoverable parse errors (e.g. an over-limit body)
     /// with the same JSON `{code, message}` shape the editor expects, so the
     /// middleware surfaces a real message ("The file is too large…") instead of a
-    /// generic parse-failure. A leaf object — the HTTP server retains it.
+    /// generic parse-failure, and keeps the app running while a connection is
+    /// served. A leaf object — the HTTP server retains it.
     private final class ServerDelegate: HTTPServerDelegate {
         func response(forRecoverableParseError error: HTTPRequestParseError) -> HTTPResponse {
             let message: String = switch error {
@@ -512,6 +595,26 @@ final class MediaUploadServer: Sendable {
             default: "\(error.httpStatusText)"
             }
             return MediaUploadServer.errorResponse(status: error.httpStatus, message: message)
+        }
+
+        /// Holds a background-task assertion from the first byte of the request to the
+        /// last byte of the response, so locking the phone mid-upload doesn't suspend the
+        /// app at either end of the exchange.
+        ///
+        /// Wrapping only the handler misses both ends. The file arrives from the WebView
+        /// before the handler runs, and WordPress's answer is written back after it
+        /// returns. An app suspended in the second gap has already created the attachment,
+        /// and if iOS reclaims the socket before the app resumes, the editor never hears
+        /// about it: it shows a failure, and a retry makes a duplicate.
+        ///
+        /// Best-effort: the grace is fixed (~30s), so a long upload still ends when it
+        /// expires. See `withBackgroundActivity`.
+        func withConnectionActivity(_ body: () async -> Void) async {
+            #if !os(macOS)
+            await withBackgroundActivity("gutenbergkit-media-upload", body)
+            #else
+            await body()
+            #endif
         }
     }
 
