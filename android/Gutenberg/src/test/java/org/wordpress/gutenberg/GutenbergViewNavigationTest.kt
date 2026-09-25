@@ -1,10 +1,14 @@
 package org.wordpress.gutenberg
 
+import android.net.Uri
+import android.webkit.WebResourceRequest
 import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.`when`
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
@@ -38,6 +42,66 @@ class GutenbergViewNavigationTest {
      */
     private fun editorUrlFor(siteUrl: String) = BuildConfig.GUTENBERG_EDITOR_URL
         .ifEmpty { "$siteUrl/assets/index.html" }
+
+    private fun opensExternally(view: GutenbergView, url: String): Boolean {
+        val request = mock(WebResourceRequest::class.java)
+        `when`(request.url).thenReturn(Uri.parse(url))
+        return view.editorWebView.webViewClient.shouldOverrideUrlLoading(view.editorWebView, request)
+    }
+
+    @Test
+    fun `shouldOverrideUrlLoading blocks a site page whose path merely contains the API root path`() {
+        // This site's API root is `/wp-json/`, so `/blog/` here is a page path and
+        // WordPress serves it with the site's theme and plugins.
+        val result = opensExternally(configuredSiteView(), "https://example.com/blog/wp-json/a-post")
+
+        assertTrue("a page whose path merely contains /wp-json/ should open externally", result)
+    }
+
+    @Test
+    fun `shouldOverrideUrlLoading allows REST API URLs for a subdirectory install`() {
+        // The same path the previous test blocks is the API when the site lives in a
+        // subdirectory, so the root the host configured decides, not the characters.
+        val siteView = GutenbergView(
+            EditorConfiguration.builder("https://example.com/blog", "https://example.com/blog/wp-json/")
+                .build(),
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+
+        val result = opensExternally(siteView, "https://example.com/blog/wp-json/a-post")
+
+        assertFalse("a subdirectory install's API URLs should load in the WebView", result)
+    }
+
+    @Test
+    fun `shouldOverrideUrlLoading blocks a site page whose query merely contains rest_route`() {
+        // `rest_route=` appears inside another parameter's value, not as a parameter.
+        val result = opensExternally(
+            configuredSiteView(),
+            "https://example.com/a-page/?utm_campaign=rest_route=x"
+        )
+
+        assertTrue("a page whose query merely contains rest_route= should open externally", result)
+    }
+
+    @Test
+    fun `shouldOverrideUrlLoading blocks site pages when the API root has no path`() {
+        // A root of `/` prefixes every path on the site, so it is no evidence that a
+        // URL is the API. Such a root is matched by its `rest_route` form alone.
+        val siteView = GutenbergView(
+            EditorConfiguration.builder("https://example.com", "https://example.com/")
+                .build(),
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+
+        val result = opensExternally(siteView, "https://example.com/any-page")
+
+        assertTrue("a pathless API root must not admit the whole site", result)
+    }
 
     @Test
     fun `onPageStarted injects the configuration into the editor document`() {

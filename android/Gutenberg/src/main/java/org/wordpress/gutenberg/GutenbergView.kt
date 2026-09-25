@@ -511,10 +511,8 @@ class GutenbergView : FrameLayout {
                 }
 
                 // Allow WordPress REST API
-                if (url.authority == originAuthority(configuration.siteApiRoot)) {
-                    if (url.path?.contains("/wp-json/") == true || url.query?.contains("rest_route=") == true) {
-                        return false
-                    }
+                if (isSiteRestApiUrl(url)) {
+                    return false
                 }
 
                 // Allow local development server if configured
@@ -609,6 +607,27 @@ class GutenbergView : FrameLayout {
                 showErrorPhase(e)
             }
         }
+    }
+
+    /**
+     * Whether [url] addresses this site's REST API, by either root a host can
+     * configure: a path root such as `/wp-json/`, or the `rest_route` query form
+     * used when pretty permalinks are unavailable.
+     *
+     * Matched against the configured root rather than by substring. The site serves
+     * ordinary pages from the same origin, and a path or query that merely contains
+     * `/wp-json/` or `rest_route=` belongs to one of those, not to the API.
+     */
+    private fun isSiteRestApiUrl(url: Uri): Boolean {
+        val apiAuthority = originAuthority(configuration.siteApiRoot) ?: return false
+        if (url.authority != apiAuthority) return false
+
+        if (url.getQueryParameter("rest_route") != null) return true
+
+        // A root of `/` would match every path on the site, so it is no evidence.
+        val apiRootPath = Uri.parse(configuration.siteApiRoot).path
+            ?.takeIf { it.length > 1 } ?: return false
+        return url.path?.startsWith(apiRootPath) == true
     }
 
     /**
