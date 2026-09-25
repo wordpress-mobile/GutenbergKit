@@ -94,7 +94,10 @@ struct EditorViewControllerLifecycleTests: MakesTestFixtures {
 
 /// A `URLSessionProtocol` whose requests hang until `release()`, so a fetch stays in
 /// flight for as long as the test needs. Records whether any request was cancelled.
-private final class ParkedURLSession: URLSessionProtocol, @unchecked Sendable {
+///
+/// Also lets a test load the editor's view, which starts the dependency fetch, without
+/// the editor then loading a page over whatever the test put in its WebView.
+final class ParkedURLSession: URLSessionProtocol, @unchecked Sendable {
     private let lock = NSLock()
     private var started = false
     private var cancelled = false
@@ -154,7 +157,7 @@ private final class ParkedURLSession: URLSessionProtocol, @unchecked Sendable {
     }
 }
 
-private enum ParkedURLSessionTimeout: Error {
+enum ParkedURLSessionTimeout: Error {
     case requestNeverStarted
 }
 

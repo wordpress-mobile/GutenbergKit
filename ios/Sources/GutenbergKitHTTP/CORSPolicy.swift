@@ -32,7 +32,10 @@ public enum CORSPolicy: Sendable {
                 // can't be cleanly allowlisted.
                 ("Access-Control-Allow-Origin", "*"),
                 ("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"),
-                ("Access-Control-Allow-Headers", "Authorization, Relay-Authorization, Content-Type"),
+                // `Relay-Upload-ID` identifies an upload so the editor can retry one that
+                // never reached WordPress. It only matters where CORS is enforced on the
+                // editor's own `file://` page, which is Lockdown Mode.
+                ("Access-Control-Allow-Headers", "Authorization, Relay-Authorization, Relay-Upload-ID, Content-Type"),
                 // Only CORS-safelisted response headers are readable
                 // cross-origin by default. The editor needs to read
                 // `x-wp-upload-attachment-id` off a relayed media upload

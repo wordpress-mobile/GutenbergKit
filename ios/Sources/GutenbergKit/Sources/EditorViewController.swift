@@ -184,6 +184,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     private(set) var uploadServer: MediaUploadServer?
 
+    /// Shared by every upload server this editor starts, so a server that replaces a lost
+    /// one can still say whether an upload sent to the old one got through. See
+    /// ``UploadLedger``.
+    private let uploadLedger = UploadLedger()
+
     // MARK: - Private Properties (UI)
 
     /// Progress bar shown during async dependency fetching ("No Dependencies" flow).
@@ -291,6 +296,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // Register async message handler for content recovery requests.
         // This allows JavaScript to request the latest persisted content from the native host.
         config.userContentController.addScriptMessageHandler(controller, contentWorld: .page, name: "requestLatestContent")
+
+        // Lets the page ask for a check of the upload server after a request to it fails,
+        // and whether the upload may be sent again. See `checkUploadServer(afterFailedUpload:)`.
+        config.userContentController.addScriptMessageHandler(controller, contentWorld: .page, name: "checkUploadServer")
 
         self.bundleProvider.bind(to: config)
 
@@ -440,7 +449,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         syncNativeUploadEndpoint()
     }
 
-    /// Restarts the upload server if its port stopped answering while the app was away.
+    /// Restarts the upload server if its port stopped answering.
     ///
     /// Once nothing is keeping the device awake — an unplugged phone locked and left to
     /// idle — iOS reclaims the sockets of suspended apps, and says nothing: the listener
@@ -448,8 +457,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// (see ``MediaUploadServer/isAnswering(timeout:)``). Suspension alone doesn't do it, so
     /// how long the app was away doesn't tell us either. Asking the port is the only way,
     /// and this is the only thing between a reclaimed socket and uploads that fail for the
-    /// rest of the session, because the page holds a port that has stopped working and
-    /// `nativeMediaUploadMiddleware` doesn't retry.
+    /// rest of the session, because the page holds a port that has stopped working.
+    ///
+    /// It runs on two triggers: every return to the foreground, and a request from the page
+    /// after a request to the server failed (``checkUploadServer(afterFailedUpload:)``). The
+    /// second covers a socket lost while the app is in the foreground, which no foreground
+    /// transition would catch — the kernel can defunct every process's sockets, foreground
+    /// apps included, when it runs out of network buffers.
     ///
     /// If the restart fails, the endpoint is withdrawn instead, which is the existing
     /// fallback: uploads go the WebView's own way rather than to a dead port.
@@ -468,7 +482,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         guard uploadServer === server else { return }
 
         Logger.uploadServer.warning(
-            "Upload server on port \(server.port) stopped answering while the app was in the background; restarting it"
+            "Upload server on port \(server.port) stopped answering; restarting it"
         )
         server.stop()
         uploadServer = nil
@@ -484,6 +498,27 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         Task { @MainActor [weak self] in
             await self?.restartUploadServerIfUnreachable()
         }
+    }
+
+    /// Answers the page after a request to the upload server failed at the transport layer.
+    ///
+    /// Runs the same check as a return to the foreground, so a socket lost while the app is
+    /// in the foreground gets a new server too. Then says where the server is now, and
+    /// whether the failed upload may be sent again: only if no server ever began passing it
+    /// on to WordPress, which ``UploadLedger`` settles for good, so a copy the old server
+    /// still holds can't go out as well.
+    ///
+    /// - Parameter uploadID: The ID the page sent with the upload that failed, or `nil`
+    ///   for a request that isn't an upload.
+    func checkUploadServer(afterFailedUpload uploadID: String?) async -> UploadServerCheck {
+        await restartUploadServerIfUnreachable()
+        guard let uploadServer else {
+            // No server to retry on: the restart failed, or media handling was stopped.
+            // The endpoint is already withdrawn, so later uploads take the WebView's path.
+            return UploadServerCheck(port: nil, token: nil, mayRetry: false)
+        }
+        let mayRetry = uploadID.map(uploadLedger.abandon) ?? false
+        return UploadServerCheck(port: uploadServer.port, token: uploadServer.token, mayRetry: mayRetry)
     }
 
     /// Tells the page which loopback endpoint to use, or that there is none.
@@ -698,7 +733,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             let server = try await MediaUploadServer.start(
                 processor: mediaProcessor,
                 uploader: mediaUploader,
-                internalClient: internalClient
+                internalClient: internalClient,
+                ledger: uploadLedger
             )
 
             // `stopMediaHandling()` can land while the bind is in flight: it is a
@@ -1078,6 +1114,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         return delegate?.editorDidRequestLatestContent(self)
     }
 
+    fileprivate func controller(
+        _ controller: GutenbergEditorController,
+        didRequestUploadServerCheckFor uploadID: String?
+    ) async -> UploadServerCheck {
+        await checkUploadServer(afterFailedUpload: uploadID)
+    }
+
     fileprivate func controllerWebContentProcessDidTerminate(_ controller: GutenbergEditorController) {
         // Reset readiness so JS bridge calls are blocked until the editor
         // re-emits onEditorLoaded after the reload completes.
@@ -1147,10 +1190,31 @@ public struct EditorNotReadyError: LocalizedError {
     }
 }
 
+/// The editor's answer to the page's `checkUploadServer` request.
+struct UploadServerCheck: Equatable {
+    /// Where the upload server is listening now, or `nil` if there isn't one.
+    let port: UInt16?
+    let token: String?
+    /// Whether the page may send the failed upload again: no server ever began passing it
+    /// on to WordPress, and none ever will.
+    let mayRetry: Bool
+
+    /// The reply for `checkUploadServer()` in `bridge.js`.
+    var reply: [String: Any] {
+        var reply: [String: Any] = ["retry": mayRetry]
+        if let port, let token {
+            reply["port"] = Int(port)
+            reply["token"] = token
+        }
+        return reply
+    }
+}
+
 @MainActor
 private protocol GutenbergEditorControllerDelegate: AnyObject {
     func controller(_ controller: GutenbergEditorController, didReceiveMessage message: EditorJSMessage)
     func controllerDidRequestLatestContent(_ controller: GutenbergEditorController) -> (title: String, content: String)?
+    func controller(_ controller: GutenbergEditorController, didRequestUploadServerCheckFor uploadID: String?) async -> UploadServerCheck
     func controllerWebContentProcessDidTerminate(_ controller: GutenbergEditorController)
 }
 
@@ -1172,6 +1236,13 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     // MARK: - WKScriptMessageHandlerWithReply
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) async -> (Any?, String?) {
+        if message.name == "checkUploadServer" {
+            let uploadID = (message.body as? [String: Any])?["uploadId"] as? String
+            guard let delegate else { return (nil, nil) }
+            let check = await delegate.controller(self, didRequestUploadServerCheckFor: uploadID)
+            return (check.reply, nil)
+        }
+
         guard message.name == "requestLatestContent" else {
             return (nil, "Unknown message handler: \(message.name)")
         }

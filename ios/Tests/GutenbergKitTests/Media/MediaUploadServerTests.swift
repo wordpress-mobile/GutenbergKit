@@ -525,6 +525,40 @@ struct MediaUploadServerTests {
     #expect(uploader.received?.mimeType == "image/jpeg")
   }
 
+  // MARK: - Upload IDs
+
+  /// The page may retry an upload it lost, but only one no server ever began. When it
+  /// gives up on an upload the old server is still holding, that server must drop it,
+  /// or WordPress would get the file twice: once from the old server, once from the retry.
+  @Test("an upload the editor gave up on never reaches the uploader")
+  func abandonedUploadIsDropped() async throws {
+    let uploader = RecordingUploader()
+    let ledger = UploadLedger()
+    let server = try await MediaUploadServer.start(uploader: uploader, internalClient: MockInternalMediaClient(), ledger: ledger)
+    defer { server.stop() }
+    #expect(ledger.abandon("given-up"))
+
+    let (_, response) = try await URLSession.shared.data(for: uploadRequest(to: server, uploadID: "given-up"))
+
+    #expect((response as? HTTPURLResponse)?.statusCode == 409)
+    #expect(uploader.received == nil, "an upload the editor was already sending again reached the uploader")
+  }
+
+  /// The other half: once the server has begun an upload, the page can't clear it for a
+  /// retry, because WordPress may already have it.
+  @Test("an upload that reached the uploader can't be sent again")
+  func begunUploadCannotBeAbandoned() async throws {
+    let uploader = RecordingUploader()
+    let ledger = UploadLedger()
+    let server = try await MediaUploadServer.start(uploader: uploader, internalClient: MockInternalMediaClient(), ledger: ledger)
+    defer { server.stop() }
+
+    let (_, response) = try await URLSession.shared.data(for: uploadRequest(to: server, uploadID: "sent"))
+
+    #expect((response as? HTTPURLResponse)?.statusCode == 201)
+    #expect(!ledger.abandon("sent"), "cleared an upload that had already reached the uploader")
+  }
+
   @Test("an uploader receives the editor's form fields in order, and the query")
   func uploaderReceivesFieldsAndQuery() async throws {
     // Without `post` the attachment is created unattached, and repeated names (a
@@ -837,6 +871,20 @@ struct MediaUploadServerTests {
       }
     }
     return result == -1 && errno == ECONNREFUSED
+  }
+
+  /// An authenticated upload of a small JPEG, carrying `uploadID` as the page would.
+  private func uploadRequest(to server: MediaUploadServer, uploadID: String) -> URLRequest {
+    let boundary = UUID().uuidString
+    var request = URLRequest(url: URL(string: "http://127.0.0.1:\(server.port)/upload")!)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Relay-Authorization")
+    request.setValue(uploadID, forHTTPHeaderField: MediaUploadServer.uploadIDHeader)
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    request.httpBody = buildMultipartBody(
+      boundary: boundary, filename: "photo.jpg", mimeType: "image/jpeg", data: Data("fake image data".utf8)
+    )
+    return request
   }
 
   private func buildMultipartBody(boundary: String, filename: String, mimeType: String, data: Data) -> Data {

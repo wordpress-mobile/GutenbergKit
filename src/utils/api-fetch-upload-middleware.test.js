@@ -11,6 +11,8 @@ import { nativeMediaUploadMiddleware } from './api-fetch';
 // Mock dependencies
 vi.mock( './bridge', () => ( {
 	getGBKit: vi.fn( () => ( {} ) ),
+	canCheckUploadServer: vi.fn( () => false ),
+	checkUploadServer: vi.fn( () => Promise.resolve( null ) ),
 } ) );
 
 vi.mock( './logger', () => ( {
@@ -18,7 +20,7 @@ vi.mock( './logger', () => ( {
 	error: vi.fn(),
 } ) );
 
-import { getGBKit } from './bridge';
+import { canCheckUploadServer, checkUploadServer, getGBKit } from './bridge';
 
 function makeNext() {
 	return vi.fn( () => Promise.resolve( { passthrough: true } ) );
@@ -43,6 +45,10 @@ function makeFile( name = 'photo.jpg', type = 'image/jpeg' ) {
 describe( 'nativeMediaUploadMiddleware', () => {
 	beforeEach( () => {
 		vi.restoreAllMocks();
+		// A host that can't check its server (Android, a browser) unless a test
+		// says otherwise: no upload IDs, and `checkUploadServer` answers `null`.
+		canCheckUploadServer.mockReset().mockReturnValue( false );
+		checkUploadServer.mockReset().mockResolvedValue( null );
 		global.fetch = vi.fn();
 	} );
 
@@ -412,6 +418,9 @@ describe( 'nativeMediaUploadMiddleware', () => {
 			code: 'rest_cannot_create',
 			message: expect.stringContaining( 'not allowed' ),
 		} );
+
+		// The server answered, so there's nothing wrong with it to report.
+		expect( checkUploadServer ).not.toHaveBeenCalled();
 	} );
 
 	it( 'rejects with invalid_json when the error body is not JSON', async () => {
@@ -551,6 +560,199 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		expect( next ).not.toHaveBeenCalled();
 	} );
 
+	// MARK: - Retrying an upload that never reached WordPress
+
+	describe( 'on a host that can check its upload server', () => {
+		const firstEndpoint = {
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'token',
+		};
+		const restarted = { retry: true, port: 23456, token: 'new-token' };
+
+		beforeEach( () => {
+			getGBKit.mockReturnValue( firstEndpoint );
+			canCheckUploadServer.mockReturnValue( true );
+		} );
+
+		function uploadIdOf( call ) {
+			return global.fetch.mock.calls[ call ][ 1 ].headers[
+				'Relay-Upload-ID'
+			];
+		}
+
+		function refuseThenAnswer( body = { id: 42 } ) {
+			global.fetch = vi
+				.fn()
+				.mockRejectedValueOnce( new TypeError( 'Failed to fetch' ) )
+				.mockResolvedValueOnce( {
+					ok: true,
+					json: () => Promise.resolve( body ),
+				} );
+		}
+
+		it( 'sends each upload with an ID', async () => {
+			global.fetch = vi.fn( () =>
+				Promise.resolve( {
+					ok: true,
+					json: () => Promise.resolve( { id: 42 } ),
+				} )
+			);
+
+			await nativeMediaUploadMiddleware(
+				makePostMediaOptions( makeFile() ),
+				makeNext()
+			);
+
+			expect( uploadIdOf( 0 ) ).toMatch( /^[0-9a-f]{32}$/ );
+		} );
+
+		it( 'asks the host about the failed upload by its ID', async () => {
+			global.fetch = vi.fn( () =>
+				Promise.reject( new TypeError( 'Failed to fetch' ) )
+			);
+
+			await nativeMediaUploadMiddleware(
+				makePostMediaOptions( makeFile() ),
+				makeNext()
+			).catch( () => {} );
+
+			// Asking is also what gets a server lost in the foreground replaced,
+			// since no foreground transition follows to trigger the host's check.
+			expect( checkUploadServer ).toHaveBeenCalledOnce();
+			expect( checkUploadServer ).toHaveBeenCalledWith( uploadIdOf( 0 ) );
+		} );
+
+		it( 'sends the upload again, to the restarted server, when it never reached WordPress', async () => {
+			refuseThenAnswer( { id: 42 } );
+			checkUploadServer.mockResolvedValue( restarted );
+			const next = makeNext();
+
+			await expect(
+				nativeMediaUploadMiddleware(
+					makePostMediaOptions( makeFile() ),
+					next
+				)
+			).resolves.toEqual( { id: 42 } );
+
+			expect( global.fetch ).toHaveBeenCalledTimes( 2 );
+			const [ url, options ] = global.fetch.mock.calls[ 1 ];
+			expect( url ).toBe( 'http://localhost:23456/upload' );
+			expect( options.headers[ 'Relay-Authorization' ] ).toBe(
+				'Bearer new-token'
+			);
+			expect( options.body ).toBe(
+				global.fetch.mock.calls[ 0 ][ 1 ].body
+			);
+			// A fresh ID: the host has settled the first one as abandoned, and
+			// would refuse to begin it.
+			expect( uploadIdOf( 1 ) ).toMatch( /^[0-9a-f]{32}$/ );
+			expect( uploadIdOf( 1 ) ).not.toBe( uploadIdOf( 0 ) );
+			expect( next ).not.toHaveBeenCalled();
+		} );
+
+		it( 'keeps raw Response semantics for the second attempt under parse: false', async () => {
+			const answer = new Response( '{"id":42}', { status: 201 } );
+			global.fetch = vi
+				.fn()
+				.mockRejectedValueOnce( new TypeError( 'Failed to fetch' ) )
+				.mockResolvedValueOnce( answer );
+			checkUploadServer.mockResolvedValue( restarted );
+
+			await expect(
+				nativeMediaUploadMiddleware(
+					{ ...makePostMediaOptions( makeFile() ), parse: false },
+					makeNext()
+				)
+			).resolves.toBe( answer );
+		} );
+
+		it( 'surfaces the failure when the upload may have reached WordPress', async () => {
+			global.fetch = vi.fn( () =>
+				Promise.reject( new TypeError( 'Failed to fetch' ) )
+			);
+			checkUploadServer.mockResolvedValue( {
+				...restarted,
+				retry: false,
+			} );
+
+			const error = await nativeMediaUploadMiddleware(
+				makePostMediaOptions( makeFile() ),
+				makeNext()
+			).catch( ( e ) => e );
+
+			expect( error.code ).toBe( 'fetch_error' );
+			expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'sends an upload at most twice', async () => {
+			global.fetch = vi.fn( () =>
+				Promise.reject( new TypeError( 'Failed to fetch' ) )
+			);
+			checkUploadServer.mockResolvedValue( restarted );
+
+			const error = await nativeMediaUploadMiddleware(
+				makePostMediaOptions( makeFile() ),
+				makeNext()
+			).catch( ( e ) => e );
+
+			expect( error.code ).toBe( 'fetch_error' );
+			expect( global.fetch ).toHaveBeenCalledTimes( 2 );
+			// The second failure still gets the server checked, for later uploads.
+			expect( checkUploadServer ).toHaveBeenCalledTimes( 2 );
+			expect( checkUploadServer ).toHaveBeenLastCalledWith(
+				uploadIdOf( 1 )
+			);
+		} );
+
+		it( 'does not send an upload again once it was cancelled', async () => {
+			const controller = new AbortController();
+			global.fetch = vi.fn( () =>
+				Promise.reject( new TypeError( 'Failed to fetch' ) )
+			);
+			// The user cancels while the host is checking.
+			checkUploadServer.mockImplementation( async () => {
+				controller.abort();
+				return restarted;
+			} );
+
+			const error = await nativeMediaUploadMiddleware(
+				{
+					...makePostMediaOptions( makeFile() ),
+					signal: controller.signal,
+				},
+				makeNext()
+			).catch( ( e ) => e );
+
+			// Read after the fact: the reason only exists once the abort happens.
+			expect( error ).toBe( controller.signal.reason );
+
+			expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+		} );
+	} );
+
+	it( 'sends no upload ID, and nothing again, on a host that can’t check its server', async () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'token',
+		} );
+		global.fetch = vi.fn( () =>
+			Promise.reject( new TypeError( 'Failed to fetch' ) )
+		);
+
+		const error = await nativeMediaUploadMiddleware(
+			makePostMediaOptions( makeFile() ),
+			makeNext()
+		).catch( ( e ) => e );
+
+		// Android's server doesn't allow the header, so sending it would fail
+		// the CORS preflight for every upload.
+		expect(
+			global.fetch.mock.calls[ 0 ][ 1 ].headers[ 'Relay-Upload-ID' ]
+		).toBeUndefined();
+		expect( error.code ).toBe( 'fetch_error' );
+		expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+	} );
+
 	it( 'normalizes an offline transport failure to offline_error', async () => {
 		getGBKit.mockReturnValue( {
 			nativeUploadPort: 8080,
@@ -573,6 +775,8 @@ describe( 'nativeMediaUploadMiddleware', () => {
 
 			expect( error.code ).toBe( 'offline_error' );
 			expect( next ).not.toHaveBeenCalled();
+			// Loopback doesn't need a network, so the server is still suspect.
+			expect( checkUploadServer ).toHaveBeenCalledOnce();
 		} finally {
 			onLineSpy.mockRestore();
 		}
@@ -607,6 +811,8 @@ describe( 'nativeMediaUploadMiddleware', () => {
 
 		// An explicit cancellation must not be retried via the default path.
 		expect( next ).not.toHaveBeenCalled();
+		// Nor reported: a cancellation says nothing about the server.
+		expect( checkUploadServer ).not.toHaveBeenCalled();
 	} );
 
 	it( 'propagates a timeout cancellation (aborted signal, non-AbortError) instead of falling back', async () => {
@@ -853,6 +1059,23 @@ describe( 'nativeMediaUploadMiddleware', () => {
 			).catch( ( error ) => error );
 
 			expect( thrown ).toEqual( { code: 'rest_cannot_delete' } );
+			expect( checkUploadServer ).not.toHaveBeenCalled();
+		} );
+
+		it( 'asks the host to check the upload server when a deletion can’t reach it', async () => {
+			global.fetch = vi.fn( () =>
+				Promise.reject( new TypeError( 'Failed to fetch' ) )
+			);
+
+			const thrown = await nativeMediaUploadMiddleware(
+				{ method: 'DELETE', path: '/wp/v2/media/42?force=true' },
+				makeNext()
+			).catch( ( error ) => error );
+
+			expect( thrown.code ).toBe( 'fetch_error' );
+			expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+			expect( checkUploadServer ).toHaveBeenCalledOnce();
+			expect( checkUploadServer ).toHaveBeenCalledWith();
 		} );
 	} );
 } );

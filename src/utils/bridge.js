@@ -191,6 +191,47 @@ export function onModalDialogClosed( dialogType ) {
 }
 
 /**
+ * Whether the native host can check its local upload server on request. Only
+ * such a host is sent upload IDs, and only its answer can clear a failed upload
+ * for a retry.
+ *
+ * @return {boolean} Whether `checkUploadServer` reaches a host that answers.
+ */
+export function canCheckUploadServer() {
+	return Boolean( window.webkit?.messageHandlers?.checkUploadServer );
+}
+
+/**
+ * Asks the native host to check its local upload server after a request to it
+ * failed at the transport layer, and to replace the server if its socket is
+ * gone.
+ *
+ * The answer says where the server is now, and whether the upload may be sent
+ * again. The host allows that only if no server ever began passing the upload
+ * on to WordPress, and it makes sure none ever will, so a retry can't create a
+ * duplicate attachment.
+ *
+ * @param {string} [uploadId] The ID sent with the failed upload, if any.
+ *
+ * @return {Promise<?{retry: boolean, port?: number, token?: string}>} The
+ * host's answer, or `null` if it can't check its server (Android, a browser).
+ */
+export async function checkUploadServer( uploadId ) {
+	if ( ! canCheckUploadServer() ) {
+		return null;
+	}
+
+	try {
+		return await window.webkit.messageHandlers.checkUploadServer.postMessage(
+			{ uploadId }
+		);
+	} catch ( err ) {
+		error( 'Failed to check the native upload server', err );
+		return null;
+	}
+}
+
+/**
  * Notifies the native host about a network request and its response.
  *
  * @param {Object}      requestData                 The network request data.
