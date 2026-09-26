@@ -867,6 +867,28 @@ class GutenbergView : FrameLayout {
             webView.evaluateJavascript("editor.undo();", null)
         }
     }
+    /**
+    * Temporary Android native Find decision spike.
+    * This is not the final Find in Post API.
+    */
+    fun debugFind(query: String) {
+        if (!isEditorLoaded) {
+            Log.e("GutenbergView", "Can't search until the editor has loaded")
+            return
+        }
+
+        handler.post {
+            webView.setFindListener { activeMatchOrdinal, numberOfMatches, isDoneCounting ->
+                Log.d(
+                    "GutenbergFindSpike",
+                    "query=$query activeMatchOrdinal=$activeMatchOrdinal " +
+                        "numberOfMatches=$numberOfMatches isDoneCounting=$isDoneCounting"
+                )
+            }
+
+            webView.findAllAsync(query)
+        }
+    }
 
     fun redo() {
         handler.post {
