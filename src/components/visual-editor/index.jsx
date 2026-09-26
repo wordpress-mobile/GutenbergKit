@@ -73,7 +73,10 @@ const alignCSS = `.is-root-container.alignwide { max-width: var(--wp--style--glo
  *
  * @return {Element} The rendered Editor component.
  */
-const VisualEditor = forwardRef( function VisualEditor( { hideTitle }, ref ) {
+const VisualEditor = forwardRef( function UnforwardedVisualEditor(
+	{ hideTitle },
+	ref
+) {
 	const editorPostTitleRef = useRef();
 
 	const {

@@ -27,10 +27,18 @@ test.describe( 'Color and Gradient', () => {
 		// Open block settings.
 		await editor.openBlockSettings();
 
-		// Click the Background color control.
+		// Click the Background color control. The panel is headed "Background"
+		// and its colour control is labelled "Color", the same label the text
+		// colour control carries, so scope the lookup to the panel.
 		await page
-			.locator( '.block-settings-menu' )
-			.getByRole( 'button', { name: 'Background' } )
+			.locator( '.block-settings-menu .components-tools-panel' )
+			.filter( {
+				has: page.getByRole( 'heading', {
+					name: 'Background',
+					exact: true,
+				} ),
+			} )
+			.getByRole( 'button', { name: 'Color', exact: true } )
 			.click();
 
 		// Pick the first color option in the palette.

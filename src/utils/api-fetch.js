@@ -10,12 +10,13 @@ import { __ } from '@wordpress/i18n';
  */
 import { getGBKit, POST_FALLBACKS } from './bridge';
 import { info, error as logError } from './logger';
+import { ensureTrailingSlash, stripTrailingSlash } from './url';
 
 /**
  * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
  */
 
-/** Matches `POST /wp/v2/media` but not sub-paths like `/wp/v2/media/123`. */
+/** Matches `/wp/v2/media` but not sub-paths like `/wp/v2/media/123`. */
 const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
 
 /**
@@ -24,16 +25,23 @@ const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
  * @return {void}
  */
 export function configureApiFetch() {
-	const { siteApiRoot = '', preloadData = null } = getGBKit();
+	const { siteApiRoot, preloadData = null } = getGBKit();
 
-	apiFetch.use( apiFetch.createRootURLMiddleware( siteApiRoot ) );
+	// The root is joined to request paths by concatenation, so it has to supply
+	// the separator. Hosts may configure it with or without the trailing slash,
+	// as the native URL builders accept either.
+	apiFetch.use(
+		apiFetch.createRootURLMiddleware( ensureTrailingSlash( siteApiRoot ) )
+	);
 	apiFetch.use( corsMiddleware );
 	apiFetch.use( apiPathModifierMiddleware );
 	apiFetch.use( tokenAuthMiddleware );
 	apiFetch.use( filterEndpointsMiddleware );
 	apiFetch.use( nativeMediaUploadMiddleware );
 	apiFetch.use( mediaUploadMiddleware );
+	apiFetch.use( mediaPermissionsMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
+	apiFetch.use( siteIndexMiddleware );
 	apiFetch.use(
 		apiFetch.createPreloadingMiddleware( preloadData ?? defaultPreloadData )
 	);
@@ -79,10 +87,11 @@ function apiPathModifierMiddleware( options, next ) {
 		/\/sites\/[^/]+\//.test( options.path );
 
 	if ( isEligiblePath && ! alreadyHasSiteNamespace ) {
-		// Insert the API namespace after the first two path segments.
+		// Insert the API namespace after the first two path segments, with a
+		// single trailing slash.
 		options.path = options.path.replace(
 			/^(?<apiPath>\/?(?:[\w.-]+\/){2})/,
-			`$<apiPath>${ siteApiNamespace[ 0 ] }`
+			`$<apiPath>${ ensureTrailingSlash( siteApiNamespace[ 0 ] ) }`
 		);
 	}
 
@@ -401,6 +410,41 @@ function mediaUploadMiddleware( options, next ) {
 }
 
 /**
+ * Middleware restoring the `Allow` header on the media permissions check.
+ *
+ * Browsers hide `Allow` from cross-origin responses, so `canUser` would report
+ * uploads as denied and the editor would remove its Upload buttons. WordPress
+ * always allows `GET` on this collection, so a missing header was hidden rather
+ * than omitted, and the user is assumed able to upload.
+ *
+ * @type {APIFetchMiddleware}
+ */
+function mediaPermissionsMiddleware( options, next ) {
+	if (
+		options.parse !== false ||
+		options.method?.toUpperCase() !== 'OPTIONS' ||
+		! options.path ||
+		! MEDIA_UPLOAD_PATH.test( options.path )
+	) {
+		return next( options );
+	}
+
+	return next( options ).then( ( response ) => {
+		if ( response.headers.has( 'allow' ) ) {
+			return response;
+		}
+
+		const headers = new Headers( response.headers );
+		headers.set( 'Allow', 'GET, POST' );
+		return new Response( response.body, {
+			status: response.status,
+			statusText: response.statusText,
+			headers,
+		} );
+	} );
+}
+
+/**
  * Remove the wrapping element from the oEmbed response, as it breaks
  * Gutenberg's sizing styles.
  *
@@ -458,6 +502,54 @@ function transformOEmbedApiResponse( options, next ) {
 	}
 
 	return next( options, next );
+}
+
+/**
+ * Middleware resolving the REST API index locally on namespaced sites.
+ *
+ * Gutenberg's `root`/`__unstableBase` entity fetches the REST API index (`/`)
+ * during editor initialization. On a namespaced site that path has no segments
+ * for `apiPathModifierMiddleware` to insert the namespace into, so the request
+ * targets the API host's root, which serves no index. Rather than let the
+ * request fail, resolve the entity with `home` from the host's site URL. The
+ * host supplies a single URL, so `url`, the WordPress address, has no accurate
+ * source and is left unset.
+ *
+ * Consumers tolerate the remaining fields being absent: the site blocks read
+ * the `site` entity when the user can edit settings, and client-side media
+ * processing treats missing image sizes as none.
+ *
+ * Runs after the preloading middleware so a host-supplied index entry takes
+ * precedence. `apiFetch.use()` prepends, so this is registered immediately
+ * before it.
+ *
+ * @type {APIFetchMiddleware}
+ */
+function siteIndexMiddleware( options, next ) {
+	const { siteApiNamespace = [], siteURL } = getGBKit();
+	const isNamespacedSite = siteApiNamespace.length > 0;
+	const isGet = ! options.method || options.method.toUpperCase() === 'GET';
+
+	if ( ! isNamespacedSite || ! isGet || ! isRestIndexPath( options.path ) ) {
+		return next( options );
+	}
+
+	const home = stripTrailingSlash( siteURL );
+	return Promise.resolve( home ? { home } : {} );
+}
+
+/**
+ * Whether a request path targets the REST API index.
+ *
+ * @param {string} [path] The request path, e.g. `/?_fields=name`.
+ * @return {boolean} True for `/` with or without a query string.
+ */
+function isRestIndexPath( path ) {
+	if ( typeof path !== 'string' ) {
+		return false;
+	}
+	const pathname = path.split( '?' )[ 0 ];
+	return pathname === '' || pathname === '/';
 }
 
 const defaultPreloadData = {

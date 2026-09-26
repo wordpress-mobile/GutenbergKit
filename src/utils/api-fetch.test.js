@@ -68,7 +68,7 @@ describe( 'api-fetch credentials handling', () => {
 
 		try {
 			await apiFetch( { path: '/wp/v2/posts' } );
-		} catch ( error ) {
+		} catch {
 			// Ignore errors from the actual fetch
 		}
 
@@ -89,7 +89,7 @@ describe( 'api-fetch credentials handling', () => {
 
 		try {
 			await apiFetch( { path: '/wp/v2/posts' } );
-		} catch ( error ) {
+		} catch {
 			// Ignore errors from the actual fetch
 		}
 
@@ -113,7 +113,7 @@ describe( 'api-fetch credentials handling', () => {
 				path: '/wp/v2/posts',
 				credentials: 'include',
 			} );
-		} catch ( error ) {
+		} catch {
 			// Ignore errors from the actual fetch
 		}
 
@@ -170,7 +170,7 @@ describe( 'api-fetch credentials handling', () => {
 
 			try {
 				await apiFetch( { path: '/wp/v2/posts/99' } );
-			} catch ( error ) {
+			} catch {
 				// Ignore errors from the actual fetch
 			}
 
@@ -186,12 +186,166 @@ describe( 'api-fetch credentials handling', () => {
 
 			try {
 				await apiFetch( { path: '/wp/v2/posts/99' } );
-			} catch ( error ) {
+			} catch {
 				// Ignore errors from the actual fetch
 			}
 
 			expect( global.fetch ).toHaveBeenCalled();
 		} );
+	} );
+
+	describe( 'siteIndexMiddleware', () => {
+		const indexPath = '/?_fields=name,home,url,image_sizes';
+
+		it( 'resolves the REST index locally on namespaced sites', async () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://public-api.example.com/',
+				siteApiNamespace: [ 'sites/123/' ],
+				namespaceExcludedPaths: [],
+				siteURL: 'https://example.com/',
+			} );
+
+			const result = await apiFetch( { path: indexPath } );
+
+			expect( global.fetch ).not.toHaveBeenCalled();
+			expect( result ).toEqual( { home: 'https://example.com' } );
+		} );
+
+		it( 'resolves an empty record when the site URL is unknown', async () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://public-api.example.com/',
+				siteApiNamespace: [ 'sites/123/' ],
+				namespaceExcludedPaths: [],
+			} );
+
+			const result = await apiFetch( { path: '/' } );
+
+			expect( global.fetch ).not.toHaveBeenCalled();
+			expect( result ).toEqual( {} );
+		} );
+
+		it( 'requests the REST index from sites without a namespace', async () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://example.com/wp-json/',
+				siteApiNamespace: [],
+				namespaceExcludedPaths: [],
+				siteURL: 'https://example.com/',
+			} );
+
+			await apiFetch( { path: indexPath } );
+
+			expect( global.fetch ).toHaveBeenCalled();
+			const [ url ] = global.fetch.mock.calls[ 0 ];
+			expect( url ).toMatch(
+				/^https:\/\/example\.com\/wp-json\/\?_fields=/
+			);
+		} );
+
+		it( 'lets non-index requests through on namespaced sites', async () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://public-api.example.com/',
+				siteApiNamespace: [ 'sites/123/' ],
+				namespaceExcludedPaths: [],
+				siteURL: 'https://example.com/',
+			} );
+
+			try {
+				await apiFetch( { path: '/wp/v2/posts' } );
+			} catch {
+				// Ignore errors from the actual fetch
+			}
+
+			expect( global.fetch ).toHaveBeenCalled();
+		} );
+	} );
+
+	describe( 'apiPathModifierMiddleware', () => {
+		/** The URL of the first `fetch` call. */
+		function requestedUrl() {
+			expect( global.fetch ).toHaveBeenCalled();
+			return String( global.fetch.mock.calls[ 0 ][ 0 ] );
+		}
+
+		// Both slash forms are supported input and must resolve to the same path;
+		// an unslashed namespace otherwise runs into the following segment:
+		// `/wp/v2/sites/123posts`. The repeated-slash case pins the quantifier.
+		it.each( [ 'sites/123', 'sites/123/', 'sites/123//' ] )(
+			'inserts the namespace %s with a single trailing slash',
+			async ( namespace ) => {
+				bridge.getGBKit.mockReturnValue( {
+					siteApiRoot: 'https://example.com/wp-json/',
+					siteApiNamespace: [ namespace ],
+					namespaceExcludedPaths: [],
+				} );
+
+				await apiFetch( { path: '/wp/v2/posts' } ).catch( () => {} );
+
+				expect( requestedUrl() ).toContain( '/wp/v2/sites/123/posts' );
+			}
+		);
+	} );
+
+	describe( 'mediaPermissionsMiddleware', () => {
+		beforeEach( () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://example.com/wp-json/',
+				siteApiNamespace: [ 'wp/v2' ],
+				namespaceExcludedPaths: [],
+			} );
+		} );
+
+		it( 'fills in the Allow header when the browser hides it', async () => {
+			global.fetch = vi.fn( () =>
+				Promise.resolve( new Response( '{}', { status: 200 } ) )
+			);
+
+			const response = await apiFetch( {
+				path: '/wp/v2/media',
+				method: 'OPTIONS',
+				parse: false,
+			} );
+
+			expect( response.headers.get( 'allow' ) ).toBe( 'GET, POST' );
+		} );
+
+		it( 'keeps the Allow header WordPress sends', async () => {
+			global.fetch = vi.fn( () =>
+				Promise.resolve(
+					new Response( '{}', {
+						status: 200,
+						headers: { Allow: 'GET' },
+					} )
+				)
+			);
+
+			const response = await apiFetch( {
+				path: '/wp/v2/media',
+				method: 'OPTIONS',
+				parse: false,
+			} );
+
+			expect( response.headers.get( 'allow' ) ).toBe( 'GET' );
+		} );
+
+		it.each( [
+			[ 'a single attachment', '/wp/v2/media/123' ],
+			[ 'another collection', '/wp/v2/settings' ],
+		] )(
+			'leaves the Allow header missing for %s',
+			async ( _label, path ) => {
+				global.fetch = vi.fn( () =>
+					Promise.resolve( new Response( '{}', { status: 200 } ) )
+				);
+
+				const response = await apiFetch( {
+					path,
+					method: 'OPTIONS',
+					parse: false,
+				} );
+
+				expect( response.headers.get( 'allow' ) ).toBeNull();
+			}
+		);
 	} );
 
 	it( 'should preserve other headers when adding Authorization', async () => {
@@ -210,7 +364,7 @@ describe( 'api-fetch credentials handling', () => {
 					'X-Custom-Header': 'custom-value',
 				},
 			} );
-		} catch ( error ) {
+		} catch {
 			// Ignore errors from the actual fetch
 		}
 

@@ -323,7 +323,7 @@ function hasValidTranslations( locale ) {
 		const content = fs.readFileSync( filePath, 'utf8' );
 		const translations = JSON.parse( content );
 		return translations && typeof translations === 'object';
-	} catch ( err ) {
+	} catch {
 		return false;
 	}
 }

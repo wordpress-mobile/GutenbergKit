@@ -30,6 +30,7 @@ import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.ProgressBar
 import android.widget.Toast
+import androidx.annotation.VisibleForTesting
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
 import kotlinx.coroutines.CoroutineScope
@@ -47,6 +48,7 @@ import org.wordpress.gutenberg.views.EditorErrorView
 import org.wordpress.gutenberg.views.EditorProgressView
 import java.util.Collections
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 const val DEFAULT_ASSET_DOMAIN = "appassets.androidplatform.net"
 const val ASSET_PATH_INDEX = "/assets/index.html"
@@ -95,14 +97,32 @@ const val ASSET_PATH_INDEX = "/assets/index.html"
  */
 class GutenbergView : FrameLayout {
     private val webView: WebView
-    private var isEditorLoaded = false
+    @Volatile private var isEditorLoaded = false
     private var didFireEditorLoaded = false
+
+    /**
+     * Whether opening the editor has already placed the caret in its content.
+     *
+     * Unlike [didFireEditorLoaded], this survives a reload. Autofocus decides
+     * from the content the editor was opened with, which a reload can replace
+     * with newer content from the host, so repeating it would pop the keyboard
+     * over a restored post.
+     */
+    private var hasAutofocused = false
     private lateinit var assetLoader: WebViewAssetLoader
     private lateinit var assetAuthority: String
     private val configuration: EditorConfiguration
     private lateinit var dependencies: EditorDependencies
 
     private val handler = Handler(Looper.getMainLooper())
+
+    /**
+     * [getTitleAndContent] calls awaiting a result, keyed by a token per call.
+     * Removing a read claims it, so it reports once even if [onDetachedFromWindow]
+     * fails it first.
+     */
+    private val pendingTitleAndContentReads = ConcurrentHashMap<Any, TitleAndContentCallback>()
+
     private var connectivityManager: ConnectivityManager? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     @Volatile private var lastKnownConnectivity: Boolean? = null
@@ -175,6 +195,7 @@ class GutenbergView : FrameLayout {
     private var featuredImageChangeListener: FeaturedImageChangeListener? = null
     private var openMediaLibraryListener: OpenMediaLibraryListener? = null
     private var editorDidBecomeAvailableListener: EditorAvailableListener? = null
+    private var editorDidBecomeUnavailableListener: EditorUnavailableListener? = null
     private var logJsExceptionListener: LogJsExceptionListener? = null
     private var autocompleterTriggeredListener: AutocompleterTriggeredListener? = null
     private var modalDialogStateListener: ModalDialogStateListener? = null
@@ -203,6 +224,7 @@ class GutenbergView : FrameLayout {
     var textEditorEnabled: Boolean = false
         set(value) {
             field = value
+            if (!isEditorLoaded) return
             val mode = if (value) "text" else "visual"
             handler.post {
                 webView.evaluateJavascript("editor.switchEditorMode('$mode');", null)
@@ -251,6 +273,10 @@ class GutenbergView : FrameLayout {
 
     fun setEditorDidBecomeAvailable(listener: EditorAvailableListener?) {
         editorDidBecomeAvailableListener = listener
+    }
+
+    fun setEditorDidBecomeUnavailable(listener: EditorUnavailableListener?) {
+        editorDidBecomeUnavailableListener = listener
     }
 
     constructor(context: Context) : this(
@@ -348,6 +374,7 @@ class GutenbergView : FrameLayout {
             spinnerView.animate().alpha(1f).setDuration(200).start()
             errorView.visibility = GONE
             webView.alpha = 0f
+            webView.visibility = VISIBLE
         }
     }
 
@@ -363,6 +390,7 @@ class GutenbergView : FrameLayout {
                 progressView.visibility = GONE
             }.start()
             errorView.visibility = GONE
+            webView.visibility = VISIBLE
             webView.animate().alpha(1f).setDuration(200).start()
         }
     }
@@ -371,6 +399,14 @@ class GutenbergView : FrameLayout {
      * Transitions to the error phase (loading failed).
      */
     private fun showErrorPhase(error: Throwable) {
+        showErrorView { setError(error) }
+    }
+
+    /**
+     * Replaces the editor and any loading indicator with [errorView], after
+     * [configure] sets its content.
+     */
+    private fun showErrorView(configure: EditorErrorView.() -> Unit) {
         handler.post {
             progressView.animate().alpha(0f).setDuration(200).withEndAction {
                 progressView.visibility = GONE
@@ -378,11 +414,14 @@ class GutenbergView : FrameLayout {
             spinnerView.animate().alpha(0f).setDuration(200).withEndAction {
                 spinnerView.visibility = GONE
             }.start()
-            errorView.setError(error)
+            errorView.configure()
             errorView.alpha = 0f
             errorView.visibility = VISIBLE
             errorView.animate().alpha(1f).setDuration(200).start()
             webView.alpha = 0f
+            // Transparency alone leaves the web view reachable by touch and TalkBack.
+            webView.visibility = INVISIBLE
+            errorView.focusTitleForAccessibility()
         }
     }
 
@@ -479,11 +518,8 @@ class GutenbergView : FrameLayout {
                 }
 
                 // Allow local development server if configured
-                if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
-                    val editorUrl = Uri.parse(BuildConfig.GUTENBERG_EDITOR_URL)
-                    if (url.host == editorUrl.host) {
-                        return false
-                    }
+                if (isDevServerUrl(url, BuildConfig.GUTENBERG_EDITOR_URL)) {
+                    return false
                 }
 
                 // For all other URLs, open in external browser
@@ -652,6 +688,10 @@ class GutenbergView : FrameLayout {
      * background-thread delegate assignment.
      */
     private fun onEditorPageStarted() {
+        // Readiness belongs to the page: a new page, including one a reload starts,
+        // is not ready until it reports `onEditorLoaded`.
+        isEditorLoaded = false
+        didFireEditorLoaded = false
         if (!hasStartedLoading) {
             hasStartedLoading = true
             startUploadServer()
@@ -735,25 +775,35 @@ class GutenbergView : FrameLayout {
     }
 
     fun setContent(newContent: String) {
-        if (!isEditorLoaded) {
-            Log.e("GutenbergView", "You can't change the editor content until it has loaded")
-            return
-        }
         val encodedContent = newContent.encodeForEditor()
-        webView.evaluateJavascript("editor.setContent('$encodedContent');", null)
+        evaluateIfLoaded("editor.setContent('$encodedContent');")
     }
 
     fun setTitle(newTitle: String) {
-        if (!isEditorLoaded) {
-            Log.e("GutenbergView", "You can't change the editor content until it has loaded")
-            return
-        }
         val encodedTitle = newTitle.encodeForEditor()
-        webView.evaluateJavascript("editor.setTitle('$encodedTitle');", null)
+        evaluateIfLoaded("editor.setTitle('$encodedTitle');")
     }
 
+    /**
+     * Receives the result of [getTitleAndContent]. Each read reports [onResult] or
+     * [onError] once, and no later than when the view is detached.
+     */
     interface TitleAndContentCallback {
         fun onResult(title: CharSequence, content: CharSequence)
+
+        /**
+         * The editor could not be read, so there is no title or content to
+         * report.
+         *
+         * A failed read is not an empty post: hosts must leave the last known
+         * title and content in place rather than persisting anything derived
+         * from this call.
+         *
+         * @param error [EditorNotReadyException] when the editor has not
+         * loaded or the view has been detached, or a [JSONException] when its
+         * result could not be read.
+         */
+        fun onError(error: Throwable)
     }
 
     interface ContentChangeListener {
@@ -792,6 +842,28 @@ class GutenbergView : FrameLayout {
         fun onEditorAvailable(view: GutenbergView?)
     }
 
+    /**
+     * Notified when the editor crashes and is no longer usable.
+     *
+     * This can be called without a preceding
+     * [EditorAvailableListener.onEditorAvailable] when the editor crashes before
+     * it finishes loading.
+     *
+     * The editor's error boundary caught an error and replaced the editor with an
+     * error message. React unmounted the editor, which deleted every JavaScript
+     * `editor` API, so calls to them are refused from this point until the editor
+     * reloads.
+     *
+     * GutenbergKit covers the editor with a notice offering to reload it. Until it
+     * reloads, hosts should disable the controls that depend on the editor —
+     * history, editor mode — while leaving those that read from their own
+     * persisted copy, such as saving and closing, available. Re-enable them the
+     * next time [EditorAvailableListener.onEditorAvailable] is called.
+     */
+    fun interface EditorUnavailableListener {
+        fun onEditorUnavailable(view: GutenbergView?)
+    }
+
     interface LogJsExceptionListener {
         fun onLogJsException(exception: GutenbergJsException)
     }
@@ -810,16 +882,17 @@ class GutenbergView : FrameLayout {
     }
 
     /**
-     * Provides the latest persisted content for recovery after WebView refresh.
+     * Provides the content the editor starts from when its page loads.
      *
-     * When the WebView reinitializes (e.g., due to OS memory pressure or page refresh),
-     * the editor requests the latest content from this provider. The host app should
-     * return the most recently persisted title and content from autosave.
+     * Asked each time the editor page loads, including when it reloads after a
+     * crash. Return the newest title and content the host holds, including
+     * anything saved during this session.
      */
     interface LatestContentProvider {
         /**
-         * Returns the most recently persisted title and content from autosave.
-         * @return LatestContent if available, null if no persisted content exists.
+         * Returns the newest title and content the host holds.
+         * @return LatestContent, or null to start from the content the editor was
+         * opened with, discarding any edits made since.
          */
         fun getLatestContent(): LatestContent?
     }
@@ -833,39 +906,31 @@ class GutenbergView : FrameLayout {
     )
 
     fun getTitleAndContent(originalContent: CharSequence, callback: TitleAndContentCallback, completeComposition: Boolean = false) {
+        // Tracked before readiness is checked, so a read racing teardown is either
+        // failed by `onDetachedFromWindow` or finds the editor unloaded.
+        val read = Any()
+        pendingTitleAndContentReads[read] = callback
         if (!isEditorLoaded) {
             Log.e("GutenbergView", "You can't change the editor content until it has loaded")
+            // Posted so the error arrives on the main thread, as a read's result does.
+            handler.post {
+                if (pendingTitleAndContentReads.remove(read) != null) callback.onError(EditorNotReadyException())
+            }
             return
         }
         handler.post {
-            webView.evaluateJavascript("editor.getTitleAndContent($completeComposition);") { result ->
-                var lastUpdatedTitle: CharSequence? = null
-                var lastUpdatedContent: CharSequence? = null
-                var changed = false
-                try {
-                    val jsonObject = JSONObject(result)
-                    lastUpdatedTitle = jsonObject.getString("title")
-                    lastUpdatedContent = jsonObject.getString("content")
-                    changed = jsonObject.getBoolean("changed")
-                } catch (e: JSONException) {
-                    Log.e("GutenbergView", "Received invalid JSON from editor.getTitleAndContent")
-                }
-
-                val title = lastUpdatedTitle ?: ""
-                val content = if (changed) {
-                    lastUpdatedContent ?: ""
-                } else {
-                    originalContent
-                }
-                callback.onResult(title, content)
+            webView.evaluateJavascript(getTitleAndContentScript(completeComposition)) { result ->
+                if (pendingTitleAndContentReads.remove(read) == null) return@evaluateJavascript
+                parseTitleAndContent(result, originalContent).fold(
+                    onSuccess = { (title, content) -> callback.onResult(title, content) },
+                    onFailure = { error -> callback.onError(error) }
+                )
             }
         }
     }
 
     fun undo() {
-        handler.post {
-            webView.evaluateJavascript("editor.undo();", null)
-        }
+        evaluateIfLoaded("editor.undo();")
     }
     /**
     * Temporary Android native Find decision spike.
@@ -891,25 +956,30 @@ class GutenbergView : FrameLayout {
     }
 
     fun redo() {
-        handler.post {
-            webView.evaluateJavascript("editor.redo();", null)
-        }
+        evaluateIfLoaded("editor.redo();")
     }
 
     fun dismissTopModal() {
-        handler.post {
-            webView.evaluateJavascript("editor.dismissTopModal();", null)
-        }
+        evaluateIfLoaded("editor.dismissTopModal();")
     }
 
     fun appendTextAtCursor(text: String) {
+        val encodedText = text.encodeForEditor()
+        evaluateIfLoaded("editor.appendTextAtCursor(decodeURIComponent('$encodedText'));")
+    }
+
+    /**
+     * Evaluates [script] in the editor on the main thread, or refuses it when the
+     * editor has not loaded. The editor's bridge methods exist only while it is
+     * loaded, so a refused call would otherwise fail inside the web view.
+     */
+    private fun evaluateIfLoaded(script: String) {
         if (!isEditorLoaded) {
-            Log.e("GutenbergView", "You can't append text until the editor has loaded")
+            Log.d(TAG, "Refused ${script.substringBefore('(')} because the editor is not ready")
             return
         }
-        val encodedText = text.encodeForEditor()
         handler.post {
-            webView.evaluateJavascript("editor.appendTextAtCursor(decodeURIComponent('$encodedText'));", null)
+            webView.evaluateJavascript(script, null)
         }
     }
 
@@ -918,15 +988,27 @@ class GutenbergView : FrameLayout {
         Log.i("GutenbergView", "EditorLoaded received in native code")
         isEditorLoaded = true
         handler.post {
+            // The editor can become unavailable before this runs, which resets
+            // readiness and shows the crash notice. Carrying on would report the
+            // editor available again and replace that notice with the ready phase.
+            if (!isEditorLoaded) return@post
+
             lastKnownConnectivity?.let { isConnected ->
                 if (!isConnected) dispatchConnectivityEvent(false)
             }
             if(!didFireEditorLoaded) {
+                // The web editor always starts in visual mode, so restore code
+                // editor mode when the host enabled it, including after a reload.
+                if (textEditorEnabled) {
+                    webView.evaluateJavascript("editor.switchEditorMode('text');", null)
+                }
                 editorDidBecomeAvailableListener?.onEditorAvailable(this)
                 this.didFireEditorLoaded = true
                 showReadyPhase()
 
-                if (configuration.content.isEmpty()) {
+                if (!hasAutofocused && configuration.content.isEmpty()) {
+                    hasAutofocused = true
+
                     // Focus the editor content
                     webView.evaluateJavascript("editor.focus();", null)
 
@@ -938,6 +1020,62 @@ class GutenbergView : FrameLayout {
                     }, 100)
                 }
             }
+        }
+    }
+
+    /**
+     * The editor's error boundary caught an error, so React unmounted the editor
+     * and deleted every `window.editor.*` bridge method.
+     *
+     * Readiness is reset until the editor reloads and emits `onEditorLoaded`
+     * again. Without this, calls keep reaching a web view that can no longer
+     * answer them.
+     */
+    @JavascriptInterface
+    fun onEditorUnavailable() {
+        Log.e("GutenbergView", "EditorUnavailable received in native code")
+        isEditorLoaded = false
+        showEditorCrashPhase()
+        handler.post {
+            // Picks made in an open inserter can no longer reach the editor.
+            blockInserterDialog?.dismiss()
+            editorDidBecomeUnavailableListener?.onEditorUnavailable(this)
+        }
+    }
+
+    /**
+     * Covers the editor with a notice offering to reload.
+     *
+     * The web view still shows the editor's error message underneath, so it is
+     * covered rather than left showing two competing error states.
+     */
+    private fun showEditorCrashPhase() {
+        showErrorView {
+            setActionableState(
+                titleResId = R.string.gbk_editor_crashed_title,
+                descriptionResId = R.string.gbk_editor_crashed_description,
+                actionResId = R.string.gbk_editor_crashed_reload,
+                onAction = { reloadEditor() }
+            )
+        }
+    }
+
+    /**
+     * Reloads the editor after it has crashed.
+     *
+     * The reloaded editor starts from the content [LatestContentProvider]
+     * returns, or from the content it was opened with when there is none.
+     * Readiness is reset immediately and restored only once the editor emits
+     * `onEditorLoaded` again.
+     */
+    internal fun reloadEditor() {
+        isEditorLoaded = false
+        // The reload replaces the page these reads were sent to, so their results
+        // may never arrive.
+        failPendingTitleAndContentReads()
+        handler.post {
+            showSpinnerPhase()
+            webView.reload()
         }
     }
 
@@ -1009,11 +1147,6 @@ class GutenbergView : FrameLayout {
     }
 
     fun setMediaUploadAttachment(media: String) {
-        if (!isEditorLoaded) {
-            Log.e("GutenbergView", "You can't change the editor content until it has loaded")
-            return
-        }
-
         val contextId = currentMediaContextId
         if (contextId == null) {
             Log.e("GutenbergView", "setMediaUploadAttachment called without contextId")
@@ -1021,26 +1154,17 @@ class GutenbergView : FrameLayout {
         }
 
         val escapedContextId = contextId.replace("'", "\\'")
-        webView.evaluateJavascript("editor.setMediaUploadAttachment($media, '$escapedContextId');", null)
+        evaluateIfLoaded("editor.setMediaUploadAttachment($media, '$escapedContextId');")
 
         currentMediaContextId = null
     }
 
     private fun insertBlock(blockId: String) {
-        if (!isEditorLoaded) return
-        handler.post {
-            webView.evaluateJavascript(
-                "window.blockInserter?.insertBlock(${JSONObject.quote(blockId)});",
-                null,
-            )
-        }
+        evaluateIfLoaded("window.blockInserter?.insertBlock(${JSONObject.quote(blockId)});")
     }
 
     private fun dismissBlockInserter() {
-        if (!isEditorLoaded) return
-        handler.post {
-            webView.evaluateJavascript("window.blockInserter?.onClose?.();", null)
-        }
+        evaluateIfLoaded("window.blockInserter?.onClose?.();")
     }
 
     @JavascriptInterface
@@ -1191,6 +1315,7 @@ class GutenbergView : FrameLayout {
         openMediaLibraryListener = null
         logJsExceptionListener = null
         editorDidBecomeAvailableListener = null
+        editorDidBecomeUnavailableListener = null
         filePathCallback = null
         onFileChooserRequested = null
         autocompleterTriggeredListener = null
@@ -1200,8 +1325,18 @@ class GutenbergView : FrameLayout {
         latestContentProvider = null
         blockInserterDialog?.dismiss()
         blockInserterDialog = null
+        // Reads from here on report the editor as not ready. Pending reads are failed
+        // only after the handler is cleared, so none loses its error to the clear.
+        isEditorLoaded = false
         handler.removeCallbacksAndMessages(null)
         webView.destroy()
+        failPendingTitleAndContentReads()
+    }
+
+    private fun failPendingTitleAndContentReads() {
+        pendingTitleAndContentReads.keys.forEach { read ->
+            pendingTitleAndContentReads.remove(read)?.onError(EditorNotReadyException())
+        }
     }
 
     // Network Monitoring
@@ -1284,6 +1419,19 @@ class GutenbergView : FrameLayout {
             return if (uri.port != -1 && uri.port != defaultPort) "$host:${uri.port}" else host
         }
 
+        /**
+         * Whether [url] is on the local development server at [editorUrl]. Compares
+         * host and port so another port on the same host, such as a local WordPress
+         * site beside the dev server, isn't treated as the dev server.
+         *
+         * Returns false when [editorUrl] has no host (unset or missing a scheme), so
+         * host-less URLs like `mailto:` never match it.
+         */
+        internal fun isDevServerUrl(url: Uri, editorUrl: String): Boolean {
+            val devServerAuthority = originAuthority(editorUrl) ?: return false
+            return url.authority == devServerAuthority
+        }
+
         private const val ASSET_LOADING_TIMEOUT_MS = 5000L
 
         /**
@@ -1317,6 +1465,45 @@ class GutenbergView : FrameLayout {
             warmupRunnable = null
         }
     }
+}
+
+/**
+ * Reported when the editor is read before it has loaded, or after the view is
+ * detached.
+ */
+class EditorNotReadyException : IllegalStateException(
+    "The editor is not ready. Wait for onEditorAvailable before calling bridge methods."
+)
+
+/**
+ * The script `getTitleAndContent` evaluates, shared so tests run exactly what the
+ * editor is sent.
+ */
+@VisibleForTesting
+internal fun getTitleAndContentScript(completeComposition: Boolean): String =
+    "editor.getTitleAndContent($completeComposition);"
+
+/**
+ * Parses the result of `editor.getTitleAndContent`, failing when it cannot be
+ * read.
+ *
+ * Failing rather than returning a partially defaulted pair is the point. A crashed
+ * editor leaves `window.editor` an empty object, so the evaluation yields the
+ * string `"null"`; substituting `""` for the title there is indistinguishable
+ * from the user clearing it, and the host persists it over their own.
+ */
+@VisibleForTesting
+internal fun parseTitleAndContent(
+    result: String?,
+    originalContent: CharSequence
+): Result<Pair<CharSequence, CharSequence>> = try {
+    val json = JSONObject(result.orEmpty())
+    val title: CharSequence = json.getString("title")
+    val updatedContent: CharSequence = json.getString("content")
+    Result.success(title to if (json.getBoolean("changed")) updatedContent else originalContent)
+} catch (e: JSONException) {
+    Log.e("GutenbergView", "Received invalid JSON from editor.getTitleAndContent", e)
+    Result.failure(e)
 }
 
 data class Media(

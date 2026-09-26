@@ -14,6 +14,19 @@ private extension Logger {
     static let demo = Logger(subsystem: "GutenbergKit-Demo", category: "media-upload")
 }
 
+/// Throws from the selector the editor reads to choose between the visual and
+/// code editors, so the crash reaches the editor's error boundary in either mode
+/// rather than a single block's.
+private let triggerEditorCrashScript = """
+    (() => {
+        const editor = wp.data.select('core/editor');
+        editor.getEditorMode = () => {
+            throw new Error('Editor crash triggered from the demo app');
+        };
+        wp.data.dispatch('core/editor').updateEditorSettings({});
+    })();
+    """
+
 struct EditorView: View {
     private let configuration: EditorConfiguration
     private let dependencies: EditorDependencies?
@@ -70,12 +83,12 @@ struct EditorView: View {
                 .disabled(!viewModel.hasRedo)
                 .accessibilityLabel("Redo")
             }
-            .disabled(viewModel.isModalDialogOpen)
+            .disabled(!viewModel.isEditorReady || viewModel.isModalDialogOpen)
         }
 
         ToolbarItemGroup(placement: .topBarTrailing) {
             moreMenu
-                .disabled(viewModel.isModalDialogOpen)
+                .disabled(!viewModel.isEditorReady || viewModel.isModalDialogOpen)
         }
 
         ToolbarItem(placement: .topBarTrailing) {
@@ -106,6 +119,12 @@ struct EditorView: View {
                     systemImage: viewModel.isCodeEditorEnabled ? "doc.richtext" : "curlybraces"
                 )
             })
+
+            Button(role: .destructive) {
+                viewModel.perform(.triggerCrash)
+            } label: {
+                Label("Trigger Editor Crash", systemImage: "exclamationmark.triangle")
+            }
         } label: {
             Image(systemName: "ellipsis")
         }
@@ -151,6 +170,8 @@ private struct _EditorView: UIViewControllerRepresentable {
             case .redo: viewController?.redo()
             case .undo: viewController?.undo()
             case .find: viewController?.presentFindNavigator()
+            case .triggerCrash:
+                viewController?.webView.evaluateJavaScript(triggerEditorCrashScript, completionHandler: nil)
             }
         }
 
@@ -207,6 +228,10 @@ private struct _EditorView: UIViewControllerRepresentable {
 
         func editorDidLoad(_ viewContoller: EditorViewController) {
             viewModel.isEditorReady = true
+        }
+
+        func editorDidBecomeUnavailable(_ viewController: EditorViewController) {
+            viewModel.isEditorReady = false
         }
 
         func editor(_ viewContoller: EditorViewController, didDisplayInitialContent content: String) {
@@ -385,6 +410,7 @@ private final class EditorViewModel {
         case undo
         case redo
         case find
+        case triggerCrash
     }
 
     var perform: (_ action: Action) -> Void = { _ in assertionFailure() }

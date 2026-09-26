@@ -53,6 +53,7 @@ import * as router from '@wordpress/router';
 import * as serverSideRender from '@wordpress/server-side-render';
 import * as shortcode from '@wordpress/shortcode';
 import * as styleEngine from '@wordpress/style-engine';
+import * as theme from '@wordpress/theme';
 import * as tokenList from '@wordpress/token-list';
 import * as url from '@wordpress/url';
 import * as viewport from '@wordpress/viewport';
@@ -123,6 +124,7 @@ export async function initializeWordPressGlobals() {
 	window.wp.serverSideRender = serverSideRender;
 	window.wp.shortcode = shortcode;
 	window.wp.styleEngine = styleEngine;
+	window.wp.theme = theme;
 	window.wp.tokenList = tokenList.default || tokenList;
 	window.wp.url = url;
 	window.wp.viewport = viewport;

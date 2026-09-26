@@ -100,6 +100,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// - Important: JS `editor` APIs are only safe to call after this becomes `true`.
     private var isReady: Bool = false
 
+    /// Whether opening the editor has already placed the caret in its content.
+    ///
+    /// Autofocus belongs to opening the editor, not to the reload after a crash:
+    /// ``focus(force:)`` decides from the content the editor was opened with,
+    /// which a reload can replace with newer content from the host, so repeating
+    /// it would raise the keyboard over a restored post.
+    private var hasAutofocused = false
+
     /// When `true`, loads editor HTML without dependencies for WebKit prewarming.
     /// Used by `EditorViewController.warmup()` to reduce first-render latency.
     private let isWarmupMode: Bool
@@ -171,9 +179,15 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// View controller that displays error information when loading fails.
     private var errorViewController: UIHostingController<AnyView>?
 
+    /// View controller covering the editor after it crashes.
+    private var editorCrashViewController: UIHostingController<AnyView>?
+
     /// Stores the contextId from the most recent `openMediaLibrary` JS call.
     /// Passed back to JavaScript when media selection completes.
     private var currentMediaContextId: String?
+
+    /// The native block inserter, while it is presented.
+    private weak var blockInserterController: UIViewController?
 
     // MARK: - Private Properties (Timing)
 
@@ -190,6 +204,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
     }()
+
+    /// Modal dialogs the editor reports open, so a reload can report them closed.
+    private var openModalDialogs: Set<String> = []
 
     /// Renders HTML previews for block patterns in the block inserter.
     private lazy var htmlPreviewManager: HTMLPreviewManager = {
@@ -611,10 +628,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func _setContent(_ content: String) {
-        guard self.isReady else {
-            return
-        }
-
         let escapedString = content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
         evaluate("editor.setContent('\(escapedString)');", isCritical: true)
     }
@@ -650,13 +663,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Steps backwards in the editor history state
     public func undo() {
-        guard isReady else { return }
         evaluate("editor.undo();")
     }
 
     /// Steps forwards in the editor history state
     public func redo() {
-        guard isReady else { return }
         evaluate("editor.redo();")
     }
 
@@ -666,14 +677,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Dismisses the topmost modal dialog or menu in the editor
     public func dismissTopModal() {
-        guard isReady else { return }
         evaluate("editor.dismissTopModal();")
     }
 
     /// Enables code editor.
     public var isCodeEditorEnabled: Bool = false {
         didSet {
-            guard isCodeEditorEnabled != oldValue, isReady else { return }
+            guard isCodeEditorEnabled != oldValue else { return }
             evaluate("editor.switchEditorMode('\(isCodeEditorEnabled ? "text" : "visual")');")
         }
     }
@@ -686,6 +696,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // MARK: - Internal (JavaScript)
 
     private func evaluate(_ javascript: String, isCritical: Bool = false) {
+        // The editor's bridge methods exist only while it is loaded. Calling them
+        // otherwise fails with a raw `TypeError` that `handleError` would show in
+        // an alert.
+        guard isReady else {
+            let command = String(javascript.prefix { $0 != "(" })
+            Logger.bridge.debug("Refused \(command, privacy: .public) because the editor is not ready")
+            return
+        }
         webView.evaluateJavaScript(javascript) { [weak self] _, error in
             guard let self, let error else { return }
             self.handleError(error, isCritical: isCritical)
@@ -761,6 +779,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             sheet.preferredCornerRadius = 26
         }
 
+        blockInserterController = host
         present(host, animated: true)
     }
 
@@ -779,6 +798,24 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
+    /// Dismisses the block inserter and any picker it presented.
+    ///
+    /// Dismisses the inserter itself rather than asking its presenting view
+    /// controller, which belongs to the host. Asked again while the inserter is
+    /// still closing, that view controller dismisses itself instead, which can
+    /// close the host's editor.
+    private func dismissBlockInserter() {
+        guard let inserter = blockInserterController else { return }
+        guard inserter.presentedViewController != nil else {
+            inserter.dismiss(animated: true)
+            return
+        }
+        // While a picker is presented, dismissing the inserter closes only the picker.
+        inserter.dismiss(animated: false) {
+            inserter.dismiss(animated: true)
+        }
+    }
+
     // MARK: - UIAdaptivePresentationControllerDelegate
 
     public func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
@@ -790,15 +827,20 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func insertBlockFromInserter(_ blockID: String) {
-        evaluate("window.blockInserter.insertBlock('\(blockID)')")
+        evaluate("window.blockInserter?.insertBlock('\(blockID)')")
     }
 
     private func insertMediaFromInserter(_ selection: [MediaInfo]) async {
         guard !selection.isEmpty else { return }
+        // `callAsyncJavaScript` does not go through `evaluate()`, so check readiness here.
+        guard isReady else {
+            Logger.bridge.debug("Refused inserting media because the editor is not ready")
+            return
+        }
         do {
             let object = try makeJavaScriptCompatibleDictionary(with: selection)
             _ = try await webView.callAsyncJavaScript(
-                "window.blockInserter.insertMedia(selection)",
+                "window.blockInserter?.insertMedia(selection)",
                 arguments: ["selection": object],
                 in: nil,
                 contentWorld: .page
@@ -810,7 +852,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     private func insertPatternFromInserter(_ patternName: String) {
         let escapedName = patternName.replacingOccurrences(of: "'", with: "\\'")
-        evaluate("window.blockInserter.insertPattern('\(escapedName)')")
+        evaluate("window.blockInserter?.insertPattern('\(escapedName)')")
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
@@ -835,7 +877,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     /// - parameter text: The text to append at the cursor position.
     public func appendTextAtCursor(_ text: String) {
-        guard isReady else { return }
         let escapedText = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? text
         evaluate("editor.appendTextAtCursor(decodeURIComponent('\(escapedText)'));")
     }
@@ -905,6 +946,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                     return
                 }
                 delegate?.editor(self, didLogException: editorException)
+            case .onEditorUnavailable:
+                didLoseEditor()
             case .showBlockInserter:
                 let body = try message.decode(EditorJSMessage.ShowBlockInserterBody.self)
                 showBlockInserter(data: body)
@@ -916,10 +959,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 delegate?.editor(self, didTriggerAutocompleter: body.type)
             case .onModalDialogOpened:
                 let body = try message.decode(EditorJSMessage.ModalDialogBody.self)
+                openModalDialogs.insert(body.dialogType)
                 showNavigationOverlay()
                 delegate?.editor(self, didOpenModalDialog: body.dialogType)
             case .onModalDialogClosed:
                 let body = try message.decode(EditorJSMessage.ModalDialogBody.self)
+                openModalDialogs.remove(body.dialogType)
                 hideNavigationOverlay()
                 delegate?.editor(self, didCloseModalDialog: body.dialogType)
             case .log:
@@ -957,10 +1002,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     fileprivate func controllerWebContentProcessDidTerminate(_ controller: GutenbergEditorController) {
-        // Reset readiness so JS bridge calls are blocked until the editor
-        // re-emits onEditorLoaded after the reload completes.
-        self.isReady = false
-        webView.reload()
+        // Reload through the same path as a crash so any crash notice is cleared
+        // rather than left covering the reloaded editor.
+        reloadEditor()
+        // The editor stays gone until that reload finishes, so the host disables
+        // the controls that depend on it, as it does for a crash. Readiness is
+        // already reset, so the calls those controls would make are refused.
+        delegate?.editorDidBecomeUnavailable(self)
     }
 
     // MARK: - Loading Complete: Editor Ready
@@ -984,15 +1032,25 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         self.hideActivityView()
         self.isReady = true
 
+        // The web editor always starts in visual mode, so restore code editor
+        // mode when the host enabled it, including after a reload.
+        if isCodeEditorEnabled {
+            evaluate("editor.switchEditorMode('text');")
+        }
+
         // Fade in the WebView now that navigation is complete
         UIView.animate(withDuration: 0.2, delay: 0.1, options: [.allowUserInteraction]) {
             self.webView.alpha = 1
         }
 
-        // If lockdown mode was detected, show the sheet — skip autofocus entirely
-        // since the editor may not function correctly with Lockdown Mode restrictions.
-        if !lockdownModeMonitor.isLockdownModeEnabled {
-            self.focus()
+        if !hasAutofocused {
+            hasAutofocused = true
+
+            // If lockdown mode was detected, show the sheet — skip autofocus entirely
+            // since the editor may not function correctly with Lockdown Mode restrictions.
+            if !lockdownModeMonitor.isLockdownModeEnabled {
+                self.focus()
+            }
         }
         lockdownModeMonitor.presentSheetIfNeeded(onDismiss: {})
 
@@ -1001,6 +1059,112 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         print("gutenbergkit-measure_editor-first-render:", duration)
 
         delegate?.editorDidLoad(self)
+    }
+
+    /// Called when the editor JavaScript emits the `onEditorUnavailable` message.
+    ///
+    /// The editor's error boundary caught an error and replaced the editor with
+    /// an error message. React unmounted the editor, which deleted every
+    /// `window.editor.*` bridge method, so readiness is reset until the editor
+    /// reloads and emits `onEditorLoaded` again.
+    ///
+    /// Without this, `isReady` stays `true` and every subsequent bridge call
+    /// raises an uncaught `TypeError` inside the web view.
+    private func didLoseEditor() {
+        self.isReady = false
+        // Picks made in an open inserter can no longer reach the editor.
+        dismissBlockInserter()
+        self.displayEditorCrash()
+        delegate?.editorDidBecomeUnavailable(self)
+    }
+
+    /// Covers the editor with a native notice offering to reload.
+    ///
+    /// The web view still shows the editor's error message underneath, so it is
+    /// covered rather than left showing two competing error states.
+    @MainActor
+    private func displayEditorCrash() {
+        guard editorCrashViewController == nil else { return }
+
+        let controller = UIHostingController(rootView: AnyView(EmptyView()))
+        editorCrashViewController = controller
+
+        addChild(controller)
+        controller.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(controller.view)
+        view.bringSubviewToFront(controller.view)
+        NSLayoutConstraint.activate([
+            controller.view.topAnchor.constraint(equalTo: view.topAnchor),
+            controller.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            controller.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            controller.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
+        controller.didMove(toParent: self)
+
+        // Follow the tint the host sets on the editor's view hierarchy, as UIKit
+        // controls do, rather than the app's global accent color. A presentation
+        // covering the editor dims the tint its views inherit, so read it from the
+        // notice's own view undimmed, or the button would stay gray afterward.
+        controller.view.tintAdjustmentMode = .normal
+        let tint = Color(uiColor: controller.view.tintColor)
+
+        let crashView = EditorErrorView(
+            title: EditorLocalization[.editorCrashedTitle],
+            description: EditorLocalization[.editorCrashedDescription]
+        ) {
+            Button(EditorLocalization[.editorCrashedReload]) { [weak self] in
+                self?.reloadEditor()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(tint)
+        }
+        .background(Color(uiColor: .systemBackground))
+        controller.rootView = AnyView(crashView)
+
+        // A crash before the editor loads leaves the loading indicator running
+        // under the notice. Remove it without animating, so the animation can't
+        // end after a quick Reload and remove the indicator that reload shows.
+        waitingView.stopAnimating()
+        waitingView.removeFromSuperview()
+
+        // The web view stays in the hierarchy underneath the notice, so hide it
+        // from VoiceOver. The notice moves focus to its title when it appears.
+        webView.accessibilityElementsHidden = true
+    }
+
+    /// Reloads the editor, showing the loading indicator until it is ready again.
+    ///
+    /// The reloaded editor starts from the content the delegate returns from
+    /// ``EditorViewControllerDelegate/editorDidRequestLatestContent(_:)``, or
+    /// from the content it was opened with when that returns `nil`.
+    ///
+    /// Readiness is reset immediately and restored only once the editor emits
+    /// `onEditorLoaded` again, so bridge calls stay refused until it is
+    /// genuinely usable.
+    private func reloadEditor() {
+        isReady = false
+        // Picks made in an open inserter cannot reach the reloaded page, which has
+        // no `window.blockInserter` until the editor opens one again. A crash has
+        // dismissed it already; ending the web content process has not.
+        dismissBlockInserter()
+        hideEditorCrash()
+        // A reload that did not follow a crash never unmounted the editor's open
+        // dialogs, so report them closed rather than leave navigation blocked.
+        hideNavigationOverlay()
+        openModalDialogs.forEach { delegate?.editor(self, didCloseModalDialog: $0) }
+        openModalDialogs.removeAll()
+        webView.alpha = 0
+        displayActivityView()
+        webView.reload()
+    }
+
+    @MainActor
+    private func hideEditorCrash() {
+        editorCrashViewController?.willMove(toParent: nil)
+        editorCrashViewController?.view.removeFromSuperview()
+        editorCrashViewController?.removeFromParent()
+        editorCrashViewController = nil
+        webView.accessibilityElementsHidden = false
     }
 
     // MARK: - Warmup
@@ -1120,10 +1284,9 @@ extension EditorViewController {
 
     @MainActor
     func displayError(_ error: Error) {
-        let view = ContentUnavailableView(
-            EditorLocalization[.editorError],
-            systemImage: "exclamationmark.circle",
-            description: Text(error.localizedDescription)
+        let view = EditorErrorView(
+            title: EditorLocalization[.editorError],
+            description: error.localizedDescription
         )
 
         self.errorViewController = UIHostingController(rootView: AnyView(view))
