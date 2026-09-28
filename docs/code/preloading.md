@@ -84,6 +84,8 @@ The `EditorURLCache` provides disk-based caching for API responses, keyed by URL
 | `.maxAge(TimeInterval)` | Use cached responses younger than the specified age |
 | `.always`               | Always use cached responses regardless of age       |
 
+The same policy decides when an `EditorService` checks for new plugin and theme assets; see [Refreshing](#refreshing).
+
 Example:
 
 **Swift**
@@ -244,6 +246,32 @@ try await service.purge()
 ```kotlin
 //tbd
 ```
+
+### Refreshing
+
+An `EditorService`'s cache policy covers plugin and theme assets as well as API responses. For assets, it decides when to check the site's asset manifest again:
+
+| Policy                  | API responses                   | Asset bundle                                           |
+| ----------------------- | ------------------------------- | ------------------------------------------------------ |
+| `.always` (default)     | Fetched only when not cached    | Manifest checked only when no bundle is on disk        |
+| `.maxAge(TimeInterval)` | Fetched once older than the age | Manifest checked once the bundle is older than the age |
+| `.ignore`               | Always fetched                  | Manifest always checked                                |
+
+If the manifest hasn't changed, the bundle on disk is kept rather than downloaded again — asset URLs carry their version (`?ver=`), so the same manifest means the same assets — and its age starts over. If it has changed, the new bundle is built beside the old one, and every service for the site uses it once it's complete. `cleanup()` removes the old one later.
+
+To refresh a site's editor data — on pull-to-refresh, for instance — prepare a separate service that ignores the cache, and give its dependencies to the next editor:
+
+**Swift**
+
+```swift
+let dependencies = try await EditorService(configuration: configuration, cachePolicy: .ignore).prepare()
+```
+
+Nothing is deleted first, so an editor opened during the refresh still loads straight from what's on disk, and a refresh that fails leaves it all in place. An editor given no dependencies prepares its own with `.always`, so it uses whatever the last refresh left. To download assets again even when their manifest hasn't changed, `purge()` instead, at the cost of a cold load for the next editor.
+
+**Kotlin**
+
+Not yet: Android's `EditorService` still checks the asset manifest only when no bundle is on disk, whatever its cache policy.
 
 ## Offline Mode
 

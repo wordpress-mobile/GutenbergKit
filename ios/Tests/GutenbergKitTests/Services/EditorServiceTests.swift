@@ -138,6 +138,46 @@ struct EditorServiceTests: MakesTestFixtures {
     _ = try await second.value
   }
 
+  // MARK: - Cache Policy
+
+  @Test("prepare() under .always uses the bundle on disk without checking the manifest")
+  func prepareUnderAlwaysUsesBundleOnDisk() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    let bundle = try await site.service(cachePolicy: .always).prepare().assetBundle
+
+    let again = try await site.service(cachePolicy: .always).prepare().assetBundle
+
+    #expect(again.id == bundle.id)
+    #expect(site.manifestRequestCount == 1)
+    #expect(site.client.downloadCallCount == 1)
+  }
+
+  @Test("prepare() under .ignore checks the manifest, and keeps the bundle when it hasn't changed")
+  func prepareUnderIgnoreKeepsUnchangedBundle() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    let bundle = try await site.service(cachePolicy: .always).prepare().assetBundle
+
+    let refreshed = try await site.service(cachePolicy: .ignore).prepare().assetBundle
+
+    #expect(refreshed.id == bundle.id)
+    #expect(site.manifestRequestCount == 2)
+    #expect(site.client.downloadCallCount == 1)
+  }
+
+  @Test("prepare() under .ignore picks up a changed manifest, which later editors then load")
+  func prepareUnderIgnorePicksUpChangedManifest() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    let bundle = try await site.service(cachePolicy: .always).prepare().assetBundle
+
+    site.manifest = Self.pluginManifest(version: "2")
+    let refreshed = try await site.service(cachePolicy: .ignore).prepare().assetBundle
+    let afterwards = try await site.service(cachePolicy: .always).prepare().assetBundle
+
+    #expect(refreshed.id != bundle.id)
+    #expect(afterwards.id == refreshed.id)
+    #expect(site.client.downloadCallCount == 2)
+  }
+
   // MARK: - Test Helpers
 
   /// URL-based response handler for EditorService.prepare() tests.
@@ -161,6 +201,53 @@ struct EditorServiceTests: MakesTestFixtures {
       return Data(#"{"id":123,"title":{"rendered":"Test"}}"#.utf8)
     default:
       return Data("{}".utf8)
+    }
+  }
+
+  /// A manifest with one plugin script, whose URL carries `version` the way WordPress versions its
+  /// assets.
+  private static func pluginManifest(version: String) -> String {
+    #"{"scripts":"<script src=\"https://example.com/plugin.js?ver=\#(version)\"></script>","styles":"","allowed_block_types":[]}"#
+  }
+
+  /// One site's server and storage, shared by every service a test makes for it — as a host's
+  /// services for one site share them.
+  private final class TestSite {
+    let configuration: EditorConfiguration
+    let client = EditorAssetLibraryMockHTTPClient()
+    let storageRoot = URL.randomTemporaryDirectory
+    let cacheRoot = URL.randomTemporaryDirectory
+
+    /// What the site's `editor-assets` endpoint answers.
+    var manifest: String {
+      didSet { serve(manifest) }
+    }
+
+    var manifestRequestCount: Int {
+      client.requestedURLs.filter { $0.absoluteString.contains("editor-assets") }.count
+    }
+
+    init(configuration: EditorConfiguration, manifest: String) {
+      self.configuration = configuration
+      self.manifest = manifest
+      serve(manifest)
+    }
+
+    func service(cachePolicy: EditorCachePolicy) -> EditorService {
+      EditorService(
+        configuration: configuration,
+        httpClient: client,
+        cachePolicy: cachePolicy,
+        storageRoot: storageRoot,
+        cacheRoot: cacheRoot
+      )
+    }
+
+    private func serve(_ manifest: String) {
+      client.urlResponseHandler = { url in
+        url.absoluteString.contains("editor-assets")
+          ? Data(manifest.utf8) : EditorServiceTests.editorServiceResponseHandler(url)
+      }
     }
   }
 }

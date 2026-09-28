@@ -48,9 +48,11 @@ public struct EditorAssetBundle: Sendable, Equatable, Hashable {
     /// The manifest that defines which assets belong to this bundle.
     let manifest: LocalEditorAssetManifest
 
-    /// The date this bundle was created by downloading the manifest contents.
+    /// The date this bundle was created by downloading the manifest contents, or last found to still match the
+    /// site's manifest.
     ///
-    /// Used to determine which bundle is most recent when multiple bundles exist.
+    /// Used to determine which bundle is most recent when multiple bundles exist, and how old it is for the
+    /// cache policy.
     let downloadDate: Date
 
     /// The number of assets stored in this bundle.

@@ -87,8 +87,8 @@ struct EditorAssetLibraryTests {
         #expect(manifest.rawStyles.contains("plugin.css"))
     }
 
-    @Test("fetchManifest with ignore cache policy always fetches new data")
-    func fetchManifestIgnoreCachePolicyAlwaysFetches() async throws {
+    @Test("fetchManifest requests the manifest on every call")
+    func fetchManifestRequestsOnEveryCall() async throws {
         let manifestJSON = """
       {
           "scripts": "",
@@ -100,7 +100,7 @@ struct EditorAssetLibraryTests {
         let mockClient = EditorAssetLibraryMockHTTPClient()
         mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
-        let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
+        let library = makeLibrary(httpClient: mockClient)
 
         _ = try await library.fetchManifest()
         _ = try await library.fetchManifest()
@@ -108,14 +108,15 @@ struct EditorAssetLibraryTests {
         #expect(mockClient.getCallCount == 2)
     }
 
-    @Test("fetchManifest with always cache policy returns cached manifest when bundle exists on disk")
-    func fetchManifestAlwaysCachePolicyReturnsCachedManifest() async throws {
+    @Test("fetchManifest returns the manifest of a matching bundle on disk, even under .ignore")
+    func fetchManifestReturnsMatchingBundleManifest() async throws {
         let manifestJSON = uniqueManifestJSON(identifier: "test-cached-manifest-\(UUID().uuidString)")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
         mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
-        let library = makeLibrary(httpClient: mockClient, cachePolicy: .always)
+        // The policy decides whether to check the manifest at all, not what to make of the answer
+        let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
         // First, fetch the manifest and create a bundle on disk
         let originalManifest = try await library.fetchManifest()
@@ -133,16 +134,16 @@ struct EditorAssetLibraryTests {
         #expect(mockClient.getCallCount == 2)
     }
 
-    @Test("fetchManifest with always cache policy falls back to new manifest when no bundle exists")
-    func fetchManifestAlwaysCachePolicyFallsBackWhenNoBundleExists() async throws {
+    @Test("fetchManifest parses a new manifest when no bundle matches")
+    func fetchManifestParsesWhenNoBundleMatches() async throws {
         let manifestJSON = uniqueManifestJSON(identifier: "test-no-cache-fallback-\(UUID().uuidString)")
 
         let mockClient = EditorAssetLibraryMockHTTPClient()
         mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
-        let library = makeLibrary(httpClient: mockClient, cachePolicy: .always)
+        let library = makeLibrary(httpClient: mockClient)
 
-        // Fetch with always cache policy when no bundle exists on disk
+        // Fetch when no bundle exists on disk
         let manifest = try await library.fetchManifest()
 
         // Should still return a valid manifest (created from remote data)
@@ -150,9 +151,8 @@ struct EditorAssetLibraryTests {
         #expect(mockClient.getCallCount == 1)
     }
 
-    @Test(
-        "fetchManifest with always cache policy avoids expensive LocalEditorAssetManifest creation when cached")
-    func fetchManifestAlwaysCachePolicyAvoidsExpensiveCreation() async throws {
+    @Test("fetchManifest avoids expensive LocalEditorAssetManifest creation when a bundle matches")
+    func fetchManifestAvoidsExpensiveCreationWhenBundleMatches() async throws {
         // Use a manifest with multiple block types but no scripts/styles to avoid download issues
         let manifestJSON = """
       {
@@ -165,7 +165,7 @@ struct EditorAssetLibraryTests {
         let mockClient = EditorAssetLibraryMockHTTPClient()
         mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
-        let library = makeLibrary(httpClient: mockClient, cachePolicy: .always)
+        let library = makeLibrary(httpClient: mockClient)
 
         // First fetch and create the bundle
         let originalManifest = try await library.fetchManifest()
@@ -313,125 +313,127 @@ struct EditorAssetLibraryTests {
         #expect(retrievedBundle.manifest.allowedBlockTypes == blockTypes)
     }
 
-    // MARK: - CachePolicy Tests
+    // MARK: - Cache Policy Tests
 
-    @Test("EditorCachePolicy.always is default behavior")
-    func editorCachePolicyAlwaysIsDefault() async throws {
-        let manifestJSON = """
-      {
-          "scripts": "",
-          "styles": "",
-          "allowed_block_types": []
-      }
-      """
+    @Test("readLatestAssetBundle returns nil when there are no bundles")
+    func readLatestAssetBundleReturnsNilWithoutBundles() async throws {
+        let library = makeLibrary(cachePolicy: .always)
 
-        let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
-
-        let library = makeLibrary(httpClient: mockClient)
-
-        // Call fetchManifest with default cache policy
-        _ = try await library.fetchManifest()
-
-        // The HTTP client should have been called
-        #expect(mockClient.getCallCount == 1)
+        #expect(try await library.readLatestAssetBundle() == nil)
     }
 
-    @Test("EditorCachePolicy.maxAge uses cached manifest when within timeout")
-    func editorCachePolicyMaxAgeUsesCachedWhenWithinTimeout() async throws {
-        let manifestJSON = uniqueManifestJSON(identifier: "test-maxage-within-\(UUID().uuidString)")
+    @Test("readLatestAssetBundle returns the newest bundle, however old, under .always")
+    func readLatestAssetBundleIgnoresAgeUnderAlways() async throws {
+        let (library, _) = try await makeLibraryWithBundle(cachePolicy: .always)
+        let bundle = try #require(try await library.readAssetBundles().first)
+        try backdate(bundle, by: 365 * 86_400)
 
-        let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
-
-        // Set maxAge to 1 hour (3600 seconds)
-        let library = makeLibrary(httpClient: mockClient, cachePolicy: .maxAge(3600))
-
-        // First fetch and create the bundle
-        let originalManifest = try await library.fetchManifest()
-        _ = try await library.buildBundle(for: originalManifest)
-
-        // Second fetch should use cached manifest since we're within the 1 hour timeout
-        let cachedManifest = try await library.fetchManifest()
-
-        #expect(cachedManifest.checksum == originalManifest.checksum)
-        // Should have made 2 HTTP calls but second one used cached bundle
-        #expect(mockClient.getCallCount == 2)
+        #expect(try await library.readLatestAssetBundle()?.id == bundle.id)
     }
 
-    @Test("EditorCachePolicy.maxAge fetches new manifest when timeout expired")
-    func editorCachePolicyMaxAgeFetchesNewWhenExpired() async throws {
-        let manifestJSON = uniqueManifestJSON(identifier: "test-maxage-expired-\(UUID().uuidString)")
+    @Test("readLatestAssetBundle returns nil under .ignore, even for a new bundle")
+    func readLatestAssetBundleReturnsNilUnderIgnore() async throws {
+        let (library, _) = try await makeLibraryWithBundle(cachePolicy: .ignore)
 
-        let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
-
-        // Set maxAge to 0 seconds (immediately expired)
-        let library = makeLibrary(httpClient: mockClient, cachePolicy: .maxAge(0))
-
-        // First fetch and create the bundle
-        let originalManifest = try await library.fetchManifest()
-        _ = try await library.buildBundle(for: originalManifest)
-
-        // Second fetch should NOT use cached manifest since maxAge(0) means immediately expired
-        let newManifest = try await library.fetchManifest()
-
-        // The checksums should still match (same data) but the cache was bypassed
-        #expect(newManifest.checksum == originalManifest.checksum)
-        #expect(mockClient.getCallCount == 2)
+        #expect(try await library.readAssetBundles().count == 1)
+        #expect(try await library.readLatestAssetBundle() == nil)
     }
 
-    @Test("EditorCachePolicy.maxAge with short timeout expires after delay")
-    func editorCachePolicyMaxAgeExpiresAfterDelay() async throws {
-        let manifestJSON = uniqueManifestJSON(identifier: "test-maxage-delay-\(UUID().uuidString)")
+    @Test("readLatestAssetBundle returns a bundle younger than .maxAge")
+    func readLatestAssetBundleReturnsBundleWithinMaxAge() async throws {
+        let (library, _) = try await makeLibraryWithBundle(cachePolicy: .maxAge(3600))
+        let bundle = try #require(try await library.readAssetBundles().first)
+        try backdate(bundle, by: 1800)
 
-        let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
-
-        // Set maxAge to 0.05 seconds (50 milliseconds)
-        let library = makeLibrary(httpClient: mockClient, cachePolicy: .maxAge(0.05))
-
-        // First fetch and create the bundle
-        let originalManifest = try await library.fetchManifest()
-        _ = try await library.buildBundle(for: originalManifest)
-
-        // Wait for the cache to expire
-        try await Task.sleep(for: .milliseconds(100))
-
-        // Third fetch should bypass cache since it's expired
-        _ = try await library.fetchManifest()
-
-        // Both fetches should have made HTTP calls since cache expired
-        #expect(mockClient.getCallCount == 2)
+        #expect(try await library.readLatestAssetBundle()?.id == bundle.id)
     }
 
-    @Test("EditorCachePolicy.maxAge uses cache before expiry then fetches after")
-    func editorCachePolicyMaxAgeTransitionsCorrectly() async throws {
-        let manifestJSON = uniqueManifestJSON(identifier: "test-maxage-transition-\(UUID().uuidString)")
+    @Test("readLatestAssetBundle returns nil for a bundle older than .maxAge")
+    func readLatestAssetBundleReturnsNilPastMaxAge() async throws {
+        let (library, _) = try await makeLibraryWithBundle(cachePolicy: .maxAge(3600))
+        let bundle = try #require(try await library.readAssetBundles().first)
+        try backdate(bundle, by: 7200)
 
+        #expect(try await library.readLatestAssetBundle() == nil)
+    }
+
+    @Test("downloadAssetBundle keeps a bundle whose manifest hasn't changed, and marks it current")
+    func downloadAssetBundleKeepsUnchangedBundle() async throws {
+        let (library, mockClient) = try await makeLibraryWithBundle(cachePolicy: .maxAge(3600))
+        let bundle = try #require(try await library.readAssetBundles().first)
+        try backdate(bundle, by: 7200)
+        #expect(mockClient.downloadCallCount == 1)
+
+        let checked = try await library.downloadAssetBundle()
+
+        #expect(checked.id == bundle.id)
+        #expect(mockClient.getCallCount == 2)  // The manifest, checked again
+        #expect(mockClient.downloadCallCount == 1)  // Its asset, not downloaded again
+        #expect(try await library.readAssetBundles().count == 1)
+        #expect(try await library.readLatestAssetBundle()?.id == bundle.id)
+    }
+
+    @Test("downloadAssetBundle builds a new bundle when the manifest has changed")
+    func downloadAssetBundleBuildsChangedBundle() async throws {
+        let (library, mockClient) = try await makeLibraryWithBundle(cachePolicy: .ignore)
+        let original = try #require(try await library.readAssetBundles().first)
+
+        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "2"))
+        let changed = try await library.downloadAssetBundle()
+
+        #expect(changed.id != original.id)
+        #expect(mockClient.downloadCallCount == 2)
+        #expect(try await library.readAssetBundles().map(\.id) == [changed.id, original.id])
+    }
+
+    @Test("downloadAssetBundle makes the bundle for a manifest the site went back to the newest again")
+    func downloadAssetBundleRestoresReturningBundle() async throws {
+        let (library, mockClient) = try await makeLibraryWithBundle(cachePolicy: .ignore)
+        let original = try #require(try await library.readAssetBundles().first)
+        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "2"))
+        let changed = try await library.downloadAssetBundle()
+
+        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "1"))
+        let restored = try await library.downloadAssetBundle()
+
+        #expect(restored.id == original.id)
+        #expect(mockClient.downloadCallCount == 2)
+        #expect(try await library.readAssetBundles().map(\.id) == [original.id, changed.id])
+    }
+
+    /// A library whose storage holds one bundle, built from ``manifestJSON(scriptVersion:)`` with version `1`.
+    private func makeLibraryWithBundle(
+        cachePolicy: EditorCachePolicy
+    ) async throws -> (EditorAssetLibrary, EditorAssetLibraryMockHTTPClient) {
         let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
+        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "1"))
+        let library = makeLibrary(httpClient: mockClient, cachePolicy: cachePolicy)
+        _ = try await library.downloadAssetBundle()
+        return (library, mockClient)
+    }
 
-        // Set maxAge to 0.1 seconds (100 milliseconds)
-        let library = makeLibrary(httpClient: mockClient, cachePolicy: .maxAge(0.1))
+    /// A manifest with one script, whose URL carries `scriptVersion` the way WordPress versions its assets.
+    private static func manifestJSON(scriptVersion: String) -> String {
+        """
+        {
+            "scripts": "<script src=\\"https://example.com/plugin.js?ver=\(scriptVersion)\\"></script>",
+            "styles": "",
+            "allowed_block_types": ["core/paragraph"]
+        }
+        """
+    }
 
-        // First fetch and create the bundle
-        let originalManifest = try await library.fetchManifest()
-        _ = try await library.buildBundle(for: originalManifest)
+    private static func responses(forManifest manifestJSON: String) -> (URL) throws -> Data {
+        { url in url.path.contains("editor-assets") ? Data(manifestJSON.utf8) : Data("mock content".utf8) }
+    }
 
-        // Immediate second fetch should use cache (within 100ms)
-        let cachedManifest = try await library.fetchManifest()
-        #expect(cachedManifest.checksum == originalManifest.checksum)
-
-        // Wait for cache to expire
-        try await Task.sleep(for: .milliseconds(150))
-
-        // Third fetch should create new manifest since cache expired
-        let newManifest = try await library.fetchManifest()
-        #expect(newManifest.checksum == originalManifest.checksum)
-
-        // Should have made 3 HTTP calls total
-        #expect(mockClient.getCallCount == 3)
+    /// Rewrites `bundle`'s download date on disk to `interval` seconds ago.
+    private func backdate(_ bundle: EditorAssetBundle, by interval: TimeInterval) throws {
+        try EditorAssetBundle(
+            manifest: bundle.manifest,
+            downloadDate: Date(timeIntervalSinceNow: -interval),
+            bundleRoot: bundle.bundleRoot
+        ).writeManifest()
     }
 
     // MARK: - Bundle Fetching Tests with Real Manifest Data
