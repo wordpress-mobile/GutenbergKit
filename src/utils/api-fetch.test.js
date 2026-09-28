@@ -433,19 +433,36 @@ describe( 'api-fetch credentials handling', () => {
 			expect( await request ).toEqual( { ok: true } );
 		} );
 
-		it( 'caps a long Retry-After delay', async () => {
+		it( 'waits for a Retry-After delay of up to 10 seconds', async () => {
 			global.fetch = vi
 				.fn()
 				.mockImplementationOnce( () =>
-					rateLimited( { 'Retry-After': '120' } )
+					rateLimited( { 'Retry-After': '10' } )
 				)
 				.mockImplementationOnce( okResponse );
 
 			const request = apiFetch( { path: '/wp/v2/taxonomies' } );
 
-			await vi.advanceTimersByTimeAsync( 10_000 );
+			await vi.advanceTimersByTimeAsync( 9_999 );
+			expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+			await vi.advanceTimersByTimeAsync( 1 );
 
 			expect( await request ).toEqual( { ok: true } );
+		} );
+
+		it( 'does not retry when Retry-After asks for a longer delay', async () => {
+			global.fetch = vi.fn( () =>
+				rateLimited( { 'Retry-After': '11' } )
+			);
+
+			const request = apiFetch( { path: '/wp/v2/taxonomies' } );
+			const assertion = expect( request ).rejects.toMatchObject( {
+				code: 'invalid_json',
+			} );
+			await vi.runAllTimersAsync();
+
+			await assertion;
+			expect( global.fetch ).toHaveBeenCalledTimes( 1 );
 		} );
 
 		it( 'rejects as api-fetch would once retries run out', async () => {

@@ -19,7 +19,7 @@ const RETRYABLE_METHODS = [ 'GET', 'HEAD', 'OPTIONS' ];
 /** Base delay before each retry; jitter of up to the same amount is added. */
 const RETRY_DELAYS_MS = [ 500, 2000 ];
 
-/** Upper bound on a server-requested `Retry-After` delay. */
+/** Longest `Retry-After` delay worth waiting for; longer ones fail at once. */
 const MAX_RETRY_AFTER_MS = 10_000;
 
 /**
@@ -602,13 +602,17 @@ export function withRateLimitRetry( fetchHandler ) {
 				attempt < RETRY_DELAYS_MS.length &&
 				! options.signal?.aborted
 			) {
-				warn(
-					`Retrying ${ method } ${
-						options.url ?? options.path
-					} after a 429 response`
-				);
-				await wait( getRetryDelay( response, attempt ) );
-				continue;
+				const delay = getRetryDelay( response, attempt );
+				// A retry sent before a longer `Retry-After` elapses would fail too.
+				if ( delay <= MAX_RETRY_AFTER_MS ) {
+					warn(
+						`Retrying ${ method } ${
+							options.url ?? options.path
+						} after a 429 response`
+					);
+					await wait( delay );
+					continue;
+				}
 			}
 
 			if ( options.parse === false ) {
@@ -637,7 +641,7 @@ function getRetryDelay( response, attempt ) {
 			? Date.parse( retryAfter ) - Date.now()
 			: seconds * 1000;
 		if ( ! Number.isNaN( delay ) ) {
-			return Math.min( Math.max( delay, 0 ), MAX_RETRY_AFTER_MS );
+			return Math.max( delay, 0 );
 		}
 	}
 
