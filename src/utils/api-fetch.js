@@ -561,15 +561,9 @@ function isRestIndexPath( path ) {
 /**
  * Wraps a fetch handler to retry read-only requests the site rate-limits.
  *
- * Some hosts throttle the burst of requests sent while the editor loads with
- * a 429. core-data caches some failed resolutions, such as the taxonomy
- * entity config, for the rest of the session, so one throttled request can
- * break a block, like Categories List, until the editor reloads.
- *
- * The handler requests the raw response to read its status, then parses it
- * as api-fetch would. Wrapping the fetch handler rather than adding a
- * middleware retries each network request once, including the pages
- * `fetchAllMiddleware` requests.
+ * core-data caches some failed resolutions for the session, so one throttled
+ * request in the editor's load burst can break a block until reload. As a
+ * fetch handler, it also retries each page `fetchAllMiddleware` requests.
  *
  * Exported for testing only.
  *
