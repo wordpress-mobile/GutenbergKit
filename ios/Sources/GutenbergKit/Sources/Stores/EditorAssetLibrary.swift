@@ -18,9 +18,10 @@ public actor EditorAssetLibrary {
     /// - Parameters:
     ///   - configuration: The editor configuration containing site-specific settings.
     ///   - httpClient: The HTTP client used to fetch remote assets.
-    ///   - cachePolicy: The policy that determines when cached asset manifests are considered valid.
-    ///     Use `.ignore` to always fetch fresh manifests, `.maxAge(_:)` to expire entries after
-    ///     a time interval, or `.always` (the default) to use cached manifests regardless of age.
+    ///   - cachePolicy: The policy that determines how long the newest bundle on disk is used
+    ///     before the site's manifest is checked again. Use `.ignore` to check it every time,
+    ///     `.maxAge(_:)` to check it once the bundle is older than a time interval, or `.always`
+    ///     (the default) to check it only when there is no bundle on disk.
     ///   - storageRoot: The root directory where asset bundles will be stored on disk.
     public init(
         configuration: EditorConfiguration,
@@ -38,7 +39,8 @@ public actor EditorAssetLibrary {
 
     /// Retrieve the manifest for a given site configuration.
     ///
-    /// Applications should periodically check for a new editor manifest. This can be very expensive, so this method defaults to returning an existing one on-disk.
+    /// Parsing a manifest is expensive, so when a bundle built from the same manifest is already on disk, this
+    /// method returns that bundle's copy rather than parsing it again.
     ///
     func fetchManifest() async throws -> LocalEditorAssetManifest {
         guard configuration.shouldUsePlugins else { return .empty }
@@ -47,14 +49,13 @@ public actor EditorAssetLibrary {
         ).0
         let remoteManifest = try RemoteEditorAssetManifest(data: data)
 
-        guard
-            let existingManifest = self.existingBundle(forManifestChecksum: remoteManifest.checksum),
-            self.cachePolicy.allowsResponseWith(date: existingManifest.downloadDate)
-        else {
-            return try LocalEditorAssetManifest(remoteManifest: remoteManifest)
+        // The checksum covers the whole response, so a bundle with the same one was built from
+        // this exact manifest.
+        if let existingBundle = self.existingBundle(forManifestChecksum: remoteManifest.checksum) {
+            return existingBundle.manifest
         }
 
-        return existingManifest.manifest
+        return try LocalEditorAssetManifest(remoteManifest: remoteManifest)
     }
 
     // MARK: - Bundle Handling
@@ -72,17 +73,44 @@ public actor EditorAssetLibrary {
             .sorted { $0.downloadDate > $1.downloadDate }
     }
 
+    /// The newest bundle on disk, if the cache policy still trusts it.
+    ///
+    /// Returns `nil` when there is no bundle, or when the newest one is too old for the policy. Either way, call
+    /// ``downloadAssetBundle(progress:)`` next to check the site's manifest.
+    func readLatestAssetBundle() throws -> EditorAssetBundle? {
+        guard
+            let latestBundle = try self.readAssetBundles().first,
+            self.cachePolicy.allowsResponseWith(date: latestBundle.downloadDate)
+        else {
+            return nil
+        }
+
+        return latestBundle
+    }
+
     /// Fetches the latest manifest from the server and downloads all of its resources, caching them on-disk.
+    ///
+    /// If a bundle built from the same manifest is already on disk, it's returned instead, without downloading its
+    /// assets again: they're versioned by URL, so an unchanged manifest means unchanged assets. The bundle then
+    /// counts as newly downloaded, both for the cache policy and as the newest bundle on disk. To download every
+    /// asset again regardless, ``purge()`` the library first.
     ///
     /// - Parameter progress: An optional callback that receives progress updates as assets are downloaded.
     /// - Returns: The downloaded `EditorAssetBundle` containing all cached assets.
     /// - Throws: An error if the manifest cannot be fetched or assets fail to download.
     public func downloadAssetBundle(
-        cachePolicy: EditorCachePolicy = .always,
         progress: EditorProgressCallback? = nil
     ) async throws -> EditorAssetBundle {
         let manifest = try await self.fetchManifest()
         return try await self.buildBundle(for: manifest, progress: progress)
+    }
+
+    @available(*, deprecated, message: "`cachePolicy` has no effect; the library's own cache policy applies. Drop the argument.")
+    public func downloadAssetBundle(
+        cachePolicy: EditorCachePolicy,
+        progress: EditorProgressCallback? = nil
+    ) async throws -> EditorAssetBundle {
+        try await self.downloadAssetBundle(progress: progress)
     }
 
     /// Checks whether a complete bundle with the given manifest checksum exists on disk.
@@ -110,7 +138,8 @@ public actor EditorAssetLibrary {
     /// Downloads all of the assets for a given manifest and assembles them into a bundle.
     ///
     /// Assets are downloaded concurrently and stored in a temporary directory. Once all downloads
-    /// complete successfully, the bundle is atomically moved to its final location.
+    /// complete successfully, the bundle is atomically moved to its final location. If a complete
+    /// bundle for the manifest is already there, it's marked current and returned instead.
     func buildBundle(
         for manifest: LocalEditorAssetManifest,
         progress: EditorProgressCallback? = nil
@@ -126,7 +155,30 @@ public actor EditorAssetLibrary {
         // join a build in flight rather than race a second one into it.
         let destination = self.bundleRoot(for: manifest.checksum).standardizedFileURL
         return try await Self.inFlightBuilds.value(for: destination, progress: progress) { report in
-            try await self.build(manifest, reportingTo: report)
+            // Checked here rather than before joining, so that a build finishing in between is
+            // reused, and so that marking a bundle current doesn't race a build in flight
+            // replacing it.
+            if let existingBundle = await self.existingBundle(forManifestChecksum: manifest.checksum) {
+                await report(EditorProgress(completed: 1, total: 1))
+                return await self.markCurrent(existingBundle)
+            }
+
+            return try await self.build(manifest, reportingTo: report)
+        }
+    }
+
+    /// Records that the site's manifest still matches `bundle`, by resetting its download date to now. That makes
+    /// it fresh again for the cache policy, and the newest bundle on disk — which matters when a site goes back to
+    /// a manifest it had before, whose bundle is older than the one it replaced.
+    private func markCurrent(_ bundle: EditorAssetBundle) -> EditorAssetBundle {
+        do {
+            let current = try EditorAssetBundle(manifest: bundle.manifest, bundleRoot: bundle.bundleRoot)
+            try current.writeManifest()
+            return current
+        } catch {
+            // The bundle is still complete and correct; it'll just be checked again sooner.
+            log(.warn, "Failed to mark asset bundle \(bundle.id) current: \(error.localizedDescription)")
+            return bundle
         }
     }
 

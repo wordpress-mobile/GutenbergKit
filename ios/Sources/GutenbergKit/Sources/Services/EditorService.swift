@@ -55,7 +55,9 @@ public actor EditorService {
     ///   - cachePolicy: The policy that determines when cached responses are considered valid.
     ///     Use `.ignore` to always fetch fresh data, `.maxAge(_:)` to expire entries after
     ///     a time interval, or `.always` (the default) to use cached data regardless of age.
-    ///     This policy applies to both API response caching and asset manifest caching.
+    ///     This policy applies to both API responses and plugin and theme assets. For assets, it
+    ///     decides when to check the site's asset manifest again; an unchanged manifest keeps the
+    ///     bundle already on disk rather than downloading its assets again.
     public init(
         configuration: EditorConfiguration,
         httpClient: (any EditorHTTPClientProtocol)? = nil,
@@ -233,7 +235,7 @@ public actor EditorService {
     }
 
     private func prepareAssetBundle() async throws -> EditorAssetBundle {
-        if let latestAssetBundle = try await self.assetLibrary.readAssetBundles().first {
+        if let latestAssetBundle = try await self.assetLibrary.readLatestAssetBundle() {
             await self.incrementProgress(for: .assetBundle)
             return latestAssetBundle
         }
