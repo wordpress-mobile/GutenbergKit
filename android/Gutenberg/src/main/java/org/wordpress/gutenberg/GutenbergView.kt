@@ -111,6 +111,9 @@ class GutenbergView : FrameLayout {
     private var hasAutofocused = false
     private lateinit var assetLoader: WebViewAssetLoader
     private lateinit var assetAuthority: String
+
+    /** The editor document [loadEditor] loaded, so its load failures can be told apart. */
+    private var editorUri: Uri? = null
     private val configuration: EditorConfiguration
     private lateinit var dependencies: EditorDependencies
 
@@ -443,8 +446,16 @@ class GutenbergView : FrameLayout {
                 request: WebResourceRequest?,
                 error: WebResourceError?
             ) {
-                Log.e("GutenbergView", "Received web error: $error")
+                val url = request?.url
+                val description = error?.description?.toString()
+                Log.e("GutenbergView", "Received web error ${error?.errorCode} ($description) for $url")
                 super.onReceivedError(view, request, error)
+
+                // Otherwise the editor never signals readiness and the spinner never ends.
+                if (request?.isForMainFrame == true && url != null && isEditorDocument(url)) {
+                    val isDevServer = BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()
+                    showErrorPhase(Exception(editorLoadErrorMessage(url, description, isDevServer)))
+                }
             }
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -576,6 +587,14 @@ class GutenbergView : FrameLayout {
         }
     }
 
+    /** Whether [url] is the editor document, ignoring an explicit default port or empty path. */
+    private fun isEditorDocument(url: Uri): Boolean {
+        val editorUri = editorUri ?: return false
+        return url.scheme == editorUri.scheme &&
+            originAuthority(url.toString()) == originAuthority(editorUri.toString()) &&
+            url.path.orEmpty().ifEmpty { "/" } == editorUri.path.orEmpty().ifEmpty { "/" }
+    }
+
     /**
      * Fetches all required dependencies and then loads the editor.
      *
@@ -657,6 +676,7 @@ class GutenbergView : FrameLayout {
         val editorUrl = BuildConfig.GUTENBERG_EDITOR_URL.ifEmpty {
             assetUrl
         }
+        editorUri = Uri.parse(editorUrl)
 
         WebStorage.getInstance().deleteAllData()
         webView.clearCache(true)
@@ -1409,6 +1429,33 @@ class GutenbergView : FrameLayout {
             val devServerAuthority = originAuthority(editorUrl) ?: return false
             return url.authority == devServerAuthority
         }
+
+        /**
+         * Why the editor document at [url] failed to load, with a hint keyed to
+         * Chromium's [description] (e.g. `net::ERR_CONNECTION_REFUSED`) when it is a
+         * dev server. Null for the bundled editor, so the view shows its localized text.
+         */
+        internal fun editorLoadErrorMessage(url: Uri, description: String?, isDevServer: Boolean): String? {
+            if (!isDevServer) return null
+            val reason = description.orEmpty()
+            val hint = when {
+                "ERR_CONNECTION_REFUSED" in reason ->
+                    "Is the dev server running? Start it with \"make serve-dev\"."
+                "ERR_CLEARTEXT_NOT_PERMITTED" in reason ->
+                    "Allow cleartext traffic to ${url.host} in the app's network security config."
+                UNREACHABLE_HOST_ERRORS.any { it in reason } ->
+                    "Check that this device can reach ${url.host}: its IP address, network, and firewall."
+                else -> null
+            }
+            val summary = "Couldn't load the editor from $url (${description ?: "unknown error"})."
+            return listOfNotNull(summary, hint).joinToString(" ")
+        }
+
+        private val UNREACHABLE_HOST_ERRORS = listOf(
+            "ERR_CONNECTION_TIMED_OUT",
+            "ERR_ADDRESS_UNREACHABLE",
+            "ERR_NAME_NOT_RESOLVED"
+        )
 
         private const val ASSET_LOADING_TIMEOUT_MS = 5000L
 
