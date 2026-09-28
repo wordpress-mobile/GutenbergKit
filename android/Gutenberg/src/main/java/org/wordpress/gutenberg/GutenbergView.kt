@@ -602,8 +602,8 @@ class GutenbergView : FrameLayout {
     }
 
     /**
-     * Whether [url] is served by [assetLoader]. Only the scheme it serves counts, as
-     * the other scheme on the same authority reaches the site over the network.
+     * Whether [url] is an asset [assetLoader] serves over the scheme the editor loads
+     * with. On an https site, http on the same authority reaches the site instead.
      */
     private fun isAssetUrl(url: Uri): Boolean =
         url.scheme == assetScheme &&
