@@ -1470,6 +1470,9 @@ class GutenbergView : FrameLayout {
                     "Is the dev server running? Start it with \"make serve-dev\"."
                 "ERR_CLEARTEXT_NOT_PERMITTED" in reason ->
                     "Allow cleartext traffic to ${url.host} in the app's network security config."
+                UNREACHABLE_HOST_ERRORS.any { it in reason } && url.host == EMULATOR_HOST_ALIAS ->
+                    "$EMULATOR_HOST_ALIAS reaches your computer only from the emulator. " +
+                        "On a physical device, use your computer's LAN IP address instead."
                 UNREACHABLE_HOST_ERRORS.any { it in reason } ->
                     "Check that this device can reach ${url.host}: its IP address, network, and firewall."
                 reason.startsWith("HTTP ") ->
@@ -1482,6 +1485,9 @@ class GutenbergView : FrameLayout {
 
         /** Hosts that resolve to the device itself, which reaches the dev machine only through `adb reverse`. */
         private val DEVICE_LOOPBACK_HOSTS = setOf("localhost", "127.0.0.1")
+
+        /** The emulator's alias for the dev machine; a physical device can't reach it. */
+        private const val EMULATOR_HOST_ALIAS = "10.0.2.2"
 
         private val UNREACHABLE_HOST_ERRORS = listOf(
             "ERR_CONNECTION_TIMED_OUT",

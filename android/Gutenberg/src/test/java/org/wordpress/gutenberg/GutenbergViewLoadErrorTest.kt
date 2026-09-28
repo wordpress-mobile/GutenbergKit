@@ -29,6 +29,8 @@ class GutenbergViewLoadErrorTest {
 
     private val devServer = Uri.parse("http://10.0.2.2:5173/")
 
+    private val lanDevServer = Uri.parse("http://192.168.1.5:5173/")
+
     private fun siteView() = GutenbergView(
         EditorConfiguration.builder("https://example.com", "https://example.com/wp-json/").build(),
         EditorDependencies.empty,
@@ -144,16 +146,24 @@ class GutenbergViewLoadErrorTest {
 
     @Test
     fun `editorLoadErrorMessage suggests checking reachability of an unreachable host`() {
-        val message = GutenbergView.editorLoadErrorMessage(devServer, "net::ERR_CONNECTION_TIMED_OUT", true)
+        val message = GutenbergView.editorLoadErrorMessage(lanDevServer, "net::ERR_CONNECTION_TIMED_OUT", true)
 
-        assertTrue(message.orEmpty().contains("can reach 10.0.2.2"))
+        assertTrue(message.orEmpty().contains("can reach 192.168.1.5"))
     }
 
     @Test
     fun `editorLoadErrorMessage suggests checking reachability of a disconnected device`() {
-        val message = GutenbergView.editorLoadErrorMessage(devServer, "net::ERR_INTERNET_DISCONNECTED", true)
+        val message = GutenbergView.editorLoadErrorMessage(lanDevServer, "net::ERR_INTERNET_DISCONNECTED", true)
 
-        assertTrue(message.orEmpty().contains("can reach 10.0.2.2"))
+        assertTrue(message.orEmpty().contains("can reach 192.168.1.5"))
+    }
+
+    @Test
+    fun `editorLoadErrorMessage suggests a LAN IP address for an unreachable emulator alias`() {
+        val message = GutenbergView.editorLoadErrorMessage(devServer, "net::ERR_CONNECTION_TIMED_OUT", true)
+
+        assertTrue(message.orEmpty().contains("only from the emulator"))
+        assertTrue(message.orEmpty().contains("LAN IP address"))
     }
 
     @Test
