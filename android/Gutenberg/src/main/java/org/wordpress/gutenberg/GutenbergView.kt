@@ -1453,8 +1453,12 @@ class GutenbergView : FrameLayout {
 
         private val UNREACHABLE_HOST_ERRORS = listOf(
             "ERR_CONNECTION_TIMED_OUT",
+            "ERR_CONNECTION_FAILED",
+            "ERR_TIMED_OUT",
             "ERR_ADDRESS_UNREACHABLE",
-            "ERR_NAME_NOT_RESOLVED"
+            "ERR_NAME_NOT_RESOLVED",
+            "ERR_INTERNET_DISCONNECTED",
+            "ERR_NETWORK_CHANGED"
         )
 
         private const val ASSET_LOADING_TIMEOUT_MS = 5000L

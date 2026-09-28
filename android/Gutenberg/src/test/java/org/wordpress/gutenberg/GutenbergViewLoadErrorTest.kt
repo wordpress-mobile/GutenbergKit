@@ -94,6 +94,13 @@ class GutenbergViewLoadErrorTest {
     }
 
     @Test
+    fun `editorLoadErrorMessage suggests checking reachability of a disconnected device`() {
+        val message = GutenbergView.editorLoadErrorMessage(devServer, "net::ERR_INTERNET_DISCONNECTED", true)
+
+        assertTrue(message.orEmpty().contains("can reach 10.0.2.2"))
+    }
+
+    @Test
     fun `editorLoadErrorMessage leaves the bundled editor to the localized message`() {
         assertNull(
             GutenbergView.editorLoadErrorMessage(
