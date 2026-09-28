@@ -1439,6 +1439,9 @@ class GutenbergView : FrameLayout {
             if (!isDevServer) return null
             val reason = description.orEmpty()
             val hint = when {
+                "ERR_CONNECTION_REFUSED" in reason && url.host in DEVICE_LOOPBACK_HOSTS && url.port != -1 ->
+                    "Is the dev server running? Start it with \"make serve-dev\". " +
+                        "On a physical device, also run \"adb reverse tcp:${url.port} tcp:${url.port}\"."
                 "ERR_CONNECTION_REFUSED" in reason ->
                     "Is the dev server running? Start it with \"make serve-dev\"."
                 "ERR_CLEARTEXT_NOT_PERMITTED" in reason ->
@@ -1450,6 +1453,9 @@ class GutenbergView : FrameLayout {
             val summary = "Couldn't load the editor from $url (${description ?: "unknown error"})."
             return listOfNotNull(summary, hint).joinToString(" ")
         }
+
+        /** Hosts that resolve to the device itself, which reaches the dev machine only through `adb reverse`. */
+        private val DEVICE_LOOPBACK_HOSTS = setOf("localhost", "127.0.0.1")
 
         private val UNREACHABLE_HOST_ERRORS = listOf(
             "ERR_CONNECTION_TIMED_OUT",

@@ -7,6 +7,7 @@ import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -77,6 +78,19 @@ class GutenbergViewLoadErrorTest {
         val message = GutenbergView.editorLoadErrorMessage(devServer, "net::ERR_CONNECTION_REFUSED", true)
 
         assertTrue(message.orEmpty().contains("make serve-dev"))
+        assertFalse(message.orEmpty().contains("adb reverse"))
+    }
+
+    @Test
+    fun `editorLoadErrorMessage suggests forwarding the port for a refused loopback dev server`() {
+        val message = GutenbergView.editorLoadErrorMessage(
+            Uri.parse("http://localhost:5173/"),
+            "net::ERR_CONNECTION_REFUSED",
+            true
+        )
+
+        assertTrue(message.orEmpty().contains("make serve-dev"))
+        assertTrue(message.orEmpty().contains("adb reverse tcp:5173 tcp:5173"))
     }
 
     @Test
