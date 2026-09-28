@@ -337,6 +337,218 @@ describe( 'api-fetch credentials handling', () => {
 		);
 	} );
 
+	describe( 'withRateLimitRetry', () => {
+		const rateLimited = ( headers = {} ) =>
+			Promise.resolve(
+				new Response( '<html>Too Many Requests</html>', {
+					status: 429,
+					headers: { 'Content-Type': 'text/html', ...headers },
+				} )
+			);
+		const okResponse = () =>
+			Promise.resolve( new Response( '{"ok":true}', { status: 200 } ) );
+
+		beforeEach( () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://example.com/wp-json/',
+				siteApiNamespace: [],
+				namespaceExcludedPaths: [],
+			} );
+			vi.useFakeTimers();
+			vi.spyOn( Math, 'random' ).mockReturnValue( 0 );
+		} );
+
+		afterEach( () => {
+			vi.useRealTimers();
+			vi.restoreAllMocks();
+		} );
+
+		it.each( [ 'GET', 'HEAD', 'OPTIONS' ] )(
+			'retries a rate-limited %s request',
+			async ( method ) => {
+				global.fetch = vi
+					.fn()
+					.mockImplementationOnce( () => rateLimited() )
+					.mockImplementationOnce( okResponse );
+
+				const request = apiFetch( {
+					path: '/wp/v2/taxonomies',
+					method,
+					parse: false,
+				} );
+				await vi.runAllTimersAsync();
+
+				expect( ( await request ).status ).toBe( 200 );
+				expect( global.fetch ).toHaveBeenCalledTimes( 2 );
+			}
+		);
+
+		it( 'resolves with the parsed body of the retried request', async () => {
+			global.fetch = vi
+				.fn()
+				.mockImplementationOnce( () => rateLimited() )
+				.mockImplementationOnce( okResponse );
+
+			const request = apiFetch( { path: '/wp/v2/taxonomies' } );
+			await vi.runAllTimersAsync();
+
+			expect( await request ).toEqual( { ok: true } );
+		} );
+
+		it( 'waits longer before each retry', async () => {
+			global.fetch = vi
+				.fn()
+				.mockImplementationOnce( () => rateLimited() )
+				.mockImplementationOnce( () => rateLimited() )
+				.mockImplementationOnce( okResponse );
+
+			const request = apiFetch( { path: '/wp/v2/taxonomies' } );
+
+			await vi.advanceTimersByTimeAsync( 499 );
+			expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+			await vi.advanceTimersByTimeAsync( 1 );
+			expect( global.fetch ).toHaveBeenCalledTimes( 2 );
+			await vi.advanceTimersByTimeAsync( 1999 );
+			expect( global.fetch ).toHaveBeenCalledTimes( 2 );
+			await vi.advanceTimersByTimeAsync( 1 );
+
+			expect( await request ).toEqual( { ok: true } );
+			expect( global.fetch ).toHaveBeenCalledTimes( 3 );
+		} );
+
+		it( 'waits as long as the Retry-After header asks', async () => {
+			global.fetch = vi
+				.fn()
+				.mockImplementationOnce( () =>
+					rateLimited( { 'Retry-After': '3' } )
+				)
+				.mockImplementationOnce( okResponse );
+
+			const request = apiFetch( { path: '/wp/v2/taxonomies' } );
+
+			await vi.advanceTimersByTimeAsync( 2999 );
+			expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+			await vi.advanceTimersByTimeAsync( 1 );
+
+			expect( await request ).toEqual( { ok: true } );
+		} );
+
+		it( 'caps a long Retry-After delay', async () => {
+			global.fetch = vi
+				.fn()
+				.mockImplementationOnce( () =>
+					rateLimited( { 'Retry-After': '120' } )
+				)
+				.mockImplementationOnce( okResponse );
+
+			const request = apiFetch( { path: '/wp/v2/taxonomies' } );
+
+			await vi.advanceTimersByTimeAsync( 10_000 );
+
+			expect( await request ).toEqual( { ok: true } );
+		} );
+
+		it( 'rejects as api-fetch would once retries run out', async () => {
+			global.fetch = vi.fn( () => rateLimited() );
+
+			const request = apiFetch( { path: '/wp/v2/taxonomies' } );
+			const assertion = expect( request ).rejects.toMatchObject( {
+				code: 'invalid_json',
+			} );
+			await vi.runAllTimersAsync();
+
+			await assertion;
+			expect( global.fetch ).toHaveBeenCalledTimes( 3 );
+		} );
+
+		it( 'rejects with the response once retries run out without parsing', async () => {
+			global.fetch = vi.fn( () => rateLimited() );
+
+			const request = apiFetch( {
+				path: '/wp/v2/taxonomies',
+				parse: false,
+			} );
+			const assertion = expect( request ).rejects.toMatchObject( {
+				status: 429,
+			} );
+			await vi.runAllTimersAsync();
+
+			await assertion;
+		} );
+
+		it( 'does not retry a request that changes server state', async () => {
+			global.fetch = vi.fn( () => rateLimited() );
+
+			await expect(
+				apiFetch( { path: '/wp/v2/posts', method: 'POST', data: {} } )
+			).rejects.toMatchObject( { code: 'invalid_json' } );
+			expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'does not retry other error responses', async () => {
+			global.fetch = vi.fn( () =>
+				Promise.resolve(
+					new Response( '{"code":"rest_forbidden"}', {
+						status: 403,
+					} )
+				)
+			);
+
+			await expect(
+				apiFetch( { path: '/wp/v2/taxonomies' } )
+			).rejects.toMatchObject( { code: 'rest_forbidden' } );
+			expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'does not retry network errors', async () => {
+			global.fetch = vi.fn( () =>
+				Promise.reject( new TypeError( 'Failed to fetch' ) )
+			);
+
+			await expect(
+				apiFetch( { path: '/wp/v2/taxonomies' } )
+			).rejects.toMatchObject( { code: 'fetch_error' } );
+			expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'does not retry an aborted request', async () => {
+			const controller = new AbortController();
+			global.fetch = vi.fn( () => {
+				controller.abort();
+				return rateLimited();
+			} );
+
+			await expect(
+				apiFetch( {
+					path: '/wp/v2/taxonomies',
+					signal: controller.signal,
+				} )
+			).rejects.toMatchObject( { code: 'invalid_json' } );
+			expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it.each( [
+			[ 'a 204 response', new Response( null, { status: 204 } ), null ],
+			[ 'an empty body', new Response( '', { status: 200 } ), null ],
+		] )( 'resolves with null for %s', async ( _label, response, body ) => {
+			global.fetch = vi.fn( () => Promise.resolve( response ) );
+
+			expect( await apiFetch( { path: '/wp/v2/taxonomies' } ) ).toBe(
+				body
+			);
+		} );
+
+		it( 'rejects invalid JSON in a successful response', async () => {
+			global.fetch = vi.fn( () =>
+				Promise.resolve( new Response( '<html>', { status: 200 } ) )
+			);
+
+			await expect(
+				apiFetch( { path: '/wp/v2/taxonomies' } )
+			).rejects.toMatchObject( { code: 'invalid_json' } );
+		} );
+	} );
+
 	it( 'should preserve other headers when adding Authorization', async () => {
 		bridge.getGBKit.mockReturnValue( {
 			siteApiRoot: 'https://example.com/wp-json/',

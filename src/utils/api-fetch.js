@@ -2,15 +2,25 @@ import apiFetch from '@wordpress/api-fetch';
 import { getQueryArg } from '@wordpress/url';
 import { __ } from '@wordpress/i18n';
 import { getGBKit, POST_FALLBACKS } from './bridge';
-import { info, error as logError } from './logger';
+import { info, warn, error as logError } from './logger';
 import { ensureTrailingSlash, stripTrailingSlash } from './url';
 
 /**
  * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
+ * @typedef {import('@wordpress/api-fetch').FetchHandler} FetchHandler
  */
 
 /** Matches `/wp/v2/media` but not sub-paths like `/wp/v2/media/123`. */
 const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
+
+/** Methods safe to repeat because they do not change server state. */
+const RETRYABLE_METHODS = [ 'GET', 'HEAD', 'OPTIONS' ];
+
+/** Base delay before each retry; jitter of up to the same amount is added. */
+const RETRY_DELAYS_MS = [ 500, 2000 ];
+
+/** Upper bound on a server-requested `Retry-After` delay. */
+const MAX_RETRY_AFTER_MS = 10_000;
 
 /**
  * Initializes the API fetch configuration and middleware.
@@ -37,6 +47,9 @@ export function configureApiFetch() {
 	apiFetch.use( siteIndexMiddleware );
 	apiFetch.use(
 		apiFetch.createPreloadingMiddleware( preloadData ?? defaultPreloadData )
+	);
+	apiFetch.setFetchHandler(
+		withRateLimitRetry( apiFetch.defaultFetchHandler )
 	);
 }
 
@@ -543,6 +556,138 @@ function isRestIndexPath( path ) {
 	}
 	const pathname = path.split( '?' )[ 0 ];
 	return pathname === '' || pathname === '/';
+}
+
+/**
+ * Wraps a fetch handler to retry read-only requests the site rate-limits.
+ *
+ * Some hosts throttle the burst of requests sent while the editor loads with
+ * a 429. core-data caches some failed resolutions, such as the taxonomy
+ * entity config, for the rest of the session, so one throttled request can
+ * break a block, like Categories List, until the editor reloads.
+ *
+ * The handler requests the raw response to read its status, then parses it
+ * as api-fetch would. Wrapping the fetch handler rather than adding a
+ * middleware retries each network request once, including the pages
+ * `fetchAllMiddleware` requests.
+ *
+ * Exported for testing only.
+ *
+ * @param {FetchHandler} fetchHandler The handler performing the request.
+ * @return {FetchHandler} The handler with retries.
+ */
+export function withRateLimitRetry( fetchHandler ) {
+	return async ( options ) => {
+		const method = ( options.method ?? 'GET' ).toUpperCase();
+		if ( ! RETRYABLE_METHODS.includes( method ) ) {
+			return fetchHandler( options );
+		}
+
+		for ( let attempt = 0; ; attempt++ ) {
+			let response;
+			let isOk = true;
+			try {
+				response = await fetchHandler( { ...options, parse: false } );
+			} catch ( err ) {
+				// Network, offline, and abort errors have no response.
+				if ( typeof err?.status !== 'number' ) {
+					throw err;
+				}
+				response = err;
+				isOk = false;
+			}
+
+			if (
+				response.status === 429 &&
+				attempt < RETRY_DELAYS_MS.length &&
+				! options.signal?.aborted
+			) {
+				warn(
+					`Retrying ${ method } ${
+						options.url ?? options.path
+					} after a 429 response`
+				);
+				await wait( getRetryDelay( response, attempt ) );
+				continue;
+			}
+
+			if ( options.parse === false ) {
+				if ( ! isOk ) {
+					throw response;
+				}
+				return response;
+			}
+			return parseResponse( response, isOk );
+		}
+	};
+}
+
+/**
+ * Returns how long to wait before retrying a rate-limited request.
+ *
+ * @param {Response} response The 429 response.
+ * @param {number}   attempt  Zero-based index of the retry about to happen.
+ * @return {number} Delay in milliseconds.
+ */
+function getRetryDelay( response, attempt ) {
+	const retryAfter = response.headers?.get?.( 'retry-after' );
+	if ( retryAfter ) {
+		const seconds = Number( retryAfter );
+		const delay = Number.isNaN( seconds )
+			? Date.parse( retryAfter ) - Date.now()
+			: seconds * 1000;
+		if ( ! Number.isNaN( delay ) ) {
+			return Math.min( Math.max( delay, 0 ), MAX_RETRY_AFTER_MS );
+		}
+	}
+
+	// Jitter spreads out requests that were throttled in the same burst.
+	const delay = RETRY_DELAYS_MS[ attempt ];
+	return delay + Math.random() * delay;
+}
+
+/**
+ * Resolves after the given delay.
+ *
+ * @param {number} ms Delay in milliseconds.
+ * @return {Promise<void>} Resolves once the delay has elapsed.
+ */
+function wait( ms ) {
+	return new Promise( ( resolve ) => setTimeout( resolve, ms ) );
+}
+
+/**
+ * Parses a response the way api-fetch's default handler does, which does not
+ * expose its parsing.
+ *
+ * @param {Response} response The response.
+ * @param {boolean}  isOk     Whether the handler accepted the response.
+ * @return {Promise<*>} The parsed body; rejects with it for an error response.
+ */
+async function parseResponse( response, isOk ) {
+	if ( isOk && response.status === 204 ) {
+		return null;
+	}
+
+	let body;
+	try {
+		if ( typeof response.text !== 'function' ) {
+			body = await response.json();
+		} else {
+			const text = await response.text();
+			body = isOk && text === '' ? null : JSON.parse( text );
+		}
+	} catch {
+		throw {
+			code: 'invalid_json',
+			message: __( 'The response is not a valid JSON response.' ),
+		};
+	}
+
+	if ( ! isOk ) {
+		throw body;
+	}
+	return body;
 }
 
 const defaultPreloadData = {
