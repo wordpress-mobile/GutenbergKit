@@ -5,6 +5,7 @@ import android.os.Looper
 import android.view.View
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -40,13 +41,23 @@ class GutenbergViewLoadErrorTest {
         .ifEmpty { "https://example.com/assets/index.html" }
 
     private fun failMainFrameLoad(view: GutenbergView, url: String) {
-        val request = mock(WebResourceRequest::class.java)
-        `when`(request.url).thenReturn(Uri.parse(url))
-        `when`(request.isForMainFrame).thenReturn(true)
         val error = mock(WebResourceError::class.java)
         `when`(error.description).thenReturn("net::ERR_CONNECTION_REFUSED")
-        view.editorWebView.webViewClient.onReceivedError(view.editorWebView, request, error)
+        view.editorWebView.webViewClient.onReceivedError(view.editorWebView, request(url, isForMainFrame = true), error)
         shadowOf(Looper.getMainLooper()).idle()
+    }
+
+    private fun respondWithNotFound(view: GutenbergView, url: String, isForMainFrame: Boolean) {
+        val response = WebResourceResponse(null, null, 404, "Not Found", null, null)
+        view.editorWebView.webViewClient.onReceivedHttpError(view.editorWebView, request(url, isForMainFrame), response)
+        shadowOf(Looper.getMainLooper()).idle()
+    }
+
+    private fun request(url: String, isForMainFrame: Boolean): WebResourceRequest {
+        val request = mock(WebResourceRequest::class.java)
+        `when`(request.url).thenReturn(Uri.parse(url))
+        `when`(request.isForMainFrame).thenReturn(isForMainFrame)
+        return request
     }
 
     @Test
@@ -71,6 +82,37 @@ class GutenbergViewLoadErrorTest {
         failMainFrameLoad(view, "https://example.com/wp-json/wp/v2/posts")
 
         assertEquals(View.VISIBLE, view.editorWebView.visibility)
+    }
+
+    @Test
+    fun `an HTTP error for the editor document replaces the spinner with the error view`() {
+        val view = siteView()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        respondWithNotFound(view, editorUrl, isForMainFrame = true)
+
+        assertEquals(
+            "the missing editor must give way to the error view",
+            View.INVISIBLE,
+            view.editorWebView.visibility
+        )
+    }
+
+    @Test
+    fun `an HTTP error for a subresource leaves the editor as it is`() {
+        val view = siteView()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        respondWithNotFound(view, "https://example.com/wp-content/uploads/missing.jpg", isForMainFrame = false)
+
+        assertEquals(View.VISIBLE, view.editorWebView.visibility)
+    }
+
+    @Test
+    fun `editorLoadErrorMessage suggests checking the editor URL for an HTTP error`() {
+        val message = GutenbergView.editorLoadErrorMessage(devServer, "HTTP 404", true)
+
+        assertTrue(message.orEmpty().contains("GUTENBERG_EDITOR_URL"))
     }
 
     @Test
@@ -116,12 +158,9 @@ class GutenbergViewLoadErrorTest {
 
     @Test
     fun `editorLoadErrorMessage leaves the bundled editor to the localized message`() {
-        assertNull(
-            GutenbergView.editorLoadErrorMessage(
-                Uri.parse("https://example.com/assets/index.html"),
-                "net::ERR_FAILED",
-                false
-            )
-        )
+        val bundledEditor = Uri.parse("https://example.com/assets/index.html")
+
+        assertNull(GutenbergView.editorLoadErrorMessage(bundledEditor, "net::ERR_FAILED", false))
+        assertNull(GutenbergView.editorLoadErrorMessage(bundledEditor, "HTTP 404", false))
     }
 }

@@ -451,10 +451,24 @@ class GutenbergView : FrameLayout {
                 Log.e("GutenbergView", "Received web error ${error?.errorCode} ($description) for $url")
                 super.onReceivedError(view, request, error)
 
-                // Otherwise the editor never signals readiness and the spinner never ends.
                 if (request?.isForMainFrame == true && url != null && isEditorDocument(url)) {
-                    val isDevServer = BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()
-                    showErrorPhase(Exception(editorLoadErrorMessage(url, description, isDevServer)))
+                    showEditorLoadErrorPhase(url, description)
+                }
+            }
+
+            override fun onReceivedHttpError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                errorResponse: WebResourceResponse?
+            ) {
+                super.onReceivedHttpError(view, request, errorResponse)
+
+                // A missing bundled `index.html` also lands here, as a 404 from the asset loader.
+                val url = request?.url
+                if (request?.isForMainFrame == true && url != null && isEditorDocument(url)) {
+                    val status = "HTTP ${errorResponse?.statusCode}"
+                    Log.e("GutenbergView", "Received $status for the editor document $url")
+                    showEditorLoadErrorPhase(url, status)
                 }
             }
 
@@ -593,6 +607,15 @@ class GutenbergView : FrameLayout {
         return url.scheme == editorUri.scheme &&
             originAuthority(url.toString()) == originAuthority(editorUri.toString()) &&
             url.path.orEmpty().ifEmpty { "/" } == editorUri.path.orEmpty().ifEmpty { "/" }
+    }
+
+    /**
+     * Shows why the editor document at [url] failed to load. Otherwise the editor
+     * never signals readiness and the spinner never ends.
+     */
+    private fun showEditorLoadErrorPhase(url: Uri, reason: String?) {
+        val isDevServer = BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()
+        showErrorPhase(Exception(editorLoadErrorMessage(url, reason, isDevServer)))
     }
 
     /**
@@ -1432,8 +1455,9 @@ class GutenbergView : FrameLayout {
 
         /**
          * Why the editor document at [url] failed to load, with a hint keyed to
-         * Chromium's [description] (e.g. `net::ERR_CONNECTION_REFUSED`) when it is a
-         * dev server. Null for the bundled editor, so the view shows its localized text.
+         * [description] (Chromium's `net::ERR_CONNECTION_REFUSED`, or `HTTP 404`)
+         * when it is a dev server. Null for the bundled editor, so the view shows
+         * its localized text.
          */
         internal fun editorLoadErrorMessage(url: Uri, description: String?, isDevServer: Boolean): String? {
             if (!isDevServer) return null
@@ -1448,6 +1472,8 @@ class GutenbergView : FrameLayout {
                     "Allow cleartext traffic to ${url.host} in the app's network security config."
                 UNREACHABLE_HOST_ERRORS.any { it in reason } ->
                     "Check that this device can reach ${url.host}: its IP address, network, and firewall."
+                reason.startsWith("HTTP ") ->
+                    "Check that GUTENBERG_EDITOR_URL in local.properties points at the dev server."
                 else -> null
             }
             val summary = "Couldn't load the editor from $url (${description ?: "unknown error"})."
