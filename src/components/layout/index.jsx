@@ -32,7 +32,10 @@ export default function Layout( props ) {
 			<SlotFillProvider>
 				<PopoverSlots />
 				<OfflineIndicator />
-				<AutosaveMonitor autosave={ onEditorContentChanged } />
+				<AutosaveMonitor
+					interval={ 1 }
+					autosave={ onEditorContentChanged }
+				/>
 				<Editor { ...editorProps }>
 					<SnackbarNotices className="gutenberg-kit-layout__snackbar" />
 				</Editor>
