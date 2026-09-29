@@ -171,8 +171,8 @@ private struct _EditorView: UIViewControllerRepresentable {
         viewModel.hasPostID = configuration.postID != nil
 
         viewModel.saveHandler = { [weak viewController, weak viewModel] in
-            guard let viewController, let viewModel else { return }
-            await persistPost(viewController: viewController, viewModel: viewModel)
+            guard let viewController, let viewModel else { return nil }
+            return await persistPost(viewController: viewController, viewModel: viewModel)
         }
 
         return viewController
@@ -182,9 +182,9 @@ private struct _EditorView: UIViewControllerRepresentable {
         viewController.isCodeEditorEnabled = viewModel.isCodeEditorEnabled
     }
 
-    /// Persists the post via the REST API.
-    private func persistPost(viewController: EditorViewController, viewModel: EditorViewModel) async {
-        guard let apiClient, let postID = configuration.postID else { return }
+    /// Persists the post via the REST API, returning the content it saved.
+    private func persistPost(viewController: EditorViewController, viewModel: EditorViewModel) async -> PostContent? {
+        guard let apiClient, let postID = configuration.postID else { return nil }
         do {
             let titleAndContent = try await viewController.getTitleAndContent()
             let params = PostUpdateParams(title: .some(titleAndContent.title), content: .some(titleAndContent.content), meta: nil)
@@ -204,8 +204,10 @@ private struct _EditorView: UIViewControllerRepresentable {
                 context: nil
             )
             print("Post \(postID) persisted via REST API")
+            return PostContent(title: titleAndContent.title, content: titleAndContent.content)
         } catch {
             print("Failed to persist post \(postID): \(error)")
+            return nil
         }
     }
 
@@ -236,7 +238,16 @@ private struct _EditorView: UIViewControllerRepresentable {
         }
 
         func editor(_ viewController: EditorViewController, didUpdateContentWithState state: EditorState) {
-            // No-op for demo
+            // Mirror a host app's autosave: keep the latest content in memory so
+            // Save reflects unsaved changes and an editor reload restores them.
+            Task {
+                do {
+                    let result = try await viewController.getTitleAndContent()
+                    viewModel.latestContent = PostContent(title: result.title, content: result.content)
+                } catch {
+                    Logger.demo.error("Failed to read the editor content: \(error.localizedDescription)")
+                }
+            }
         }
 
         func editor(_ viewController: EditorViewController, didUpdateHistoryState state: EditorState) {
@@ -315,9 +326,7 @@ private struct _EditorView: UIViewControllerRepresentable {
         }
 
         func editorDidRequestLatestContent(_ controller: EditorViewController) -> (title: String, content: String)? {
-            // Demo app has no persistence layer, so return nil.
-            // In a real app, return the persisted title and content from autosave.
-            return nil
+            viewModel.latestContent.map { ($0.title, $0.content) }
         }
 
         // MARK: - MediaUploadDelegate
@@ -395,8 +404,17 @@ private final class EditorViewModel {
 
     var hasPostID = false
 
+    /// The newest content read from the editor, held in memory as a host app's autosave would.
+    var latestContent: PostContent?
+    /// The content most recently persisted via Save.
+    var savedContent: PostContent?
+
+    var hasChanges: Bool {
+        latestContent != nil && latestContent != savedContent
+    }
+
     var canSave: Bool {
-        isEditorReady && !isSaving && hasPostID
+        isEditorReady && !isSaving && hasPostID && hasChanges
     }
 
     enum Action {
@@ -406,16 +424,24 @@ private final class EditorViewModel {
     }
 
     var perform: (_ action: Action) -> Void = { _ in assertionFailure() }
-    var saveHandler: () async -> Void = {}
+    /// Persists the post, returning the content it saved, or `nil` on failure.
+    var saveHandler: () async -> PostContent? = { nil }
 
     func save() {
         guard canSave else { return }
         isSaving = true
         Task {
-            await saveHandler()
+            if let saved = await saveHandler() {
+                savedContent = saved
+            }
             isSaving = false
         }
     }
+}
+
+private struct PostContent: Equatable {
+    let title: String
+    let content: String
 }
 
 #Preview {
