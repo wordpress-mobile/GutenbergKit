@@ -166,6 +166,10 @@ fun EditorScreen(
     var isEditorAvailable by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
     var gutenbergViewRef by remember { mutableStateOf<GutenbergView?>(null) }
+    // The newest content read from the editor. A read with no changes since the
+    // previous one returns the `originalContent` it is given, so pass this rather
+    // than the configuration's content.
+    var latestContent by remember { mutableStateOf<GutenbergView.LatestContent?>(null) }
     val saveScope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -225,7 +229,9 @@ fun EditorScreen(
                                         view = view,
                                         configuration = configuration,
                                         accountId = accountId,
-                                        postId = postId
+                                        postId = postId,
+                                        originalContent = latestContent?.content ?: configuration.content,
+                                        onRead = { latestContent = it }
                                     )
                                     if (errorMessage != null) {
                                         Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
@@ -386,12 +392,14 @@ private suspend fun persistPost(
     view: GutenbergView,
     configuration: EditorConfiguration,
     accountId: ULong,
-    postId: UInt
+    postId: UInt,
+    originalContent: CharSequence,
+    onRead: (GutenbergView.LatestContent) -> Unit
 ): String? {
     return try {
         val titleAndContent = suspendCancellableCoroutine<Pair<CharSequence, CharSequence>> { cont ->
             view.getTitleAndContent(
-                originalContent = configuration.content,
+                originalContent = originalContent,
                 callback = object : GutenbergView.TitleAndContentCallback {
                     override fun onResult(title: CharSequence, content: CharSequence) {
                         if (cont.isActive) cont.resume(title to content)
@@ -407,6 +415,12 @@ private suspend fun persistPost(
                 }
             )
         }
+        onRead(
+            GutenbergView.LatestContent(
+                title = titleAndContent.first.toString(),
+                content = titleAndContent.second.toString()
+            )
+        )
 
         val app = context.applicationContext as GutenbergKitApplication
         val account = app.accountRepository.all().firstOrNull { it.id() == accountId }
