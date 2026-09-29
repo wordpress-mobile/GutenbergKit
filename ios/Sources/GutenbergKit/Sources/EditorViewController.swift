@@ -811,16 +811,58 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             return
         }
         do {
-            let object = try makeJavaScriptCompatibleDictionary(with: selection)
+            var items: [Any] = []
+            for media in selection {
+                items.append(try await javaScriptMediaItem(for: media))
+            }
             _ = try await webView.callAsyncJavaScript(
                 "window.blockInserter?.insertMedia(selection)",
-                arguments: ["selection": object],
+                arguments: ["selection": items],
                 in: nil,
                 contentWorld: .page
             )
         } catch {
             assertionFailure("Failed to serialize or insert media: \(error)")
         }
+    }
+
+    /// The media item as the page's `insertMedia` takes it.
+    ///
+    /// A file the editor imported and can upload natively gets a `nativeUpload`
+    /// description: the page builds a stand-in from it — a preview image and the
+    /// session to finish — so the upload runs through Gutenberg's own pipeline while
+    /// the file's bytes stay in native code. Anything else goes as it is, and the page
+    /// fetches and uploads it itself.
+    func javaScriptMediaItem(for media: MediaInfo) async throws -> Any {
+        let item = try makeJavaScriptCompatibleDictionary(with: media)
+        guard media.id == nil,
+              mediaUploadSchemeHandler.isEnabled,
+              var dictionary = item as? [String: Any],
+              let url = media.url.flatMap(URL.init(string:)),
+              url.scheme == MediaFileSchemeHandler.scheme,
+              let fileURL = MediaFileManager.fileURL(for: url),
+              let size = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]))?.fileSize else {
+            return item
+        }
+
+        let mimeType = media.type ?? MediaFileManager.mimeType(forExtension: fileURL.pathExtension)
+        let file = MediaUploadFile(url: fileURL, mimeType: mimeType, filename: fileURL.lastPathComponent)
+        let preview = await MediaPreview.write(for: fileURL, mimeType: mimeType)
+        guard let sessionId = await mediaUploadSchemeHandler.register(file) else {
+            return item
+        }
+
+        var nativeUpload: [String: Any] = [
+            "sessionId": sessionId,
+            "filename": file.filename,
+            "size": size,
+        ]
+        if let previewURL = preview.flatMap({ MediaFileManager.mediaURL(forFile: $0) }) {
+            nativeUpload["previewUrl"] = previewURL.absoluteString
+        }
+        dictionary["type"] = mimeType
+        dictionary["nativeUpload"] = nativeUpload
+        return dictionary
     }
 
     private func insertPatternFromInserter(_ patternName: String) {

@@ -28,10 +28,25 @@ actor MediaFileManager {
         }
     }
 
-    /// Imports a photo picker item and saves it to the uploads directory.
+    /// Imports a photo picker item into the uploads directory.
+    ///
+    /// Asks Photos for the item as a file and copies it, which on APFS is a clone: a
+    /// 1 GB video costs neither memory nor disk. The file keeps the name Photos gave
+    /// it, so the attachment WordPress creates is named after it. An item Photos can
+    /// only hand over as data is written from memory instead.
     ///
     /// - Returns: MediaInfo with a `gbk-media-file://` URL and detected media type
     func `import`(_ item: PhotosPickerItem) async throws -> MediaInfo {
+        do {
+            if let picked = try await item.loadTransferable(type: PickedFile.self) {
+                defer { try? fileManager.removeItem(at: picked.url.deletingLastPathComponent()) }
+                let imported = try adopt(picked.url, mimeType: picked.mimeType ?? item.supportedContentTypes.first?.preferredMIMEType)
+                return imported.mediaInfo
+            }
+        } catch {
+            Logger.media.error("Failed to load picker item \(item.supportedContentTypes) as a file, loading its data instead: \(error)")
+        }
+
         let data: Data?
         do {
             data = try await item.loadTransferable(type: Data.self)
@@ -48,6 +63,50 @@ actor MediaFileManager {
 
         let fileURL = try await writeData(data, withExtension: fileExtension)
         return MediaInfo(url: fileURL.absoluteString, type: contentType?.preferredMIMEType)
+    }
+
+    /// Imports a file that is already on disk — a video the camera recorded — by
+    /// copying it into the uploads directory under its own name.
+    func importFile(at url: URL) throws -> MediaInfo {
+        try adopt(url, mimeType: nil).mediaInfo
+    }
+
+    /// Copies `url` into its own directory under the uploads directory.
+    private func adopt(_ url: URL, mimeType: String?) throws -> ImportedMedia {
+        let directory = uploadsDirectory.appending(component: UUID().uuidString, directoryHint: .isDirectory)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        let destination = directory.appending(component: MediaUploadSessionStore.sanitizeFilename(url.lastPathComponent))
+        try fileManager.copyItem(at: url, to: destination)
+        return ImportedMedia(
+            fileURL: destination,
+            mimeType: mimeType ?? Self.mimeType(forExtension: destination.pathExtension),
+            mediaURL: try Self.mediaURL(forPath: "/Uploads/\(directory.lastPathComponent)/\(destination.lastPathComponent)")
+        )
+    }
+
+    /// A `gbk-media-file:` URL for a path under the root, percent-encoded so a
+    /// filename with spaces or non-ASCII characters survives.
+    nonisolated static func mediaURL(forPath path: String) throws -> URL {
+        var components = URLComponents()
+        components.scheme = MediaFileSchemeHandler.scheme
+        components.host = ""
+        components.path = path
+        guard let url = components.url else { throw URLError(.badURL) }
+        return url
+    }
+
+    /// The `gbk-media-file:` URL that names `fileURL`, or `nil` when the file isn't
+    /// under `root` — the inverse of ``fileURL(for:root:)``.
+    nonisolated static func mediaURL(forFile fileURL: URL, root: URL = defaultRootURL) -> URL? {
+        let rootPath = root.standardizedFileURL.path(percentEncoded: false)
+        let filePath = fileURL.standardizedFileURL.path(percentEncoded: false)
+        let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+        guard filePath.hasPrefix(prefix) else { return nil }
+        return try? mediaURL(forPath: "/" + filePath.dropFirst(prefix.count))
+    }
+
+    nonisolated static func mimeType(forExtension pathExtension: String) -> String {
+        UTType(filenameExtension: pathExtension)?.preferredMIMEType ?? "application/octet-stream"
     }
 
     /// Saves media data to the uploads directory and returns a URL with a
@@ -97,5 +156,45 @@ actor MediaFileManager {
             print("Failed to clean up old files: \(error)")
 #endif
         }
+    }
+}
+
+/// A file imported into the uploads directory.
+struct ImportedMedia: Sendable {
+    let fileURL: URL
+    let mimeType: String
+    /// The file's `gbk-media-file:` URL.
+    let mediaURL: URL
+
+    var mediaInfo: MediaInfo {
+        MediaInfo(url: mediaURL.absoluteString, type: mimeType)
+    }
+}
+
+/// A picker item received as a file.
+///
+/// Photos deletes the file it hands over once the import closure returns, so the
+/// closure copies it — a clone on APFS — into a staging directory first.
+/// Representations are tried in order; `.data` catches everything else.
+private struct PickedFile: Transferable {
+    let url: URL
+    let mimeType: String?
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: .movie) { try stage($0, as: .movie) }
+        FileRepresentation(importedContentType: .image) { try stage($0, as: .image) }
+        FileRepresentation(importedContentType: .audio) { try stage($0, as: .audio) }
+        FileRepresentation(importedContentType: .data) { try stage($0, as: nil) }
+    }
+
+    private static func stage(_ received: ReceivedTransferredFile, as type: UTType?) throws -> PickedFile {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(component: "GutenbergKit-imports", directoryHint: .isDirectory)
+            .appending(component: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let destination = directory.appending(component: received.file.lastPathComponent)
+        try FileManager.default.copyItem(at: received.file, to: destination)
+        let fromExtension = UTType(filenameExtension: destination.pathExtension)
+        return PickedFile(url: destination, mimeType: (fromExtension ?? type)?.preferredMIMEType)
     }
 }

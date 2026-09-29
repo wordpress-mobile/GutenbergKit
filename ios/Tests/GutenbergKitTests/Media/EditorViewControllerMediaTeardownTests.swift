@@ -197,6 +197,65 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         #expect(result["beginStatus"] as? Int == 503)
     }
 
+    // MARK: - Media from the block inserter
+
+    @MainActor
+    @Test("an imported file is registered for native upload and described to the page")
+    func importedFilesAreRegistered() async throws {
+        let uploader = RecordingUploader()
+        let editor = EditorViewController(configuration: makeConfiguration(), mediaUploader: uploader)
+        defer { editor.stopMediaHandling() }
+        let (media, fileURL) = try await importTestVideo()
+
+        let item = try #require(try await editor.javaScriptMediaItem(for: media) as? [String: Any])
+        let nativeUpload = try #require(item["nativeUpload"] as? [String: Any])
+        let sessionId = try #require(nativeUpload["sessionId"] as? String)
+
+        #expect(nativeUpload["filename"] as? String == fileURL.lastPathComponent)
+        #expect(nativeUpload["size"] as? Int == 32)
+        #expect(item["type"] as? String == "video/quicktime")
+
+        var request = URLRequest(url: URL(string: "gbk-upload://upload/sessions/\(sessionId)/finish")!)
+        request.httpMethod = "POST"
+        request.httpBody = Data(#"{"fields":[{"name":"post","value":"7"}],"query":""}"#.utf8)
+        let finish = FakeSchemeTask(request: request)
+        editor.mediaUploadSchemeHandler.start(finish)
+        await finish.waitUntilAnswered()
+
+        #expect(finish.status == 201)
+        #expect(uploader.receivedContents == Data(repeating: 1, count: 32))
+        #expect(uploader.received?.fields == [MediaUploadField(name: "post", value: "7")])
+    }
+
+    @MainActor
+    @Test("media goes to the page as it is when the editor can't upload it natively")
+    func unregisteredMedia() async throws {
+        let (media, _) = try await importTestVideo()
+        let plain = EditorViewController(configuration: makeConfiguration())
+        let uploading = EditorViewController(configuration: makeConfiguration(), mediaUploader: InertUploader())
+        defer { uploading.stopMediaHandling() }
+
+        let withoutHandling = try #require(try await plain.javaScriptMediaItem(for: media) as? [String: Any])
+        let libraryItem = try #require(try await uploading.javaScriptMediaItem(
+            for: MediaInfo(id: 42, url: "https://example.com/a.jpg", type: "image/jpeg")
+        ) as? [String: Any])
+        let remote = try #require(try await uploading.javaScriptMediaItem(
+            for: MediaInfo(url: "https://example.com/a.jpg", type: "image/jpeg")
+        ) as? [String: Any])
+
+        #expect(withoutHandling["nativeUpload"] == nil)
+        #expect(libraryItem["nativeUpload"] == nil)
+        #expect(remote["nativeUpload"] == nil)
+    }
+
+    /// Imports a small file the way the camera path does.
+    private func importTestVideo() async throws -> (MediaInfo, URL) {
+        let source = try makeTemporaryFile(Data(repeating: 1, count: 32), named: "clip-\(UUID().uuidString).MOV")
+        let media = try await MediaFileManager.shared.importFile(at: source)
+        let url = try #require(media.url.flatMap(URL.init(string:)))
+        return (media, try #require(MediaFileManager.fileURL(for: url)))
+    }
+
     /// Loads an empty `file://` page — the editor's own origin — into the editor's web view.
     @MainActor
     private func loadBlankPage(in editor: EditorViewController) async throws {

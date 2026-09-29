@@ -1,4 +1,9 @@
 /**
+ * WordPress dependencies
+ */
+import { __, sprintf } from '@wordpress/i18n';
+
+/**
  * Stand-in files for media native code already holds.
  *
  * The native block inserter imports a picked photo or video to disk and uploads it
@@ -56,4 +61,55 @@ export async function readNativeUploadReference( file ) {
 	}
 	const sessionId = tail.slice( MARKER.length );
 	return SESSION_ID_PATTERN.test( sessionId ) ? sessionId : null;
+}
+
+/**
+ * Builds the stand-in for a media item the native inserter imported.
+ *
+ * Only the preview crosses into the page. Rejects, with core's own message, a
+ * file larger than the site accepts: the stand-in is small, so core's size
+ * check would pass it and native code would upload a file WordPress refuses.
+ *
+ * @param {Object}   media                     The inserter's media item.
+ * @param {Object}   media.nativeUpload        What native code registered.
+ * @param {?string}  media.type                The file's MIME type.
+ * @param {Object}   options
+ * @param {?number}  options.maxUploadFileSize The site's upload limit, in bytes.
+ * @param {Function} options.fetchPreview      Loads the preview; `fetch` by default.
+ * @return {Promise<File>} The stand-in.
+ */
+export async function standInForNativeUpload(
+	media,
+	{ maxUploadFileSize = null, fetchPreview = ( url ) => fetch( url ) } = {}
+) {
+	const { sessionId, filename, size, previewUrl } = media.nativeUpload;
+	if ( maxUploadFileSize && size > maxUploadFileSize ) {
+		const error = new Error(
+			sprintf(
+				// translators: %s: file name.
+				__(
+					'%s: This file exceeds the maximum upload size for this site.'
+				),
+				filename
+			)
+		);
+		error.code = 'SIZE_ABOVE_LIMIT';
+		throw error;
+	}
+
+	let preview = null;
+	if ( previewUrl ) {
+		try {
+			preview = await ( await fetchPreview( previewUrl ) ).blob();
+		} catch {
+			// The block shows no preview while it uploads; the upload is unaffected.
+		}
+	}
+
+	return createNativeUploadStandIn( {
+		sessionId,
+		filename,
+		type: media.type ?? 'application/octet-stream',
+		preview,
+	} );
 }
