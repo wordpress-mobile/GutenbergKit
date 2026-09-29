@@ -74,7 +74,7 @@ jobs:
                   languages: swift
 
             - name: Build Swift package
-              run: swift build --target GutenbergKit --target GutenbergKitHTTP
+              run: swift build --target GutenbergKit
 
             - name: Perform CodeQL Analysis
               uses: github/codeql-action/analyze@v3

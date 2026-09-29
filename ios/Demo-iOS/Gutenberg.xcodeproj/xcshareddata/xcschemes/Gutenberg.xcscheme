@@ -30,16 +30,6 @@
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "YES">
       <Testables>
-         <TestableReference
-            skipped = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "GutenbergKitHTTPTests"
-               BuildableName = "GutenbergKitHTTPTests"
-               BlueprintName = "GutenbergKitHTTPTests"
-               ReferencedContainer = "container:Gutenberg.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction
