@@ -7,8 +7,8 @@ public protocol EditorHTTPClientProtocol: Sendable {
 
     /// Like ``perform(_:)`` but does **not** throw on a non-2xx status — returns
     /// the raw response so the caller can relay WordPress's exact status and body.
-    /// Used by the media upload server, which forwards WordPress's response (and
-    /// its errors) to the editor unchanged.
+    /// Used for native media uploads, which forward WordPress's response (and its
+    /// errors) to the editor unchanged.
     func performRaw(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse)
 
     func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse)

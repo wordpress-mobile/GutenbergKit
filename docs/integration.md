@@ -274,7 +274,7 @@ if you put it there.
 That happens when you conform the object that already holds the editor in order to drive
 it. The editor holds the processor strongly in return — deliberately, so an in-flight upload
 can't lose it mid-request — which closes a retain cycle ARC cannot break. The editor is
-never deallocated, and each one strands a bound loopback listener.
+never deallocated, and on Android each one also strands a bound loopback listener.
 
 ```swift
 // Leaks: coordinator -> editor -> mediaProcessor -> coordinator
@@ -307,14 +307,38 @@ are finished with the editor. It is terminal — the editor cannot upload or del
 afterwards — so call it when the editor is going away, not when it is merely covered or
 backgrounded.
 
+### How uploads reach native code
+
+A native upload runs your `MediaProcessor`, then your `MediaUploader` or GutenbergKit's
+own client, whichever way the file arrived:
+
+-   **Files the page holds** — the Upload button, drag-and-drop, paste — go from the editor's
+    page to native code. On iOS that is a URL scheme the editor's own web view handles, so
+    there is nothing to configure and it works under Lockdown Mode. On Android it is a
+    loopback HTTP server, which needs the network security entry below.
+-   **Media from the native block inserter** is imported to disk (a clone, on iOS, so a
+    large video costs no memory) and uploaded from there. The page only shows a preview
+    while the upload runs; the file never passes through it.
+
+Either way the block uploads through Gutenberg's own pipeline, so its placeholder, saving
+lock, error notices, and recovery of a failed server-side resize all behave as they do for
+any upload. If native uploads are unavailable — no handler, no site credentials, or after
+`stopMediaHandling()` — the page uploads straight to WordPress instead.
+
+An upload keeps running for about 30 seconds after the app moves to the background. One
+that takes longer is interrupted when iOS suspends the app. A `MediaUploader` that needs to
+survive that should use a background `URLSession` of its own, and dedupe by filename or a
+field it sets: a background session re-sends an upload whose response is slow, and
+WordPress creates an attachment for each copy.
+
 ### Android: permit cleartext to localhost
 
 **Android hosts must add localhost to their network security configuration, or native
 media handling will silently not run.**
 
-GutenbergKit serves media through a loopback HTTP server, which the editor reaches over
-cleartext `http://localhost`. Apps targeting API 28 or above deny cleartext by default, so
-without an entry the WebView blocks every upload request with
+On Android, GutenbergKit receives media uploads through a loopback HTTP server, which the
+editor reaches over cleartext `http://localhost`. Apps targeting API 28 or above deny
+cleartext by default, so without an entry the WebView blocks every upload request with
 `ERR_CLEARTEXT_NOT_PERMITTED` before it leaves the page. `GutenbergView` detects this and
 leaves the server down, so uploads fall back to the WebView's own path rather than failing
 against a server they can never reach.
