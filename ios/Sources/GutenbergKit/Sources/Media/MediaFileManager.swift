@@ -16,7 +16,11 @@ actor MediaFileManager {
     private let rootURL: URL
     private let uploadsDirectory: URL
 
-    init(rootURL: URL = URL.libraryDirectory.appendingPathComponent("GutenbergKit")) {
+    /// Where imported media lives: `gbk-media-file:///Uploads/<name>` names
+    /// `<root>/Uploads/<name>`.
+    static let defaultRootURL = URL.libraryDirectory.appendingPathComponent("GutenbergKit")
+
+    init(rootURL: URL = MediaFileManager.defaultRootURL) {
         self.rootURL = rootURL
         self.uploadsDirectory = self.rootURL.appendingPathComponent("Uploads")
         Task {
@@ -58,11 +62,16 @@ actor MediaFileManager {
         return URL(string: "\(MediaFileSchemeHandler.scheme):///Uploads/\(fileName)")!
     }
 
-    /// Gets URLResponse and data for a `gbk-media-file` URL
-    func getData(for url: URL) async throws -> Data {
-        // Convert `gbk-media-file:///Uploads/filename.jpg` to actual file path
-        let fileURL = rootURL.appendingPathComponent(url.path)
-        return try Data(contentsOf: fileURL)
+    /// The file a `gbk-media-file` URL names, or `nil` when the URL's path would
+    /// resolve outside `root` — a `..` segment, for instance, which the page controls.
+    nonisolated static func fileURL(for url: URL, root: URL = defaultRootURL) -> URL? {
+        let rootPath = root.standardizedFileURL.path(percentEncoded: false)
+        let candidate = root.appending(path: url.path(percentEncoded: false)).standardizedFileURL
+        let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+        guard candidate.path(percentEncoded: false).hasPrefix(prefix) else {
+            return nil
+        }
+        return candidate
     }
 
     /// Cleans up files older than 2 days
