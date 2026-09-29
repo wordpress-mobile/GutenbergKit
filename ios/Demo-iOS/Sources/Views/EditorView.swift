@@ -187,7 +187,11 @@ private struct _EditorView: UIViewControllerRepresentable {
         guard let apiClient, let postID = configuration.postID else { return nil }
         do {
             let titleAndContent = try await viewController.getTitleAndContent()
-            let params = PostUpdateParams(title: .some(titleAndContent.title), content: .some(titleAndContent.content), meta: nil)
+            let content = PostContent(title: titleAndContent.title, content: titleAndContent.content)
+            // Not every change sends a content-change event (e.g. undoing back
+            // to the opened content), so keep the host copy current here too.
+            viewModel.latestContent = content
+            let params = PostUpdateParams(title: .some(content.title), content: .some(content.content), meta: nil)
             let endpointType: PostEndpointType
             switch configuration.postType.postType {
             case "post":
@@ -204,7 +208,7 @@ private struct _EditorView: UIViewControllerRepresentable {
                 context: nil
             )
             print("Post \(postID) persisted via REST API")
-            return PostContent(title: titleAndContent.title, content: titleAndContent.content)
+            return content
         } catch {
             print("Failed to persist post \(postID): \(error)")
             return nil
