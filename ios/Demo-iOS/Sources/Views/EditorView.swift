@@ -393,6 +393,7 @@ private struct _EditorView: UIViewControllerRepresentable {
     }
 }
 
+@MainActor
 @Observable
 private final class EditorViewModel {
     var isModalDialogOpen = false
