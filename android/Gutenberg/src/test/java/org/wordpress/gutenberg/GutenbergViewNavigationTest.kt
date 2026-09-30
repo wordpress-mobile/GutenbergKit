@@ -1,6 +1,7 @@
 package org.wordpress.gutenberg
 
 import android.net.Uri
+import android.os.Looper
 import android.webkit.WebResourceRequest
 import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertNull
@@ -93,6 +94,44 @@ class GutenbergViewNavigationTest {
 
         assertTrue(
             "the editor document should receive the globals it boots from",
+            shadowOf(webView).lastEvaluatedJavascript.orEmpty().contains("window.GBKit")
+        )
+    }
+
+    @Test
+    fun `onPageStarted injects the configuration again when the editor reloads`() {
+        val siteView = configuredSiteView()
+        val webView = siteView.editorWebView
+        webView.webViewClient.onPageStarted(webView, editorUrlFor("https://example.com"), null)
+        webView.evaluateJavascript("editor.undo()", null)
+
+        siteView.reloadEditor()
+        shadowOf(Looper.getMainLooper()).idle()
+        webView.webViewClient.onPageStarted(webView, editorUrlFor("https://example.com"), null)
+
+        assertTrue(
+            "the reloaded editor document should receive the globals again",
+            shadowOf(webView).lastEvaluatedJavascript.orEmpty().contains("window.GBKit")
+        )
+    }
+
+    @Test
+    fun `onPageStarted injects the configuration into a local http site's editor document`() {
+        // A local site serves the editor over http, which the asset scheme must follow.
+        val siteView = GutenbergView(
+            EditorConfiguration.builder("http://10.0.2.2:8888", "http://10.0.2.2:8888/wp-json/")
+                .setAuthHeader("Bearer secret-credential")
+                .build(),
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+        val webView = siteView.editorWebView
+
+        webView.webViewClient.onPageStarted(webView, editorUrlFor("http://10.0.2.2:8888"), null)
+
+        assertTrue(
+            "a local http site's editor document should receive the globals",
             shadowOf(webView).lastEvaluatedJavascript.orEmpty().contains("window.GBKit")
         )
     }
