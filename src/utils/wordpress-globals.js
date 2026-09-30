@@ -109,7 +109,7 @@ export async function initializeWordPressGlobals() {
 	}
 	window.wp.htmlEntities = toCommonJS( htmlEntities );
 	window.wp.icons = toCommonJS( icons );
-	window.wp.isShallowEqual = isShallowEqual.default || isShallowEqual;
+	window.wp.isShallowEqual = toCommonJS( isShallowEqual );
 	window.wp.keycodes = toCommonJS( keycodes );
 	window.wp.keyboardShortcuts = toCommonJS( keyboardShortcuts );
 	window.wp.mediaUtils = toCommonJS( mediaUtils );
@@ -124,8 +124,8 @@ export async function initializeWordPressGlobals() {
 	window.wp.reduxRoutine = reduxRoutine.default || reduxRoutine;
 	window.wp.richText = toCommonJS( richText );
 	window.wp.router = toCommonJS( router );
-	window.wp.serverSideRender = toCommonJS( serverSideRender );
-	window.wp.shortcode = toCommonJS( shortcode );
+	window.wp.serverSideRender = serverSideRender.default || serverSideRender;
+	window.wp.shortcode = shortcode.default || shortcode;
 	window.wp.styleEngine = toCommonJS( styleEngine );
 	window.wp.sync = toCommonJS( sync );
 	window.wp.theme = toCommonJS( theme );
