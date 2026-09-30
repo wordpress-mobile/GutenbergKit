@@ -24,10 +24,10 @@ let contextIdCounter = 0;
 
 /**
  * @typedef {Object} MediaUploadConfig
- * @property {Function}        onSelect         Callback function to handle the selected media.
- * @property {string[]}        [allowedTypes]   Comma-separated list of media types to allow.
- * @property {boolean}         [multiple=false] Flag to indicate if multiple media items can be selected.
- * @property {number|number[]} [value]          The context's currently selected media.
+ * @property {(media: Object|Object[]) => void} onSelect         Callback function to handle the selected media.
+ * @property {string[]}                         [allowedTypes]   Comma-separated list of media types to allow.
+ * @property {boolean}                          [multiple=false] Flag to indicate if multiple media items can be selected.
+ * @property {number|number[]}                  [value]          The context's currently selected media.
  */
 
 /**

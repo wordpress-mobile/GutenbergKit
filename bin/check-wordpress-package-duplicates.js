@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 /**
- * Fail when any @wordpress package is installed more than once in the
+ * Fail when any `@wordpress` package is installed more than once in the
  * production dependency graph.
  *
- * The editor exposes its @wordpress packages on `window.wp` for plugin
+ * The editor exposes its `@wordpress` packages on `window.wp` for plugin
  * scripts, mirroring WP Admin. That only works when each package is a single
  * module instance: a second copy nested under another dependency brings its
  * own React contexts, data stores, and private APIs, and nothing at runtime
@@ -46,7 +46,7 @@ const KNOWN_DUPLICATES = {};
 process.exitCode = checkForDuplicateInstalls();
 
 /**
- * Report every @wordpress package the lockfile installs more than once, along
+ * Report every `@wordpress` package the lockfile installs more than once, along
  * with any `KNOWN_DUPLICATES` entry that no longer applies.
  *
  * @return {number} Process exit code.
@@ -144,7 +144,7 @@ function readLockfile() {
 }
 
 /**
- * Map each @wordpress package to every place the lockfile installs it.
+ * Map each `@wordpress` package to every place the lockfile installs it.
  *
  * The `packages` keys are install paths, so a nested copy is a distinct entry
  * even when it shares a version with the hoisted one. Development-only entries

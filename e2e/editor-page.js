@@ -214,7 +214,7 @@ export default class EditorPage {
 	 *
 	 * @param {number} index     Zero-based block index.
 	 * @param {string} attribute Attribute name.
-	 * @return {Promise<*>} The attribute value.
+	 * @return {Promise<unknown>} The attribute value.
 	 */
 	async getBlockAttribute( index, attribute ) {
 		return await this.#page.evaluate(

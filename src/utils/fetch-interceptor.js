@@ -180,7 +180,7 @@ function extractRequestDetails( input, init = {} ) {
  * Serializes non-string request body objects into readable strings.
  * Handles FormData, Blob, File, ArrayBuffer, and URLSearchParams.
  *
- * @param {*} body The request body to serialize.
+ * @param {unknown} body The request body to serialize.
  *
  * @return {string} The serialized body representation.
  */

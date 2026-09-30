@@ -64,10 +64,10 @@ import { unlock } from '../../lock-unlock';
  *
  * Mimics the WordPress Inserter component API with open/onToggle props.
  *
- * @param {Object}   props           Component props
- * @param {string}   props.className Optional CSS class for styling
- * @param {boolean}  props.open      Whether the inserter is open
- * @param {Function} props.onToggle  Callback to toggle inserter open state
+ * @param {Object}                    props           Component props
+ * @param {string}                    props.className Optional CSS class for styling
+ * @param {boolean}                   props.open      Whether the inserter is open
+ * @param {(isOpen: boolean) => void} props.onToggle  Callback to toggle inserter open state
  */
 export default function NativeBlockInserterButton( {
 	className,
