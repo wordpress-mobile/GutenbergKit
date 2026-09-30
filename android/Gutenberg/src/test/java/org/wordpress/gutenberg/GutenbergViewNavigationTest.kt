@@ -53,18 +53,20 @@ class GutenbergViewNavigationTest {
     @Test
     fun `shouldOverrideUrlLoading opens REST API URLs externally`() {
         // The editor reaches the API by fetch, which never navigates the frame.
+        val siteView = configuredSiteView()
         listOf(
             "https://example.com/wp-json/wp/v2/posts",
             "https://example.com/?rest_route=/wp/v2/posts",
             "https://public-api.wordpress.com/wp/v2/sites/123/posts"
         ).forEach { url ->
-            assertTrue("$url should open externally", opensExternally(configuredSiteView(), url))
+            assertTrue("$url should open externally", opensExternally(siteView, url))
         }
     }
 
     @Test
     fun `shouldOverrideUrlLoading opens site pages that resemble the REST API externally`() {
         // WordPress serves each of these with the site's theme and plugins.
+        val siteView = configuredSiteView()
         listOf(
             "https://example.com/blog/wp-json/a-post",
             "https://example.com/a-page/?utm_campaign=rest_route=x",
@@ -72,7 +74,7 @@ class GutenbergViewNavigationTest {
             "https://example.com/a-page/?rest_route=/wp/v2/posts&rest_route=",
             "http://example.com/wp-json/wp/v2/posts"
         ).forEach { url ->
-            assertTrue("$url should open externally", opensExternally(configuredSiteView(), url))
+            assertTrue("$url should open externally", opensExternally(siteView, url))
         }
     }
 
