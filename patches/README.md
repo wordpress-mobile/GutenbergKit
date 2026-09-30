@@ -34,7 +34,3 @@ Existing patches should be described and justified here.
 ### `mousetrap`
 
 -   Fix the `global-bind` plugin failing under Vite 8's Rolldown bundler due to import reordering. Rolldown may execute the `global-bind` side-effect import before the main `mousetrap` module ([rolldown#6436](https://github.com/rolldown/rolldown/issues/6436), [vite#5142](https://github.com/vitejs/vite/issues/5142)), so `window.Mousetrap` is not yet set when the plugin's IIFE checks `typeof Mousetrap`. The patch adds a `require("mousetrap")` fallback so the plugin resolves Mousetrap via the module system instead of relying on the global. We opted for a targeted patch over Rolldown's `output.strictExecutionOrder` option to avoid the bundle size increase that option incurs.
-
-### `react-autosize-textarea`
-
--   Fix CJS/ESM interop issue where Vite's esbuild pre-bundling wraps the `__esModule`-flagged default export as a module object instead of the actual React component, causing the `PlainText` component to crash. The patch removes the `__esModule` flag and switches from `exports["default"]` to `module.exports`, matching [Gutenberg's upstream fix](https://github.com/WordPress/gutenberg/pull/73822).
