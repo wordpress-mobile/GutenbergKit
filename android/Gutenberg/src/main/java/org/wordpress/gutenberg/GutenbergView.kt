@@ -1442,9 +1442,10 @@ class GutenbergView : FrameLayout {
          *
          * This deliberately does not use [Uri.authority], which returns whatever the
          * URL was written with. Chromium canonicalizes a URL before it reaches
-         * [WebResourceRequest.url], dropping a default port and any userinfo, so
-         * `https://example.com:443` arrives as `example.com`. Comparing that against
-         * a raw authority of `example.com:443` would never match — and since
+         * [WebResourceRequest.url], lowercasing the host and dropping a default port
+         * and any userinfo, so `https://Example.com:443` arrives as `example.com`.
+         * Comparing that against a raw authority of `Example.com:443` would never
+         * match — and since
          * `WebViewAssetLoader.PathMatcher` compares authorities exactly, the bundled
          * editor document would not be served at all.
          *
@@ -1460,7 +1461,7 @@ class GutenbergView : FrameLayout {
             // supports reaching, and the authority is at least well-formed.
             if (authority.startsWith("[")) return authority
 
-            val host = uri.host ?: return null
+            val host = uri.host?.lowercase() ?: return null
             val defaultPort = if (uri.scheme == "http") 80 else 443
             return if (uri.port != -1 && uri.port != defaultPort) "$host:${uri.port}" else host
         }

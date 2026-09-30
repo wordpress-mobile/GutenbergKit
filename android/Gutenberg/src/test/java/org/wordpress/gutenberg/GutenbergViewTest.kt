@@ -258,6 +258,12 @@ class GutenbergViewTest {
     }
 
     @Test
+    fun `originAuthority lowercases the host`() {
+        // Chromium lowercases the host, e.g. a Mac's `Davids-MacBook-Pro.local`.
+        assertEquals("mymac.local:5173", GutenbergView.originAuthority("http://MyMac.local:5173"))
+    }
+
+    @Test
     fun `originAuthority omits a port that is absent`() {
         assertEquals("example.com", GutenbergView.originAuthority("https://example.com"))
     }
@@ -309,6 +315,13 @@ class GutenbergViewTest {
         )
         assertFalse(
             GutenbergView.isDevServerUrl(Uri.parse("http://10.0.2.2/"), "http://10.0.2.2:5173/")
+        )
+    }
+
+    @Test
+    fun `isDevServerUrl matches a dev server URL written with a capitalized host`() {
+        assertTrue(
+            GutenbergView.isDevServerUrl(Uri.parse("http://mymac.local:5173/"), "http://MyMac.local:5173/")
         )
     }
 
