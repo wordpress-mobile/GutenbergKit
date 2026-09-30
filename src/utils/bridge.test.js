@@ -6,7 +6,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 /**
  * Internal dependencies
  */
-import { requestLatestContent, getPost, showBlockInserter } from './bridge';
+import {
+	requestLatestContent,
+	getGBKit,
+	getPost,
+	showBlockInserter,
+} from './bridge';
 
 vi.mock( './logger.js', () => ( {
 	error: vi.fn(),
@@ -183,6 +188,47 @@ describe( 'requestLatestContent', () => {
 
 			expect( result ).toBeNull();
 		} );
+	} );
+} );
+
+describe( 'getGBKit', () => {
+	let originalGBKit;
+
+	beforeEach( () => {
+		originalGBKit = window.GBKit;
+		delete window.GBKit;
+		localStorage.clear();
+	} );
+
+	afterEach( () => {
+		if ( originalGBKit !== undefined ) {
+			window.GBKit = originalGBKit;
+		} else {
+			delete window.GBKit;
+		}
+		localStorage.clear();
+	} );
+
+	it( 'returns the injected global', () => {
+		window.GBKit = { siteApiRoot: 'https://example.com/wp-json/' };
+
+		expect( getGBKit() ).toEqual( {
+			siteApiRoot: 'https://example.com/wp-json/',
+		} );
+	} );
+
+	it( 'ignores a configuration persisted by an earlier session', () => {
+		// The configuration carries the site credential and the local server's
+		// port and token, none of which outlive the load that injected them.
+		localStorage.setItem(
+			'GBKit',
+			JSON.stringify( {
+				siteApiRoot: 'https://stale.example.com/wp-json/',
+				authHeader: 'Bearer stale',
+			} )
+		);
+
+		expect( getGBKit() ).toEqual( {} );
 	} );
 } );
 

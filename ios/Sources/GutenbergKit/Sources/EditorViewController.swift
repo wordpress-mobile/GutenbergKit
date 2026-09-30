@@ -451,15 +451,27 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             nativeUploadPort: uploadServer.map { Int($0.port) },
             nativeUploadToken: uploadServer?.token
         )
-        let stringValue = try gbkitGlobal.toString()
+        return WKUserScript(
+            source: Self.configurationScript(gbkitGlobal: try gbkitGlobal.toString()),
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        )
+    }
 
-        let jsCode = """
-        window.GBKit = \(stringValue);
-        localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
-        "done";
+    /// The document-start script that installs `window.GBKit`.
+    ///
+    /// The configuration is session-scoped — it carries the site credential and
+    /// the local server's port and tokens — so no copy of it outlives the load
+    /// that injected it. Versions before #613 mirrored it into `localStorage`,
+    /// which persists across launches; the script removes that key, scrubbing an
+    /// upgraded device the next time the editor loads. Nothing reads it any
+    /// more, so the line can go once builds from before #613 are no longer in
+    /// use.
+    static func configurationScript(gbkitGlobal: String) -> String {
         """
-
-        return WKUserScript(source: jsCode, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        window.GBKit = \(gbkitGlobal);
+        localStorage.removeItem('GBKit');
+        """
     }
 
     /// Starts the local HTTP server for routing file uploads through native processing.
