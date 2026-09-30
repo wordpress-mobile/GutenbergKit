@@ -111,8 +111,9 @@ class GutenbergView : FrameLayout {
     private var hasAutofocused = false
     private lateinit var assetLoader: WebViewAssetLoader
     private lateinit var assetAuthority: String
+    private lateinit var assetScheme: String
 
-    /** The editor document [loadEditor] loaded, so its load failures can be told apart. */
+    /** The editor document [loadEditor] loaded, the only page given the editor globals. */
     private var editorUri: Uri? = null
     private val configuration: EditorConfiguration
     private lateinit var dependencies: EditorDependencies
@@ -474,7 +475,7 @@ class GutenbergView : FrameLayout {
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
-                onEditorPageStarted()
+                onEditorPageStarted(url)
             }
 
             override fun shouldInterceptRequest(
@@ -526,20 +527,8 @@ class GutenbergView : FrameLayout {
                 // Allow asset URLs (restrict to the asset path prefix so that
                 // arbitrary site pages don't load inside the WebView when the
                 // asset authority matches the site authority)
-                if (url.authority == assetAuthority && url.path?.startsWith("/assets/") == true) {
+                if (isAssetUrl(url)) {
                     return false
-                }
-
-                // Allow WordPress.com REST API
-                if (url.host == "public-api.wordpress.com") {
-                    return false
-                }
-
-                // Allow WordPress REST API
-                if (url.authority == originAuthority(configuration.siteApiRoot)) {
-                    if (url.path?.contains("/wp-json/") == true || url.query?.contains("rest_route=") == true) {
-                        return false
-                    }
                 }
 
                 // Allow local development server if configured
@@ -547,7 +536,8 @@ class GutenbergView : FrameLayout {
                     return false
                 }
 
-                // For all other URLs, open in external browser
+                // For all other URLs, open in external browser. This includes the site's
+                // REST API: the editor reaches it by fetch, which never passes through here.
                 val intent = Intent(Intent.ACTION_VIEW, url)
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 view?.context?.startActivity(intent)
@@ -654,6 +644,15 @@ class GutenbergView : FrameLayout {
     }
 
     /**
+     * Whether [url] is an asset [assetLoader] serves over the scheme the editor loads
+     * with. On an https site, http on the same authority reaches the site instead.
+     */
+    private fun isAssetUrl(url: Uri): Boolean =
+        url.scheme == assetScheme &&
+            url.authority == assetAuthority &&
+            url.path?.startsWith("/assets/") == true
+
+    /**
      * Loads the editor with the given dependencies.
      *
      * This is the shared loading path used by both flows after dependencies are available.
@@ -683,6 +682,7 @@ class GutenbergView : FrameLayout {
         // avoid accidentally downgrading asset traffic for production sites.
         val siteUri = Uri.parse(configuration.siteURL)
         val isLocalHttpSite = siteUri.scheme == "http" && siteUri.host in LOCAL_HOSTS
+        assetScheme = if (isLocalHttpSite) "http" else "https"
         assetLoader = WebViewAssetLoader.Builder()
             .setDomain(assetAuthority)
             .setHttpAllowed(isLocalHttpSite)
@@ -694,8 +694,7 @@ class GutenbergView : FrameLayout {
 
         initializeWebView()
 
-        val scheme = if (isLocalHttpSite) "http" else "https"
-        val assetUrl = "$scheme://$assetAuthority$ASSET_PATH_INDEX"
+        val assetUrl = "$assetScheme://$assetAuthority$ASSET_PATH_INDEX"
         val editorUrl = BuildConfig.GUTENBERG_EDITOR_URL.ifEmpty {
             assetUrl
         }
@@ -721,20 +720,28 @@ class GutenbergView : FrameLayout {
     }
 
     /**
-     * Invoked when the editor page begins loading. Starts the upload server once —
-     * capturing the [mediaUploadDelegate] provided before load — then advertises
-     * the editor globals (including the server's port and token) to the page.
+     * Invoked when any page begins loading in the main frame. Resets readiness for
+     * every page; for the editor document alone, starts the upload server once —
+     * capturing the [mediaUploadDelegate] provided before load — then advertises the
+     * editor globals (including the server's port and token).
      *
      * Starting the server here, on the UI thread, rather than from the
      * [mediaUploadDelegate] setter keeps its whole lifecycle — start here, stop in
      * [onDetachedFromWindow] — on the UI thread, so it can't race a
      * background-thread delegate assignment.
      */
-    private fun onEditorPageStarted() {
+    private fun onEditorPageStarted(url: String?) {
         // Readiness belongs to the page: a new page, including one a reload starts,
         // is not ready until it reports `onEditorLoaded`.
         isEditorLoaded = false
         didFireEditorLoaded = false
+
+        // The globals carry the site credential and the upload server's token, so
+        // they go to the editor document alone. `shouldOverrideUrlLoading` admits
+        // other pages into this frame, and on Android the editor shares an origin
+        // with the site, so the destination is checked rather than assumed.
+        if (url == null || !isEditorDocument(Uri.parse(url))) return
+
         if (!hasStartedLoading) {
             hasStartedLoading = true
             startUploadServer()
@@ -1417,9 +1424,10 @@ class GutenbergView : FrameLayout {
          *
          * This deliberately does not use [Uri.authority], which returns whatever the
          * URL was written with. Chromium canonicalizes a URL before it reaches
-         * [WebResourceRequest.url], dropping a default port and any userinfo, so
-         * `https://example.com:443` arrives as `example.com`. Comparing that against
-         * a raw authority of `example.com:443` would never match — and since
+         * [WebResourceRequest.url], lowercasing the host and dropping a default port
+         * and any userinfo, so `https://Example.com:443` arrives as `example.com`.
+         * Comparing that against a raw authority of `Example.com:443` would never
+         * match — and since
          * `WebViewAssetLoader.PathMatcher` compares authorities exactly, the bundled
          * editor document would not be served at all.
          *
@@ -1435,7 +1443,7 @@ class GutenbergView : FrameLayout {
             // supports reaching, and the authority is at least well-formed.
             if (authority.startsWith("[")) return authority
 
-            val host = uri.host ?: return null
+            val host = uri.host?.lowercase() ?: return null
             val defaultPort = if (uri.scheme == "http") 80 else 443
             return if (uri.port != -1 && uri.port != defaultPort) "$host:${uri.port}" else host
         }
