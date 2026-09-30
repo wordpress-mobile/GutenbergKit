@@ -53,6 +53,7 @@ import * as viewport from '@wordpress/viewport';
 import * as warning from '@wordpress/warning';
 import * as widgets from '@wordpress/widgets';
 import * as wordcount from '@wordpress/wordcount';
+import { toCommonJS } from './to-common-js';
 
 /**
  * Initialize WordPress globals by defining all `@wordpress` modules on the
@@ -67,30 +68,31 @@ export async function initializeWordPressGlobals() {
 	// Initialize the wp namespace if it doesn't exist
 	window.wp = window.wp || {};
 
-	// Define all WordPress modules on window.wp
-	window.wp.a11y = a11y;
+	// Define all WordPress modules on window.wp, shaped as core builds them:
+	// packages core flags `wpScriptDefaultExport` expose their default export.
+	window.wp.a11y = toCommonJS( a11y );
 	window.wp.apiFetch = apiFetch.default || apiFetch;
-	window.wp.autop = autop;
-	window.wp.blob = blob;
-	window.wp.blockEditor = blockEditor;
-	window.wp.blockLibrary = blockLibrary;
-	window.wp.blocks = blocks;
-	window.wp.commands = commands;
-	window.wp.components = components;
-	window.wp.compose = compose;
-	window.wp.coreData = coreData;
-	window.wp.data = data;
-	window.wp.dataControls = dataControls;
-	window.wp.date = date;
+	window.wp.autop = toCommonJS( autop );
+	window.wp.blob = toCommonJS( blob );
+	window.wp.blockEditor = toCommonJS( blockEditor );
+	window.wp.blockLibrary = toCommonJS( blockLibrary );
+	window.wp.blocks = toCommonJS( blocks );
+	window.wp.commands = toCommonJS( commands );
+	window.wp.components = toCommonJS( components );
+	window.wp.compose = toCommonJS( compose );
+	window.wp.coreData = toCommonJS( coreData );
+	window.wp.data = toCommonJS( data );
+	window.wp.dataControls = toCommonJS( dataControls );
+	window.wp.date = toCommonJS( date );
 	window.wp.deprecated = deprecated.default || deprecated;
-	window.wp.dom = dom;
+	window.wp.dom = toCommonJS( dom );
 	window.wp.domReady = domReady.default || domReady;
-	window.wp.editPost = editPost;
-	window.wp.editor = editor;
-	window.wp.element = element;
-	window.wp.escapeHtml = escapeHtml;
-	window.wp.formatLibrary = formatLibrary;
-	window.wp.globalStylesEngine = globalStylesEngine;
+	window.wp.editPost = toCommonJS( editPost );
+	window.wp.editor = toCommonJS( editor );
+	window.wp.element = toCommonJS( element );
+	window.wp.escapeHtml = toCommonJS( escapeHtml );
+	window.wp.formatLibrary = toCommonJS( formatLibrary );
+	window.wp.globalStylesEngine = toCommonJS( globalStylesEngine );
 	// hooks and i18n are initialized via wordpress-i18n.js
 	// Ensure they exist (they should, but handle case where wordpress-i18n.js hasn't loaded)
 	if ( ! window.wp.hooks ) {
@@ -98,32 +100,32 @@ export async function initializeWordPressGlobals() {
 			'wordpress-i18n.js must be loaded before wordpress-globals.js'
 		);
 	}
-	window.wp.htmlEntities = htmlEntities;
-	window.wp.icons = icons;
+	window.wp.htmlEntities = toCommonJS( htmlEntities );
+	window.wp.icons = toCommonJS( icons );
 	window.wp.isShallowEqual = isShallowEqual.default || isShallowEqual;
-	window.wp.keycodes = keycodes;
-	window.wp.keyboardShortcuts = keyboardShortcuts;
-	window.wp.mediaUtils = mediaUtils;
-	window.wp.notices = notices;
-	window.wp.patterns = patterns;
-	window.wp.plugins = plugins;
-	window.wp.preferences = preferences;
-	window.wp.preferencesPersistence = preferencesPersistence;
-	window.wp.primitives = primitives;
-	window.wp.privateApis = privateApis;
-	window.wp.priorityQueue = priorityQueue;
-	window.wp.richText = richText;
-	window.wp.router = router;
-	window.wp.serverSideRender = serverSideRender;
-	window.wp.shortcode = shortcode;
-	window.wp.styleEngine = styleEngine;
-	window.wp.theme = theme;
+	window.wp.keycodes = toCommonJS( keycodes );
+	window.wp.keyboardShortcuts = toCommonJS( keyboardShortcuts );
+	window.wp.mediaUtils = toCommonJS( mediaUtils );
+	window.wp.notices = toCommonJS( notices );
+	window.wp.patterns = toCommonJS( patterns );
+	window.wp.plugins = toCommonJS( plugins );
+	window.wp.preferences = toCommonJS( preferences );
+	window.wp.preferencesPersistence = toCommonJS( preferencesPersistence );
+	window.wp.primitives = toCommonJS( primitives );
+	window.wp.privateApis = toCommonJS( privateApis );
+	window.wp.priorityQueue = toCommonJS( priorityQueue );
+	window.wp.richText = toCommonJS( richText );
+	window.wp.router = toCommonJS( router );
+	window.wp.serverSideRender = toCommonJS( serverSideRender );
+	window.wp.shortcode = toCommonJS( shortcode );
+	window.wp.styleEngine = toCommonJS( styleEngine );
+	window.wp.theme = toCommonJS( theme );
 	window.wp.tokenList = tokenList.default || tokenList;
-	window.wp.url = url;
-	window.wp.viewport = viewport;
+	window.wp.url = toCommonJS( url );
+	window.wp.viewport = toCommonJS( viewport );
 	window.wp.warning = warning.default || warning;
-	window.wp.widgets = widgets;
-	window.wp.wordcount = wordcount;
+	window.wp.widgets = toCommonJS( widgets );
+	window.wp.wordcount = toCommonJS( wordcount );
 
 	// Define external dependencies that plugins expect
 	window.React = React;
