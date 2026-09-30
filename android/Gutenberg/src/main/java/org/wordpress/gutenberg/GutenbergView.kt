@@ -113,7 +113,7 @@ class GutenbergView : FrameLayout {
     private lateinit var assetAuthority: String
     private lateinit var assetScheme: String
 
-    /** The editor document [loadEditor] loaded, so its load failures can be told apart. */
+    /** The editor document [loadEditor] loaded, the only page given the editor globals. */
     private var editorUri: Uri? = null
     private val configuration: EditorConfiguration
     private lateinit var dependencies: EditorDependencies
@@ -740,31 +740,13 @@ class GutenbergView : FrameLayout {
         // they go to the editor document alone. `shouldOverrideUrlLoading` admits
         // other pages into this frame, and on Android the editor shares an origin
         // with the site, so the destination is checked rather than assumed.
-        if (!isEditorUrl(url)) return
+        if (url == null || !isEditorDocument(Uri.parse(url))) return
 
         if (!hasStartedLoading) {
             hasStartedLoading = true
             startUploadServer()
         }
         setGlobalJavaScriptVariables()
-    }
-
-    /**
-     * Whether [url] is the editor document this view loaded.
-     *
-     * A configured dev server replaces the bundled assets as the editor, mirroring
-     * the URL [loadEditor] chooses, so only one of the two can match.
-     */
-    private fun isEditorUrl(url: String?): Boolean {
-        if (url.isNullOrEmpty()) return false
-        val uri = Uri.parse(url)
-
-        if (BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()) {
-            return isDevServerUrl(uri, BuildConfig.GUTENBERG_EDITOR_URL)
-        }
-
-        // The host app's own bundled pages are asset URLs too, but not the editor.
-        return isAssetUrl(uri) && uri.path == ASSET_PATH_INDEX
     }
 
     private fun setGlobalJavaScriptVariables() {
