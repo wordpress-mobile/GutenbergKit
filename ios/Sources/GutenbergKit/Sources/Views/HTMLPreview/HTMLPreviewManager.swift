@@ -3,9 +3,29 @@ import UIKit
 import WebKit
 import CryptoKit
 import ImageIO
+import OSLog
 import UniformTypeIdentifiers
 import SwiftUI
 import GutenbergKitResources
+
+// MARK: - Process-wide cache
+
+/// Roughly 600–1000 cached previews depending on rendered size.
+private let previewDiskCapacity = Measurement<UnitInformationStorage>(value: 16, unit: .mebibytes)
+
+/// Process-wide preview cache. `SQLiteKVCache` requires one owning instance
+/// per backing file, and `HTMLPreviewManager` is created lazily per
+/// `EditorViewController` — so the store lives at file scope rather than
+/// being owned by any one manager. Per-template isolation still holds
+/// because the cache key folds in `templateHash`, so different themes can't
+/// see each other's entries.
+private let previewCache = SQLiteKVCache(
+    handle: "htmlpreview",
+    directory: Paths.defaultCacheRoot,
+    diskCapacity: previewDiskCapacity
+)
+
+private let previewLogger = Logger(subsystem: "GutenbergKit", category: "html-preview")
 
 /// Renders HTML content to images using a pool of WKWebView instances.
 ///
@@ -29,8 +49,6 @@ public final class HTMLPreviewManager: ObservableObject {
     // All requests (both queued and executing)
     private var requests: [RenderRequest] = []
     private var executingTaskCount: Int = 0
-
-    private let urlCache: URLCache
 
     private let editorStyles: String
     private let themeStyles: String?
@@ -64,8 +82,6 @@ public final class HTMLPreviewManager: ObservableObject {
         // it will automatically invaliate the previous caches.
         let template = makePatternHTML(content: "", viewportWidth: 0, editorStyles: gutenbergCSS, themeStyles: themeStyles)
         self.templateHash = template.sha1
-
-        self.urlCache = HTMLPreviewManager.makeCache()
     }
 
     // MARK: - Public API
@@ -126,58 +142,44 @@ public final class HTMLPreviewManager: ObservableObject {
         }
     }
 
-    // MARK: - URLCache
+    // MARK: - Cache
 
-    /// Clears the disk cache for all HTMLPreviewManager instances
-    public static func clearCache() async {
-        makeCache().removeAllCachedResponses()
+    /// Clears the disk cache. Backing store is process-wide, so this affects
+    /// every `HTMLPreviewManager` instance. `nonisolated` so non-MainActor
+    /// callers don't have to hop through the main actor just to flush a
+    /// SQLite table.
+    public nonisolated static func clearCache() {
+        try? previewCache.clear()
     }
 
-    private static func makeCache() -> URLCache {
-        let cacheDirectory = URL.cachesDirectory.appendingPathComponent("gbk-html-preview-cache", isDirectory: true)
-        do {
-            try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-        } catch {
-            assertionFailure("failed to create cache directory: \(error)")
-        }
-        return URLCache(
-            memoryCapacity: 0,
-            diskCapacity: 16 * 1024 * 1024,
-            directory: cacheDirectory
-        )
-    }
-
-    /// Clears the disk cache for this instance
-    public func clearCache() async {
-        urlCache.removeAllCachedResponses()
-    }
-
-    /// Load image from URLCache
     private func loadImageFromCache(forKey key: String) -> UIImage? {
-        let url = URL(string: "preview://\(key)")!
-        let request = URLRequest(url: url)
-
-        guard let cachedResponse = urlCache.cachedResponse(for: request),
-              let image = UIImage(data: cachedResponse.data) else {
+        let entry: SQLiteKVCache.Entry?
+        do {
+            entry = try previewCache.get(key: key)
+        } catch {
+            previewLogger.error("Failed to read preview from cache: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+        guard let entry, let image = UIImage(data: entry.value) else {
             return nil
         }
         return image
     }
 
-    /// Save image to URLCache
     private func saveImageToCache(_ image: UIImage, forKey key: String) {
-        guard let data = encode(image) else { return }
-
-        let url = URL(string: "preview://\(key)")!
-        let request = URLRequest(url: url)
-        let response = URLResponse(
-            url: url,
-            mimeType: "image/heic",
-            expectedContentLength: data.count,
-            textEncodingName: nil
-        )
-        let cachedResponse = CachedURLResponse(response: response, data: data)
-        urlCache.storeCachedResponse(cachedResponse, for: request)
+        // Encode on main because `UIImage` isn't `Sendable`; ship the
+        // resulting `Data` + `key` to a detached task for the SQLite write.
+        guard let data = encode(image) else {
+            previewLogger.error("Failed to encode preview image to HEIC")
+            return
+        }
+        Task.detached {
+            do {
+                try previewCache.put(key: key, storageDate: .now, metadata: Data(), value: data)
+            } catch {
+                previewLogger.error("Failed to write preview to cache: \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     // MARK: - Private Methods
@@ -232,7 +234,7 @@ public final class HTMLPreviewManager: ObservableObject {
 // MARK: - Private Helper Functions
 
 private func makeDiskCacheKey(content: String, viewportWidth: Int, templateHash: String) -> String {
-    "\(content)-\(viewportWidth)-\(templateHash)".sha1
+    "\(content)-\(viewportWidth)-\(templateHash)"
 }
 
 /// Creates the HTML for rendering the pattern preview.
