@@ -26,6 +26,7 @@ struct EditorDependencyLoaderTests: MakesTestFixtures {
     @Test("delivers the error when the fetch fails")
     func deliversTheError() async throws {
         let session = ParkedURLSession()
+        defer { session.release() }
         let owner = LoaderOwner(service: makeService(session: session))
         try await session.waitUntilStarted()
 

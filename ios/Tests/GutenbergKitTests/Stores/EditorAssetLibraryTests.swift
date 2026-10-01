@@ -890,14 +890,19 @@ struct EditorAssetLibraryTests {
         let session = ParkedURLSession()
         defer { session.release() }
         let library = makeLibrary(httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token"))
+        let destination = await library.bundleRoot(for: manifest.checksum).standardizedFileURL
 
         let build = Task { try await library.buildBundle(for: manifest) }
         try await session.waitUntilStarted()
+        let abandoned = try #require(EditorAssetLibrary.inFlightBuilds.task(for: destination))
         build.cancel()
 
         // The cancelled download is swallowed like any failed asset; the build must
         // still refuse to publish, or every later launch serves the gap.
         await #expect(throws: CancellationError.self) { try await build.value }
+        // The caller's wait ends before the build it abandoned is cancelled, so wait for the
+        // build itself: checked any sooner, a build about to publish hasn't yet.
+        await abandoned.value
         #expect(try await library.readAssetBundles().isEmpty)
     }
 

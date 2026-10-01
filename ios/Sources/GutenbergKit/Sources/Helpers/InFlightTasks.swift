@@ -38,6 +38,12 @@ final class InFlightTasks<Key: Hashable & Sendable, Value: Sendable>: @unchecked
         lock.withLock { joinable[key]?.waiters.count ?? 0 }
     }
 
+    /// For tests: the task in flight for `key`. It outlives the wait of a caller that leaves,
+    /// so a test of what an abandoned task does has to wait for the task itself.
+    func task(for key: Key) -> Task<Void, Never>? {
+        lock.withLock { joinable[key]?.task }
+    }
+
     private func join(
         _ key: Key,
         _ waiter: Waiter,

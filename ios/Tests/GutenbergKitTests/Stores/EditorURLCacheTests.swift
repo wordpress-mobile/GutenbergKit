@@ -470,6 +470,26 @@ struct EditorURLCacheAlwaysPolicyTests {
         }
     }
 
+    /// A cache still open on a deleted file fails every read and write. While its store was
+    /// still shared, so did every cache created after the delete, for as long as it was held.
+    @Test("a cache created after deleteAll opens a new file")
+    func aCacheCreatedAfterDeleteAllOpensANewFile() throws {
+        let parent = URL.randomTemporaryDirectory
+        let stale = EditorURLCache(siteId: "site", parentDirectory: parent, cachePolicy: .always)
+        try stale.store(makeResponse(), for: testURL, httpMethod: .GET)
+
+        try EditorURLCache.deleteAll(in: parent)
+
+        // Held throughout, as an editor still open or a fetch still running holds its cache.
+        try withExtendedLifetime(stale) {
+            let cache = EditorURLCache(siteId: "site", parentDirectory: parent, cachePolicy: .always)
+            #expect(try cache.response(for: testURL, httpMethod: .GET) == nil)
+            let response = makeResponse()
+            try cache.store(response, for: testURL, httpMethod: .GET)
+            #expect(try cache.response(for: testURL, httpMethod: .GET) == response)
+        }
+    }
+
     @Test("caches for one site can write at the same time")
     func cachesForOneSiteCanWriteAtTheSameTime() async throws {
         let parent = URL.randomTemporaryDirectory

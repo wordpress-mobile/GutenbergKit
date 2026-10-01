@@ -501,6 +501,23 @@ struct EditorHTTPClientTests {
         #expect(await watched.sharedRequest(for: URLRequest(url: url)) == nil)
     }
 
+    @Test("a request that asks to skip the cache goes out alone")
+    func aRequestThatSkipsTheCacheGoesOutAlone() async throws {
+        let client = EditorHTTPClient(urlSession: SpyURLSession(), authHeader: "Bearer a")
+        var request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/posts/5")!)
+
+        let freshAnswerPolicies: [URLRequest.CachePolicy] = [
+            .reloadIgnoringLocalCacheData, .reloadIgnoringLocalAndRemoteCacheData, .reloadRevalidatingCacheData,
+        ]
+        for policy in freshAnswerPolicies {
+            request.cachePolicy = policy
+            #expect(await client.sharedRequest(for: request) == nil)
+        }
+
+        request.cachePolicy = .returnCacheDataElseLoad
+        #expect(await client.sharedRequest(for: request) != nil)
+    }
+
     @Test("identical requests in flight go out once")
     func identicalRequestsInFlightGoOutOnce() async throws {
         let session = ParkedURLSession()

@@ -327,6 +327,11 @@ Requests are shared only between clients with the same `URLSession` instance, cr
 client with a delegate, which expects to see every request it makes. A bundle build is shared by every service for the
 site whatever its client, just as the bundle it produces is once it's on disk.
 
+The request for the post is never shared, even between two editors on the same post: one already in flight can predate
+an edit made since. It opts out through its cache policy — a request that asks to skip the cache
+(`.reloadIgnoringLocalCacheData` and its siblings) always goes out on its own — and a host's own requests through
+`EditorHTTPClient` can do the same.
+
 Cancelling a caller ends only that caller's wait; shared work stops once no caller is left waiting on it. `purge()`
 doesn't stop it, so work that began before a purge can still land after it.
 

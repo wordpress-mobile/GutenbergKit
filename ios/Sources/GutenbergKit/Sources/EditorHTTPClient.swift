@@ -125,8 +125,10 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
     /// A request identical to one already in flight joins it rather than going out again, so
     /// callers after the same site data — an editor and a prefetch, say — pay for one round
     /// trip. Only a safe request without a body is shared, and only between clients no delegate
-    /// is watching. Cancelling a caller ends its own wait; the request is cancelled once no
-    /// caller is left waiting on it.
+    /// is watching. A request whose cache policy asks to skip the cache goes out alone: its
+    /// caller wants an answer no older than the call, and a request already in flight may
+    /// predate a write made since. Cancelling a caller ends its own wait; the request is
+    /// cancelled once no caller is left waiting on it.
     public func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let configuredRequest = self.configureRequest(urlRequest)
         guard let sharedRequest = sharedRequest(forConfigured: configuredRequest) else {
@@ -142,14 +144,16 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
         sharedRequest(forConfigured: configureRequest(urlRequest))
     }
 
-    /// `nil` for a request that must go out alone: an unsafe method or a body, a delegate that
-    /// expects to see each request it asked for, or a session that isn't an object — a shared
-    /// request is keyed by the session's identity, which only an object keeps.
+    /// `nil` for a request that must go out alone: an unsafe method or a body, a cache policy
+    /// that asks for a fresh answer, a delegate that expects to see each request it asked for,
+    /// or a session that isn't an object — a shared request is keyed by the session's identity,
+    /// which only an object keeps.
     private func sharedRequest(forConfigured request: URLRequest) -> SharedRequest? {
         guard delegate == nil,
             Self.sharableMethods.contains(request.httpMethod ?? "GET"),
             request.httpBody == nil,
             request.httpBodyStream == nil,
+            !Self.freshAnswerPolicies.contains(request.cachePolicy),
             type(of: urlSession) is AnyClass
         else {
             return nil
@@ -163,6 +167,14 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
     }
 
     private static let sharableMethods: Set<String> = ["GET", "HEAD", "OPTIONS"]
+
+    /// The cache policies that ask the server afresh rather than trust a stored response, and
+    /// so won't take one already on its way.
+    private static let freshAnswerPolicies: Set<URLRequest.CachePolicy> = [
+        .reloadIgnoringLocalCacheData,
+        .reloadIgnoringLocalAndRemoteCacheData,
+        .reloadRevalidatingCacheData,
+    ]
 
     private func send(_ configuredRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let (data, response) = try await self.urlSession.data(for: configuredRequest)

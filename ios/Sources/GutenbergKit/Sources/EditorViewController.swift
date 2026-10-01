@@ -660,9 +660,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Deletes all cached editor data for all sites
     public static func deleteAllData() throws {
-        if FileManager.default.directoryExists(at: Paths.defaultCacheRoot) {
-            try FileManager.default.removeItem(at: Paths.defaultCacheRoot)
-        }
+        try EditorURLCache.deleteAll()
 
         if FileManager.default.directoryExists(at: Paths.defaultStorageRoot) {
             try FileManager.default.removeItem(at: Paths.defaultStorageRoot)

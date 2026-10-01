@@ -162,6 +162,17 @@ public struct EditorURLCache: Sendable {
         try self.store.clear()
     }
 
+    /// Deletes every site's cache under `parentDirectory`, including any still in use.
+    ///
+    /// A cache still open when this is called fails every read and write from then on, so its
+    /// store is no longer shared: a cache created afterwards opens a new file.
+    static func deleteAll(in parentDirectory: URL = Paths.defaultCacheRoot) throws {
+        guard FileManager.default.directoryExists(at: parentDirectory) else { return }
+        // Whether or not the removal finishes: one that fails partway has still deleted files.
+        defer { SQLiteKVCache.forgetInstances(under: parentDirectory) }
+        try FileManager.default.removeItem(at: parentDirectory)
+    }
+
     /// Combines the HTTP method and URL into a single string key. `SQLiteKVCache`
     /// hashes the key with SHA-256 before binding to SQLite, so length, escaping,
     /// and encoding aren't concerns here.
