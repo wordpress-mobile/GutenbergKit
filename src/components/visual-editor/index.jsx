@@ -8,7 +8,6 @@ import {
 import { store as editorStore, PostTitle } from '@wordpress/editor';
 import { useSelect } from '@wordpress/data';
 import { store as editPostStore } from '@wordpress/edit-post';
-import '@wordpress/format-library';
 // Base styles for the content within the block canvas iframe.
 import componentStyles from '@wordpress/components/build-style/style.css?inline';
 import blockEditorContentStyles from '@wordpress/block-editor/build-style/content.css?inline';
