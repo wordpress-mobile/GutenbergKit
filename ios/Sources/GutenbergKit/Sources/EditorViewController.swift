@@ -564,7 +564,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             return
         }
 
-        // The native upload server relays through DefaultMediaUploader, which needs a
+        // The native upload server relays through InternalMediaClient, which needs a
         // site root and an auth header (every host provides one — the editor injects
         // it because the WebView has no auth cookies). Without both there is nothing
         // to upload through, so leave the server down and let uploads fall to the
@@ -579,7 +579,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             return
         }
 
-        let defaultUploader = DefaultMediaUploader(
+        let internalClient = InternalMediaClient(
             httpClient: httpClient.uploadClient(),
             siteApiRoot: configuration.siteApiRoot,
             siteApiNamespace: configuration.siteApiNamespace
@@ -588,7 +588,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         do {
             let server = try await MediaUploadServer.start(
                 uploadDelegate: mediaUploadDelegate,
-                defaultUploader: defaultUploader
+                internalClient: internalClient
             )
 
             // `stopMediaHandling()` can land while the bind is in flight: it is a
