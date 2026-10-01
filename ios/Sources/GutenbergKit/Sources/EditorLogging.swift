@@ -34,6 +34,9 @@ extension Logger {
 
     /// Logs calls into the editor's JavaScript bridge
     static let bridge = Logger(subsystem: "GutenbergKit", category: "bridge")
+
+    /// Logs the native REST relay's activity
+    static let restRelay = Logger(subsystem: "GutenbergKit", category: "rest-relay")
 }
 
 public struct SignpostMonitor: Sendable {

@@ -314,6 +314,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // Register media file scheme handler for serving local media via gbk-media-file:// URLs
         config.setURLSchemeHandler(MediaFileSchemeHandler(), forURLScheme: MediaFileSchemeHandler.scheme)
 
+        // The page sends the site's REST API requests here for native code to relay.
+        config.setURLSchemeHandler(
+            RestRelaySchemeHandler(relay: RestRelay(configuration: configuration)),
+            forURLScheme: RestRelaySchemeHandler.scheme
+        )
+
         // Scheme handlers can only be registered before the web view exists, so the
         // upload handler is built here, from what the host handed over, even though the
         // page won't use it until it loads.
@@ -530,7 +536,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let gbkitGlobal = try GBKitGlobal(
             configuration: self.configuration,
             dependencies: dependencies,
-            nativeUploadScheme: mediaUploadSchemeHandler.isEnabled ? MediaUploadSchemeHandler.scheme : nil
+            nativeUploadScheme: mediaUploadSchemeHandler.isEnabled ? MediaUploadSchemeHandler.scheme : nil,
+            restRelayBaseURL: RestRelaySchemeHandler.baseURL
         )
         return WKUserScript(
             source: Self.configurationScript(gbkitGlobal: try gbkitGlobal.toString()),

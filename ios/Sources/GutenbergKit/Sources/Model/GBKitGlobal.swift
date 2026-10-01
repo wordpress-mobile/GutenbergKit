@@ -84,6 +84,17 @@ public struct GBKitGlobal: Sendable, Codable {
     /// `nil` when uploads go straight from the page to WordPress.
     let nativeUploadScheme: String?
 
+    /// Where the page sends the site's REST API requests for native code to relay, or
+    /// `nil` when they go straight from the page to the site.
+    let restRelay: RestRelayLocation?
+
+    /// Where the native REST relay is.
+    struct RestRelayLocation: Codable, Sendable {
+        /// The URL a path below the site's REST API root is appended to,
+        /// slash-terminated.
+        let baseURL: String
+    }
+
     let editorSettings: JSON?
 
     let preloadData: JSON?
@@ -98,10 +109,13 @@ public struct GBKitGlobal: Sendable, Codable {
     ///   - dependencies: The pre-fetched editor dependencies (unused but reserved for future use).
     ///   - nativeUploadScheme: The scheme native media uploads use, or nil when the
     ///     editor has no native media handling.
+    ///   - restRelayBaseURL: The URL the page relays the site's REST API requests
+    ///     through, or nil when it sends them itself.
     public init(
         configuration: EditorConfiguration,
         dependencies: EditorDependencies,
-        nativeUploadScheme: String? = nil
+        nativeUploadScheme: String? = nil,
+        restRelayBaseURL: String? = nil
     ) throws {
         self.siteURL = configuration.isOfflineModeEnabled ? nil : configuration.siteURL
         self.siteApiRoot = configuration.isOfflineModeEnabled ? nil : configuration.siteApiRoot
@@ -125,6 +139,7 @@ public struct GBKitGlobal: Sendable, Codable {
         self.logLevel = configuration.logLevel.rawValue
         self.enableNetworkLogging = configuration.enableNetworkLogging
         self.nativeUploadScheme = nativeUploadScheme
+        self.restRelay = restRelayBaseURL.map(RestRelayLocation.init(baseURL:))
         self.editorSettings = dependencies.editorSettings.jsonValue
         self.preloadData = try dependencies.preloadList?.build()
         self.editorAssets = Self.buildEditorAssets(from: dependencies.assetBundle)
