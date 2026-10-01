@@ -31,7 +31,7 @@ export async function setUpEditorEnvironment() {
 		initializeFetchInterceptor();
 		const isRTL = await configureLocale();
 		injectEditorStyles( isRTL );
-		configureAdminGlobals();
+		configureAdminGlobals( isRTL );
 		await initializeWordPressGlobals();
 		await configureApiFetch();
 		const pluginLoadResult = await loadPluginsIfEnabled();

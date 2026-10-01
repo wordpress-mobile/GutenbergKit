@@ -85,10 +85,10 @@ describe( 'configureAdminGlobals', () => {
 		expect( window.decimalPoint ).toBe( '.' );
 	} );
 
-	it( 'flags right-to-left locales', () => {
-		getGBKit.mockReturnValue( { locale: 'ar' } );
+	it( 'flags a right-to-left editor', () => {
+		getGBKit.mockReturnValue( {} );
 
-		configureAdminGlobals();
+		configureAdminGlobals( true );
 
 		expect( window.isRtl ).toBe( 1 );
 	} );

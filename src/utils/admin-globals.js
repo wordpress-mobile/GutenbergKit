@@ -1,6 +1,6 @@
 import { getGBKit, POST_FALLBACKS } from './bridge';
 import { getAjaxUrl } from './ajax';
-import { DEFAULT_LOCALE, isRTLLocale } from './localization';
+import { DEFAULT_LOCALE } from './localization';
 
 /**
  * Defines the screen globals WP Admin prints before any script runs, so plugin
@@ -8,9 +8,11 @@ import { DEFAULT_LOCALE, isRTLLocale } from './localization';
  *
  * @see https://github.com/WordPress/wordpress-develop/blob/9868757/src/wp-admin/admin-header.php#L125-L141
  *
+ * @param {boolean} isRTL Whether the editor renders right-to-left.
+ *
  * @return {void}
  */
-export function configureAdminGlobals() {
+export function configureAdminGlobals( isRTL ) {
 	const { siteURL, post, locale = DEFAULT_LOCALE } = getGBKit();
 	const postType = post?.type || POST_FALLBACKS.type;
 
@@ -21,7 +23,7 @@ export function configureAdminGlobals() {
 		typenow: postType,
 		adminpage: post?.id > 0 ? 'post-php' : 'post-new-php',
 		...getNumberSeparators( locale ),
-		isRtl: isRTLLocale( locale ) ? 1 : 0,
+		isRtl: isRTL ? 1 : 0,
 	} );
 }
 

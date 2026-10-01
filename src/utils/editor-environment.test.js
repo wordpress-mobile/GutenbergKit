@@ -134,6 +134,14 @@ describe( 'setUpEditorEnvironment', () => {
 		] );
 	} );
 
+	it( 'applies the resolved text direction to the admin globals', async () => {
+		configureLocale.mockResolvedValue( true );
+
+		await setUpEditorEnvironment();
+
+		expect( configureAdminGlobals ).toHaveBeenCalledWith( true );
+	} );
+
 	it( 'loads plugins when plugins enabled', async () => {
 		getGBKit.mockReturnValue( { plugins: true } );
 
