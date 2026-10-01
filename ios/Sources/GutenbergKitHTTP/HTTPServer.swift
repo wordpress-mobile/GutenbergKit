@@ -277,6 +277,46 @@ public final class HTTPServer: Sendable {
         }
     }
 
+    /// Starts a server that serves requests from an ``HTTPRequestHandler`` object
+    /// rather than a closure.
+    ///
+    /// Everything else behaves identically — this forwards to the closure form. Reach
+    /// for it when the handler has dependencies to hold: a `struct` conformer stores
+    /// them and serves from instance methods, instead of statics threading a context
+    /// parameter through every call. See ``HTTPRequestHandler`` for the (short)
+    /// lifetime rules.
+    public static func start(
+        name: String,
+        port: UInt16? = nil,
+        listenOnAllInterfaces: Bool = false,
+        requiresAuthentication: Bool = true,
+        maxRequestBodySize: Int64 = HTTPRequestParser.defaultMaxBodySize,
+        maxConnections: Int = HTTPServer.defaultMaxConnections,
+        readTimeout: Duration = HTTPServer.defaultReadTimeout,
+        bodyReadTimeout: Duration? = nil,
+        idleTimeout: Duration = HTTPServer.defaultIdleTimeout,
+        startTimeout: Duration = HTTPServer.defaultStartTimeout,
+        cors: CORSPolicy = .none,
+        delegate: HTTPServerDelegate? = nil,
+        handler: some HTTPRequestHandler
+    ) async throws -> HTTPServer {
+        try await start(
+            name: name,
+            port: port,
+            listenOnAllInterfaces: listenOnAllInterfaces,
+            requiresAuthentication: requiresAuthentication,
+            maxRequestBodySize: maxRequestBodySize,
+            maxConnections: maxConnections,
+            readTimeout: readTimeout,
+            bodyReadTimeout: bodyReadTimeout,
+            idleTimeout: idleTimeout,
+            startTimeout: startTimeout,
+            cors: cors,
+            delegate: delegate,
+            handler: { await handler.handle($0) }
+        )
+    }
+
     /// Races `operation` against `timeout`, throwing ``HTTPServerError/startTimeout``
     /// if the timeout wins. Used to bound the wait for the listener to become ready
     /// so a caller — such as the editor load awaiting the upload server's bind —
