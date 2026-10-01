@@ -26,7 +26,8 @@ import * as editPost from '@wordpress/edit-post';
 import * as editor from '@wordpress/editor';
 import * as element from '@wordpress/element';
 import * as escapeHtml from '@wordpress/escape-html';
-import * as formatLibrary from '@wordpress/format-library';
+// Registers the default rich text formats; the package exports nothing.
+import '@wordpress/format-library';
 import * as htmlEntities from '@wordpress/html-entities';
 import * as isShallowEqual from '@wordpress/is-shallow-equal';
 import * as keycodes from '@wordpress/keycodes';
@@ -96,7 +97,7 @@ export async function initializeWordPressGlobals() {
 	window.wp.editor = toCommonJS( editor );
 	window.wp.element = toCommonJS( element );
 	window.wp.escapeHtml = toCommonJS( escapeHtml );
-	window.wp.formatLibrary = toCommonJS( formatLibrary );
+	window.wp.formatLibrary = undefined; // Core's script exposes no exports.
 	// hooks and i18n are initialized via wordpress-i18n.js
 	// Ensure they exist (they should, but handle case where wordpress-i18n.js hasn't loaded)
 	if ( ! window.wp.hooks ) {
