@@ -1,11 +1,4 @@
-/**
- * External dependencies
- */
 import clsx from 'clsx';
-
-/**
- * WordPress dependencies
- */
 import { Button } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { plus } from '@wordpress/icons';
@@ -40,10 +33,6 @@ import { store as coreDataStore } from '@wordpress/core-data';
 // - We're building a WordPress editor integration, not a general library
 import useInsertionPoint from '@wordpress/block-editor/build-module/components/inserter/hooks/use-insertion-point';
 import useBlockTypesState from '@wordpress/block-editor/build-module/components/inserter/hooks/use-block-types-state';
-
-/**
- * Internal dependencies
- */
 import './style.scss';
 import { debug } from '../../utils/logger';
 import {

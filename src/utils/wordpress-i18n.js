@@ -1,6 +1,3 @@
-/**
- * WordPress dependencies
- */
 import * as hooks from '@wordpress/hooks';
 import * as i18n from '@wordpress/i18n';
 

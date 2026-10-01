@@ -3,10 +3,6 @@
  * reconciles a single tracking issue. Run by
  * `.github/workflows/android-toolchain-sync.yml`.
  */
-
-/**
- * External dependencies
- */
 import { readFile } from 'fs/promises';
 
 const UPSTREAM = 'wordpress-mobile/WordPress-Android';

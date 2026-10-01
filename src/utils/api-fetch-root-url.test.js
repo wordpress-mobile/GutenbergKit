@@ -1,16 +1,5 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-
-/**
- * WordPress dependencies
- */
 import apiFetch from '@wordpress/api-fetch';
-
-/**
- * Internal dependencies
- */
 import { configureApiFetch } from './api-fetch';
 import * as bridge from './bridge';
 

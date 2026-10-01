@@ -1,17 +1,6 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-
-/**
- * WordPress dependencies
- */
 import { Component } from '@wordpress/element';
-
-/**
- * Internal dependencies
- */
 import EditorErrorBoundary from '.';
 import { editorUnavailable, logException } from '../../utils/bridge';
 

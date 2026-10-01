@@ -1,16 +1,9 @@
-/**
- * External dependencies
- */
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import MagicString from 'magic-string';
-
-/**
- * WordPress dependencies
- */
 import { defaultRequestToExternal } from '@wordpress/dependency-extraction-webpack-plugin/lib/util';
 
 // Stub for Node.js modules imported by PostCSS via @wordpress/block-editor.

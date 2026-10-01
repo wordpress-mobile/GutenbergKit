@@ -1,13 +1,6 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { dispatch } from '@wordpress/data';
 import { registerCoreBlocks } from '@wordpress/block-library';
-
-/**
- * Internal dependencies
- */
 import { initializeEditor } from './editor';
 import { getGBKit, getPost } from './bridge';
 import { getDefaultEditorSettings } from './editor-settings';

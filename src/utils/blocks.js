@@ -1,6 +1,3 @@
-/**
- * WordPress dependencies
- */
 import { unregisterBlockType, getBlockTypes } from '@wordpress/blocks';
 import { renderToString } from '@wordpress/element';
 import { debug } from './logger';

@@ -1,11 +1,4 @@
-/**
- * WordPress dependencies
- */
 import { setLocaleData } from '@wordpress/i18n';
-
-/**
- * Internal dependencies
- */
 import { getGBKit } from './bridge';
 import { warn, debug } from './logger';
 

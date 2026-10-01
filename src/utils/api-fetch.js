@@ -1,13 +1,6 @@
-/**
- * WordPress dependencies
- */
 import apiFetch from '@wordpress/api-fetch';
 import { getQueryArg } from '@wordpress/url';
 import { __ } from '@wordpress/i18n';
-
-/**
- * Internal dependencies
- */
 import { getGBKit, POST_FALLBACKS } from './bridge';
 import { info, error as logError } from './logger';
 import { ensureTrailingSlash, stripTrailingSlash } from './url';

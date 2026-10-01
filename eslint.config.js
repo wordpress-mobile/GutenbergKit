@@ -1,6 +1,3 @@
-/**
- * External dependencies
- */
 import { defineConfig, globalIgnores } from 'eslint/config';
 import wordpress from '@wordpress/eslint-plugin';
 import reactRefresh from 'eslint-plugin-react-refresh';

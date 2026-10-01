@@ -1,12 +1,5 @@
-/**
- * WordPress dependencies
- */
 import { store as editorStore } from '@wordpress/editor';
 import { select } from '@wordpress/data';
-
-/**
- * Internal dependencies
- */
 import defaultEditorStyles from './default-editor-styles.scss?inline';
 
 /**

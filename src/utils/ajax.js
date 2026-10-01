@@ -1,6 +1,3 @@
-/**
- * Internal dependencies
- */
 import { getGBKit } from './bridge';
 import { warn, debug } from './logger';
 import { stripTrailingSlash } from './url';

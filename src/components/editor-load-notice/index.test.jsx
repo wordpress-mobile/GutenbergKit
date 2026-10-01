@@ -1,12 +1,5 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
-
-/**
- * Internal dependencies
- */
 import EditorLoadNotice from '.';
 
 vi.mock( '@wordpress/components' );

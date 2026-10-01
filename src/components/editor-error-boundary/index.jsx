@@ -1,12 +1,5 @@
-/**
- * WordPress dependencies
- */
 import { Component } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-
-/**
- * Internal dependencies
- */
 import { editorUnavailable, logException } from '../../utils/bridge';
 import { error } from '../../utils/logger';
 

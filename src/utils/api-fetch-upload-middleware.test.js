@@ -1,11 +1,4 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-/**
- * Internal dependencies
- */
 import { nativeMediaUploadMiddleware } from './api-fetch';
 import { getGBKit } from './bridge';
 

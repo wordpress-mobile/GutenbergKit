@@ -1,12 +1,5 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
-
-/**
- * Internal dependencies
- */
 import { useModalDialogState } from '../use-modal-dialog-state';
 import {
 	onModalDialogOpened,

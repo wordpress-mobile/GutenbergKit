@@ -1,6 +1,3 @@
-/**
- * WordPress dependencies
- */
 import { store as editorStore } from '@wordpress/editor';
 import { useSelect } from '@wordpress/data';
 import { store as editPostStore } from '@wordpress/edit-post';

@@ -1,6 +1,3 @@
-/**
- * Internal dependencies
- */
 import { getGBKit } from './bridge';
 import { error } from './logger';
 

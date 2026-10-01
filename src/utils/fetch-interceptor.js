@@ -1,6 +1,3 @@
-/**
- * Internal dependencies
- */
 import { onNetworkRequest, getGBKit } from './bridge';
 import { debug } from './logger';
 
