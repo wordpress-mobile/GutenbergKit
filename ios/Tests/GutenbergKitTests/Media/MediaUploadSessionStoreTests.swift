@@ -22,7 +22,6 @@ struct MediaUploadSessionStoreTests {
     let finished = try await store.take(id)
     defer { finished.cleanUp() }
 
-    #expect(finished.isStagingCopy)
     #expect(finished.file.filename == "clip.mp4")
     #expect(finished.file.mimeType == "video/mp4")
     #expect(try Data(contentsOf: finished.file.url) == Data("0123456789".utf8))
@@ -93,23 +92,6 @@ struct MediaUploadSessionStoreTests {
     let finished = try await store.take(id)
     finished.cleanUp()
     await #expect(throws: MediaUploadSessionStore.Failure.unknownSession) { _ = try await store.take(id) }
-  }
-
-  @Test("hands back a registered file as it is, and never deletes it")
-  func registeredFiles() async throws {
-    let store = makeStore()
-    let url = try makeTemporaryFile(Data("imported".utf8), named: "IMG_0001.HEIC")
-    let id = await store.register(MediaUploadFile(url: url, mimeType: "image/heic", filename: "IMG_0001.HEIC"))
-
-    await #expect(throws: MediaUploadSessionStore.Failure.notReceiving) {
-      _ = try await store.append(Data("x".utf8), to: id, at: 0)
-    }
-    let finished = try await store.take(id)
-    finished.cleanUp()
-
-    #expect(!finished.isStagingCopy)
-    #expect(finished.file.url == url)
-    #expect(FileManager.default.fileExists(atPath: url.path), "cleaned up a file the store doesn't own")
   }
 
   @Test("discarding a session deletes its staging copy")

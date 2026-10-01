@@ -18,9 +18,6 @@ import WebKit
 /// | `POST …/sessions/<id>/cancel` | — | `204` |
 /// | `POST …/media/<attachmentId>/delete` | JSON `{query}` | WordPress's response, verbatim |
 ///
-/// `finish` also completes a session native code registered with ``register(_:)`` — a
-/// file the block inserter imported, whose bytes never enter the page.
-///
 /// Only the editor's own web view can load this scheme, so there is no token to check.
 /// Every response carries CORS headers: under Lockdown Mode WebKit enforces CORS on
 /// scheme responses too, and core's upload middleware reads
@@ -68,15 +65,6 @@ final class MediaUploadSchemeHandler: NSObject, WKURLSchemeHandler {
         }
         let store = store
         Task { await store.removeAll() }
-    }
-
-    /// Makes a file native code holds uploadable by reference: the page finishes the
-    /// session with the returned ID and the file's bytes never cross into it.
-    ///
-    /// Returns `nil` when uploads are disabled.
-    func register(_ file: MediaUploadFile) async -> String? {
-        guard isEnabled else { return nil }
-        return await store.register(file)
     }
 
     // MARK: - WKURLSchemeHandler
@@ -224,8 +212,6 @@ final class MediaUploadSchemeHandler: NSObject, WKURLSchemeHandler {
             return .error(413, code: "upload_file_too_big", message: "The file is too large to upload in the editor.")
         case let .incomplete(expected, received):
             return .error(409, code: "native_upload_incomplete", message: "Received \(received) of \(expected) bytes.")
-        case .notReceiving:
-            return .error(409, code: "native_upload_not_receiving", message: "The upload session does not accept chunks.")
         }
     }
 

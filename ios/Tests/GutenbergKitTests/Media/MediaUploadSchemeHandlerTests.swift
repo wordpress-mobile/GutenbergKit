@@ -173,23 +173,6 @@ struct MediaUploadSchemeHandlerTests {
     #expect(begin.status == 400)
   }
 
-  // MARK: - Files native code holds
-
-  @Test("finishes a registered file without the page sending its bytes")
-  func uploadsRegisteredFiles() async throws {
-    let service = ScriptedUploadService()
-    let handler = makeHandler(service: service)
-    let url = try makeTemporaryFile(Data("imported video".utf8), named: "IMG_0001.MOV")
-    let id = try #require(await handler.register(MediaUploadFile(url: url, mimeType: "video/quicktime", filename: "IMG_0001.MOV")))
-
-    let finish = try await send(handler, "/sessions/\(id)/finish", json: ["fields": [["name": "post", "value": "7"]]])
-
-    #expect(finish.status == 201)
-    #expect(service.calls.first?.contents == Data("imported video".utf8))
-    #expect(service.calls.first?.file.filename == "IMG_0001.MOV")
-    #expect(FileManager.default.fileExists(atPath: url.path), "deleted a file the handler doesn't own")
-  }
-
   // MARK: - Deletes
 
   @Test("relays a media delete with its query")
@@ -225,7 +208,6 @@ struct MediaUploadSchemeHandlerTests {
 
     #expect(begin.status == 503)
     #expect(begin.json["code"] as? String == "native_upload_unavailable")
-    #expect(await handler.register(MediaUploadFile(url: URL(fileURLWithPath: "/tmp/x"), mimeType: "image/jpeg", filename: "x")) == nil)
   }
 
   @Test("disable() cancels an upload in flight and refuses new ones")

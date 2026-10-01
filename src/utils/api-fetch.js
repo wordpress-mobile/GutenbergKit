@@ -2,7 +2,6 @@ import apiFetch from '@wordpress/api-fetch';
 import { __ } from '@wordpress/i18n';
 import { getGBKit, POST_FALLBACKS } from './bridge';
 import { info, warn, error as logError } from './logger';
-import { readNativeUploadReference } from './native-upload-reference';
 import { ensureTrailingSlash, stripTrailingSlash } from './url';
 
 /**
@@ -369,10 +368,6 @@ function loopbackUpload( options, file, query, { port, token } ) {
  * duplicated. From `finish` on, native code may already have sent the file, so a
  * failure there is reported, not retried.
  *
- * A stand-in for a file native code already holds goes straight to `finish` and
- * never falls back: its bytes are only a preview, and uploading them would
- * create an attachment of the wrong file.
- *
  * @param {Object}   options    The api-fetch options.
  * @param {File}     file       The file being uploaded.
  * @param {string}   query      The request's query string.
@@ -382,21 +377,6 @@ function loopbackUpload( options, file, query, { port, token } ) {
  */
 async function schemeUpload( options, file, query, schemeBase, next ) {
 	const { signal } = options;
-	const fields = uploadFields( options.body );
-
-	const reference = await readNativeUploadReference( file );
-	if ( reference ) {
-		info( `Finishing native upload of ${ file.name } from native code` );
-		return {
-			response: await finishNativeUpload(
-				schemeBase,
-				reference,
-				fields,
-				query,
-				signal
-			),
-		};
-	}
 
 	info( `Routing upload of ${ file.name } through the native upload scheme` );
 
@@ -436,7 +416,7 @@ async function schemeUpload( options, file, query, schemeBase, next ) {
 		response: await finishNativeUpload(
 			schemeBase,
 			sessionId,
-			fields,
+			uploadFields( options.body ),
 			query,
 			signal
 		),

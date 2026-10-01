@@ -10,10 +10,6 @@ import {
 	nativeMediaUploadMiddleware,
 	NATIVE_UPLOAD_CHUNK_SIZE,
 } from './api-fetch';
-import {
-	createNativeUploadStandIn,
-	readNativeUploadReference,
-} from './native-upload-reference';
 
 vi.mock( './bridge', () => ( {
 	getGBKit: vi.fn( () => ( {} ) ),
@@ -330,95 +326,6 @@ describe( 'nativeMediaUploadMiddleware over the native upload scheme', () => {
 				)
 			).rejects.toMatchObject( { code: 'fetch_error' } );
 			expect( next ).not.toHaveBeenCalled();
-		} );
-	} );
-
-	describe( 'files native code holds', () => {
-		function makeStandIn() {
-			return createNativeUploadStandIn( {
-				sessionId: SESSION,
-				filename: 'IMG_0001.HEIC',
-				type: 'image/heic',
-				preview: new Blob( [ 'preview-jpeg-bytes' ], {
-					type: 'image/jpeg',
-				} ),
-			} );
-		}
-
-		it( 'finishes the native session without sending the stand-in', async () => {
-			const requests = installScheme();
-
-			const result = await nativeMediaUploadMiddleware(
-				makeOptions( makeStandIn(), { fields: [ [ 'post', '7' ] ] } ),
-				makeNext()
-			);
-
-			expect( result ).toMatchObject( { id: 42 } );
-			expect( requests.map( ( r ) => r.path ) ).toEqual( [
-				`/sessions/${ SESSION }/finish`,
-			] );
-			expect( JSON.parse( requests[ 0 ].init.body ).fields ).toEqual( [
-				{ name: 'post', value: '7' },
-			] );
-		} );
-
-		it( 'never uploads the stand-in through the web view', async () => {
-			installScheme( {
-				[ `/sessions/${ SESSION }/finish` ]: () =>
-					json( 503, { code: 'native_upload_unavailable' } ),
-			} );
-			const next = makeNext();
-
-			await expect(
-				nativeMediaUploadMiddleware(
-					makeOptions( makeStandIn() ),
-					next
-				)
-			).rejects.toMatchObject( { code: 'native_upload_unavailable' } );
-			expect( next ).not.toHaveBeenCalled();
-		} );
-
-		it( 'survives the File being re-created, as core does when it builds FormData', async () => {
-			const standIn = makeStandIn();
-			const recreated = new File( [ standIn ], standIn.name, {
-				type: standIn.type,
-			} );
-
-			expect( await readNativeUploadReference( recreated ) ).toBe(
-				SESSION
-			);
-		} );
-	} );
-
-	describe( 'readNativeUploadReference', () => {
-		it( 'is null for an ordinary file', async () => {
-			expect(
-				await readNativeUploadReference(
-					new File( [ 'just a photo' ], 'a.jpg' )
-				)
-			).toBeNull();
-		} );
-
-		it( 'is null for a marker that does not end in a session ID', async () => {
-			const file = new File(
-				[
-					'x',
-					'\nGBK-NATIVE-UPLOAD:not-a-session-id-at-all-0000000000',
-				],
-				'a.jpg'
-			);
-			expect( await readNativeUploadReference( file ) ).toBeNull();
-		} );
-
-		it( 'reads a stand-in with no preview', async () => {
-			const standIn = createNativeUploadStandIn( {
-				sessionId: SESSION,
-				filename: 'a.pdf',
-				type: 'application/pdf',
-			} );
-			expect( await readNativeUploadReference( standIn ) ).toBe(
-				SESSION
-			);
 		} );
 	} );
 

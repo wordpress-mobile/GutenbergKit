@@ -2,8 +2,7 @@ import Foundation
 import OSLog
 
 /// The uploads waiting for their `finish` request: files the editor's page is sending
-/// to native code in chunks, and files native code imported itself and handed the page
-/// a reference to.
+/// to native code in chunks.
 ///
 /// Every chunk is written straight to a staging file, so a file's size is bounded by
 /// disk, not memory. Sessions are one-shot — ``take(_:)`` removes the session — so a
@@ -20,24 +19,17 @@ actor MediaUploadSessionStore {
         case tooLarge(limit: Int)
         /// `finish` arrived before every byte the page announced.
         case incomplete(expected: Int, received: Int)
-        /// A chunk was sent to a session native code registered, which has no bytes
-        /// to receive.
-        case notReceiving
     }
 
     /// A finished session, handed to the uploader.
     struct Finished: Sendable {
+        /// The staging copy the store wrote, which the caller deletes once the upload
+        /// is over.
         let file: MediaUploadFile
-        /// Whether the file is a staging copy the store created, which the caller
-        /// deletes once the upload is over. A registered file belongs to whoever
-        /// registered it.
-        let isStagingCopy: Bool
 
-        /// Deletes the staging copy, if this is one.
+        /// Deletes the staging copy.
         func cleanUp() {
-            if isStagingCopy {
-                try? FileManager.default.removeItem(at: file.url.deletingLastPathComponent())
-            }
+            try? FileManager.default.removeItem(at: file.url.deletingLastPathComponent())
         }
     }
 
@@ -45,8 +37,8 @@ actor MediaUploadSessionStore {
         let file: MediaUploadFile
         let expectedSize: Int?
         var received: Int
-        /// Open for writing while the page sends chunks; `nil` for a registered file.
-        var handle: FileHandle?
+        /// Open for writing while the page sends chunks.
+        let handle: FileHandle
         var lastActivity: Date
     }
 
@@ -101,7 +93,6 @@ actor MediaUploadSessionStore {
     /// would silently corrupt the file.
     func append(_ data: Data, to id: String, at offset: Int) throws -> Int {
         guard var session = sessions[id] else { throw Failure.unknownSession }
-        guard let handle = session.handle else { throw Failure.notReceiving }
         guard offset == session.received else {
             throw Failure.offsetMismatch(expected: session.received, offset: offset)
         }
@@ -110,29 +101,18 @@ actor MediaUploadSessionStore {
             discard(id)
             throw Failure.tooLarge(limit: session.expectedSize.map { min($0, maxFileSize) } ?? maxFileSize)
         }
-        try handle.write(contentsOf: data)
+        try session.handle.write(contentsOf: data)
         session.received = total
         session.lastActivity = .now
         sessions[id] = session
         return total
     }
 
-    /// Registers a file native code already holds, so the page can finish an upload of
-    /// it without sending its bytes. Returns the session ID.
-    func register(_ file: MediaUploadFile) -> String {
-        let id = UUID().uuidString.lowercased()
-        sessions[id] = Session(file: file, expectedSize: nil, received: 0, handle: nil, lastActivity: .now)
-        return id
-    }
-
     /// Ends a session and returns its file for upload.
     func take(_ id: String) throws -> Finished {
         guard let session = sessions.removeValue(forKey: id) else { throw Failure.unknownSession }
-        guard let handle = session.handle else {
-            return Finished(file: session.file, isStagingCopy: false)
-        }
-        try? handle.close()
-        let finished = Finished(file: session.file, isStagingCopy: true)
+        try? session.handle.close()
+        let finished = Finished(file: session.file)
         if let expected = session.expectedSize, expected != session.received {
             finished.cleanUp()
             throw Failure.incomplete(expected: expected, received: session.received)
@@ -143,10 +123,8 @@ actor MediaUploadSessionStore {
     /// Abandons a session, deleting what it received. Unknown IDs are ignored.
     func discard(_ id: String) {
         guard let session = sessions.removeValue(forKey: id) else { return }
-        if let handle = session.handle {
-            try? handle.close()
-            Finished(file: session.file, isStagingCopy: true).cleanUp()
-        }
+        try? session.handle.close()
+        Finished(file: session.file).cleanUp()
     }
 
     /// Abandons every session that has been idle for longer than `interval`.
