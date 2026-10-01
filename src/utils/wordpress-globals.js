@@ -142,7 +142,8 @@ export async function initializeWordPressGlobals() {
 	window.lodash = lodash;
 
 	// React JSX runtime for plugin compatibility
-	window.ReactJSXRuntime = ReactJSXRuntime;
+	// Core exposes the CommonJS exports, without the interop `default` key.
+	window.ReactJSXRuntime = ReactJSXRuntime.default || ReactJSXRuntime;
 
 	// Load wp-util after jQuery and lodash are on window
 	await import( '../../vendor/wp-util.js' );
