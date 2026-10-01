@@ -317,8 +317,10 @@ own client, whichever way the file arrived:
     there is nothing to configure and it works under Lockdown Mode. On Android it is a
     loopback HTTP server, which needs the network security entry below.
 -   **Media from the native block inserter** is imported to disk (a clone, on iOS, so a
-    large video costs no memory) and uploaded from there. The page only shows a preview
-    while the upload runs; the file never passes through it.
+    large video costs no memory) and handed to the page as a file, which it then uploads
+    like any other. WebKit reads the file from disk as it is sent, so the page never holds
+    it in memory. This needs iOS 18.4: before that the inserter doesn't offer the photo
+    library or the camera, and media is added from a block's own upload button.
 
 Either way the block uploads through Gutenberg's own pipeline, so its placeholder, saving
 lock, error notices, and recovery of a failed server-side resize all behave as they do for

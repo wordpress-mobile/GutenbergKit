@@ -183,6 +183,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let editorService: EditorService
     private let httpClient: any EditorHTTPClientProtocol
     private let mediaPicker: MediaPickerController?
+    let nativeFileInput = NativeFileInput()
     private let controller: GutenbergEditorController
     private let bundleProvider: EditorAssetBundleProvider
     private let lockdownModeMonitor: LockdownModeMonitor
@@ -812,57 +813,49 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
         do {
             var items: [Any] = []
+            var files: [URL] = []
             for media in selection {
-                items.append(try await javaScriptMediaItem(for: media))
+                let (item, file) = try javaScriptMediaItem(for: media)
+                items.append(item)
+                if let file {
+                    files.append(file)
+                }
             }
-            _ = try await webView.callAsyncJavaScript(
-                "window.blockInserter?.insertMedia(selection)",
-                arguments: ["selection": items],
-                in: nil,
-                contentWorld: .page
-            )
+            try await nativeFileInput.offer(files, to: webView) {
+                _ = try await webView.callAsyncJavaScript(
+                    "return await window.blockInserter?.insertMedia(selection)",
+                    arguments: ["selection": items],
+                    in: nil,
+                    contentWorld: .page
+                )
+            }
         } catch {
             assertionFailure("Failed to serialize or insert media: \(error)")
         }
     }
 
-    /// The media item as the page's `insertMedia` takes it.
+    /// The media item as the page's `insertMedia` takes it, and the file to offer the
+    /// page for it.
     ///
-    /// A file the editor imported and can upload natively gets a `nativeUpload`
-    /// description: the page builds a stand-in from it — a preview image and the
-    /// session to finish — so the upload runs through Gutenberg's own pipeline while
-    /// the file's bytes stay in native code. Anything else goes as it is, and the page
-    /// fetches and uploads it itself.
-    func javaScriptMediaItem(for media: MediaInfo) async throws -> Any {
+    /// A file the editor imported is offered through ``NativeFileInput``, and its item
+    /// is marked `nativeFile` so the page asks for it. Anything else — a media library
+    /// item, a remote URL, any file on an OS that can't offer one — goes as it is, and
+    /// the page fetches it.
+    func javaScriptMediaItem(for media: MediaInfo) throws -> (item: Any, file: URL?) {
         let item = try makeJavaScriptCompatibleDictionary(with: media)
-        guard media.id == nil,
-              mediaUploadSchemeHandler.isEnabled,
+        guard NativeFileInput.isSupported,
+              media.id == nil,
               var dictionary = item as? [String: Any],
               let url = media.url.flatMap(URL.init(string:)),
               url.scheme == MediaFileSchemeHandler.scheme,
               let fileURL = MediaFileManager.fileURL(for: url),
-              let size = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]))?.fileSize else {
-            return item
+              FileManager.default.fileExists(atPath: fileURL.path(percentEncoded: false)) else {
+            return (item, nil)
         }
 
-        let mimeType = media.type ?? MediaFileManager.mimeType(forExtension: fileURL.pathExtension)
-        let file = MediaUploadFile(url: fileURL, mimeType: mimeType, filename: fileURL.lastPathComponent)
-        let preview = await MediaPreview.write(for: fileURL, mimeType: mimeType)
-        guard let sessionId = await mediaUploadSchemeHandler.register(file) else {
-            return item
-        }
-
-        var nativeUpload: [String: Any] = [
-            "sessionId": sessionId,
-            "filename": file.filename,
-            "size": size,
-        ]
-        if let previewURL = preview.flatMap({ MediaFileManager.mediaURL(forFile: $0) }) {
-            nativeUpload["previewUrl"] = previewURL.absoluteString
-        }
-        dictionary["type"] = mimeType
-        dictionary["nativeUpload"] = nativeUpload
-        return dictionary
+        dictionary["type"] = media.type ?? MediaFileManager.mimeType(forExtension: fileURL.pathExtension)
+        dictionary["nativeFile"] = true
+        return (dictionary, fileURL)
     }
 
     private func insertPatternFromInserter(_ patternName: String) {

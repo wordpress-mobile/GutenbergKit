@@ -136,12 +136,21 @@ struct BlockInserterView: View {
             BlockInserterSectionView(section: section, onBlockSelected: insertBlock)
                 .padding(.bottom, 6)
 
-            if viewModel.searchText.isEmpty && section.category == "gbk-most-used" {
+            if canInsertDeviceMedia && viewModel.searchText.isEmpty && section.category == "gbk-most-used" {
                 inlinePhotosPicker
             }
         }
         .cardStyle()
         .padding(.horizontal)
+    }
+
+    /// Whether the inserter offers the photo library and the camera.
+    ///
+    /// Media picked here reaches the page as a file, which needs ``NativeFileInput``.
+    /// Where it isn't supported the pickers are hidden, and media is added from a
+    /// block's own upload button, through WebKit's picker.
+    private var canInsertDeviceMedia: Bool {
+        NativeFileInput.isSupported
     }
 
     private var inlinePickerSpacing: CGFloat {
@@ -165,23 +174,25 @@ struct BlockInserterView: View {
                 customSearchField
             }
 
-            PhotosPicker(
-                selection: $selectedMediaItems,
-                preferredItemEncoding: .compatible
-            ) {
-                Image(systemName: "photo.on.rectangle.angled")
-            }
-            .onChange(of: selectedMediaItems) { _, selection in
-                if !selection.isEmpty {
-                    insertMedia(selection)
+            if canInsertDeviceMedia {
+                PhotosPicker(
+                    selection: $selectedMediaItems,
+                    preferredItemEncoding: .compatible
+                ) {
+                    Image(systemName: "photo.on.rectangle.angled")
                 }
-                selectedMediaItems = []
-            }
+                .onChange(of: selectedMediaItems) { _, selection in
+                    if !selection.isEmpty {
+                        insertMedia(selection)
+                    }
+                    selectedMediaItems = []
+                }
 
-            Button {
-                isShowingCamera = true
-            } label: {
-                Image(systemName: "camera")
+                Button {
+                    isShowingCamera = true
+                } label: {
+                    Image(systemName: "camera")
+                }
             }
 
             Button {

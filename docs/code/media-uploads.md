@@ -9,7 +9,7 @@ for the host-facing API.
 | Source                                                       | Reaches native code as                                      |
 | ------------------------------------------------------------ | ----------------------------------------------------------- |
 | Upload button, drag-and-drop, paste, "upload external image" | a `File` in the page, sent by `nativeMediaUploadMiddleware` |
-| The native block inserter (iOS)                              | a file on disk, which the page only references              |
+| The native block inserter (iOS)                              | a `File` native code hands the page, sent the same way      |
 
 Both end in the same place. Core's `mediaUpload` builds a `FormData` and calls
 `apiFetch({ path: '/wp/v2/media', method: 'POST' })`. `nativeMediaUploadMiddleware`
@@ -78,13 +78,30 @@ the wrong offset. A 1.1 GB upload peaked at 44 MB of app memory.
 ### Native inserter media
 
 The inserter imports a picked photo or video as a file. On APFS that copy is a clone, so
-an import of any size costs no memory. When the editor can upload natively it registers
-the file with the scheme handler, and the page gets a stand-in `File`: a small JPEG preview
-followed by a marker naming the session (`src/utils/native-upload-reference.js`). The marker
-travels in the bytes because core re-creates the `File` when it builds `FormData`. The
-middleware finishes the session instead of sending the stand-in, and never uploads a
-stand-in through the web view. The page checks the real size against the site's
-`maxUploadFileSize` itself, since the stand-in would pass core's check.
+an import of any size costs no memory. The page then needs it as a `File`: Gutenberg's
+upload pipeline reads the bytes from one, and so does a block that uploads on its own
+(VideoPress sends its file to its own endpoint and never calls `mediaUpload`).
+
+The page clicks a hidden file input (`requestNativeFiles` in `src/utils/native-files.js`),
+and `NativeFileInput` answers the open panel WebKit would otherwise show with the imported
+files. The page gets what the system picker gives it: `File`s that WebKit reads from disk
+as they are sliced. From there an inserter pick is an Upload-button pick. On an iPhone 14
+Pro (iOS 18.6.2) the page read a 1.1 GB video through 4 MB slices in about a second,
+byte for byte.
+
+-   **iOS 18.4.** WebKit asks its UI delegate for the panel from iOS 18.4. Before that the
+    inserter hides the photo library and the camera, and media is added from a block's own
+    upload button.
+-   **Only while offering.** A UI delegate that implements the panel answers every file
+    input, so `NativeFileInput` is the web view's UI delegate only for the insertion, and
+    puts the host's delegate back.
+-   **User activation.** The click needs the user activation the native script call
+    carries, so the page asks for the files before its first `await`.
+-   **Fallback.** If the files don't arrive, the page fetches them from `gbk-media-file:`
+    instead, which holds each file in the page's memory.
+-   **WebKit's copies.** WebKit copies every file a file input receives into
+    `tmp/WKFileUploadPanel-…` (a clone) and never deletes it. `MediaFileManager` removes
+    the ones older than two days, along with its own imports.
 
 ## Background and timeouts
 
@@ -102,10 +119,11 @@ stand-in through the web view. The page checks the real size against the site's
 ## Tests
 
 -   JS: `src/utils/api-fetch-upload-scheme.test.js`, `api-fetch-post-process.test.js` (core's
-    recovery over the scheme), `native-upload-reference.test.js`, and
+    recovery over the scheme), `native-files.test.js`, and
     `api-fetch-upload-middleware.test.js` (the Android loopback transport).
 -   Swift, on the host: `MediaUploadSchemeHandlerTests`, `MediaUploadSessionStoreTests`,
     `MediaUploadServiceTests`, `InternalMediaClientTests`, `MediaFileSchemeHandlerTests`,
-    `MediaImportTests`.
+    `MediaImportTests`, `NativeFileInputTests`.
 -   Swift, in the simulator: `EditorViewControllerMediaTeardownTests` runs the upload
-    protocol in the editor's own `WKWebView`.
+    protocol in the editor's own `WKWebView`, and has a page's file input receive a file
+    from `NativeFileInput`.

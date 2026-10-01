@@ -1,8 +1,5 @@
-import CoreGraphics
 import Foundation
-import ImageIO
 import Testing
-import UniformTypeIdentifiers
 
 @testable import GutenbergKit
 
@@ -27,6 +24,27 @@ struct MediaImportTests {
     #expect(try sharesStorage(fileURL, with: source), "the import copied the bytes instead of cloning them")
   }
 
+  @Test("removes WebKit's old upload copies, and nothing else")
+  func removesStaleWebKitUploadCopies() throws {
+    let tmp = URL.randomTemporaryDirectory
+    let old = tmp.appending(component: "WKFileUploadPanel-old")
+    let recent = tmp.appending(component: "WKFileUploadPanel-recent")
+    let unrelated = tmp.appending(component: "GutenbergKit-uploads")
+    for directory in [old, recent, unrelated] {
+      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+      try Data("video".utf8).write(to: directory.appending(component: "clip.mp4"))
+    }
+    let threeDaysAgo = Date.now.addingTimeInterval(-3 * 24 * 60 * 60)
+    try FileManager.default.setAttributes([.creationDate: threeDaysAgo], ofItemAtPath: old.path)
+    try FileManager.default.setAttributes([.creationDate: threeDaysAgo], ofItemAtPath: unrelated.path)
+
+    MediaFileManager.removeStaleWebKitUploadCopies(in: tmp)
+
+    #expect(!FileManager.default.fileExists(atPath: old.path))
+    #expect(FileManager.default.fileExists(atPath: recent.path))
+    #expect(FileManager.default.fileExists(atPath: unrelated.path))
+  }
+
   @Test("maps a file back to the gbk-media-file URL that names it")
   func mediaURLRoundTrips() throws {
     let file = root.appending(component: "Uploads/abc/IMG 0001.HEIC")
@@ -35,41 +53,6 @@ struct MediaImportTests {
     #expect(url.absoluteString == "gbk-media-file:///Uploads/abc/IMG%200001.HEIC")
     #expect(MediaFileManager.fileURL(for: url, root: root) == file.standardizedFileURL)
     #expect(MediaFileManager.mediaURL(forFile: URL(fileURLWithPath: "/etc/hosts"), root: root) == nil)
-  }
-
-  @Test("writes a JPEG preview of an image next to it")
-  func imagePreview() async throws {
-    let image = try makeTemporaryFile(try pngData(width: 3000, height: 2000), named: "big.png")
-
-    let preview = try #require(await MediaPreview.write(for: image, mimeType: "image/png"))
-
-    #expect(preview.deletingLastPathComponent() == image.deletingLastPathComponent())
-    let source = try #require(CGImageSourceCreateWithURL(preview as CFURL, nil))
-    #expect(CGImageSourceGetType(source) as String? == UTType.jpeg.identifier)
-    let properties = try #require(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
-    #expect(properties[kCGImagePropertyPixelWidth] as? Int == MediaPreview.maxPixelSize)
-  }
-
-  @Test("has no preview for a file that isn't an image or video")
-  func noPreviewForDocuments() async throws {
-    let document = try makeTemporaryFile(Data("%PDF-1.7".utf8), named: "a.pdf")
-
-    #expect(await MediaPreview.write(for: document, mimeType: "application/pdf") == nil)
-  }
-
-  private func pngData(width: Int, height: Int) throws -> Data {
-    let context = try #require(CGContext(
-      data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-    ))
-    context.setFillColor(CGColor(red: 0.2, green: 0.4, blue: 0.8, alpha: 1))
-    context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-    let image = try #require(context.makeImage())
-    let data = NSMutableData()
-    let destination = try #require(CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil))
-    CGImageDestinationAddImage(destination, image, nil)
-    #expect(CGImageDestinationFinalize(destination))
-    return data as Data
   }
 }
 

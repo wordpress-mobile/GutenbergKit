@@ -157,35 +157,6 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
     }
 
     @MainActor
-    @Test("the page finishes a file native code registered, without sending its bytes")
-    func pageFinishesRegisteredFiles() async throws {
-        let uploader = RecordingUploader()
-        let editor = EditorViewController(configuration: makeConfiguration(), mediaUploader: uploader)
-        defer { editor.stopMediaHandling() }
-        try await loadBlankPage(in: editor)
-        let url = try makeTemporaryFile(Data("imported video".utf8), named: "IMG_0001.MOV")
-        let id = try #require(await editor.mediaUploadSchemeHandler.register(
-            MediaUploadFile(url: url, mimeType: "video/quicktime", filename: "IMG_0001.MOV")
-        ))
-
-        let result = try #require(try await editor.webView.callAsyncJavaScript(
-            """
-            const response = await fetch(`gbk-upload://upload/sessions/${id}/finish`, {
-                method: 'POST',
-                body: JSON.stringify({ fields: [], query: '' }),
-            });
-            return { status: response.status };
-            """,
-            arguments: ["id": id],
-            in: nil,
-            contentWorld: .page
-        ) as? [String: Any])
-
-        #expect(result["status"] as? Int == 201)
-        #expect(uploader.receivedContents == Data("imported video".utf8))
-    }
-
-    @MainActor
     @Test("after stopMediaHandling the page is told to upload through the web view")
     func stoppedEditorAnswers503() async throws {
         let editor = EditorViewController(configuration: makeConfiguration(), mediaUploader: InertUploader())
@@ -200,52 +171,76 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
     // MARK: - Media from the block inserter
 
     @MainActor
-    @Test("an imported file is registered for native upload and described to the page")
-    func importedFilesAreRegistered() async throws {
-        let uploader = RecordingUploader()
-        let editor = EditorViewController(configuration: makeConfiguration(), mediaUploader: uploader)
-        defer { editor.stopMediaHandling() }
+    @Test("an imported file is offered to the page as a file, and its item says so", .enabled(if: NativeFileInput.isSupported))
+    func importedFilesAreOffered() async throws {
+        let editor = EditorViewController(configuration: makeConfiguration())
         let (media, fileURL) = try await importTestVideo()
 
-        let item = try #require(try await editor.javaScriptMediaItem(for: media) as? [String: Any])
-        let nativeUpload = try #require(item["nativeUpload"] as? [String: Any])
-        let sessionId = try #require(nativeUpload["sessionId"] as? String)
+        let (item, file) = try editor.javaScriptMediaItem(for: media)
+        let dictionary = try #require(item as? [String: Any])
 
-        #expect(nativeUpload["filename"] as? String == fileURL.lastPathComponent)
-        #expect(nativeUpload["size"] as? Int == 32)
-        #expect(item["type"] as? String == "video/quicktime")
-
-        var request = URLRequest(url: URL(string: "gbk-upload://upload/sessions/\(sessionId)/finish")!)
-        request.httpMethod = "POST"
-        request.httpBody = Data(#"{"fields":[{"name":"post","value":"7"}],"query":""}"#.utf8)
-        let finish = FakeSchemeTask(request: request)
-        editor.mediaUploadSchemeHandler.start(finish)
-        await finish.waitUntilAnswered()
-
-        #expect(finish.status == 201)
-        #expect(uploader.receivedContents == Data(repeating: 1, count: 32))
-        #expect(uploader.received?.fields == [MediaUploadField(name: "post", value: "7")])
+        #expect(file == fileURL)
+        #expect(dictionary["nativeFile"] as? Bool == true)
+        #expect(dictionary["type"] as? String == "video/quicktime")
+        #expect(dictionary["url"] as? String == media.url)
     }
 
     @MainActor
-    @Test("media goes to the page as it is when the editor can't upload it natively")
-    func unregisteredMedia() async throws {
-        let (media, _) = try await importTestVideo()
-        let plain = EditorViewController(configuration: makeConfiguration())
-        let uploading = EditorViewController(configuration: makeConfiguration(), mediaUploader: InertUploader())
-        defer { uploading.stopMediaHandling() }
+    @Test("media the editor did not import goes to the page as it is")
+    func otherMediaIsNotOffered() async throws {
+        let editor = EditorViewController(configuration: makeConfiguration())
 
-        let withoutHandling = try #require(try await plain.javaScriptMediaItem(for: media) as? [String: Any])
-        let libraryItem = try #require(try await uploading.javaScriptMediaItem(
+        let library = try editor.javaScriptMediaItem(
             for: MediaInfo(id: 42, url: "https://example.com/a.jpg", type: "image/jpeg")
-        ) as? [String: Any])
-        let remote = try #require(try await uploading.javaScriptMediaItem(
+        )
+        let remote = try editor.javaScriptMediaItem(
             for: MediaInfo(url: "https://example.com/a.jpg", type: "image/jpeg")
-        ) as? [String: Any])
+        )
+        let missing = try editor.javaScriptMediaItem(
+            for: MediaInfo(url: "gbk-media-file:///Uploads/gone/IMG_0001.MOV", type: "video/quicktime")
+        )
 
-        #expect(withoutHandling["nativeUpload"] == nil)
-        #expect(libraryItem["nativeUpload"] == nil)
-        #expect(remote["nativeUpload"] == nil)
+        for (item, file) in [library, remote, missing] {
+            #expect(file == nil)
+            #expect((item as? [String: Any])?["nativeFile"] == nil)
+        }
+    }
+
+    @MainActor
+    @Test("the page's file input gets the offered file, read from disk", .enabled(if: NativeFileInput.isSupported))
+    func pageReceivesOfferedFiles() async throws {
+        let editor = EditorViewController(configuration: makeConfiguration())
+        try await loadBlankPage(in: editor)
+        let (_, fileURL) = try await importTestVideo()
+
+        let result = try await editor.nativeFileInput.offer([fileURL], to: editor.webView) {
+            try await editor.webView.callAsyncJavaScript(
+                """
+                const files = await new Promise((resolve, reject) => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.multiple = true;
+                    input.addEventListener('change', () => resolve(Array.from(input.files)));
+                    input.addEventListener('cancel', () => reject(new Error('cancelled')));
+                    document.body.appendChild(input);
+                    input.click();
+                });
+                const bytes = new Uint8Array(await files[0].slice(0, 4).arrayBuffer());
+                return { count: files.length, name: files[0].name, size: files[0].size, type: files[0].type, first: Array.from(bytes) };
+                """,
+                arguments: [:],
+                in: nil,
+                contentWorld: .page
+            )
+        }
+        let file = try #require(result as? [String: Any])
+
+        #expect(file["count"] as? Int == 1)
+        #expect(file["name"] as? String == fileURL.lastPathComponent)
+        #expect(file["size"] as? Int == 32)
+        #expect(file["type"] as? String == "video/quicktime")
+        #expect(file["first"] as? [Int] == [1, 1, 1, 1])
+        #expect(editor.webView.uiDelegate == nil, "the offer outlived the insertion")
     }
 
     /// Imports a small file the way the camera path does.

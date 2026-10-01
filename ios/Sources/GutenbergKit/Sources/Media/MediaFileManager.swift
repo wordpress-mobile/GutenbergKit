@@ -25,6 +25,7 @@ actor MediaFileManager {
         self.uploadsDirectory = self.rootURL.appendingPathComponent("Uploads")
         Task {
             await cleanupOldFiles()
+            Self.removeStaleWebKitUploadCopies()
         }
     }
 
@@ -155,6 +156,36 @@ actor MediaFileManager {
 #if DEBUG
             print("Failed to clean up old files: \(error)")
 #endif
+        }
+    }
+}
+
+extension MediaFileManager {
+    /// How long WebKit's copy of an uploaded file is kept.
+    static let webKitUploadCopyLifetime: TimeInterval = 2 * 24 * 60 * 60
+
+    /// Deletes the copies WebKit made of files handed to a file input, once they are
+    /// older than `age`.
+    ///
+    /// WebKit copies every file a file input receives — from the system picker or from
+    /// ``NativeFileInput`` — into `tmp/WKFileUploadPanel-…`, and never deletes it. The
+    /// copy is a clone, so it costs nothing while the original exists; once the
+    /// original is gone it holds the file's storage on its own. An upload in flight
+    /// reads from that copy, so only old ones are removed.
+    nonisolated static func removeStaleWebKitUploadCopies(
+        in directory: URL = FileManager.default.temporaryDirectory,
+        olderThan age: TimeInterval = webKitUploadCopyLifetime
+    ) {
+        let cutoff = Date.now.addingTimeInterval(-age)
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.creationDateKey]
+        ) else { return }
+        for entry in entries where entry.lastPathComponent.hasPrefix("WKFileUploadPanel-") {
+            let created = (try? entry.resourceValues(forKeys: [.creationDateKey]))?.creationDate
+            if let created, created < cutoff {
+                try? FileManager.default.removeItem(at: entry)
+            }
         }
     }
 }
