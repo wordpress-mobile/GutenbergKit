@@ -43,6 +43,22 @@ export default defineConfig( [
 			'react-refresh': reactRefresh,
 		},
 		rules: {
+			// Imports form one contiguous block, aligned with the upstream
+			// Gutenberg ESLint configuration.
+			'@wordpress/dependency-group': [ 'error', 'never' ],
+			'import/order': [
+				'error',
+				{
+					groups: [
+						'builtin',
+						'external',
+						'internal',
+						[ 'parent', 'sibling', 'index' ],
+					],
+					'newlines-between': 'never',
+					warnOnUnassignedImports: true,
+				},
+			],
 			'react-refresh/only-export-components': [
 				'warn',
 				{ allowConstantExport: true },
