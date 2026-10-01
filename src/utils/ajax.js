@@ -7,9 +7,8 @@ import { stripTrailingSlash } from './url';
  *
  * GutenbergKit runs in a WebView without WordPress session cookies,
  * so AJAX requests need explicit URL and token-based authentication.
- * Additionally, WordPress core media globals (`wp.media.ajax`,
- * `wp.media.post`) are normally set by wp-includes/js/media-models.js,
- * which GutenbergKit doesn't load — so we alias them here.
+ * Runs before plugins load so requests they send while loading, e.g. to the
+ * `ajaxurl` global, are authenticated.
  *
  * @return {void}
  */
@@ -22,7 +21,6 @@ export function configureAjax() {
 	const siteURL = stripTrailingSlash( rawSiteURL );
 	configureAjaxUrl( siteURL );
 	configureAjaxAuth( siteURL, authHeader );
-	configureMediaAjax();
 }
 
 function configureAjaxUrl( siteURL ) {
@@ -117,10 +115,15 @@ function isSameOrigin( requestUrl, siteOrigin ) {
  * `wp.ajax.send` and `wp.ajax.post`. WordPress core normally sets these
  * in `wp-includes/js/media-models.js`, which GutenbergKit doesn't load.
  *
+ * Configured after plugins load, so a plugin replacing `wp.media` doesn't
+ * discard the aliases.
+ *
  * @see https://github.com/WordPress/wordpress-develop/blob/117af7e/src/js/_enqueues/wp/media/models.js#L134
+ *
+ * @return {void}
  */
-function configureMediaAjax() {
-	if ( ! window.wp.ajax.send || ! window.wp.ajax.post ) {
+export function configureMediaAjax() {
+	if ( ! window.wp?.ajax?.send || ! window.wp.ajax.post ) {
 		warn(
 			'Unable to configure media AJAX: wp.ajax.send/post not available'
 		);

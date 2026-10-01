@@ -9,7 +9,7 @@ import {
 import { loadEditorAssets } from './editor-loader.js';
 import EditorLoadError from '../components/editor-load-error/index.jsx';
 import { error } from './logger.js';
-import { configureAjax } from './ajax.js';
+import { configureAjax, configureMediaAjax } from './ajax.js';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge.js';
 import { initializeWordPressGlobals } from './wordpress-globals.js';
 import { configureLocale } from './localization.js';
@@ -75,6 +75,7 @@ describe( 'setUpEditorEnvironment', () => {
 
 	it( 'executes initialization sequence in correct order', async () => {
 		const callOrder = [];
+		getGBKit.mockReturnValue( { plugins: true } );
 
 		awaitGBKitGlobal.mockImplementation( () => {
 			callOrder.push( 'awaitGBKitGlobal' );
@@ -110,6 +111,15 @@ describe( 'setUpEditorEnvironment', () => {
 			callOrder.push( 'configureAjax' );
 		} );
 
+		loadEditorAssets.mockImplementation( () => {
+			callOrder.push( 'loadEditorAssets' );
+			return Promise.resolve( {} );
+		} );
+
+		configureMediaAjax.mockImplementation( () => {
+			callOrder.push( 'configureMediaAjax' );
+		} );
+
 		initializeVideoPressAjaxBridge.mockImplementation( () => {
 			callOrder.push( 'initializeVideoPressAjaxBridge' );
 		} );
@@ -129,6 +139,8 @@ describe( 'setUpEditorEnvironment', () => {
 			'loadRemainingGlobals',
 			'configureApiFetch',
 			'configureAjax',
+			'loadEditorAssets',
+			'configureMediaAjax',
 			'initializeVideoPressAjaxBridge',
 			'initializeEditor',
 		] );
@@ -257,7 +269,7 @@ describe( 'setUpEditorEnvironment', () => {
 
 		await setUpEditorEnvironment();
 
-		expect( configureAjax ).toHaveBeenCalledTimes( 1 );
+		expect( configureMediaAjax ).toHaveBeenCalledTimes( 1 );
 		expect( initializeVideoPressAjaxBridge ).toHaveBeenCalledTimes( 1 );
 	} );
 
@@ -269,7 +281,7 @@ describe( 'setUpEditorEnvironment', () => {
 
 		await setUpEditorEnvironment();
 
-		expect( configureAjax ).toHaveBeenCalledTimes( 1 );
+		expect( configureMediaAjax ).toHaveBeenCalledTimes( 1 );
 		expect( initializeVideoPressAjaxBridge ).not.toHaveBeenCalled();
 	} );
 
@@ -278,7 +290,7 @@ describe( 'setUpEditorEnvironment', () => {
 
 		await setUpEditorEnvironment();
 
-		expect( configureAjax ).toHaveBeenCalledTimes( 1 );
+		expect( configureMediaAjax ).toHaveBeenCalledTimes( 1 );
 		expect( initializeVideoPressAjaxBridge ).toHaveBeenCalledTimes( 1 );
 	} );
 
