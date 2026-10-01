@@ -27,9 +27,7 @@ import * as editor from '@wordpress/editor';
 import * as element from '@wordpress/element';
 import * as escapeHtml from '@wordpress/escape-html';
 import * as formatLibrary from '@wordpress/format-library';
-import * as globalStylesEngine from '@wordpress/global-styles-engine';
 import * as htmlEntities from '@wordpress/html-entities';
-import * as icons from '@wordpress/icons';
 import * as isShallowEqual from '@wordpress/is-shallow-equal';
 import * as keycodes from '@wordpress/keycodes';
 import * as keyboardShortcuts from '@wordpress/keyboard-shortcuts';
@@ -99,7 +97,6 @@ export async function initializeWordPressGlobals() {
 	window.wp.element = toCommonJS( element );
 	window.wp.escapeHtml = toCommonJS( escapeHtml );
 	window.wp.formatLibrary = toCommonJS( formatLibrary );
-	window.wp.globalStylesEngine = toCommonJS( globalStylesEngine );
 	// hooks and i18n are initialized via wordpress-i18n.js
 	// Ensure they exist (they should, but handle case where wordpress-i18n.js hasn't loaded)
 	if ( ! window.wp.hooks ) {
@@ -108,7 +105,6 @@ export async function initializeWordPressGlobals() {
 		);
 	}
 	window.wp.htmlEntities = toCommonJS( htmlEntities );
-	window.wp.icons = toCommonJS( icons );
 	window.wp.isShallowEqual = toCommonJS( isShallowEqual );
 	window.wp.keycodes = toCommonJS( keycodes );
 	window.wp.keyboardShortcuts = toCommonJS( keyboardShortcuts );
