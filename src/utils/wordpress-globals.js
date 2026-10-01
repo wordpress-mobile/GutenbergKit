@@ -62,7 +62,7 @@ import * as widgets from '@wordpress/widgets';
 import * as wordcount from '@wordpress/wordcount';
 
 /**
- * Initialize WordPress globals by defining all @wordpress modules on the
+ * Initialize WordPress globals by defining all `@wordpress` modules on the
  * window.wp namespace. This allows plugin scripts loaded from the editor
  * assets endpoint to access these modules.
  *
