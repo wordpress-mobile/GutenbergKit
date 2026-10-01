@@ -275,6 +275,85 @@ class MediaUploadServerTest {
     }
 
     @Test
+    fun `keeps a binary Blob part out of an uploader's fields`() {
+        // Pin rule 3: a Blob always has a filename, so it's dropped before the decode.
+        val uploader = RecordingUploader()
+        server.stop()
+        server = MediaUploadServer(
+            processor = null, internalClient = MockInternalMediaClient(), uploader = uploader,
+            cacheDir = tempFolder.root
+        )
+
+        val boundary = "test-boundary-blob"
+        val body = java.io.ByteArrayOutputStream().apply {
+            // Ordered as uploadToServer emits it: the file first, then additionalData.
+            write("--$boundary\r\n".toByteArray())
+            write("Content-Disposition: form-data; name=\"file\"; filename=\"photo.jpg\"\r\n".toByteArray())
+            write("Content-Type: image/jpeg\r\n\r\n".toByteArray())
+            write("fake image data".toByteArray())
+            write("\r\n--$boundary\r\n".toByteArray())
+            write("Content-Disposition: form-data; name=\"post\"\r\n\r\n".toByteArray())
+            write("42\r\n".toByteArray())
+            // A Blob-shaped part: it has a filename, and its bytes are not valid UTF-8.
+            write("--$boundary\r\n".toByteArray())
+            write("Content-Disposition: form-data; name=\"blob\"; filename=\"blob\"\r\n".toByteArray())
+            write("Content-Type: application/octet-stream\r\n\r\n".toByteArray())
+            write(byteArrayOf(0xED.toByte(), 0xA0.toByte(), 0x80.toByte()))
+            write("\r\n--$boundary--\r\n".toByteArray())
+        }.toByteArray()
+
+        sendRawRequest(
+            method = "POST",
+            path = "/upload",
+            headers = mapOf(
+                "Relay-Authorization" to "Bearer ${server.token}",
+                "Content-Type" to "multipart/form-data; boundary=$boundary"
+            ),
+            body = body
+        )
+
+        // The Blob is dropped rather than decoded, and file is still the file.
+        assertEquals("photo.jpg", uploader.received?.filename)
+        assertEquals(listOf(MediaUploadField("post", "42")), uploader.received?.fields)
+    }
+
+    @Test
+    fun `round-trips a non-Latin field value exactly`() {
+        // The other half: valid UTF-8 round-trips, so real captions and titles survive.
+        val uploader = RecordingUploader()
+        server.stop()
+        server = MediaUploadServer(
+            processor = null, internalClient = MockInternalMediaClient(), uploader = uploader,
+            cacheDir = tempFolder.root
+        )
+
+        val caption = "Grüße 🎉 日本語"
+        val boundary = "test-boundary-utf8"
+        val body = java.io.ByteArrayOutputStream().apply {
+            write("--$boundary\r\n".toByteArray())
+            write("Content-Disposition: form-data; name=\"caption\"\r\n\r\n".toByteArray())
+            write("$caption\r\n".toByteArray())
+            write("--$boundary\r\n".toByteArray())
+            write("Content-Disposition: form-data; name=\"file\"; filename=\"photo.jpg\"\r\n".toByteArray())
+            write("Content-Type: image/jpeg\r\n\r\n".toByteArray())
+            write("fake image data".toByteArray())
+            write("\r\n--$boundary--\r\n".toByteArray())
+        }.toByteArray()
+
+        sendRawRequest(
+            method = "POST",
+            path = "/upload",
+            headers = mapOf(
+                "Relay-Authorization" to "Bearer ${server.token}",
+                "Content-Type" to "multipart/form-data; boundary=$boundary"
+            ),
+            body = body
+        )
+
+        assertEquals(listOf(MediaUploadField("caption", caption)), uploader.received?.fields)
+    }
+
+    @Test
     fun `an uploader sees a file the processor's metadata gate would have declined`() {
         // The gate exists to skip a temp copy for a file the processor won't touch. An
         // uploader takes over delivery for every file, so passing through here would
