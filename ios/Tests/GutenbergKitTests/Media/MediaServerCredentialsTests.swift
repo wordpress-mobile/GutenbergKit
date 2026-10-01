@@ -24,7 +24,11 @@ struct MediaServerCredentialsTests {
 
   @Test("rejects a site root with no scheme")
   func rejectsSchemelessSiteRoot() {
-    let relative = URL(string: "example.com/wp-json/")!
+    // A network-path reference: it has a host, so only the scheme arm rejects it.
+    // `example.com/wp-json/` would not do — it parses as a bare path with no host
+    // either, and passes on the host arm alone.
+    let relative = URL(string: "//example.com/wp-json/")!
+    #expect(relative.host() != nil)
     #expect(!MediaServerCredentials.areUsable(siteApiRoot: relative, authHeader: "Bearer t"))
   }
 
@@ -34,8 +38,8 @@ struct MediaServerCredentialsTests {
     #expect(!MediaServerCredentials.areUsable(siteApiRoot: fileURL, authHeader: "Bearer t"))
   }
 
-  @Test("rejects an empty site root, the default when a host configures none")
-  func rejectsEmptySiteRoot() {
+  @Test("rejects a site root with no scheme or host")
+  func rejectsRelativeSiteRoot() {
     #expect(!MediaServerCredentials.areUsable(siteApiRoot: URL(string: "/")!, authHeader: "Bearer t"))
   }
 }
