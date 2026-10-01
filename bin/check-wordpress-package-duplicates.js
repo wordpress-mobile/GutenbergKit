@@ -17,17 +17,9 @@
  * install paths distinguish separate copies of the same version, which are
  * still separate module instances.
  */
-
-/**
- * External dependencies
- */
 import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-
-/**
- * Internal dependencies
- */
 import { error, info, warn } from '../src/utils/logger.js';
 
 const rootDir = join( dirname( fileURLToPath( import.meta.url ) ), '..' );

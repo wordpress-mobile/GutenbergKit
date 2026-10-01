@@ -1,12 +1,5 @@
-/**
- * WordPress dependencies
- */
 import { forwardRef } from '@wordpress/element';
 import { PostTitleRaw, PostTextEditor } from '@wordpress/editor';
-
-/**
- * Internal dependencies
- */
 import './style.scss';
 
 /**

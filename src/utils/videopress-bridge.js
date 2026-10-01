@@ -1,6 +1,3 @@
-/**
- * Internal dependencies
- */
 import { warn, debug, error } from './logger';
 
 /**

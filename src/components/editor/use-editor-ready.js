@@ -1,11 +1,4 @@
-/**
- * WordPress dependencies
- */
 import { useRef, useCallback, useLayoutEffect } from '@wordpress/element';
-
-/**
- * Internal dependencies
- */
 import { editorLoaded } from '../../utils/bridge';
 
 /**

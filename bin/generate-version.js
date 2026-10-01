@@ -4,17 +4,9 @@
  * Generate version files for iOS and Android from package.json
  * This ensures a single source of truth for the version number
  */
-
-/**
- * External dependencies
- */
 import { readFileSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-
-/**
- * Internal dependencies
- */
 import { info } from '../src/utils/logger.js';
 
 const __filename = fileURLToPath( import.meta.url );

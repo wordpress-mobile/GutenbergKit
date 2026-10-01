@@ -1,6 +1,3 @@
-/**
- * Internal dependencies
- */
 import { Platform } from './platform.js';
 
 // Log levels in order of verbosity

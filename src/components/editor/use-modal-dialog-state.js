@@ -1,11 +1,4 @@
-/**
- * WordPress dependencies
- */
 import { useEffect, useRef } from '@wordpress/element';
-
-/**
- * Internal dependencies
- */
 import { onModalDialogOpened, onModalDialogClosed } from '../../utils/bridge';
 
 /**

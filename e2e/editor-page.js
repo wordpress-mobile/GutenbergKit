@@ -4,10 +4,6 @@
  * Encapsulates common editor interactions — setup, block appending,
  * caret movement, and data-store queries — behind a single class.
  */
-
-/**
- * Internal dependencies
- */
 import {
 	credentials,
 	getEditorSettings,

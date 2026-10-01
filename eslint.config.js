@@ -1,6 +1,3 @@
-/**
- * External dependencies
- */
 import { defineConfig, globalIgnores } from 'eslint/config';
 import wordpress from '@wordpress/eslint-plugin';
 import reactRefresh from 'eslint-plugin-react-refresh';
@@ -43,6 +40,22 @@ export default defineConfig( [
 			'react-refresh': reactRefresh,
 		},
 		rules: {
+			// Imports form one contiguous block, aligned with the upstream
+			// Gutenberg ESLint configuration.
+			'@wordpress/dependency-group': [ 'error', 'never' ],
+			'import/order': [
+				'error',
+				{
+					groups: [
+						'builtin',
+						'external',
+						'internal',
+						[ 'parent', 'sibling', 'index' ],
+					],
+					'newlines-between': 'never',
+					warnOnUnassignedImports: true,
+				},
+			],
 			'react-refresh/only-export-components': [
 				'warn',
 				{ allowConstantExport: true },

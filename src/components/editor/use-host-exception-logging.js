@@ -1,12 +1,5 @@
-/**
- * WordPress dependencies
- */
 import { useEffect } from '@wordpress/element';
 import { addAction, removeAction } from '@wordpress/hooks';
-
-/**
- * Internal dependencies
- */
 import { logException } from '../../utils/bridge';
 
 /**

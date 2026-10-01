@@ -1,6 +1,3 @@
-/**
- * Internal dependencies
- */
 import { version as gbkVersion } from '../../package.json';
 import { chromeStackParser, geckoStackParser } from './stack-parsers';
 

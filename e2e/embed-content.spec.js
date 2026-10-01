@@ -1,11 +1,4 @@
-/**
- * External dependencies
- */
 import { test, expect } from '@playwright/test';
-
-/**
- * Internal dependencies
- */
 import EditorPage from './editor-page';
 import { credentials } from './wp-env-fixtures';
 

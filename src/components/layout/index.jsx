@@ -1,13 +1,6 @@
-/**
- * WordPress dependencies
- */
 import { AutosaveMonitor } from '@wordpress/editor';
 import { SnackbarNotices } from '@wordpress/notices';
 import { SlotFillProvider } from '@wordpress/components';
-
-/**
- * Internal dependencies
- */
 import Editor from '../editor';
 import EditorErrorBoundary from '../editor-error-boundary';
 import { onEditorContentChanged } from '../../utils/bridge';

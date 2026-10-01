@@ -1,6 +1,3 @@
-/**
- * WordPress dependencies
- */
 import { useEffect, useCallback, useRef } from '@wordpress/element';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as coreStore } from '@wordpress/core-data';
@@ -8,10 +5,6 @@ import { store as editorStore } from '@wordpress/editor';
 import { parse, serialize, getBlockType } from '@wordpress/blocks';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { insert, create, toHTMLString } from '@wordpress/rich-text';
-
-/**
- * Internal dependencies
- */
 import { warn } from '../../utils/logger';
 
 window.editor = window.editor || {};

@@ -1,12 +1,5 @@
-/**
- * WordPress dependencies
- */
 import { addFilter, removeFilter } from '@wordpress/hooks';
 import { useCallback, useEffect, useRef } from '@wordpress/element';
-
-/**
- * Internal dependencies
- */
 import { openMediaLibrary } from '../../utils/bridge';
 import { warn } from '../../utils/logger';
 

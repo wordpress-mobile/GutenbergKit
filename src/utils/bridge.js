@@ -1,6 +1,3 @@
-/**
- * Internal dependencies
- */
 import parseException from './exception-parser';
 import { debug, error } from './logger';
 import { isDevMode } from './dev-mode';

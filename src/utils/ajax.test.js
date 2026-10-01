@@ -1,11 +1,4 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-
-/**
- * Internal dependencies
- */
 import { configureAjax } from './ajax';
 import * as bridge from './bridge';
 import * as logger from './logger';

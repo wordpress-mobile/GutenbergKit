@@ -1,6 +1,3 @@
-/**
- * External dependencies
- */
 import { defineConfig } from 'vite';
 import { defaultExclude } from 'vitest/config';
 import react from '@vitejs/plugin-react';

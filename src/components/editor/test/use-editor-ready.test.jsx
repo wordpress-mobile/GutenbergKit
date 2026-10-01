@@ -1,17 +1,6 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, renderHook } from '@testing-library/react';
-
-/**
- * WordPress dependencies
- */
 import { Component, useEffect } from '@wordpress/element';
-
-/**
- * Internal dependencies
- */
 import { useEditorReady } from '../use-editor-ready';
 import { editorLoaded } from '../../../utils/bridge';
 

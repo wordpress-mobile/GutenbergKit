@@ -1,12 +1,5 @@
-/**
- * WordPress dependencies
- */
 import { createPortal } from '@wordpress/element';
 import { Popover } from '@wordpress/components';
-
-/**
- * Internal dependencies
- */
 import './style.scss';
 import {
 	OVERLAY_SLOT_NAME,

@@ -1,12 +1,6 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-/**
- * Internal dependencies
- */
 import { nativeMediaUploadMiddleware } from './api-fetch';
+import { getGBKit } from './bridge';
 
 // Mock dependencies
 vi.mock( './bridge', () => ( {
@@ -17,8 +11,6 @@ vi.mock( './logger', () => ( {
 	info: vi.fn(),
 	error: vi.fn(),
 } ) );
-
-import { getGBKit } from './bridge';
 
 function makeNext() {
 	return vi.fn( () => Promise.resolve( { passthrough: true } ) );
