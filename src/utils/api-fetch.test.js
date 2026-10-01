@@ -421,4 +421,77 @@ describe( 'api-fetch credentials handling', () => {
 		expect( options.headers[ 'X-Custom-Header' ] ).toBe( 'custom-value' );
 		expect( options.headers.Authorization ).toBe( 'Bearer preserve-test' );
 	} );
+
+	describe( 'oEmbed responses', () => {
+		const proxyPath =
+			'/oembed/1.0/proxy?url=https%3A%2F%2Fvideopress.com%2Fv%2FeDeLfBNN';
+
+		beforeEach( () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: 'https://example.com/wp-json/',
+				authHeader: 'Bearer test-token',
+				siteApiNamespace: [],
+				namespaceExcludedPaths: [],
+			} );
+		} );
+
+		function respondWith( body, status = 200 ) {
+			global.fetch = vi.fn( () =>
+				Promise.resolve(
+					new Response( JSON.stringify( body ), {
+						status,
+						headers: { 'Content-Type': 'application/json' },
+					} )
+				)
+			);
+		}
+
+		it( 'rejects when WordPress cannot embed the URL', async () => {
+			respondWith(
+				{
+					code: 'oembed_invalid_url',
+					message: 'Not Found',
+					data: { status: 404 },
+				},
+				404
+			);
+
+			await expect(
+				apiFetch( { path: proxyPath } )
+			).rejects.toMatchObject( { code: 'oembed_invalid_url' } );
+		} );
+
+		it( 'rejects when the request fails', async () => {
+			global.fetch = vi.fn( () =>
+				Promise.reject( new TypeError( 'Load failed' ) )
+			);
+
+			await expect(
+				apiFetch( { path: proxyPath } )
+			).rejects.toBeDefined();
+		} );
+
+		it( 'removes the wrapper around a provider iframe', async () => {
+			respondWith( {
+				html: '<span class="embed-youtube"><iframe src="https://www.youtube.com/embed/abc"></iframe></span>',
+				type: 'video',
+			} );
+
+			const preview = await apiFetch( { path: proxyPath } );
+
+			expect( preview.html ).toBe(
+				'<iframe src="https://www.youtube.com/embed/abc"></iframe>'
+			);
+		} );
+
+		it( 'returns other embed markup as WordPress sent it', async () => {
+			const html =
+				'<a href="https://example.com/post">https://example.com/post</a>';
+			respondWith( { html, type: 'rich' } );
+
+			const preview = await apiFetch( { path: proxyPath } );
+
+			expect( preview ).toEqual( { html, type: 'rich' } );
+		} );
+	} );
 } );
