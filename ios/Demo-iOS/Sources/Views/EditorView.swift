@@ -136,7 +136,7 @@ private struct _EditorView: UIViewControllerRepresentable {
         let viewController = EditorViewController(
             configuration: configuration,
             dependencies: dependencies,
-            mediaUploadDelegate: enableNativeMediaUpload ? context.coordinator : nil
+            mediaProcessor: enableNativeMediaUpload ? context.coordinator : nil
         )
         viewController.delegate = context.coordinator
         viewController.webView.isInspectable = true
@@ -190,7 +190,7 @@ private struct _EditorView: UIViewControllerRepresentable {
     }
 
     @MainActor
-    class Coordinator: NSObject, EditorViewControllerDelegate, MediaUploadDelegate {
+    class Coordinator: NSObject, EditorViewControllerDelegate, MediaProcessor {
         let viewModel: EditorViewModel
 
         init(viewModel: EditorViewModel) {
@@ -296,11 +296,11 @@ private struct _EditorView: UIViewControllerRepresentable {
             return nil
         }
 
-        // MARK: - MediaUploadDelegate
+        // MARK: - MediaProcessor
 
         /// Only non-GIF images are ever resized (see `processFile`), so decline
         /// everything else by metadata — the server then skips copying a file
-        /// this delegate would only pass through.
+        /// this processor would only pass through.
         nonisolated func handlesFile(ofType mimeType: String, named _: String) -> Bool {
             mimeType.hasPrefix("image/") && mimeType != "image/gif"
         }

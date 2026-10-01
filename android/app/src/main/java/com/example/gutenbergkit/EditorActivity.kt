@@ -338,7 +338,7 @@ fun EditorScreen(
                         }
                     })
                     if (enableNativeMediaUpload) {
-                        mediaUploadDelegate = DemoMediaUploadDelegate()
+                        mediaProcessor = DemoMediaProcessor()
                     }
                     onGutenbergViewCreated(this)
                 }
