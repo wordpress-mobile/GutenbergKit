@@ -144,6 +144,17 @@ class GutenbergView : FrameLayout {
     var mediaUploader: MediaUploader? = null
         set(value) {
             check(!hasStartedLoading) { lateMediaAssignmentMessage("mediaUploader") }
+            // An uploader's media deletes still relay through the internal media client,
+            // which needs a site root and an auth header to reach the configured site.
+            // Check it here, where the host hands the uploader over, rather than at
+            // server start: the stack trace names the caller's own line, and the mistake
+            // can't hide until the page loads. `configuration` is assigned in the
+            // constructor, so it is always available by the time this runs.
+            MediaServerCredentials.requireCredentialsForUploader(
+                siteApiRoot = configuration.siteApiRoot,
+                authHeader = configuration.authHeader,
+                hasUploader = value != null
+            )
             field = value
         }
 
@@ -701,12 +712,17 @@ class GutenbergView : FrameLayout {
         // WebView path. (Matches iOS.)
         if (mediaProcessor == null && mediaUploader == null) return
 
-        // The native upload server relays through InternalMediaClient, which needs a
-        // site root and an auth header (every host provides one — the editor injects
-        // it because the WebView has no auth cookies). Without both there is nothing
-        // to upload through, so leave the server down and let uploads fall to the
-        // default WebView path rather than start a server that could only fail.
-        if (configuration.siteApiRoot.isEmpty() || configuration.authHeader.isEmpty()) return
+        // An InternalMediaClient delivers GutenbergKit-owned uploads (when no uploader
+        // is set) and relays the editor's media DELETEs to the configured site — every
+        // attachment lives there, even one a host uploader delivered. It needs a site
+        // root and an auth header (the editor injects the latter because the WebView
+        // has no auth cookies). Without them there is nothing to upload through, so
+        // leave the server down and let uploads fall to the default WebView path
+        // rather than start a server that could only fail.
+        //
+        // Only a mediaProcessor can reach this return: a mediaUploader without
+        // credentials already failed in its setter, so by here it has them.
+        if (!MediaServerCredentials.areUsable(configuration.siteApiRoot, configuration.authHeader)) return
 
         // The editor reaches the loopback server over cleartext http://localhost. If
         // the host app's network-security config doesn't permit cleartext to
@@ -714,7 +730,14 @@ class GutenbergView : FrameLayout {
         // before it leaves the page. Detect that here and don't start the server, so
         // the JS middleware routes uploads down the default path instead of a server
         // it can never reach. Hosts that want native media processing must permit
-        // cleartext to localhost (see the demo's res/xml/network_security_config.xml).
+        // cleartext to localhost — see "Android: permit cleartext to localhost" in
+        // docs/integration.md, and the demo's res/xml/network_security_config.xml.
+        //
+        // This drops a mediaUploader as silently as missing credentials would, and still
+        // only warns. The difference is the cause, not the symptom: the configuration is
+        // sound here — permit cleartext and the same setup works unchanged — so there is
+        // nothing for the host to fix in what it handed us. See
+        // MediaServerCredentials.requireCredentialsForUploader.
         if (!NetworkSecurityPolicy.getInstance().isCleartextTrafficPermitted(LOOPBACK_HOST)) {
             Log.w(
                 TAG,
