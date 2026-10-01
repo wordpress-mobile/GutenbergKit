@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { configureAjax } from './ajax';
+import { configureAjax, getAjaxUrl } from './ajax';
 import * as bridge from './bridge';
 import * as logger from './logger';
 
@@ -16,13 +16,11 @@ describe( 'configureAjax', () => {
 		// Store original window state
 		originalWindow = {
 			wp: global.window.wp,
-			ajaxurl: global.window.ajaxurl,
 			jQuery: global.window.jQuery,
 		};
 
 		// Reset window.wp
 		global.window.wp = undefined;
-		global.window.ajaxurl = undefined;
 
 		// Mock jQuery
 		mockJQueryAjaxPrefilter = vi.fn();
@@ -34,12 +32,11 @@ describe( 'configureAjax', () => {
 	afterEach( () => {
 		// Restore original window state
 		global.window.wp = originalWindow.wp;
-		global.window.ajaxurl = originalWindow.ajaxurl;
 		global.window.jQuery = originalWindow.jQuery;
 	} );
 
 	describe( 'URL configuration', () => {
-		it( 'should configure ajax URLs when siteURL is provided', () => {
+		it( 'should configure the AJAX URL when siteURL is provided', () => {
 			bridge.getGBKit.mockReturnValue( {
 				siteURL: 'https://example.com',
 				authHeader: null,
@@ -47,9 +44,6 @@ describe( 'configureAjax', () => {
 
 			configureAjax();
 
-			expect( global.window.ajaxurl ).toBe(
-				'https://example.com/wp-admin/admin-ajax.php'
-			);
 			expect( global.window.wp.ajax.settings.url ).toBe(
 				'https://example.com/wp-admin/admin-ajax.php'
 			);
@@ -66,9 +60,6 @@ describe( 'configureAjax', () => {
 
 			configureAjax();
 
-			expect( global.window.ajaxurl ).toBe(
-				'https://example.com/wp-admin/admin-ajax.php'
-			);
 			expect( global.window.wp.ajax.settings.url ).toBe(
 				'https://example.com/wp-admin/admin-ajax.php'
 			);
@@ -88,7 +79,7 @@ describe( 'configureAjax', () => {
 			expect( logger.warn ).toHaveBeenCalledWith(
 				'Unable to configure AJAX auth without siteURL'
 			);
-			expect( global.window.ajaxurl ).toBeUndefined();
+			expect( global.window.wp.ajax.settings.url ).toBeUndefined();
 		} );
 
 		it( 'should handle undefined siteURL', () => {
@@ -104,7 +95,7 @@ describe( 'configureAjax', () => {
 			expect( logger.warn ).toHaveBeenCalledWith(
 				'Unable to configure AJAX auth without siteURL'
 			);
-			expect( global.window.ajaxurl ).toBeUndefined();
+			expect( global.window.wp.ajax.settings.url ).toBeUndefined();
 		} );
 
 		it( 'should properly initialize window.wp.ajax hierarchy', () => {
@@ -258,9 +249,6 @@ describe( 'configureAjax', () => {
 			configureAjax();
 
 			// Check URL configuration
-			expect( global.window.ajaxurl ).toBe(
-				'https://example.com/wp-admin/admin-ajax.php'
-			);
 			expect( global.window.wp.ajax.settings.url ).toBe(
 				'https://example.com/wp-admin/admin-ajax.php'
 			);
@@ -507,4 +495,22 @@ describe( 'configureAjax', () => {
 			expect( mockJQueryAjaxPrefilter ).not.toHaveBeenCalled();
 		} );
 	} );
+} );
+
+describe( 'getAjaxUrl', () => {
+	it.each( [ 'https://example.com', 'https://example.com/' ] )(
+		'builds the admin-ajax URL from %s',
+		( siteURL ) => {
+			expect( getAjaxUrl( siteURL ) ).toBe(
+				'https://example.com/wp-admin/admin-ajax.php'
+			);
+		}
+	);
+
+	it.each( [ undefined, null, '' ] )(
+		'returns undefined without a site URL (%s)',
+		( siteURL ) => {
+			expect( getAjaxUrl( siteURL ) ).toBeUndefined();
+		}
+	);
 } );
