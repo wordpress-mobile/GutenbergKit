@@ -57,14 +57,14 @@ internal class MediaUploadResponse(
 )
 
 /**
- * The result of a delegate's [MediaUploadDelegate.processFile].
+ * The result of a processor's [MediaProcessor.processFile].
  */
 sealed class ProcessedProxyFile {
-    /** The delegate did not modify the file; the original upload is forwarded unchanged. */
+    /** The processor did not modify the file; the original upload is forwarded unchanged. */
     data object Original : ProcessedProxyFile()
 
     /**
-     * The delegate produced a file to upload, along with its MIME type and
+     * The processor produced a file to upload, along with its MIME type and
      * filename. Both are used verbatim, so a format change (e.g. transcoding MOV
      * to MP4, or an in-place EXIF strip) must report the resulting type and
      * filename for WordPress to store the file correctly.
@@ -75,23 +75,23 @@ sealed class ProcessedProxyFile {
 /**
  * Transforms media before GutenbergKit delivers it.
  *
- * A delegate only changes *bytes* — GutenbergKit still uploads the result to the
+ * A processor only changes *bytes* — GutenbergKit still uploads the result to the
  * configured site and owns the whole lifecycle (retries, cleanup). Because it never
  * performs the upload itself, it cannot deliver media to the wrong place. Set
- * [GutenbergView.mediaUploadDelegate] to resize images, transcode video, strip EXIF,
+ * [GutenbergView.mediaProcessor] to resize images, transcode video, strip EXIF,
  * etc.
  *
  * This is the safe, common extension point: most hosts want only this. To perform the
  * upload yourself, implement [MediaUploader] instead.
  */
-interface MediaUploadDelegate {
+interface MediaProcessor {
     /**
-     * Whether this delegate might transform a file with the given metadata.
+     * Whether this processor might transform a file with the given metadata.
      *
      * A cheap, metadata-only gate the server consults *before* materializing the
      * upload to a temp file. Return false to decline a file by type — e.g. an
-     * image-only delegate returning false for a video — so the server forwards
-     * the original upload to WordPress without first copying a file the delegate
+     * image-only processor returning false for a video — so the server forwards
+     * the original upload to WordPress without first copying a file the processor
      * won't touch.
      *
      * With a [MediaUploader] set this can't decline the upload itself — an uploader
@@ -130,7 +130,7 @@ data class MediaUploadField(val name: String, val value: String)
  * Everything a [MediaUploader] needs to reproduce a native upload: the file to send,
  * its metadata, the editor's non-file form fields, and the request's query.
  *
- * @property file The file to upload — already processed, if a [MediaUploadDelegate] ran.
+ * @property file The file to upload — already processed, if a [MediaProcessor] ran.
  * @property mimeType The file's MIME type.
  * @property filename The file's name.
  * @property fields The editor's non-file form fields, in order, each decoded as UTF-8 —
@@ -203,7 +203,7 @@ interface MediaUploader {
  * stop on detach.
  */
 internal class MediaUploadServer(
-    private val uploadDelegate: MediaUploadDelegate?,
+    private val processor: MediaProcessor?,
     private val internalClient: InternalMediaClient?,
     private val uploader: MediaUploader? = null,
     cacheDir: File? = null,
@@ -364,25 +364,25 @@ internal class MediaUploadServer(
         val mimeType = filePart.contentType
         val filename = filePart.filename ?: "upload"
 
-        // Ask the delegate — from metadata alone — whether it will touch a file
+        // Ask the processor — from metadata alone — whether it will touch a file
         // like this. If not, forward the original upload to WordPress directly,
-        // skipping a full temp-file copy of a file the delegate won't process
-        // (e.g. a video handed to an image-only delegate).
+        // skipping a full temp-file copy of a file the processor won't process
+        // (e.g. a video handed to an image-only processor).
         // An uploader takes over delivery for *every* file, so with one set there is no
         // passthrough to fall to and the gate can't decline the upload outright. It
         // still decides whether processFile runs, though — a declined file is handed to
-        // the uploader unprocessed rather than to a delegate that said it won't touch it
+        // the uploader unprocessed rather than to a processor that said it won't touch it
         // — so the answer is carried into processAndUpload rather than short-circuited
         // away here. Asked exactly once per upload, matching iOS.
-        val delegateWantsFile = uploadDelegate?.handlesFile(mimeType, filename) == true
-        if (uploader == null && !delegateWantsFile) {
+        val processorWantsFile = processor?.handlesFile(mimeType, filename) == true
+        if (uploader == null && !processorWantsFile) {
             return passthroughResponse(request, query)
         }
 
         val tempFile = writePartToTempFile(filePart)
             ?: return errorResponse(500, "Failed to save file")
 
-        return processAndRespond(request, tempFile, filePart, extraParts, query, delegateWantsFile)
+        return processAndRespond(request, tempFile, filePart, extraParts, query, processorWantsFile)
     }
 
     @Suppress("TooGenericExceptionCaught")
@@ -410,7 +410,7 @@ internal class MediaUploadServer(
      * The response's own `Content-Type` wins over the JSON default, matched
      * case-insensitively — HTTP header names are case-insensitive, and
      * [HttpResponse] serializes every entry it is given, so a plain map merge
-     * would emit the name twice for a delegate that spells it `content-type`.
+     * would emit the name twice for a processor that spells it `content-type`.
      */
     private fun relayResponse(response: MediaUploadResponse): HttpResponse {
         val hasContentType = response.headers.keys.any { it.lowercase() == "content-type" }
@@ -466,12 +466,12 @@ internal class MediaUploadServer(
     @Suppress("TooGenericExceptionCaught")
     private suspend fun processAndRespond(
         request: HttpRequest, tempFile: File, filePart: MultipartPart,
-        extraParts: List<MultipartPart>, query: String, delegateWantsFile: Boolean
+        extraParts: List<MultipartPart>, query: String, processorWantsFile: Boolean
     ): HttpResponse {
         try {
             val uploadResult = processAndUpload(
                 tempFile, filePart.contentType, filePart.filename ?: "upload",
-                extraParts, query, delegateWantsFile
+                extraParts, query, processorWantsFile
             )
             val response = when (uploadResult) {
                 is UploadResult.Uploaded -> {
@@ -479,7 +479,7 @@ internal class MediaUploadServer(
                     uploadResult.response
                 }
                 is UploadResult.Passthrough -> {
-                    // Delegate didn't modify the file — forward the original
+                    // The processor didn't modify the file — forward the original
                     // request body to WordPress without re-encoding.
                     Log.d(TAG, "Passthrough: forwarding original request body to WordPress")
                     performPassthroughUpload(request, query)
@@ -493,7 +493,7 @@ internal class MediaUploadServer(
             throw e // Never swallow coroutine cancellation.
         } catch (e: Exception) {
             // Any other failure — IOException from the upload call, JSON parse
-            // errors, a throwing host delegate, or "no internal media client
+            // errors, a throwing host processor, or "no internal media client
             // configured" — must still be answered WITH CORS headers. Otherwise
             // it escapes to HttpServer's header-less 500 fallback and the browser
             // rejects the preflighted cross-origin fetch with an opaque "Failed to
@@ -506,7 +506,7 @@ internal class MediaUploadServer(
         }
     }
 
-    // MARK: - Delegate Pipeline
+    // MARK: - Processor Pipeline
 
     private sealed class UploadResult {
         data class Uploaded(val response: MediaUploadResponse) : UploadResult()
@@ -527,21 +527,21 @@ internal class MediaUploadServer(
 
     private suspend fun processAndUpload(
         file: File, mimeType: String, filename: String,
-        extraParts: List<MultipartPart>, query: String, delegateWantsFile: Boolean
+        extraParts: List<MultipartPart>, query: String, processorWantsFile: Boolean
     ): UploadResult {
-        // Process (resize, transcode, etc.) — but only for a file the delegate's
-        // metadata gate accepted. handlesFile returning false is the delegate saying it
+        // Process (resize, transcode, etc.) — but only for a file the processor's
+        // metadata gate accepted. handlesFile returning false is the processor saying it
         // won't touch a file like this, so handing it one anyway would break the
         // contract the gate documents. With an uploader set the file still gets
         // delivered; it just skips processing on its way there.
-        val processed = if (delegateWantsFile) {
-            uploadDelegate?.processFile(file, mimeType, filename) ?: ProcessedProxyFile.Original
+        val processed = if (processorWantsFile) {
+            processor?.processFile(file, mimeType, filename) ?: ProcessedProxyFile.Original
         } else {
             ProcessedProxyFile.Original
         }
 
         // Resolve the file to upload and its metadata. Processed uses the
-        // delegate's values verbatim, so a format change is reported to WordPress.
+        // processor's values verbatim, so a format change is reported to WordPress.
         val targetFile: File
         val targetMimeType: String
         val targetFilename: String
@@ -590,7 +590,7 @@ internal class MediaUploadServer(
                 ?: error("No media uploader or internal media client configured")
             return UploadResult.Uploaded(result)
         } finally {
-            // The processed file (if the delegate produced a new one) is ours to
+            // The processed file (if the processor produced a new one) is ours to
             // clean up — covers the success and throw paths alike.
             if (targetFile != file) {
                 targetFile.delete()
@@ -718,7 +718,7 @@ internal open class InternalMediaClient(
     /**
      * Forwards the original request body to WordPress without re-encoding.
      *
-     * Used when the delegate's `processFile` returned the file unchanged —
+     * Used when the processor's `processFile` returned the file unchanged —
      * the incoming multipart body is already valid for WordPress.
      */
     open suspend fun passthroughUpload(
