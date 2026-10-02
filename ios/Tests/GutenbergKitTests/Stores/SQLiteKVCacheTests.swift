@@ -651,4 +651,114 @@ struct SQLiteKVCacheTests {
         let expected = try encoder.encode(meta)
         #expect(entry.metadata == expected)
     }
+
+    // MARK: - One instance per file
+
+    @Test("shared hands every caller the live instance for a file")
+    func sharedHandsOutOneInstancePerFile() {
+        let directory = URL.randomTemporaryDirectory
+        let capacity = Measurement<UnitInformationStorage>(value: 1, unit: .mebibytes)
+        let store = SQLiteKVCache.shared(handle: "test", directory: directory, diskCapacity: capacity)
+
+        #expect(SQLiteKVCache.shared(handle: "test", directory: directory, diskCapacity: capacity) === store)
+        #expect(SQLiteKVCache.shared(handle: "TEST", directory: directory, diskCapacity: capacity) === store)
+        #expect(SQLiteKVCache.shared(handle: "other", directory: directory, diskCapacity: capacity) !== store)
+        #expect(SQLiteKVCache.shared(handle: "test", directory: .randomTemporaryDirectory, diskCapacity: capacity) !== store)
+    }
+
+    @Test("shared opens a file afresh once no one is using it")
+    func sharedReopensAFileNoOneIsUsing() throws {
+        let directory = URL.randomTemporaryDirectory
+        let capacity = Measurement<UnitInformationStorage>(value: 1, unit: .mebibytes)
+        var store: SQLiteKVCache? = SQLiteKVCache.shared(handle: "test", directory: directory, diskCapacity: capacity)
+        try store?.put(key: "durable", storageDate: referenceDate, metadata: Data(), value: Data("v"))
+        weak let released = store
+
+        store = nil
+        #expect(released == nil, "sharing should not keep a file open")
+
+        let reopened = SQLiteKVCache.shared(handle: "test", directory: directory, diskCapacity: capacity)
+        #expect(try reopened.get(key: "durable")?.value == Data("v"))
+    }
+
+    /// An instance keeps a failed open for life. While `shared` went on handing it out, every
+    /// later caller failed with it for as long as anything held it, though the file could by
+    /// then be opened.
+    @Test("shared opens a file afresh after an open that failed")
+    func sharedReopensAFileAfterAFailedOpen() throws {
+        let directory = URL.randomTemporaryDirectory
+        let capacity = Measurement<UnitInformationStorage>(value: 1, unit: .mebibytes)
+        // A directory where the database file belongs fails the open.
+        let obstacle = directory.appending(component: "test.sqlite")
+        try FileManager.default.createDirectory(at: obstacle, withIntermediateDirectories: true)
+        let failed = SQLiteKVCache.shared(handle: "test", directory: directory, diskCapacity: capacity)
+        #expect(throws: SQLiteKVCache.Error.self) { try failed.get(key: "k") }
+
+        try FileManager.default.removeItem(at: obstacle)
+        try withExtendedLifetime(failed) {
+            let reopened = SQLiteKVCache.shared(handle: "test", directory: directory, diskCapacity: capacity)
+            #expect(reopened !== failed)
+            try reopened.put(key: "k", storageDate: referenceDate, metadata: Data(), value: Data("v"))
+            #expect(try reopened.get(key: "k")?.value == Data("v"))
+        }
+    }
+
+    @Test("forgetInstances stops sharing the instances under a directory, and no others")
+    func forgetInstancesIsScopedToADirectory() {
+        let root = URL.randomTemporaryDirectory
+        // Beside `root` rather than under it, though its path starts with `root`'s.
+        let beside = root.deletingLastPathComponent().appending(path: root.lastPathComponent + "-beside")
+        let capacity = Measurement<UnitInformationStorage>(value: 1, unit: .mebibytes)
+        let under = SQLiteKVCache.shared(handle: "test", directory: root.appending(path: "site"), diskCapacity: capacity)
+        let other = SQLiteKVCache.shared(handle: "test", directory: beside.appending(path: "site"), diskCapacity: capacity)
+
+        SQLiteKVCache.forgetInstances(under: root)
+
+        #expect(SQLiteKVCache.shared(handle: "test", directory: root.appending(path: "site"), diskCapacity: capacity) !== under)
+        #expect(SQLiteKVCache.shared(handle: "test", directory: beside.appending(path: "site"), diskCapacity: capacity) === other)
+    }
+
+    /// `shared` hands out a fresh instance the moment the last one is released, while that
+    /// one's `deinit` may still hold the file to checkpoint its WAL. Without a busy timeout the
+    /// reopen fails on that lock every time — 200 runs out of 200 — and caches the failure.
+    @Test("shared reopens a file while its last instance is still closing")
+    func sharedReopensAFileWhileItCloses() async throws {
+        let capacity = Measurement<UnitInformationStorage>(value: 1, unit: .mebibytes)
+        for _ in 0..<20 {
+            let directory = URL.randomTemporaryDirectory
+            let closing = ReleasableStore(SQLiteKVCache.shared(handle: "test", directory: directory, diskCapacity: capacity))
+            // Enough in the WAL that checkpointing it on close takes a moment.
+            for index in 0..<50 {
+                try closing.store?.put(
+                    key: "\(index)",
+                    storageDate: referenceDate,
+                    metadata: Data(),
+                    value: Data(repeating: 1, count: 4096)
+                )
+            }
+
+            async let released: Void = Task.detached { closing.release() }.value
+            async let reopened = Task.detached {
+                try SQLiteKVCache.shared(handle: "test", directory: directory, diskCapacity: capacity).get(key: "0")
+            }.value
+            await released
+            #expect(try await reopened != nil)
+        }
+    }
+}
+
+/// Holds the only reference to a store until `release()`, so a test can drop it from another task.
+private final class ReleasableStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var held: SQLiteKVCache?
+
+    init(_ store: SQLiteKVCache) {
+        held = store
+    }
+
+    var store: SQLiteKVCache? { lock.withLock { held } }
+
+    func release() {
+        lock.withLock { held = nil }
+    }
 }

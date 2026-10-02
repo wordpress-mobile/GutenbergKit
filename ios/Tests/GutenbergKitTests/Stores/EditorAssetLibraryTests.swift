@@ -873,6 +873,68 @@ struct EditorAssetLibraryTests {
         let failedScriptPath = bundleRoot.appending(path: "/stats.js")
         #expect(!FileManager.default.fileExists(at: failedScriptPath))
     }
+
+    @Test("buildBundle publishes nothing when it is cancelled mid-download")
+    func buildBundlePublishesNothingWhenCancelled() async throws {
+        let manifestJSON = """
+      {
+          "scripts": "<script src=\\"https://example.com/script.js\\"></script>",
+          "styles": "",
+          "allowed_block_types": ["core/paragraph"]
+      }
+      """
+        let manifest = try LocalEditorAssetManifest(
+            remoteManifest: RemoteEditorAssetManifest(data: Data(manifestJSON.utf8))
+        )
+
+        let session = ParkedURLSession()
+        defer { session.release() }
+        let library = makeLibrary(httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token"))
+        let destination = await library.bundleRoot(for: manifest.checksum).standardizedFileURL
+
+        let build = Task { try await library.buildBundle(for: manifest) }
+        try await session.waitUntilStarted()
+        let abandoned = try #require(EditorAssetLibrary.inFlightBuilds.task(for: destination))
+        build.cancel()
+
+        // The cancelled download is swallowed like any failed asset; the build must
+        // still refuse to publish, or every later launch serves the gap.
+        await #expect(throws: CancellationError.self) { try await build.value }
+        // The caller's wait ends before the build it abandoned is cancelled, so wait for the
+        // build itself: checked any sooner, a build about to publish hasn't yet.
+        await abandoned.value
+        #expect(try await library.readAssetBundles().isEmpty)
+    }
+
+    @Test("builds of one bundle share one build, whichever library runs them")
+    func buildsOfOneBundleShareOneBuild() async throws {
+        let manifestJSON = """
+      {
+          "scripts": "<script src=\\"https://example.com/script.js\\"></script>",
+          "styles": "",
+          "allowed_block_types": ["core/paragraph"]
+      }
+      """
+        let manifest = try LocalEditorAssetManifest(
+            remoteManifest: RemoteEditorAssetManifest(data: Data(manifestJSON.utf8))
+        )
+
+        let session = ParkedURLSession()
+        defer { session.release() }
+        let storageRoot = URL.randomTemporaryDirectory
+        let libraries = [
+            makeLibrary(httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token"), storageRoot: storageRoot),
+            makeLibrary(httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token"), storageRoot: storageRoot),
+        ]
+        let destination = await libraries[0].bundleRoot(for: manifest.checksum).standardizedFileURL
+
+        let builds = libraries.map { library in Task { try await library.buildBundle(for: manifest) } }
+        try await waitUntil { EditorAssetLibrary.inFlightBuilds.waiterCount(for: destination) == 2 }
+
+        session.release()  // fails the parked download, which a build tolerates
+        #expect(try await builds[0].value == builds[1].value)
+        #expect(session.requestCount == 1)
+    }
 }
 
 // MARK: - Progress Tracker for Tests
