@@ -1,12 +1,5 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, vi } from 'vitest';
 import Ajv from 'ajv';
-
-/**
- * Internal dependencies
- */
 import {
 	preprocessBlockTypesForNativeInserter,
 	formatPatternsForNativeInserter,

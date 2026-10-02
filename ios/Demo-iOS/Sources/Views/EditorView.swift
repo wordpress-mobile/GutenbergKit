@@ -14,6 +14,19 @@ private extension Logger {
     static let demo = Logger(subsystem: "GutenbergKit-Demo", category: "media-upload")
 }
 
+/// Throws from the selector the editor reads to choose between the visual and
+/// code editors, so the crash reaches the editor's error boundary in either mode
+/// rather than a single block's.
+private let triggerEditorCrashScript = """
+    (() => {
+        const editor = wp.data.select('core/editor');
+        editor.getEditorMode = () => {
+            throw new Error('Editor crash triggered from the demo app');
+        };
+        wp.data.dispatch('core/editor').updateEditorSettings({});
+    })();
+    """
+
 struct EditorView: View {
     private let configuration: EditorConfiguration
     private let dependencies: EditorDependencies?
@@ -70,12 +83,12 @@ struct EditorView: View {
                 .disabled(!viewModel.hasRedo)
                 .accessibilityLabel("Redo")
             }
-            .disabled(viewModel.isModalDialogOpen)
+            .disabled(!viewModel.isEditorReady || viewModel.isModalDialogOpen)
         }
 
         ToolbarItemGroup(placement: .topBarTrailing) {
             moreMenu
-                .disabled(viewModel.isModalDialogOpen)
+                .disabled(!viewModel.isEditorReady || viewModel.isModalDialogOpen)
         }
 
         ToolbarItem(placement: .topBarTrailing) {
@@ -100,6 +113,12 @@ struct EditorView: View {
                     systemImage: viewModel.isCodeEditorEnabled ? "doc.richtext" : "curlybraces"
                 )
             })
+
+            Button(role: .destructive) {
+                viewModel.perform(.triggerCrash)
+            } label: {
+                Label("Trigger Editor Crash", systemImage: "exclamationmark.triangle")
+            }
         } label: {
             Image(systemName: "ellipsis")
         }
@@ -145,14 +164,16 @@ private struct _EditorView: UIViewControllerRepresentable {
             switch $0 {
             case .redo: viewController?.redo()
             case .undo: viewController?.undo()
+            case .triggerCrash:
+                viewController?.webView.evaluateJavaScript(triggerEditorCrashScript, completionHandler: nil)
             }
         }
 
         viewModel.hasPostID = configuration.postID != nil
 
         viewModel.saveHandler = { [weak viewController, weak viewModel] in
-            guard let viewController, let viewModel else { return }
-            await persistPost(viewController: viewController, viewModel: viewModel)
+            guard let viewController, let viewModel else { return nil }
+            return await persistPost(viewController: viewController, viewModel: viewModel)
         }
 
         return viewController
@@ -162,12 +183,16 @@ private struct _EditorView: UIViewControllerRepresentable {
         viewController.isCodeEditorEnabled = viewModel.isCodeEditorEnabled
     }
 
-    /// Persists the post via the REST API.
-    private func persistPost(viewController: EditorViewController, viewModel: EditorViewModel) async {
-        guard let apiClient, let postID = configuration.postID else { return }
+    /// Persists the post via the REST API, returning the content it saved.
+    private func persistPost(viewController: EditorViewController, viewModel: EditorViewModel) async -> PostContent? {
+        guard let apiClient, let postID = configuration.postID else { return nil }
         do {
             let titleAndContent = try await viewController.getTitleAndContent()
-            let params = PostUpdateParams(title: .some(titleAndContent.title), content: .some(titleAndContent.content), meta: nil)
+            let content = PostContent(title: titleAndContent.title, content: titleAndContent.content)
+            // Not every change sends a content-change event (e.g. undoing back
+            // to the opened content), so keep the host copy current here too.
+            viewModel.latestContent = content
+            let params = PostUpdateParams(title: .some(content.title), content: .some(content.content), meta: nil)
             let endpointType: PostEndpointType
             switch configuration.postType.postType {
             case "post":
@@ -184,8 +209,10 @@ private struct _EditorView: UIViewControllerRepresentable {
                 context: nil
             )
             print("Post \(postID) persisted via REST API")
+            return content
         } catch {
             print("Failed to persist post \(postID): \(error)")
+            return nil
         }
     }
 
@@ -203,6 +230,10 @@ private struct _EditorView: UIViewControllerRepresentable {
             viewModel.isEditorReady = true
         }
 
+        func editorDidBecomeUnavailable(_ viewController: EditorViewController) {
+            viewModel.isEditorReady = false
+        }
+
         func editor(_ viewContoller: EditorViewController, didDisplayInitialContent content: String) {
             // No-op for demo
         }
@@ -212,7 +243,16 @@ private struct _EditorView: UIViewControllerRepresentable {
         }
 
         func editor(_ viewController: EditorViewController, didUpdateContentWithState state: EditorState) {
-            // No-op for demo
+            // Mirror a host app's autosave: keep the latest content in memory so
+            // Save reflects unsaved changes and an editor reload restores them.
+            Task {
+                do {
+                    let result = try await viewController.getTitleAndContent()
+                    viewModel.latestContent = PostContent(title: result.title, content: result.content)
+                } catch {
+                    Logger.demo.error("Failed to read the editor content: \(error.localizedDescription)")
+                }
+            }
         }
 
         func editor(_ viewController: EditorViewController, didUpdateHistoryState state: EditorState) {
@@ -291,9 +331,7 @@ private struct _EditorView: UIViewControllerRepresentable {
         }
 
         func editorDidRequestLatestContent(_ controller: EditorViewController) -> (title: String, content: String)? {
-            // Demo app has no persistence layer, so return nil.
-            // In a real app, return the persisted title and content from autosave.
-            return nil
+            viewModel.latestContent.map { ($0.title, $0.content) }
         }
 
         // MARK: - MediaProcessor
@@ -360,6 +398,7 @@ private struct _EditorView: UIViewControllerRepresentable {
     }
 }
 
+@MainActor
 @Observable
 private final class EditorViewModel {
     var isModalDialogOpen = false
@@ -371,26 +410,44 @@ private final class EditorViewModel {
 
     var hasPostID = false
 
+    /// The newest content read from the editor, held in memory as a host app's autosave would.
+    var latestContent: PostContent?
+    /// The content most recently persisted via Save.
+    var savedContent: PostContent?
+
+    var hasChanges: Bool {
+        latestContent != nil && latestContent != savedContent
+    }
+
     var canSave: Bool {
-        isEditorReady && !isSaving && hasPostID
+        isEditorReady && !isSaving && hasPostID && hasChanges
     }
 
     enum Action {
         case undo
         case redo
+        case triggerCrash
     }
 
     var perform: (_ action: Action) -> Void = { _ in assertionFailure() }
-    var saveHandler: () async -> Void = {}
+    /// Persists the post, returning the content it saved, or `nil` on failure.
+    var saveHandler: () async -> PostContent? = { nil }
 
     func save() {
         guard canSave else { return }
         isSaving = true
         Task {
-            await saveHandler()
+            if let saved = await saveHandler() {
+                savedContent = saved
+            }
             isSaving = false
         }
     }
+}
+
+private struct PostContent: Equatable {
+    let title: String
+    let content: String
 }
 
 #Preview {

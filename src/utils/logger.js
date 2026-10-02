@@ -1,6 +1,3 @@
-/**
- * Internal dependencies
- */
 import { Platform } from './platform.js';
 
 // Log levels in order of verbosity
@@ -64,8 +61,8 @@ const shouldLog = ( level ) => {
 
 /**
  * Log an error message
- * @param {string} message - The message to log
- * @param {*}      [data]  - Optional data to log
+ * @param {string}  message - The message to log
+ * @param {unknown} [data]  - Optional data to log
  */
 const error = ( message, data ) => {
 	if ( shouldLog( LOG_LEVELS.ERROR ) ) {
@@ -87,8 +84,8 @@ const error = ( message, data ) => {
 
 /**
  * Log a warning message
- * @param {string} message - The message to log
- * @param {*}      [data]  - Optional data to log
+ * @param {string}  message - The message to log
+ * @param {unknown} [data]  - Optional data to log
  */
 const warn = ( message, data ) => {
 	if ( shouldLog( LOG_LEVELS.WARN ) ) {
@@ -110,8 +107,8 @@ const warn = ( message, data ) => {
 
 /**
  * Log an info message
- * @param {string} message - The message to log
- * @param {*}      [data]  - Optional data to log
+ * @param {string}  message - The message to log
+ * @param {unknown} [data]  - Optional data to log
  */
 const info = ( message, data ) => {
 	if ( shouldLog( LOG_LEVELS.INFO ) ) {
@@ -133,8 +130,8 @@ const info = ( message, data ) => {
 
 /**
  * Log a debug message
- * @param {string} message - The message to log
- * @param {*}      [data]  - Optional data to log
+ * @param {string}  message - The message to log
+ * @param {unknown} [data]  - Optional data to log
  */
 const debug = ( message, data ) => {
 	if ( shouldLog( LOG_LEVELS.DEBUG ) ) {

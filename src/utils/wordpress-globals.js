@@ -1,16 +1,9 @@
-/**
- * External dependencies
- */
 import React from 'react';
 import ReactDOM from 'react-dom';
 import moment from 'moment';
 import lodash from 'lodash';
 import * as ReactJSXRuntime from 'react/jsx-runtime';
 import jquery from 'jquery';
-
-/**
- * WordPress dependencies
- */
 import * as a11y from '@wordpress/a11y';
 import * as apiFetch from '@wordpress/api-fetch';
 import * as autop from '@wordpress/autop';
@@ -62,7 +55,7 @@ import * as widgets from '@wordpress/widgets';
 import * as wordcount from '@wordpress/wordcount';
 
 /**
- * Initialize WordPress globals by defining all @wordpress modules on the
+ * Initialize WordPress globals by defining all `@wordpress` modules on the
  * window.wp namespace. This allows plugin scripts loaded from the editor
  * assets endpoint to access these modules.
  *

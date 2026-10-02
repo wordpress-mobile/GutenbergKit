@@ -1,6 +1,3 @@
-/**
- * Internal dependencies
- */
 import { onNetworkRequest, getGBKit } from './bridge';
 import { debug } from './logger';
 
@@ -180,7 +177,7 @@ function extractRequestDetails( input, init = {} ) {
  * Serializes non-string request body objects into readable strings.
  * Handles FormData, Blob, File, ArrayBuffer, and URLSearchParams.
  *
- * @param {*} body The request body to serialize.
+ * @param {unknown} body The request body to serialize.
  *
  * @return {string} The serialized body representation.
  */
@@ -264,7 +261,7 @@ async function serializeBody( source ) {
 			try {
 				JSON.parse( text );
 				return text;
-			} catch ( e ) {
+			} catch {
 				return text;
 			}
 		}

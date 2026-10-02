@@ -1,12 +1,5 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, afterEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
-
-/**
- * Internal dependencies
- */
 import { useScrollIndicators } from './use-scroll-indicators';
 
 /**

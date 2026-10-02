@@ -1,12 +1,5 @@
-/**
- * External dependencies
- */
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
-
-/**
- * Internal dependencies
- */
 import EditorPage from './editor-page';
 
 const TEST_IMAGE_1 = path.resolve(

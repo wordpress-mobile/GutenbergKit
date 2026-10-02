@@ -1,21 +1,15 @@
-/**
- * WordPress dependencies
- */
 import apiFetch from '@wordpress/api-fetch';
 import { getQueryArg } from '@wordpress/url';
 import { __ } from '@wordpress/i18n';
-
-/**
- * Internal dependencies
- */
 import { getGBKit, POST_FALLBACKS } from './bridge';
 import { info, error as logError } from './logger';
+import { ensureTrailingSlash, stripTrailingSlash } from './url';
 
 /**
  * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
  */
 
-/** Matches `POST /wp/v2/media` but not sub-paths like `/wp/v2/media/123`. */
+/** Matches `/wp/v2/media` but not sub-paths like `/wp/v2/media/123`. */
 const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
 
 /** Matches `/wp/v2/media/<id>`, capturing the attachment ID. */
@@ -27,9 +21,14 @@ const MEDIA_ATTACHMENT_PATH = /^\/wp\/v2\/media\/(\d+)(\?|$)/;
  * @return {void}
  */
 export function configureApiFetch() {
-	const { siteApiRoot = '', preloadData = null } = getGBKit();
+	const { siteApiRoot, preloadData = null } = getGBKit();
 
-	apiFetch.use( apiFetch.createRootURLMiddleware( siteApiRoot ) );
+	// The root is joined to request paths by concatenation, so it has to supply
+	// the separator. Hosts may configure it with or without the trailing slash,
+	// as the native URL builders accept either.
+	apiFetch.use(
+		apiFetch.createRootURLMiddleware( ensureTrailingSlash( siteApiRoot ) )
+	);
 	apiFetch.use( corsMiddleware );
 	apiFetch.use( apiPathModifierMiddleware );
 	apiFetch.use( tokenAuthMiddleware );
@@ -60,6 +59,7 @@ export function configureApiFetch() {
 	apiFetch.use( nativeMediaUploadMiddleware );
 	apiFetch.use( apiFetch.mediaUploadMiddleware );
 	apiFetch.use( stripDraftPostIdMiddleware );
+	apiFetch.use( mediaPermissionsMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
 	apiFetch.use( siteIndexMiddleware );
 	apiFetch.use(
@@ -110,10 +110,11 @@ function apiPathModifierMiddleware( options, next ) {
 		).test( options.path ) || /\/sites\/[^/]+\//.test( options.path );
 
 	if ( isEligiblePath && ! alreadyHasSiteNamespace ) {
-		// Insert the API namespace after the first two path segments.
+		// Insert the API namespace after the first two path segments, with a
+		// single trailing slash.
 		options.path = options.path.replace(
 			/^(?<apiPath>\/?(?:[\w.-]+\/){2})/,
-			`$<apiPath>${ siteApiNamespace[ 0 ] }`
+			`$<apiPath>${ ensureTrailingSlash( siteApiNamespace[ 0 ] ) }`
 		);
 	}
 
@@ -577,6 +578,41 @@ function stripDraftPostIdMiddleware( options, next ) {
 }
 
 /**
+ * Middleware restoring the `Allow` header on the media permissions check.
+ *
+ * Browsers hide `Allow` from cross-origin responses, so `canUser` would report
+ * uploads as denied and the editor would remove its Upload buttons. WordPress
+ * always allows `GET` on this collection, so a missing header was hidden rather
+ * than omitted, and the user is assumed able to upload.
+ *
+ * @type {APIFetchMiddleware}
+ */
+function mediaPermissionsMiddleware( options, next ) {
+	if (
+		options.parse !== false ||
+		options.method?.toUpperCase() !== 'OPTIONS' ||
+		! options.path ||
+		! MEDIA_UPLOAD_PATH.test( options.path )
+	) {
+		return next( options );
+	}
+
+	return next( options ).then( ( response ) => {
+		if ( response.headers.has( 'allow' ) ) {
+			return response;
+		}
+
+		const headers = new Headers( response.headers );
+		headers.set( 'Allow', 'GET, POST' );
+		return new Response( response.body, {
+			status: response.status,
+			statusText: response.statusText,
+			headers,
+		} );
+	} );
+}
+
+/**
  * Remove the wrapping element from the oEmbed response, as it breaks
  * Gutenberg's sizing styles.
  *
@@ -666,7 +702,7 @@ function siteIndexMiddleware( options, next ) {
 		return next( options );
 	}
 
-	const home = siteURL?.replace( /\/+$/, '' );
+	const home = stripTrailingSlash( siteURL );
 	return Promise.resolve( home ? { home } : {} );
 }
 

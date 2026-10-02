@@ -1,11 +1,4 @@
-/**
- * WordPress dependencies
- */
 import { useEffect } from '@wordpress/element';
-
-/**
- * Internal dependencies
- */
 import * as ariaHelper from './aria-helper';
 import {
 	getClipContainer,

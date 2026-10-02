@@ -1,13 +1,6 @@
-/**
- * WordPress dependencies
- */
 import { store as coreStore } from '@wordpress/core-data';
 import { useSelect } from '@wordpress/data';
 import { store as editorStore, EditorProvider } from '@wordpress/editor';
-
-/**
- * Internal dependencies
- */
 import VisualEditor from '../visual-editor';
 import './style.scss';
 import { useSyncHistoryControls } from './use-sync-history-controls';

@@ -1,6 +1,3 @@
-/**
- * WordPress dependencies
- */
 import { Notice } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';

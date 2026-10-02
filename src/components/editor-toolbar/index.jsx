@@ -1,6 +1,3 @@
-/**
- * WordPress dependencies
- */
 import { useState, useRef } from '@wordpress/element';
 import {
 	BlockInspector,
@@ -20,10 +17,6 @@ import { __ } from '@wordpress/i18n';
 import { close, cog } from '@wordpress/icons';
 import clsx from 'clsx';
 import { store as editorStore } from '@wordpress/editor';
-
-/**
- * Internal dependencies
- */
 import './style.scss';
 import { useModalize } from './use-modalize';
 import { useModalDialogState } from '../editor/use-modal-dialog-state';

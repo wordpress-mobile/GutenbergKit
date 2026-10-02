@@ -1,11 +1,4 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-
-/**
- * Internal dependencies
- */
 import { injectEditorStyles } from './editor-styles';
 
 // Vitest runs with `css: false`, so `?inline` imports resolve to empty strings

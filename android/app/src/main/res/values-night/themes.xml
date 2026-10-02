@@ -1,6 +1,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Base.Theme.GutenbergKit" parent="Theme.Material3.DayNight.NoActionBar">
+    <!-- Base application theme. Dynamic colors match the Compose `AppTheme`, so
+         classic views such as `GutenbergView` share the Compose screens' palette. -->
+    <style name="Base.Theme.GutenbergKit" parent="Theme.Material3.DynamicColors.DayNight.NoActionBar">
         <!-- Customize your dark theme here. -->
         <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
     </style>

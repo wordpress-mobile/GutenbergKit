@@ -1,11 +1,4 @@
-/**
- * External dependencies
- */
 import clsx from 'clsx';
-
-/**
- * WordPress dependencies
- */
 import { forwardRef, useRef } from '@wordpress/element';
 import {
 	BlockList,
@@ -26,10 +19,6 @@ import componentStylesRTL from '@wordpress/components/build-style/style-rtl.css?
 import blockEditorContentStylesRTL from '@wordpress/block-editor/build-style/content-rtl.css?inline';
 import blocksStylesRTL from '@wordpress/block-library/build-style/style-rtl.css?inline';
 import blocksEditorStylesRTL from '@wordpress/block-library/build-style/editor-rtl.css?inline';
-
-/**
- * Internal dependencies
- */
 import './style.scss';
 import EditorToolbar from '../editor-toolbar';
 import { useEditorStyles } from './use-editor-styles';
@@ -73,7 +62,10 @@ const alignCSS = `.is-root-container.alignwide { max-width: var(--wp--style--glo
  *
  * @return {Element} The rendered Editor component.
  */
-const VisualEditor = forwardRef( function VisualEditor( { hideTitle }, ref ) {
+const VisualEditor = forwardRef( function UnforwardedVisualEditor(
+	{ hideTitle },
+	ref
+) {
 	const editorPostTitleRef = useRef();
 
 	const {
