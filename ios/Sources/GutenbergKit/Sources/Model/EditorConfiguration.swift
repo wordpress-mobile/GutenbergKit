@@ -9,7 +9,8 @@ import Foundation
 public enum NetworkFallbackMode: Sendable, Hashable {
     /// Network failures are fatal and propagate as errors (current default behavior).
     case disabled
-    /// Automatically fall back to the bundled editor when network requests fail.
+    /// Automatically fall back when network requests fail: to the dependencies already on disk,
+    /// even ones the cache policy considers too old, or else to the bundled editor.
     case automatic
 }
 

@@ -84,6 +84,8 @@ The `EditorURLCache` provides disk-based caching for API responses, keyed by URL
 | `.maxAge(TimeInterval)` | Use cached responses younger than the specified age |
 | `.always`               | Always use cached responses regardless of age       |
 
+The same policy decides when an `EditorService` checks for new plugin and theme assets; see [Refreshing](#refreshing).
+
 Example:
 
 **Swift**
@@ -211,15 +213,19 @@ This filtering is performed by `EditorURLResponse.asPreloadResponse()`.
 
 ### Automatic Cleanup
 
-`EditorService` automatically cleans up old asset bundles once per day:
+`EditorService` automatically cleans up each site's old asset bundles once per day:
 
 **Swift**
 
 ```swift
-try await onceEvery(.seconds(86_400)) {
-    try await self.cleanup()
-}
+try await onceEvery(
+    .seconds(86_400),
+    { try await self.cleanup() },
+    handle: "asset-bundle-cleanup-\(self.configuration.siteId)"
+)
 ```
+
+A cleanup keeps the site's latest bundle, and any bundle the app has been handed since it launched — an open editor, or dependencies the host still holds, may be reading it.
 
 **Kotlin**
 
@@ -244,6 +250,38 @@ try await service.purge()
 ```kotlin
 //tbd
 ```
+
+### Refreshing
+
+An `EditorService`'s cache policy covers plugin and theme assets as well as API responses. For assets, it decides when to check the site's asset manifest again, and how much to download when it does:
+
+| Policy                  | API responses                   | Asset bundle                                               |
+| ----------------------- | ------------------------------- | ---------------------------------------------------------- |
+| `.always` (default)     | Fetched only when not cached    | Manifest checked only when no bundle is on disk            |
+| `.maxAge(TimeInterval)` | Fetched once older than the age | Manifest checked once the last check is older than the age |
+| `.ignore`               | Always fetched                  | Manifest always checked, and every asset downloaded again  |
+
+Under `.always` and `.maxAge`, a check downloads only what the manifest says has changed. If the manifest hasn't changed, the bundle on disk is kept rather than downloaded again — asset URLs carry their version (`?ver=`), so the same manifest means the same assets — and its age starts over. Only an asset that failed to download when the bundle was built is tried again. If the manifest has changed, the new bundle is built beside the old one, and every service for the site uses it once it's complete. An asset whose versioned URL is the same as in the latest bundle on disk is copied from that bundle. An asset whose URL has no `?ver=` is downloaded again, because its URL can't say whether it changed.
+
+Under `.ignore`, nothing on disk is taken to be valid, so every asset is downloaded whether or not the manifest has changed. That makes it the way to replace an asset that changed without its URL changing, or one that was stored wrong. The assets go into a new bundle beside any the manifest already has: a bundle on disk is never changed, because an editor may be reading it. An asset that fails to download is taken from the latest bundle on disk, if that has it, rather than left out. If the manifest hasn't changed and its assets all come back the same as the bundle on disk has them, that bundle is returned and the new one is discarded, so a host can tell whether a refresh changed anything, and a refresh that changed nothing takes no more disk space.
+
+The old bundle stays on disk for as long as the app is running, because an open editor — or dependencies the host prepared earlier and still holds — may be reading it. `cleanup()` removes it after the next launch.
+
+To refresh a site's editor data — on pull-to-refresh, for instance — prepare a separate service that ignores the cache, and give its dependencies to the next editor:
+
+**Swift**
+
+```swift
+let dependencies = try await EditorService(configuration: configuration, cachePolicy: .ignore).prepare()
+```
+
+Nothing is deleted first, so an editor opened during the refresh still loads straight from what's on disk, and a refresh that fails leaves it all in place. An editor given no dependencies prepares its own with `.always`, so it uses whatever the last refresh left. A refresh downloads every asset again; to check for changes and download only those, use `.maxAge(0)` instead.
+
+A refresh that can't reach the site throws. If the configuration's `networkFallbackMode` is `.automatic`, it returns the dependencies already on disk instead — however old they are — so they're still safe to give to the next editor. It returns empty dependencies only when something the editor needs has never been cached.
+
+**Kotlin**
+
+Not yet: Android's `EditorService` still checks the asset manifest only when no bundle is on disk, whatever its cache policy.
 
 ## Offline Mode
 
@@ -279,6 +317,8 @@ let config = EditorConfigurationBuilder(
 ```
 
 When a network error is caught (e.g., `notConnectedToInternet`, `timedOut`, `cannotConnectToHost`), `EditorService.prepare()` returns empty dependencies — the same as offline mode — so the bundled editor loads instead of showing an error. Non-network errors (e.g., decoding failures) still propagate normally.
+
+On iOS, a service whose cache policy is `.maxAge` or `.ignore` first falls back to the dependencies already on disk, however old: they can't be checked against a site that can't be reached, and they're better than none. It returns empty dependencies only if some are missing.
 
 On the JavaScript side, an `OfflineIndicator` component displays a "Working Offline" status bar at the top of the editor when the device loses connectivity. The indicator automatically appears and disappears based on the browser's `online`/`offline` events.
 

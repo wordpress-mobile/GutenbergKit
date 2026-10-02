@@ -4,7 +4,8 @@ import Foundation
 ///
 /// `EditorCachePolicy` provides three caching strategies that control when cached
 /// HTTP responses are considered valid. This is used by `EditorURLCache` to decide
-/// whether to return a cached response or require a fresh network request.
+/// whether to return a cached response or require a fresh network request, and by
+/// `EditorAssetLibrary` to decide when to check a site's asset manifest again.
 ///
 /// ## Usage
 ///

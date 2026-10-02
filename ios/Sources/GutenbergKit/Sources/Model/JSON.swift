@@ -23,9 +23,24 @@ public enum JSON: Sendable, Equatable, Hashable, CustomStringConvertible {
         self = try JSONDecoder().decode(JSON.self, from: data)
     }
 
+    /// The value as JSON, laid out for reading.
     public var description: String {
-        let data = try! JSONSerialization.data(withJSONObject: self, options: [.prettyPrinted, .withoutEscapingSlashes])
-        return String(data: data, encoding: .utf8)!
+        // Not `JSONSerialization`, which takes Foundation objects: handed this enum, it raises an
+        // exception that Swift can't catch.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        // JSON has no way to write these numbers, and a description shouldn't fail over one.
+        encoder.nonConformingFloatEncodingStrategy = .convertToString(
+            positiveInfinity: "Infinity",
+            negativeInfinity: "-Infinity",
+            nan: "NaN"
+        )
+
+        guard let data = try? encoder.encode(self) else {
+            return "<invalid JSON>"
+        }
+
+        return String(decoding: data, as: UTF8.self)
     }
 }
 

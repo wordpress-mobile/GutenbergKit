@@ -14,7 +14,7 @@ import SwiftSoup
 ///
 /// Assets are accessed via URL lookup - the bundle maintains a mapping from
 /// original remote URLs to local file paths.
-public struct EditorAssetBundle: Sendable, Equatable, Hashable {
+public struct EditorAssetBundle: Sendable {
 
     /// The EditorRepresentation has the exact same format as `RemoteEditorAssetManifest.RawManifest` – what we're passing to Gutenberg
     /// looks exactly like what it'd get if it called `/wpcom/v2/editor-assets` directly.
@@ -35,6 +35,8 @@ public struct EditorAssetBundle: Sendable, Equatable, Hashable {
     struct RawAssetBundle: Codable {
         let manifest: LocalEditorAssetManifest
         let downloadDate: Date
+        /// Absent from a bundle stored before this was recorded.
+        var lastCheckedDate: Date?
     }
 
     /// The bundle's unique identifier, derived from its manifest checksum.
@@ -50,8 +52,23 @@ public struct EditorAssetBundle: Sendable, Equatable, Hashable {
 
     /// The date this bundle was created by downloading the manifest contents.
     ///
-    /// Used to determine which bundle is most recent when multiple bundles exist.
+    /// Used to determine which bundle is most recent when multiple bundles exist, until the bundle
+    /// has a ``lastCheckedDate``.
     let downloadDate: Date
+
+    /// The date the site's manifest was last found to match this bundle, if that's been recorded.
+    ///
+    /// It says how recently the bundle was confirmed, not what the bundle is, so two copies of a
+    /// bundle that differ only in this are equal.
+    let lastCheckedDate: Date?
+
+    /// When the site's manifest is last known to have matched this bundle: when it was last
+    /// checked, or else when it was downloaded.
+    ///
+    /// Used to determine which bundle is the site's latest, and how old it is for the cache policy.
+    var lastMatchedDate: Date {
+        lastCheckedDate ?? downloadDate
+    }
 
     /// The number of assets stored in this bundle.
     public var assetCount: Int {
@@ -63,12 +80,19 @@ public struct EditorAssetBundle: Sendable, Equatable, Hashable {
     init(raw: RawAssetBundle, bundleRoot: URL) {
         self.manifest = raw.manifest
         self.downloadDate = raw.downloadDate
+        self.lastCheckedDate = raw.lastCheckedDate
         self.bundleRoot = bundleRoot
     }
 
-    init(manifest: LocalEditorAssetManifest, downloadDate: Date = Date(), bundleRoot: URL) throws {
+    init(
+        manifest: LocalEditorAssetManifest,
+        downloadDate: Date = Date(),
+        lastCheckedDate: Date? = nil,
+        bundleRoot: URL
+    ) throws {
         self.manifest = manifest
         self.downloadDate = downloadDate
+        self.lastCheckedDate = lastCheckedDate
         self.bundleRoot = bundleRoot
     }
 
@@ -186,7 +210,8 @@ public struct EditorAssetBundle: Sendable, Equatable, Hashable {
     func dataRepresentation() throws -> Data {
         try JSONEncoder().encode(RawAssetBundle(
             manifest: self.manifest,
-            downloadDate: self.downloadDate
+            downloadDate: self.downloadDate,
+            lastCheckedDate: self.lastCheckedDate
         ))
     }
 
@@ -232,4 +257,16 @@ public struct EditorAssetBundle: Sendable, Equatable, Hashable {
         ),
         bundleRoot: URL.temporaryDirectory
     )
+}
+
+extension EditorAssetBundle: Equatable, Hashable {
+    public static func == (lhs: EditorAssetBundle, rhs: EditorAssetBundle) -> Bool {
+        lhs.manifest == rhs.manifest && lhs.downloadDate == rhs.downloadDate && lhs.bundleRoot == rhs.bundleRoot
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(manifest)
+        hasher.combine(downloadDate)
+        hasher.combine(bundleRoot)
+    }
 }
