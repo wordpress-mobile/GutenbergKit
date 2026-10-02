@@ -23,8 +23,31 @@ enum EditorUITestHelpers {
 
         // Wait for the WebView to appear in the full-screen editor.
         let webView = app.webViews.firstMatch
-        XCTAssertTrue(webView.waitForExistence(timeout: 30), "Expected a WKWebView to appear after editor loads")
+        if !webView.waitForExistence(timeout: 30) {
+            attachScreenState(app: app)
+            // The crash notice hides the WebView, so name it rather than
+            // reporting a WebView that never appeared.
+            let message = app.buttons["Reload Editor"].exists
+                ? "Editor crashed while loading; the crash notice replaced the WKWebView"
+                : "Expected a WKWebView to appear after editor loads"
+            XCTFail(message)
+        }
         return webView
+    }
+
+    /// Attaches a screenshot and the accessibility hierarchy to the result
+    /// bundle, so a CI failure records what the app showed.
+    private static func attachScreenState(app: XCUIApplication) {
+        XCTContext.runActivity(named: "Screen state") { activity in
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.lifetime = .keepAlways
+            activity.add(screenshot)
+
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "Accessibility hierarchy"
+            hierarchy.lifetime = .keepAlways
+            activity.add(hierarchy)
+        }
     }
 
     /// Types text into the title field and returns the field element.
