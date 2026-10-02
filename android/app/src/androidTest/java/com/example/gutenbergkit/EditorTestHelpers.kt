@@ -384,8 +384,12 @@ private fun AndroidComposeTestRule<*, *>.waitForNode(
     // Poll on the match count rather than `assertExists`, so an ambiguous
     // match fails as soon as it appears instead of burning the full timeout
     // on an assertion that can never pass.
+    // Between activities no Compose root is resumed, and the default
+    // `atLeastOneRootRequired` throws there instead of letting the poll retry.
     waitUntil(timeoutMs) {
-        onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
+        onAllNodes(matcher)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+            .isNotEmpty()
     }
     val matches = onAllNodes(matcher).fetchSemanticsNodes()
     check(matches.size == 1) {
