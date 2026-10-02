@@ -14,6 +14,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.wordpress.gutenberg.model.EditorAuthorizationScope
 import org.wordpress.gutenberg.model.http.EditorHttpMethod
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -44,15 +45,20 @@ class EditorHTTPClientTest {
 
     private fun makeClient(
         authHeader: String = TEST_AUTH_HEADER,
+        authorizationScope: EditorAuthorizationScope = siteScope(),
         delegate: EditorHTTPClientDelegate? = null,
         timeoutSeconds: Long = 60
     ): EditorHTTPClient {
         return EditorHTTPClient(
             authHeader = authHeader,
+            authorizationScope = authorizationScope,
             delegate = delegate,
             requestTimeoutSeconds = timeoutSeconds
         )
     }
+
+    /** The scope of a site served by the mock web server. */
+    private fun siteScope() = EditorAuthorizationScope(siteURL = baseUrl, siteApiRoot = baseUrl)
 
     // MARK: - EditorHTTPClientResponse Tests
 
@@ -414,6 +420,7 @@ class EditorHTTPClientTest {
 
         val client = EditorHTTPClient(
             authHeader = TEST_AUTH_HEADER,
+            authorizationScope = siteScope(),
             okHttpClient = customOkHttpClient
         )
 

@@ -282,10 +282,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             hasUploader: mediaUploader != nil
         )
 
-        let httpClient = httpClient ?? EditorHTTPClient(
-            urlSession: URLSession.shared,
-            authHeader: configuration.authHeader
-        )
+        let httpClient = httpClient ?? EditorHTTPClient(configuration: configuration)
 
         self.configuration = configuration
         self.dependencies = dependencies

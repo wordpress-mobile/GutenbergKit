@@ -178,7 +178,7 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         let recorder = TaskEventRecorder()
         let editor = EditorViewController(
             configuration: configuration,
-            httpClient: EditorHTTPClient(urlSession: URLSession.shared, authHeader: "Bearer test-token", delegate: recorder)
+            httpClient: EditorHTTPClient(configuration: configuration, urlSession: URLSession.shared, delegate: recorder)
         )
         defer { editor.stopMediaHandling() }
         try await loadBlankPage(in: editor)
@@ -223,7 +223,7 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         let session = RelayingURLSession(statusCode: 201, headers: [:])
         let editor = EditorViewController(
             configuration: makeConfiguration(),
-            httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token")
+            httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token", authorizationScope: .example)
         )
         defer { editor.stopMediaHandling() }
         try await loadBlankPage(in: editor)
@@ -249,7 +249,7 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         let editor = EditorViewController(
             configuration: makeConfiguration(),
             mediaProcessor: StandaloneProcessor(),
-            httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token")
+            httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token", authorizationScope: .example)
         )
         defer { editor.stopMediaHandling() }
         try await loadBlankPage(in: editor)
