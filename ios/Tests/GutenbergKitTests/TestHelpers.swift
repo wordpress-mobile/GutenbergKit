@@ -3,10 +3,17 @@ import Testing
 
 @testable import GutenbergKit
 
+/// How long a test waits for something that is supposed to happen before giving up.
+///
+/// Generous, because a wait that succeeds returns as soon as it can and only one that is going to
+/// fail runs this long. A run's first results take half a minute to arrive on a busy CI machine,
+/// which a shorter wait reads as a failure.
+let patientTimeout: Duration = .seconds(60)
+
 /// Polls `condition` until it holds, failing the test at the caller's line if it hasn't within
 /// `timeout`.
 func waitUntil(
-    timeout: Duration = .seconds(10),
+    timeout: Duration = patientTimeout,
     sourceLocation: SourceLocation = #_sourceLocation,
     _ condition: () -> Bool
 ) async throws {
@@ -50,6 +57,18 @@ func plantBundles(
         planted.append(try EditorAssetBundle(url: destination.appending(path: "manifest.json")))
     }
     return planted
+}
+
+extension Data {
+    /// Whether this holds the same bytes as `other`, for an `#expect`.
+    ///
+    /// Not `==` in the `#expect` itself: Swift Testing describes a failed `==` between two
+    /// collections by working out the difference between them. For megabytes of bytes that takes
+    /// most of an hour on the thread the test runs on — and on the main actor, every other
+    /// main-actor test in the run waits behind it.
+    func hasSameBytes(as other: Data) -> Bool {
+        self == other
+    }
 }
 
 protocol MakesTestFixtures {

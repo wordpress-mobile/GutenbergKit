@@ -11,7 +11,7 @@ GutenbergKit is a Gutenberg block editor for native iOS and Android apps built w
 -   Kotlin library for Android integration
 -   Native-to-web bridge for communication between platforms
 
-For deeper architectural context on specific subsystems, see the docs under `docs/code/` — including `architecture.md`, `plugins.md`, `preloading.md`, and others.
+For deeper architectural context on specific subsystems, see the docs under `docs/code/` — including `architecture.md`, `media-uploads.md`, `plugins.md`, `preloading.md`, and others.
 
 ## Common Development Commands
 

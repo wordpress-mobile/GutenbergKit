@@ -118,10 +118,10 @@ class BlockInserterViewModel: ObservableObject {
                     mediaInfo = MediaInfo(url: fileURL.absoluteString, type: "image/jpeg")
 
                 case .video(let videoURL):
-                    let videoData = try Data(contentsOf: videoURL)
-                    let fileExtension = videoURL.pathExtension.isEmpty ? "mp4" : videoURL.pathExtension
-                    let fileURL = try await fileManager.writeData(videoData, withExtension: fileExtension)
-                    mediaInfo = MediaInfo(url: fileURL.absoluteString, type: "video/\(fileExtension)")
+                    // Copied, not read: a clone on APFS, so a long recording never
+                    // passes through memory. The type comes from the extension —
+                    // `video/MOV` is not a MIME type WordPress accepts.
+                    mediaInfo = try await fileManager.importFile(at: videoURL)
                 }
 
                 guard !Task.isCancelled else {

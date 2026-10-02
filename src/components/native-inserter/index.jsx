@@ -41,6 +41,7 @@ import {
 	formatPatternCategoriesForNativeInserter,
 } from '../../utils/blocks';
 import { showBlockInserter } from '../../utils/bridge';
+import { requestNativeFiles, withMimeType } from '../../utils/native-files';
 import { unlock } from '../../lock-unlock';
 
 /**
@@ -175,6 +176,27 @@ export default function NativeBlockInserterButton( {
 				return false;
 			}
 
+			// Native code offers the files it imported — the items marked
+			// `nativeFile` — through a file input. Ask before the first
+			// `await`: the click needs this script's user activation.
+			const nativeFileCount = mediaArray.filter(
+				( media ) => media.nativeFile
+			).length;
+			const nativeFilesRequest =
+				nativeFileCount > 0
+					? requestNativeFiles().then(
+							( files ) =>
+								files.length === nativeFileCount ? files : null,
+							( error ) => {
+								debug(
+									'Native files unavailable; fetching them instead',
+									error
+								);
+								return null;
+							}
+					  )
+					: Promise.resolve( null );
+
 			/**
 			 * Get media type from MIME type.
 			 *
@@ -276,10 +298,26 @@ export default function NativeBlockInserterButton( {
 			 * @return {Promise<boolean>} True if insertion succeeded
 			 */
 			const insertMediaWithoutIds = async ( items ) => {
-				// Convert media objects to File objects
+				// Convert media objects to File objects. Files native code
+				// provided come in the order of the items marked `nativeFile`;
+				// without them, every item is fetched.
+				const nativeFiles = await nativeFilesRequest;
+				let nextNativeFile = 0;
+				const providedFiles = items.map( ( media ) =>
+					media.nativeFile && nativeFiles
+						? nativeFiles[ nextNativeFile++ ]
+						: null
+				);
+
 				const files = await Promise.all(
-					items.map( async ( media ) => {
+					items.map( async ( media, index ) => {
 						try {
+							if ( providedFiles[ index ] ) {
+								return withMimeType(
+									providedFiles[ index ],
+									media.type
+								);
+							}
 							const response = await fetch( media.url );
 							const blob = await response.blob();
 							const filename =

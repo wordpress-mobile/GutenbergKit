@@ -87,6 +87,33 @@ struct EditorAssetLibraryTests {
         #expect(manifest.rawStyles.contains("plugin.css"))
     }
 
+    /// On iOS 17 and 18, `URL.appending(path:)` keeps both slashes when the root ends in
+    /// one and the path starts with one, and WordPress answers `/wp-json//wpcom/…` with
+    /// a 404.
+    @Test(
+        "fetchManifest requests one URL whether or not the API root ends in a slash",
+        arguments: ["https://example.com/wp-json", "https://example.com/wp-json/"]
+    )
+    func fetchManifestJoinsTheAPIRootWithOneSlash(siteApiRoot: String) async throws {
+        let configuration = EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: URL(string: "https://example.com")!,
+            siteApiRoot: URL(string: siteApiRoot)!
+        )
+        .setShouldUsePlugins(true)
+        .build()
+
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = { _ in Data(#"{"scripts": "", "styles": "", "allowed_block_types": []}"#.utf8) }
+
+        let library = makeLibrary(configuration: configuration, httpClient: mockClient, cachePolicy: .ignore)
+        _ = try await library.fetchManifest()
+
+        #expect(mockClient.requestedURLs.map(\.absoluteString) == [
+            "https://example.com/wp-json/wpcom/v2/editor-assets?exclude=core,gutenberg"
+        ])
+    }
+
     @Test("fetchManifest requests the manifest on every call")
     func fetchManifestRequestsOnEveryCall() async throws {
         let manifestJSON = """
