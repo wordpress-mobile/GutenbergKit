@@ -468,7 +468,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // it because the WebView has no auth cookies). Without both there is nothing
         // to upload through, so leave the server down and let uploads fall to the
         // default WebView path rather than start a server that could only fail.
-        guard !configuration.authHeader.isEmpty else {
+        //
+        // `MediaServerCredentials` owns the check so it is reachable from the host
+        // test suite — this file is not.
+        guard MediaServerCredentials.areUsable(
+            siteApiRoot: configuration.siteApiRoot,
+            authHeader: configuration.authHeader
+        ) else {
             return
         }
 
