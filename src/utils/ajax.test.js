@@ -211,6 +211,57 @@ describe( 'configureAjax', () => {
 			expect( originalBeforeSend ).toHaveBeenCalledWith( mockXhr );
 		} );
 
+		it( 'should pass the context, settings, and result through to the original beforeSend', () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteURL: 'https://example.com',
+				authHeader: 'Bearer test-token',
+			} );
+
+			configureAjax();
+
+			const prefilter = mockJQueryAjaxPrefilter.mock.calls[ 0 ][ 0 ];
+			const originalBeforeSend = vi.fn( () => false );
+			const options = {
+				url: 'https://example.com/wp-admin/admin-ajax.php',
+				beforeSend: originalBeforeSend,
+			};
+			prefilter( options );
+
+			const context = {};
+			const mockXhr = { setRequestHeader: vi.fn() };
+			const result = options.beforeSend.call( context, mockXhr, options );
+
+			expect( originalBeforeSend ).toHaveBeenCalledWith(
+				mockXhr,
+				options
+			);
+			expect( originalBeforeSend.mock.contexts[ 0 ] ).toBe( context );
+			// jQuery cancels the request when beforeSend returns false.
+			expect( result ).toBe( false );
+		} );
+
+		it( 'should not inject auth header when a later prefilter moves the URL off the site', () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteURL: 'https://example.com',
+				authHeader: 'Bearer test-token',
+			} );
+
+			configureAjax();
+
+			const prefilter = mockJQueryAjaxPrefilter.mock.calls[ 0 ][ 0 ];
+			const options = {
+				url: 'https://example.com/wp-admin/admin-ajax.php',
+			};
+			prefilter( options );
+			// jQuery passes the same options object to every prefilter.
+			options.url = 'https://proxy.example.net/wp-admin/admin-ajax.php';
+
+			const mockXhr = { setRequestHeader: vi.fn() };
+			options.beforeSend( mockXhr, options );
+
+			expect( mockXhr.setRequestHeader ).not.toHaveBeenCalled();
+		} );
+
 		it( 'should log warning when authHeader is missing', () => {
 			bridge.getGBKit.mockReturnValue( {
 				siteURL: 'https://example.com',
