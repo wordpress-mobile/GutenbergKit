@@ -42,8 +42,10 @@ import SQLite3
 /// instances with different caps would clobber each other's triggers; in the
 /// best case you get the wrong cap, in the worst case `SQLITE_BUSY` while the
 /// recreations race. Each backing file must have exactly one owning
-/// `SQLiteKVCache` for the lifetime of the process. Not currently enforced at
-/// runtime — this is a usage contract.
+/// `SQLiteKVCache` at a time. Within a process, ``shared(handle:directory:diskCapacity:)``
+/// enforces that by handing every caller the live instance for its file; `init`
+/// doesn't, so use it directly only where nothing else can open the file. Across
+/// processes it remains a usage contract.
 ///
 /// **Schema migrations.** A `schemaVersion` constant baked into the build is
 /// compared against `PRAGMA user_version` on open; mismatches drop and recreate
@@ -131,6 +133,11 @@ final class SQLiteKVCache: @unchecked Sendable {
     /// silently wipe users' caches a second time on the next upgrade).
     private static let schemaVersion: Int32 = 1
 
+    /// How long a statement waits on another connection's lock before failing with
+    /// `SQLITE_BUSY`. The usual holder is the previous instance on the same file checkpointing
+    /// its WAL as it closes, which takes milliseconds; this only bounds a pathological one.
+    private static let busyTimeoutMilliseconds: Int32 = 5_000
+
     private static let logger = Logger(subsystem: "GutenbergKit", category: "sqlite-kv-cache")
 
     /// SQLite C API: signals that bound data should be copied. Reinvented here
@@ -203,6 +210,9 @@ final class SQLiteKVCache: @unchecked Sendable {
             try Self.openAndConfigure(directory: self.directory, filename: self.filename, diskCapacity: self.diskCapacity)
         }
         dbResult = result
+        if case .failure = result {
+            Self.forget(self)
+        }
         return try result.get()
     }
 
@@ -247,6 +257,14 @@ final class SQLiteKVCache: @unchecked Sendable {
         guard let connection else {
             throw Error.databaseUnavailable
         }
+
+        // Wait out another connection's lock rather than fail on it: `connection()` caches a
+        // failure for the life of the cache, so a lock held for milliseconds would break it for
+        // good. `shared(handle:directory:diskCapacity:)` makes that routine — it hands out a
+        // fresh instance as soon as the last one is released, while that one's `deinit` may
+        // still be checkpointing the WAL. Reopening in that window failed 200 times in 200
+        // without a timeout, and never with one.
+        sqlite3_busy_timeout(connection, Self.busyTimeoutMilliseconds)
 
         // Pragmas + schema setup. Pragmas first because `journal_mode`
         // changes must run with no active transaction. `journal_mode = WAL`
@@ -674,6 +692,77 @@ extension SQLiteKVCache.Error: CustomStringConvertible, LocalizedError {
 }
 
 extension SQLiteKVCache {
+
+    /// The live cache for `handle` in `directory`, created if there is none.
+    ///
+    /// Two instances on one file race their opens, and the loser caches its failure and
+    /// throws for the rest of its life. Measured with two `EditorURLCache`s making their
+    /// first read at the same moment: at least one ended up broken in 50 runs out of 50.
+    /// The busy timeout doesn't save it — the switch to WAL fails with `SQLITE_BUSY`
+    /// without waiting on it. Every caller that can share a file must come through here.
+    ///
+    /// Callers sharing a file must agree on `diskCapacity`: one that finds the file open
+    /// gets the live instance as it is, cap included.
+    static func shared(
+        handle: StaticString,
+        directory: URL = URL.cachesDirectory,
+        diskCapacity: Measurement<UnitInformationStorage>
+    ) -> SQLiteKVCache {
+        let file = registryKey(directory: directory, filename: "\(handle)".lowercased())
+        let bytes = Int(diskCapacity.converted(to: .bytes).value)
+        return liveInstancesLock.withLock {
+            if let live = liveInstances[file]?.instance {
+                assert(
+                    live.diskCapacity == bytes,
+                    "'\(handle)' is already open with a different disk capacity; callers sharing a file must agree on it"
+                )
+                return live
+            }
+            let instance = SQLiteKVCache(handle: handle, directory: directory, diskCapacity: bytes)
+            liveInstances[file] = WeakInstance(instance: instance)
+            return instance
+        }
+    }
+
+    /// Stops `shared` handing out the instances for files under `directory`, so the next caller
+    /// for each opens it afresh. For a caller that has just deleted `directory`: an instance
+    /// still open on a deleted file fails every read and write with `SQLITE_IOERR`, and would
+    /// go on being shared for as long as anything held it.
+    static func forgetInstances(under directory: URL) {
+        let root = directory.standardizedFileURL.path(percentEncoded: false)
+        let prefix = root.hasSuffix("/") ? root : root + "/"
+        liveInstancesLock.withLock {
+            liveInstances = liveInstances.filter { !$0.key.hasPrefix(prefix) }
+        }
+    }
+
+    /// Stops `shared` handing out `instance`, whose open has failed. It keeps that failure for
+    /// life, so sharing it would fail every later caller for as long as anything held it. It
+    /// has closed its handle, so the fresh instance the next caller gets has the file to itself.
+    ///
+    /// Called with the instance's `openLock` held, which is why `shared` asks nothing of an
+    /// instance: an open can take as long as the busy timeout, and `shared` runs on the main
+    /// thread whenever an editor builds its service.
+    private static func forget(_ instance: SQLiteKVCache) {
+        let file = registryKey(directory: instance.directory, filename: instance.filename)
+        liveInstancesLock.withLock {
+            if liveInstances[file]?.instance === instance {
+                liveInstances[file] = nil
+            }
+        }
+    }
+
+    private static func registryKey(directory: URL, filename: String) -> String {
+        directory.standardizedFileURL.appending(component: filename).path(percentEncoded: false)
+    }
+
+    /// Weak, so a file no one is using is closed, and opened afresh by the next caller.
+    nonisolated(unsafe) private static var liveInstances: [String: WeakInstance] = [:]
+    private static let liveInstancesLock = NSLock()
+
+    private struct WeakInstance {
+        weak var instance: SQLiteKVCache?
+    }
 
     /// Convenience initializer that accepts the cap as a
     /// `Measurement<UnitInformationStorage>` so callers can write

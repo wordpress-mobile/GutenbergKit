@@ -1,6 +1,21 @@
 import Foundation
+import Testing
 
 @testable import GutenbergKit
+
+/// Polls `condition` until it holds, failing the test at the caller's line if it hasn't within
+/// `timeout`.
+func waitUntil(
+    timeout: Duration = .seconds(10),
+    sourceLocation: SourceLocation = #_sourceLocation,
+    _ condition: () -> Bool
+) async throws {
+    let deadline = ContinuousClock.now + timeout
+    while !condition() && ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    try #require(condition(), "timed out waiting", sourceLocation: sourceLocation)
+}
 
 func jsonResource(named name: String) throws -> Data {
     let url = Bundle.module.url(forResource: name, withExtension: "json")!
