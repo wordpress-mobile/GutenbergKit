@@ -121,13 +121,21 @@ struct EditorAssetLibraryTests {
         // First, fetch the manifest and create a bundle on disk
         let originalManifest = try await library.fetchManifest()
 
-        _ = try await library.buildBundle(for: originalManifest)
+        let bundle = try await library.buildBundle(for: originalManifest)
+
+        // Mark the copy on disk, so that it can be told apart from the response parsed again
+        let manifestPath = await library.bundleManifestPath(for: bundle)
+        var stored = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: manifestPath)) as? [String: Any])
+        var storedManifest = try #require(stored["manifest"] as? [String: Any])
+        storedManifest["allowedBlockTypes"] = ["only/on-disk"]
+        stored["manifest"] = storedManifest
+        try JSONSerialization.data(withJSONObject: stored).write(to: manifestPath, options: .atomic)
 
         // Now fetch again - should return the on-disk manifest
         let cachedManifest = try await library.fetchManifest()
 
-        // The checksums should match since it's the same manifest data
         #expect(cachedManifest.checksum == originalManifest.checksum)
+        #expect(cachedManifest.allowedBlockTypes == ["only/on-disk"])
 
         // Verify we made 2 HTTP calls (one for each fetchManifest)
         // but the second one used the cached bundle's manifest
@@ -401,6 +409,161 @@ struct EditorAssetLibraryTests {
         #expect(try await library.readAssetBundles().map(\.id) == [original.id, changed.id])
     }
 
+    @Test("downloadAssetBundle leaves a bundle whose manifest hasn't changed exactly as it was")
+    func downloadAssetBundleLeavesUnchangedBundleAsItWas() async throws {
+        let (library, _) = try await makeLibraryWithBundle(cachePolicy: .ignore)
+        let bundle = try #require(try await library.readAssetBundles().first)
+
+        let checked = try await library.downloadAssetBundle()
+
+        // A host comparing dependencies sees no change, and the date still says when it was downloaded
+        #expect(checked == bundle)
+        #expect(checked.downloadDate == bundle.downloadDate)
+        #expect(try await library.readAssetBundles() == [bundle])
+    }
+
+    @Test("downloadAssetBundle downloads an asset that an earlier build of the bundle failed to")
+    func downloadAssetBundleRepairsMissingAsset() async throws {
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = { url in
+            guard url.path.contains("editor-assets") else { throw URLError(.timedOut) }
+            return Data(Self.manifestJSON(scriptVersion: "1").utf8)
+        }
+        let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
+        let gapped = try await library.downloadAssetBundle()
+        #expect(!gapped.hasAssetData(for: Self.scriptURL))
+
+        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "1"))
+        let repaired = try await library.downloadAssetBundle()
+
+        #expect(repaired.id == gapped.id)
+        #expect(repaired.hasAssetData(for: Self.scriptURL))
+        #expect(mockClient.downloadCallCount == 2)
+    }
+
+    @Test(
+        "a manifest check asks the site afresh, rather than taking a stored response or a request in flight",
+        arguments: [EditorCachePolicy.ignore, .maxAge(3600)]
+    )
+    func manifestCheckAsksAfresh(cachePolicy: EditorCachePolicy) async throws {
+        let (library, mockClient) = try await makeLibraryWithBundle(cachePolicy: cachePolicy)
+
+        _ = try await library.downloadAssetBundle()
+
+        #expect(mockClient.requests.last?.cachePolicy == .reloadIgnoringLocalCacheData)
+    }
+
+    @Test("under .always, a manifest request can still be shared with one in flight")
+    func manifestRequestIsSharableUnderAlways() async throws {
+        let (_, mockClient) = try await makeLibraryWithBundle(cachePolicy: .always)
+
+        #expect(mockClient.requests.last?.cachePolicy == .useProtocolCachePolicy)
+    }
+
+    @Test("downloadAssetBundle builds a bundle again if another service's cleanup deletes it mid-check")
+    func downloadAssetBundleRebuildsBundleCleanedUpDuringCheck() async throws {
+        let storageRoot = URL.randomTemporaryDirectory
+        let planted = try await plantBundles(
+            forManifests: [Self.manifestJSON(scriptVersion: "1"), Self.manifestJSON(scriptVersion: "2")],
+            in: storageRoot
+        )
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore, storageRoot: storageRoot)
+        let other = makeLibrary(storageRoot: storageRoot)
+
+        // The site is back on the older manifest. Another service's cleanup removes that manifest's
+        // bundle — not yet the latest — after the check has found it on disk.
+        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "1"))
+        let restored = try await library.downloadAssetBundle { _ in try? await other.cleanup() }
+
+        #expect(restored.id == planted[0].id)
+        #expect((try? restored.getEditorRepresentation() as EditorAssetBundle.EditorRepresentation) != nil)
+        #expect(restored.hasAssetData(for: Self.scriptURL))
+        #expect(try await library.readAssetBundles().first?.id == restored.id)
+    }
+
+    @Test("downloadAssetBundle builds a bundle again if a purge deletes it mid-check")
+    func downloadAssetBundleRebuildsBundlePurgedDuringCheck() async throws {
+        let (library, _) = try await makeLibraryWithBundle(cachePolicy: .ignore)
+        let bundle = try #require(try await library.readAssetBundles().first)
+
+        let checked = try await library.downloadAssetBundle { _ in try? await library.purge() }
+
+        #expect(checked.id == bundle.id)
+        #expect((try? checked.getEditorRepresentation() as EditorAssetBundle.EditorRepresentation) != nil)
+        #expect(checked.hasAssetData(for: Self.scriptURL))
+        #expect(try await library.readAssetBundles().map(\.id) == [bundle.id])
+    }
+
+    @Test("a bundle stored before checks were recorded is as old as its download")
+    func bundleWithoutLastCheckedDateUsesDownloadDate() async throws {
+        let (library, _) = try await makeLibraryWithBundle(cachePolicy: .maxAge(3600))
+        let bundle = try #require(try await library.readAssetBundles().first)
+        let manifestPath = await library.bundleManifestPath(for: bundle)
+
+        // What an earlier version wrote: the manifest and a download date, and nothing else
+        func store(downloadedAgo interval: TimeInterval) throws {
+            let stored: [String: Any] = [
+                "manifest": try JSONSerialization.jsonObject(with: JSONEncoder().encode(bundle.manifest)),
+                "downloadDate": Date(timeIntervalSinceNow: -interval).timeIntervalSinceReferenceDate
+            ]
+            try JSONSerialization.data(withJSONObject: stored).write(to: manifestPath, options: .atomic)
+        }
+
+        try store(downloadedAgo: 1800)
+        #expect(try await library.readLatestAssetBundle()?.id == bundle.id)
+
+        try store(downloadedAgo: 7200)
+        #expect(try await library.readAssetBundles().first?.lastCheckedDate == nil)
+        #expect(try await library.readLatestAssetBundle() == nil)
+    }
+
+    // MARK: - cleanup Tests
+
+    @Test("cleanup removes the bundles an earlier launch left behind, except the newest")
+    func cleanupRemovesBundlesFromEarlierLaunch() async throws {
+        let storageRoot = URL.randomTemporaryDirectory
+        let planted = try await plantBundles(
+            forManifests: ["1", "2", "3"].map(Self.manifestJSON(scriptVersion:)),
+            in: storageRoot
+        )
+        let library = makeLibrary(storageRoot: storageRoot)
+
+        try await library.cleanup()
+
+        #expect(try await library.readAssetBundles().map(\.id) == [planted[2].id])
+    }
+
+    @Test("cleanup keeps the bundle the site's manifest last matched, though another was downloaded later")
+    func cleanupKeepsLatestBundleWhateverItsDownloadDate() async throws {
+        let storageRoot = URL.randomTemporaryDirectory
+        let planted = try await plantBundles(
+            forManifests: [Self.manifestJSON(scriptVersion: "1"), Self.manifestJSON(scriptVersion: "2")],
+            in: storageRoot
+        )
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "1"))
+        let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore, storageRoot: storageRoot)
+
+        _ = try await library.downloadAssetBundle()
+        try await library.cleanup()
+
+        #expect(try await library.readAssetBundles().map(\.id) == [planted[0].id])
+    }
+
+    @Test("cleanup keeps a bundle handed out since launch, and purge removes it anyway")
+    func cleanupKeepsHandedOutBundles() async throws {
+        let (library, mockClient) = try await makeLibraryWithBundle(cachePolicy: .ignore)
+        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "2"))
+        _ = try await library.downloadAssetBundle()
+
+        try await library.cleanup()
+        #expect(try await library.readAssetBundles().count == 2)
+
+        try await library.purge()
+        #expect(try await library.readAssetBundles().isEmpty)
+    }
+
     /// A library whose storage holds one bundle, built from ``manifestJSON(scriptVersion:)`` with version `1`.
     private func makeLibraryWithBundle(
         cachePolicy: EditorCachePolicy
@@ -427,11 +590,15 @@ struct EditorAssetLibraryTests {
         { url in url.path.contains("editor-assets") ? Data(manifestJSON.utf8) : Data("mock content".utf8) }
     }
 
-    /// Rewrites `bundle`'s download date on disk to `interval` seconds ago.
+    /// The script in ``manifestJSON(scriptVersion:)`` with version `1`.
+    private static let scriptURL = URL(string: "https://example.com/plugin.js?ver=1")!
+
+    /// Makes it `interval` seconds since the site's manifest was last found to match `bundle`.
     private func backdate(_ bundle: EditorAssetBundle, by interval: TimeInterval) throws {
         try EditorAssetBundle(
             manifest: bundle.manifest,
-            downloadDate: Date(timeIntervalSinceNow: -interval),
+            downloadDate: bundle.downloadDate,
+            lastCheckedDate: Date(timeIntervalSinceNow: -interval),
             bundleRoot: bundle.bundleRoot
         ).writeManifest()
     }
@@ -967,10 +1134,15 @@ final class EditorAssetLibraryMockHTTPClient: EditorHTTPClientProtocol, @uncheck
     var downloadedURLs: [URL] = []
     private let lock = NSLock()
 
+    /// Requests made via `perform(_:)`, in order.
+    private var _requests: [URLRequest] = []
+    var requests: [URLRequest] {
+        lock.withLock { _requests }
+    }
+
     /// URLs requested via `perform(_:)`. Use this to verify which endpoints were called.
-    private var _requestedURLs: [URL] = []
     var requestedURLs: [URL] {
-        lock.withLock { _requestedURLs }
+        requests.compactMap(\.url)
     }
 
     /// Handler for generating response data based on request URL.
@@ -983,7 +1155,7 @@ final class EditorAssetLibraryMockHTTPClient: EditorHTTPClientProtocol, @uncheck
 
         lock.withLock {
             getCallCount += 1
-            _requestedURLs.append(url)
+            _requests.append(urlRequest)
         }
 
         let responseData = try urlResponseHandler(url)
