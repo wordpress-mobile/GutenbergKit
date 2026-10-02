@@ -1,11 +1,4 @@
-/**
- * WordPress dependencies
- */
-import { useRef, useCallback } from '@wordpress/element';
-
-/**
- * Internal dependencies
- */
+import { useRef, useCallback, useLayoutEffect } from '@wordpress/element';
 import { editorLoaded } from '../../utils/bridge';
 
 /**
@@ -24,6 +17,7 @@ export function useEditorReady() {
 	const editorVisible = useRef( false );
 	const notified = useRef( false );
 	const observerRef = useRef( null );
+	const frameRef = useRef( null );
 
 	const tryNotify = useCallback( () => {
 		if (
@@ -34,9 +28,16 @@ export function useEditorReady() {
 			notified.current = true;
 			// Defer one frame so the browser has painted the editor content
 			// before the native host starts the fade-in animation.
-			requestAnimationFrame( editorLoaded );
+			frameRef.current = requestAnimationFrame( editorLoaded );
 		}
 	}, [] );
+
+	// An editor that crashes before the deferred frame runs must not report
+	// itself loaded after the host has been told it is unavailable. Cancelling in
+	// a layout effect runs while React commits the crash, before the error
+	// boundary's `componentDidCatch` reports it; a passive effect runs a task
+	// later, leaving the frame free to fire in between.
+	useLayoutEffect( () => () => cancelAnimationFrame( frameRef.current ), [] );
 
 	const markBridgeReady = useCallback( () => {
 		bridgeReady.current = true;

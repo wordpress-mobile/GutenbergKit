@@ -1,11 +1,4 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-/**
- * Internal dependencies
- */
 import { setUpEditorEnvironment } from './editor-environment';
 import {
 	awaitGBKitGlobal,

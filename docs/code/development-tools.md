@@ -23,7 +23,7 @@ The [React Developer Tools](https://react.dev/learn/react-developer-tools) allow
 1. Start the standalone DevTools server:
 
     ```bash
-    make dev-tools
+    make start-devtools
     ```
 
     This opens a standalone window that will display your React component tree.
@@ -31,7 +31,7 @@ The [React Developer Tools](https://react.dev/learn/react-developer-tools) allow
 2. Start the development server:
 
     ```bash
-    make dev-server
+    make serve-dev
     ```
 
 3. For Android emulators only, set up port forwarding:

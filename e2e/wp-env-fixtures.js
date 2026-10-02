@@ -1,12 +1,5 @@
-/**
- * External dependencies
- */
 import fs from 'node:fs';
 import path from 'node:path';
-
-/**
- * Internal dependencies
- */
 import { fetchJson } from './fetch-json';
 
 const CREDENTIALS_PATH = path.resolve(

@@ -1,14 +1,7 @@
-/**
- * WordPress dependencies
- */
 import { addFilter, removeFilter } from '@wordpress/hooks';
 import { render, renderHook, waitFor } from '@testing-library/react';
-
-/**
- * Internal dependencies
- */
-import { useMediaUpload } from '../use-media-upload';
 import { describe, it, expect, vi, afterAll, afterEach } from 'vitest';
+import { useMediaUpload } from '../use-media-upload';
 import { openMediaLibrary } from '../../../utils/bridge';
 import { warn } from '../../../utils/logger';
 

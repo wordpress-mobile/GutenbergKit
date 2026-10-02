@@ -1,11 +1,4 @@
-/**
- * WordPress dependencies
- */
-import { useEffect } from '@wordpress/element';
-
-/**
- * Internal dependencies
- */
+import { useEffect, useRef } from '@wordpress/element';
 import { onModalDialogOpened, onModalDialogClosed } from '../../utils/bridge';
 
 /**
@@ -22,11 +15,27 @@ import { onModalDialogOpened, onModalDialogClosed } from '../../utils/bridge';
  * @return {void}
  */
 export function useModalDialogState( isModalVisible, dialogType ) {
+	const isModalVisibleRef = useRef( isModalVisible );
+
 	useEffect( () => {
+		isModalVisibleRef.current = isModalVisible;
+
 		if ( isModalVisible ) {
 			onModalDialogOpened( dialogType );
 		} else {
 			onModalDialogClosed( dialogType );
 		}
 	}, [ isModalVisible, dialogType ] );
+
+	// The editor can unmount with a dialog still open, most notably when
+	// `EditorErrorBoundary` catches. Report the dialog closed so the host
+	// does not keep its navigation disabled for a dialog that no longer exists.
+	useEffect(
+		() => () => {
+			if ( isModalVisibleRef.current ) {
+				onModalDialogClosed( dialogType );
+			}
+		},
+		[ dialogType ]
+	);
 }

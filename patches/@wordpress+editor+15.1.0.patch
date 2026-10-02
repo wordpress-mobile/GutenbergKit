@@ -1,8 +1,8 @@
 diff --git a/node_modules/@wordpress/editor/package.json b/node_modules/@wordpress/editor/package.json
-index e068a9a..fcfeee8 100644
+index ffae000..642d54f 100644
 --- a/node_modules/@wordpress/editor/package.json
 +++ b/node_modules/@wordpress/editor/package.json
-@@ -38,7 +38,8 @@
+@@ -37,7 +37,8 @@
  			"import": "./build-module/index.mjs",
  			"require": "./build/index.cjs"
  		},
@@ -10,5 +10,5 @@ index e068a9a..fcfeee8 100644
 +		"./package.json": "./package.json",
 +		"./build-style/*": "./build-style/*"
  	},
- 	"react-native": "src/index",
  	"wpScript": true,
+ 	"types": "build-types",

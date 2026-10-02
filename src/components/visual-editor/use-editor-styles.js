@@ -1,6 +1,3 @@
-/**
- * WordPress dependencies
- */
 import { store as editorStore } from '@wordpress/editor';
 import { useSelect } from '@wordpress/data';
 import { store as editPostStore } from '@wordpress/edit-post';
@@ -10,12 +7,12 @@ import { getLayoutStyles } from '@wordpress/global-styles-engine';
 /**
  * Custom hook to retrieve and memoize editor styles.
  *
- * @param {...any} additionalStyles Additional styles to add to the default styles.
+ * @param {...string} additionalStyles Additional styles to add to the default styles.
  *
  * @todo This should be exported from Core so no reimplementation is needed.
  * @see https://github.com/WordPress/gutenberg/blob/a4d79e85a06e06b9123778e6991ac27b0bbe351d/packages/edit-post/src/components/layout/index.js#L86
  *
- * @return {any[]} An array of editor styles.
+ * @return {Object[]} An array of editor styles.
  */
 export function useEditorStyles( ...additionalStyles ) {
 	const { hasThemeStyleSupport, editorSettings } = useSelect( ( select ) => {

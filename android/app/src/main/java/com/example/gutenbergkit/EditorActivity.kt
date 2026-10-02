@@ -57,7 +57,22 @@ import org.wordpress.gutenberg.model.EditorDependenciesSerializer
 import rs.wordpress.api.kotlin.WpRequestResult
 import uniffi.wp_api.PostEndpointType
 import uniffi.wp_api.PostUpdateParams
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+
+// Throws from the selector the editor reads to choose between the visual and
+// code editors, so the crash reaches the editor's error boundary in either mode
+// rather than a single block's.
+private const val TRIGGER_EDITOR_CRASH_SCRIPT = """
+    (() => {
+        const editor = wp.data.select('core/editor');
+        editor.getEditorMode = () => {
+            throw new Error('Editor crash triggered from the demo app');
+        };
+        wp.data.dispatch('core/editor').updateEditorSettings({});
+    })();
+"""
 
 class EditorActivity : ComponentActivity() {
 
@@ -148,12 +163,21 @@ fun EditorScreen(
     var hasUndoState by remember { mutableStateOf(false) }
     var hasRedoState by remember { mutableStateOf(false) }
     var isCodeEditorEnabled by remember { mutableStateOf(false) }
+    var isEditorAvailable by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
     var gutenbergViewRef by remember { mutableStateOf<GutenbergView?>(null) }
+    val openedContent = GutenbergView.LatestContent(configuration.title, configuration.content)
+    // The newest content read from the editor, held in memory as a host app's
+    // autosave would. A read with no changes since the previous one returns the
+    // `originalContent` it is given, so pass this rather than the configuration's.
+    var latestContent by remember { mutableStateOf(openedContent) }
+    // The content most recently persisted via Save.
+    var savedContent by remember { mutableStateOf(openedContent) }
     val saveScope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    val canSave = !isSaving && accountId != null && configuration.postId != null
+    val hasChanges = latestContent != savedContent
+    val canSave = isEditorAvailable && !isSaving && accountId != null && configuration.postId != null && hasChanges
 
     BackHandler(enabled = isModalDialogOpen) {
         gutenbergViewRef?.dismissTopModal()
@@ -180,7 +204,7 @@ fun EditorScreen(
                 actions = {
                     IconButton(
                         onClick = { gutenbergViewRef?.undo() },
-                        enabled = hasUndoState && !isModalDialogOpen
+                        enabled = isEditorAvailable && hasUndoState && !isModalDialogOpen
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Undo,
@@ -189,7 +213,7 @@ fun EditorScreen(
                     }
                     IconButton(
                         onClick = { gutenbergViewRef?.redo() },
-                        enabled = hasRedoState && !isModalDialogOpen
+                        enabled = isEditorAvailable && hasRedoState && !isModalDialogOpen
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Redo,
@@ -204,15 +228,23 @@ fun EditorScreen(
                             isSaving = true
                             saveScope.launch {
                                 try {
+                                    var readContent = latestContent
                                     val errorMessage = persistPost(
                                         context = context,
                                         view = view,
                                         configuration = configuration,
                                         accountId = accountId,
-                                        postId = postId
+                                        postId = postId,
+                                        originalContent = latestContent.content,
+                                        onRead = {
+                                            latestContent = it
+                                            readContent = it
+                                        }
                                     )
                                     if (errorMessage != null) {
                                         Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
+                                    } else {
+                                        savedContent = readContent
                                     }
                                 } finally {
                                     isSaving = false
@@ -228,7 +260,7 @@ fun EditorScreen(
                     Box {
                         IconButton(
                             onClick = { showMenu = true },
-                            enabled = !isModalDialogOpen
+                            enabled = isEditorAvailable && !isModalDialogOpen
                         ) {
                             Icon(
                                 imageVector = Icons.Default.MoreVert,
@@ -244,6 +276,16 @@ fun EditorScreen(
                                 onClick = {
                                     isCodeEditorEnabled = !isCodeEditorEnabled
                                     gutenbergViewRef?.textEditorEnabled = isCodeEditorEnabled
+                                    showMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.trigger_editor_crash)) },
+                                onClick = {
+                                    gutenbergViewRef?.editorWebView?.evaluateJavascript(
+                                        TRIGGER_EDITOR_CRASH_SCRIPT,
+                                        null
+                                    )
                                     showMenu = false
                                 }
                             )
@@ -269,6 +311,8 @@ fun EditorScreen(
                     )
 
                     gutenbergViewRef = this
+                    setEditorDidBecomeAvailable { isEditorAvailable = true }
+                    setEditorDidBecomeUnavailable { isEditorAvailable = false }
                     setModalDialogStateListener(object : GutenbergView.ModalDialogStateListener {
                         override fun onModalDialogOpened(dialogType: String) {
                             isModalDialogOpen = true
@@ -330,11 +374,33 @@ fun EditorScreen(
                                 .show()
                         }
                     })
-                    // Demo app has no persistence layer, so return null.
-                    // In a real app, return the persisted title and content from autosave.
+                    // Mirror a host app's autosave: keep the latest content in memory so
+                    // Save reflects unsaved changes and an editor reload restores them.
+                    setContentChangeListener(object : GutenbergView.ContentChangeListener {
+                        override fun onContentChanged() {
+                            // Called on the JavaScript bridge thread.
+                            post {
+                                getTitleAndContent(
+                                    originalContent = latestContent.content,
+                                    callback = object : GutenbergView.TitleAndContentCallback {
+                                        override fun onResult(title: CharSequence, content: CharSequence) {
+                                            latestContent = GutenbergView.LatestContent(
+                                                title = title.toString(),
+                                                content = content.toString()
+                                            )
+                                        }
+
+                                        override fun onError(error: Throwable) {
+                                            Log.e("EditorActivity", "Failed to read the editor content", error)
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    })
                     setLatestContentProvider(object : GutenbergView.LatestContentProvider {
                         override fun getLatestContent(): GutenbergView.LatestContent? {
-                            return null
+                            return latestContent
                         }
                     })
                     if (enableNativeMediaUpload) {
@@ -358,19 +424,35 @@ private suspend fun persistPost(
     view: GutenbergView,
     configuration: EditorConfiguration,
     accountId: ULong,
-    postId: UInt
+    postId: UInt,
+    originalContent: CharSequence,
+    onRead: (GutenbergView.LatestContent) -> Unit
 ): String? {
     return try {
         val titleAndContent = suspendCancellableCoroutine<Pair<CharSequence, CharSequence>> { cont ->
             view.getTitleAndContent(
-                originalContent = configuration.content,
+                originalContent = originalContent,
                 callback = object : GutenbergView.TitleAndContentCallback {
                     override fun onResult(title: CharSequence, content: CharSequence) {
                         if (cont.isActive) cont.resume(title to content)
                     }
+
+                    override fun onError(error: Throwable) {
+                        if (cont.isActive) {
+                            cont.resumeWithException(
+                                IllegalStateException("Could not read the editor content", error)
+                            )
+                        }
+                    }
                 }
             )
         }
+        onRead(
+            GutenbergView.LatestContent(
+                title = titleAndContent.first.toString(),
+                content = titleAndContent.second.toString()
+            )
+        )
 
         val app = context.applicationContext as GutenbergKitApplication
         val account = app.accountRepository.all().firstOrNull { it.id() == accountId }
@@ -407,6 +489,8 @@ private suspend fun persistPost(
                 context.getString(R.string.save_failed_generic)
             }
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Log.e("EditorActivity", "Failed to persist post $postId", e)
         context.getString(R.string.save_failed_with_reason, e.message ?: "unknown error")

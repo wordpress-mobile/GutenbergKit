@@ -26,15 +26,15 @@ Once started, the **"Local WordPress"** option in both the iOS and Android demo 
 
 ## Available Commands
 
-| Command                                 | Description                                                   |
-| --------------------------------------- | ------------------------------------------------------------- |
-| `make wp-env-start`                     | Start the environment and provision credentials               |
-| `make wp-env-stop`                      | Stop the environment                                          |
-| `make wp-env-clean`                     | Remove downloaded WordPress, plugin, and theme files          |
-| `make wp-env-android-urls`              | Report whether WordPress emits emulator-reachable URLs        |
-| `make wp-env-android-urls MODE=on\|off` | Emit `10.0.2.2` URLs for the Android emulator, or `localhost` |
+| Command                                        | Description                                                   |
+| ---------------------------------------------- | ------------------------------------------------------------- |
+| `make wp-env-start`                            | Start the environment and provision credentials               |
+| `make wp-env-stop`                             | Stop the environment                                          |
+| `make wp-env-clean`                            | Remove downloaded files and cached credentials                |
+| `make wp-env-config-android-urls`              | Report whether WordPress emits emulator-reachable URLs        |
+| `make wp-env-config-android-urls MODE=on\|off` | Emit `10.0.2.2` URLs for the Android emulator, or `localhost` |
 
-The site is rebuilt from scratch on every start, so stopping the environment discards any content you created. Use `make wp-env-clean` when you also want to remove the downloaded WordPress, plugin, and theme files.
+The site is rebuilt from scratch on every start, so stopping the environment discards any content you created. Use `make wp-env-clean` when you also want to remove the downloaded WordPress, plugin, and theme files, along with `.wp-env.credentials.json`.
 
 ## How It Works
 
@@ -88,7 +88,7 @@ The credentials remap above covers the site URL the app connects to. It does not
 To remap them, enable the URL override:
 
 ```bash
-make wp-env-android-urls MODE=on
+make wp-env-config-android-urls MODE=on
 ```
 
 This installs a mu-plugin (`gutenbergkit-android-urls.php`) that rewrites `localhost` and `127.0.0.1` to `10.0.2.2` in WordPress's URL output. The mu-plugins directory is mounted into the running server, so the change applies immediately — no restart, and existing credentials keep working.
@@ -98,7 +98,7 @@ Rebuild the Android app afterwards. This is needed for the URL change itself, no
 To revert (for browser access or iOS testing):
 
 ```bash
-make wp-env-android-urls MODE=off
+make wp-env-config-android-urls MODE=off
 ```
 
 Run it with no `MODE` to report the current setting.
@@ -106,7 +106,7 @@ Run it with no `MODE` to report the current setting.
 Two things to be aware of while the override is active:
 
 -   The WordPress admin dashboard (`http://localhost:8888/wp-admin/`) redirects to `10.0.2.2`, which doesn't resolve in a desktop browser.
--   The `/wp/v2/settings` endpoint still reports `url` as `localhost`, because that field reads the stored option directly rather than passing through the `site_url` and `home_url` filters. It is not a reliable way to check whether the override is on — use `make wp-env-android-urls` instead.
+-   The `/wp/v2/settings` endpoint still reports `url` as `localhost`, because that field reads the stored option directly rather than passing through the `site_url` and `home_url` filters. It is not a reliable way to check whether the override is on — use `make wp-env-config-android-urls` instead.
 
 ### Physical Devices
 
@@ -178,6 +178,7 @@ If the port belongs to an unrelated service, change the wp-env port in `.wp-env.
 ```
 
 The make targets read the port from wp-env, so a `port` key here — or the `WP_ENV_PORT` environment variable — applies to the port check and credential provisioning as well as to the server itself.
+
 ### Resetting the environment
 
 To start fresh, destroy the environment and recreate it:

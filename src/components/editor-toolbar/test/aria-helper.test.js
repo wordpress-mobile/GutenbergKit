@@ -1,11 +1,4 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, afterEach } from 'vitest';
-
-/**
- * Internal dependencies
- */
 import { modalize, unmodalize } from '../aria-helper';
 
 const ariaHidden = ( id ) =>

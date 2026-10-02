@@ -1,16 +1,5 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-/**
- * WordPress dependencies
- */
 import { setLocaleData } from '@wordpress/i18n';
-
-/**
- * Internal dependencies
- */
 import { configureLocale, isRTLLocale } from './localization';
 import { getGBKit } from './bridge';
 

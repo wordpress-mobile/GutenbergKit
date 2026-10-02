@@ -31,6 +31,9 @@ extension Logger {
 
     /// Logs upload server activity
     static let uploadServer = Logger(subsystem: "GutenbergKit", category: "upload-server")
+
+    /// Logs calls into the editor's JavaScript bridge
+    static let bridge = Logger(subsystem: "GutenbergKit", category: "bridge")
 }
 
 public struct SignpostMonitor: Sendable {

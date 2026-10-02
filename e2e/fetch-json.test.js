@@ -1,11 +1,4 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-
-/**
- * Internal dependencies
- */
 import { fetchJson } from './fetch-json';
 
 const CREDS = { authHeader: 'Basic dGVzdDp0ZXN0' };

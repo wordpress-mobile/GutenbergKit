@@ -1,6 +1,3 @@
-/**
- * External dependencies
- */
 import { defineConfig, devices } from '@playwright/test';
 
 const isCI = process.env.CI === 'true';

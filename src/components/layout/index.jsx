@@ -1,14 +1,8 @@
-/**
- * WordPress dependencies
- */
-import { ErrorBoundary, AutosaveMonitor } from '@wordpress/editor';
+import { AutosaveMonitor } from '@wordpress/editor';
 import { SnackbarNotices } from '@wordpress/notices';
 import { SlotFillProvider } from '@wordpress/components';
-
-/**
- * Internal dependencies
- */
 import Editor from '../editor';
+import EditorErrorBoundary from '../editor-error-boundary';
 import { onEditorContentChanged } from '../../utils/bridge';
 import EditorLoadNotice from '../editor-load-notice';
 import OfflineIndicator from '../offline-indicator';
@@ -16,7 +10,7 @@ import PopoverSlots from '../popover-slots';
 import './style.scss';
 
 /**
- * Top-level layout, including the Editor component wrapped in an ErrorBoundary.
+ * Top-level layout, including the Editor component wrapped in an error boundary.
  *
  * @param {Object}  props                  The settings passed along to the Editor component.
  * @param {boolean} props.pluginLoadFailed Whether plugin loading failed.
@@ -27,11 +21,14 @@ export default function Layout( props ) {
 	const { pluginLoadFailed, ...editorProps } = props;
 
 	return (
-		<ErrorBoundary canCopyContent>
+		<EditorErrorBoundary>
 			<SlotFillProvider>
 				<PopoverSlots />
 				<OfflineIndicator />
-				<AutosaveMonitor autosave={ onEditorContentChanged } />
+				<AutosaveMonitor
+					interval={ 1 }
+					autosave={ onEditorContentChanged }
+				/>
 				<Editor { ...editorProps }>
 					<SnackbarNotices className="gutenberg-kit-layout__snackbar" />
 				</Editor>
@@ -40,6 +37,6 @@ export default function Layout( props ) {
 					pluginLoadFailed={ pluginLoadFailed }
 				/>
 			</SlotFillProvider>
-		</ErrorBoundary>
+		</EditorErrorBoundary>
 	);
 }

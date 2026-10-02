@@ -1,12 +1,5 @@
-/**
- * External dependencies
- */
 import fs from 'fs';
 import path from 'path';
-
-/**
- * Internal dependencies
- */
 import { info, error, debug } from '../src/utils/logger.js';
 
 // Uses Node's built-in `fetch` (Node 20, per .nvmrc) so this script can
@@ -323,7 +316,7 @@ function hasValidTranslations( locale ) {
 		const content = fs.readFileSync( filePath, 'utf8' );
 		const translations = JSON.parse( content );
 		return translations && typeof translations === 'object';
-	} catch ( err ) {
+	} catch {
 		return false;
 	}
 }

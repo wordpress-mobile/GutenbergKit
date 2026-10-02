@@ -13,19 +13,19 @@ Important, high-level test cases are [documented](../test-cases.md) for manual t
 Test files follow the `*.test.{js,jsx}` naming convention.
 
 ```bash
-make test-js
+make test-web-unit
 ```
 
 ### Swift (Swift Testing)
 
 ```bash
-make test-swift-package
+make test-ios-library-simulator
 ```
 
 ### Android (JUnit)
 
 ```bash
-make test-android
+make test-android-library-unit
 ```
 
 ## E2E Tests
@@ -41,13 +41,13 @@ Locally, Playwright starts the Vite dev server (`npm run dev` on `:5173`) and re
 Run tests:
 
 ```bash
-make test-e2e
+make test-web-e2e
 ```
 
 Run in interactive UI mode:
 
 ```bash
-make test-e2e-ui
+make test-web-e2e-ui
 ```
 
 ### iOS E2E Tests (XCUITest)
@@ -66,20 +66,20 @@ Uses the Vite dev server for faster iteration — no production build required. 
 
 ```bash
 # Terminal 1
-make dev-server
+make serve-dev
 
 # Terminal 2
-make test-ios-e2e-dev
+make test-ios-app-e2e-dev
 ```
 
 This sets `TEST_RUNNER_GUTENBERG_EDITOR_URL`, which `xcodebuild` forwards to the test runner process (with the `TEST_RUNNER_` prefix stripped). The test setup then passes `GUTENBERG_EDITOR_URL` to the app under test via `launchEnvironment`, so the WebView loads from `http://localhost:5173` instead of the bundled assets.
 
 #### Production build (CI)
 
-Uses the production JS bundle built by Vite. This is what CI runs and is the default `make test-ios-e2e` target:
+Uses the production JS bundle built by Vite. This is what CI runs and is the default `make test-ios-app-e2e` target:
 
 ```bash
-make test-ios-e2e
+make test-ios-app-e2e
 ```
 
 The target depends on `build` and will handle it automatically.
@@ -88,8 +88,8 @@ The target depends on `build` and will handle it automatically.
 
 The mode is controlled by the `GUTENBERG_EDITOR_URL` environment variable. When set, `EditorViewController` loads from that URL; otherwise it loads from the bundled `index.html`.
 
--   `make test-ios-e2e-dev` — sets `TEST_RUNNER_GUTENBERG_EDITOR_URL=http://localhost:5173` and checks that the dev server is running before starting.
--   `make test-ios-e2e` — does not set the variable; runs a production build first.
+-   `make test-ios-app-e2e-dev` — sets `TEST_RUNNER_GUTENBERG_EDITOR_URL=http://localhost:5173` and checks that the dev server is running before starting.
+-   `make test-ios-app-e2e` — does not set the variable; runs a production build first.
 
 You can also pass the variable directly if you need a custom URL:
 
@@ -117,8 +117,8 @@ Lint JavaScript code using ESLint:
 
 ```bash
 # Auto-fix linting errors
-make lint-js-fix
+make lint-web-fix
 
 # Verify linting passes
-make lint-js
+make lint-web
 ```

@@ -1,12 +1,5 @@
-/**
- * WordPress dependencies
- */
 import { forwardRef } from '@wordpress/element';
 import { PostTitleRaw, PostTextEditor } from '@wordpress/editor';
-
-/**
- * Internal dependencies
- */
 import './style.scss';
 
 /**
@@ -18,7 +11,10 @@ import './style.scss';
  *
  * @return {Element} The rendered text editor component.
  */
-const TextEditor = forwardRef( function TextEditor( { hideTitle }, ref ) {
+const TextEditor = forwardRef( function UnforwardedTextEditor(
+	{ hideTitle },
+	ref
+) {
 	return (
 		<div className="gutenberg-kit-text-editor" ref={ ref }>
 			{ ! hideTitle && <PostTitleRaw /> }

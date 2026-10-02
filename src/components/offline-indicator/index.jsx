@@ -1,15 +1,8 @@
-/**
- * WordPress dependencies
- */
 import { speak } from '@wordpress/a11y';
 import { Icon } from '@wordpress/components';
 import { useState, useEffect } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { offline } from '@wordpress/icons';
-
-/**
- * Internal dependencies
- */
 import { getGBKit } from '../../utils/bridge';
 import './style.scss';
 
