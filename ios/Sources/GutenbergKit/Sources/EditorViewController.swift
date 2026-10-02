@@ -457,10 +457,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// this existed nothing cleared it, so stopping the server left every image insert
     /// failing with a connection error on a working connection.
     ///
-    /// Three copies hold the endpoint and all three have to go: the live page, the
-    /// `localStorage` copy `getGBKit()` falls back to, and the injected user script,
-    /// which would otherwise restore the dead port verbatim at the next document start
-    /// — including the reload that recovers a terminated WebContent process.
+    /// Two copies hold the endpoint and both have to go: the live page, and the injected
+    /// user script, which would otherwise restore the dead port verbatim at the next
+    /// document start — including the reload that recovers a terminated WebContent
+    /// process.
     private func revokeNativeUploadEndpoint() {
         webView.evaluateJavaScript(
             """
@@ -468,12 +468,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 window.GBKit.nativeUploadPort = null;
                 window.GBKit.nativeUploadToken = null;
             }
-            try {
-                const stored = JSON.parse(localStorage.getItem('GBKit') || '{}');
-                stored.nativeUploadPort = null;
-                stored.nativeUploadToken = null;
-                localStorage.setItem('GBKit', JSON.stringify(stored));
-            } catch (error) {}
             """
         ) { _, error in
             // Logged rather than surfaced: this runs while the editor is going away, so
