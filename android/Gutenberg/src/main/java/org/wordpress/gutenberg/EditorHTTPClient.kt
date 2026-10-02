@@ -10,6 +10,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import org.wordpress.gutenberg.model.EditorAuthorizationScope
 import org.wordpress.gutenberg.model.http.EditorHTTPHeaders
 import org.wordpress.gutenberg.model.http.EditorHttpMethod
 import java.io.File
@@ -120,10 +121,15 @@ sealed class EditorHTTPClientError : Exception() {
  * An HTTP client for making authenticated requests to the WordPress REST API.
  *
  * This class handles request signing, error parsing, and response validation.
- * All requests are automatically authenticated using the provided authorization header.
+ * A request within the client's [EditorAuthorizationScope] is authenticated using the provided
+ * authorization header. A request anywhere else — an asset on another party's host, say — goes
+ * out without it.
+ *
+ * @param authorizationScope The requests that carry [authHeader].
  */
 class EditorHTTPClient(
     private val authHeader: String,
+    private val authorizationScope: EditorAuthorizationScope,
     private val delegate: EditorHTTPClientDelegate? = null,
     private val requestTimeoutSeconds: Long = 60,
     okHttpClient: OkHttpClient? = null
@@ -139,11 +145,19 @@ class EditorHTTPClient(
             .writeTimeout(requestTimeoutSeconds, TimeUnit.SECONDS)
             .build()
 
+    /**
+     * Adds the site's credentials to a request for [url], if they may go there. The site's
+     * credentials are for the site, and a request can be for anywhere: an editor downloads assets
+     * from whichever hosts the site names.
+     */
+    private fun Request.Builder.authorize(url: String): Request.Builder =
+        if (authorizationScope.allows(url)) addHeader("Authorization", authHeader) else this
+
     override suspend fun download(url: String, destination: File): EditorHTTPClientDownloadResponse =
         withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url(url)
-                .addHeader("Authorization", authHeader)
+                .authorize(url)
                 .get()
                 .build()
 
@@ -186,7 +200,7 @@ class EditorHTTPClient(
 
             val request = Request.Builder()
                 .url(url)
-                .addHeader("Authorization", authHeader)
+                .authorize(url)
                 .method(method.toString(), requestBody)
                 .build()
 

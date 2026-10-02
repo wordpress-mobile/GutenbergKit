@@ -169,6 +169,17 @@ struct EditorConfigurationBuilderTests: MakesTestFixtures {
     #expect(config.authHeader == "Bearer token123")
   }
 
+  @Test("setAuthHeaderDomains updates authHeaderDomains, which names none by default")
+  func setAuthHeaderDomainsUpdatesAuthHeaderDomains() {
+    #expect(makeConfigurationBuilder().build().authHeaderDomains.isEmpty)
+
+    let config = makeConfigurationBuilder()
+      .setAuthHeaderDomains(["*.wp.com", "*.files.wordpress.com"])
+      .build()
+
+    #expect(config.authHeaderDomains == ["*.wp.com", "*.files.wordpress.com"])
+  }
+
   @Test("setEditorSettings updates editorSettings")
   func setEditorSettingsUpdatesEditorSettings() {
     let settings = #"{"colors":[]}"#
@@ -341,6 +352,7 @@ struct EditorConfigurationBuilderTests: MakesTestFixtures {
       .setSiteApiNamespace(["wp/v2"])
       .setNamespaceExcludedPaths(["/oembed"])
       .setAuthHeader("Bearer abc")
+      .setAuthHeaderDomains(["*.wp.com"])
       .setEditorSettings("{}")
       .setLocale("ja_JP")
       .setNativeInserterEnabled(true)

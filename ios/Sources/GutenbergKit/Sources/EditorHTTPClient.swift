@@ -56,7 +56,9 @@ public struct WPError: Decodable, Sendable {
 /// An HTTP client for making authenticated requests to the WordPress REST API.
 ///
 /// This actor handles request signing, error parsing, and response validation.
-/// All requests are automatically authenticated using the provided authorization header.
+/// A request within the client's ``EditorAuthorizationScope`` is authenticated using the provided
+/// authorization header. A request anywhere else — an asset on another party's host, say — goes
+/// out without it.
 public actor EditorHTTPClient: EditorHTTPClientProtocol {
 
     /// Errors that can occur during HTTP requests.
@@ -91,17 +93,39 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
 
     private let urlSession: URLSessionProtocol
     private let authHeader: String
+    private let authorizationScope: EditorAuthorizationScope
     private let delegate: EditorHTTPClientDelegate?
     private let requestTimeout: TimeInterval?
 
+    /// Creates a client for the site in `configuration`, which sends the site's credentials only
+    /// to the site.
+    public init(
+        configuration: EditorConfiguration,
+        urlSession: URLSessionProtocol = URLSession.shared,
+        delegate: EditorHTTPClientDelegate? = nil,
+        requestTimeout: TimeInterval? = nil
+    ) {
+        self.init(
+            urlSession: urlSession,
+            authHeader: configuration.authHeader,
+            authorizationScope: EditorAuthorizationScope(configuration: configuration),
+            delegate: delegate,
+            requestTimeout: requestTimeout
+        )
+    }
+
+    /// - Parameter authorizationScope: The requests that carry `authHeader`. A request outside it
+    ///   goes out without credentials.
     public init(
         urlSession: URLSessionProtocol,
         authHeader: String,
+        authorizationScope: EditorAuthorizationScope,
         delegate: EditorHTTPClientDelegate? = nil,
         requestTimeout: TimeInterval? = nil
     ) {
         self.urlSession = urlSession
         self.authHeader = authHeader
+        self.authorizationScope = authorizationScope
         self.delegate = delegate
         self.requestTimeout = requestTimeout
     }
@@ -175,12 +199,23 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
     /// the REST `requestTimeout` is dropped. Sharing the observer across both
     /// clients is sound because `EditorHTTPClientDelegate` is `Sendable`.
     public nonisolated func uploadClient() -> any EditorHTTPClientProtocol {
-        EditorHTTPClient(urlSession: urlSession, authHeader: authHeader, delegate: delegate)
+        EditorHTTPClient(
+            urlSession: urlSession,
+            authHeader: authHeader,
+            authorizationScope: authorizationScope,
+            delegate: delegate
+        )
     }
 
     private func configureRequest(_ request: URLRequest) -> URLRequest {
         var mutableRequest = request
-        mutableRequest.addValue(self.authHeader, forHTTPHeaderField: "Authorization")
+
+        // The site's credentials are for the site. A request can be for anywhere: an editor
+        // downloads assets from whichever hosts the site names.
+        if let url = request.url, self.authorizationScope.allows(url) {
+            mutableRequest.addValue(self.authHeader, forHTTPHeaderField: "Authorization")
+        }
+
         mutableRequest.addValue("\(Self.baseUserAgent) GutenbergKit/\(GutenbergKitVersion.version)", forHTTPHeaderField: "User-Agent")
 
         if let requestTimeout {
