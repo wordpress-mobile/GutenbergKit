@@ -45,6 +45,7 @@ The `.wp-env.json` file at the project root configures the environment:
 -   **Gutenberg plugin** is installed for the `/wp-block-editor/v1/settings` editor settings REST API endpoint.
 -   **Jetpack plugin** is installed with the blocks module auto-activated via a mu-plugin (`wp-env/mu-plugins/gutenbergkit-jetpack-blocks.php`), providing the `/wpcom/v2/editor-assets` endpoint and additional editor blocks.
 -   A **CORS mu-plugin** (`wp-env/mu-plugins/gutenbergkit-cors.php`) adds CORS headers to REST API responses, allowing requests from the Vite dev server, preview server, and native WebViews.
+-   A **media failure mu-plugin** (`wp-env/mu-plugins/gutenbergkit-media-failure.php`) can simulate a server-side image processing fatal on demand. Inactive by default — see [Simulating media upload failures](#simulating-media-upload-failures).
 -   **WP_DEBUG** and **WP_DEBUG_LOG** are enabled for development.
 
 ### Credential Provisioning
@@ -114,6 +115,34 @@ Physical devices cannot reach `localhost`. You'll need to:
 1. Find your machine's local IP address (e.g., `192.168.1.100`).
 2. Update the CORS mu-plugin to allow your IP.
 3. Manually create or edit `.wp-env.credentials.json` with the correct IP-based URLs.
+
+## Simulating Media Upload Failures
+
+When `wp_generate_attachment_metadata()` fatals server-side — commonly a PHP `memory_limit` or `max_execution_time` fatal on a large image — WordPress has already created the attachment row and sent an `X-WP-Upload-Attachment-ID` header. The editor reads that header off the resulting 5xx and retries `POST /wp/v2/media/<id>/post-process` up to five times, deleting the orphaned attachment if every attempt fails.
+
+`gutenbergkit-media-failure.php` reproduces that failure on demand so the retry can be exercised without a large image or a resource-starved host:
+
+```bash
+# Report the current mode.
+make wp-env-media-failure
+
+# Fail once per attachment, then succeed: the retry recovers the upload.
+make wp-env-media-failure MODE=recover
+
+# Fail every time: exhausts all five retries, then the orphan is deleted.
+make wp-env-media-failure MODE=always
+
+# Restore normal uploads.
+make wp-env-media-failure MODE=off
+```
+
+The mode is stored server-side, so it persists across uploads and retries until changed. It does not survive restarting wp-env — the Playground runtime starts from a fresh database, so the mode returns to `off` (and credentials need `make wp-env-start RESET=1`).
+
+Then upload an image from a demo app and watch the network requests. In `recover` mode the upload 500s and the following `post-process` call succeeds, leaving a complete attachment; in `always` mode you should see five `post-process` attempts followed by a `DELETE`.
+
+**Only the native upload server path recovers locally.** Reading `X-WP-Upload-Attachment-ID` cross-origin requires the site to list it in `Access-Control-Expose-Headers`, and WordPress core's `rest_send_cors_headers()` does not. Uploads routed through the native upload server recover on both platforms, since that server exposes the header itself.
+
+A **direct** upload (native media upload disabled) never recovers on iOS, which loads the editor from `file://`. It does not recover against wp-env on Android either: `GutenbergView` derives the asset domain from the site's _host_, which drops the port, so the editor at `http://10.0.2.2` is cross-origin with the site at `http://10.0.2.2:8888`. Direct uploads are only same-origin — and therefore only recover — when the site runs on the scheme's default port, as production sites do.
 
 ## WordPress Admin
 

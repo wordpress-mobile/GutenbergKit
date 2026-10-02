@@ -9,12 +9,13 @@
  */
 function gutenbergkit_cors_allowed_origins() {
 	return array(
-		'http://localhost:5173',                    // Vite dev server
-		'http://localhost:4173',                    // Vite preview server
-		'http://10.0.2.2:5173',                    // Vite dev server (Android emulator)
-		'http://10.0.2.2:4173',                    // Vite preview server (Android emulator)
-		'https://appassets.androidplatform.net',   // Android production build (HTTPS site)
-		'http://appassets.androidplatform.net',    // Android production build (HTTP site)
+		'http://localhost:5173',                 // Vite dev server
+		'http://localhost:4173',                 // Vite preview server
+		'http://10.0.2.2',                       // wp-env site origin (Android emulator)
+		'http://10.0.2.2:5173',                  // Vite dev server (Android emulator)
+		'http://10.0.2.2:4173',                  // Vite preview server (Android emulator)
+		'https://appassets.androidplatform.net', // Android production build (HTTPS site)
+		'http://appassets.androidplatform.net',  // Android production build (HTTP site)
 	);
 }
 
