@@ -7,7 +7,7 @@ import {
 import { configureLocale } from './localization';
 import { configureAdminGlobals } from './admin-globals';
 import { loadEditorAssets } from './editor-loader';
-import { configureAjax, configureMediaAjax } from './ajax';
+import { configureAjax } from './ajax';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge';
 import { initializeFetchInterceptor } from './fetch-interceptor';
 import EditorLoadError from '../components/editor-load-error';
@@ -34,7 +34,6 @@ export async function setUpEditorEnvironment() {
 		configureAdminGlobals( isRTL );
 		await initializeWordPressGlobals();
 		await configureApiFetch();
-		configureAjax();
 		const pluginLoadResult = await loadPluginsIfEnabled();
 		await initializeEditor( pluginLoadResult );
 	} catch ( err ) {
@@ -143,7 +142,7 @@ async function initializeEditor( pluginLoadResult = {} ) {
 	const { initializeEditor: _initializeEditor } = await import( './editor' );
 	const { allowedBlockTypes } = pluginLoadResult;
 
-	configureMediaAjax();
+	configureAjax();
 
 	if ( ! allowedBlockTypes?.includes( 'videopress/video' ) ) {
 		// The VideoPress block isn't available, so initialize the bridge to handle

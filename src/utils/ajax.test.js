@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { configureAjax, configureMediaAjax, getAjaxUrl } from './ajax';
+import { configureAjax, getAjaxUrl } from './ajax';
 import * as bridge from './bridge';
 import * as logger from './logger';
 
@@ -401,19 +401,83 @@ describe( 'configureAjax', () => {
 		} );
 	} );
 
-	it( 'should not alias the media AJAX methods', () => {
-		bridge.getGBKit.mockReturnValue( {
-			siteURL: 'https://example.com',
-			authHeader: null,
+	describe( 'Media AJAX configuration', () => {
+		it( 'should alias wp.media.ajax to wp.ajax.send', () => {
+			const mockSend = vi.fn();
+			bridge.getGBKit.mockReturnValue( {
+				siteURL: 'https://example.com',
+				authHeader: null,
+			} );
+
+			global.window.wp = {
+				ajax: {
+					send: mockSend,
+					post: vi.fn(),
+					settings: {},
+				},
+			};
+
+			configureAjax();
+
+			expect( global.window.wp.media.ajax ).toBe( mockSend );
 		} );
 
-		global.window.wp = {
-			ajax: { send: vi.fn(), post: vi.fn(), settings: {} },
-		};
+		it( 'should alias wp.media.post to wp.ajax.post', () => {
+			const mockPost = vi.fn();
+			bridge.getGBKit.mockReturnValue( {
+				siteURL: 'https://example.com',
+				authHeader: null,
+			} );
 
-		configureAjax();
+			global.window.wp = {
+				ajax: {
+					send: vi.fn(),
+					post: mockPost,
+					settings: {},
+				},
+			};
 
-		expect( global.window.wp.media ).toBeUndefined();
+			configureAjax();
+
+			expect( global.window.wp.media.post ).toBe( mockPost );
+		} );
+
+		it( 'should not initialize wp.media when wp.ajax.send is unavailable', () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteURL: 'https://example.com',
+				authHeader: null,
+			} );
+
+			global.window.wp = {};
+
+			configureAjax();
+
+			expect( global.window.wp.media ).toBeUndefined();
+			expect( logger.warn ).toHaveBeenCalledWith(
+				'Unable to configure media AJAX: wp.ajax.send/post not available'
+			);
+		} );
+
+		it( 'should warn when wp.ajax.send or wp.ajax.post are not available', () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteURL: 'https://example.com',
+				authHeader: null,
+			} );
+
+			// wp.ajax exists but without send/post (e.g., wp-util.js failed to load)
+			global.window.wp = {
+				ajax: {
+					settings: {},
+				},
+			};
+
+			configureAjax();
+
+			expect( logger.warn ).toHaveBeenCalledWith(
+				'Unable to configure media AJAX: wp.ajax.send/post not available'
+			);
+			expect( global.window.wp.media ).toBeUndefined();
+		} );
 	} );
 
 	describe( 'Invalid siteURL handling', () => {
@@ -430,80 +494,6 @@ describe( 'configureAjax', () => {
 			);
 			expect( mockJQueryAjaxPrefilter ).not.toHaveBeenCalled();
 		} );
-	} );
-} );
-
-describe( 'configureMediaAjax', () => {
-	let originalWp;
-
-	beforeEach( () => {
-		vi.clearAllMocks();
-		originalWp = global.window.wp;
-	} );
-
-	afterEach( () => {
-		global.window.wp = originalWp;
-	} );
-
-	it( 'should alias wp.media.ajax to wp.ajax.send', () => {
-		const mockSend = vi.fn();
-		global.window.wp = {
-			ajax: { send: mockSend, post: vi.fn(), settings: {} },
-		};
-
-		configureMediaAjax();
-
-		expect( global.window.wp.media.ajax ).toBe( mockSend );
-	} );
-
-	it( 'should alias wp.media.post to wp.ajax.post', () => {
-		const mockPost = vi.fn();
-		global.window.wp = {
-			ajax: { send: vi.fn(), post: mockPost, settings: {} },
-		};
-
-		configureMediaAjax();
-
-		expect( global.window.wp.media.post ).toBe( mockPost );
-	} );
-
-	it( 'should preserve existing wp.media properties', () => {
-		const frame = vi.fn();
-		global.window.wp = {
-			ajax: { send: vi.fn(), post: vi.fn(), settings: {} },
-			media: { frame },
-		};
-
-		configureMediaAjax();
-
-		expect( global.window.wp.media.frame ).toBe( frame );
-	} );
-
-	it( 'should not initialize wp.media when wp.ajax is unavailable', () => {
-		global.window.wp = {};
-
-		configureMediaAjax();
-
-		expect( global.window.wp.media ).toBeUndefined();
-		expect( logger.warn ).toHaveBeenCalledWith(
-			'Unable to configure media AJAX: wp.ajax.send/post not available'
-		);
-	} );
-
-	it( 'should warn when wp.ajax.send or wp.ajax.post are not available', () => {
-		// wp.ajax exists but without send/post (e.g., wp-util.js failed to load)
-		global.window.wp = {
-			ajax: {
-				settings: {},
-			},
-		};
-
-		configureMediaAjax();
-
-		expect( logger.warn ).toHaveBeenCalledWith(
-			'Unable to configure media AJAX: wp.ajax.send/post not available'
-		);
-		expect( global.window.wp.media ).toBeUndefined();
 	} );
 } );
 
