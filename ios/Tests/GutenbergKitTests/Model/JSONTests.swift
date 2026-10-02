@@ -819,6 +819,43 @@ struct JSONTests {
     #expect(decodedFalse == originalFalse)
   }
 
+  // MARK: - Description Tests
+
+  @Test("description is the value as JSON")
+  func descriptionIsJSON() throws {
+    let json: JSON = ["b": [1, 2.5, "three", true, nil], "a": ["url": "https://example.com/a"]]
+
+    #expect(try JSON(Data(json.description.utf8)) == json)
+    // Readable: one member to a line, in a stable order, with slashes left alone
+    #expect(json.description.contains("\n"))
+    #expect(json.description.contains("https://example.com/a"))
+    #expect(try #require(json.description.firstRange(of: #""a""#)).lowerBound < #require(json.description.firstRange(of: #""b""#)).lowerBound)
+  }
+
+  @Test("description handles a value that isn't an object or an array")
+  func descriptionHandlesFragments() {
+    #expect(JSON.string("a/b").description == #""a/b""#)
+    #expect(JSON.number(1.5).description == "1.5")
+    #expect(JSON.boolean(true).description == "true")
+    #expect(JSON.null.description == "null")
+  }
+
+  @Test("description handles a number that JSON can't represent")
+  func descriptionHandlesNonFiniteNumbers() {
+    #expect(JSON.number(.infinity).description == #""Infinity""#)
+    #expect(JSON.number(-.infinity).description == #""-Infinity""#)
+    #expect(JSON.number(.nan).description == #""NaN""#)
+  }
+
+  @Test("a value holding JSON can be described, as a failing expectation or a log message would")
+  func valuesHoldingJSONCanBeDescribed() throws {
+    let settings = try EditorSettings(data: Data(#"{"styles":[],"alignWide":true}"#.utf8))
+    let dependencies = EditorDependencies(editorSettings: settings, assetBundle: .empty, preloadList: nil)
+
+    #expect(String(describing: settings).contains("alignWide"))
+    #expect(String(reflecting: dependencies).contains("alignWide"))
+  }
+
   // MARK: - Resource File Validation Tests
 
   static let objectResourceFiles = [
