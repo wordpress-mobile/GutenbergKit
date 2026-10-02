@@ -33,7 +33,8 @@ struct MediaFileSchemeHandlerTests {
     #expect(task.header("Content-Type") == "video/mp4")
     #expect(task.header("Content-Length") == "\(contents.count)")
     #expect(task.header("Access-Control-Allow-Origin") == "*")
-    #expect(task.body == contents)
+    #expect(task.body.count == contents.count)
+    #expect(task.body.hasSameBytes(as: contents))
     #expect(handler.activeRequestCount == 0)
   }
 

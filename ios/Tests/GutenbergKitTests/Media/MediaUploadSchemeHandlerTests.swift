@@ -303,7 +303,7 @@ final class FakeSchemeTask: NSObject, WKURLSchemeTask, @unchecked Sendable {
     (try? JSONSerialization.jsonObject(with: body) as? [String: Any]) ?? [:]
   }
 
-  func waitUntilAnswered(timeout: Duration = .seconds(5)) async {
+  func waitUntilAnswered(timeout: Duration = patientTimeout) async {
     let deadline = ContinuousClock.now + timeout
     while !finished && failure == nil && ContinuousClock.now < deadline {
       try? await Task.sleep(for: .milliseconds(2))

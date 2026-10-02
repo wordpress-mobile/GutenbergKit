@@ -131,7 +131,7 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         #expect(result["status"] as? Int == 201)
         let received = try #require(uploader.receivedContents)
         #expect(received.count == size)
-        #expect(received == Self.pattern(count: size), "the file was reassembled out of order or short")
+        #expect(received.hasSameBytes(as: Self.pattern(count: size)), "the file was reassembled out of order or short")
         #expect(uploader.received?.filename == "clip.bin")
         #expect(uploader.received?.fields == [MediaUploadField(name: "post", value: "7")])
         #expect(uploader.received?.query == "?_embed")
@@ -259,14 +259,20 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         let page = directory.appending(component: "index.html")
         try Data("<!doctype html><title>upload test</title>".utf8).write(to: page)
         editor.webView.loadFileURL(page, allowingReadAccessTo: directory)
-        for _ in 0..<500 {
-            if !editor.webView.isLoading,
-               (try? await editor.webView.evaluateJavaScript("document.readyState")) as? String == "complete" {
-                return
+
+        var isLoaded = false
+        let deadline = ContinuousClock.now + patientTimeout
+        while !isLoaded && ContinuousClock.now < deadline {
+            let readyState = try? await editor.webView.evaluateJavaScript("document.readyState")
+            isLoaded = !editor.webView.isLoading && readyState as? String == "complete"
+            if !isLoaded {
+                try await Task.sleep(for: .milliseconds(10))
             }
-            try await Task.sleep(for: .milliseconds(10))
         }
-        Issue.record("the test page never finished loading")
+
+        // Stops the test here: carrying on in a page that never loaded fails it again, further
+        // on, with a JavaScript error that says nothing about why.
+        try #require(isLoaded, "the test page never finished loading")
     }
 
     /// Runs the page side of the upload protocol, as `nativeMediaUploadMiddleware` does.

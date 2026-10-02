@@ -20,7 +20,7 @@ struct MediaImportTests {
     let fileURL = try #require(MediaFileManager.fileURL(for: url, root: root))
     #expect(fileURL.lastPathComponent == "IMG 0001.MOV")
     #expect(fileURL.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent == "Uploads")
-    #expect(try Data(contentsOf: fileURL) == Data(contentsOf: source))
+    #expect(try Data(contentsOf: fileURL).hasSameBytes(as: Data(contentsOf: source)))
     #expect(try sharesStorage(fileURL, with: source), "the import copied the bytes instead of cloning them")
   }
 
