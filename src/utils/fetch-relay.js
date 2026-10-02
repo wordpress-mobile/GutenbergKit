@@ -1,6 +1,3 @@
-/**
- * Internal dependencies
- */
 import { getGBKit } from './bridge';
 import { debug, warn } from './logger';
 
@@ -96,9 +93,9 @@ export function createRelayFetch( next, { restRelay, siteApiRoot } ) {
  * Serializing a `FormData` is what gives it a boundary, so the `Content-Type`
  * the browser would have set is set here, as a `Blob`'s own type is.
  *
- * @param {*}       body    The request body, as `fetch` takes it.
+ * @param {unknown} body    The request body, as `fetch` takes it.
  * @param {Headers} headers The request headers, updated in place.
- * @return {Promise<*>} The body to send.
+ * @return {Promise<unknown>} The body to send.
  */
 async function bufferedBody( body, headers ) {
 	if ( body instanceof Blob ) {

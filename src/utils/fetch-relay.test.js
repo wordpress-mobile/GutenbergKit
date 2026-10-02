@@ -1,11 +1,4 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-
-/**
- * Internal dependencies
- */
 import { createRelayFetch, createRelayFetchWrapper } from './fetch-relay';
 import { getGBKit } from './bridge';
 import { warn } from './logger';
@@ -281,7 +274,7 @@ describe( 'createRelayFetch', () => {
 		/**
 		 * Asserts the wrapper passed the call through untouched.
 		 *
-		 * @param {any} input The `fetch` input.
+		 * @param {unknown} input The `fetch` input.
 		 */
 		async function expectPassthrough( input ) {
 			await relayFetch()( input );

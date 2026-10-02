@@ -284,9 +284,9 @@ function nativeUploadTransport( gbkit ) {
  * WordPress's response so the existing Gutenberg upload pipeline (blob previews,
  * save locking, entity caching, `post-process` recovery) works unchanged.
  *
- * @param {Object}                options   The api-fetch options.
- * @param {NativeUploadTransport} transport How to reach native code.
- * @param {Function}              next      The next middleware.
+ * @param {Object}                                options   The api-fetch options.
+ * @param {NativeUploadTransport}                 transport How to reach native code.
+ * @param {(options: Object) => Promise<unknown>} next      The next middleware.
  * @return {?Promise} The relayed upload, or `null` if not applicable.
  */
 function nativeMediaUpload( options, transport, next ) {
@@ -368,11 +368,11 @@ function loopbackUpload( options, file, query, { port, token } ) {
  * duplicated. From `finish` on, native code may already have sent the file, so a
  * failure there is reported, not retried.
  *
- * @param {Object}   options    The api-fetch options.
- * @param {File}     file       The file being uploaded.
- * @param {string}   query      The request's query string.
- * @param {string}   schemeBase The native upload scheme's base URL.
- * @param {Function} next       The next middleware, for the fallback.
+ * @param {Object}                                options    The api-fetch options.
+ * @param {File}                                  file       The file being uploaded.
+ * @param {string}                                query      The request's query string.
+ * @param {string}                                schemeBase The native upload scheme's base URL.
+ * @param {(options: Object) => Promise<unknown>} next       The next middleware, for the fallback.
  * @return {Promise<{response?: Response, fallback?: Promise}>} The outcome.
  */
 async function schemeUpload( options, file, query, schemeBase, next ) {
@@ -588,8 +588,8 @@ function relayUploadResponse( response, options ) {
 /**
  * Rejects an upload that could not reach native code, or whose relay failed.
  *
- * @param {*}      connectionError What the request rejected with.
- * @param {Object} options         The api-fetch options.
+ * @param {unknown} connectionError What the request rejected with.
+ * @param {Object}  options         The api-fetch options.
  * @return {never} Always throws.
  */
 function rejectUnreachableUpload( connectionError, options ) {

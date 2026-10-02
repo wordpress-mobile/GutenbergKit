@@ -292,7 +292,7 @@ describe( "core's media upload post-process middleware", () => {
 		 * A fake scheme whose `finish` relays WordPress's 5xx and attachment ID,
 		 * with `wordpress` answering everything sent straight to the site.
 		 *
-		 * @param {Function} wordpress Answers direct requests by URL.
+		 * @param {(path: string) => unknown} wordpress Answers direct requests by URL.
 		 */
 		function installScheme( wordpress ) {
 			global.fetch = vi.fn( ( url ) => {

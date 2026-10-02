@@ -1,15 +1,10 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-/**
- * Internal dependencies
- */
 import {
 	nativeMediaUploadMiddleware,
 	NATIVE_UPLOAD_CHUNK_SIZE,
 } from './api-fetch';
+import { getGBKit } from './bridge';
+import { warn } from './logger';
 
 vi.mock( './bridge', () => ( {
 	getGBKit: vi.fn( () => ( {} ) ),
@@ -20,9 +15,6 @@ vi.mock( './logger', () => ( {
 	warn: vi.fn(),
 	error: vi.fn(),
 } ) );
-
-import { getGBKit } from './bridge';
-import { warn } from './logger';
 
 const BASE = 'gbk-upload://upload';
 const SESSION = '0f8fad5b-d9cb-469f-a165-70867728950e';

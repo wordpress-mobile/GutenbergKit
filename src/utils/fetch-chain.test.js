@@ -1,11 +1,4 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-
-/**
- * Internal dependencies
- */
 import { installFetchWrappers } from './fetch-chain';
 
 vi.mock( './logger', () => ( {
