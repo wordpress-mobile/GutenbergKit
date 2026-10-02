@@ -591,22 +591,21 @@ export function withRateLimitRetry( fetchHandler ) {
 				isOk = false;
 			}
 
-			if (
-				response.status === 429 &&
-				attempt < RETRY_DELAYS_MS.length &&
-				! options.signal?.aborted
-			) {
-				const delay = getRetryDelay( response, attempt );
-				// A retry sent before a longer `Retry-After` elapses would fail too.
-				if ( delay <= MAX_RETRY_AFTER_MS ) {
-					warn(
-						`Retrying ${ method } ${
-							options.url ?? options.path
-						} after a 429 response`
-					);
-					await wait( delay );
-					continue;
+			if ( response.status === 429 && ! options.signal?.aborted ) {
+				const request = `${ method } ${ options.url ?? options.path }`;
+				if ( attempt < RETRY_DELAYS_MS.length ) {
+					const delay = getRetryDelay( response, attempt );
+					// A retry sent before a longer `Retry-After` elapses would fail too.
+					if ( delay <= MAX_RETRY_AFTER_MS ) {
+						info( `Retrying ${ request } after a 429 response` );
+						await wait( delay );
+						continue;
+					}
 				}
+				// core-data may cache this failure for the session.
+				warn( `Giving up on ${ request } after a 429 response`, {
+					retries: attempt,
+				} );
 			}
 
 			if ( options.parse === false ) {

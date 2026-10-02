@@ -10,6 +10,7 @@ import {
 import apiFetch from '@wordpress/api-fetch';
 import { configureApiFetch, withRateLimitRetry } from './api-fetch';
 import * as bridge from './bridge';
+import * as logger from './logger';
 
 vi.mock( './bridge', async ( importOriginal ) => {
 	const actual = await importOriginal();
@@ -18,6 +19,7 @@ vi.mock( './bridge', async ( importOriginal ) => {
 		getGBKit: vi.fn(),
 	};
 } );
+vi.mock( './logger' );
 
 describe( 'api-fetch credentials handling', () => {
 	let originalFetch;
@@ -403,6 +405,22 @@ describe( 'api-fetch credentials handling', () => {
 			expect( await request ).toEqual( { ok: true } );
 		} );
 
+		it( 'logs each retry as info rather than a warning', async () => {
+			global.fetch = vi
+				.fn()
+				.mockImplementationOnce( () => rateLimited() )
+				.mockImplementationOnce( okResponse );
+
+			const request = apiFetch( { path: '/wp/v2/taxonomies' } );
+			await vi.runAllTimersAsync();
+			await request;
+
+			expect( logger.info ).toHaveBeenCalledWith(
+				expect.stringContaining( 'Retrying GET' )
+			);
+			expect( logger.warn ).not.toHaveBeenCalled();
+		} );
+
 		it( 'waits longer before each retry', async () => {
 			global.fetch = vi
 				.fn()
@@ -513,6 +531,10 @@ describe( 'api-fetch credentials handling', () => {
 
 			await assertion;
 			expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+			expect( logger.warn ).toHaveBeenCalledWith(
+				expect.stringContaining( 'Giving up on GET' ),
+				{ retries: 0 }
+			);
 		} );
 
 		it( 'rejects as api-fetch would once retries run out', async () => {
@@ -526,6 +548,10 @@ describe( 'api-fetch credentials handling', () => {
 
 			await assertion;
 			expect( global.fetch ).toHaveBeenCalledTimes( 3 );
+			expect( logger.warn ).toHaveBeenCalledWith(
+				expect.stringContaining( 'Giving up on GET' ),
+				{ retries: 2 }
+			);
 		} );
 
 		it( 'rejects with the response once retries run out without parsing', async () => {
@@ -612,6 +638,7 @@ describe( 'api-fetch credentials handling', () => {
 
 			await assertion;
 			expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+			expect( logger.warn ).not.toHaveBeenCalled();
 		} );
 
 		it.each( [
