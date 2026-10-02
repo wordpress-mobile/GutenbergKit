@@ -252,6 +252,131 @@ val configuration = EditorConfiguration.builder()
     .build()
 ```
 
+## Media Handling
+
+The host can transform media before upload by supplying a `MediaProcessor` at init.
+To take over the upload itself, supply a `MediaUploader` instead — a processor only
+changes bytes; GutenbergKit still delivers them.
+
+```swift
+let editor = EditorViewController(
+    configuration: configuration,
+    mediaProcessor: ResizingProcessor(maxDimension: 2000)
+)
+```
+
+### Don't conform the object that owns the editor
+
+GutenbergKit never hands your processor the editor: every value crossing that boundary is a
+value type — a file URL, a MIME type, a filename. So a processor can only reach the editor
+if you put it there.
+
+That happens when you conform the object that already holds the editor in order to drive
+it. The editor holds the processor strongly in return — deliberately, so an in-flight upload
+can't lose it mid-request — which closes a retain cycle ARC cannot break. The editor is
+never deallocated, and each one strands a bound loopback listener.
+
+```swift
+// Leaks: coordinator -> editor -> mediaProcessor -> coordinator
+final class PostEditorCoordinator: MediaProcessor {
+    var editor: EditorViewController!
+    init(blog: Blog, configuration: EditorConfiguration) {
+        editor = EditorViewController(configuration: configuration, mediaProcessor: self)
+    }
+}
+```
+
+Use a leaf object instead. Nothing is lost: `processFile` is called off the main actor, so
+it could not have touched your coordinator's state regardless — whatever it needs is
+already separable:
+
+```swift
+final class PostEditorCoordinator {
+    private let editor: EditorViewController
+    init(blog: Blog, configuration: EditorConfiguration) {
+        editor = EditorViewController(
+            configuration: configuration,
+            mediaProcessor: BlogMediaProcessor(siteID: blog.dotComID, maxDimension: 2000)
+        )
+    }
+}
+```
+
+If your design genuinely requires the retaining shape, call `stopMediaHandling()` when you
+are finished with the editor. It is terminal — the editor cannot upload or delete media
+afterwards — so call it when the editor is going away, not when it is merely covered or
+backgrounded.
+
+### Android: permit cleartext to localhost
+
+**Android hosts must add localhost to their network security configuration, or native
+media handling will silently not run.**
+
+GutenbergKit serves media through a loopback HTTP server, which the editor reaches over
+cleartext `http://localhost`. Apps targeting API 28 or above deny cleartext by default, so
+without an entry the WebView blocks every upload request with
+`ERR_CLEARTEXT_NOT_PERMITTED` before it leaves the page. `GutenbergView` detects this and
+leaves the server down, so uploads fall back to the WebView's own path rather than failing
+against a server they can never reach.
+
+The failure is quiet by design — media still uploads — so the symptom is that your
+`MediaProcessor` or `MediaUploader` is simply never called. The only signal is a warning
+in logcat:
+
+```
+Cleartext to localhost is not permitted, so the native media upload server can't be
+reached from the WebView. Permit cleartext to localhost in the app's network security
+config to enable native media processing.
+```
+
+Add a `domain-config` to the file referenced by your `<application>`'s
+`android:networkSecurityConfig`:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>
+```
+
+This narrows cleartext to loopback only. It does not permit cleartext anywhere else — the
+rest of the app keeps whatever `base-config` (or the platform default) already applies.
+
+#### Why GutenbergKit can't ship this for you
+
+`android:networkSecurityConfig` is a single-valued attribute on `<application>`: an app
+has exactly one, and the XML files do not merge. A library that declares it collides with
+the host's, and the manifest merger fails the build until the app adds
+`tools:replace="android:networkSecurityConfig"` — which then discards the library's
+version entirely. It also collides with _other_ libraries that declare one; the WordPress
+Rust API client already does. And for a host that has no config of its own, a library's
+file would silently become the app's entire network security policy, replacing any
+certificate pinning or trust anchors it would otherwise have had.
+
+So the attribute has to be the app's. Only the app can arbitrate between the libraries
+that want a say in it.
+
+#### Devices running Android 16 and above
+
+API 36 added an implicit cleartext-permitted configuration for localhost, applied when the
+app's own config does not already name it. On those devices native media handling works
+without the entry above. GutenbergKit supports API 24 and up, so the entry is still
+required in practice — and it remains correct on Android 16, where naming localhost
+explicitly simply takes precedence over the implicit one.
+
+### Reusing a processor across editor sessions
+
+The editor holds the processor for its lifetime and releases it when it goes, so a processor
+built for a single editor needs no reference of its own. To use the same instance for
+several editors, keep your own reference — the editor drops only its own. Sharing is also
+the safer shape: a processor owned by something longer-lived than any editor is a leaf, so
+it cannot form the cycle above and there is nothing to tear down. It may be called
+concurrently if more than one editor is live, and it must not hold on to any editor it has
+served.
+
 ## Common Patterns
 
 ### Plugin Support

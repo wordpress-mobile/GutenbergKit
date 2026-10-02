@@ -64,7 +64,7 @@ Look for your local network IP address (typically in the format `192.168.x.x` or
 
 ### 2. Modify Network Security Configuration
 
-Android requires explicit network security configuration to allow cleartext (http) traffic to non-localhost addresses.
+Android requires explicit network security configuration to allow cleartext (http) traffic. The demo app's config already covers `localhost` and the emulator's `10.0.2.2` alias; a development machine reached over the LAN needs its own entry.
 
 **Temporarily** modify `android/app/src/main/res/xml/network_security_config.xml` to include your development machine's IP address:
 
@@ -72,6 +72,9 @@ Android requires explicit network security configuration to allow cleartext (htt
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">
+        <!-- Keep these: localhost carries the native media upload server -->
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
         <domain includeSubdomains="true">10.0.2.2</domain>
         <!-- Add your development machine's IP address here -->
         <domain includeSubdomains="true">192.168.1.100</domain>

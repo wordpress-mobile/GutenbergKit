@@ -112,6 +112,32 @@ struct EditorServiceTests: MakesTestFixtures {
     #expect(!postRequests.isEmpty, "Should request /posts/123 for positive post IDs")
   }
 
+  // MARK: - Progress
+
+  /// The first `prepare()` to finish clears the service's progress while the other still has
+  /// progress to report, so `incrementProgress` has to drop late progress rather than trap on it.
+  /// A shared bundle build delivers the same late progress to a service whose `prepare()` has
+  /// given up on it.
+  @Test("overlapping prepare() calls on one service don't trap on each other's progress")
+  func overlappingPrepareCallsDontTrap() async throws {
+    let client = GatedHTTPClient(respond: Self.editorServiceResponseHandler)
+    let service = EditorService(
+      configuration: makeConfiguration(),
+      httpClient: client,
+      storageRoot: .randomTemporaryDirectory,
+      cacheRoot: .randomTemporaryDirectory
+    )
+
+    let first = Task { try await GatedHTTPClient.$caller.withValue("first") { try await service.prepare() } }
+    let second = Task { try await GatedHTTPClient.$caller.withValue("second") { try await service.prepare() } }
+    try await waitUntil { client.isHolding("first") && client.isHolding("second") }
+
+    client.release("first")
+    _ = try await first.value
+    client.release("second")
+    _ = try await second.value
+  }
+
   // MARK: - Test Helpers
 
   /// URL-based response handler for EditorService.prepare() tests.
@@ -136,5 +162,45 @@ struct EditorServiceTests: MakesTestFixtures {
     default:
       return Data("{}".utf8)
     }
+  }
+}
+
+/// Answers every request from `respond`, but holds each one until the test releases the caller
+/// that made it — named by ``caller``, which a test sets around the work it starts.
+private final class GatedHTTPClient: EditorHTTPClientProtocol, @unchecked Sendable {
+  @TaskLocal static var caller = ""
+
+  private let respond: @Sendable (URL) -> Data
+  private let lock = NSLock()
+  private var holding: [String: Int] = [:]
+  private var released: Set<String> = []
+
+  init(respond: @escaping @Sendable (URL) -> Data) {
+    self.respond = respond
+  }
+
+  /// Whether a request from `caller` is being held.
+  func isHolding(_ caller: String) -> Bool {
+    lock.withLock { holding[caller, default: 0] > 0 }
+  }
+
+  /// Lets every request from `caller`, held or still to come, through.
+  func release(_ caller: String) {
+    lock.withLock { _ = released.insert(caller) }
+  }
+
+  func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
+    let caller = Self.caller
+    lock.withLock { holding[caller, default: 0] += 1 }
+    defer { lock.withLock { holding[caller, default: 0] -= 1 } }
+    while !lock.withLock({ released.contains(caller) }) {
+      try await Task.sleep(for: .milliseconds(5))
+    }
+    let url = try #require(urlRequest.url)
+    return (respond(url), try #require(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)))
+  }
+
+  func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse) {
+    throw URLError(.unsupportedURL)
   }
 }
