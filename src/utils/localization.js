@@ -2,7 +2,7 @@ import { setLocaleData } from '@wordpress/i18n';
 import { getGBKit } from './bridge';
 import { warn, debug } from './logger';
 
-export const DEFAULT_LOCALE = 'en';
+const DEFAULT_LOCALE = 'en';
 
 // Vite statically enumerates the translation bundles at build time, so the
 // loader map below is always in sync with what we actually ship.

@@ -7,15 +7,7 @@ vi.mock( './bridge', async ( importOriginal ) => ( {
 	getGBKit: vi.fn(),
 } ) );
 
-const GLOBALS = [
-	'ajaxurl',
-	'pagenow',
-	'typenow',
-	'adminpage',
-	'thousandsSeparator',
-	'decimalPoint',
-	'isRtl',
-];
+const GLOBALS = [ 'ajaxurl', 'pagenow', 'typenow', 'adminpage', 'isRtl' ];
 
 describe( 'configureAdminGlobals', () => {
 	beforeEach( () => {
@@ -30,7 +22,6 @@ describe( 'configureAdminGlobals', () => {
 		getGBKit.mockReturnValue( {
 			siteURL: 'https://example.com/',
 			post: { id: 42, type: 'page' },
-			locale: 'en_US',
 		} );
 
 		configureAdminGlobals();
@@ -40,10 +31,17 @@ describe( 'configureAdminGlobals', () => {
 			pagenow: 'page',
 			typenow: 'page',
 			adminpage: 'post-php',
-			thousandsSeparator: ',',
-			decimalPoint: '.',
 			isRtl: 0,
 		} );
+	} );
+
+	it( 'omits the number separator globals', () => {
+		getGBKit.mockReturnValue( {} );
+
+		configureAdminGlobals();
+
+		expect( window ).not.toHaveProperty( 'thousandsSeparator' );
+		expect( window ).not.toHaveProperty( 'decimalPoint' );
 	} );
 
 	it.each( [ undefined, -1, 0 ] )(
@@ -65,24 +63,6 @@ describe( 'configureAdminGlobals', () => {
 		expect( window.pagenow ).toBe( 'post' );
 		expect( window.typenow ).toBe( 'post' );
 		expect( window.ajaxurl ).toBeUndefined();
-	} );
-
-	it( 'derives number separators from the locale', () => {
-		getGBKit.mockReturnValue( { locale: 'de_DE' } );
-
-		configureAdminGlobals();
-
-		expect( window.thousandsSeparator ).toBe( '.' );
-		expect( window.decimalPoint ).toBe( ',' );
-	} );
-
-	it( 'falls back to en_US separators for an unrecognized locale', () => {
-		getGBKit.mockReturnValue( { locale: '!!' } );
-
-		configureAdminGlobals();
-
-		expect( window.thousandsSeparator ).toBe( ',' );
-		expect( window.decimalPoint ).toBe( '.' );
 	} );
 
 	it( 'flags a right-to-left editor', () => {
