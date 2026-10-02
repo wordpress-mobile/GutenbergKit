@@ -660,7 +660,7 @@ function wait( ms ) {
  *
  * @param {Response} response The response.
  * @param {boolean}  isOk     Whether the handler accepted the response.
- * @return {Promise<*>} The parsed body; rejects with it for an error response.
+ * @return {Promise<unknown>} The parsed body; rejects with it for an error response.
  */
 async function parseResponse( response, isOk ) {
 	if ( isOk && response.status === 204 ) {
