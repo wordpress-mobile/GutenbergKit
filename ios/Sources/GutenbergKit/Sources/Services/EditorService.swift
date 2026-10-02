@@ -65,7 +65,8 @@ public actor EditorService {
     ///     a time interval, or `.always` (the default) to use cached data regardless of age.
     ///     This policy applies to both API responses and plugin and theme assets. For assets, it
     ///     decides when to check the site's asset manifest again; an unchanged manifest keeps the
-    ///     bundle already on disk rather than downloading its assets again.
+    ///     bundle already on disk rather than downloading its assets again. `.ignore` is the
+    ///     exception: it downloads every asset again whether or not the manifest has changed.
     public init(
         configuration: EditorConfiguration,
         httpClient: (any EditorHTTPClientProtocol)? = nil,
