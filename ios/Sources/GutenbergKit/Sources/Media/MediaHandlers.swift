@@ -79,15 +79,6 @@ public enum ProcessedProxyFile: Sendable {
 /// `processFile` cannot be `mutating` (a `mutating` witness does not satisfy a
 /// non-mutating requirement), and its argument labels must match exactly. Either
 /// mistake resolves to the no-op default below instead of failing to build, leaving a
-/// processor that is never called. That
-/// reference must itself be `Sendable` — an actor, or a class made safe with a lock —
-/// because this protocol is `Sendable` and a `struct` conformer's stored properties
-/// inherit that requirement.
-///
-/// Two requirements a `struct` makes easy to miss, both of which compile silently:
-/// `processFile` cannot be `mutating` (a `mutating` witness does not satisfy a
-/// non-mutating requirement), and its argument labels must match exactly. Either
-/// mistake resolves to the no-op default below instead of failing to build, leaving a
 /// processor that is never called.
 public protocol MediaProcessor: Sendable {
     /// Whether this processor might transform a file with the given metadata.
