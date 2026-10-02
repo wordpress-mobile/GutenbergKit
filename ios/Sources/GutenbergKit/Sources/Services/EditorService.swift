@@ -180,13 +180,14 @@ public actor EditorService {
     }
 
     private func incrementProgress(for weight: DependencyWeights, fraction: Double = 1.0) async {
-        precondition(
-            self.progress != nil,
-            "Progress has not been initialized. This is a bug in the EditorService. Please file an issue."
-        )
+        // Progress can arrive after the `prepare()` it belongs to has returned and cleared it. A
+        // bundle build shared with another service may already be calling in when this service
+        // gives up on it, and an overlapping `prepare()` on this service is cleared by whichever
+        // finishes first. There is nothing left to report to, so drop it.
+        guard let current = self.progress else { return }
         let progress = EditorProgress(
-            completed: self.progress!.completed + Int(weight.rawValue * fraction),
-            total: self.progress!.total)
+            completed: current.completed + Int(weight.rawValue * fraction),
+            total: current.total)
         self.progress = progress
         await self.progressCallback?(progress)
     }
