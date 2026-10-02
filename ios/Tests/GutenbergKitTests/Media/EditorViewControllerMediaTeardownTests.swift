@@ -260,8 +260,10 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         try Data("<!doctype html><title>upload test</title>".utf8).write(to: page)
         editor.webView.loadFileURL(page, allowingReadAccessTo: directory)
 
+        // Longer than `patientTimeout`: on the CI machine a web view takes about a minute to load
+        // its first page, however small. Three runs there each had it answering 60 to 66 seconds in.
         var isLoaded = false
-        let deadline = ContinuousClock.now + patientTimeout
+        let deadline = ContinuousClock.now + .seconds(180)
         while !isLoaded && ContinuousClock.now < deadline {
             let readyState = try? await editor.webView.evaluateJavaScript("document.readyState")
             isLoaded = !editor.webView.isLoading && readyState as? String == "complete"
