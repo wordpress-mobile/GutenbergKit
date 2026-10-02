@@ -26,6 +26,7 @@
 .DEFAULT_GOAL := help
 
 SIMULATOR_DESTINATION := OS=latest,name=iPhone 17
+IOS_E2E_RESULT_BUNDLE := build/ios-e2e.xcresult
 
 .PHONY: help
 help: ## Display this help menu
@@ -370,12 +371,15 @@ test-ios-app-e2e: ## Run iOS demo app E2E tests against the production build
 	@echo "--- :open_file_folder: Copying build into iOS bundle"
 	@$(MAKE) copy-ios-dist
 	@echo "--- :ios: Running iOS E2E Tests (production build)"
+# xcodebuild refuses to overwrite an existing result bundle.
+	@rm -rf '$(IOS_E2E_RESULT_BUNDLE)'
 	@set -o pipefail && \
 		xcodebuild test \
 		-project ./ios/Demo-iOS/Gutenberg.xcodeproj \
 		-scheme GutenbergUITests \
 		-sdk iphonesimulator \
 		-destination '${SIMULATOR_DESTINATION}' \
+		-resultBundlePath '$(IOS_E2E_RESULT_BUNDLE)' \
 		| xcbeautify
 
 .PHONY: test-ios-app-e2e-dev
