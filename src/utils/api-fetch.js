@@ -598,7 +598,7 @@ export function withRateLimitRetry( fetchHandler ) {
 					// A retry sent before a longer `Retry-After` elapses would fail too.
 					if ( delay <= MAX_RETRY_AFTER_MS ) {
 						info( `Retrying ${ request } after a 429 response` );
-						await wait( delay );
+						await wait( delay, options.signal );
 						continue;
 					}
 				}
@@ -644,13 +644,24 @@ function getRetryDelay( response, attempt ) {
 }
 
 /**
- * Resolves after the given delay.
+ * Resolves after the given delay, or rejects as `fetch` would once aborted.
  *
- * @param {number} ms Delay in milliseconds.
+ * @param {number}      ms       Delay in milliseconds.
+ * @param {AbortSignal} [signal] Signal of the request being retried.
  * @return {Promise<void>} Resolves once the delay has elapsed.
  */
-function wait( ms ) {
-	return new Promise( ( resolve ) => setTimeout( resolve, ms ) );
+function wait( ms, signal ) {
+	return new Promise( ( resolve, reject ) => {
+		const onAbort = () => {
+			clearTimeout( timer );
+			reject( signal.reason );
+		};
+		const timer = setTimeout( () => {
+			signal?.removeEventListener( 'abort', onAbort );
+			resolve();
+		}, ms );
+		signal?.addEventListener( 'abort', onAbort, { once: true } );
+	} );
 }
 
 /**

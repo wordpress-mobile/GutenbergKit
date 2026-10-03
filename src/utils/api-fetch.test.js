@@ -641,6 +641,26 @@ describe( 'api-fetch credentials handling', () => {
 			expect( logger.warn ).not.toHaveBeenCalled();
 		} );
 
+		it( 'rejects at once when aborted while waiting to retry', async () => {
+			const controller = new AbortController();
+			global.fetch = vi.fn( () => rateLimited() );
+
+			const request = apiFetch( {
+				path: '/wp/v2/taxonomies',
+				signal: controller.signal,
+			} );
+			const assertion = expect( request ).rejects.toMatchObject( {
+				name: 'AbortError',
+			} );
+			await vi.advanceTimersByTimeAsync( 100 );
+			controller.abort();
+			await vi.advanceTimersByTimeAsync( 0 );
+
+			expect( vi.getTimerCount() ).toBe( 0 );
+			await assertion;
+			expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+		} );
+
 		it.each( [
 			[ 'a 204 response', new Response( null, { status: 204 } ), null ],
 			[ 'an empty body', new Response( '', { status: 200 } ), null ],
