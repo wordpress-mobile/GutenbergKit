@@ -199,7 +199,17 @@ steps:
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
-          make test-ios-app-e2e
+          # Keep the result bundle even when tests fail: its screenshots and
+          # UI hierarchy are the only record of what the editor showed.
+          TEST_STATUS=0
+          make test-ios-app-e2e || TEST_STATUS=$$?
+          if [ -d build/ios-e2e.xcresult ]; then
+              echo "--- :package: Zipping test results"
+              (cd build && zip -rq ios-e2e.xcresult.zip ios-e2e.xcresult)
+          fi
+          exit "$$TEST_STATUS"
+      artifact_paths:
+          - 'build/ios-e2e.xcresult.zip'
       plugins: *plugins
 
     - label: ':android: Test Android E2E'
