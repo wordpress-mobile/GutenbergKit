@@ -45,6 +45,11 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
   public let namespaceExcludedPaths: [String]
   /// Authorization header
   public let authHeader: String
+  /// Places that `authHeader` may be sent to over HTTPS, besides the site and its API, which always receive it.
+  ///
+  /// A name is one host, exactly: `s0.wp.com`. A name that starts with `*.` is the domain that follows and
+  /// every subdomain of it: `*.wp.com`. See ``EditorConfigurationBuilder/setAuthHeaderDomains(_:)``.
+  public let authHeaderDomains: [String]
   /// Raw block editor settings from the WordPress REST API
   public let editorSettings: String
   /// Locale used for translations
@@ -81,6 +86,7 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
     siteApiNamespace: [String],
     namespaceExcludedPaths: [String],
     authHeader: String,
+    authHeaderDomains: [String],
     editorSettings: String,
     locale: String,
     isNativeInserterEnabled: Bool,
@@ -104,6 +110,7 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
     self.siteApiNamespace = siteApiNamespace
     self.namespaceExcludedPaths = namespaceExcludedPaths
     self.authHeader = authHeader
+    self.authHeaderDomains = authHeaderDomains
     self.editorSettings = editorSettings
     self.locale = locale
     self.isNativeInserterEnabled = isNativeInserterEnabled
@@ -136,6 +143,7 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
       siteApiNamespace: siteApiNamespace,
       namespaceExcludedPaths: namespaceExcludedPaths,
       authHeader: authHeader,
+      authHeaderDomains: authHeaderDomains,
       editorSettings: editorSettings,
       locale: locale,
       isNativeInserterEnabled: isNativeInserterEnabled,
@@ -182,6 +190,7 @@ public struct EditorConfigurationBuilder {
   private var siteApiNamespace: [String]
   private var namespaceExcludedPaths: [String]
   private var authHeader: String
+  private var authHeaderDomains: [String]
   private var editorSettings: String
   private var locale: String
   private var isNativeInserterEnabled: Bool
@@ -206,6 +215,7 @@ public struct EditorConfigurationBuilder {
     siteApiNamespace: [String] = [],
     namespaceExcludedPaths: [String] = [],
     authHeader: String = "",
+    authHeaderDomains: [String] = [],
     editorSettings: String = "undefined",
     locale: String = "en",
     isNativeInserterEnabled: Bool = false,
@@ -229,6 +239,7 @@ public struct EditorConfigurationBuilder {
     self.siteApiNamespace = siteApiNamespace
     self.namespaceExcludedPaths = namespaceExcludedPaths
     self.authHeader = authHeader
+    self.authHeaderDomains = authHeaderDomains
     self.editorSettings = editorSettings
     self.locale = locale
     self.isNativeInserterEnabled = isNativeInserterEnabled
@@ -316,6 +327,26 @@ public struct EditorConfigurationBuilder {
   public func setAuthHeader(_ authHeader: String) -> EditorConfigurationBuilder {
     var copy = self
     copy.authHeader = authHeader
+    return copy
+  }
+
+  /// Sets the places the auth header may be sent to, besides the site and its API, which always
+  /// receive it. Only requests over HTTPS qualify.
+  ///
+  /// Each name is taken exactly as written:
+  ///
+  /// - `s0.wp.com` is that one host. It isn't its subdomains, and it isn't `s1.wp.com`.
+  /// - `*.wp.com` is `wp.com` and every subdomain of it, however deep.
+  ///
+  /// A wildcard is only ever the whole first label, and is taken at its word: `*.com` is every
+  /// `.com` site. Name the narrowest domain that will do.
+  ///
+  /// A site reached through WordPress.com is served from more than its own address — its assets
+  /// from `wp.com` and its files from `files.wordpress.com`, say — and can name those here:
+  /// `["*.wp.com", "*.files.wordpress.com"]`.
+  public func setAuthHeaderDomains(_ authHeaderDomains: [String]) -> EditorConfigurationBuilder {
+    var copy = self
+    copy.authHeaderDomains = authHeaderDomains
     return copy
   }
 
@@ -416,6 +447,7 @@ public struct EditorConfigurationBuilder {
       siteApiNamespace: siteApiNamespace,
       namespaceExcludedPaths: namespaceExcludedPaths,
       authHeader: authHeader,
+      authHeaderDomains: authHeaderDomains,
       editorSettings: editorSettings,
       locale: locale,
       isNativeInserterEnabled: isNativeInserterEnabled,

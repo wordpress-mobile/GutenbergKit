@@ -2,6 +2,14 @@ import Foundation
 import Testing
 @testable import GutenbergKit
 
+extension EditorAuthorizationScope {
+    /// The scope of the site every test here makes requests to.
+    fileprivate static let example = EditorAuthorizationScope(
+        siteURL: URL(string: "https://example.com")!,
+        siteApiRoot: URL(string: "https://example.com/wp-json/")!
+    )
+}
+
 /// A spy mock that captures requests for inspection
 private final class SpyURLSession: URLSessionProtocol, @unchecked Sendable {
     private let lock = NSLock()
@@ -88,7 +96,8 @@ struct EditorHTTPClientTests {
         let authHeader = "Bearer test-token-12345"
         let client = EditorHTTPClient(
             urlSession: spySession,
-            authHeader: authHeader
+            authHeader: authHeader,
+            authorizationScope: .example
         )
 
         let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/posts")!)
@@ -104,7 +113,8 @@ struct EditorHTTPClientTests {
         let authHeader = "Bearer test-token-12345"
         let client = EditorHTTPClient(
             urlSession: spySession,
-            authHeader: authHeader
+            authHeader: authHeader,
+            authorizationScope: .example
         )
 
         let request = URLRequest(url: URL(string: "https://example.com/wp-content/file.js")!)
@@ -112,6 +122,97 @@ struct EditorHTTPClientTests {
 
         let capturedRequest = try #require(spySession.lastCapturedRequest)
         #expect(capturedRequest.value(forHTTPHeaderField: "Authorization") == authHeader)
+    }
+
+    // MARK: - Authorization Scope Tests
+
+    @Test(
+        "a request to another party's host goes out without the Authorization header",
+        arguments: [
+            "https://cdn.vendor.net/integration.js",
+            "https://example.com.vendor.net/script.js",
+            "http://example.com/wp-content/plugins/plugin/script.js",
+        ]
+    )
+    func requestOutsideScopeHasNoAuthorizationHeader(url: String) async throws {
+        let spySession = SpyURLSession()
+        let client = EditorHTTPClient(
+            urlSession: spySession,
+            authHeader: "Bearer test-token-12345",
+            authorizationScope: .example
+        )
+        let request = URLRequest(url: URL(string: url)!)
+
+        _ = try await client.download(request)
+        _ = try await client.perform(request)
+        _ = try await client.performRaw(request)
+
+        #expect(spySession.capturedRequests.count == 3)
+        #expect(spySession.capturedRequests.allSatisfy { $0.value(forHTTPHeaderField: "Authorization") == nil })
+        // It's still this library's request
+        #expect(spySession.capturedRequests.allSatisfy { $0.value(forHTTPHeaderField: "User-Agent") != nil })
+    }
+
+    @Test("a client made for a configuration sends the site's credentials only to the site")
+    func clientForConfigurationScopesAuthorizationHeader() async throws {
+        let spySession = SpyURLSession()
+        let configuration = EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: URL(string: "https://example.com")!,
+            siteApiRoot: URL(string: "https://example.com/wp-json/")!
+        )
+        .setAuthHeader("Bearer test-token-12345")
+        .build()
+        let client = EditorHTTPClient(configuration: configuration, urlSession: spySession)
+
+        _ = try await client.download(URLRequest(url: URL(string: "https://example.com/wp-content/script.js")!))
+        _ = try await client.download(URLRequest(url: URL(string: "https://cdn.vendor.net/integration.js")!))
+
+        #expect(spySession.capturedRequests.map { $0.value(forHTTPHeaderField: "Authorization") } == [
+            "Bearer test-token-12345",
+            nil,
+        ])
+    }
+
+    @Test("a client made for a configuration sends the site's credentials to the places it names as well")
+    func clientForConfigurationAuthorizesNamedDomains() async throws {
+        let spySession = SpyURLSession()
+        let configuration = EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: URL(string: "https://example.wordpress.com")!,
+            siteApiRoot: URL(string: "https://public-api.wordpress.com/")!
+        )
+        .setAuthHeader("Bearer test-token-12345")
+        .setAuthHeaderDomains(["*.wp.com"])
+        .build()
+        let client = EditorHTTPClient(configuration: configuration, urlSession: spySession)
+
+        _ = try await client.download(URLRequest(url: URL(string: "https://s0.wp.com/wp-content/script.js")!))
+        _ = try await client.download(URLRequest(url: URL(string: "https://cdn.vendor.net/integration.js")!))
+
+        #expect(spySession.capturedRequests.map { $0.value(forHTTPHeaderField: "Authorization") } == [
+            "Bearer test-token-12345",
+            nil,
+        ])
+    }
+
+    @Test("the upload client keeps the client's authorization scope")
+    func uploadClientKeepsAuthorizationScope() async throws {
+        let spySession = SpyURLSession()
+        let client = EditorHTTPClient(
+            urlSession: spySession,
+            authHeader: "Bearer test-token-12345",
+            authorizationScope: .example
+        )
+        let uploadClient = client.uploadClient()
+
+        _ = try await uploadClient.perform(URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/media")!))
+        _ = try await uploadClient.perform(URLRequest(url: URL(string: "https://cdn.vendor.net/upload")!))
+
+        #expect(spySession.capturedRequests.map { $0.value(forHTTPHeaderField: "Authorization") } == [
+            "Bearer test-token-12345",
+            nil,
+        ])
     }
 
     // MARK: - Timeout Tests
@@ -123,6 +224,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: "Bearer token",
+            authorizationScope: .example,
             requestTimeout: customTimeout
         )
 
@@ -140,6 +242,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: "Bearer token",
+            authorizationScope: .example,
             requestTimeout: customTimeout
         )
 
@@ -155,7 +258,8 @@ struct EditorHTTPClientTests {
         let spySession = SpyURLSession()
         let client = EditorHTTPClient(
             urlSession: spySession,
-            authHeader: "Bearer token"
+            authHeader: "Bearer token",
+            authorizationScope: .example
         )
 
         var request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/posts")!)
@@ -176,6 +280,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: authHeader,
+            authorizationScope: .example,
             requestTimeout: restTimeout
         )
 
@@ -198,6 +303,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: "Bearer token",
+            authorizationScope: .example,
             requestTimeout: 15
         )
 
@@ -220,6 +326,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: "Bearer token",
+            authorizationScope: .example,
             delegate: spyDelegate
         )
 
@@ -242,7 +349,8 @@ struct EditorHTTPClientTests {
         let spySession = SpyURLSession()
         let client = EditorHTTPClient(
             urlSession: spySession,
-            authHeader: "Bearer token"
+            authHeader: "Bearer token",
+            authorizationScope: .example
         )
 
         let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/posts")!)
@@ -257,7 +365,8 @@ struct EditorHTTPClientTests {
         let spySession = SpyURLSession()
         let client = EditorHTTPClient(
             urlSession: spySession,
-            authHeader: "Bearer token"
+            authHeader: "Bearer token",
+            authorizationScope: .example
         )
 
         let request = URLRequest(url: URL(string: "https://example.com/wp-content/file.js")!)
@@ -277,6 +386,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: authHeader,
+            authorizationScope: .example,
             requestTimeout: customTimeout
         )
 
@@ -297,6 +407,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: authHeader,
+            authorizationScope: .example,
             requestTimeout: customTimeout
         )
 
@@ -321,6 +432,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: "Bearer token",
+            authorizationScope: .example,
             delegate: spyDelegate
         )
 
@@ -346,6 +458,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: "Bearer token",
+            authorizationScope: .example,
             delegate: spyDelegate
         )
 
@@ -371,6 +484,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: "Bearer token",
+            authorizationScope: .example,
             delegate: spyDelegate
         )
 
@@ -393,6 +507,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: authHeader,
+            authorizationScope: .example,
             delegate: spyDelegate
         )
 
@@ -411,7 +526,8 @@ struct EditorHTTPClientTests {
         let spySession = SpyURLSession()
         let client = EditorHTTPClient(
             urlSession: spySession,
-            authHeader: "Bearer token"
+            authHeader: "Bearer token",
+            authorizationScope: .example
         )
 
         let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/posts")!)
@@ -428,7 +544,8 @@ struct EditorHTTPClientTests {
         let spySession = SpyURLSession()
         let client = EditorHTTPClient(
             urlSession: spySession,
-            authHeader: "Bearer token"
+            authHeader: "Bearer token",
+            authorizationScope: .example
         )
 
         let request = URLRequest(url: URL(string: "https://example.com/wp-content/file.js")!)
@@ -445,7 +562,8 @@ struct EditorHTTPClientTests {
         let spySession = SpyURLSession()
         let client = EditorHTTPClient(
             urlSession: spySession,
-            authHeader: "Bearer token"
+            authHeader: "Bearer token",
+            authorizationScope: .example
         )
 
         let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/posts")!)

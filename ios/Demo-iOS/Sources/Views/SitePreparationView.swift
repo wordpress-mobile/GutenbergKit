@@ -341,6 +341,7 @@ class SitePreparationViewModel {
         .setShouldUsePlugins(true)
         .setNetworkFallbackMode(.automatic)
         .setAuthHeader(account.authHeader)
+        .setAuthHeaderDomains(account.authHeaderDomains)
         .setLogLevel(.debug)
         .build()
     }
@@ -461,6 +462,7 @@ class SitePreparationViewModel {
         .setShouldUsePlugins(canUsePlugins)
         .setSiteApiNamespace(siteApiNamespace)
         .setAuthHeader(account.authHeader)
+        .setAuthHeaderDomains(account.authHeaderDomains)
         .setLogLevel(.debug)
         .build()
     }

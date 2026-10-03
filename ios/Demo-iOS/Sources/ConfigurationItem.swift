@@ -105,6 +105,20 @@ extension Account {
         }
     }
 
+    /// The places the account's credentials may go to, besides the site and its API.
+    ///
+    /// A WordPress.com token is good across WordPress.com, which serves a site's assets from
+    /// `wp.com` and its files from `files.wordpress.com`. An application password is good for the
+    /// one site.
+    var authHeaderDomains: [String] {
+        switch self {
+        case .selfHostedSite:
+            return []
+        case .wpCom:
+            return ["*.wp.com", "*.files.wordpress.com"]
+        }
+    }
+
     var siteApiRoot: String {
         switch self {
         case .selfHostedSite(_, _, _, _, let siteApiRoot):

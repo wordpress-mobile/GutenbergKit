@@ -92,11 +92,7 @@ public actor EditorService {
     ) {
         self.configuration = configuration
 
-        let httpClient: any EditorHTTPClientProtocol = httpClient ?? EditorHTTPClient(
-            urlSession: URLSession.shared,
-            authHeader: configuration.authHeader,
-            delegate: nil
-        )
+        let httpClient: any EditorHTTPClientProtocol = httpClient ?? EditorHTTPClient(configuration: configuration)
 
         self.restRepository = RESTAPIRepository(
             configuration: configuration,
