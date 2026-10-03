@@ -15,7 +15,7 @@ import java.io.File
 /**
  * Instrumented tests that exercise [HtmlToBitmapRenderer] against a real Android
  * [android.webkit.WebView]. Runs in CI via the `:android: Test Android Library
- * Instrumented` step (`make test-android-library-e2e`); locally:
+ * E2E` step (`make test-android-library-e2e`); locally:
  *
  *   ./gradlew :Gutenberg:connectedAndroidTest
  *
