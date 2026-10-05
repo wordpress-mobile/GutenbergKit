@@ -25,7 +25,7 @@ fun String.encodeForEditor(): String {
  * than the URL path, and any query string on [path] is merged with `&`:
  *
  * ```
- * https://example.com/?rest_route=/ + /wp/v2/media -> https://example.com/?rest_route=/wp/v2/media
+ * https://example.com/?rest_route=/ + /wp/v2/posts -> https://example.com/?rest_route=/wp/v2/posts
  * ```
  *
  * This mirrors the behavior of `@wordpress/api-fetch`'s root URL middleware, which the web
