@@ -46,11 +46,16 @@ public struct EditorPreparation: Sendable {
         /// editor loads without them, and they're tried again the next time dependencies are prepared.
         case assetsMissing([URL])
 
+        /// These assets failed to download, and the asset bundle holds the copy an earlier bundle had of each
+        /// in its place. The editor loads those copies, and the assets are asked for again the next time the
+        /// site's asset manifest is checked.
+        case assetsNotRefreshed([URL])
+
         /// The dependency the failure is about.
         public var dependency: Dependency {
             switch self {
             case .notFetched(let dependency, _, _): dependency
-            case .assetsMissing: .assetBundle
+            case .assetsMissing, .assetsNotRefreshed: .assetBundle
             }
         }
     }

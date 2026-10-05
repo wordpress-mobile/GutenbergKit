@@ -39,6 +39,8 @@ public struct EditorAssetBundle: Sendable {
         var lastCheckedDate: Date?
         /// Absent from a bundle stored before these were recorded.
         var assetHeaders: [String: AssetHeaders]?
+        /// Absent from a bundle that has none, or that was stored before these were recorded.
+        var assetsNotRefreshed: [String]?
     }
 
     /// What a server sent with an asset that's worth keeping with it: what kind of file it is, and what tells
@@ -126,6 +128,24 @@ public struct EditorAssetBundle: Sendable {
     /// sent none worth keeping has no entry.
     let assetHeaders: [String: AssetHeaders]
 
+    /// The `Content-Type` each asset is served to an editor with, by the asset's ``assetKey(for:)``.
+    ///
+    /// It's part of what a bundle gives an editor, so two copies of a bundle that differ in it aren't
+    /// equal. The rest of an asset's headers only say how to ask its server for a newer copy.
+    ///
+    /// Each is as its server wrote it, but for capitals and spaces, which a server can write differently
+    /// from one answer to the next without meaning anything by it.
+    private var assetContentTypes: [String: String] {
+        assetHeaders.compactMapValues { $0.contentType?.lowercased().filter { !$0.isWhitespace } }
+    }
+
+    /// The assets that failed to download when the bundle was built, by their ``assetKey(for:)``, and that it
+    /// holds the copy an earlier bundle had in their place.
+    ///
+    /// Like ``lastCheckedDate``, this says how the bundle came to be rather than what it holds, so two copies
+    /// of a bundle that differ only in this are equal.
+    let assetsNotRefreshed: Set<String>
+
     /// The number of assets stored in this bundle.
     public var assetCount: Int {
         manifest.assetUrls.count
@@ -138,6 +158,7 @@ public struct EditorAssetBundle: Sendable {
         self.downloadDate = raw.downloadDate
         self.lastCheckedDate = raw.lastCheckedDate
         self.assetHeaders = raw.assetHeaders ?? [:]
+        self.assetsNotRefreshed = Set(raw.assetsNotRefreshed ?? [])
         self.bundleRoot = bundleRoot
     }
 
@@ -146,13 +167,33 @@ public struct EditorAssetBundle: Sendable {
         downloadDate: Date = Date(),
         lastCheckedDate: Date? = nil,
         assetHeaders: [String: AssetHeaders] = [:],
+        assetsNotRefreshed: Set<String> = [],
         bundleRoot: URL
     ) throws {
         self.manifest = manifest
         self.downloadDate = downloadDate
         self.lastCheckedDate = lastCheckedDate
         self.assetHeaders = assetHeaders
+        self.assetsNotRefreshed = assetsNotRefreshed
         self.bundleRoot = bundleRoot
+    }
+
+    /// The same bundle, recording another date for its last check and other things about its assets.
+    func recording(
+        lastCheckedDate: Date?,
+        assetHeaders: [String: AssetHeaders],
+        assetsNotRefreshed: Set<String>
+    ) -> EditorAssetBundle {
+        EditorAssetBundle(
+            raw: RawAssetBundle(
+                manifest: self.manifest,
+                downloadDate: self.downloadDate,
+                lastCheckedDate: lastCheckedDate,
+                assetHeaders: assetHeaders,
+                assetsNotRefreshed: assetsNotRefreshed.sorted()
+            ),
+            bundleRoot: self.bundleRoot
+        )
     }
 
     /// Loads a bundle from a JSON file on disk.
@@ -193,6 +234,31 @@ public struct EditorAssetBundle: Sendable {
             .appending(path: Self.assetFileName(for: url), directoryHint: .notDirectory)
     }
 
+    /// Where a bundle stored before assets were kept at ``assetLocation(for:)`` kept the asset at `url`: at its
+    /// URL's path, under the bundle's root. `nil` if no file is there, or if the path leads out of the bundle.
+    ///
+    /// It's for moving such a bundle's assets to where a bundle keeps them now, and nothing else: an asset
+    /// is only ever read from ``assetLocation(for:)``.
+    func legacyAssetLocation(for url: URL) -> URL? {
+        let root = self.bundleRoot.standardizedFileURL
+        let location = root.appending(path: url.path(percentEncoded: false)).standardizedFileURL
+        let isOwnFile =
+            location.deletingLastPathComponent().path == root.path
+            && ["manifest.json", "editor-representation.json"].contains(location.lastPathComponent.lowercased())
+
+        var isDirectory: ObjCBool = false
+        guard
+            location.path.hasPrefix(root.path + "/"),
+            !isOwnFile,
+            FileManager.default.fileExists(atPath: location.path, isDirectory: &isDirectory),
+            !isDirectory.boolValue
+        else {
+            return nil
+        }
+
+        return location
+    }
+
     /// The name of the file an asset is stored in: its URL, spelled so that it can be a file's name, then a
     /// digest of the URL, then the extension the URL has.
     ///
@@ -207,12 +273,29 @@ public struct EditorAssetBundle: Sendable {
         )
         let digest = SHA256.hash(data: Data(key.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
 
-        let pathExtension = url.pathExtension
+        // From the key, as the rest of the name is: a URL written another way may not show the same one
+        let pathExtension = Self.pathExtension(ofAssetKey: key)
         let isPlainExtension =
             (1...8).contains(pathExtension.count)
             && pathExtension.unicodeScalars.allSatisfy { Self.fileNameCharacters.contains($0) }
 
         return isPlainExtension ? "\(spelling).\(digest).\(pathExtension)" : "\(spelling).\(digest)"
+    }
+
+    /// The extension of the file that `key`, an asset's ``assetKey(for:)``, leads to: what follows the last
+    /// `.` in the last part of its path. Empty if it has none.
+    private static func pathExtension(ofAssetKey key: String) -> String {
+        let path = key.prefix { $0 != "?" }.drop { $0 != "/" }
+
+        guard
+            let name = path.split(separator: "/").last,
+            let dot = name.lastIndex(of: "."),
+            dot != name.startIndex
+        else {
+            return ""
+        }
+
+        return String(name[name.index(after: dot)...])
     }
 
     /// The characters of an asset's URL that are kept in its file's name. All of them are one byte long.
@@ -229,14 +312,84 @@ public struct EditorAssetBundle: Sendable {
     /// The editor asks for an asset under a scheme of its own, so the scheme is no part of it. Neither is how
     /// the URL happens to be written — its host in capitals, `..` in its path, a character percent-encoded or
     /// not — since a web view may write it another way when it asks.
+    ///
+    /// The exception is a character that would mean something else if it weren't encoded: `a%2Fb.js` is a
+    /// file in no directory, and `a/b.js` isn't the same asset. Nothing writes those another way.
     static func assetKey(for url: URL) -> String {
-        let url = url.standardized
+        let url = Self.resolvingDotSegments(of: url)
         let host = url.host(percentEncoded: false)?.lowercased() ?? ""
         let port = url.port.map { ":\($0)" } ?? ""
-        let query = url.query(percentEncoded: false).map { "?\($0)" } ?? ""
+        var path = Self.decoded(url.path(percentEncoded: true))
+        let query = url.query(percentEncoded: true).map { "?" + Self.decoded($0) } ?? ""
 
-        return host + port + url.path(percentEncoded: false) + query
+        // A `..` with nothing above it to go back to goes nowhere, which a web view knows and a `URL`
+        // leaves written down
+        while path.hasPrefix("/../") {
+            path.removeFirst(3)
+        }
+
+        if path == "/.." {
+            path = "/"
+        }
+
+        return host + port + path + query
     }
+
+    /// `url` with the `.` and `..` in its path resolved, however they're written. A web view takes an
+    /// encoded dot for a dot there, and asks for the path they lead to.
+    private static func resolvingDotSegments(of url: URL) -> URL {
+        let written = url.absoluteString
+
+        guard written.range(of: "%2E", options: .caseInsensitive) != nil else {
+            return url.standardized
+        }
+
+        let decodingDots = written.replacingOccurrences(of: "%2E", with: ".", options: .caseInsensitive)
+        return (URL(string: decodingDots) ?? url).standardized
+    }
+
+    /// `component` with its percent-encoding removed, apart from the characters that divide a URL up, which
+    /// stay encoded: decoded, they'd read as dividing it somewhere else.
+    ///
+    /// What's encoded may not be text at all, as with a name written in an encoding other than UTF-8. That
+    /// decodes to nothing, which would leave every such URL on a site with one key, so it's kept as it's
+    /// written, but for the capitals in what's encoded, which mean nothing.
+    private static func decoded(_ component: String) -> String {
+        guard component.contains("%") else {
+            return component
+        }
+
+        // Encoding the `%` of each one a second time leaves it encoded once after decoding
+        let escapingDelimiters = Self.encodedDelimiters.reduce(component) { component, delimiter in
+            component.replacingOccurrences(of: delimiter, with: "%25" + delimiter.dropFirst(), options: .caseInsensitive)
+        }
+
+        return escapingDelimiters.removingPercentEncoding ?? Self.withEncodingInCapitals(component)
+    }
+
+    /// `component` with the two characters after each `%` in capitals: `%e9` and `%E9` are one byte.
+    private static func withEncodingInCapitals(_ component: String) -> String {
+        var result = ""
+        var encodedCharactersLeft = 0
+
+        for character in component {
+            if character == "%" {
+                encodedCharactersLeft = 2
+                result.append(character)
+            } else if encodedCharactersLeft > 0 {
+                encodedCharactersLeft -= 1
+                result += character.uppercased()
+            } else {
+                result.append(character)
+            }
+        }
+
+        return result
+    }
+
+    /// The characters that divide a URL's path and query up, as each is written when it's encoded: `%`
+    /// itself first, so that encoding the others again doesn't encode it twice.
+    private static let encodedDelimiters = ["%25", "%2F", "%3F", "%23", "%26", "%3D", "%2B"]
 
     /// Checks whether this bundle contains cached data for the given asset URL.
     ///
@@ -252,6 +405,11 @@ public struct EditorAssetBundle: Sendable {
     /// - Returns: The local file URL where the asset is stored.
     public func assetDataPath(for url: URL) -> URL {
         self.assetLocation(for: url)
+    }
+
+    @available(*, deprecated, message: "No asset's place is outside its bundle now, so this is always `true`. Drop the check.")
+    public func isValidAssetPath(for url: URL) -> Bool {
+        true
     }
 
     /// The headers kept from when the asset at `url` was downloaded, if its server sent any worth keeping.
@@ -316,7 +474,8 @@ public struct EditorAssetBundle: Sendable {
             manifest: self.manifest,
             downloadDate: self.downloadDate,
             lastCheckedDate: self.lastCheckedDate,
-            assetHeaders: self.assetHeaders.isEmpty ? nil : self.assetHeaders
+            assetHeaders: self.assetHeaders.isEmpty ? nil : self.assetHeaders,
+            assetsNotRefreshed: self.assetsNotRefreshed.isEmpty ? nil : self.assetsNotRefreshed.sorted()
         ))
     }
 
@@ -345,12 +504,16 @@ public struct EditorAssetBundle: Sendable {
 
 extension EditorAssetBundle: Equatable, Hashable {
     public static func == (lhs: EditorAssetBundle, rhs: EditorAssetBundle) -> Bool {
-        lhs.manifest == rhs.manifest && lhs.downloadDate == rhs.downloadDate && lhs.bundleRoot == rhs.bundleRoot
+        lhs.manifest == rhs.manifest
+            && lhs.downloadDate == rhs.downloadDate
+            && (lhs.assetHeaders == rhs.assetHeaders || lhs.assetContentTypes == rhs.assetContentTypes)
+            && lhs.bundleRoot == rhs.bundleRoot
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(manifest)
         hasher.combine(downloadDate)
+        hasher.combine(assetContentTypes)
         hasher.combine(bundleRoot)
     }
 }

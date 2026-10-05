@@ -9,6 +9,15 @@ public actor EditorAssetLibrary {
     private let storageRoot: URL
     private let cachePolicy: EditorCachePolicy
 
+    /// The assets of each manifest this library has been asked about, by the manifest's checksum. Working
+    /// them out means reading every link in the manifest, and one prepare asks several times.
+    private var downloadableAssetsByManifest: [String: [URL]] = [:]
+
+    /// The bundles this library has already tried to copy into the layout a bundle has now. One prepare
+    /// asks for the site's latest bundle several times, and a copy that couldn't be made once won't be
+    /// the next time either.
+    private var bundlesTriedInCurrentLayout: Set<URL> = []
+
     /// Bundle builds in flight, keyed by the directory named for the manifest each builds. Every
     /// service builds its own library, so this is shared across all of them.
     static let inFlightBuilds = InFlightTasks<URL, EditorAssetBundle>()
@@ -18,13 +27,16 @@ public actor EditorAssetLibrary {
     ///
     /// Storage changes in three ways and no others, each one step taken with this lock held:
     ///
-    /// - ``publish(_:)`` moves a finished bundle in, already marked as the latest and handed out.
-    /// - ``markLatest(_:)`` rewrites the manifest of a bundle it has found still there.
+    /// - ``publish(_:matchedAt:keptFrom:)`` moves a finished bundle in, already dated and handed out.
+    ///   ``copyInCurrentLayout(of:missing:)`` moves in a copy of a bundle stored in an earlier layout,
+    ///   which is handed out when a caller is given it: until then it's the site's latest, or no one's.
+    /// - ``markLatest(_:matchedAt:recording:)`` rewrites the manifest of a bundle it has found still there,
+    ///   and so does ``redateBundlesDatedInTimeToCome(among:)``, both through ``rewriteManifest(of:)``.
     /// - ``cleanup()`` and ``purge()`` remove whole bundles.
     ///
-    /// So a bundle in storage is always complete, never gains or loses a file, and is never
-    /// there without the protection that being handed out gives it. Assets are only ever
-    /// written into a ``Draft``, in a temporary directory that none of this can see.
+    /// So a bundle in storage is always complete and never gains or loses a file, and one that a
+    /// build puts there is never without the protection that being handed out gives it. Assets are
+    /// only ever written into a ``Draft``, in a temporary directory that none of this can see.
     private static let storageLock = NSLock()
 
     /// The directory of every bundle this process has handed to a caller. An editor, or
@@ -99,18 +111,31 @@ public actor EditorAssetLibrary {
     /// matched each: the latest first.
     ///
     public func readAssetBundles() throws -> [EditorAssetBundle] {
+        try self.readAssetBundles { _ in true }
+    }
+
+    /// The bundles in the directories whose names `isIncluded` accepts, the latest first. Only those are
+    /// read, and reading a bundle means decoding its manifest.
+    private func readAssetBundles(inDirectoriesNamed isIncluded: (String) -> Bool) throws -> [EditorAssetBundle] {
         try FileManager.default.createDirectory(at: self.storageRoot, withIntermediateDirectories: true)
         return try FileManager.default
             .contentsOfDirectory(at: self.storageRoot, includingPropertiesForKeys: [.isDirectoryKey])
             .filter { $0.hasDirectoryPath }  // Only include directories
             .filter { $0.pathExtension != "download" }  // Don't include bundles that are being downloaded
+            .filter { isIncluded($0.lastPathComponent) }
             // Not the listed URL itself: a listing resolves symlinks in the path (`/var` to `/private/var`), which
             // would make a bundle read here unequal to the same bundle built or looked up by checksum.
             .map { self.bundleManifestPath(for: $0.lastPathComponent) }
             .compactMap { try? EditorAssetBundle(url: $0) }  // Skip invalid/incomplete bundles
             // Not by when each was downloaded: a site can go back to a manifest it had before, whose bundle
             // was downloaded earlier than the one it replaced.
-            .sorted { $0.lastMatchedDate > $1.lastMatchedDate }
+            //
+            // Two bundles only tie when one is a copy of the other in the layout a bundle has now, which
+            // keeps the other's dates. The copy comes first: its directory has the other's name and more.
+            .sorted {
+                ($0.lastMatchedDate, $0.bundleRoot.lastPathComponent)
+                    > ($1.lastMatchedDate, $1.bundleRoot.lastPathComponent)
+            }
     }
 
     /// The latest bundle on disk, if there's no reason to check the site's manifest again.
@@ -118,27 +143,220 @@ public actor EditorAssetLibrary {
     /// Returns `nil` when there is no bundle, when the site's manifest was last checked too long ago for the
     /// cache policy, or when the bundle is missing assets, which another try may download. In each case, call
     /// ``downloadAssetBundle(progress:)`` next to check.
+    ///
+    /// A bundle that holds an earlier copy of an asset that failed to download is returned all the same:
+    /// it has everything an editor loads. That asset is asked for again when the manifest is next checked.
     public func readLatestAssetBundle() throws -> EditorAssetBundle? {
+        guard let latest = try self.latestBundleWithinPolicy(), latest.missingAssets.isEmpty else {
+            return nil
+        }
+
+        return self.handOut(latest.bundle)
+    }
+
+    /// The latest bundle on disk if the site's manifest was checked recently enough for the cache policy,
+    /// and whether it's missing assets.
+    ///
+    /// It's the bundle the policy asks for, and no more than that. Trying its missing assets again is worth
+    /// asking the site for, but the bundle doesn't depend on the answer. It isn't handed out: that's for
+    /// ``handOut(_:)``, once a caller is to be given it.
+    func readLatestAssetBundleWithinPolicy() throws -> (bundle: EditorAssetBundle, isMissingAssets: Bool)? {
+        try self.latestBundleWithinPolicy().map { ($0.bundle, !$0.missingAssets.isEmpty) }
+    }
+
+    private func latestBundleWithinPolicy() throws -> (bundle: EditorAssetBundle, missingAssets: [URL])? {
         guard
-            let latestBundle = try self.readAssetBundles().first,
-            self.cachePolicy.allowsResponseWith(date: latestBundle.lastMatchedDate),
-            self.missingAssets(of: latestBundle).isEmpty
+            let latest = try self.latestBundle(),
+            self.cachePolicy.allowsResponseWith(date: latest.bundle.lastMatchedDate)
         else {
             return nil
         }
 
-        return self.handOut(latestBundle)
+        return latest
     }
 
     /// The latest bundle on disk, however long ago the site's manifest was checked and whether or not it has
     /// every asset: what there is to use when the site can't be asked.
     func readLatestAssetBundleOnDisk() throws -> EditorAssetBundle? {
-        try self.readAssetBundles().first.flatMap { self.handOut($0) }
+        try self.latestBundle().flatMap { self.handOut($0.bundle) }
+    }
+
+    /// The site's latest bundle on disk, with its assets where a bundle keeps them now, and the assets it's
+    /// missing. Everything that wants the site's latest bundle comes through here.
+    private func latestBundle() throws -> (bundle: EditorAssetBundle, missingAssets: [URL])? {
+        var bundles = try self.readAssetBundles()
+
+        if self.redateBundlesDatedInTimeToCome(among: bundles) {
+            bundles = try self.readAssetBundles()
+        }
+
+        guard let latestBundle = bundles.first else {
+            return nil
+        }
+
+        let missingAssets = self.missingAssets(of: latestBundle)
+
+        guard let copy = self.copyInCurrentLayout(of: latestBundle, missing: missingAssets) else {
+            return (latestBundle, missingAssets)
+        }
+
+        return (copy, self.missingAssets(of: copy))
+    }
+
+    /// Dates afresh each of `bundles` that's dated in time to come, and says whether there were any.
+    ///
+    /// A date that's still to come was recorded by a clock that has been set back since. Left alone, the
+    /// bundle would stay ahead of everything published until the clock reached that date — a refresh
+    /// would seem to do nothing — and a cache policy that goes by age would trust it without a check.
+    ///
+    /// All such a date tells is which of those bundles came later. So each is dated again, in the same
+    /// order, just after the latest bundle whose date can be believed: ahead of what was there before,
+    /// and behind whatever is published from here on. If there's no such bundle, they're dated as long
+    /// ago as there is, and a policy that goes by age checks the manifest.
+    private func redateBundlesDatedInTimeToCome(among bundles: [EditorAssetBundle]) -> Bool {
+        // A date a moment ahead is the clock being put right, or a bundle dated just after the one it
+        // replaced. It's a date well ahead that the clock won't reach for a while.
+        let isStillToCome = { (bundle: EditorAssetBundle) in
+            bundle.lastMatchedDate > Date().addingTimeInterval(Self.clockAdjustmentAllowance)
+        }
+
+        guard bundles.contains(where: isStillToCome) else {
+            return false
+        }
+
+        Self.storageLock.withLock {
+            // As they stand at this moment: another library may have got here first
+            let bundles = (try? self.readAssetBundles()) ?? []
+            var date = bundles.first { !isStillToCome($0) }?.lastMatchedDate ?? .distantPast
+
+            // The earliest of them first, so that the latest of them ends up the latest
+            for bundle in bundles.filter(isStillToCome).reversed() {
+                date = date.addingTimeInterval(0.001)
+
+                let redated = bundle.recording(
+                    lastCheckedDate: date,
+                    assetHeaders: bundle.assetHeaders,
+                    assetsNotRefreshed: bundle.assetsNotRefreshed
+                )
+
+                do {
+                    try self.rewriteManifest(of: redated)
+                } catch {
+                    log(.warn, "Failed to date asset bundle \(bundle.id) afresh: \(error.localizedDescription)")
+                }
+            }
+        }
+
+        return true
+    }
+
+    /// How far ahead of the clock a bundle's date can be without having been recorded by a clock that was
+    /// wrong: a clock is put right by a few seconds at a time as a matter of course.
+    private static let clockAdjustmentAllowance: TimeInterval = 60
+
+    /// A copy of `bundle`, the site's latest, with its assets where a bundle keeps them now. `nil` if it has
+    /// none to move, and `bundle` is as good as it gets.
+    ///
+    /// A bundle used to keep each asset at its URL's path, where nothing looks for it any more. Left at
+    /// that, the bundle would read as missing every asset: all of them to download again, and none to give
+    /// an editor until the site could be reached. So the assets found there are copied, in a new bundle
+    /// beside the old one, which is left as it was. The copy keeps the old bundle's dates, because the site
+    /// hasn't been asked anything. And it records each asset it copies as one that wasn't refreshed: an
+    /// earlier bundle's copy, to use until the site's manifest is next checked, and to ask for again then.
+    /// Such a bundle kept whatever a site answered with, and none of what's kept with an asset now.
+    private func copyInCurrentLayout(of bundle: EditorAssetBundle, missing missingAssets: [URL]) -> EditorAssetBundle? {
+        let assetsToCopy = self.assetsInEarlierLayout(of: bundle, missing: missingAssets)
+
+        guard !assetsToCopy.isEmpty, self.bundlesTriedInCurrentLayout.insert(bundle.bundleRoot).inserted else {
+            return nil
+        }
+
+        do {
+            var draft = try Draft(manifest: bundle.manifest, downloadDate: bundle.downloadDate)
+
+            // Once it's placed, a draft has left its directory, and there's nothing of it to remove
+            defer { draft.discard() }
+
+            let editorRepresentation: EditorAssetBundle.EditorRepresentation = try bundle.getEditorRepresentation()
+            try draft.bundle.writeManifest(editorRepresentation: editorRepresentation)
+
+            // What the bundle already keeps in today's layout, then what it kept in the earlier one
+            let assetHeaders = self.carryForward(
+                self.downloadableAssets(in: bundle.manifest),
+                from: [bundle],
+                whetherOrNotRefreshed: true,
+                into: draft
+            ).headers
+
+            // One that can't be copied is one asset to download, not a reason to leave the rest
+            let copied = assetsToCopy.filter { asset in
+                guard let location = bundle.legacyAssetLocation(for: asset) else {
+                    return false
+                }
+
+                do {
+                    try FileManager.default.copyItem(at: location, to: self.destination(for: asset, in: draft))
+                    return true
+                } catch {
+                    log(.warn, "Failed to copy asset \(asset.lastPathComponent): \(error.localizedDescription)")
+                    return false
+                }
+            }
+
+            guard !copied.isEmpty else {
+                return nil
+            }
+
+            try draft.record(
+                assetHeaders: assetHeaders,
+                assetsNotRefreshed: bundle.assetsNotRefreshed
+                    .union(copied.map { EditorAssetBundle.assetKey(for: $0) }),
+                lastCheckedDate: bundle.lastCheckedDate
+            )
+
+            return try Self.storageLock.withLock {
+                let latestBundle = try self.readAssetBundles().first
+
+                // Another library may have made the copy, or built another bundle, in the meantime
+                guard latestBundle?.bundleRoot == bundle.bundleRoot else {
+                    return latestBundle
+                }
+
+                return try self.place(draft, asCopyOf: bundle)
+            }
+        } catch {
+            log(.warn, "Failed to copy asset bundle \(bundle.id) into the current layout: \(error.localizedDescription)")
+
+            // The bundle is as usable as it was, if it's still the latest: its assets are just asked for
+            // again. If it isn't, the latest is whatever took its place.
+            let latestBundle = try? self.readAssetBundles().first
+            return latestBundle?.bundleRoot == bundle.bundleRoot ? nil : latestBundle
+        }
+    }
+
+    /// The assets `bundle` is missing that it holds where a bundle used to keep them: at their URL's path.
+    ///
+    /// A bundle kept one file there for every asset with that path, whichever host or query each was asked
+    /// for by. Where its manifest has more than one, there's no telling which of them the file holds, so
+    /// it's taken for none of them, and they're downloaded.
+    private func assetsInEarlierLayout(of bundle: EditorAssetBundle, missing missingAssets: [URL]) -> [URL] {
+        let assets = missingAssets.filter { bundle.legacyAssetLocation(for: $0) != nil }
+
+        guard !assets.isEmpty else {
+            return []
+        }
+
+        // By the file each leads to, which two paths written differently can share. Capitals are left
+        // out of it, since not every volume tells them apart.
+        let file = { (asset: URL) in bundle.legacyAssetLocation(for: asset)?.path.lowercased() }
+        let assetsByFile = Dictionary(grouping: self.downloadableAssets(in: bundle.manifest), by: file)
+
+        return assets.filter { assetsByFile[file($0)]?.count == 1 }
     }
 
     /// Records that `bundle` is being handed to a caller, so that `cleanup()` leaves it be. Returns `nil` if
     /// it's no longer on disk.
-    private func handOut(_ bundle: EditorAssetBundle) -> EditorAssetBundle? {
+    func handOut(_ bundle: EditorAssetBundle) -> EditorAssetBundle? {
         Self.storageLock.withLock {
             guard self.hasBundle(at: bundle.bundleRoot) else { return nil }
             Self.handedOut.insert(bundle.bundleRoot.standardizedFileURL)
@@ -151,19 +369,26 @@ public actor EditorAssetLibrary {
     /// Under `.always` and `.maxAge`, only what the manifest says has changed is downloaded. If a bundle built
     /// from the same manifest is already on disk, it's returned instead, without downloading its assets again:
     /// they're versioned by URL, so an unchanged manifest means unchanged assets. Only an asset that an earlier
-    /// build failed to download is tried again, in a new bundle beside that one. If the manifest has changed, the new bundle takes each asset
-    /// whose versioned URL (`?ver=`) a bundle on disk already has from that bundle, and downloads the rest.
+    /// build failed to download is tried again, in a new bundle beside that one. If the manifest has changed,
+    /// the new bundle takes each asset whose versioned URL (`?ver=`) a bundle on disk already has from that
+    /// bundle, and downloads the rest.
     /// That trusts the site's versions: WordPress gives an asset registered without a version its own, so
     /// such a file can change while its URL doesn't, and only `.ignore` downloads it again. An asset without
     /// a version is asked for again, but only for a newer copy if its server sent an `ETag` or `Last-Modified`
-    /// with the one on disk. An asset that fails to download is taken from the latest bundle on disk that has it.
+    /// with the one on disk.
     ///
     /// Under `.ignore`, every asset is downloaded whether or not the manifest has changed, into a new bundle: a
-    /// bundle already on disk is never changed, because an editor may be reading it. An asset that fails to
-    /// download is taken from the latest bundle on disk that has it. If the manifest hasn't changed and its
-    /// assets all come back the same as the bundle on disk has them, that bundle is returned instead.
+    /// bundle already on disk is never changed, because an editor may be reading it. If the manifest hasn't
+    /// changed and its assets all come back the same as the bundle on disk has them, that bundle is returned
+    /// instead.
     ///
-    /// Either way the bundle becomes the site's latest, and its age for the cache policy starts over.
+    /// Under every policy, an asset that fails to download is taken from the latest bundle on disk that has
+    /// it, and the bundle records that it wasn't downloaded: ``assetsNotRefreshed(in:)`` lists it, and it's
+    /// asked for again the next time the site's manifest is checked, whether or not its URL has a version.
+    ///
+    /// Either way the bundle is dated by when the manifest was fetched, however long it then takes to build:
+    /// that's when the site was found to match it. It becomes the site's latest unless the site has been
+    /// found to have another manifest since, and its age for the cache policy starts from then.
     ///
     /// - Parameter progress: An optional callback that receives progress updates as assets are downloaded.
     /// - Returns: The downloaded `EditorAssetBundle` containing all cached assets.
@@ -172,7 +397,7 @@ public actor EditorAssetLibrary {
         progress: EditorProgressCallback? = nil
     ) async throws -> EditorAssetBundle {
         let manifest = try await self.fetchManifest()
-        return try await self.buildBundle(for: manifest, progress: progress)
+        return try await self.buildBundle(for: manifest, fetchedAt: Date(), progress: progress)
     }
 
     @available(*, deprecated, message: "`cachePolicy` has no effect: this always checks the site's manifest. Drop the argument.")
@@ -202,7 +427,8 @@ public actor EditorAssetLibrary {
     /// A manifest can have more than one: each download under `.ignore` that changes a manifest's assets leaves
     /// a bundle of its own. This is the one the site's manifest last matched.
     func existingBundle(forManifestChecksum checksum: String) -> EditorAssetBundle? {
-        try? self.readAssetBundles().first { $0.id == checksum }
+        // Every bundle is in a directory named for its manifest's checksum, alone or with more after it
+        try? self.readAssetBundles { $0.hasPrefix(checksum) }.first { $0.id == checksum }
     }
 
     // MARK: - Individual Asset Handling
@@ -212,12 +438,14 @@ public actor EditorAssetLibrary {
     /// Unless the cache policy is `.ignore`, assets a bundle on disk already has are copied
     /// from it. The rest are downloaded concurrently, all into a temporary directory. Once all
     /// downloads complete successfully, the bundle is atomically moved into the library's storage. If
-    /// a bundle for the manifest is already there with every asset, it's returned instead. If one is
-    /// there with assets missing, they're tried again in a new bundle beside it, which is only kept
-    /// if it gains any. Under `.ignore`, the bundle is built again regardless. Either way, the bundle
-    /// returned is marked as the site's latest.
+    /// a bundle for the manifest is already there with every asset downloaded, it's returned instead.
+    /// If one is there with assets that failed to download, they're tried again in a new bundle beside
+    /// it, which is only kept if its assets come out different. Under `.ignore`, the bundle is built
+    /// again regardless. Either way, the bundle returned is marked as matching the site's manifest at
+    /// `manifestFetchDate`: when the manifest was fetched, which is when the site was found to have it.
     func buildBundle(
         for manifest: LocalEditorAssetManifest,
+        fetchedAt manifestFetchDate: Date = Date(),
         progress: EditorProgressCallback? = nil
     ) async throws -> EditorAssetBundle {
 
@@ -227,106 +455,136 @@ public actor EditorAssetLibrary {
             return .empty
         }
 
+        // A bundle stored in an earlier layout has assets this build can fall back on, once they're
+        // where a bundle keeps them now.
+        _ = try? self.latestBundle()
+
+        // A build under `.ignore` joins no build in flight, not even another under `.ignore`: what's
+        // asked for is every asset as it is from now on, and a build already under way may have
+        // downloaded some of them before that.
         if case .ignore = self.cachePolicy {
-            return try await self.buildFreshBundle(for: manifest) { await progress?($0) }
+            return try await self.buildFreshBundle(for: manifest, fetchedAt: manifestFetchDate) { await progress?($0) }
         }
 
-        // Every build of one manifest does the same work, whichever library runs it: join a
+        // Every other build of one manifest does the same work, whichever library runs it: join a
         // build in flight rather than download it all a second time.
         let key = self.bundleRoot(for: manifest.checksum).standardizedFileURL
-        return try await Self.inFlightBuilds.value(for: key, progress: progress) { report in
-            try await self.reuseOrBuildBundle(for: manifest, reportingTo: report)
+        let bundle = try await Self.inFlightBuilds.value(for: key, progress: progress) { report in
+            try await self.reuseOrBuildBundle(for: manifest, fetchedAt: manifestFetchDate, reportingTo: report)
         }
+
+        // The build dates the bundle by the fetch of the library that started it. One that joined it
+        // fetched the manifest later, and so has found the site to match more recently than that.
+        guard let lastCheckedDate = bundle.lastCheckedDate, lastCheckedDate < manifestFetchDate else {
+            return bundle
+        }
+
+        return self.markLatest(bundle, matchedAt: manifestFetchDate) ?? bundle
     }
 
-    /// Returns the bundle on disk for `manifest` if it has every asset, and otherwise builds one.
+    /// Returns the bundle on disk for `manifest` if it has every asset downloaded, and otherwise builds one.
     ///
     /// The bundle on disk is looked for here, inside the build that callers share, so that a build
     /// finishing in between is reused.
     private func reuseOrBuildBundle(
         for manifest: LocalEditorAssetManifest,
+        fetchedAt manifestFetchDate: Date,
         reportingTo progress: EditorProgressCallback
     ) async throws -> EditorAssetBundle {
-        let existingBundle = self.existingBundle(forManifestChecksum: manifest.checksum)
+        // Another library can put a bundle for this manifest in storage while this one works: a build
+        // under `.ignore` doesn't share this one. What was found or built here is then out of date,
+        // and marking or publishing it would put it back in front of the newer bundle. So the
+        // manifest's bundle is looked for again: once for each bundle published in the meantime.
+        while true {
+            let existingBundle = self.existingBundle(forManifestChecksum: manifest.checksum)
 
-        if let existingBundle, self.missingAssets(of: existingBundle).isEmpty {
-            await progress(EditorProgress(completed: 1, total: 1))
+            if let existingBundle, self.assetsToTryAgain(of: existingBundle).isEmpty {
+                await progress(EditorProgress(completed: 1, total: 1))
 
-            // A `cleanup()` or `purge()` can delete the bundle after it's found here, in which
-            // case there is nothing to reuse after all.
-            if let latestBundle = self.markLatest(existingBundle) {
-                return latestBundle
+                // A `cleanup()` or `purge()` can also delete the bundle after it's found here, in
+                // which case there is nothing to reuse after all.
+                if let latestBundle = self.markLatest(existingBundle, matchedAt: manifestFetchDate) {
+                    return latestBundle
+                }
+
+                continue
             }
-        }
 
-        // A bundle on disk that's missing assets is left as it is: an editor may be reading it.
-        // The build takes what that bundle has and tries the rest again.
-        let draft = try await self.build(manifest, reportingTo: progress)
+            // A bundle on disk with assets that failed to download is left as it is: an editor may
+            // be reading it. The build takes what that bundle downloaded and tries the rest again.
+            let draft = try await self.build(manifest, keepingAssetsOf: existingBundle, reportingTo: progress)
 
-        // Another try that gained nothing isn't worth a second bundle on disk
-        if let existingBundle,
-            self.missingAssets(of: draft.bundle) == self.missingAssets(of: existingBundle),
-            let latestBundle = self.markLatest(existingBundle) {
+            if let bundle = try self.publish(draft, matchedAt: manifestFetchDate, unlessSameAs: existingBundle) {
+                return bundle
+            }
+
             draft.discard()
-            return latestBundle
         }
-
-        return try self.publish(draft)
     }
 
     /// Builds a bundle for `manifest` with every asset downloaded now, which is what `.ignore` asks for.
     ///
     /// The bundle goes beside the one the manifest already has rather than over it: a bundle on disk is never
-    /// changed, because an editor may be reading it. It has no build to join, because a build under another
-    /// policy doesn't download everything. If the assets all come back the same as the manifest's bundle on
-    /// disk has them, that bundle is still right, so it's returned instead and the new one is discarded. That
-    /// keeps a refresh that changed nothing from costing disk space, or looking like a change to a host
-    /// comparing dependencies.
+    /// changed, because an editor may be reading it. It has no build to join: one under another policy
+    /// doesn't download everything, and another under `.ignore` began before this was asked for. Of two
+    /// that overlap, the one that finishes last is the site's latest.
+    ///
+    /// If the assets all come back the same as the manifest's bundle on disk has them, that bundle is still
+    /// right, so it's returned instead and the new one is discarded. That keeps a refresh that changed
+    /// nothing from costing disk space, or looking like a change to a host comparing dependencies.
     private func buildFreshBundle(
         for manifest: LocalEditorAssetManifest,
+        fetchedAt manifestFetchDate: Date,
         reportingTo progress: EditorProgressCallback
     ) async throws -> EditorAssetBundle {
         let draft = try await self.build(manifest, reportingTo: progress)
 
-        if let existingBundle = self.existingBundle(forManifestChecksum: manifest.checksum),
-            self.hasSameAssets(draft.bundle, as: existingBundle),
-            let latestBundle = self.markLatest(existingBundle) {
-            draft.discard()
-            return latestBundle
-        }
+        // The draft kept nothing from the bundle on disk, so it's as good against whichever bundle the
+        // manifest has by now. If another library publishes one in between, it's compared with that.
+        while true {
+            let existingBundle = self.existingBundle(forManifestChecksum: manifest.checksum)
 
-        return try self.publish(draft)
+            if let bundle = try self.publish(draft, matchedAt: manifestFetchDate, unlessSameAs: existingBundle) {
+                return bundle
+            }
+        }
     }
 
     /// A bundle while it's being assembled, in a temporary directory that nothing else can see or delete.
     ///
     /// It's the only thing an asset is ever written into. A draft can't be made of a bundle in storage — the
     /// one way to make one starts a directory of its own — so nothing that downloads or copies an asset can
-    /// reach a bundle an editor may be reading. ``publish(_:)`` is the one way a draft becomes such a bundle.
+    /// reach a bundle an editor may be reading. Publishing a draft is the one way it becomes such a bundle.
     private struct Draft: Sendable {
         /// The bundle as it stands in the temporary directory.
         private(set) var bundle: EditorAssetBundle
 
+        /// The keys of the assets the draft took as they were from the bundle on disk for its manifest,
+        /// because the manifest hasn't changed. The build learned nothing about these: each is a copy of
+        /// that bundle's file, and that bundle is what knows about it.
+        var assetsKeptFromExistingBundle: Set<String> = []
+
         /// Starts a draft of the bundle for `manifest`, in a temporary directory of its own.
-        init(manifest: LocalEditorAssetManifest) throws {
+        init(manifest: LocalEditorAssetManifest, downloadDate: Date = Date()) throws {
             self.bundle = try EditorAssetBundle(
                 manifest: manifest,
+                downloadDate: downloadDate,
                 bundleRoot: URL.temporaryDirectory.appending(path: UUID().uuidString)
             )
         }
 
         /// Writes the draft's manifest again, with what's been learned since it was started: its assets'
-        /// headers, and, for a draft about to be published, when the site's manifest last matched it.
+        /// headers, which of them failed to download, and, for a draft about to be published, when the
+        /// site's manifest last matched it.
         mutating func record(
             assetHeaders: [String: EditorAssetBundle.AssetHeaders],
+            assetsNotRefreshed: Set<String>,
             lastCheckedDate: Date? = nil
         ) throws {
-            self.bundle = try EditorAssetBundle(
-                manifest: self.bundle.manifest,
-                downloadDate: self.bundle.downloadDate,
+            self.bundle = self.bundle.recording(
                 lastCheckedDate: lastCheckedDate,
                 assetHeaders: assetHeaders,
-                bundleRoot: self.bundle.bundleRoot
+                assetsNotRefreshed: assetsNotRefreshed
             )
             try self.bundle.writeManifest()
         }
@@ -337,31 +595,75 @@ public actor EditorAssetLibrary {
         }
     }
 
-    /// Moves `draft` into the library's storage, as the site's latest bundle and one that's been handed out.
+    /// Puts `draft` in the library's storage as the site's latest bundle — unless `existingBundle`, the bundle
+    /// on disk for the same manifest, already holds the same assets.
+    ///
+    /// Then that bundle is still right, so it's kept as the latest and the draft is discarded: a build
+    /// that changed nothing costs no disk space. What the build learned is still recorded in the bundle
+    /// it keeps: the headers its assets come with now, and which of them failed to download.
+    ///
+    /// `existingBundle` must be the bundle the draft kept assets from, if it kept any. Returns `nil`, with
+    /// the draft left as it is, if `existingBundle` is no longer the manifest's latest bundle on disk.
+    private func publish(
+        _ draft: Draft,
+        matchedAt matchDate: Date,
+        unlessSameAs existingBundle: EditorAssetBundle?
+    ) throws -> EditorAssetBundle? {
+        if let existingBundle,
+            self.hasSameAssets(draft, as: existingBundle),
+            let latestBundle = self.markLatest(existingBundle, matchedAt: matchDate, recording: draft) {
+            draft.discard()
+            return latestBundle
+        }
+
+        return try self.publish(draft, matchedAt: matchDate, keptFrom: existingBundle)
+    }
+
+    /// Moves `draft` into the library's storage, as one the site's manifest matched at `matchDate` and one
+    /// that's been handed out.
     ///
     /// It's all one step for anything else that changes storage: there is no moment when the bundle is there
     /// and a `cleanup()` could take it for one nobody is using. And it's a move, into a directory that didn't
     /// exist, so nothing sees the bundle half there and no bundle on disk is written over.
-    private func publish(_ draft: Draft) throws -> EditorAssetBundle {
+    ///
+    /// `existingBundle` is the manifest's bundle on disk as the build found it, if it found one. Returns
+    /// `nil`, with the draft left as it is, if another library has put a bundle for the manifest in storage
+    /// since: the draft was made without it.
+    private func publish(
+        _ draft: Draft,
+        matchedAt matchDate: Date,
+        keptFrom existingBundle: EditorAssetBundle?
+    ) throws -> EditorAssetBundle? {
         var draft = draft
 
         do {
-            // Marked before it's moved, while nothing else can see it
-            try draft.record(assetHeaders: draft.bundle.assetHeaders, lastCheckedDate: Date())
-
             return try Self.storageLock.withLock {
-                try FileManager.default.createDirectory(at: self.storageRoot, withIntermediateDirectories: true)
+                // The manifest's latest bundle on disk, as it's recorded at this moment. If there is
+                // one and it isn't `existingBundle`, another library has published it since.
+                let recorded = self.existingBundle(forManifestChecksum: draft.bundle.id)
 
-                // The manifest's own directory, unless something is already there
-                var destination = self.bundleRoot(for: draft.bundle.id)
-                if FileManager.default.fileExists(atPath: destination.path) {
-                    destination = self.storageRoot.appending(path: "\(draft.bundle.id)-\(UUID().uuidString)")
+                guard recorded == nil || recorded?.bundleRoot == existingBundle?.bundleRoot else {
+                    return nil
                 }
 
-                try FileManager.default.moveItem(at: draft.bundle.bundleRoot, to: destination)
-                Self.handedOut.insert(destination.standardizedFileURL)
+                let record = self.assetRecord(from: draft, keptFrom: recorded)
 
-                return try EditorAssetBundle(url: self.bundleManifestPath(relativeTo: destination))
+                // The bundle replaces the one the manifest has on disk, so it has to come ahead of it.
+                // Another library may have found the manifest to match more recently than this build
+                // fetched it, and recorded that in the bundle on disk: this one is dated just after.
+                let matchDate = recorded.map { max(matchDate, $0.lastMatchedDate.addingTimeInterval(0.001)) } ?? matchDate
+
+                // Marked before it's moved, while nothing else can see it
+                try draft.record(
+                    assetHeaders: record.assetHeaders,
+                    assetsNotRefreshed: record.assetsNotRefreshed,
+                    lastCheckedDate: matchDate
+                )
+
+                let bundle = try self.place(draft)
+                Self.handedOut.insert(bundle.bundleRoot.standardizedFileURL)
+
+                return bundle
             }
         } catch {
             draft.discard()
@@ -369,14 +671,72 @@ public actor EditorAssetLibrary {
         }
     }
 
-    /// Whether two bundles of one manifest hold the same assets: each either missing from both, or identical.
-    private func hasSameAssets(_ bundle: EditorAssetBundle, as other: EditorAssetBundle) -> Bool {
-        self.downloadableAssets(in: bundle.manifest).allSatisfy { asset in
-            let path = self.assetPath(for: asset, in: bundle).path
+    /// What a bundle records about its assets: the headers each came with, and which of them failed to
+    /// download.
+    private typealias AssetRecord = (
+        assetHeaders: [String: EditorAssetBundle.AssetHeaders], assetsNotRefreshed: Set<String>
+    )
+
+    /// What `draft` gives a bundle to record about its assets.
+    ///
+    /// The build found that out for every asset but the ones it kept from the bundle on disk for its
+    /// manifest, without asking for them. For those it's what that bundle records now, which is `recorded`
+    /// — not what it recorded when the build read it, which another library may have changed since.
+    private func assetRecord(from draft: Draft, keptFrom recorded: EditorAssetBundle?) -> AssetRecord {
+        var assetHeaders = draft.bundle.assetHeaders
+        var assetsNotRefreshed = draft.bundle.assetsNotRefreshed
+
+        if let recorded {
+            for key in draft.assetsKeptFromExistingBundle {
+                assetHeaders[key] = recorded.assetHeaders[key]
+
+                if recorded.assetsNotRefreshed.contains(key) {
+                    assetsNotRefreshed.insert(key)
+                }
+            }
+        }
+
+        return (assetHeaders, assetsNotRefreshed)
+    }
+
+    /// Moves `draft` into the library's storage as it stands. Call it with `storageLock` held.
+    ///
+    /// The bundle isn't recorded as handed out: that's for whoever gives it to a caller.
+    ///
+    /// A copy of `original` in the layout a bundle has now goes in a directory with the original's name and
+    /// more: with the same dates, that's what puts the copy first in ``readAssetBundles()``.
+    private func place(_ draft: Draft, asCopyOf original: EditorAssetBundle? = nil) throws -> EditorAssetBundle {
+        try FileManager.default.createDirectory(at: self.storageRoot, withIntermediateDirectories: true)
+
+        // The manifest's own directory, unless something is already there
+        var destination = self.bundleRoot(for: draft.bundle.id)
+        if let original {
+            let name = "\(original.bundleRoot.lastPathComponent)-\(UUID().uuidString)"
+            destination = self.storageRoot.appending(path: name)
+        } else if FileManager.default.fileExists(atPath: destination.path) {
+            destination = self.storageRoot.appending(path: "\(draft.bundle.id)-\(UUID().uuidString)")
+        }
+
+        try FileManager.default.moveItem(at: draft.bundle.bundleRoot, to: destination)
+
+        return try EditorAssetBundle(url: self.bundleManifestPath(relativeTo: destination))
+    }
+
+    /// Whether `draft` holds the same assets as `other`, a bundle of the same manifest: each either missing
+    /// from both, or identical.
+    ///
+    /// An asset the draft kept from `other` is a copy of the file there, so it's only looked for.
+    private func hasSameAssets(_ draft: Draft, as other: EditorAssetBundle) -> Bool {
+        self.downloadableAssets(in: draft.bundle.manifest).allSatisfy { asset in
+            let path = self.assetPath(for: asset, in: draft.bundle).path
             let otherPath = self.assetPath(for: asset, in: other).path
 
             guard FileManager.default.fileExists(atPath: path) else {
                 return !FileManager.default.fileExists(atPath: otherPath)
+            }
+
+            guard !draft.assetsKeptFromExistingBundle.contains(EditorAssetBundle.assetKey(for: asset)) else {
+                return FileManager.default.fileExists(atPath: otherPath)
             }
 
             return FileManager.default.contentsEqual(atPath: path, andPath: otherPath)
@@ -388,7 +748,7 @@ public actor EditorAssetLibrary {
     /// Returns the headers each downloaded asset's server sent with it, by the asset's key.
     private func downloadMissingAssets(
         of draft: Draft,
-        unlessSameAsIn sources: [AssetSource] = [],
+        unlessSameAsIn sources: [EditorAssetBundle] = [],
         reportingTo progress: EditorProgressCallback
     ) async throws -> [String: EditorAssetBundle.AssetHeaders] {
         let missingAssets = self.missingAssets(of: draft.bundle)
@@ -406,48 +766,100 @@ public actor EditorAssetLibrary {
         )
     }
 
-    /// The assets `bundle` should have that aren't on disk: the ones that failed to download.
+    /// The assets `bundle` should have that aren't on disk: the ones that failed to download, with no copy on
+    /// disk to take their place.
     func missingAssets(of bundle: EditorAssetBundle) -> [URL] {
         self.downloadableAssets(in: bundle.manifest)
             .filter { !FileManager.default.fileExists(at: self.assetPath(for: $0, in: bundle)) }
     }
 
-    /// Records that the site's manifest matches `bundle` now, and that the bundle has been handed out. That makes
-    /// it the site's latest bundle, and starts its age for the cache policy over. Returns `nil` if the bundle is
-    /// no longer on disk.
-    private func markLatest(_ bundle: EditorAssetBundle) -> EditorAssetBundle? {
-        Self.storageLock.withLock {
-            guard self.hasBundle(at: bundle.bundleRoot) else {
+    /// The assets `bundle` holds an earlier bundle's copy of: the ones that failed to download when it was
+    /// built, with a copy on disk to take their place.
+    func assetsNotRefreshed(in bundle: EditorAssetBundle) -> [URL] {
+        guard !bundle.assetsNotRefreshed.isEmpty else {
+            return []
+        }
+
+        return self.downloadableAssets(in: bundle.manifest).filter {
+            bundle.assetsNotRefreshed.contains(EditorAssetBundle.assetKey(for: $0)) && bundle.hasAssetData(for: $0)
+        }
+    }
+
+    /// The assets of `bundle` that failed to download, whether or not a copy on disk took their place. A
+    /// check of the site's manifest that finds the bundle still matches asks for these again.
+    private func assetsToTryAgain(of bundle: EditorAssetBundle) -> [URL] {
+        self.missingAssets(of: bundle) + self.assetsNotRefreshed(in: bundle)
+    }
+
+    /// Records that the site's manifest matched `bundle` at `matchDate`, and that the bundle has been handed
+    /// out. That makes it the site's latest bundle, unless the site has been found to have another manifest
+    /// since then, and starts its age for the cache policy from then.
+    ///
+    /// Returns `nil` if the bundle is no longer on disk, or is no longer its manifest's latest bundle there:
+    /// another library has published one since, and marking this one would put it back in front.
+    ///
+    /// `draft`, if there is one, is a build of the same manifest that came out with the same assets. What it
+    /// learned about them is recorded too. Otherwise the bundle keeps what it records on disk at this moment
+    /// — not what `bundle` had when it was read, which another library may have changed since.
+    private func markLatest(
+        _ bundle: EditorAssetBundle,
+        matchedAt matchDate: Date,
+        recording draft: Draft? = nil
+    ) -> EditorAssetBundle? {
+        Self.storageLock.withLock { () -> EditorAssetBundle? in
+            // The manifest's latest bundle on disk, as it's recorded at this moment. If that isn't
+            // `bundle`, it has been removed, or another library has published one since.
+            guard
+                let recorded = self.existingBundle(forManifestChecksum: bundle.id),
+                recorded.bundleRoot == bundle.bundleRoot
+            else {
                 return nil
             }
 
             Self.handedOut.insert(bundle.bundleRoot.standardizedFileURL)
 
+            let record: AssetRecord =
+                draft.map { self.assetRecord(from: $0, keptFrom: recorded) }
+                ?? (recorded.assetHeaders, recorded.assetsNotRefreshed)
+
+            // Another library may have found the manifest to match more recently than this one did,
+            // and recorded it first
+            let latestBundle = bundle.recording(
+                lastCheckedDate: max(recorded.lastMatchedDate, matchDate),
+                assetHeaders: record.assetHeaders,
+                assetsNotRefreshed: record.assetsNotRefreshed
+            )
+
             do {
-                let latestBundle = try EditorAssetBundle(
-                    manifest: bundle.manifest,
-                    downloadDate: bundle.downloadDate,
-                    lastCheckedDate: Date(),
-                    assetHeaders: bundle.assetHeaders,
-                    bundleRoot: bundle.bundleRoot
-                )
-                // Written straight to the file, which is known to be there: `writeManifest()` would
-                // create the bundle's directory if it weren't.
-                try latestBundle.dataRepresentation()
-                    .write(to: self.bundleManifestPath(relativeTo: bundle.bundleRoot), options: .atomic)
-                return latestBundle
+                try self.rewriteManifest(of: latestBundle)
             } catch {
-                // The bundle is still complete and correct; it'll just be checked again sooner.
+                // The bundle is still complete and correct, and what's known about it now is still
+                // what the caller is given. It'll just be checked again sooner.
                 log(.warn, "Failed to mark asset bundle \(bundle.id) as the latest: \(error.localizedDescription)")
-                return bundle
             }
+
+            return latestBundle
         }
     }
 
+    /// Writes `bundle`'s manifest over the one in storage. Call it with `storageLock` held, for a bundle
+    /// that's been found still there.
+    ///
+    /// It's written straight to the file: `EditorAssetBundle.writeManifest()` would create the bundle's
+    /// directory if it weren't there.
+    private func rewriteManifest(of bundle: EditorAssetBundle) throws {
+        try bundle.dataRepresentation()
+            .write(to: self.bundleManifestPath(relativeTo: bundle.bundleRoot), options: .atomic)
+    }
+
     /// Assembles a bundle for `manifest` as a draft, for the caller to put in the library's storage with
-    /// ``publish(_:)`` or to discard. A build that fails discards the draft itself.
+    /// ``publish(_:matchedAt:unlessSameAs:)``. A build that fails discards the draft itself.
+    ///
+    /// `existingBundle` is the bundle on disk for this same manifest, if there is one and the cache policy
+    /// isn't `.ignore`: the manifest hasn't changed, so the draft keeps every asset that bundle downloaded.
     private func build(
         _ manifest: LocalEditorAssetManifest,
+        keepingAssetsOf existingBundle: EditorAssetBundle? = nil,
         reportingTo progress: EditorProgressCallback
     ) async throws -> Draft {
         var draft = try Draft(manifest: manifest)
@@ -457,8 +869,7 @@ public actor EditorAssetLibrary {
             try draft.bundle.writeManifest(editorRepresentation: editorRepresentation)
 
             let sources = self.assetSources()
-            let carried: [String: EditorAssetBundle.AssetHeaders]
-            let downloaded: [String: EditorAssetBundle.AssetHeaders]
+            var assetHeaders: [String: EditorAssetBundle.AssetHeaders] = [:]
 
             switch self.cachePolicy {
             case .always, .maxAge:
@@ -467,34 +878,38 @@ public actor EditorAssetLibrary {
                 // though only for a newer copy when its server said how to tell one from another.
                 //
                 // A bundle already on disk for this manifest is the exception: the manifest hasn't
-                // changed, so the bundle keeps every asset it has, and only what it's missing is
-                // asked for.
+                // changed, so the bundle keeps every asset it downloaded, and only the rest are asked
+                // for.
                 let assets = self.downloadableAssets(in: manifest)
-                let unchanged = self.carryForward(
-                    assets,
-                    from: sources.filter { $0.bundle.id == manifest.checksum },
-                    into: draft
-                )
+
+                if let existingBundle {
+                    let unchanged = self.carryForward(assets, from: [existingBundle], into: draft)
+                    assetHeaders.merge(unchanged.headers) { $1 }
+                    draft.assetsKeptFromExistingBundle = unchanged.keys
+                }
+
                 let versioned = self.carryForward(assets.filter { self.isVersioned($0) }, from: sources, into: draft)
-                carried = unchanged.merging(versioned) { $1 }
-                downloaded = try await self.downloadMissingAssets(
+                assetHeaders.merge(versioned.headers) { $1 }
+
+                let downloaded = try await self.downloadMissingAssets(
                     of: draft,
                     unlessSameAsIn: sources,
                     reportingTo: progress
                 )
+                assetHeaders.merge(downloaded) { $1 }
             case .ignore:
                 // Takes nothing on disk as valid, so every asset is downloaded in full.
-                carried = [:]
-                downloaded = try await self.downloadMissingAssets(of: draft, reportingTo: progress)
+                assetHeaders = try await self.downloadMissingAssets(of: draft, reportingTo: progress)
             }
 
             // An asset that fails to download has no better copy than one already on disk, which
-            // beats a gap.
-            let kept = self.carryForward(self.missingAssets(of: draft.bundle), from: sources, into: draft)
+            // beats a gap. The bundle records that it holds one, so that the failure isn't hidden
+            // behind the copy, and the asset is asked for again when the manifest is next checked.
+            let failed = self.missingAssets(of: draft.bundle)
+            let kept = self.carryForward(failed, from: sources, whetherOrNotRefreshed: true, into: draft)
+            assetHeaders.merge(kept.headers) { $1 }
 
-            // Each asset has one entry at most: an asset in the draft is neither downloaded nor
-            // carried again.
-            try draft.record(assetHeaders: carried.merging(downloaded) { $1 }.merging(kept) { $1 })
+            try draft.record(assetHeaders: assetHeaders, assetsNotRefreshed: kept.keys)
             return draft
         } catch {
             draft.discard()
@@ -502,32 +917,32 @@ public actor EditorAssetLibrary {
         }
     }
 
-    /// A bundle on disk, and the assets it should have.
-    private typealias AssetSource = (bundle: EditorAssetBundle, assets: Set<URL>)
-
     /// The bundles on disk that a build can take a copy of an asset from, the latest first.
-    private func assetSources() -> [AssetSource] {
-        ((try? self.readAssetBundles()) ?? []).map {
-            (bundle: $0, assets: Set(self.downloadableAssets(in: $0.manifest)))
-        }
+    private func assetSources() -> [EditorAssetBundle] {
+        (try? self.readAssetBundles()) ?? []
     }
 
     /// The latest of `sources` that has `asset` under the same URL. That isn't always the site's latest
     /// bundle: a site can go back to a manifest it had before, whose assets only that manifest's bundle has.
-    private func source(of asset: URL, in sources: [AssetSource]) -> EditorAssetBundle? {
-        sources.first {
-            $0.assets.contains(asset) && FileManager.default.fileExists(at: self.assetPath(for: asset, in: $0.bundle))
-        }?.bundle
+    ///
+    /// The same URL, scheme included: a bundle keeps an asset by its host, path and query, but a copy that
+    /// came over `http` isn't one to take in place of asking over `https`.
+    private func source(of asset: URL, in sources: [EditorAssetBundle]) -> EditorAssetBundle? {
+        sources.first { $0.hasAssetData(for: asset) && $0.manifest.assetUrls.contains(asset) }
     }
 
-    /// Copies into `draft` each of `assets` that one of `sources` has under the same URL. Returns the
-    /// headers that came with each asset copied, by the asset's key.
+    /// Copies into `draft` each of `assets` that one of `sources` has, and returns which it copied.
+    ///
+    /// A copy that stands in for an asset that failed to download isn't one to carry on as though it had
+    /// downloaded: the asset is left for the build to ask for again. `whetherOrNotRefreshed` takes it
+    /// anyway, for when asking has failed, or nothing is being asked.
     private func carryForward(
         _ assets: [URL],
-        from sources: [AssetSource],
+        from sources: [EditorAssetBundle],
+        whetherOrNotRefreshed: Bool = false,
         into draft: Draft
-    ) -> [String: EditorAssetBundle.AssetHeaders] {
-        var assetHeaders: [String: EditorAssetBundle.AssetHeaders] = [:]
+    ) -> CarriedAssets {
+        var carried = CarriedAssets()
 
         for asset in assets {
             let destination = self.assetPath(for: asset, in: draft.bundle)
@@ -535,25 +950,35 @@ public actor EditorAssetLibrary {
             // An asset the draft already has stays as it is
             guard
                 !FileManager.default.fileExists(at: destination),
-                let source = self.source(of: asset, in: sources)
+                let source = self.source(of: asset, in: sources),
+                whetherOrNotRefreshed || !source.assetsNotRefreshed.contains(EditorAssetBundle.assetKey(for: asset))
             else {
                 continue
             }
 
             do {
-                try FileManager.default.createDirectory(
-                    at: destination.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
+                try FileManager.default.copyItem(
+                    at: self.assetPath(for: asset, in: source),
+                    to: self.destination(for: asset, in: draft)
                 )
-                try FileManager.default.copyItem(at: self.assetPath(for: asset, in: source), to: destination)
-                assetHeaders[EditorAssetBundle.assetKey(for: asset)] = source.headers(for: asset)
+
+                let key = EditorAssetBundle.assetKey(for: asset)
+                carried.keys.insert(key)
+                carried.headers[key] = source.headers(for: asset)
             } catch {
                 // The bundle has been removed since. Leave nothing behind, so that it reads as missing.
                 try? FileManager.default.removeItem(at: destination)
             }
         }
 
-        return assetHeaders
+        return carried
+    }
+
+    /// The assets a carry copied into a draft: their keys, and the headers that came with the ones that
+    /// have any.
+    private struct CarriedAssets {
+        var keys: Set<String> = []
+        var headers: [String: EditorAssetBundle.AssetHeaders] = [:]
     }
 
     /// Whether `url` carries a version the way WordPress adds one: a `ver` in its query.
@@ -565,8 +990,33 @@ public actor EditorAssetLibrary {
 
     /// The assets in `manifest` that belong in its bundle: every link that one of its script or stylesheet
     /// tags loads over HTTP. The tag is what makes a link an asset, however its URL ends.
+    ///
+    /// Each is listed once. A manifest can link one asset twice, or under two URLs that a bundle keeps as
+    /// one — over `http` and over `https` — and it's one file to download either way. The `https` link is
+    /// the one to ask for: over `http`, the request may not be allowed at all.
     private func downloadableAssets(in manifest: LocalEditorAssetManifest) -> [URL] {
-        (manifest.scripts + manifest.styles).filter { self.isDownloadable($0) }
+        if let assets = self.downloadableAssetsByManifest[manifest.checksum] {
+            return assets
+        }
+
+        var assets: [URL] = []
+        var positions: [String: Int] = [:]
+
+        for link in manifest.scripts + manifest.styles where self.isDownloadable(link) {
+            let key = EditorAssetBundle.assetKey(for: link)
+
+            if let position = positions[key] {
+                if assets[position].scheme != "https", link.scheme == "https" {
+                    assets[position] = link
+                }
+            } else {
+                positions[key] = assets.count
+                assets.append(link)
+            }
+        }
+
+        self.downloadableAssetsByManifest[manifest.checksum] = assets
+        return assets
     }
 
     /// Downloads `assets` into `draft` concurrently, tolerating any that fail. Returns the headers each
@@ -574,7 +1024,7 @@ public actor EditorAssetLibrary {
     private func downloadAssets(
         _ assets: [URL],
         into draft: Draft,
-        unlessSameAsIn sources: [AssetSource],
+        unlessSameAsIn sources: [EditorAssetBundle],
         reportingTo progress: EditorProgressCallback
     ) async throws -> [String: EditorAssetBundle.AssetHeaders] {
         var complete = 0
@@ -595,7 +1045,9 @@ public actor EditorAssetLibrary {
             }
 
             for await (asset, headers) in group {
-                assetHeaders[EditorAssetBundle.assetKey(for: asset)] = headers
+                if let headers {
+                    assetHeaders[EditorAssetBundle.assetKey(for: asset)] = headers
+                }
                 complete += 1
                 await progress(EditorProgress(completed: complete, total: assets.count))
             }
@@ -619,7 +1071,7 @@ public actor EditorAssetLibrary {
     private func fetchAsset(
         url: URL,
         into draft: Draft,
-        unlessSameAsIn sources: [AssetSource]
+        unlessSameAsIn sources: [EditorAssetBundle]
     ) async throws -> EditorAssetBundle.AssetHeaders? {
         let source = self.source(of: url, in: sources)
         let heldHeaders = source?.headers(for: url).flatMap { $0.canRevalidate ? $0 : nil }
@@ -639,11 +1091,7 @@ public actor EditorAssetLibrary {
         // isn't — the server had nothing newer, or something fails first — it's removed.
         defer { try? FileManager.default.removeItem(at: tempUrl) }
 
-        let destinationPath = self.assetPath(for: url, in: draft.bundle)
-        let destinationParent = destinationPath.deletingLastPathComponent()
-
-        // Ensure the destination directory exists
-        try FileManager.default.createDirectory(at: destinationParent, withIntermediateDirectories: true)
+        let destinationPath = try self.destination(for: url, in: draft)
 
         guard response.statusCode != 304 else {
             // Only a request that said which copy it has should be answered this way
@@ -704,6 +1152,16 @@ public actor EditorAssetLibrary {
     /// from there.
     private func assetPath(for url: URL, in bundle: EditorAssetBundle) -> URL {
         bundle.assetDataPath(for: url)
+    }
+
+    /// Where `draft` keeps the asset at `url`, in a directory that's there to write it into.
+    private func destination(for url: URL, in draft: Draft) throws -> URL {
+        let destination = self.assetPath(for: url, in: draft.bundle)
+        try FileManager.default.createDirectory(
+            at: destination.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        return destination
     }
 
     /// The links in `manifest` that a bundle doesn't hold: the ones that aren't HTTP or HTTPS URLs.

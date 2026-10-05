@@ -247,6 +247,32 @@ struct EditorAssetBundleTests {
         )
 
         #expect(bundle.headers(for: URL(string: "https://example.com/app.js")!) == nil)
+        #expect(bundle.assetsNotRefreshed.isEmpty)
+    }
+
+    @Test("Bundle keeps which of its assets weren't refreshed through writing and reading")
+    func bundleKeepsAssetsNotRefreshedThroughWritingAndReading() throws {
+        let asset = URL(string: "https://example.com/app.js")!
+        let manifest = try createManifest(scripts: "<script src=\"https://example.com/app.js\"></script>")
+        let bundle = try EditorAssetBundle(
+            manifest: manifest,
+            assetsNotRefreshed: [EditorAssetBundle.assetKey(for: asset)],
+            bundleRoot: FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        )
+        try bundle.writeManifest(editorRepresentation: .empty)
+
+        let loaded = try EditorAssetBundle(url: bundle.bundleRoot.appending(path: "manifest.json"))
+
+        #expect(loaded.assetsNotRefreshed == [EditorAssetBundle.assetKey(for: asset)])
+        // It says how the bundle came to be, not what it holds
+        #expect(
+            loaded
+                == (try EditorAssetBundle(
+                    manifest: manifest,
+                    downloadDate: loaded.downloadDate,
+                    bundleRoot: loaded.bundleRoot
+                ))
+        )
     }
 
     // MARK: - URL Initialization Tests
@@ -366,6 +392,117 @@ struct EditorAssetBundleTests {
         #expect(bundle.assetDataPath(for: try #require(URL(string: other))) != bundle.assetDataPath(for: asset))
     }
 
+    /// A name that's percent-encoded but isn't UTF-8 — a directory named in Latin-1, say — decodes to
+    /// nothing at all. Its URL is told apart as it's written instead.
+    @Test(
+        "assets whose URLs are encoded as something other than text are stored apart",
+        arguments: [
+            ("https://example.com/caf%E9/a.js", "https://example.com/caf%E9/b.css"),
+            ("https://example.com/caf%E9/a.js", "https://example.com/th%E9/a.js"),
+            ("https://example.com/a.js?x=caf%E9", "https://example.com/a.js?x=th%E9"),
+            ("https://example.com/a.js?x=caf%E9", "https://example.com/a.js"),
+        ]
+    )
+    func assetsWithEncodingThatIsNotTextAreStoredApart(first: String, second: String) throws {
+        let bundle = makeBundle()
+
+        #expect(
+            bundle.assetDataPath(for: try #require(URL(string: first)))
+                != bundle.assetDataPath(for: try #require(URL(string: second)))
+        )
+    }
+
+    /// A character that divides a URL up means something else when it's encoded: `a%2Fb.js` is one file's
+    /// name, and `a/b.js` is a file in a directory.
+    @Test(
+        "assets whose URLs differ in whether a dividing character is encoded are stored apart",
+        arguments: [
+            ("https://example.com/a%2Fb/app.js", "https://example.com/a/b/app.js"),
+            ("https://example.com/a%3Fb.js", "https://example.com/a?b.js"),
+            ("https://example.com/app.js?x=a%26y%3D1", "https://example.com/app.js?x=a&y=1"),
+            ("https://example.com/app.js?x=a%2Bb", "https://example.com/app.js?x=a+b"),
+            ("https://example.com/100%25.js", "https://example.com/100%2525.js"),
+        ]
+    )
+    func assetsThatDifferInEncodedDelimitersAreStoredApart(first: String, second: String) throws {
+        let bundle = makeBundle()
+
+        #expect(
+            bundle.assetDataPath(for: try #require(URL(string: first)))
+                != bundle.assetDataPath(for: try #require(URL(string: second)))
+        )
+    }
+
+    /// However else a URL is written, it's the same asset: a web view may write it another way.
+    @Test(
+        "assets whose URLs differ only in how they're written are stored together",
+        arguments: [
+            ("https://example.com/my%20plugin/app.js", "https://example.com/my plugin/app.js"),
+            ("https://example.com/caf%C3%A9/app.js", "https://example.com/café/app.js"),
+            ("https://example.com/a%2fb/app.js", "https://example.com/a%2Fb/app.js"),
+            ("https://example.com/app.js?x=%7B1%7D", "https://example.com/app.js?x={1}"),
+            ("https://example.com/%61pp.js", "https://example.com/app.js"),
+            ("https://example.com/a/%2E%2E/app.js", "https://example.com/app.js"),
+            ("https://example.com/a/%2e/app.js", "https://example.com/a/app.js"),
+            // What can't be decoded is still the same bytes, whichever case they're written in
+            ("https://example.com/caf%e9/app.js", "https://example.com/caf%E9/app.js"),
+            // The whole of a file's name comes of what the URL leads to, its extension included
+            ("https://example.com/caf%E9/../app.js", "https://example.com/app.js"),
+            // Nothing is above a site's root, so going back from there goes nowhere
+            ("https://example.com/a/../../app.js", "https://example.com/app.js"),
+            ("https://example.com/%2E%2E/%2E%2E/app.js", "https://example.com/app.js"),
+        ]
+    )
+    func assetsThatDifferOnlyInHowTheyAreWrittenAreStoredTogether(first: String, second: String) throws {
+        let bundle = makeBundle()
+
+        #expect(
+            bundle.assetDataPath(for: try #require(URL(string: first)))
+                == bundle.assetDataPath(for: try #require(URL(string: second)))
+        )
+    }
+
+    // MARK: - Earlier Layout Tests
+
+    @Test("legacyAssetLocation gives the file at an asset's URL path, where a bundle used to keep it")
+    func legacyAssetLocationFindsFileAtURLPath() throws {
+        let bundle = makeBundle(bundleRoot: URL.randomTemporaryDirectory.appending(path: "bundle"))
+        let asset = try #require(URL(string: "https://example.com/wp-content/plugins/a%20plugin/app.js?ver=1"))
+        let file = bundle.bundleRoot.appending(path: "wp-content/plugins/a plugin/app.js")
+        try write("content", to: file)
+
+        let location = try #require(bundle.legacyAssetLocation(for: asset))
+
+        #expect(try Data(contentsOf: location) == Data("content".utf8))
+    }
+
+    /// Only a file inside the bundle that isn't one of the bundle's own can be an asset it kept.
+    @Test(
+        "legacyAssetLocation gives nothing where a bundle never kept an asset",
+        arguments: [
+            "https://example.com/wp-content/missing.js",
+            "https://example.com/",
+            "https://example.com/wp-content/",
+            "https://example.com/wp-content/../../outside.js",
+            "https://example.com/%2E%2E/outside.js",
+            "https://example.com/manifest.json",
+            "https://example.com/editor-representation.json",
+            // The same files, on a volume that doesn't tell capitals apart
+            "https://example.com/Manifest.json",
+            "https://example.com/EDITOR-REPRESENTATION.JSON",
+        ]
+    )
+    func legacyAssetLocationIsNilWhereNoAssetWasKept(link: String) throws {
+        let directory = URL.randomTemporaryDirectory
+        let bundle = makeBundle(bundleRoot: directory.appending(path: "bundle"))
+        try write("content", to: bundle.bundleRoot.appending(path: "wp-content/app.js"))
+        try write("{}", to: bundle.bundleRoot.appending(path: "manifest.json"))
+        try write("{}", to: bundle.bundleRoot.appending(path: "editor-representation.json"))
+        try write("outside", to: directory.appending(path: "outside.js"))
+
+        #expect(bundle.legacyAssetLocation(for: try #require(URL(string: link))) == nil)
+    }
+
     /// A bundle on disk can be read by someone looking for an asset.
     @Test("an asset's file is named for its URL")
     func assetFileIsNamedForItsURL() throws {
@@ -376,6 +513,14 @@ struct EditorAssetBundleTests {
 
         #expect(name.hasPrefix("example.com_wp-content_plugins_script.js_ver=1.2."))
         #expect(name.hasSuffix(".js"))
+    }
+
+    /// Only a path leads to a file with an extension. A query can have a `/` and a `.` in it too.
+    @Test("an asset's file takes no extension from its URL's query")
+    func assetFileTakesNoExtensionFromQuery() throws {
+        let asset = try #require(URL(string: "https://example.com?load=a/b.js"))
+
+        #expect(!EditorAssetBundle.assetFileName(for: asset).hasSuffix(".js"))
     }
 
     @Test("an asset's file name fits the file system however long its URL is, and still tells assets apart")
@@ -492,6 +637,88 @@ struct EditorAssetBundleTests {
         let bundle2 = makeBundle(manifest: manifest2)
 
         #expect(bundle1 != bundle2)
+    }
+
+    /// An editor is served each asset with the headers its bundle holds for it.
+    @Test("Bundles that hold different headers for their assets are not equal")
+    func bundlesWithDifferentAssetHeadersNotEqual() throws {
+        let manifest = try createManifest(scripts: "<script src=\"https://example.com/app.js\"></script>")
+        let key = EditorAssetBundle.assetKey(for: URL(string: "https://example.com/app.js")!)
+        let date = Date()
+        let root = URL.randomTemporaryDirectory
+
+        let plain = try EditorAssetBundle(
+            manifest: manifest,
+            downloadDate: date,
+            assetHeaders: [key: .init(contentType: "text/plain")],
+            bundleRoot: root
+        )
+        let script = try EditorAssetBundle(
+            manifest: manifest,
+            downloadDate: date,
+            assetHeaders: [key: .init(contentType: "application/javascript")],
+            bundleRoot: root
+        )
+
+        #expect(plain != script)
+        #expect(plain.hashValue != script.hashValue)
+    }
+
+    /// A server can write the same type differently from one answer to the next.
+    @Test("Bundles that differ only in how their assets' types are written are equal")
+    func bundlesWithDifferentlyWrittenContentTypesAreEqual() throws {
+        let manifest = try createManifest(scripts: "<script src=\"https://example.com/app.js\"></script>")
+        let key = EditorAssetBundle.assetKey(for: URL(string: "https://example.com/app.js")!)
+        let date = Date()
+        let root = URL.randomTemporaryDirectory
+
+        let first = try EditorAssetBundle(
+            manifest: manifest,
+            downloadDate: date,
+            assetHeaders: [key: .init(contentType: "text/css; charset=UTF-8")],
+            bundleRoot: root
+        )
+        let second = try EditorAssetBundle(
+            manifest: manifest,
+            downloadDate: date,
+            assetHeaders: [key: .init(contentType: "text/css;charset=utf-8")],
+            bundleRoot: root
+        )
+
+        #expect(first == second)
+        #expect(first.hashValue == second.hashValue)
+    }
+
+    /// What tells one version of an asset from another is for asking its server, not for an editor. A
+    /// server can send a new one with the same file.
+    @Test("Bundles that differ only in how their assets' servers tell versions apart are equal")
+    func bundlesWithDifferentValidatorsAreEqual() throws {
+        let manifest = try createManifest(scripts: "<script src=\"https://example.com/app.js\"></script>")
+        let key = EditorAssetBundle.assetKey(for: URL(string: "https://example.com/app.js")!)
+        let date = Date()
+        let root = URL.randomTemporaryDirectory
+
+        let first = try EditorAssetBundle(
+            manifest: manifest,
+            downloadDate: date,
+            assetHeaders: [key: .init(contentType: "application/javascript", etag: "\"first\"")],
+            bundleRoot: root
+        )
+        let second = try EditorAssetBundle(
+            manifest: manifest,
+            downloadDate: date,
+            assetHeaders: [
+                key: .init(
+                    contentType: "application/javascript",
+                    etag: "\"second\"",
+                    lastModified: "Wed, 30 Sep 2026 21:43:35 GMT"
+                )
+            ],
+            bundleRoot: root
+        )
+
+        #expect(first == second)
+        #expect(first.hashValue == second.hashValue)
     }
 
     @Test("Bundles with different downloadDates are not equal")

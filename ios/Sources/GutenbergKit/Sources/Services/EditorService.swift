@@ -147,6 +147,9 @@ public actor EditorService {
     /// fetched comes from disk, however old, or is left out. Call ``prepareAvailable(progress:)``
     /// to have the dependencies and to know.
     ///
+    /// An asset that fails to download doesn't count as a dependency that couldn't be fetched, and
+    /// never stops an editor opening: the asset bundle is given without it, or with an earlier copy.
+    ///
     /// - Parameter progress: A callback invoked with progress updates during loading.
     /// - Returns: The complete set of dependencies needed to initialize the editor.
     /// - Throws: An error if any required resource fails to download.
@@ -154,8 +157,9 @@ public actor EditorService {
     public func prepare(progress: EditorProgressCallback? = nil) async throws -> EditorDependencies {
         let preparation = try await self.prepareAvailable(progress: progress)
 
-        // An asset bundle that's missing assets doesn't count: one asset failing to download has
-        // never stopped an editor opening.
+        // Thrown once every dependency has been tried, rather than at the first to fail. By then
+        // whatever could be fetched is stored, so trying again starts from there instead of from
+        // nothing, and which error is thrown doesn't depend on which request finished first.
         if self.configuration.networkFallbackMode == .disabled {
             for case .notFetched(_, let error, _) in preparation.failures {
                 throw error
@@ -215,11 +219,12 @@ public actor EditorService {
             log(.warn, "Failed to clean up old asset bundles: \(error.localizedDescription)")
         }
 
-        let bundle = try await assetBundle.value ?? .empty
+        let resolvedAssetBundle = try await assetBundle
+        let bundle = resolvedAssetBundle.value ?? .empty
         let postData = try await post?.value
         var failures = try await [
             editorSettings.failure,
-            assetBundle.failure,
+            resolvedAssetBundle.failure,
             post?.failure,
             postType.failure,
             postTypes.failure,
@@ -230,6 +235,16 @@ public actor EditorService {
         let missingAssets = await self.assetLibrary.missingAssets(of: bundle)
         if !missingAssets.isEmpty {
             failures.append(.assetsMissing(missingAssets))
+        }
+
+        // Only a bundle the site was asked for in this prepare: that's when these were asked for and
+        // failed to download. A bundle from disk holds an earlier copy of them too, but nothing was
+        // asked of the site for it, so nothing about them went wrong here.
+        if resolvedAssetBundle.wasFetched {
+            let assetsNotRefreshed = await self.assetLibrary.assetsNotRefreshed(in: bundle)
+            if !assetsNotRefreshed.isEmpty {
+                failures.append(.assetsNotRefreshed(assetsNotRefreshed))
+            }
         }
 
         // The editor can't use a preload list without its post types, and asks for the rest itself
@@ -309,6 +324,9 @@ public actor EditorService {
     private struct Resolved<Value: Sendable>: Sendable {
         let value: Value?
         let failure: EditorPreparation.Failure?
+
+        /// Whether `value` is what the site was asked for in this prepare, rather than a copy on disk.
+        var wasFetched = false
     }
 
     /// Resolves one dependency. Every dependency comes through here, so each is fetched, falls
@@ -344,7 +362,7 @@ public actor EditorService {
             }
 
             await complete()
-            return Resolved(value: value, failure: nil)
+            return Resolved(value: value, failure: nil, wasFetched: trustedValue == nil)
         } catch {
             // A prepare that's been cancelled has no one to report a failure to
             try Task.checkCancellation()
@@ -372,9 +390,27 @@ public actor EditorService {
     }
 
     private func resolveAssetBundle() async throws -> Resolved<EditorAssetBundle> {
-        try await self.resolve(
+        // The bundle on disk, if the cache policy still trusts it, and whether it's missing assets. It's
+        // read once, so that what the policy makes of it is settled before the site is asked anything,
+        // and doesn't depend on how long the site takes to answer.
+        let trusted: (bundle: EditorAssetBundle, isMissingAssets: Bool)?
+        do {
+            trusted = try await self.assetLibrary.readLatestAssetBundleWithinPolicy()
+        } catch {
+            log(.warn, "Failed to read the asset bundle from disk: \(error.localizedDescription)")
+            trusted = nil
+        }
+
+        let resolved = try await self.resolve(
             .assetBundle,
-            trusted: { try await self.assetLibrary.readLatestAssetBundle() },
+            // One that's missing assets is still worth going to the site for, to try them again
+            trusted: {
+                guard let trusted, !trusted.isMissingAssets else {
+                    return nil
+                }
+
+                return await self.assetLibrary.handOut(trusted.bundle)
+            },
             fetch: {
                 try await self.assetLibrary.downloadAssetBundle { progress in
                     await self.incrementProgress(forAssetBundleDownload: progress)
@@ -385,6 +421,26 @@ public actor EditorService {
             // report, and not when it fails
             complete: { await self.incrementProgress(forAssetBundleDownload: EditorProgress(completed: 1, total: 1)) }
         )
+
+        // If the site couldn't be asked, a bundle the policy trusts is still what the policy asked
+        // for, so nothing went unfetched: its missing assets are reported as they stand, and why they
+        // couldn't be tried again is logged.
+        //
+        // The bundle given is the latest on disk by now, which another service may have published
+        // in the meantime, and otherwise the one that was trusted to begin with.
+        if case .notFetched(_, let error, _)? = resolved.failure, let trusted, trusted.isMissingAssets {
+            var bundle = resolved.value
+            if bundle == nil {
+                bundle = await self.assetLibrary.handOut(trusted.bundle)
+            }
+
+            if let bundle {
+                log(.warn, "Failed to try the asset bundle's missing assets again: \(error.localizedDescription)")
+                return Resolved(value: bundle, failure: nil)
+            }
+        }
+
+        return resolved
     }
 
     /// `nil` when the configuration is for a post that doesn't exist yet.

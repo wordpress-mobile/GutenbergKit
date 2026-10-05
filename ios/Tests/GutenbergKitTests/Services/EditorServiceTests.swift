@@ -470,7 +470,10 @@ struct EditorServiceTests: MakesTestFixtures {
     #expect(site.client.downloadCallCount == 3)
   }
 
-  @Test("a bundle that's missing an asset is still given when the site can't be asked about it")
+  /// The cache policy asks for no more than the bundle on disk. Trying its missing asset again is worth
+  /// asking the site for, but the bundle doesn't depend on the answer — so no dependency went unfetched,
+  /// and nothing throws for want of a fallback.
+  @Test("a bundle that's missing an asset is still given when the site can't be asked about it, even without a fallback")
   func bundleMissingAssetIsGivenWhenSiteCannotBeAsked() async throws {
     let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
     site.failure = { $0.path == Self.pluginScript.path ? Self.notFound($0) : nil }
@@ -480,8 +483,149 @@ struct EditorServiceTests: MakesTestFixtures {
     let preparation = try await site.service(cachePolicy: .always).prepareAvailable()
 
     #expect(preparation.dependencies.assetBundle == gapped)
-    #expect(dependenciesNotFetched(in: preparation) == [.assetBundle: true])
+    #expect(dependenciesNotFetched(in: preparation).isEmpty)
     #expect(assetsMissing(in: preparation) == [Self.pluginScript])
+    #expect(try await site.service(cachePolicy: .always).prepare().assetBundle == gapped)
+  }
+
+  @Test("a bundle that's missing an asset is still given when the site answers the check with an error")
+  func bundleMissingAssetIsGivenWhenManifestCheckErrors() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    site.failure = { $0.path == Self.pluginScript.path ? Self.notFound($0) : nil }
+    let gapped = try await site.service(cachePolicy: .always).prepare().assetBundle
+
+    // The site no longer has the endpoint that serves its manifest
+    site.failure = { Self.notFound($0) }
+
+    #expect(try await site.service(cachePolicy: .always).prepare().assetBundle == gapped)
+  }
+
+  /// The bundle that was trusted when the prepare began isn't the one to give if there's a newer one by
+  /// the time the site turns out not to answer: another service may have published it in between.
+  @Test("a bundle that's missing an asset gives way to one published while the site couldn't be asked")
+  func bundleMissingAssetGivesWayToOnePublishedMeanwhile() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    site.failure = { $0.path == Self.pluginScript.path ? Self.notFound($0) : nil }
+    let gapped = try await site.service(cachePolicy: .always).prepare().assetBundle
+    let publishedRoot = gapped.bundleRoot.deletingLastPathComponent().appending(path: "\(gapped.id)-published")
+
+    // While the manifest is being asked for, and failing, a bundle with the asset is published
+    site.failure = { _ in
+      if !FileManager.default.fileExists(atPath: publishedRoot.path) {
+        try? FileManager.default.copyItem(at: gapped.bundleRoot, to: publishedRoot)
+        if let published = try? EditorAssetBundle(
+          manifest: gapped.manifest,
+          downloadDate: Date(),
+          lastCheckedDate: Date(),
+          bundleRoot: publishedRoot
+        ) {
+          try? published.writeManifest()
+          try? FileManager.default.createDirectory(
+            at: published.assetDataPath(for: Self.pluginScript).deletingLastPathComponent(),
+            withIntermediateDirectories: true
+          )
+          try? Data("script".utf8).write(to: published.assetDataPath(for: Self.pluginScript))
+        }
+      }
+      return URLError(.timedOut)
+    }
+    let preparation = try await site.service(cachePolicy: .always).prepareAvailable()
+
+    #expect(preparation.dependencies.assetBundle.bundleRoot.lastPathComponent == publishedRoot.lastPathComponent)
+    #expect(preparation.dependencies.assetBundle.hasAssetData(for: Self.pluginScript))
+    #expect(preparation.isComplete)
+  }
+
+  /// The copy on disk stands in for the asset, and the failure isn't hidden behind it.
+  @Test("an asset that fails to download in a refresh is reported, and asked for again at each check until it downloads")
+  func assetNotRefreshedIsReportedAndAskedForAgain() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    let prepared = try await site.service(cachePolicy: .always).prepare()
+
+    site.failure = { $0.path == Self.pluginScript.path ? URLError(.timedOut) : nil }
+    let refreshed = try await site.service(cachePolicy: .ignore).prepareAvailable()
+
+    #expect(refreshed.dependencies.assetBundle == prepared.assetBundle)
+    #expect(assetsNotRefreshed(in: refreshed) == [Self.pluginScript])
+    #expect(assetsMissing(in: refreshed).isEmpty)
+    #expect(dependenciesNotFetched(in: refreshed).isEmpty)
+
+    // The bundle has everything an editor loads, and it's what `.always` asks for: the next editor
+    // doesn't wait on the site for it, and has nothing to report, because nothing was asked.
+    let requests = site.client.requests.count + site.client.downloadCallCount
+    let opened = try await site.service(cachePolicy: .always).prepareAvailable()
+
+    #expect(opened.isComplete)
+    #expect(opened.dependencies.assetBundle == prepared.assetBundle)
+    #expect(site.client.requests.count + site.client.downloadCallCount == requests)
+
+    // The next check of the manifest asks for the asset again, though its URL has a version
+    let downloads = site.client.downloadCallCount
+    let checked = try await site.service(cachePolicy: .maxAge(0)).prepareAvailable()
+
+    #expect(assetsNotRefreshed(in: checked) == [Self.pluginScript])
+    #expect(site.client.downloadCallCount == downloads + 1)
+
+    site.failure = nil
+    let settled = try await site.service(cachePolicy: .maxAge(0)).prepareAvailable()
+
+    #expect(settled.isComplete)
+    #expect(settled.dependencies.assetBundle == prepared.assetBundle)
+    #expect(try await site.service(cachePolicy: .always).fetchAssetBundleCount() == 1)
+
+    // And once it has it, a check has nothing left to ask for
+    let settledDownloads = site.client.downloadCallCount
+    _ = try await site.service(cachePolicy: .maxAge(0)).prepare()
+    #expect(site.client.downloadCallCount == settledDownloads)
+  }
+
+  /// An app update mustn't cost a site its assets while the site can't be reached.
+  @Test("a bundle stored before assets were named for their URLs gives its assets when the site can't be reached")
+  func bundleStoredAtAssetPathsGivesItsAssetsOffline() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    let stored = try await site.service(cachePolicy: .always).prepare().assetBundle
+    // As it was stored then: at its URL's path
+    try FileManager.default.moveItem(
+      at: stored.assetDataPath(for: Self.pluginScript),
+      to: stored.bundleRoot.appending(path: "plugin.js")
+    )
+
+    site.isOffline = true
+    let preparation = try await site.service(cachePolicy: .always).prepareAvailable()
+
+    #expect(preparation.isComplete)
+    #expect(preparation.dependencies.assetBundle.hasAssetData(for: Self.pluginScript))
+    #expect(site.client.downloadCallCount == 1)
+
+    // Nor when the site was to be asked and couldn't be: the bundle wasn't fetched, and that's all
+    // there is to say about it. None of its assets was asked for, so none failed to download.
+    let refresh = try await site.service(cachePolicy: .ignore).prepareAvailable()
+
+    #expect(refresh.dependencies.assetBundle.hasAssetData(for: Self.pluginScript))
+    #expect(dependenciesNotFetched(in: refresh)[.assetBundle] == true)
+    #expect(assetsNotRefreshed(in: refresh).isEmpty)
+  }
+
+  /// Not at the first failure: by the time it throws, whatever could be fetched is stored, so trying
+  /// again starts from there.
+  @Test("with no fallback, a dependency that can't be fetched throws once the others have been fetched and stored")
+  func failureThrowsOnceOtherDependenciesAreStored() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    site.failure = { $0.absoluteString.contains("wp-block-editor/v1/settings") ? Self.notFound($0) : nil }
+
+    await #expect(throws: EditorHTTPClient.ClientError.self) {
+      try await site.service(cachePolicy: .always).prepare()
+    }
+    #expect(try await site.service(cachePolicy: .always).fetchAssetBundleCount() == 1)
+
+    // Trying again asks only for what failed
+    site.failure = nil
+    let requests = site.client.requests.count
+    let prepared = try await site.service(cachePolicy: .always).prepare()
+
+    #expect(prepared.assetBundle.hasAssetData(for: Self.pluginScript))
+    #expect(site.client.requests.count == requests + 1)
+    #expect(site.client.downloadCallCount == 1)
   }
 
   /// A copy that can't be read is no copy, and the site can still be asked.
@@ -620,6 +764,15 @@ struct EditorServiceTests: MakesTestFixtures {
     var assets: [URL] = []
     for case .assetsMissing(let missing) in preparation.failures {
       assets += missing
+    }
+    return assets
+  }
+
+  /// The assets `preparation` says its bundle holds an earlier copy of.
+  private func assetsNotRefreshed(in preparation: EditorPreparation) -> [URL] {
+    var assets: [URL] = []
+    for case .assetsNotRefreshed(let notRefreshed) in preparation.failures {
+      assets += notRefreshed
     }
     return assets
   }
