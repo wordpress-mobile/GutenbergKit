@@ -6,8 +6,12 @@ import Testing
 private final class SpyURLSession: URLSessionProtocol, @unchecked Sendable {
     private let lock = NSLock()
     private var _capturedRequests: [URLRequest] = []
+    private var _downloadedFiles: [URL] = []
 
     var responseData = Data()
+
+    /// The status `download(for:delegate:)` answers with.
+    var downloadStatusCode = 200
 
     var capturedRequests: [URLRequest] {
         lock.withLock { _capturedRequests }
@@ -15,6 +19,11 @@ private final class SpyURLSession: URLSessionProtocol, @unchecked Sendable {
 
     var lastCapturedRequest: URLRequest? {
         capturedRequests.last
+    }
+
+    /// The file each `download(for:delegate:)` handed back, in order.
+    var downloadedFiles: [URL] {
+        lock.withLock { _downloadedFiles }
     }
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
@@ -40,7 +49,7 @@ private final class SpyURLSession: URLSessionProtocol, @unchecked Sendable {
         let url = request.url ?? URL(string: "https://example.com")!
         let response = HTTPURLResponse(
             url: url,
-            statusCode: 200,
+            statusCode: downloadStatusCode,
             httpVersion: nil,
             headerFields: nil
         )!
@@ -48,6 +57,7 @@ private final class SpyURLSession: URLSessionProtocol, @unchecked Sendable {
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
         try responseData.write(to: tempURL)
+        lock.withLock { _downloadedFiles.append(tempURL) }
 
         return (tempURL, response)
     }
@@ -112,6 +122,44 @@ struct EditorHTTPClientTests {
 
         let capturedRequest = try #require(spySession.lastCapturedRequest)
         #expect(capturedRequest.value(forHTTPHeaderField: "Authorization") == authHeader)
+    }
+
+    @Test("download() returns a 304, which answers a request that asked only for a newer copy")
+    func downloadReturnsNotModified() async throws {
+        let spySession = SpyURLSession()
+        spySession.downloadStatusCode = 304
+        let client = EditorHTTPClient(urlSession: spySession, authHeader: "Bearer test-token")
+
+        var request = URLRequest(url: URL(string: "https://example.com/wp-content/file.js")!)
+        request.setValue("\"first\"", forHTTPHeaderField: "If-None-Match")
+        let (_, response) = try await client.download(request)
+
+        #expect(response.statusCode == 304)
+    }
+
+    @Test("download() throws for a status that isn't a success")
+    func downloadThrowsForFailureStatus() async throws {
+        let spySession = SpyURLSession()
+        spySession.downloadStatusCode = 404
+        let client = EditorHTTPClient(urlSession: spySession, authHeader: "Bearer test-token")
+
+        await #expect(throws: EditorHTTPClient.ClientError.self) {
+            try await client.download(URLRequest(url: URL(string: "https://example.com/wp-content/file.js")!))
+        }
+    }
+
+    /// The file holds the error's body. No caller is handed it, so none can remove it.
+    @Test("download() leaves no file behind for a status that isn't a success")
+    func downloadRemovesFileForFailureStatus() async throws {
+        let spySession = SpyURLSession()
+        spySession.downloadStatusCode = 404
+        spySession.responseData = Data("Not Found".utf8)
+        let client = EditorHTTPClient(urlSession: spySession, authHeader: "Bearer test-token")
+
+        _ = try? await client.download(URLRequest(url: URL(string: "https://example.com/wp-content/file.js")!))
+
+        let file = try #require(spySession.downloadedFiles.first)
+        #expect(!FileManager.default.fileExists(at: file))
     }
 
     // MARK: - Timeout Tests

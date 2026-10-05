@@ -3,10 +3,17 @@ import Testing
 
 @testable import GutenbergKit
 
+/// How long a test waits for something that is supposed to happen before giving up.
+///
+/// Generous, because a wait that succeeds returns as soon as it can and only one that is going to
+/// fail runs this long. A run's first results take half a minute to arrive on a busy CI machine,
+/// which a shorter wait reads as a failure.
+let patientTimeout: Duration = .seconds(60)
+
 /// Polls `condition` until it holds, failing the test at the caller's line if it hasn't within
 /// `timeout`.
 func waitUntil(
-    timeout: Duration = .seconds(10),
+    timeout: Duration = patientTimeout,
     sourceLocation: SourceLocation = #_sourceLocation,
     _ condition: () -> Bool
 ) async throws {
@@ -24,6 +31,32 @@ func jsonResource(named name: String) throws -> Data {
 
 func jsonResource(named name: String) throws -> String {
     String(data: try jsonResource(named: name), encoding: .utf8)!
+}
+
+/// Puts a bundle for each manifest under `storageRoot` the way an earlier launch would have left
+/// them: complete on disk, the last the latest, but not handed out by this process.
+@discardableResult
+func plantBundles(
+    forManifests manifests: [String],
+    in storageRoot: URL,
+    configuration: EditorConfiguration = EditorAssetLibraryTests.testConfiguration
+) async throws -> [EditorAssetBundle] {
+    let scratchRoot = URL.randomTemporaryDirectory
+    let client = EditorAssetLibraryMockHTTPClient()
+    let library = EditorAssetLibrary(configuration: configuration, httpClient: client, storageRoot: scratchRoot)
+    try FileManager.default.createDirectory(at: storageRoot, withIntermediateDirectories: true)
+
+    var planted: [EditorAssetBundle] = []
+    for manifest in manifests {
+        client.urlResponseHandler = { url in
+            url.path.contains("editor-assets") ? Data(manifest.utf8) : Data("mock content".utf8)
+        }
+        let bundle = try await library.downloadAssetBundle()
+        let destination = storageRoot.appending(path: bundle.id)
+        try FileManager.default.moveItem(at: scratchRoot.appending(path: bundle.id), to: destination)
+        planted.append(try EditorAssetBundle(url: destination.appending(path: "manifest.json")))
+    }
+    return planted
 }
 
 protocol MakesTestFixtures {
