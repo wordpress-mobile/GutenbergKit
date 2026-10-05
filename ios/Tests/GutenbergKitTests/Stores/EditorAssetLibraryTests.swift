@@ -1191,92 +1191,6 @@ struct EditorAssetLibraryTests {
         #expect(await library.existingBundle(forManifestChecksum: bundle.id)?.bundleRoot == refreshed.bundleRoot)
     }
 
-    /// The clock was ahead when the bundle on disk was last matched, and has been set back since. What's
-    /// published now is dated now, and still has to come ahead of it — and stay there.
-    @Test("a bundle dated in time to come stays behind the bundles published since")
-    func bundleDatedInTimeToComeStaysBehindBundlesPublishedSince() async throws {
-        let storageRoot = URL.randomTemporaryDirectory
-        let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "1"))
-        let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore, storageRoot: storageRoot)
-        let dated = try await library.downloadAssetBundle()
-        try backdate(dated, by: -86_400)
-
-        // A refresh replaces it, for the same manifest
-        mockClient.urlResponseHandler = Self.responses(
-            forManifest: Self.manifestJSON(scriptVersion: "1"),
-            assetContent: "new content"
-        )
-        let refreshed = try await library.downloadAssetBundle()
-        #expect(try await library.readAssetBundles().first?.bundleRoot == refreshed.bundleRoot)
-        // It's been dated afresh, so it won't come back in front when the clock reaches the date it had
-        #expect(try #require(try await library.readAssetBundles().last?.lastCheckedDate) <= Date())
-
-        // Another that changes nothing keeps the refreshed bundle, and leaves it in front
-        let again = try await library.downloadAssetBundle()
-        #expect(again.bundleRoot == refreshed.bundleRoot)
-        #expect(try await library.readAssetBundles().first?.bundleRoot == refreshed.bundleRoot)
-        #expect(try FileManager.default.contentsOfDirectory(atPath: storageRoot.path).count == 2)
-
-        // And so does a bundle for another manifest
-        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "2"))
-        let changed = try await library.downloadAssetBundle()
-        #expect(try await library.readAssetBundles().first?.bundleRoot == changed.bundleRoot)
-    }
-
-    /// All a date still to come tells is that the bundle was matched after the ones with dates that can
-    /// be believed. It keeps its place ahead of them.
-    @Test("a bundle dated in time to come stays ahead of the bundles that were there before it")
-    func bundleDatedInTimeToComeStaysAheadOfEarlierBundles() async throws {
-        let mockClient = EditorAssetLibraryMockHTTPClient()
-        let library = makeLibrary(httpClient: mockClient, cachePolicy: .maxAge(0))
-        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "1"))
-        let earlier = try await library.downloadAssetBundle()
-        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "2"))
-        let latest = try await library.downloadAssetBundle()
-        try backdate(latest, by: -86_400)
-
-        let onDisk = try #require(try await library.readLatestAssetBundleOnDisk())
-
-        #expect(onDisk.id == latest.id)
-        let bundles = try await library.readAssetBundles()
-        #expect(bundles.map(\.id) == [latest.id, earlier.id])
-        #expect(try #require(bundles.first?.lastCheckedDate) <= Date())
-    }
-
-    /// Their dates still say which came later, which is all that's kept of them.
-    @Test("bundles dated in time to come keep their order when they're dated afresh")
-    func bundlesDatedInTimeToComeKeepTheirOrder() async throws {
-        let mockClient = EditorAssetLibraryMockHTTPClient()
-        let library = makeLibrary(httpClient: mockClient, cachePolicy: .maxAge(0))
-        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "1"))
-        let earlier = try await library.downloadAssetBundle()
-        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "2"))
-        let later = try await library.downloadAssetBundle()
-        try backdate(earlier, by: -86_400)
-        try backdate(later, by: -172_800)
-
-        #expect(try await library.readLatestAssetBundleOnDisk()?.id == later.id)
-
-        let bundles = try await library.readAssetBundles()
-        #expect(bundles.map(\.id) == [later.id, earlier.id])
-        #expect(bundles.allSatisfy { ($0.lastCheckedDate ?? .distantFuture) <= Date() })
-    }
-
-    /// A date that's still to come says nothing about how long ago the manifest was checked.
-    @Test("a bundle dated in time to come isn't trusted for its age, only by a policy that never asks")
-    func bundleDatedInTimeToComeIsNotTrustedForItsAge() async throws {
-        let storageRoot = URL.randomTemporaryDirectory
-        let mockClient = EditorAssetLibraryMockHTTPClient()
-        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "1"))
-        let library = makeLibrary(httpClient: mockClient, cachePolicy: .maxAge(3600), storageRoot: storageRoot)
-        let bundle = try await library.downloadAssetBundle()
-        try backdate(bundle, by: -86_400)
-
-        #expect(try await library.readLatestAssetBundle() == nil)
-        #expect(try await makeLibrary(cachePolicy: .always, storageRoot: storageRoot).readLatestAssetBundle() == bundle)
-    }
-
     /// Another library may have found the site's manifest to match the bundle more recently than this one
     /// did, and recorded it first: here, between this check fetching the manifest and marking the bundle.
     @Test("a check doesn't make a bundle look less recently matched than it's recorded to be")
@@ -1298,19 +1212,6 @@ struct EditorAssetLibraryTests {
 
         #expect(checked.lastCheckedDate == otherMatch.date)
         #expect(try await library.readAssetBundles().first?.lastCheckedDate == otherMatch.date)
-    }
-
-    /// A date that's still to come is one the clock has been set back from. Going by it would leave the
-    /// bundle unchecked until the clock caught up.
-    @Test("a check dates a bundle afresh when the date it's recorded with is still to come")
-    func checkDatesBundleAfreshWhenRecordedDateIsStillToCome() async throws {
-        let (library, _) = try await makeLibraryWithBundle(cachePolicy: .maxAge(0))
-        let bundle = try #require(try await library.readAssetBundles().first)
-        try backdate(bundle, by: -3600)
-
-        let checked = try await library.downloadAssetBundle()
-
-        #expect(try #require(checked.lastCheckedDate) <= Date())
     }
 
     /// What a refresh learned is the caller's to be told, whether or not it could be written down.

@@ -30,8 +30,7 @@ public actor EditorAssetLibrary {
     /// - ``publish(_:matchedAt:keptFrom:)`` moves a finished bundle in, already dated and handed out.
     ///   ``copyInCurrentLayout(of:missing:)`` moves in a copy of a bundle stored in an earlier layout,
     ///   which is handed out when a caller is given it: until then it's the site's latest, or no one's.
-    /// - ``markLatest(_:matchedAt:recording:)`` rewrites the manifest of a bundle it has found still there,
-    ///   and so does ``redateBundlesDatedInTimeToCome(among:)``, both through ``rewriteManifest(of:)``.
+    /// - ``markLatest(_:matchedAt:recording:)`` rewrites the manifest of a bundle it has found still there.
     /// - ``cleanup()`` and ``purge()`` remove whole bundles.
     ///
     /// So a bundle in storage is always complete and never gains or loses a file, and one that a
@@ -184,13 +183,7 @@ public actor EditorAssetLibrary {
     /// The site's latest bundle on disk, with its assets where a bundle keeps them now, and the assets it's
     /// missing. Everything that wants the site's latest bundle comes through here.
     private func latestBundle() throws -> (bundle: EditorAssetBundle, missingAssets: [URL])? {
-        var bundles = try self.readAssetBundles()
-
-        if self.redateBundlesDatedInTimeToCome(among: bundles) {
-            bundles = try self.readAssetBundles()
-        }
-
-        guard let latestBundle = bundles.first else {
+        guard let latestBundle = try self.readAssetBundles().first else {
             return nil
         }
 
@@ -202,57 +195,6 @@ public actor EditorAssetLibrary {
 
         return (copy, self.missingAssets(of: copy))
     }
-
-    /// Dates afresh each of `bundles` that's dated in time to come, and says whether there were any.
-    ///
-    /// A date that's still to come was recorded by a clock that has been set back since. Left alone, the
-    /// bundle would stay ahead of everything published until the clock reached that date — a refresh
-    /// would seem to do nothing — and a cache policy that goes by age would trust it without a check.
-    ///
-    /// All such a date tells is which of those bundles came later. So each is dated again, in the same
-    /// order, just after the latest bundle whose date can be believed: ahead of what was there before,
-    /// and behind whatever is published from here on. If there's no such bundle, they're dated as long
-    /// ago as there is, and a policy that goes by age checks the manifest.
-    private func redateBundlesDatedInTimeToCome(among bundles: [EditorAssetBundle]) -> Bool {
-        // A date a moment ahead is the clock being put right, or a bundle dated just after the one it
-        // replaced. It's a date well ahead that the clock won't reach for a while.
-        let isStillToCome = { (bundle: EditorAssetBundle) in
-            bundle.lastMatchedDate > Date().addingTimeInterval(Self.clockAdjustmentAllowance)
-        }
-
-        guard bundles.contains(where: isStillToCome) else {
-            return false
-        }
-
-        Self.storageLock.withLock {
-            // As they stand at this moment: another library may have got here first
-            let bundles = (try? self.readAssetBundles()) ?? []
-            var date = bundles.first { !isStillToCome($0) }?.lastMatchedDate ?? .distantPast
-
-            // The earliest of them first, so that the latest of them ends up the latest
-            for bundle in bundles.filter(isStillToCome).reversed() {
-                date = date.addingTimeInterval(0.001)
-
-                let redated = bundle.recording(
-                    lastCheckedDate: date,
-                    assetHeaders: bundle.assetHeaders,
-                    assetsNotRefreshed: bundle.assetsNotRefreshed
-                )
-
-                do {
-                    try self.rewriteManifest(of: redated)
-                } catch {
-                    log(.warn, "Failed to date asset bundle \(bundle.id) afresh: \(error.localizedDescription)")
-                }
-            }
-        }
-
-        return true
-    }
-
-    /// How far ahead of the clock a bundle's date can be without having been recorded by a clock that was
-    /// wrong: a clock is put right by a few seconds at a time as a matter of course.
-    private static let clockAdjustmentAllowance: TimeInterval = 60
 
     /// A copy of `bundle`, the site's latest, with its assets where a bundle keeps them now. `nil` if it has
     /// none to move, and `bundle` is as good as it gets.
