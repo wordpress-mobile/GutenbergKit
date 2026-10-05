@@ -76,10 +76,10 @@ struct DebugSettingsView: View {
     }
 
     private func clearCache() {
-        Task {
-            await HTMLPreviewManager.clearCache()
-            cacheCleared = true
+        HTMLPreviewManager.clearCache()
+        cacheCleared = true
 
+        Task {
             // Reset the checkmark after 2 seconds
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             cacheCleared = false
