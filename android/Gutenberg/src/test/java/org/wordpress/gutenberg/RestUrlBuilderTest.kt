@@ -44,4 +44,34 @@ class RestUrlBuilderTest {
             RestUrlBuilder.namespaced("https://example.com/wp-json", "sites/123", "/wp-block-editor/v1/settings")
         )
     }
+
+    @Test
+    fun `namespaces a two-segment path`() {
+        assertEquals(
+            "https://example.com/wp-json/wp/v2/sites/123/",
+            RestUrlBuilder.namespaced("https://example.com/wp-json", "sites/123", "/wp/v2")
+        )
+    }
+
+    // MARK: - Query-based API Roots (plain permalinks)
+
+    @Test
+    fun `appends the path to the route of a query-based root`() {
+        assertEquals(
+            "https://example.com/?rest_route=/wp/v2/types",
+            RestUrlBuilder.namespaced("https://example.com/?rest_route=/", null, "/wp/v2/types")
+        )
+    }
+
+    @Test
+    fun `merges the path query string into a query-based root`() {
+        assertEquals(
+            "https://example.com/?rest_route=/wp/v2/sites/123/themes&context=edit&status=active",
+            RestUrlBuilder.namespaced(
+                "https://example.com/?rest_route=/",
+                "sites/123",
+                "/wp/v2/themes?context=edit&status=active"
+            )
+        )
+    }
 }
