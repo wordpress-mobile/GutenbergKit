@@ -3,10 +3,17 @@ import Testing
 
 @testable import GutenbergKit
 
+/// How long a test waits for something that is supposed to happen before giving up.
+///
+/// Generous, because a wait that succeeds returns as soon as it can and only one that is going to
+/// fail runs this long. A run's first results take half a minute to arrive on a busy CI machine,
+/// which a shorter wait reads as a failure.
+let patientTimeout: Duration = .seconds(60)
+
 /// Polls `condition` until it holds, failing the test at the caller's line if it hasn't within
 /// `timeout`.
 func waitUntil(
-    timeout: Duration = .seconds(10),
+    timeout: Duration = patientTimeout,
     sourceLocation: SourceLocation = #_sourceLocation,
     _ condition: () -> Bool
 ) async throws {
