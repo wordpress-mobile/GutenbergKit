@@ -19,9 +19,8 @@ struct EditorList: View {
                     SitePreparationView(site: .bundledEditor)
                 }
             } header: {
-                if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"] != nil
-                    {
-                    Text("Note: Editors are using the dev server started with `make dev-server`.")
+                if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"] != nil {
+                    Text("Note: Editors are using the dev server started with `make serve-dev`.")
                         .textCase(nil)
                         .font(.footnote)
                         .foregroundStyle(.secondary)

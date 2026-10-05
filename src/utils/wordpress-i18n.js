@@ -1,8 +1,6 @@
-/**
- * WordPress dependencies
- */
 import * as hooks from '@wordpress/hooks';
 import * as i18n from '@wordpress/i18n';
+import { toCommonJS } from './to-common-js';
 
 initializeWordPressI18n();
 
@@ -18,6 +16,6 @@ function initializeWordPressI18n() {
 	window.wp = window.wp || {};
 
 	// Define i18n-related WordPress modules on window.wp
-	window.wp.hooks = hooks;
-	window.wp.i18n = i18n;
+	window.wp.hooks = toCommonJS( hooks );
+	window.wp.i18n = toCommonJS( i18n );
 }

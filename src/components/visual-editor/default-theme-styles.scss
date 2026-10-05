@@ -3,10 +3,6 @@
   * unavailable or when the editor's theme styles feature is disabled.
   */
 
-.gutenberg-kit-visual-editor__post-title-wrapper .wp-block-post-title {
-	font-size: 20px; // Set reasonable default size for small screens
-}
-
 .block-editor-default-block-appender__content {
 	opacity: 0.62; // Match empty post title/rich text placholder style
 }

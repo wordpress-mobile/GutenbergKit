@@ -1,8 +1,6 @@
-/**
- * Internal dependencies
- */
 import { getGBKit } from './bridge';
 import { warn, debug } from './logger';
+import { stripTrailingSlash } from './url';
 
 /**
  * Configure AJAX for use without authentication cookies.
@@ -21,7 +19,7 @@ export function configureAjax() {
 	window.wp.ajax.settings = window.wp.ajax.settings || {};
 
 	const { siteURL: rawSiteURL, authHeader } = getGBKit();
-	const siteURL = rawSiteURL?.replace( /\/+$/, '' );
+	const siteURL = stripTrailingSlash( rawSiteURL );
 	configureAjaxUrl( siteURL );
 	configureAjaxAuth( siteURL, authHeader );
 	configureMediaAjax();
@@ -33,13 +31,25 @@ function configureAjaxUrl( siteURL ) {
 		return;
 	}
 
-	const ajaxUrl = `${ siteURL }/wp-admin/admin-ajax.php`;
-	// Global used within WordPress admin pages
-	window.ajaxurl = ajaxUrl;
-	// Global used by WordPress' JavaScript API
-	window.wp.ajax.settings.url = ajaxUrl;
+	// Global used by WordPress' JavaScript API. The `ajaxurl` global is set
+	// earlier, with the other WP Admin screen globals, by `admin-globals.js`.
+	window.wp.ajax.settings.url = getAjaxUrl( siteURL );
 
 	debug( 'AJAX URL configured' );
+}
+
+/**
+ * Builds the site's `admin-ajax.php` URL.
+ *
+ * @param {string} [siteURL] The site's home URL.
+ * @return {string|undefined} The AJAX URL, or `undefined` without a site URL.
+ */
+export function getAjaxUrl( siteURL ) {
+	if ( ! siteURL ) {
+		return undefined;
+	}
+
+	return `${ stripTrailingSlash( siteURL ) }/wp-admin/admin-ajax.php`;
 }
 
 function configureAjaxAuth( siteURL, authHeader ) {
@@ -72,11 +82,16 @@ function configureAjaxAuth( siteURL, authHeader ) {
 		}
 
 		const originalBeforeSend = options.beforeSend;
-		options.beforeSend = function ( xhr ) {
-			xhr.setRequestHeader( 'Authorization', authHeader );
-			if ( typeof originalBeforeSend === 'function' ) {
-				originalBeforeSend( xhr );
+		options.beforeSend = function ( xhr, ...args ) {
+			// Recheck when sending, since a later prefilter may rewrite the URL.
+			if ( isSameOrigin( options.url, siteOrigin ) ) {
+				xhr.setRequestHeader( 'Authorization', authHeader );
 			}
+			if ( typeof originalBeforeSend === 'function' ) {
+				// Returning `false` lets the original cancel the request.
+				return originalBeforeSend.call( this, xhr, ...args );
+			}
+			return undefined;
 		};
 	} );
 

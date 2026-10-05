@@ -9,6 +9,7 @@ fastlane/             @wordpress-mobile/apps-infra-tooling
 .github/dependabot.yml @wordpress-mobile/apps-infra-tooling
 
 # Toolchain and environment pins
+.ruby-version         @wordpress-mobile/apps-infra-tooling
 .xcode-version        @wordpress-mobile/apps-infra-tooling
 .java-version         @wordpress-mobile/apps-infra-tooling
 .nvmrc                @wordpress-mobile/apps-infra-tooling

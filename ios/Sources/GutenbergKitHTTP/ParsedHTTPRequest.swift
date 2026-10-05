@@ -32,6 +32,29 @@ extension ParsedHTTPRequest {
         }
     }
 
+    /// The path portion of ``target``, without the query component
+    /// (e.g., "/wp/v2/posts" for "/wp/v2/posts?per_page=10").
+    ///
+    /// Use this for routing — matching against ``target`` fails as soon as a
+    /// client appends a query string.
+    public var path: String {
+        let target = target
+        guard let separator = target.firstIndex(of: "?") else { return target }
+        return String(target.prefix(upTo: separator))
+    }
+
+    /// The query component of ``target``, including the leading "?"
+    /// (e.g., "?per_page=10"), or an empty string when there is no query.
+    ///
+    /// A bare trailing "?" carries no parameters and yields an empty string, so
+    /// the value can be appended to an upstream URL unconditionally.
+    public var query: String {
+        let target = target
+        guard let separator = target.firstIndex(of: "?") else { return "" }
+        let value = String(target[target.index(after: separator)...])
+        return value.isEmpty ? "" : "?\(value)"
+    }
+
     /// The HTTP-version from the request line (e.g., "HTTP/1.1"), per RFC 9112 §2.3.
     public var httpVersion: String {
         switch self {

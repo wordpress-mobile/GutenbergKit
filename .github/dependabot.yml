@@ -4,17 +4,28 @@ updates:
       directory: '/'
       schedule:
           interval: 'weekly'
+      groups:
+          # The editor exposes @wordpress packages on window.wp as single
+          # instances, so they must move together like a Gutenberg release.
+          # Bumping them one at a time leaves mismatched ranges that nest
+          # duplicate copies.
+          #
+          # Scoped to production dependencies, matching `make
+          # check-wp-packages`: dev tooling (eslint-plugin, env,
+          # prettier-config, dependency-extraction-webpack-plugin) never
+          # reaches the bundle, and because Dependabot ships a group
+          # atomically, a breaking tooling major would hold back every
+          # runtime bump alongside it.
+          wordpress-packages:
+              patterns: ['@wordpress/*']
+              dependency-type: 'production'
       ignore:
-          - dependency-name: 'eslint' # eslint@>=9.x.x blocked by https://github.com/WordPress/gutenberg/issues/64782
-            update-types: ['version-update:semver-major']
           - dependency-name: 'react' # react@>=19.x.x blocked by https://github.com/WordPress/gutenberg/issues/71336
             update-types: ['version-update:semver-major']
           - dependency-name: 'react-dom' # react@>=19.x.x blocked by https://github.com/WordPress/gutenberg/issues/71336
             update-types: ['version-update:semver-major']
           - dependency-name: 'jquery' # jquery@>=4.x.x blocked by https://core.trac.wordpress.org/ticket/60478
             update-types: ['version-update:semver-major']
-          - dependency-name: 'eslint-plugin-react-refresh' # eslint-plugin-react-refresh@>=0.5.x requires eslint@>=9.x.x, blocked by https://github.com/WordPress/gutenberg/issues/64782
-            update-types: ['version-update:semver-minor']
 
     - package-ecosystem: 'bundler'
       directory: '/'
@@ -24,3 +35,28 @@ updates:
           ruby-minor-and-patch:
               update-types: ['minor', 'patch']
       open-pull-requests-limit: 5
+
+    - package-ecosystem: 'gradle'
+      directory: '/android'
+      schedule:
+          interval: 'weekly'
+      open-pull-requests-limit: 5
+      ignore:
+          # The Android Gradle Plugin and Kotlin must match WordPress-Android
+          # exactly, not track their own latest release. WordPress-Android
+          # includes this project as a composite build, and Gradle refuses to
+          # run one that spans two AGP versions; for Kotlin, the newer plugin
+          # silently wins the classpath for both halves of that build. The
+          # `Android toolchain sync` workflow watches WordPress-Android and
+          # opens an issue when either drifts.
+          - dependency-name: 'com.android.application'
+          - dependency-name: 'com.android.library'
+          - dependency-name: 'org.jetbrains.kotlin.*'
+          # A new Gradle major is adopted alongside the AGP upgrade that
+          # requires it, not ahead of the AGP version pinned above.
+          - dependency-name: 'gradle-wrapper'
+            update-types: ['version-update:semver-major']
+          # Published to a private S3 Maven repo with a versioning scheme
+          # Dependabot cannot resolve.
+          - dependency-name: 'rs.wordpress.api:android'
+          - dependency-name: 'com.automattic.android.publish-to-s3'

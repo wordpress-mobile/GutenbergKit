@@ -5,6 +5,47 @@ import Testing
 @Suite("ParsedHTTPRequest")
 struct ParsedHTTPRequestTests {
 
+    // MARK: - path / query
+
+    @Test(
+        "path and query split the target",
+        arguments: [
+            ("/upload", "/upload", ""),
+            ("/upload?_embed=wp:featuredmedia", "/upload", "?_embed=wp:featuredmedia"),
+            // A bare "?" carries no parameters, so the query is empty.
+            ("/upload?", "/upload", ""),
+            ("/wp/v2/posts?per_page=10&page=2", "/wp/v2/posts", "?per_page=10&page=2"),
+            // Only the first "?" separates path from query; later ones belong to it.
+            ("/search?q=a?b", "/search", "?q=a?b"),
+            ("/", "/", ""),
+        ]
+    )
+    func pathAndQuery(target: String, expectedPath: String, expectedQuery: String) {
+        let request = ParsedHTTPRequest.complete(
+            method: "POST",
+            target: target,
+            httpVersion: "HTTP/1.1",
+            headers: [:],
+            body: nil
+        )
+
+        #expect(request.path == expectedPath)
+        #expect(request.query == expectedQuery)
+    }
+
+    @Test("path and query are available on a partial request")
+    func pathAndQueryOnPartial() {
+        let request = ParsedHTTPRequest.partial(
+            method: "POST",
+            target: "/upload?_embed=wp:featuredmedia",
+            httpVersion: "HTTP/1.1",
+            headers: [:]
+        )
+
+        #expect(request.path == "/upload")
+        #expect(request.query == "?_embed=wp:featuredmedia")
+    }
+
     // MARK: - urlRequest(relativeTo:)
 
     @Test("urlRequest resolves path against base URL")

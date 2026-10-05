@@ -1,12 +1,9 @@
-/**
- * Internal dependencies
- */
-import Layout from '../components/layout';
 import { createRoot, StrictMode } from '@wordpress/element';
 import { dispatch } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { store as preferencesStore } from '@wordpress/preferences';
 import { registerCoreBlocks } from '@wordpress/block-library';
+import Layout from '../components/layout';
 import { unregisterDisallowedBlocks } from './blocks';
 import { getGBKit, getPost } from './bridge';
 import { getDefaultEditorSettings } from './editor-settings';

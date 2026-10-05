@@ -276,6 +276,8 @@ struct RFC7230ConformanceTests {
         let parser = HTTPRequestParser("GET /wp/v2/posts HTTP/1.1\r\nHost:\r\n\r\n")
         let request = try #require(try parser.parseRequest())
 
+        // Optional `String?`: `== ""` asserts present-and-empty, which `isEmpty` cannot express.
+        // swiftlint:disable:next empty_string
         #expect(request.header("Host") == "")
     }
 

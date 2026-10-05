@@ -2,11 +2,18 @@ package org.wordpress.gutenberg.views
 
 import android.content.Context
 import android.util.AttributeSet
+import android.util.TypedValue
 import android.view.Gravity
+import android.view.accessibility.AccessibilityNodeInfo
+import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.annotation.StringRes
+import androidx.core.view.ViewCompat
 import androidx.core.widget.TextViewCompat
+import com.google.android.material.button.MaterialButton
+import org.wordpress.gutenberg.R
 
 /**
  * A view displaying an error state with an icon, title, and description.
@@ -30,6 +37,7 @@ class EditorErrorView @JvmOverloads constructor(
     private val icon: ImageView
     private val titleText: TextView
     private val descriptionText: TextView
+    private val actionButton: Button
 
     init {
         orientation = VERTICAL
@@ -38,7 +46,7 @@ class EditorErrorView @JvmOverloads constructor(
         // Create error icon
         icon = ImageView(context).apply {
             layoutParams = LayoutParams(dpToPx(48), dpToPx(48))
-            setImageResource(android.R.drawable.ic_dialog_alert)
+            setImageResource(R.drawable.gbk_ic_editor_error)
         }
 
         // Create title
@@ -50,7 +58,8 @@ class EditorErrorView @JvmOverloads constructor(
             }
             gravity = Gravity.CENTER
             TextViewCompat.setTextAppearance(this, android.R.style.TextAppearance_Material_Subhead)
-            text = "Failed to load editor"
+            text = context.getText(R.string.gbk_editor_load_failed_title)
+            ViewCompat.setAccessibilityHeading(this, true)
         }
 
         // Create description
@@ -64,9 +73,18 @@ class EditorErrorView @JvmOverloads constructor(
             TextViewCompat.setTextAppearance(this, android.R.style.TextAppearance_Material_Body1)
         }
 
+        // Hidden unless the state gives the user something to do about it.
+        actionButton = createActionButton().apply {
+            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dpToPx(16)
+            }
+            visibility = GONE
+        }
+
         addView(icon)
         addView(titleText)
         addView(descriptionText)
+        addView(actionButton)
     }
 
     /**
@@ -75,7 +93,67 @@ class EditorErrorView @JvmOverloads constructor(
      * @param error The exception that caused the failure.
      */
     fun setError(error: Throwable) {
-        descriptionText.text = error.message ?: "Unknown error"
+        setTitle(context.getText(R.string.gbk_editor_load_failed_title))
+        descriptionText.text =
+            error.message ?: context.getString(R.string.gbk_editor_load_failed_unknown_error)
+        clearAction()
+    }
+
+    /**
+     * Shows a state the user can act on, rather than a load failure.
+     *
+     * @param titleResId Title describing the state.
+     * @param descriptionResId What the user can do about it.
+     * @param actionResId Label for the action button.
+     * @param onAction Invoked when the action button is tapped.
+     */
+    fun setActionableState(
+        @StringRes titleResId: Int,
+        @StringRes descriptionResId: Int,
+        @StringRes actionResId: Int,
+        onAction: () -> Unit
+    ) {
+        setTitle(context.getText(titleResId))
+        descriptionText.setText(descriptionResId)
+        actionButton.setText(actionResId)
+        actionButton.setOnClickListener { onAction() }
+        actionButton.visibility = VISIBLE
+    }
+
+    /**
+     * Moves TalkBack focus to the title, since this view replaces content that
+     * could have held it.
+     *
+     * This is what announces the view, which is why it sets no accessibility
+     * pane title: that announces on appearance, so TalkBack would read the title
+     * once for the pane and again for the focus landing on it.
+     */
+    fun focusTitleForAccessibility() {
+        titleText.performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null)
+    }
+
+    private fun setTitle(title: CharSequence) {
+        titleText.text = title
+    }
+
+    private fun clearAction() {
+        actionButton.setOnClickListener(null)
+        actionButton.visibility = GONE
+    }
+
+    /**
+     * A [MaterialButton], styled by the host's Material theme, or a platform
+     * [Button] when the host theme is not a Material theme, which
+     * [MaterialButton] requires.
+     */
+    private fun createActionButton(): Button {
+        // The attribute Material's theme check looks for.
+        val isMaterialTheme = context.theme.resolveAttribute(
+            com.google.android.material.R.attr.colorPrimaryVariant,
+            TypedValue(),
+            true
+        )
+        return if (isMaterialTheme) MaterialButton(context) else Button(context)
     }
 
     private fun dpToPx(dp: Int): Int {

@@ -1,12 +1,5 @@
-/**
- * WordPress dependencies
- */
 import { addFilter, removeFilter } from '@wordpress/hooks';
 import { useEffect } from '@wordpress/element';
-
-/**
- * Internal dependencies
- */
 import { onAutocompleterTriggered } from '../../utils/bridge';
 
 /**

@@ -65,5 +65,5 @@ public struct EditorURLResponse: Sendable, Equatable, Codable, Hashable {
     }
 
     /// An empty response with an empty JSON object body and no headers.
-    static let empty: EditorURLResponse = EditorURLResponse(string: "{}", responseHeaders: [:])
+    static let empty = EditorURLResponse(string: "{}", responseHeaders: [:])
 }

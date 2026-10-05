@@ -1,17 +1,26 @@
-/**
- * WordPress dependencies
- */
 import apiFetch from '@wordpress/api-fetch';
 import { getQueryArg } from '@wordpress/url';
-
-/**
- * Internal dependencies
- */
+import { __ } from '@wordpress/i18n';
 import { getGBKit, POST_FALLBACKS } from './bridge';
+import { info, warn, error as logError } from './logger';
+import { ensureTrailingSlash, stripTrailingSlash } from './url';
 
 /**
  * @typedef {import('@wordpress/api-fetch').APIFetchMiddleware} APIFetchMiddleware
+ * @typedef {import('@wordpress/api-fetch').FetchHandler} FetchHandler
  */
+
+/** Matches `/wp/v2/media` but not sub-paths like `/wp/v2/media/123`. */
+const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
+
+/** Methods safe to repeat because they do not change server state. */
+const RETRYABLE_METHODS = [ 'GET', 'HEAD', 'OPTIONS' ];
+
+/** Base delay before each retry; jitter of up to the same amount is added. */
+const RETRY_DELAYS_MS = [ 500, 2000 ];
+
+/** Longest `Retry-After` delay worth waiting for; longer ones fail at once. */
+const MAX_RETRY_AFTER_MS = 10_000;
 
 /**
  * Initializes the API fetch configuration and middleware.
@@ -19,17 +28,28 @@ import { getGBKit, POST_FALLBACKS } from './bridge';
  * @return {void}
  */
 export function configureApiFetch() {
-	const { siteApiRoot = '', preloadData = null } = getGBKit();
+	const { siteApiRoot, preloadData = null } = getGBKit();
 
-	apiFetch.use( apiFetch.createRootURLMiddleware( siteApiRoot ) );
+	// The root is joined to request paths by concatenation, so it has to supply
+	// the separator. Hosts may configure it with or without the trailing slash,
+	// as the native URL builders accept either.
+	apiFetch.use(
+		apiFetch.createRootURLMiddleware( ensureTrailingSlash( siteApiRoot ) )
+	);
 	apiFetch.use( corsMiddleware );
 	apiFetch.use( apiPathModifierMiddleware );
 	apiFetch.use( tokenAuthMiddleware );
 	apiFetch.use( filterEndpointsMiddleware );
+	apiFetch.use( nativeMediaUploadMiddleware );
 	apiFetch.use( mediaUploadMiddleware );
+	apiFetch.use( mediaPermissionsMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
+	apiFetch.use( siteIndexMiddleware );
 	apiFetch.use(
 		apiFetch.createPreloadingMiddleware( preloadData ?? defaultPreloadData )
+	);
+	apiFetch.setFetchHandler(
+		withRateLimitRetry( apiFetch.defaultFetchHandler )
 	);
 }
 
@@ -73,10 +93,11 @@ function apiPathModifierMiddleware( options, next ) {
 		/\/sites\/[^/]+\//.test( options.path );
 
 	if ( isEligiblePath && ! alreadyHasSiteNamespace ) {
-		// Insert the API namespace after the first two path segments.
+		// Insert the API namespace after the first two path segments, with a
+		// single trailing slash.
 		options.path = options.path.replace(
 			/^(?<apiPath>\/?(?:[\w.-]+\/){2})/,
-			`$<apiPath>${ siteApiNamespace[ 0 ] }`
+			`$<apiPath>${ ensureTrailingSlash( siteApiNamespace[ 0 ] ) }`
 		);
 	}
 
@@ -147,6 +168,232 @@ function filterEndpointsMiddleware( options, next ) {
 }
 
 /**
+ * Middleware that routes media uploads through the native host's local HTTP
+ * server for processing (e.g. image resizing) before uploading to WordPress.
+ *
+ * Exported for testing only.
+ *
+ * When `nativeUploadPort` is configured in GBKit, this middleware intercepts
+ * `POST /wp/v2/media` requests, forwards the file to the native server, and
+ * returns the response in WordPress REST API attachment format so the existing
+ * Gutenberg upload pipeline (blob previews, save locking, entity caching)
+ * works unchanged.
+ *
+ * When the native server is not configured, requests pass through unmodified.
+ *
+ * Note: Ideally, media uploads would be handled via the `mediaUpload` editor
+ * setting (see the Gutenberg Framework guides), but GutenbergKit uses
+ * Gutenberg's `EditorProvider` which overwrites that setting internally:
+ * https://github.com/WordPress/gutenberg/blob/29914e1d09a344edce58d938fa4992e1ec248e41/packages/editor/src/components/provider/use-block-editor-settings.js#L340
+ *
+ * Until GutenbergKit is refactored to use `BlockEditorProvider` and aligns
+ * with the Gutenberg Framework guides (https://wordpress.org/gutenberg-framework/docs/intro/),
+ * this api-fetch middleware approach is necessary. For context, see:
+ * - https://github.com/wordpress-mobile/GutenbergKit/pull/24
+ * - https://github.com/wordpress-mobile/GutenbergKit/pull/50
+ * - https://github.com/wordpress-mobile/GutenbergKit/pull/108
+ *
+ * @type {APIFetchMiddleware}
+ */
+export function nativeMediaUploadMiddleware( options, next ) {
+	const { nativeUploadPort, nativeUploadToken } = getGBKit();
+
+	if (
+		! nativeUploadPort ||
+		! nativeUploadToken ||
+		! options.method ||
+		options.method.toUpperCase() !== 'POST' ||
+		! options.path ||
+		! MEDIA_UPLOAD_PATH.test( options.path ) ||
+		! ( options.body instanceof FormData )
+	) {
+		return next( options );
+	}
+
+	// Only intercept a genuine file upload. `FormData.get('file')` returns a
+	// `File`, a string (a non-file field that happens to be named `file`), or
+	// `null` (no such field). The `instanceof File` check covers all the
+	// non-file cases at once — a missing field and a wrong-typed value both fall
+	// through to the default path — and guarantees `file.name` below is safe.
+	const file = options.body.get( 'file' );
+	if ( ! ( file instanceof File ) ) {
+		return next( options );
+	}
+
+	info(
+		`Routing upload of ${ file.name } through native server on port ${ nativeUploadPort }`
+	);
+
+	// Forward the original request body — the file plus every sibling field
+	// (`post`, additionalData) — and the original query string (e.g. `?_embed`)
+	// so the native server can relay them to WordPress unchanged. Rebuilding the
+	// body with only `file` would drop the post association and additionalData.
+	const query = requestQuery( options.path );
+
+	// Use the two-argument form of `.then()` so the rejection handler catches
+	// *only* a connection-level failure of the `fetch()` itself — not errors
+	// thrown while handling a response (those must surface as real failures).
+	return fetch( `http://localhost:${ nativeUploadPort }/upload${ query }`, {
+		method: 'POST',
+		headers: {
+			'Relay-Authorization': `Bearer ${ nativeUploadToken }`,
+		},
+		body: options.body,
+		signal: options.signal,
+	} ).then(
+		( response ) => {
+			// The native server relays WordPress's response verbatim. On a
+			// non-2xx, mirror @wordpress/api-fetch: reject with the parsed WP
+			// error body ({ code, message, data }) so @wordpress/media-utils
+			// surfaces WordPress's real message. On success, return WordPress's
+			// attachment object unchanged so every consumer behaves exactly as
+			// it would for a non-native upload.
+			if ( ! response.ok ) {
+				return response
+					.json()
+					.catch( () => {
+						// An abort during the body read rejects json() too; surface
+						// the cancellation, not an "invalid response" error.
+						if ( options.signal?.aborted ) {
+							throw uploadAbortError( options.signal );
+						}
+						return invalidUploadResponseError();
+					} )
+					.then( ( body ) => {
+						logError( 'Native upload failed', body );
+						// Throw the parsed body verbatim, even if it isn't the usual
+						// WordPress `{ code, message, data }` shape. This is
+						// deliberate: it mirrors `@wordpress/api-fetch`'s
+						// `parseAndThrowError`, so a native-relayed error reaches
+						// consumers identically to a direct upload's. We intentionally
+						// don't reshape or second-guess a non-standard error body.
+						throw body;
+					} );
+			}
+			// A 2xx with a non-JSON body (e.g. an HTML error page injected by an
+			// intermediary) rejects json(); normalize it the same way as the
+			// non-ok path rather than surfacing a raw SyntaxError.
+			return response.json().catch( () => {
+				// An abort during the body read rejects json(); surface the
+				// cancellation rather than an "invalid response" error notice.
+				if ( options.signal?.aborted ) {
+					throw uploadAbortError( options.signal );
+				}
+				const error = invalidUploadResponseError();
+				logError( 'Native upload returned an invalid response', error );
+				throw error;
+			} );
+		},
+		( connectionError ) => {
+			// A caller-initiated cancellation must propagate as the cancellation,
+			// never be retried. Detect it via `signal.aborted` — the cancellation
+			// *state* — rather than `connectionError.name === 'AbortError'`: the
+			// state check also catches `AbortSignal.timeout()` (which rejects with
+			// a TimeoutError, not an AbortError) and custom abort reasons, which a
+			// name match would miss and wrongly fall back on. Rethrow the signal's
+			// `reason` (the canonical abort error), not `connectionError`: if a
+			// network failure and the abort race, `fetch` can reject with a network
+			// TypeError even though the signal aborted, and rethrowing that would
+			// make upstream treat a cancelled upload as a real failure — surfacing
+			// a spurious error notice instead of a silent cancel.
+			if ( options.signal?.aborted ) {
+				throw uploadAbortError( options.signal );
+			}
+			// Otherwise the loopback upload server is unreachable at the transport
+			// layer. We deliberately do NOT fall back to a direct re-upload:
+			// reachability is gated proactively upstream — this middleware's guard
+			// skips the native path when no port is advertised, and the native side
+			// only advertises a port the WebView can actually reach (server running
+			// + cleartext-to-localhost permitted, cleared on stop). So reaching here
+			// means the server died out-of-band after a valid start; retrying a
+			// non-idempotent POST /wp/v2/media could duplicate the attachment if the
+			// native server had already relayed it to WordPress.
+			logError(
+				'Native upload failed at the transport layer',
+				connectionError
+			);
+			// Normalize to the same `{ code, message }` shape
+			// `@wordpress/api-fetch`'s default handler produces for a failed fetch,
+			// so a native-upload transport failure surfaces to consumers (which key
+			// off `error.code` and show `error.message`) exactly like a direct
+			// upload's would — not as a raw, code-less TypeError with an
+			// untranslated message. Same codes and strings as api-fetch, so the
+			// existing translations apply.
+			if ( ! globalThis.navigator.onLine ) {
+				throw {
+					code: 'offline_error',
+					message: __(
+						'Unable to connect. Please check your Internet connection.'
+					),
+				};
+			}
+			throw {
+				code: 'fetch_error',
+				message: __(
+					'Could not get a valid response from the server.'
+				),
+			};
+		}
+	);
+}
+
+/**
+ * The query component of a request path, including the leading `?`, or an empty
+ * string when there is no query.
+ *
+ * Mirrors the `query` accessors on the native request types (`HttpRequest` on
+ * Android, `ParsedHTTPRequest` on iOS): the split is on the first `?`, and a
+ * bare trailing `?` carries no parameters so it yields an empty string. Keeping
+ * the three in agreement means the value can be appended to an upstream URL
+ * unconditionally, whichever side derived it.
+ *
+ * @param {string} path The request path, e.g. `/wp/v2/media?_embed`.
+ * @return {string} The query, e.g. `?_embed`, or `''`.
+ */
+function requestQuery( path ) {
+	const separator = path.indexOf( '?' );
+	if ( separator === -1 ) {
+		return '';
+	}
+	const value = path.slice( separator + 1 );
+	return value ? `?${ value }` : '';
+}
+
+/**
+ * The error rejected when the upload server's response body can't be parsed as
+ * JSON. Shaped like a WordPress REST error so `@wordpress/media-utils` surfaces
+ * it the same way as a real one, on both the non-2xx and 2xx paths.
+ *
+ * @return {{ code: string, message: string }} The normalized error.
+ */
+function invalidUploadResponseError() {
+	return {
+		code: 'invalid_json',
+		message: 'The upload server returned an invalid response.',
+	};
+}
+
+/**
+ * The error to surface for a cancelled upload.
+ *
+ * Returns the signal's `reason` (the canonical abort error), falling back to a
+ * canonical `AbortError` for engines that abort without populating `reason`.
+ * Callers gate this behind `signal.aborted` (the cancellation *state*) rather
+ * than an error's `name`, so a body-read rejection or a network error that
+ * races the abort still surfaces as a silent cancel — not a spurious failure
+ * notice.
+ *
+ * @param {AbortSignal} signal The aborted signal.
+ * @return {Error} The error representing the cancellation.
+ */
+function uploadAbortError( signal ) {
+	return (
+		signal.reason ??
+		new DOMException( 'The upload was aborted.', 'AbortError' )
+	);
+}
+
+/**
  * Middleware to modify media upload requests.
  *
  * This middleware intercepts requests to the media endpoint and conditionally
@@ -157,7 +404,7 @@ function filterEndpointsMiddleware( options, next ) {
 function mediaUploadMiddleware( options, next ) {
 	if (
 		options.path &&
-		options.path.startsWith( '/wp/v2/media' ) &&
+		MEDIA_UPLOAD_PATH.test( options.path ) &&
 		options.method === 'POST' &&
 		options.body instanceof FormData &&
 		options.body.get( 'post' ) === '-1'
@@ -166,6 +413,41 @@ function mediaUploadMiddleware( options, next ) {
 	}
 
 	return next( options );
+}
+
+/**
+ * Middleware restoring the `Allow` header on the media permissions check.
+ *
+ * Browsers hide `Allow` from cross-origin responses, so `canUser` would report
+ * uploads as denied and the editor would remove its Upload buttons. WordPress
+ * always allows `GET` on this collection, so a missing header was hidden rather
+ * than omitted, and the user is assumed able to upload.
+ *
+ * @type {APIFetchMiddleware}
+ */
+function mediaPermissionsMiddleware( options, next ) {
+	if (
+		options.parse !== false ||
+		options.method?.toUpperCase() !== 'OPTIONS' ||
+		! options.path ||
+		! MEDIA_UPLOAD_PATH.test( options.path )
+	) {
+		return next( options );
+	}
+
+	return next( options ).then( ( response ) => {
+		if ( response.headers.has( 'allow' ) ) {
+			return response;
+		}
+
+		const headers = new Headers( response.headers );
+		headers.set( 'Allow', 'GET, POST' );
+		return new Response( response.body, {
+			status: response.status,
+			statusText: response.statusText,
+			headers,
+		} );
+	} );
 }
 
 /**
@@ -226,6 +508,194 @@ function transformOEmbedApiResponse( options, next ) {
 	}
 
 	return next( options, next );
+}
+
+/**
+ * Middleware resolving the REST API index locally on namespaced sites.
+ *
+ * Gutenberg's `root`/`__unstableBase` entity fetches the REST API index (`/`)
+ * during editor initialization. On a namespaced site that path has no segments
+ * for `apiPathModifierMiddleware` to insert the namespace into, so the request
+ * targets the API host's root, which serves no index. Rather than let the
+ * request fail, resolve the entity with `home` from the host's site URL. The
+ * host supplies a single URL, so `url`, the WordPress address, has no accurate
+ * source and is left unset.
+ *
+ * Consumers tolerate the remaining fields being absent: the site blocks read
+ * the `site` entity when the user can edit settings, and client-side media
+ * processing treats missing image sizes as none.
+ *
+ * Runs after the preloading middleware so a host-supplied index entry takes
+ * precedence. `apiFetch.use()` prepends, so this is registered immediately
+ * before it.
+ *
+ * @type {APIFetchMiddleware}
+ */
+function siteIndexMiddleware( options, next ) {
+	const { siteApiNamespace = [], siteURL } = getGBKit();
+	const isNamespacedSite = siteApiNamespace.length > 0;
+	const isGet = ! options.method || options.method.toUpperCase() === 'GET';
+
+	if ( ! isNamespacedSite || ! isGet || ! isRestIndexPath( options.path ) ) {
+		return next( options );
+	}
+
+	const home = stripTrailingSlash( siteURL );
+	return Promise.resolve( home ? { home } : {} );
+}
+
+/**
+ * Whether a request path targets the REST API index.
+ *
+ * @param {string} [path] The request path, e.g. `/?_fields=name`.
+ * @return {boolean} True for `/` with or without a query string.
+ */
+function isRestIndexPath( path ) {
+	if ( typeof path !== 'string' ) {
+		return false;
+	}
+	const pathname = path.split( '?' )[ 0 ];
+	return pathname === '' || pathname === '/';
+}
+
+/**
+ * Wraps a fetch handler to retry read-only requests the site rate-limits.
+ *
+ * core-data caches some failed resolutions for the session, so one throttled
+ * request in the editor's load burst can break a block until reload. As a
+ * fetch handler, it also retries each page `fetchAllMiddleware` requests.
+ *
+ * Exported for testing only.
+ *
+ * @param {FetchHandler} fetchHandler The handler performing the request.
+ * @return {FetchHandler} The handler with retries.
+ */
+export function withRateLimitRetry( fetchHandler ) {
+	return async ( options ) => {
+		const method = ( options.method ?? 'GET' ).toUpperCase();
+		if ( ! RETRYABLE_METHODS.includes( method ) ) {
+			return fetchHandler( options );
+		}
+
+		for ( let attempt = 0; ; attempt++ ) {
+			let response;
+			let isOk = true;
+			try {
+				response = await fetchHandler( { ...options, parse: false } );
+			} catch ( err ) {
+				// Network, offline, and abort errors have no response.
+				if ( typeof err?.status !== 'number' ) {
+					throw err;
+				}
+				response = err;
+				isOk = false;
+			}
+
+			if ( response.status === 429 && ! options.signal?.aborted ) {
+				const request = `${ method } ${ options.url ?? options.path }`;
+				if ( attempt < RETRY_DELAYS_MS.length ) {
+					const delay = getRetryDelay( response, attempt );
+					// A retry sent before a longer `Retry-After` elapses would fail too.
+					if ( delay <= MAX_RETRY_AFTER_MS ) {
+						info( `Retrying ${ request } after a 429 response` );
+						await wait( delay, options.signal );
+						continue;
+					}
+				}
+				// core-data may cache this failure for the session.
+				warn( `Giving up on ${ request } after a 429 response`, {
+					retries: attempt,
+				} );
+			}
+
+			if ( options.parse === false ) {
+				if ( ! isOk ) {
+					throw response;
+				}
+				return response;
+			}
+			return parseResponse( response, isOk );
+		}
+	};
+}
+
+/**
+ * Returns how long to wait before retrying a rate-limited request.
+ *
+ * @param {Response} response The 429 response.
+ * @param {number}   attempt  Zero-based index of the retry about to happen.
+ * @return {number} Delay in milliseconds.
+ */
+function getRetryDelay( response, attempt ) {
+	const retryAfter = response.headers?.get?.( 'retry-after' );
+	if ( retryAfter ) {
+		const seconds = Number( retryAfter );
+		const delay = Number.isNaN( seconds )
+			? Date.parse( retryAfter ) - Date.now()
+			: seconds * 1000;
+		if ( ! Number.isNaN( delay ) ) {
+			return Math.max( delay, 0 );
+		}
+	}
+
+	// Jitter spreads out requests that were throttled in the same burst.
+	const delay = RETRY_DELAYS_MS[ attempt ];
+	return delay + Math.random() * delay;
+}
+
+/**
+ * Resolves after the given delay, or rejects as `fetch` would once aborted.
+ *
+ * @param {number}      ms       Delay in milliseconds.
+ * @param {AbortSignal} [signal] Signal of the request being retried.
+ * @return {Promise<void>} Resolves once the delay has elapsed.
+ */
+function wait( ms, signal ) {
+	return new Promise( ( resolve, reject ) => {
+		const onAbort = () => {
+			clearTimeout( timer );
+			reject( signal.reason );
+		};
+		const timer = setTimeout( () => {
+			signal?.removeEventListener( 'abort', onAbort );
+			resolve();
+		}, ms );
+		signal?.addEventListener( 'abort', onAbort, { once: true } );
+	} );
+}
+
+/**
+ * Parses a response the way api-fetch's default handler does, which does not
+ * expose its parsing.
+ *
+ * @param {Response} response The response.
+ * @param {boolean}  isOk     Whether the handler accepted the response.
+ * @return {Promise<unknown>} The parsed body; rejects with it for an error response.
+ */
+async function parseResponse( response, isOk ) {
+	if ( isOk && response.status === 204 ) {
+		return null;
+	}
+
+	let body;
+	try {
+		if ( typeof response.text !== 'function' ) {
+			body = await response.json();
+		} else {
+			const text = await response.text();
+			body = isOk && text === '' ? null : JSON.parse( text );
+		}
+	} catch {
+		throw {
+			code: 'invalid_json',
+			message: __( 'The response is not a valid JSON response.' ),
+		};
+	}
+
+	if ( ! isOk ) {
+		throw body;
+	}
+	return body;
 }
 
 const defaultPreloadData = {

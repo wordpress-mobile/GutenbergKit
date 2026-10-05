@@ -189,6 +189,8 @@ struct RFC9112ConformanceTests {
         let parser = HTTPRequestParser("GET /wp/v2/posts HTTP/1.1\r\nX-WP-Nonce:\r\nHost: localhost\r\n\r\n")
         let request = try #require(try parser.parseRequest())
 
+        // Optional `String?`: `== ""` asserts present-and-empty, which `isEmpty` cannot express.
+        // swiftlint:disable:next empty_string
         #expect(request.header("X-WP-Nonce") == "")
     }
 
@@ -197,6 +199,8 @@ struct RFC9112ConformanceTests {
         let parser = HTTPRequestParser("GET /wp/v2/posts HTTP/1.1\r\nX-WP-Nonce:   \t   \r\nHost: localhost\r\n\r\n")
         let request = try #require(try parser.parseRequest())
 
+        // Optional `String?`: `== ""` asserts present-and-empty, which `isEmpty` cannot express.
+        // swiftlint:disable:next empty_string
         #expect(request.header("X-WP-Nonce") == "")
     }
 
@@ -568,7 +572,7 @@ struct RFC9112ConformanceTests {
 
     // MARK: - L5: Orphaned temp file cleanup
 
-    @Test("cleanOrphanedTempFiles removes files in the server-specific temp directory")
+    @Test("cleanOrphanedTempFiles removes unregistered orphans but preserves live registered buffers")
     func orphanedTempFilesCleanedOnStart() async throws {
         let serverName = "orphan-cleanup-test"
         let serverTempDir = FileManager.default.temporaryDirectory
@@ -577,20 +581,34 @@ struct RFC9112ConformanceTests {
 
         let orphan1 = serverTempDir.appendingPathComponent("GutenbergKitHTTP-\(UUID().uuidString)")
         let orphan2 = serverTempDir.appendingPathComponent("GutenbergKitHTTP-\(UUID().uuidString)")
+        // A file backing an in-flight request of a concurrent server sharing this
+        // dir: registered in `ActiveTempFiles`, so the sweep must preserve it
+        // regardless of age. The orphans have no owner in this process.
+        let live = serverTempDir.appendingPathComponent("GutenbergKitHTTP-\(UUID().uuidString)")
         let unrelated = FileManager.default.temporaryDirectory
             .appendingPathComponent("SomeOtherFile-\(UUID().uuidString)")
 
         FileManager.default.createFile(atPath: orphan1.path, contents: Data("test".utf8))
         FileManager.default.createFile(atPath: orphan2.path, contents: Data("test".utf8))
+        FileManager.default.createFile(atPath: live.path, contents: Data("test".utf8))
         FileManager.default.createFile(atPath: unrelated.path, contents: Data("test".utf8))
-        defer { try? FileManager.default.removeItem(at: unrelated) }
+        ActiveTempFiles.register(live.lastPathComponent)
+        defer {
+            ActiveTempFiles.unregister(live.lastPathComponent)
+            try? FileManager.default.removeItem(at: live)
+            try? FileManager.default.removeItem(at: unrelated)
+        }
 
-        // Start and immediately stop a server — start() calls cleanOrphanedTempFiles()
+        // start() kicks off cleanOrphanedTempFiles() off the startup path; await it
+        // before asserting. The sweep removes every file in the server's temp dir
+        // that isn't registered as live, and never touches files outside that dir.
         let server = try await HTTPServer.start(name: serverName, handler: { _ in HTTPResponse(status: 200) })
+        await server.cleanupTask.value
         server.stop()
 
         #expect(!FileManager.default.fileExists(atPath: orphan1.path))
         #expect(!FileManager.default.fileExists(atPath: orphan2.path))
+        #expect(FileManager.default.fileExists(atPath: live.path))
         #expect(FileManager.default.fileExists(atPath: unrelated.path))
     }
 }

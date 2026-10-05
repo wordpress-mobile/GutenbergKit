@@ -36,6 +36,8 @@ struct HeaderValueTests {
     @Test("Empty quoted value")
     func emptyQuotedValue() {
         let result = HeaderValue.extractParameter("name", from: "form-data; name=\"\"")
+        // Optional `String?`: `== ""` asserts present-and-empty, which `isEmpty` cannot express.
+        // swiftlint:disable:next empty_string
         #expect(result == "")
     }
 

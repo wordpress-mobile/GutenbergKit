@@ -1,14 +1,7 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
-
-/**
- * Internal dependencies
- */
-import { useHostBridge } from '../use-host-bridge';
 import { getBlockType } from '@wordpress/blocks';
+import { useHostBridge } from '../use-host-bridge';
 
 const mockGetEditedPostAttribute = vi.fn();
 const mockGetEditedPostContent = vi.fn();

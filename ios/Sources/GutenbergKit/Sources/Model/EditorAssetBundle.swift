@@ -16,7 +16,6 @@ import SwiftSoup
 /// original remote URLs to local file paths.
 public struct EditorAssetBundle: Sendable, Equatable, Hashable {
 
-
     /// The EditorRepresentation has the exact same format as `RemoteEditorAssetManifest.RawManifest` – what we're passing to Gutenberg
     /// looks exactly like what it'd get if it called `/wpcom/v2/editor-assets` directly.
     ///
@@ -226,7 +225,7 @@ public struct EditorAssetBundle: Sendable, Equatable, Hashable {
         return try EditorAssetBundle(url: destination.appending(path: "manifest.json"))
     }
 
-    static let empty: EditorAssetBundle = EditorAssetBundle(
+    static let empty = EditorAssetBundle(
         raw: RawAssetBundle(
             manifest: .empty,
             downloadDate: Date()

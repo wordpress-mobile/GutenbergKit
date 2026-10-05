@@ -13,10 +13,10 @@ extension Logger {
 
     /// Logs timings for performance optimization
     public static let timing = Logger(subsystem: "GutenbergKit", category: "timing")
-    
+
     /// Logs editor asset library activity
     public static let assetLibrary = Logger(subsystem: "GutenbergKit", category: "asset-library")
-    
+
     /// Logs editor HTTP activity
     public static let http = Logger(subsystem: "GutenbergKit", category: "http")
 
@@ -28,6 +28,12 @@ extension Logger {
 
     /// Logs editor localization activity
     static let localization = Logger(subsystem: "GutenbergKit", category: "localization")
+
+    /// Logs upload server activity
+    static let uploadServer = Logger(subsystem: "GutenbergKit", category: "upload-server")
+
+    /// Logs calls into the editor's JavaScript bridge
+    static let bridge = Logger(subsystem: "GutenbergKit", category: "bridge")
 }
 
 public struct SignpostMonitor: Sendable {

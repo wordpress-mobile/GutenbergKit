@@ -73,6 +73,13 @@ struct BlockInserterView: View {
                 }
                 .ignoresSafeArea()
             }
+            .alert(item: $viewModel.error) { error in
+                Alert(
+                    title: Text(EditorLocalization[.failedToInsertMedia]),
+                    message: Text(error.message),
+                    dismissButton: .default(Text(EditorLocalization[.ok]))
+                )
+            }
             .animation(.smooth(duration: 2), value: viewModel.isProcessingMedia)
             .animation(.snappy, value: inlineSelectedMediaItems.count)
             .onDisappear {
@@ -152,7 +159,6 @@ struct BlockInserterView: View {
             }
             .tint(Color.primary)
         }
-
 
         ToolbarItemGroup(placement: .topBarTrailing) {
             if isLargeWidth {

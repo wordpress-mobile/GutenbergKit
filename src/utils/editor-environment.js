@@ -1,6 +1,3 @@
-/**
- * Internal dependencies
- */
 import {
 	awaitGBKitGlobal,
 	editorLoaded,
@@ -8,6 +5,7 @@ import {
 	logException,
 } from './bridge';
 import { configureLocale } from './localization';
+import { configureAdminGlobals } from './admin-globals';
 import { loadEditorAssets } from './editor-loader';
 import { configureAjax } from './ajax';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge';
@@ -33,6 +31,7 @@ export async function setUpEditorEnvironment() {
 		initializeFetchInterceptor();
 		const isRTL = await configureLocale();
 		injectEditorStyles( isRTL );
+		configureAdminGlobals( isRTL );
 		await initializeWordPressGlobals();
 		await configureApiFetch();
 		const pluginLoadResult = await loadPluginsIfEnabled();

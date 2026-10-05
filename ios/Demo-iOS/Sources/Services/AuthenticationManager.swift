@@ -143,9 +143,9 @@ class AuthenticationManager {
                 url: url,
                 callbackURLScheme: Self.callbackURLScheme
             ) { callbackURL, error in
-                if let error = error {
+                if let error {
                     continuation.resume(throwing: error)
-                } else if let callbackURL = callbackURL {
+                } else if let callbackURL {
                     continuation.resume(returning: callbackURL)
                 } else {
                     continuation.resume(throwing: AuthenticationError.noCallback)

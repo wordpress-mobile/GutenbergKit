@@ -83,7 +83,7 @@ struct EditorProgressView: UIViewRepresentable {
 
 #Preview {
     @Previewable @State
-    var editorProgress: EditorProgress = EditorProgress(completed: 1, total: 100)
+    var editorProgress = EditorProgress(completed: 1, total: 100)
 
     Spacer()
     EditorProgressView(progress: $editorProgress, loadingText: "Loading Editor")

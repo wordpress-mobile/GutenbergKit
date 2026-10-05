@@ -1,14 +1,7 @@
-/**
- * WordPress dependencies
- */
 import { useEffect, useRef } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import { store as noticesStore } from '@wordpress/notices';
 import { __ } from '@wordpress/i18n';
-
-/**
- * Internal dependencies
- */
 import { isDevMode } from '../../utils/dev-mode';
 import { getGBKit } from '../../utils/bridge';
 

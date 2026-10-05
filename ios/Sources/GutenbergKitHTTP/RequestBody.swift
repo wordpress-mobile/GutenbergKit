@@ -1,15 +1,44 @@
 import Foundation
 
+/// Process-wide registry of temp files currently backing an in-flight request.
+///
+/// ``HTTPServer/cleanOrphanedTempFiles(in:)`` runs a delete-all sweep of a
+/// server's temp directory on start to reclaim files orphaned by a crash. Two
+/// server instances that share a name share that directory (e.g. two editors
+/// open at once, or one being torn down as another starts), so the sweep would
+/// otherwise delete the other instance's live buffers. Registering a file here
+/// while it is in use makes the sweep skip it; files not registered are crash
+/// orphans (no live owner in this process) and are removed.
+///
+/// Keyed by file name (a unique UUID), which is stable however the directory is
+/// later enumerated.
+enum ActiveTempFiles {
+    private static let lock = NSLock()
+    // Guarded by `lock` on every access.
+    nonisolated(unsafe) private static var names = Set<String>()
+
+    static func register(_ name: String) { lock.withLock { _ = names.insert(name) } }
+    static func unregister(_ name: String) { lock.withLock { _ = names.remove(name) } }
+    static func contains(_ name: String) -> Bool { lock.withLock { names.contains(name) } }
+}
+
 /// Reference-counted owner for a temporary file.
 ///
 /// The file is deleted when the last reference is released. This allows
 /// ``RequestBody`` (a value type) to share ownership of a temp file across
 /// copies — including multipart part bodies that reference byte ranges within
-/// the same file.
+/// the same file. While owned, the file is registered in ``ActiveTempFiles`` so
+/// a concurrent server's orphan sweep won't delete it.
 final class TempFileOwner: Sendable {
     let url: URL
-    init(url: URL) { self.url = url }
-    deinit { try? FileManager.default.removeItem(at: url) }
+    init(url: URL) {
+        self.url = url
+        ActiveTempFiles.register(url.lastPathComponent)
+    }
+    deinit {
+        ActiveTempFiles.unregister(url.lastPathComponent)
+        try? FileManager.default.removeItem(at: url)
+    }
 }
 
 /// An HTTP request body with stream semantics.

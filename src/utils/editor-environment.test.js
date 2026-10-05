@@ -1,11 +1,4 @@
-/**
- * External dependencies
- */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-/**
- * Internal dependencies
- */
 import { setUpEditorEnvironment } from './editor-environment';
 import {
 	awaitGBKitGlobal,
@@ -20,6 +13,7 @@ import { configureAjax } from './ajax.js';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge.js';
 import { initializeWordPressGlobals } from './wordpress-globals.js';
 import { configureLocale } from './localization.js';
+import { configureAdminGlobals } from './admin-globals.js';
 import { configureApiFetch } from './api-fetch.js';
 import { initializeEditor } from './editor.jsx';
 import { initializeFetchInterceptor } from './fetch-interceptor.js';
@@ -46,6 +40,10 @@ vi.mock( './editor-loader.js', () => ( {
 
 vi.mock( './localization.js', () => ( {
 	configureLocale: vi.fn(),
+} ) );
+
+vi.mock( './admin-globals.js', () => ( {
+	configureAdminGlobals: vi.fn(),
 } ) );
 
 vi.mock( './api-fetch.js', () => ( {
@@ -96,6 +94,10 @@ describe( 'setUpEditorEnvironment', () => {
 			callOrder.push( 'injectEditorStyles' );
 		} );
 
+		configureAdminGlobals.mockImplementation( () => {
+			callOrder.push( 'configureAdminGlobals' );
+		} );
+
 		initializeWordPressGlobals.mockImplementation( () => {
 			callOrder.push( 'loadRemainingGlobals' );
 		} );
@@ -123,12 +125,21 @@ describe( 'setUpEditorEnvironment', () => {
 			'initializeFetchInterceptor',
 			'configureLocale',
 			'injectEditorStyles',
+			'configureAdminGlobals',
 			'loadRemainingGlobals',
 			'configureApiFetch',
 			'configureAjax',
 			'initializeVideoPressAjaxBridge',
 			'initializeEditor',
 		] );
+	} );
+
+	it( 'applies the resolved text direction to the admin globals', async () => {
+		configureLocale.mockResolvedValue( true );
+
+		await setUpEditorEnvironment();
+
+		expect( configureAdminGlobals ).toHaveBeenCalledWith( true );
 	} );
 
 	it( 'loads plugins when plugins enabled', async () => {

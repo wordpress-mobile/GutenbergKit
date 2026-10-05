@@ -1,0 +1,32 @@
+/**
+ * Default editor styles.
+ *
+ * These styles are shown if a theme does not register its own editor style,
+ * a theme.json file, or has toggled off "Use theme styles" in preferences.
+ *
+ * Vendored from the `@wordpress/block-editor` package, which removed the
+ * stylesheet because the Gutenberg plugin no longer enqueues it and WordPress
+ * core owns the equivalent styles.
+ *
+ * @see https://github.com/WordPress/gutenberg/blob/28c348acdf3e88bbd90f766e66acc6716bcf9103/packages/block-editor/src/default-editor-styles.scss
+ * @see https://github.com/WordPress/gutenberg/pull/81793
+ * @see https://github.com/WordPress/wordpress-develop/blob/db9654e6d386c2c69401b9c77c6ce1ae7460a6e4/src/wp-includes/block-editor.php#L218C4-L218C23
+ */
+
+@use "@wordpress/base-styles/variables" as *;
+
+body {
+	font-family: $default-font;
+	font-size: 18px;
+	line-height: 1.5;
+	--wp--style--block-gap: 2em;
+}
+
+p {
+	line-height: 1.8;
+}
+
+.editor-post-title {
+	font-size: 20px; // Set reasonable default size for small screens
+	font-weight: 800;
+}

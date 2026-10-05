@@ -1,13 +1,9 @@
-/**
- * WordPress dependencies
- */
 // Default styles that are needed for the editor.
 import componentsStyles from '@wordpress/components/build-style/style.css?inline';
 import blockEditorStyles from '@wordpress/block-editor/build-style/style.css?inline';
 import blockLibraryEditorStyles from '@wordpress/block-library/build-style/editor.css?inline';
 import formatLibraryStyles from '@wordpress/format-library/build-style/style.css?inline';
 import editorStyles from '@wordpress/editor/build-style/style.css?inline';
-
 // Right-to-left counterparts, generated upstream by `rtlcss`.
 import componentsStylesRTL from '@wordpress/components/build-style/style-rtl.css?inline';
 import blockEditorStylesRTL from '@wordpress/block-editor/build-style/style-rtl.css?inline';

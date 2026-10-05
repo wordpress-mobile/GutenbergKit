@@ -377,4 +377,3 @@ final class URLCapturingMockHTTPClient: EditorHTTPClientProtocol, @unchecked Sen
         )
     }
 }
-

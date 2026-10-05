@@ -52,9 +52,9 @@ public actor EditorAssetLibrary {
 
         return existingManifest.manifest
     }
-    
+
     // MARK: - Bundle Handling
-    
+
     /// The downloaded asset bundles for a given `EditorConfiguration`. Ordered newest to oldest.
     ///
     public func readAssetBundles() throws -> [EditorAssetBundle] {
@@ -67,7 +67,7 @@ public actor EditorAssetLibrary {
             .compactMap { try? EditorAssetBundle(url: $0) }  // Skip invalid/incomplete bundles
             .sorted { $0.downloadDate > $1.downloadDate }
     }
-    
+
     /// Fetches the latest manifest from the server and downloads all of its resources, caching them on-disk.
     ///
     /// - Parameter progress: An optional callback that receives progress updates as assets are downloaded.
@@ -80,7 +80,7 @@ public actor EditorAssetLibrary {
         let manifest = try await self.fetchManifest()
         return try await self.buildBundle(for: manifest, progress: progress)
     }
-    
+
     /// Checks whether a complete bundle with the given manifest checksum exists on disk.
     ///
     /// A bundle is considered complete only if both `manifest.json` and `editor-representation.json` exist.
@@ -100,9 +100,9 @@ public actor EditorAssetLibrary {
 
         return try? EditorAssetBundle(url: self.bundleManifestPath(for: checksum))
     }
-    
+
     // MARK: - Individual Asset Handling
-    
+
     /// Downloads all of the assets for a given manifest and assembles them into a bundle.
     ///
     /// Assets are downloaded concurrently and stored in a temporary directory. Once all downloads
@@ -119,7 +119,7 @@ public actor EditorAssetLibrary {
         }
 
         var complete = 0
-        
+
         let tempDirectory = URL.temporaryDirectory.appending(path: UUID().uuidString)
 
         let bundle = try EditorAssetBundle(
@@ -153,7 +153,7 @@ public actor EditorAssetLibrary {
 
         return try bundle.copy(to: self.bundleRoot(for: bundle))
     }
-    
+
     /// Downloads a single asset and copies it into the temporary bundle directory.
     ///
     @discardableResult
@@ -172,7 +172,7 @@ public actor EditorAssetLibrary {
 
         return destinationPath
     }
-    
+
     /// Checks if the given `url` is eligible to be downloaded into the local bundle
     ///
     /// Only HTTP/HTTPS URLs with `.js`, `.css`, or `.js.map` extensions are supported.
@@ -181,16 +181,16 @@ public actor EditorAssetLibrary {
             log(.warn, "Unexpected asset link: \(url)")
             return false
         }
-        
+
         let supportedResourceSuffixes = [".js", ".css", ".js.map"]
         guard supportedResourceSuffixes.contains(where: { url.lastPathComponent.hasSuffix($0) }) else {
             log(.warn, "Unsupported asset URL: \(url)")
             return false
         }
-        
+
         return true
     }
-    
+
     // MARK: - Helpers
     private func editorAssetsUrl(for configuration: EditorConfiguration) -> URL {
         let baseUrl: URL
@@ -206,7 +206,7 @@ public actor EditorAssetLibrary {
         }
         return baseUrl.appending(queryItems: [URLQueryItem(name: "exclude", value: "core,gutenberg")])
     }
-    
+
     /// Cleans up outdated library entries for this site.
     ///
     /// This method removes all asset bundles except the most recent one, freeing disk space
@@ -215,12 +215,12 @@ public actor EditorAssetLibrary {
     /// - Throws: An error if the list of bundles cannot be read, or any bundle cannot be removed.
     public func cleanup() throws {
         let bundles = try self.readAssetBundles().dropFirst()
-        
+
         for bundle in bundles {
             try FileManager.default.removeItem(at: self.bundleRoot(for: bundle))
         }
     }
-    
+
     /// Erases all library entries for this site.
     ///
     /// This method removes all asset bundles, requiring assets to be re-downloaded
@@ -231,29 +231,29 @@ public actor EditorAssetLibrary {
         guard FileManager.default.directoryExists(at: self.storageRoot) else {
             return
         }
-        
+
         try FileManager.default.removeItem(at: self.storageRoot)
         try FileManager.default.createDirectory(at: self.storageRoot, withIntermediateDirectories: true)
     }
-    
+
     // MARK: - File Path Helpers
     func bundleRoot(for bundle: EditorAssetBundle) -> URL {
         assert(!bundle.id.isEmpty, "Bundle must have a valid ID")
         return self.bundleRoot(for: bundle.id)
     }
-    
+
     func bundleRoot(for checksum: String) -> URL {
         self.storageRoot.appending(path: checksum)
     }
-    
+
     func bundleManifestPath(for bundle: EditorAssetBundle) -> URL {
         bundleManifestPath(relativeTo: self.bundleRoot(for: bundle))
     }
-    
+
     func bundleManifestPath(relativeTo path: URL) -> URL {
         path.appending(path: "manifest.json")
     }
-    
+
     func bundleManifestPath(for checksum: String) -> URL {
         self.bundleManifestPath(relativeTo: self.bundleRoot(for: checksum))
     }

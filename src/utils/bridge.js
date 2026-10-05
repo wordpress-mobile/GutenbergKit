@@ -1,6 +1,3 @@
-/**
- * Internal dependencies
- */
 import parseException from './exception-parser';
 import { debug, error } from './logger';
 import { isDevMode } from './dev-mode';
@@ -40,6 +37,19 @@ function dispatchToBridge( methodName, args = {} ) {
  */
 export function editorLoaded() {
 	dispatchToBridge( 'onEditorLoaded', {} );
+}
+
+/**
+ * Notifies the native host that the editor is no longer usable.
+ *
+ * Dispatched when `EditorErrorBoundary` catches an error, which
+ * unmounts the editor and tears down the `window.editor` bridge methods.
+ * The host must stop calling those methods until the editor reloads.
+ *
+ * @return {void}
+ */
+export function editorUnavailable() {
+	dispatchToBridge( 'onEditorUnavailable', {} );
 }
 
 /**
@@ -225,6 +235,7 @@ export function onNetworkRequest( requestData ) {
  * @typedef GBKitConfig
  *
  * @property {boolean}  [themeStyles]            Controls if theme styles are applied to the editor.
+ * @property {string}   [siteURL]                The site's home URL.
  * @property {string}   [siteApiRoot]            The root URL of the site's API.
  * @property {string[]} [siteApiNamespace]       The namespace of the site's API; if multiple namespaces are provided, the first one is used as the default.
  * @property {string[]} [namespaceExcludedPaths] The paths that should not be namespaced.
@@ -232,6 +243,8 @@ export function onNetworkRequest( requestData ) {
  * @property {string}   [hideTitle]              Whether to hide the title.
  * @property {Post}     [post]                   The post data.
  * @property {boolean}  [enableNetworkLogging]   Enables logging of all network requests/responses to the native host via onNetworkRequest bridge method.
+ * @property {number}   [nativeUploadPort]       Port the local HTTP server is listening on. If absent, the native upload override is not activated.
+ * @property {string}   [nativeUploadToken]      Per-session auth token for requests to the local upload server.
  */
 
 /**
@@ -248,22 +261,13 @@ export const POST_FALLBACKS = {
 };
 
 /**
- * Retrieves the native-host-provided GBKit object from localStorage or returns
- * an empty object if not found.
+ * Retrieves the native-host-provided GBKit object or returns an empty object
+ * if the host has not injected one.
  *
  * @return {GBKitConfig} The GBKit object.
  */
 export function getGBKit() {
-	if ( window.GBKit ) {
-		return window.GBKit;
-	}
-
-	try {
-		return JSON.parse( localStorage.getItem( 'GBKit' ) ) || {};
-	} catch ( err ) {
-		error( 'Failed to parse GBKit from localStorage', err );
-		return {};
-	}
+	return window.GBKit || {};
 }
 
 /**
@@ -314,13 +318,10 @@ export async function requestLatestContent() {
 /**
  * Retrieves the current post data from the native host
  *
- * Always requests content from the native host first, as it maintains the
- * latest content via autosave. Falls back to `window.GBKit.post` only if the
- * native bridge is unavailable (e.g., dev mode).
- *
- * Note: `window.GBKit.post.title/content` are "initial values" injected at
- * WebView load. After a WebView refresh, these may be stale. The native host
- * has the authoritative content from autosave.
+ * Requests the latest content from the native host first. When the host
+ * provides none, including when no native bridge is available (e.g., dev mode),
+ * falls back to `window.GBKit.post`: the content the editor was opened with,
+ * which is stale once the editor reloads after edits.
  *
  * @return {Promise<Post>} The post object.
  */

@@ -32,7 +32,6 @@ struct AppRootView: View {
             }.buttonStyle(.borderedProminent)
         })
     }
-
 }
 
 struct AppError: LocalizedError {

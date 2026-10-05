@@ -100,16 +100,73 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// - Important: JS `editor` APIs are only safe to call after this becomes `true`.
     private var isReady: Bool = false
 
+    /// Whether opening the editor has already placed the caret in its content.
+    ///
+    /// Autofocus belongs to opening the editor, not to the reload after a crash:
+    /// ``focus(force:)`` decides from the content the editor was opened with,
+    /// which a reload can replace with newer content from the host, so repeating
+    /// it would raise the keyboard over a restored post.
+    private var hasAutofocused = false
+
     /// When `true`, loads editor HTML without dependencies for WebKit prewarming.
     /// Used by `EditorViewController.warmup()` to reduce first-render latency.
     private let isWarmupMode: Bool
 
+    /// Set once the editor has begun loading and captured its configuration
+    /// (including ``mediaUploadDelegate``). After this, that delegate can no longer
+    /// take effect, so its setter traps if written.
+    private var hasStartedLoading = false
+
+    /// Whether a non-nil ``mediaUploadDelegate`` was ever assigned. Lets the load
+    /// path tell "the delegate was released before load" (a retention mistake to
+    /// trap) apart from "no delegate was configured" (a valid opt-out).
+    private var mediaUploadDelegateWasAssigned = false
+
+    /// Delegate for customizing media file processing and upload behavior.
+    ///
+    /// Provide this **before the editor loads** — typically right after `init`, the
+    /// same way the rest of the editor configuration is supplied. It is captured
+    /// once, when the editor begins loading, and injected into the page's initial
+    /// configuration; setting it afterward has no effect, so the setter traps.
+    ///
+    /// - Important: This is a `weak` reference — you must hold a strong reference to
+    ///   your delegate until the editor has loaded, or native uploads are silently
+    ///   disabled. To surface that mistake, the editor traps at load time if a
+    ///   delegate that was assigned here has already been deallocated.
+    public weak var mediaUploadDelegate: (any MediaUploadDelegate)? {
+        didSet {
+            // Record whether a delegate was provided so the load path can tell a
+            // premature deallocation apart from a deliberate opt-out (see
+            // `startUploadServer`).
+            mediaUploadDelegateWasAssigned = mediaUploadDelegate != nil
+            // Deliberate fail-fast, not a defensive check. The delegate is captured
+            // into the page's initial configuration when the editor begins loading,
+            // so a delegate assigned afterward would silently never take effect;
+            // trapping surfaces that misuse loudly instead of failing quietly.
+            //
+            // `hasStartedLoading` flips at the start of the async load (see
+            // `loadEditor`), which runs at or after `viewDidLoad` — so this only
+            // *widens* the safe window versus a synchronous flip. A host that
+            // follows the documented contract (set right after `init`, before
+            // presenting) can never race it; the trap fires only on a genuinely
+            // late assignment. Do not soften this to a no-op or a log — silently
+            // dropping the delegate is exactly the failure this is here to catch.
+            precondition(
+                !hasStartedLoading,
+                "mediaUploadDelegate must be set before the editor loads (e.g. right after init). "
+                    + "It is captured into the editor configuration at load; setting it afterward has no effect."
+            )
+        }
+    }
+
     // MARK: - Private Properties (Services)
     private let editorService: EditorService
+    private let httpClient: any EditorHTTPClientProtocol
     private let mediaPicker: MediaPickerController?
     private let controller: GutenbergEditorController
     private let bundleProvider: EditorAssetBundleProvider
     private let lockdownModeMonitor: LockdownModeMonitor
+    private var uploadServer: MediaUploadServer?
 
     // MARK: - Private Properties (UI)
 
@@ -122,9 +179,15 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// View controller that displays error information when loading fails.
     private var errorViewController: UIHostingController<AnyView>?
 
+    /// View controller covering the editor after it crashes.
+    private var editorCrashViewController: UIHostingController<AnyView>?
+
     /// Stores the contextId from the most recent `openMediaLibrary` JS call.
     /// Passed back to JavaScript when media selection completes.
     private var currentMediaContextId: String?
+
+    /// The native block inserter, while it is presented.
+    private weak var blockInserterController: UIViewController?
 
     // MARK: - Private Properties (Timing)
 
@@ -141,6 +204,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
     }()
+
+    /// Modal dialogs the editor reports open, so a reload can report them closed.
+    private var openModalDialogs: Set<String> = []
 
     /// Renders HTML previews for block patterns in the block inserter.
     private lazy var htmlPreviewManager: HTMLPreviewManager = {
@@ -165,6 +231,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         self.configuration = configuration
         self.dependencies = dependencies
+        self.httpClient = httpClient
         self.editorService = EditorService(
             configuration: configuration,
             httpClient: httpClient
@@ -244,11 +311,21 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
 
         if let dependencies {
-            // FAST PATH: Dependencies were provided at init() - load immediately
-            do {
-                try self.loadEditor(dependencies: dependencies)
-            } catch {
-                self.failToLoad(error)
+            // FAST PATH: Dependencies were provided at init() - load immediately.
+            //
+            // Deliberately NOT tracked in `dependencyTaskHandle`: `viewDidDisappear`
+            // cancels that handle to abort the async dependency *fetch*, but the
+            // fast path is cheap local work that must run to completion — a
+            // transient disappearance (e.g. a modal presented over the editor)
+            // cancelling it mid `startUploadServer()` silently disabled native
+            // uploads for the session. `[weak self]` still makes it a no-op once
+            // the controller is torn down.
+            Task(priority: .userInitiated) { [weak self] in
+                do {
+                    try await self?.loadEditor(dependencies: dependencies)
+                } catch {
+                    self?.failToLoad(error)
+                }
             }
         } else {
             // ASYNC FLOW: No dependencies - fetch them asynchronously
@@ -273,6 +350,17 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         self.dependencyTaskHandle?.cancel()
     }
 
+    deinit {
+        // Stop the upload server when the editor is permanently torn down.
+        //
+        // This deliberately does NOT happen in `viewDidDisappear`, which also
+        // fires when another view controller is merely pushed or presented over
+        // the editor. `HTTPServer.stop()` cancels the `NWListener`, which is
+        // terminal and has no restart path — stopping on disappear left uploads
+        // permanently broken once the user returned to the editor.
+        uploadServer?.stop()
+    }
+
     /// Fetches all required dependencies and then loads the editor.
     ///
     /// This method is the entry point for the **Async Flow** (when no dependencies were provided at init).
@@ -291,7 +379,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             self.dependencies = dependencies
 
             // Continue to the shared loading path
-            try self.loadEditor(dependencies: dependencies)
+            try await self.loadEditor(dependencies: dependencies)
         } catch {
             self.failToLoad(error)
         }
@@ -312,11 +400,18 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// The editor will eventually emit an `onEditorLoaded` message, triggering `didLoadEditor()`.
     ///
     @MainActor
-    private func loadEditor(dependencies: EditorDependencies) throws {
+    private func loadEditor(dependencies: EditorDependencies) async throws {
+        // From here on the editor configuration — including `mediaUploadDelegate` —
+        // is captured, so the delegate setter traps if written after this point.
+        self.hasStartedLoading = true
+
         self.displayActivityView()
 
         // Set asset bundle for the URL scheme handler to serve cached plugin/theme assets
         self.bundleProvider.set(bundle: dependencies.assetBundle)
+
+        // Start the local upload server for native media processing
+        await startUploadServer()
 
         // Build and inject editor configuration as window.GBKit
         let editorConfig = try buildEditorConfiguration(dependencies: dependencies)
@@ -350,16 +445,76 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// when it initializes.
     ///
     private func buildEditorConfiguration(dependencies: EditorDependencies) throws -> WKUserScript {
-        let gbkitGlobal = try GBKitGlobal(configuration: self.configuration, dependencies: dependencies)
-        let stringValue = try gbkitGlobal.toString()
+        let gbkitGlobal = try GBKitGlobal(
+            configuration: self.configuration,
+            dependencies: dependencies,
+            nativeUploadPort: uploadServer.map { Int($0.port) },
+            nativeUploadToken: uploadServer?.token
+        )
+        return WKUserScript(
+            source: Self.configurationScript(gbkitGlobal: try gbkitGlobal.toString()),
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        )
+    }
 
-        let jsCode = """
-        window.GBKit = \(stringValue);
-        localStorage.setItem('GBKit', JSON.stringify(window.GBKit));
-        "done";
+    /// The document-start script that installs `window.GBKit`.
+    ///
+    /// The configuration is session-scoped — it carries the site credential and
+    /// the local server's port and tokens — so no copy of it outlives the load
+    /// that injected it. Versions before #613 mirrored it into `localStorage`,
+    /// which persists across launches; the script removes that key, scrubbing an
+    /// upgraded device the next time the editor loads. Nothing reads it any
+    /// more, so the line can go once builds from before #613 are no longer in
+    /// use.
+    static func configurationScript(gbkitGlobal: String) -> String {
         """
+        window.GBKit = \(gbkitGlobal);
+        localStorage.removeItem('GBKit');
+        """
+    }
 
-        return WKUserScript(source: jsCode, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+    /// Starts the local HTTP server for routing file uploads through native processing.
+    ///
+    /// The server binds to localhost on a random port. If it fails to start, the editor
+    /// falls back to Gutenberg's default upload behavior (the JS override won't activate
+    /// because `nativeUploadPort` will be nil in GBKit).
+    private func startUploadServer() async {
+        // A delegate that was provided but is already nil here was deallocated before
+        // the editor finished loading — the host didn't hold a strong reference to it.
+        // That silently disables native uploads, so trap loudly instead.
+        precondition(
+            !(mediaUploadDelegateWasAssigned && mediaUploadDelegate == nil),
+            "mediaUploadDelegate was released before the editor loaded — hold a strong reference to it."
+        )
+
+        guard mediaUploadDelegate != nil else {
+            return
+        }
+
+        // The native upload server relays through DefaultMediaUploader, which needs a
+        // site root and an auth header (every host provides one — the editor injects
+        // it because the WebView has no auth cookies). Without both there is nothing
+        // to upload through, so leave the server down and let uploads fall to the
+        // default WebView path rather than start a server that could only fail.
+        guard !configuration.authHeader.isEmpty else {
+            return
+        }
+
+        let defaultUploader = DefaultMediaUploader(
+            httpClient: httpClient.uploadClient(),
+            siteApiRoot: configuration.siteApiRoot,
+            siteApiNamespace: configuration.siteApiNamespace
+        )
+
+        do {
+            self.uploadServer = try await MediaUploadServer.start(
+                uploadDelegate: mediaUploadDelegate,
+                defaultUploader: defaultUploader
+            )
+        } catch {
+            Logger.uploadServer.error("Failed to start upload server: \(error). Falling back to default upload behavior.")
+        }
     }
 
     /// Deletes all cached editor data for all sites
@@ -382,10 +537,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func _setContent(_ content: String) {
-        guard self.isReady else {
-            return
-        }
-
         let escapedString = content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
         evaluate("editor.setContent('\(escapedString)');", isCritical: true)
     }
@@ -421,26 +572,23 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// Steps backwards in the editor history state
     public func undo() {
-        guard isReady else { return }
         evaluate("editor.undo();")
     }
 
     /// Steps forwards in the editor history state
     public func redo() {
-        guard isReady else { return }
         evaluate("editor.redo();")
     }
 
     /// Dismisses the topmost modal dialog or menu in the editor
     public func dismissTopModal() {
-        guard isReady else { return }
         evaluate("editor.dismissTopModal();")
     }
 
     /// Enables code editor.
     public var isCodeEditorEnabled: Bool = false {
         didSet {
-            guard isCodeEditorEnabled != oldValue, isReady else { return }
+            guard isCodeEditorEnabled != oldValue else { return }
             evaluate("editor.switchEditorMode('\(isCodeEditorEnabled ? "text" : "visual")');")
         }
     }
@@ -453,6 +601,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // MARK: - Internal (JavaScript)
 
     private func evaluate(_ javascript: String, isCritical: Bool = false) {
+        // The editor's bridge methods exist only while it is loaded. Calling them
+        // otherwise fails with a raw `TypeError` that `handleError` would show in
+        // an alert.
+        guard isReady else {
+            let command = String(javascript.prefix { $0 != "(" })
+            Logger.bridge.debug("Refused \(command, privacy: .public) because the editor is not ready")
+            return
+        }
         webView.evaluateJavaScript(javascript) { [weak self] _, error in
             guard let self, let error else { return }
             self.handleError(error, isCritical: isCritical)
@@ -518,13 +674,17 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         if let sheet = host.popoverPresentationController?.adaptiveSheetPresentationController ?? host.sheetPresentationController {
             sheet.delegate = self
-            sheet.detents = [.custom(identifier: .medium, resolver: { context in
-                context.containerTraitCollection.horizontalSizeClass == .compact ? 536 : 900
-            }), .large()]
+            sheet.detents = [
+                .custom(identifier: .medium, resolver: { context in
+                    context.containerTraitCollection.horizontalSizeClass == .compact ? 536 : 900
+                }),
+                .large()
+            ]
             sheet.prefersGrabberVisible = true
             sheet.preferredCornerRadius = 26
         }
 
+        blockInserterController = host
         present(host, animated: true)
     }
 
@@ -543,6 +703,24 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
+    /// Dismisses the block inserter and any picker it presented.
+    ///
+    /// Dismisses the inserter itself rather than asking its presenting view
+    /// controller, which belongs to the host. Asked again while the inserter is
+    /// still closing, that view controller dismisses itself instead, which can
+    /// close the host's editor.
+    private func dismissBlockInserter() {
+        guard let inserter = blockInserterController else { return }
+        guard inserter.presentedViewController != nil else {
+            inserter.dismiss(animated: true)
+            return
+        }
+        // While a picker is presented, dismissing the inserter closes only the picker.
+        inserter.dismiss(animated: false) {
+            inserter.dismiss(animated: true)
+        }
+    }
+
     // MARK: - UIAdaptivePresentationControllerDelegate
 
     public func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
@@ -554,15 +732,20 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     private func insertBlockFromInserter(_ blockID: String) {
-        evaluate("window.blockInserter.insertBlock('\(blockID)')")
+        evaluate("window.blockInserter?.insertBlock('\(blockID)')")
     }
 
     private func insertMediaFromInserter(_ selection: [MediaInfo]) async {
         guard !selection.isEmpty else { return }
+        // `callAsyncJavaScript` does not go through `evaluate()`, so check readiness here.
+        guard isReady else {
+            Logger.bridge.debug("Refused inserting media because the editor is not ready")
+            return
+        }
         do {
             let object = try makeJavaScriptCompatibleDictionary(with: selection)
             _ = try await webView.callAsyncJavaScript(
-                "window.blockInserter.insertMedia(selection)",
+                "window.blockInserter?.insertMedia(selection)",
                 arguments: ["selection": object],
                 in: nil,
                 contentWorld: .page
@@ -574,7 +757,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     private func insertPatternFromInserter(_ patternName: String) {
         let escapedName = patternName.replacingOccurrences(of: "'", with: "\\'")
-        evaluate("window.blockInserter.insertPattern('\(escapedName)')")
+        evaluate("window.blockInserter?.insertPattern('\(escapedName)')")
     }
 
     private func openMediaLibrary(_ config: OpenMediaLibraryAction) {
@@ -599,7 +782,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     /// - parameter text: The text to append at the cursor position.
     public func appendTextAtCursor(_ text: String) {
-        guard isReady else { return }
         let escapedText = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? text
         evaluate("editor.appendTextAtCursor(decodeURIComponent('\(escapedText)'));")
     }
@@ -622,7 +804,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // MARK: - Navigation Overlay
 
     private func setupNavigationOverlay() {
-        guard let navigationController = navigationController,
+        guard let navigationController,
                 navigationOverlayView.superview == nil else { return }
         navigationController.view.addSubview(navigationOverlayView)
         NSLayoutConstraint.activate([
@@ -669,6 +851,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                     return
                 }
                 delegate?.editor(self, didLogException: editorException)
+            case .onEditorUnavailable:
+                didLoseEditor()
             case .showBlockInserter:
                 let body = try message.decode(EditorJSMessage.ShowBlockInserterBody.self)
                 showBlockInserter(data: body)
@@ -680,10 +864,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 delegate?.editor(self, didTriggerAutocompleter: body.type)
             case .onModalDialogOpened:
                 let body = try message.decode(EditorJSMessage.ModalDialogBody.self)
+                openModalDialogs.insert(body.dialogType)
                 showNavigationOverlay()
                 delegate?.editor(self, didOpenModalDialog: body.dialogType)
             case .onModalDialogClosed:
                 let body = try message.decode(EditorJSMessage.ModalDialogBody.self)
+                openModalDialogs.remove(body.dialogType)
                 hideNavigationOverlay()
                 delegate?.editor(self, didCloseModalDialog: body.dialogType)
             case .log:
@@ -721,10 +907,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     }
 
     fileprivate func controllerWebContentProcessDidTerminate(_ controller: GutenbergEditorController) {
-        // Reset readiness so JS bridge calls are blocked until the editor
-        // re-emits onEditorLoaded after the reload completes.
-        self.isReady = false
-        webView.reload()
+        // Reload through the same path as a crash so any crash notice is cleared
+        // rather than left covering the reloaded editor.
+        reloadEditor()
+        // The editor stays gone until that reload finishes, so the host disables
+        // the controls that depend on it, as it does for a crash. Readiness is
+        // already reset, so the calls those controls would make are refused.
+        delegate?.editorDidBecomeUnavailable(self)
     }
 
     // MARK: - Loading Complete: Editor Ready
@@ -748,15 +937,25 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         self.hideActivityView()
         self.isReady = true
 
+        // The web editor always starts in visual mode, so restore code editor
+        // mode when the host enabled it, including after a reload.
+        if isCodeEditorEnabled {
+            evaluate("editor.switchEditorMode('text');")
+        }
+
         // Fade in the WebView now that navigation is complete
         UIView.animate(withDuration: 0.2, delay: 0.1, options: [.allowUserInteraction]) {
             self.webView.alpha = 1
         }
 
-        // If lockdown mode was detected, show the sheet — skip autofocus entirely
-        // since the editor may not function correctly with Lockdown Mode restrictions.
-        if !lockdownModeMonitor.isLockdownModeEnabled {
-            self.focus()
+        if !hasAutofocused {
+            hasAutofocused = true
+
+            // If lockdown mode was detected, show the sheet — skip autofocus entirely
+            // since the editor may not function correctly with Lockdown Mode restrictions.
+            if !lockdownModeMonitor.isLockdownModeEnabled {
+                self.focus()
+            }
         }
         lockdownModeMonitor.presentSheetIfNeeded(onDismiss: {})
 
@@ -765,6 +964,112 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         print("gutenbergkit-measure_editor-first-render:", duration)
 
         delegate?.editorDidLoad(self)
+    }
+
+    /// Called when the editor JavaScript emits the `onEditorUnavailable` message.
+    ///
+    /// The editor's error boundary caught an error and replaced the editor with
+    /// an error message. React unmounted the editor, which deleted every
+    /// `window.editor.*` bridge method, so readiness is reset until the editor
+    /// reloads and emits `onEditorLoaded` again.
+    ///
+    /// Without this, `isReady` stays `true` and every subsequent bridge call
+    /// raises an uncaught `TypeError` inside the web view.
+    private func didLoseEditor() {
+        self.isReady = false
+        // Picks made in an open inserter can no longer reach the editor.
+        dismissBlockInserter()
+        self.displayEditorCrash()
+        delegate?.editorDidBecomeUnavailable(self)
+    }
+
+    /// Covers the editor with a native notice offering to reload.
+    ///
+    /// The web view still shows the editor's error message underneath, so it is
+    /// covered rather than left showing two competing error states.
+    @MainActor
+    private func displayEditorCrash() {
+        guard editorCrashViewController == nil else { return }
+
+        let controller = UIHostingController(rootView: AnyView(EmptyView()))
+        editorCrashViewController = controller
+
+        addChild(controller)
+        controller.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(controller.view)
+        view.bringSubviewToFront(controller.view)
+        NSLayoutConstraint.activate([
+            controller.view.topAnchor.constraint(equalTo: view.topAnchor),
+            controller.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            controller.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            controller.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
+        controller.didMove(toParent: self)
+
+        // Follow the tint the host sets on the editor's view hierarchy, as UIKit
+        // controls do, rather than the app's global accent color. A presentation
+        // covering the editor dims the tint its views inherit, so read it from the
+        // notice's own view undimmed, or the button would stay gray afterward.
+        controller.view.tintAdjustmentMode = .normal
+        let tint = Color(uiColor: controller.view.tintColor)
+
+        let crashView = EditorErrorView(
+            title: EditorLocalization[.editorCrashedTitle],
+            description: EditorLocalization[.editorCrashedDescription]
+        ) {
+            Button(EditorLocalization[.editorCrashedReload]) { [weak self] in
+                self?.reloadEditor()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(tint)
+        }
+        .background(Color(uiColor: .systemBackground))
+        controller.rootView = AnyView(crashView)
+
+        // A crash before the editor loads leaves the loading indicator running
+        // under the notice. Remove it without animating, so the animation can't
+        // end after a quick Reload and remove the indicator that reload shows.
+        waitingView.stopAnimating()
+        waitingView.removeFromSuperview()
+
+        // The web view stays in the hierarchy underneath the notice, so hide it
+        // from VoiceOver. The notice moves focus to its title when it appears.
+        webView.accessibilityElementsHidden = true
+    }
+
+    /// Reloads the editor, showing the loading indicator until it is ready again.
+    ///
+    /// The reloaded editor starts from the content the delegate returns from
+    /// ``EditorViewControllerDelegate/editorDidRequestLatestContent(_:)``, or
+    /// from the content it was opened with when that returns `nil`.
+    ///
+    /// Readiness is reset immediately and restored only once the editor emits
+    /// `onEditorLoaded` again, so bridge calls stay refused until it is
+    /// genuinely usable.
+    private func reloadEditor() {
+        isReady = false
+        // Picks made in an open inserter cannot reach the reloaded page, which has
+        // no `window.blockInserter` until the editor opens one again. A crash has
+        // dismissed it already; ending the web content process has not.
+        dismissBlockInserter()
+        hideEditorCrash()
+        // A reload that did not follow a crash never unmounted the editor's open
+        // dialogs, so report them closed rather than leave navigation blocked.
+        hideNavigationOverlay()
+        openModalDialogs.forEach { delegate?.editor(self, didCloseModalDialog: $0) }
+        openModalDialogs.removeAll()
+        webView.alpha = 0
+        displayActivityView()
+        webView.reload()
+    }
+
+    @MainActor
+    private func hideEditorCrash() {
+        editorCrashViewController?.willMove(toParent: nil)
+        editorCrashViewController?.view.removeFromSuperview()
+        editorCrashViewController?.removeFromParent()
+        editorCrashViewController = nil
+        webView.accessibilityElementsHidden = false
     }
 
     // MARK: - Warmup
@@ -879,15 +1184,14 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     }
 }
 
-//MARK: - View Transformation
+// MARK: - View Transformation
 extension EditorViewController {
 
     @MainActor
     func displayError(_ error: Error) {
-        let view = ContentUnavailableView(
-            EditorLocalization[.editorError],
-            systemImage: "exclamationmark.circle",
-            description: Text(error.localizedDescription)
+        let view = EditorErrorView(
+            title: EditorLocalization[.editorError],
+            description: error.localizedDescription
         )
 
         self.errorViewController = UIHostingController(rootView: AnyView(view))

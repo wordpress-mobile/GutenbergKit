@@ -11,6 +11,11 @@ public enum EditorLocalizableString {
 
     // MARK: - Media
     case failedToInsertMedia
+    case failedToLoadSelectedMedia
+    case failedToProcessCapturedMedia
+
+    // MARK: - Common
+    case ok
 
     // MARK: - Patterns
     case patterns
@@ -23,6 +28,19 @@ public enum EditorLocalizableString {
     // MARK: - Editor Loading
     case loadingEditor
     case editorError
+
+    // MARK: - Editor Crash
+
+    case editorCrashedTitle
+
+    /// Deliberately makes no claim about whether the user's work was saved.
+    /// Whether anything was persisted depends entirely on the host: some mirror
+    /// the editor's content continuously, others read it only when the user
+    /// saves, and the editor cannot tell which. A host that does mirror content
+    /// should override this key to reassure the user; the default cannot.
+    case editorCrashedDescription
+
+    case editorCrashedReload
 
     // MARK: - Lockdown Mode
     case lockdownModeTitle
@@ -96,6 +114,9 @@ public final class EditorLocalization {
         case .search: "Search"
         case .insertBlock: "Insert Block"
         case .failedToInsertMedia: "Failed to insert media"
+        case .failedToLoadSelectedMedia: "The selected media could not be loaded. It may not be fully downloaded to this device."
+        case .failedToProcessCapturedMedia: "The captured media could not be processed."
+        case .ok: "OK"
         case .patterns: "Patterns"
         case .noPatternsFound: "No Patterns Found"
         case .insertPattern: "Insert Pattern"
@@ -104,6 +125,9 @@ public final class EditorLocalization {
         case .patternsCount(let count): count == 1 ? "1 pattern" : "\(count) patterns"
         case .loadingEditor: "Loading Editor"
         case .editorError: "Editor Error"
+        case .editorCrashedTitle: "The editor stopped working"
+        case .editorCrashedDescription: "Reload the editor to continue editing."
+        case .editorCrashedReload: "Reload Editor"
         case .lockdownModeTitle: "Lockdown Mode Detected"
         case .lockdownModeWarning: "Lockdown Mode is enabled. The editor may not work correctly."
         case .lockdownModeExcludeHint: "You can exclude this app from Lockdown Mode in Settings, then re-open the editor to restore full functionality."

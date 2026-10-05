@@ -1,4 +1,7 @@
 import SwiftUI
+import ImageIO
+import OSLog
+import UniformTypeIdentifiers
 import GutenbergKit
 import WordPressAPI
 // `PostUpdateParams` is not yet re-exported from `WordPressAPI` in the pinned
@@ -7,19 +10,38 @@ import WordPressAPI
 // including Automattic/wordpress-rs#1270 is adopted.
 import WordPressAPIInternal
 
+private extension Logger {
+    static let demo = Logger(subsystem: "GutenbergKit-Demo", category: "media-upload")
+}
+
+/// Throws from the selector the editor reads to choose between the visual and
+/// code editors, so the crash reaches the editor's error boundary in either mode
+/// rather than a single block's.
+private let triggerEditorCrashScript = """
+    (() => {
+        const editor = wp.data.select('core/editor');
+        editor.getEditorMode = () => {
+            throw new Error('Editor crash triggered from the demo app');
+        };
+        wp.data.dispatch('core/editor').updateEditorSettings({});
+    })();
+    """
+
 struct EditorView: View {
     private let configuration: EditorConfiguration
     private let dependencies: EditorDependencies?
     private let apiClient: WordPressAPI?
+    private let enableNativeMediaUpload: Bool
 
     @State private var viewModel = EditorViewModel()
 
     @Environment(\.dismiss) var dismiss
 
-    init(configuration: EditorConfiguration, dependencies: EditorDependencies? = nil, apiClient: WordPressAPI? = nil) {
+    init(configuration: EditorConfiguration, dependencies: EditorDependencies? = nil, apiClient: WordPressAPI? = nil, enableNativeMediaUpload: Bool = true) {
         self.configuration = configuration
         self.dependencies = dependencies
         self.apiClient = apiClient
+        self.enableNativeMediaUpload = enableNativeMediaUpload
     }
 
     var body: some View {
@@ -27,6 +49,7 @@ struct EditorView: View {
             configuration: configuration,
             dependencies: dependencies,
             apiClient: apiClient,
+            enableNativeMediaUpload: enableNativeMediaUpload,
             viewModel: viewModel
         )
             .toolbar { toolbar }
@@ -60,12 +83,12 @@ struct EditorView: View {
                 .disabled(!viewModel.hasRedo)
                 .accessibilityLabel("Redo")
             }
-            .disabled(viewModel.isModalDialogOpen)
+            .disabled(!viewModel.isEditorReady || viewModel.isModalDialogOpen)
         }
 
         ToolbarItemGroup(placement: .topBarTrailing) {
             moreMenu
-                .disabled(viewModel.isModalDialogOpen)
+                .disabled(!viewModel.isEditorReady || viewModel.isModalDialogOpen)
         }
 
         ToolbarItem(placement: .topBarTrailing) {
@@ -90,6 +113,12 @@ struct EditorView: View {
                     systemImage: viewModel.isCodeEditorEnabled ? "doc.richtext" : "curlybraces"
                 )
             })
+
+            Button(role: .destructive) {
+                viewModel.perform(.triggerCrash)
+            } label: {
+                Label("Trigger Editor Crash", systemImage: "exclamationmark.triangle")
+            }
         } label: {
             Image(systemName: "ellipsis")
         }
@@ -101,17 +130,20 @@ private struct _EditorView: UIViewControllerRepresentable {
     private let configuration: EditorConfiguration
     private let dependencies: EditorDependencies?
     private let apiClient: WordPressAPI?
+    private let enableNativeMediaUpload: Bool
     private let viewModel: EditorViewModel
 
     init(
         configuration: EditorConfiguration,
         dependencies: EditorDependencies? = nil,
         apiClient: WordPressAPI? = nil,
+        enableNativeMediaUpload: Bool = true,
         viewModel: EditorViewModel
     ) {
         self.configuration = configuration
         self.dependencies = dependencies
         self.apiClient = apiClient
+        self.enableNativeMediaUpload = enableNativeMediaUpload
         self.viewModel = viewModel
     }
 
@@ -122,20 +154,25 @@ private struct _EditorView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> EditorViewController {
         let viewController = EditorViewController(configuration: configuration, dependencies: dependencies)
         viewController.delegate = context.coordinator
+        if enableNativeMediaUpload {
+            viewController.mediaUploadDelegate = context.coordinator
+        }
         viewController.webView.isInspectable = true
 
         viewModel.perform = { [weak viewController] in
             switch $0 {
             case .redo: viewController?.redo()
             case .undo: viewController?.undo()
+            case .triggerCrash:
+                viewController?.webView.evaluateJavaScript(triggerEditorCrashScript, completionHandler: nil)
             }
         }
 
         viewModel.hasPostID = configuration.postID != nil
 
         viewModel.saveHandler = { [weak viewController, weak viewModel] in
-            guard let viewController, let viewModel else { return }
-            await persistPost(viewController: viewController, viewModel: viewModel)
+            guard let viewController, let viewModel else { return nil }
+            return await persistPost(viewController: viewController, viewModel: viewModel)
         }
 
         return viewController
@@ -145,12 +182,16 @@ private struct _EditorView: UIViewControllerRepresentable {
         viewController.isCodeEditorEnabled = viewModel.isCodeEditorEnabled
     }
 
-    /// Persists the post via the REST API.
-    private func persistPost(viewController: EditorViewController, viewModel: EditorViewModel) async {
-        guard let apiClient, let postID = configuration.postID else { return }
+    /// Persists the post via the REST API, returning the content it saved.
+    private func persistPost(viewController: EditorViewController, viewModel: EditorViewModel) async -> PostContent? {
+        guard let apiClient, let postID = configuration.postID else { return nil }
         do {
             let titleAndContent = try await viewController.getTitleAndContent()
-            let params = PostUpdateParams(title: .some(titleAndContent.title), content: .some(titleAndContent.content), meta: nil)
+            let content = PostContent(title: titleAndContent.title, content: titleAndContent.content)
+            // Not every change sends a content-change event (e.g. undoing back
+            // to the opened content), so keep the host copy current here too.
+            viewModel.latestContent = content
+            let params = PostUpdateParams(title: .some(content.title), content: .some(content.content), meta: nil)
             let endpointType: PostEndpointType
             switch configuration.postType.postType {
             case "post":
@@ -167,13 +208,15 @@ private struct _EditorView: UIViewControllerRepresentable {
                 context: nil
             )
             print("Post \(postID) persisted via REST API")
+            return content
         } catch {
             print("Failed to persist post \(postID): \(error)")
+            return nil
         }
     }
 
     @MainActor
-    class Coordinator: NSObject, EditorViewControllerDelegate {
+    class Coordinator: NSObject, EditorViewControllerDelegate, MediaUploadDelegate {
         let viewModel: EditorViewModel
 
         init(viewModel: EditorViewModel) {
@@ -186,6 +229,10 @@ private struct _EditorView: UIViewControllerRepresentable {
             viewModel.isEditorReady = true
         }
 
+        func editorDidBecomeUnavailable(_ viewController: EditorViewController) {
+            viewModel.isEditorReady = false
+        }
+
         func editor(_ viewContoller: EditorViewController, didDisplayInitialContent content: String) {
             // No-op for demo
         }
@@ -195,7 +242,16 @@ private struct _EditorView: UIViewControllerRepresentable {
         }
 
         func editor(_ viewController: EditorViewController, didUpdateContentWithState state: EditorState) {
-            // No-op for demo
+            // Mirror a host app's autosave: keep the latest content in memory so
+            // Save reflects unsaved changes and an editor reload restores them.
+            Task {
+                do {
+                    let result = try await viewController.getTitleAndContent()
+                    viewModel.latestContent = PostContent(title: result.title, content: result.content)
+                } catch {
+                    Logger.demo.error("Failed to read the editor content: \(error.localizedDescription)")
+                }
+            }
         }
 
         func editor(_ viewController: EditorViewController, didUpdateHistoryState state: EditorState) {
@@ -274,13 +330,74 @@ private struct _EditorView: UIViewControllerRepresentable {
         }
 
         func editorDidRequestLatestContent(_ controller: EditorViewController) -> (title: String, content: String)? {
-            // Demo app has no persistence layer, so return nil.
-            // In a real app, return the persisted title and content from autosave.
-            return nil
+            viewModel.latestContent.map { ($0.title, $0.content) }
+        }
+
+        // MARK: - MediaUploadDelegate
+
+        /// Only non-GIF images are ever resized (see `processFile`), so decline
+        /// everything else by metadata — the server then skips copying a file
+        /// this delegate would only pass through.
+        nonisolated func handlesFile(ofType mimeType: String, named _: String) -> Bool {
+            mimeType.hasPrefix("image/") && mimeType != "image/gif"
+        }
+
+        /// Resizes images to a maximum dimension of 2000px before upload.
+        nonisolated func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
+            guard mimeType.hasPrefix("image/"), mimeType != "image/gif" else {
+                return .original
+            }
+
+            let maxDimension: CGFloat = 2000
+
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                  let width = properties[kCGImagePropertyPixelWidth] as? CGFloat,
+                  let height = properties[kCGImagePropertyPixelHeight] as? CGFloat else {
+                return .original
+            }
+
+            let longestSide = max(width, height)
+            guard longestSide > maxDimension else {
+                return .original
+            }
+
+            let options: [CFString: Any] = [
+                kCGImageSourceThumbnailMaxPixelSize: maxDimension,
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true
+            ]
+
+            guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+                return .original
+            }
+
+            let outputURL = url.deletingLastPathComponent()
+                .appending(component: "resized-\(url.lastPathComponent)")
+
+            let sourceType = CGImageSourceGetType(source) ?? (UTType.png.identifier as CFString)
+            guard let destination = CGImageDestinationCreateWithURL(
+                outputURL as CFURL,
+                sourceType,
+                1,
+                nil
+            ) else {
+                return .original
+            }
+
+            CGImageDestinationAddImage(destination, thumbnail, nil)
+            guard CGImageDestinationFinalize(destination) else {
+                return .original
+            }
+
+            Logger.demo.info("Resized image from \(Int(width))x\(Int(height)) to fit \(Int(maxDimension))px")
+            // Same format, so the original mimeType/filename carry over.
+            return .processed(outputURL, mimeType: mimeType, filename: filename)
         }
     }
 }
 
+@MainActor
 @Observable
 private final class EditorViewModel {
     var isModalDialogOpen = false
@@ -292,26 +409,44 @@ private final class EditorViewModel {
 
     var hasPostID = false
 
+    /// The newest content read from the editor, held in memory as a host app's autosave would.
+    var latestContent: PostContent?
+    /// The content most recently persisted via Save.
+    var savedContent: PostContent?
+
+    var hasChanges: Bool {
+        latestContent != nil && latestContent != savedContent
+    }
+
     var canSave: Bool {
-        isEditorReady && !isSaving && hasPostID
+        isEditorReady && !isSaving && hasPostID && hasChanges
     }
 
     enum Action {
         case undo
         case redo
+        case triggerCrash
     }
 
     var perform: (_ action: Action) -> Void = { _ in assertionFailure() }
-    var saveHandler: () async -> Void = {}
+    /// Persists the post, returning the content it saved, or `nil` on failure.
+    var saveHandler: () async -> PostContent? = { nil }
 
     func save() {
         guard canSave else { return }
         isSaving = true
         Task {
-            await saveHandler()
+            if let saved = await saveHandler() {
+                savedContent = saved
+            }
             isSaving = false
         }
     }
+}
+
+private struct PostContent: Equatable {
+    let title: String
+    let content: String
 }
 
 #Preview {

@@ -574,7 +574,7 @@
 			repositoryURL = "https://github.com/Automattic/wordpress-rs";
 			requirement = {
 				kind = exactVersion;
-				version = 0.6.0;
+				version = 0.7.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
