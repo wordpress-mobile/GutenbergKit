@@ -3,7 +3,9 @@ import Testing
 
 @testable import GutenbergKit
 
-@Suite
+/// One at a time, for the reason `EditorAssetLibraryTests` are: nearly every one of these builds or
+/// reads an asset bundle.
+@Suite(.serialized)
 struct EditorServiceTests: MakesTestFixtures {
 
   // MARK: - Test Fixtures
