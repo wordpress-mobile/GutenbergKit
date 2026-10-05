@@ -261,11 +261,17 @@ An `EditorService`'s cache policy covers plugin and theme assets as well as API 
 | `.maxAge(TimeInterval)` | Fetched once older than the age | Manifest checked once the last check is older than the age |
 | `.ignore`               | Always fetched                  | Manifest always checked, and every asset downloaded again  |
 
-Under `.always` and `.maxAge`, a check downloads only what the manifest says has changed. If the manifest hasn't changed, the bundle on disk is kept rather than downloaded again — asset URLs carry their version (`?ver=`), so the same manifest means the same assets — and its age starts over. Only an asset that failed to download when the bundle was built is tried again. If the manifest has changed, the new bundle is built beside the old one, and every service for the site uses it once it's complete. An asset whose versioned URL is the same as in the latest bundle on disk is copied from that bundle. An asset whose URL has no `?ver=` is downloaded again, because its URL can't say whether it changed.
+Under `.always` and `.maxAge`, a check downloads only what the manifest says has changed. If the manifest hasn't changed, the bundle on disk is kept rather than downloaded again — asset URLs carry their version (`?ver=`), so the same manifest means the same assets — and its age starts over. Only an asset that failed to download when the bundle was built is tried again, and it goes into a new bundle beside the old one rather than into it — a bundle on disk is never changed, because an editor may be reading it. A try that gains nothing leaves no second bundle. A bundle that's missing assets is checked again on every prepare, whatever the policy, until it has them. If the manifest has changed, the new bundle is built beside the old one, and every service for the site uses it once it's complete. An asset whose versioned URL a bundle on disk already has is copied from the latest bundle that has it. An asset whose URL has no `?ver=` is asked for again, because its URL can't say whether it changed. If its server sent an `ETag` or `Last-Modified` with the copy on disk, the request asks only for a newer copy, and the one on disk is kept when the server answers that it has none (a 304). An asset that fails to download is taken from the latest bundle on disk that has it, rather than left out.
 
-Under `.ignore`, nothing on disk is taken to be valid, so every asset is downloaded whether or not the manifest has changed. That makes it the way to replace an asset that changed without its URL changing, or one that was stored wrong. The assets go into a new bundle beside any the manifest already has: a bundle on disk is never changed, because an editor may be reading it. An asset that fails to download is taken from the latest bundle on disk, if that has it, rather than left out. If the manifest hasn't changed and its assets all come back the same as the bundle on disk has them, that bundle is returned and the new one is discarded, so a host can tell whether a refresh changed anything, and a refresh that changed nothing takes no more disk space.
+That trusts the site's versions. WordPress gives an asset registered without a version its own version as `?ver=`, so such a file can change while its URL — and so the manifest — stays the same. Only `.ignore` downloads it again.
+
+Under `.ignore`, nothing on disk is taken to be valid, so every asset is downloaded in full whether or not the manifest has changed. That makes it the way to replace an asset that changed without its URL changing, or one that was stored wrong. The assets go into a new bundle beside any the manifest already has: a bundle on disk is never changed, because an editor may be reading it. An asset that fails to download is taken from the latest bundle on disk that has it, rather than left out. If the manifest hasn't changed and its assets all come back the same as the bundle on disk has them, that bundle is returned and the new one is discarded, so a host can tell whether a refresh changed anything, and a refresh that changed nothing takes no more disk space.
 
 The old bundle stays on disk for as long as the app is running, because an open editor — or dependencies the host prepared earlier and still holds — may be reading it. `cleanup()` removes it after the next launch.
+
+A bundle holds every link that a `<script src>` or `<link rel="stylesheet">` tag in the manifest loads over HTTP, however the URL ends — `/_static/??a.js,b.js`, `css2?family=Inter` and `/?custom-css=1` are assets like any other. What comes back is kept whatever its type, with one exception: a web page (`text/html`). A site can answer with one and still report success — a page to log in on, say — and kept, it would be served to every editor in the asset's place for as long as the bundle is. An answer like that counts as a failed download: the copy on disk is kept if there is one, the asset is reported as missing, and the editor loads it from the site. The `Content-Type` an asset came with is stored with it, and the editor is served the asset with it, so the web view decides what to make of an asset just as it would if the site had served it.
+
+Each asset is one file in the bundle's `assets` directory, named for its URL: `example.com_wp-content_plugins_jetpack_blocks_editor.js_ver=15.2.<digest>.js`. The name spells out the host, the path and the query, so a bundle on disk can be read by eye, and two assets that share a path but differ in their host or their query are stored apart. A bundle stored before assets were named this way kept each one at its URL's path; it reads as missing its assets, and is downloaded again once.
 
 To refresh a site's editor data — on pull-to-refresh, for instance — prepare a separate service that ignores the cache, and give its dependencies to the next editor:
 
@@ -277,7 +283,7 @@ let dependencies = try await EditorService(configuration: configuration, cachePo
 
 Nothing is deleted first, so an editor opened during the refresh still loads straight from what's on disk, and a refresh that fails leaves it all in place. An editor given no dependencies prepares its own with `.always`, so it uses whatever the last refresh left. A refresh downloads every asset again; to check for changes and download only those, use `.maxAge(0)` instead.
 
-A refresh that can't reach the site throws. If the configuration's `networkFallbackMode` is `.automatic`, it returns the dependencies already on disk instead — however old they are — so they're still safe to give to the next editor. It returns empty dependencies only when something the editor needs has never been cached.
+A refresh that fails throws, unless the configuration's `networkFallbackMode` is `.automatic`. To get what there is to give the next editor whether or not it failed, and to know what failed, use `prepareAvailable()` instead; see [Network Fallback Mode](#network-fallback-mode).
 
 **Kotlin**
 
@@ -316,17 +322,45 @@ let config = EditorConfigurationBuilder(
 .build()
 ```
 
-When a network error is caught (e.g., `notConnectedToInternet`, `timedOut`, `cannotConnectToHost`), `EditorService.prepare()` returns empty dependencies — the same as offline mode — so the bundled editor loads instead of showing an error. Non-network errors (e.g., decoding failures) still propagate normally.
+What the fallback covers differs by platform for now.
 
-On iOS, a service whose cache policy is `.maxAge` or `.ignore` first falls back to the dependencies already on disk, however old: they can't be checked against a site that can't be reached, and they're better than none. It returns empty dependencies only if some are missing.
+**Swift**
+
+`EditorService.prepare()` doesn't throw when a dependency can't be fetched, whatever the reason: the site can't be reached, it answers with an error, or what it answers can't be read. The editor gets the best there is instead. Each dependency falls back on its own: one that can't be fetched comes from the copy on disk, however old, and is left out only if there is no copy. With nothing on disk at all, that's empty dependencies — the same as offline mode — and the bundled editor loads. The post is never stored, so it's always left out, and the editor opens on the title and content its host provides.
+
+`prepare()` gives the dependencies and nothing else, so it can't say that any of this happened. `prepareAvailable()` gives both:
+
+```swift
+let preparation = try await EditorService(configuration: configuration).prepareAvailable()
+
+// Always something to give the editor
+let dependencies = preparation.dependencies
+
+for failure in preparation.failures {
+    switch failure {
+    case .notFetched(let dependency, let error, let usingCopyOnDisk):
+        // `dependency` couldn't be fetched because of `error`. The dependencies hold the copy
+        // on disk in its place if `usingCopyOnDisk`, and nothing for it otherwise.
+    case .assetsMissing(let urls):
+        // The asset bundle is missing these assets, which failed to download. They're tried
+        // again on the next prepare.
+    }
+}
+```
+
+`prepareAvailable()` behaves the same whatever the fallback mode, and throws only when it's cancelled. The mode decides what `prepare()` does with a dependency that couldn't be fetched: `.disabled` throws its error, and `.automatic` returns the dependencies regardless. An asset bundle that's missing assets doesn't make `prepare()` throw under either.
+
+**Kotlin**
+
+When a network error is caught (e.g., `notConnectedToInternet`, `timedOut`, `cannotConnectToHost`), `EditorService.prepare()` returns empty dependencies — the same as offline mode — so the bundled editor loads instead of showing an error. Non-network errors (e.g., decoding failures) still propagate normally. Android doesn't yet fall back to what's on disk, or report what failed.
 
 On the JavaScript side, an `OfflineIndicator` component displays a "Working Offline" status bar at the top of the editor when the device loses connectivity. The indicator automatically appears and disappears based on the browser's `online`/`offline` events.
 
-| Mode                              | Use case                                | Behavior                                                    |
-| --------------------------------- | --------------------------------------- | ----------------------------------------------------------- |
-| `isOfflineModeEnabled: true`      | No site (demo app, standalone editor)   | Skip all networking, use bundled defaults                   |
-| `networkFallbackMode: .automatic` | Site exists but may be offline          | Try network, fall back to bundled editor on network failure |
-| `networkFallbackMode: .disabled`  | Site exists, network required (default) | Network failures are fatal errors                           |
+| Mode                              | Use case                                | Behavior                                                                   |
+| --------------------------------- | --------------------------------------- | -------------------------------------------------------------------------- |
+| `isOfflineModeEnabled: true`      | No site (demo app, standalone editor)   | Skip all networking, use bundled defaults                                  |
+| `networkFallbackMode: .automatic` | Site exists but may be offline          | Try network, fall back to what's on disk (iOS), or else the bundled editor |
+| `networkFallbackMode: .disabled`  | Site exists, network required (default) | A dependency that can't be fetched is a fatal error                        |
 
 ## Progress Reporting
 

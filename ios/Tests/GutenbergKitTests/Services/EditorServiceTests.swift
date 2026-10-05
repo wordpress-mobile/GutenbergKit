@@ -278,6 +278,264 @@ struct EditorServiceTests: MakesTestFixtures {
     #expect(dependencies.preloadList == nil)
   }
 
+  /// The post is the one thing `prepare()` asks the site for every time, so a service for a post
+  /// can't reach the site whatever its cache policy.
+  @Test(
+    "with automatic fallback, prepare() for a post that can't reach the site returns what's on disk, without the post",
+    arguments: [EditorCachePolicy.always, .maxAge(0), .ignore]
+  )
+  func failedPrepareForPostFallsBackToDisk(cachePolicy: EditorCachePolicy) async throws {
+    let configuration = makeConfiguration(postID: 123).toBuilder().setNetworkFallbackMode(.automatic).build()
+    let site = TestSite(configuration: configuration, manifest: Self.pluginManifest(version: "1"))
+    let prepared = try await site.service(cachePolicy: .always).prepare()
+
+    site.isOffline = true
+    let dependencies = try await site.service(cachePolicy: cachePolicy).prepare()
+
+    let preloadList = try #require(dependencies.preloadList)
+    #expect(dependencies.assetBundle == prepared.assetBundle)
+    #expect(dependencies.editorSettings == prepared.editorSettings)
+    #expect(preloadList.postTypeData == prepared.preloadList?.postTypeData)
+    #expect(preloadList.postData == nil)
+    // One for each `prepare()`: reading what's on disk asks the site for nothing
+    #expect(site.postRequestCount == 2)
+  }
+
+  @Test("with automatic fallback, what's on disk needs no settings or bundle for a configuration that uses neither")
+  func fallbackToDiskNeedsOnlyWhatConfigurationUses() async throws {
+    let configuration = makeConfiguration(postID: 123, shouldUsePlugins: false, shouldUseThemeStyles: false)
+      .toBuilder().setNetworkFallbackMode(.automatic).build()
+    let site = TestSite(configuration: configuration, manifest: Self.pluginManifest(version: "1"))
+    let prepared = try await site.service(cachePolicy: .always).prepare()
+
+    site.isOffline = true
+    let dependencies = try await site.service(cachePolicy: .always).prepare()
+
+    #expect(dependencies.preloadList?.postTypeData == prepared.preloadList?.postTypeData)
+    #expect(dependencies.editorSettings == .undefined)
+    #expect(dependencies.assetBundle == .empty)
+  }
+
+  @Test("without automatic fallback, prepare() for a post that can't reach the site throws, whatever is on disk")
+  func failedPrepareForPostThrowsWithoutFallback() async throws {
+    let site = TestSite(configuration: makeConfiguration(postID: 123), manifest: Self.pluginManifest(version: "1"))
+    _ = try await site.service(cachePolicy: .always).prepare()
+
+    site.isOffline = true
+    await #expect(throws: URLError.self) {
+      try await site.service(cachePolicy: .always).prepare()
+    }
+  }
+
+  // MARK: - What a Prepare Came To
+
+  @Test("prepareAvailable() reports no failures when every dependency is fetched")
+  func prepareAvailableReportsNoFailures() async throws {
+    let site = TestSite(configuration: makeConfiguration(postID: 123), manifest: Self.pluginManifest(version: "1"))
+
+    let preparation = try await site.service(cachePolicy: .always).prepareAvailable()
+
+    #expect(preparation.isComplete)
+    #expect(preparation.dependencies.assetBundle.assetCount == 1)
+    #expect(preparation.dependencies.preloadList?.postData != nil)
+  }
+
+  /// A site can answer and still not have the manifest: the endpoint is removed, or errors.
+  @Test("a manifest check the site answers with an error gives the bundle on disk, and says the check failed")
+  func manifestCheckAnsweredWithErrorGivesBundleOnDisk() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    let prepared = try await site.service(cachePolicy: .always).prepare()
+
+    site.failure = { $0.absoluteString.contains("editor-assets") ? Self.notFound($0) : nil }
+    let preparation = try await site.service(cachePolicy: .maxAge(0)).prepareAvailable()
+
+    #expect(preparation.dependencies == prepared)
+    #expect(dependenciesNotFetched(in: preparation) == [.assetBundle: true])
+    #expect(preparation.failures.count == 1)
+  }
+
+  @Test("prepare() gives the bundle on disk when the manifest check errors and the fallback is automatic")
+  func prepareGivesBundleOnDiskWhenManifestCheckErrors() async throws {
+    let configuration = makeConfiguration().toBuilder().setNetworkFallbackMode(.automatic).build()
+    let site = TestSite(configuration: configuration, manifest: Self.pluginManifest(version: "1"))
+    let prepared = try await site.service(cachePolicy: .always).prepare()
+
+    site.failure = { $0.absoluteString.contains("editor-assets") ? Self.notFound($0) : nil }
+    let dependencies = try await site.service(cachePolicy: .maxAge(0)).prepare()
+
+    #expect(dependencies == prepared)
+  }
+
+  @Test("prepare() throws when the manifest check errors and the fallback is disabled")
+  func prepareThrowsWhenManifestCheckErrorsWithoutFallback() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    _ = try await site.service(cachePolicy: .always).prepare()
+
+    site.failure = { $0.absoluteString.contains("editor-assets") ? Self.notFound($0) : nil }
+    await #expect(throws: EditorHTTPClient.ClientError.self) {
+      try await site.service(cachePolicy: .maxAge(0)).prepare()
+    }
+  }
+
+  @Test("each dependency that can't be fetched comes from disk, and each is reported")
+  func prepareAvailableFallsBackToDiskForEveryDependency() async throws {
+    let site = TestSite(configuration: makeConfiguration(postID: 123), manifest: Self.pluginManifest(version: "1"))
+    let prepared = try await site.service(cachePolicy: .always).prepare()
+
+    site.isOffline = true
+    let preparation = try await site.service(cachePolicy: .ignore).prepareAvailable()
+
+    #expect(preparation.dependencies.editorSettings == prepared.editorSettings)
+    #expect(preparation.dependencies.assetBundle == prepared.assetBundle)
+    #expect(preparation.dependencies.preloadList?.postTypeData == prepared.preloadList?.postTypeData)
+    #expect(dependenciesNotFetched(in: preparation) == [
+      .editorSettings: true,
+      .assetBundle: true,
+      .postType: true,
+      .postTypes: true,
+      .activeTheme: true,
+      .settingsOptions: true,
+      // Never stored, so there's no copy of it to use
+      .post: false,
+    ])
+  }
+
+  @Test("a dependency with no copy on disk is left out, without emptying the ones that have one")
+  func prepareAvailableLeavesOutOnlyWhatIsMissing() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    let prepared = try await site.service(cachePolicy: .always).prepare()
+    try await EditorAssetLibrary(
+      configuration: site.configuration,
+      httpClient: site.client,
+      storageRoot: site.storageRoot
+    ).purge()
+
+    site.isOffline = true
+    let preparation = try await site.service(cachePolicy: .always).prepareAvailable()
+
+    #expect(preparation.dependencies.assetBundle == .empty)
+    #expect(preparation.dependencies.editorSettings == prepared.editorSettings)
+    #expect(preparation.dependencies.preloadList == prepared.preloadList)
+    #expect(dependenciesNotFetched(in: preparation) == [.assetBundle: false])
+  }
+
+  @Test("with nothing on disk, every dependency is reported as left out")
+  func prepareAvailableReportsEverythingLeftOut() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    site.isOffline = true
+
+    let preparation = try await site.service(cachePolicy: .always).prepareAvailable()
+
+    #expect(preparation.dependencies.editorSettings == .undefined)
+    #expect(preparation.dependencies.assetBundle == .empty)
+    #expect(preparation.dependencies.preloadList == nil)
+    #expect(dependenciesNotFetched(in: preparation).values.allSatisfy { !$0 })
+    #expect(dependenciesNotFetched(in: preparation).count == 6)
+  }
+
+  @Test("a bundle that's missing an asset is reported, and doesn't stop prepare() even without a fallback")
+  func bundleMissingAssetIsReported() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    site.failure = { $0.path == Self.pluginScript.path ? Self.notFound($0) : nil }
+
+    let preparation = try await site.service(cachePolicy: .always).prepareAvailable()
+
+    #expect(assetsMissing(in: preparation) == [Self.pluginScript])
+    #expect(dependenciesNotFetched(in: preparation).isEmpty)
+    #expect(try await site.service(cachePolicy: .always).prepare().assetBundle.id == preparation.dependencies.assetBundle.id)
+  }
+
+  /// Whatever the cache policy: under `.always`, nothing else would ever ask the site again.
+  @Test("a bundle that's missing an asset is tried again on every prepare, until it has it")
+  func bundleMissingAssetIsTriedAgainEveryPrepare() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    site.failure = { $0.path == Self.pluginScript.path ? Self.notFound($0) : nil }
+    _ = try await site.service(cachePolicy: .always).prepare()
+
+    let again = try await site.service(cachePolicy: .always).prepareAvailable()
+    #expect(assetsMissing(in: again) == [Self.pluginScript])
+    #expect(site.manifestRequestCount == 2)
+    #expect(site.client.downloadCallCount == 2)
+
+    site.failure = nil
+    let repaired = try await site.service(cachePolicy: .always).prepareAvailable()
+    #expect(repaired.isComplete)
+    #expect(repaired.dependencies.assetBundle.hasAssetData(for: Self.pluginScript))
+    #expect(site.manifestRequestCount == 3)
+    #expect(site.client.downloadCallCount == 3)
+
+    // And once it has it, there's nothing left to ask for
+    _ = try await site.service(cachePolicy: .always).prepare()
+    #expect(site.manifestRequestCount == 3)
+    #expect(site.client.downloadCallCount == 3)
+  }
+
+  @Test("a bundle that's missing an asset is still given when the site can't be asked about it")
+  func bundleMissingAssetIsGivenWhenSiteCannotBeAsked() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    site.failure = { $0.path == Self.pluginScript.path ? Self.notFound($0) : nil }
+    let gapped = try await site.service(cachePolicy: .always).prepare().assetBundle
+
+    site.isOffline = true
+    let preparation = try await site.service(cachePolicy: .always).prepareAvailable()
+
+    #expect(preparation.dependencies.assetBundle == gapped)
+    #expect(dependenciesNotFetched(in: preparation) == [.assetBundle: true])
+    #expect(assetsMissing(in: preparation) == [Self.pluginScript])
+  }
+
+  /// A copy that can't be read is no copy, and the site can still be asked.
+  @Test("a dependency whose copy on disk can't be read is fetched, rather than given up on")
+  func unreadableCopyOnDiskIsFetchedAgain() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    let prepared = try await site.service(cachePolicy: .always).prepare()
+    let settingsURL = try #require(site.client.requestedURLs.first { $0.absoluteString.contains("block-editor/v1/settings") })
+    try EditorURLCache(siteId: site.configuration.siteId, parentDirectory: site.cacheRoot).store(
+      EditorURLResponse(data: Data("not editor settings".utf8), responseHeaders: [:]),
+      for: settingsURL,
+      httpMethod: .GET
+    )
+
+    let preparation = try await site.service(cachePolicy: .always).prepareAvailable()
+
+    #expect(preparation.isComplete)
+    #expect(preparation.dependencies.editorSettings == prepared.editorSettings)
+    #expect(site.client.requestedURLs.filter { $0 == settingsURL }.count == 2)
+  }
+
+  @Test("a cancelled prepare throws, rather than reporting everything it was fetching as a failure")
+  func cancelledPrepareThrows() async throws {
+    let client = GatedHTTPClient { Self.editorServiceResponseHandler($0) }
+    let service = EditorService(
+      configuration: makeConfiguration().toBuilder().setNetworkFallbackMode(.automatic).build(),
+      httpClient: client,
+      storageRoot: .randomTemporaryDirectory,
+      cacheRoot: .randomTemporaryDirectory
+    )
+
+    let prepare = Task {
+      try await GatedHTTPClient.$caller.withValue("prepare") { try await service.prepareAvailable() }
+    }
+    try await waitUntil { client.isHolding("prepare") }
+    prepare.cancel()
+
+    await #expect(throws: CancellationError.self) { try await prepare.value }
+  }
+
+  @Test("progress ends on its total when dependencies come from disk")
+  func progressEndsOnTotalWhenFallingBack() async throws {
+    let site = TestSite(configuration: makeConfiguration(postID: 123), manifest: Self.pluginManifest(version: "1"))
+    _ = try await site.service(cachePolicy: .always).prepare()
+    let tracker = ProgressTracker()
+
+    site.isOffline = true
+    _ = try await site.service(cachePolicy: .ignore).prepareAvailable { tracker.append($0) }
+
+    let last = try #require(tracker.updates.last)
+    #expect(last.completed == last.total)
+    #expect(tracker.updates.allSatisfy { $0.completed <= $0.total })
+  }
+
   // MARK: - Automatic Cleanup
 
   @Test("a site's old bundles are cleaned up, whichever site was prepared first that day")
@@ -347,6 +605,32 @@ struct EditorServiceTests: MakesTestFixtures {
     }
   }
 
+  /// The dependencies `preparation` says weren't fetched, each with whether its copy on disk stands
+  /// in for it.
+  private func dependenciesNotFetched(in preparation: EditorPreparation) -> [EditorPreparation.Dependency: Bool] {
+    var dependencies: [EditorPreparation.Dependency: Bool] = [:]
+    for case .notFetched(let dependency, _, let usingCopyOnDisk) in preparation.failures {
+      dependencies[dependency] = usingCopyOnDisk
+    }
+    return dependencies
+  }
+
+  /// The assets `preparation` says its bundle is missing.
+  private func assetsMissing(in preparation: EditorPreparation) -> [URL] {
+    var assets: [URL] = []
+    for case .assetsMissing(let missing) in preparation.failures {
+      assets += missing
+    }
+    return assets
+  }
+
+  /// The error a site answers with when it has nothing at a URL.
+  private static func notFound(_ url: URL) -> any Error {
+    EditorHTTPClient.ClientError.unknown(response: Data(), statusCode: 404, requestURL: url)
+  }
+
+  private static let pluginScript = URL(string: "https://example.com/plugin.js?ver=1")!
+
   /// A manifest with one plugin script, whose URL carries `version` the way WordPress versions its
   /// assets.
   private static func pluginManifest(version: String) -> String {
@@ -371,8 +655,17 @@ struct EditorServiceTests: MakesTestFixtures {
       didSet { serve() }
     }
 
+    /// The error a request for a URL fails with, for the requests that should fail.
+    var failure: (@Sendable (URL) -> (any Error)?)? {
+      didSet { serve() }
+    }
+
     var manifestRequestCount: Int {
       client.requestedURLs.filter { $0.absoluteString.contains("editor-assets") }.count
+    }
+
+    var postRequestCount: Int {
+      client.requestedURLs.filter { $0.absoluteString.contains("/wp/v2/posts/") }.count
     }
 
     init(configuration: EditorConfiguration, manifest: String) {
@@ -402,8 +695,9 @@ struct EditorServiceTests: MakesTestFixtures {
     }
 
     private func serve() {
-      client.urlResponseHandler = { [manifest, isOffline] url in
+      client.urlResponseHandler = { [manifest, isOffline, failure] url in
         guard !isOffline else { throw URLError(.notConnectedToInternet) }
+        if let error = failure?(url) { throw error }
         return url.absoluteString.contains("editor-assets")
           ? Data(manifest.utf8) : EditorServiceTests.editorServiceResponseHandler(url)
       }

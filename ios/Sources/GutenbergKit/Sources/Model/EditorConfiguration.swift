@@ -7,10 +7,13 @@ import Foundation
 /// - `networkFallbackMode`: A site exists, but if network fails, load the bundled editor
 ///   instead of showing an error.
 public enum NetworkFallbackMode: Sendable, Hashable {
-    /// Network failures are fatal and propagate as errors (current default behavior).
+    /// A dependency that can't be fetched makes `EditorService.prepare()` throw (current default
+    /// behavior).
     case disabled
-    /// Automatically fall back when network requests fail: to the dependencies already on disk,
-    /// even ones the cache policy considers too old, or else to the bundled editor.
+    /// A dependency that can't be fetched, for whatever reason, comes from disk instead, even if
+    /// the cache policy considers the copy there too old, and is left out if there's no copy.
+    /// With nothing on disk, that's the bundled editor. `EditorService.prepareAvailable()` does
+    /// the same and says what couldn't be fetched.
     case automatic
 }
 

@@ -21,10 +21,9 @@ public actor EditorService {
     private let restRepository: RESTAPIRepository
     private let assetLibrary: EditorAssetLibrary
 
-    /// What `prepare()` falls back to when the site can't be reached and the network fallback is
-    /// automatic: this service under the `.always` policy, which uses whatever is on disk however
-    /// old it is. `nil` when the service wouldn't use it.
-    private let diskFallback: EditorService?
+    /// `restRepository` under the `.always` policy, which reads whatever is on disk however old
+    /// it is: what a dependency that can't be fetched falls back to.
+    private let diskRepository: RESTAPIRepository
 
     private var progress: EditorProgress?
     private var progressCallback: EditorProgressCallback?
@@ -109,15 +108,20 @@ public actor EditorService {
             delegate: nil
         )
 
-        self.restRepository = RESTAPIRepository(
-            configuration: configuration,
-            httpClient: httpClient,
-            cache: EditorURLCache(
-                siteId: configuration.siteId,
-                parentDirectory: cacheRoot ?? Paths.defaultCacheRoot,
-                cachePolicy: cachePolicy
-            ),
-        )
+        let repository = { (cachePolicy: EditorCachePolicy) in
+            RESTAPIRepository(
+                configuration: configuration,
+                httpClient: httpClient,
+                cache: EditorURLCache(
+                    siteId: configuration.siteId,
+                    parentDirectory: cacheRoot ?? Paths.defaultCacheRoot,
+                    cachePolicy: cachePolicy
+                )
+            )
+        }
+
+        self.restRepository = repository(cachePolicy)
+        self.diskRepository = repository(.always)
 
         self.assetLibrary = EditorAssetLibrary(
             configuration: configuration,
@@ -125,19 +129,6 @@ public actor EditorService {
             cachePolicy: cachePolicy,
             storageRoot: storageRoot ?? Paths.storageRoot(for: configuration)
         )
-
-        switch (configuration.networkFallbackMode, cachePolicy) {
-        case (.automatic, .maxAge), (.automatic, .ignore):
-            self.diskFallback = EditorService(
-                configuration: configuration,
-                httpClient: httpClient,
-                cachePolicy: .always,
-                storageRoot: storageRoot,
-                cacheRoot: cacheRoot
-            )
-        case (.automatic, .always), (.disabled, _):
-            self.diskFallback = nil
-        }
     }
 
     /// Returns the number of asset bundles currently stored on disk.
@@ -150,21 +141,50 @@ public actor EditorService {
     /// This method fetches editor settings, plugin assets, and preload data concurrently,
     /// caching results for future use. If offline mode is enabled, returns empty dependencies.
     ///
-    /// If the site can't be reached and the configuration's network fallback is automatic, this
-    /// returns the dependencies on disk instead of throwing — even ones too old for the cache
-    /// policy, which can't be checked without the site — and empty dependencies if any are missing.
+    /// It gives the dependencies of ``prepareAvailable(progress:)`` without saying what went wrong
+    /// getting them. With the configuration's network fallback disabled, a dependency that couldn't
+    /// be fetched throws instead. With it automatic, nothing does: a dependency that couldn't be
+    /// fetched comes from disk, however old, or is left out. Call ``prepareAvailable(progress:)``
+    /// to have the dependencies and to know.
     ///
     /// - Parameter progress: A callback invoked with progress updates during loading.
     /// - Returns: The complete set of dependencies needed to initialize the editor.
     /// - Throws: An error if any required resource fails to download.
     @discardableResult
     public func prepare(progress: EditorProgressCallback? = nil) async throws -> EditorDependencies {
+        let preparation = try await self.prepareAvailable(progress: progress)
+
+        // An asset bundle that's missing assets doesn't count: one asset failing to download has
+        // never stopped an editor opening.
+        if self.configuration.networkFallbackMode == .disabled {
+            for case .notFetched(_, let error, _) in preparation.failures {
+                throw error
+            }
+        }
+
+        return preparation.dependencies
+    }
+
+    /// Prepares the best editor dependencies available, and says how they fall short of what the
+    /// cache policy asked for.
+    ///
+    /// Each dependency is fetched as the policy asks: from disk if the policy trusts the copy
+    /// there, and from the site otherwise. One that can't be fetched, for whatever reason, comes
+    /// from disk however old its copy is, or is left out if there's none, and is listed in the
+    /// result's `failures`. The post is never stored, so it's always left out.
+    ///
+    /// Nothing but cancellation throws, so there's always something to give an editor, and a
+    /// failure never has to be traded for it. The configuration's network fallback mode has no
+    /// effect here: it only decides what ``prepare(progress:)`` does with a failure.
+    ///
+    /// - Parameter progress: A callback invoked with progress updates during loading.
+    /// - Throws: `CancellationError` if the task is cancelled.
+    public func prepareAvailable(progress: EditorProgressCallback? = nil) async throws -> EditorPreparation {
 
         if self.configuration.isOfflineModeEnabled {
-            return EditorDependencies(
-                editorSettings: .undefined,
-                assetBundle: .empty,
-                preloadList: nil
+            return EditorPreparation(
+                dependencies: EditorDependencies(editorSettings: .undefined, assetBundle: .empty, preloadList: nil),
+                failures: []
             )
         }
 
@@ -176,27 +196,64 @@ public actor EditorService {
             self.progress = nil
         }
 
-        if self.configuration.networkFallbackMode == .automatic {
-            do {
-                return try await fetchDependencies()
-            } catch {
-                guard isNetworkError(error) else { throw error }
+        async let editorSettings = self.resolveEditorSettings()
+        async let assetBundle = self.resolveAssetBundle()
+        async let post = self.resolvePost()
+        async let postType = self.resolvePostType()
+        async let postTypes = self.resolvePostTypes()
+        async let activeTheme = self.resolveActiveTheme()
+        async let settingsOptions = self.resolveSettingsOptions()
 
-                // Nothing on disk can be checked against a site that can't be reached, and what's
-                // there beats loading with nothing — however old it is.
-                if let diskFallback {
-                    return try await diskFallback.prepare()
-                }
-
-                return EditorDependencies(
-                    editorSettings: .undefined,
-                    assetBundle: .empty,
-                    preloadList: nil
-                )
-            }
-        } else {
-            return try await fetchDependencies()
+        // Automatically clean up old asset bundles, once a day for each site
+        do {
+            try await onceEvery(
+                .seconds(86_400),
+                { try await self.cleanup() },
+                handle: "asset-bundle-cleanup-\(self.configuration.siteId)"
+            )
+        } catch {
+            log(.warn, "Failed to clean up old asset bundles: \(error.localizedDescription)")
         }
+
+        let bundle = try await assetBundle.value ?? .empty
+        let postData = try await post?.value
+        var failures = try await [
+            editorSettings.failure,
+            assetBundle.failure,
+            post?.failure,
+            postType.failure,
+            postTypes.failure,
+            activeTheme.failure,
+            settingsOptions.failure,
+        ].compactMap { $0 }
+
+        let missingAssets = await self.assetLibrary.missingAssets(of: bundle)
+        if !missingAssets.isEmpty {
+            failures.append(.assetsMissing(missingAssets))
+        }
+
+        // The editor can't use a preload list without its post types, and asks for the rest itself
+        var preloadList: EditorPreloadList?
+        if let postTypeData = try await postType.value, let postTypesData = try await postTypes.value {
+            preloadList = try await EditorPreloadList(
+                postID: postData == nil ? nil : self.configuration.postID,
+                postData: postData,
+                postType: self.configuration.postType,
+                postTypeData: postTypeData,
+                postTypesData: postTypesData,
+                activeThemeData: activeTheme.value,
+                settingsOptionsData: settingsOptions.value
+            )
+        }
+
+        return try await EditorPreparation(
+            dependencies: EditorDependencies(
+                editorSettings: editorSettings.value ?? .undefined,
+                assetBundle: bundle,
+                preloadList: preloadList
+            ),
+            failures: failures
+        )
     }
 
     /// Clear unused on-disk resources associated with this service's configuration.
@@ -247,144 +304,145 @@ public actor EditorService {
         await self.progressCallback?(progress)
     }
 
-    private func fetchDependencies() async throws -> EditorDependencies {
-        async let settings = try prepareEditorSettings()
-        async let assetBundle = try self.prepareAssetBundle()
-        async let preloadList = try preparePreloadList()
-
-        // Automatically clean up old asset bundles, once a day for each site
-        try await onceEvery(
-            .seconds(86_400),
-            { try await self.cleanup() },
-            handle: "asset-bundle-cleanup-\(self.configuration.siteId)"
-        )
-
-        return try await EditorDependencies(
-            editorSettings: settings,
-            assetBundle: assetBundle,
-            preloadList: preloadList
-        )
+    /// One dependency as a prepare ends up with it: its value, if there is one to give, and the
+    /// failure to fetch it, if there was one.
+    private struct Resolved<Value: Sendable>: Sendable {
+        let value: Value?
+        let failure: EditorPreparation.Failure?
     }
 
-    private func isNetworkError(_ error: Error) -> Bool {
-        guard let urlError = error as? URLError else { return false }
-        return [
-            .notConnectedToInternet,
-            .networkConnectionLost,
-            .timedOut,
-            .cannotFindHost,
-            .cannotConnectToHost,
-            .dnsLookupFailed,
-        ].contains(urlError.code)
-    }
+    /// Resolves one dependency. Every dependency comes through here, so each is fetched, falls
+    /// back and reports its failure the same way.
+    ///
+    /// - Parameters:
+    ///   - trusted: Reads the copy on disk, if the cache policy still trusts it.
+    ///   - fetch: Fetches it from the site, which stores it.
+    ///   - onDisk: Reads the copy on disk, however old.
+    ///   - complete: Counts the dependency's weight toward progress, which it's owed either way.
+    private func resolve<Value: Sendable>(
+        _ dependency: EditorPreparation.Dependency,
+        trusted: () async throws -> Value?,
+        fetch: () async throws -> Value,
+        onDisk: () async throws -> Value?,
+        complete: () async -> Void
+    ) async throws -> Resolved<Value> {
+        do {
+            // A copy that can't be read is no copy, and the site can still be asked
+            let trustedValue: Value?
+            do {
+                trustedValue = try await trusted()
+            } catch {
+                log(.warn, "Failed to read \(dependency) from disk: \(error.localizedDescription)")
+                trustedValue = nil
+            }
 
-    private func prepareEditorSettings() async throws -> EditorSettings {
-        if let settings = try restRepository.readEditorSettings() {
-            await self.incrementProgress(for: .editorSettings)
-            return settings
-        }
+            let value: Value
+            if let trustedValue {
+                value = trustedValue
+            } else {
+                value = try await fetch()
+            }
 
-        let settings = try await restRepository.fetchEditorSettings()
-        await self.incrementProgress(for: .editorSettings)
-        return settings
-    }
+            await complete()
+            return Resolved(value: value, failure: nil)
+        } catch {
+            // A prepare that's been cancelled has no one to report a failure to
+            try Task.checkCancellation()
 
-    private func prepareAssetBundle() async throws -> EditorAssetBundle {
-        if let latestAssetBundle = try await self.assetLibrary.readLatestAssetBundle() {
-            await self.incrementProgress(for: .assetBundle)
-            return latestAssetBundle
-        }
+            // Nothing on disk can be checked against a site that can't be reached, and what's
+            // there beats loading with nothing — however old it is.
+            let copy = try? await onDisk()
 
-        let assetBundle = try await self.assetLibrary.downloadAssetBundle { progress in
-            await self.incrementProgress(forAssetBundleDownload: progress)
-        }
-
-        // A bundle with nothing to download reports no progress
-        await self.incrementProgress(forAssetBundleDownload: EditorProgress(completed: 1, total: 1))
-        return assetBundle
-    }
-
-    private func preparePreloadList() async throws -> EditorPreloadList {
-        async let activeTheme = try self.prepareActiveTheme()
-        async let settingsOptions = try self.prepareSettingsOptions()
-        async let postTypeData = try self.preparePost(type: configuration.postType.postType)
-        async let postTypesData = try self.preparePostTypes()
-
-        if let postID = self.configuration.postID, postID > 0 {
-            async let postData = try self.preparePost(id: postID)
-
-            return try await EditorPreloadList(
-                postID: postID,
-                postData: postData,
-                postType: self.configuration.postType,
-                postTypeData: postTypeData,
-                postTypesData: postTypesData,
-                activeThemeData: activeTheme,
-                settingsOptionsData: settingsOptions
-            )
-        } else {
-            return try await EditorPreloadList(
-                postType: self.configuration.postType,
-                postTypeData: postTypeData,
-                postTypesData: postTypesData,
-                activeThemeData: activeTheme,
-                settingsOptionsData: settingsOptions
+            await complete()
+            return Resolved(
+                value: copy,
+                failure: .notFetched(dependency, error: error, usingCopyOnDisk: copy != nil)
             )
         }
     }
 
-    private func preparePost(id: Int) async throws -> EditorURLResponse {
-        if let postData = try self.restRepository.readPost(id: id) {
-            await self.incrementProgress(for: .post)
-            return postData
-        }
-
-        let postData = try await self.restRepository.fetchPost(id: id)
-        await self.incrementProgress(for: .post)
-        return postData
+    private func resolveEditorSettings() async throws -> Resolved<EditorSettings> {
+        try await self.resolve(
+            .editorSettings,
+            trusted: { try self.restRepository.readEditorSettings() },
+            fetch: { try await self.restRepository.fetchEditorSettings() },
+            onDisk: { try self.diskRepository.readEditorSettings() },
+            complete: { await self.incrementProgress(for: .editorSettings) }
+        )
     }
 
-    private func preparePost(type: String) async throws -> EditorURLResponse {
-        if let postType = try self.restRepository.readPostType(for: type) {
-            await self.incrementProgress(for: .postType)
-            return postType
-        }
-
-        let response = try await self.restRepository.fetchPostType(for: type)
-        await self.incrementProgress(for: .postType)
-        return response
+    private func resolveAssetBundle() async throws -> Resolved<EditorAssetBundle> {
+        try await self.resolve(
+            .assetBundle,
+            trusted: { try await self.assetLibrary.readLatestAssetBundle() },
+            fetch: {
+                try await self.assetLibrary.downloadAssetBundle { progress in
+                    await self.incrementProgress(forAssetBundleDownload: progress)
+                }
+            },
+            onDisk: { try await self.assetLibrary.readLatestAssetBundleOnDisk() },
+            // A download reports as it goes, but not to a caller that joins a build after its last
+            // report, and not when it fails
+            complete: { await self.incrementProgress(forAssetBundleDownload: EditorProgress(completed: 1, total: 1)) }
+        )
     }
 
-    private func prepareActiveTheme() async throws -> EditorURLResponse {
-        if let activeTheme = try self.restRepository.readActiveTheme() {
-            await self.incrementProgress(for: .activeTheme)
-            return activeTheme
+    /// `nil` when the configuration is for a post that doesn't exist yet.
+    private func resolvePost() async throws -> Resolved<EditorURLResponse>? {
+        guard let postID = self.configuration.postID, postID > 0 else {
+            return nil
         }
 
-        let response = try await self.restRepository.fetchActiveTheme()
-        await self.incrementProgress(for: .activeTheme)
-        return response
+        // The post is fetched every time, and has no copy on disk: a stored one can predate an
+        // edit made since. The editor still has the title and content its host gives it.
+        return try await self.resolve(
+            .post,
+            trusted: { try self.restRepository.readPost(id: postID) },
+            fetch: { try await self.restRepository.fetchPost(id: postID) },
+            onDisk: { nil },
+            complete: { await self.incrementProgress(for: .post) }
+        )
     }
 
-    private func prepareSettingsOptions() async throws -> EditorURLResponse {
-        if let settingsOptions = try self.restRepository.readSettingsOptions() {
-            await self.incrementProgress(for: .settingsOptions)
-            return settingsOptions
-        }
+    private func resolvePostType() async throws -> Resolved<EditorURLResponse> {
+        let type = self.configuration.postType.postType
 
-        let response = try await self.restRepository.fetchSettingsOptions()
-        await self.incrementProgress(for: .settingsOptions)
-        return response
+        return try await self.resolve(
+            .postType,
+            trusted: { try self.restRepository.readPostType(for: type) },
+            fetch: { try await self.restRepository.fetchPostType(for: type) },
+            onDisk: { try self.diskRepository.readPostType(for: type) },
+            complete: { await self.incrementProgress(for: .postType) }
+        )
     }
 
-    private func preparePostTypes() async throws -> EditorURLResponse {
-        if let postTypes = try self.restRepository.readPostTypes() {
-            await self.incrementProgress(for: .postTypes)
-            return postTypes
-        }
+    private func resolvePostTypes() async throws -> Resolved<EditorURLResponse> {
+        try await self.resolve(
+            .postTypes,
+            trusted: { try self.restRepository.readPostTypes() },
+            fetch: { try await self.restRepository.fetchPostTypes() },
+            onDisk: { try self.diskRepository.readPostTypes() },
+            complete: { await self.incrementProgress(for: .postTypes) }
+        )
+    }
 
-        let response = try await self.restRepository.fetchPostTypes()
-        await self.incrementProgress(for: .postTypes)
-        return response
+    private func resolveActiveTheme() async throws -> Resolved<EditorURLResponse> {
+        try await self.resolve(
+            .activeTheme,
+            trusted: { try self.restRepository.readActiveTheme() },
+            fetch: { try await self.restRepository.fetchActiveTheme() },
+            onDisk: { try self.diskRepository.readActiveTheme() },
+            complete: { await self.incrementProgress(for: .activeTheme) }
+        )
+    }
+
+    private func resolveSettingsOptions() async throws -> Resolved<EditorURLResponse> {
+        try await self.resolve(
+            .settingsOptions,
+            trusted: { try self.restRepository.readSettingsOptions() },
+            fetch: { try await self.restRepository.fetchSettingsOptions() },
+            onDisk: { try self.diskRepository.readSettingsOptions() },
+            complete: { await self.incrementProgress(for: .settingsOptions) }
+        )
     }
 }

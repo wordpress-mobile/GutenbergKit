@@ -11,6 +11,9 @@ public protocol EditorHTTPClientProtocol: Sendable {
     /// its errors) to the editor unchanged.
     func performRaw(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse)
 
+    /// Downloads the response to a file, which becomes the caller's to move or delete. A 304 is
+    /// returned, not thrown: it answers a request that asked only for a newer copy, and its file
+    /// is empty.
     func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse)
 
     /// Returns a client tuned for large media uploads. The default returns the
@@ -215,7 +218,9 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
 
         let httpResponse = response as! HTTPURLResponse
 
-        guard 200...299 ~= httpResponse.statusCode else {
+        // A 304 only comes back to a request that asked for a newer copy than one its caller has,
+        // and is the answer it wanted.
+        guard 200...299 ~= httpResponse.statusCode || httpResponse.statusCode == 304 else {
             let requestURL = configuredRequest.url!
             Logger.http.error("📡 HTTP error fetching \(requestURL.absoluteString): \(httpResponse.statusCode)")
 

@@ -9,6 +9,9 @@ private final class SpyURLSession: URLSessionProtocol, @unchecked Sendable {
 
     var responseData = Data()
 
+    /// The status `download(for:delegate:)` answers with.
+    var downloadStatusCode = 200
+
     var capturedRequests: [URLRequest] {
         lock.withLock { _capturedRequests }
     }
@@ -40,7 +43,7 @@ private final class SpyURLSession: URLSessionProtocol, @unchecked Sendable {
         let url = request.url ?? URL(string: "https://example.com")!
         let response = HTTPURLResponse(
             url: url,
-            statusCode: 200,
+            statusCode: downloadStatusCode,
             httpVersion: nil,
             headerFields: nil
         )!
@@ -112,6 +115,30 @@ struct EditorHTTPClientTests {
 
         let capturedRequest = try #require(spySession.lastCapturedRequest)
         #expect(capturedRequest.value(forHTTPHeaderField: "Authorization") == authHeader)
+    }
+
+    @Test("download() returns a 304, which answers a request that asked only for a newer copy")
+    func downloadReturnsNotModified() async throws {
+        let spySession = SpyURLSession()
+        spySession.downloadStatusCode = 304
+        let client = EditorHTTPClient(urlSession: spySession, authHeader: "Bearer test-token")
+
+        var request = URLRequest(url: URL(string: "https://example.com/wp-content/file.js")!)
+        request.setValue("\"first\"", forHTTPHeaderField: "If-None-Match")
+        let (_, response) = try await client.download(request)
+
+        #expect(response.statusCode == 304)
+    }
+
+    @Test("download() throws for a status that isn't a success")
+    func downloadThrowsForFailureStatus() async throws {
+        let spySession = SpyURLSession()
+        spySession.downloadStatusCode = 404
+        let client = EditorHTTPClient(urlSession: spySession, authHeader: "Bearer test-token")
+
+        await #expect(throws: EditorHTTPClient.ClientError.self) {
+            try await client.download(URLRequest(url: URL(string: "https://example.com/wp-content/file.js")!))
+        }
     }
 
     // MARK: - Timeout Tests
