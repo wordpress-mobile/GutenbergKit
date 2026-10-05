@@ -7,8 +7,8 @@ public protocol EditorHTTPClientProtocol: Sendable {
 
     /// Like ``perform(_:)`` but does **not** throw on a non-2xx status — returns
     /// the raw response so the caller can relay WordPress's exact status and body.
-    /// Used by the media upload server, which forwards WordPress's response (and
-    /// its errors) to the editor unchanged.
+    /// Used for native media uploads, which forward WordPress's response (and its
+    /// errors) to the editor unchanged.
     func performRaw(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse)
 
     /// Downloads the response to a file, which becomes the caller's to move or delete. A 304 is
@@ -95,10 +95,22 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
         #endif
     }()
 
+    /// The shortest inactivity timeout a media upload is allowed.
+    ///
+    /// `URLRequest.timeoutInterval` is an inactivity timer, and an upload goes silent
+    /// once its body is sent: WordPress creates the attachment and then generates image
+    /// sub-sizes before it answers. A slow host can take well over a minute, and a timer
+    /// that fires in that window reports a failure for an attachment that already exists
+    /// — an orphan the user then duplicates by retrying. Ten minutes outlasts the gateway
+    /// timeouts hosts put in front of PHP, so the host's own limit is the one that ends a
+    /// request that really is stuck.
+    public static let uploadInactivityTimeout: TimeInterval = 600
+
     private let urlSession: URLSessionProtocol
     private let authHeader: String
     private let delegate: EditorHTTPClientDelegate?
     private let requestTimeout: TimeInterval?
+    private let minimumTimeout: TimeInterval?
 
     /// Requests in flight that an identical `perform(_:)` joins instead of sending again. Every
     /// editor and service builds its own client, so this is shared across all of them.
@@ -120,10 +132,27 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
         delegate: EditorHTTPClientDelegate? = nil,
         requestTimeout: TimeInterval? = nil
     ) {
+        self.init(
+            urlSession: urlSession,
+            authHeader: authHeader,
+            delegate: delegate,
+            requestTimeout: requestTimeout,
+            minimumTimeout: nil
+        )
+    }
+
+    private init(
+        urlSession: URLSessionProtocol,
+        authHeader: String,
+        delegate: EditorHTTPClientDelegate?,
+        requestTimeout: TimeInterval?,
+        minimumTimeout: TimeInterval?
+    ) {
         self.urlSession = urlSession
         self.authHeader = authHeader
         self.delegate = delegate
         self.requestTimeout = requestTimeout
+        self.minimumTimeout = minimumTimeout
     }
 
     /// Sends `urlRequest`, throwing for a non-2xx status.
@@ -241,20 +270,27 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
 
     /// A sibling client tuned for large media uploads: it reuses this client's
     /// session (preserving any custom configuration or pinning) and auth header,
-    /// but drops the REST `requestTimeout`. That timeout is an inactivity timer
-    /// (`URLRequest.timeoutInterval`); a short value set for snappy REST calls
-    /// would also fire during the silent window while WordPress synchronously
-    /// generates image sub-sizes inside `POST /wp/v2/media`, orphaning the
-    /// attachment server-side and duplicating it on retry. Uploads instead use
-    /// the request's default 60s inactivity timeout, mirroring Android's
-    /// dedicated upload client (no total-duration cap).
+    /// drops the REST `requestTimeout`, and raises every request's inactivity
+    /// timeout to at least ``uploadInactivityTimeout``.
+    ///
+    /// Both halves guard the same window: the silence while WordPress generates image
+    /// sub-sizes inside `POST /wp/v2/media`. A short REST timeout would fire there, and
+    /// so does `URLRequest`'s own 60s default on a slow host — measured against a
+    /// WordPress whose response was held back 90s, the upload failed with
+    /// `NSURLErrorTimedOut` while the attachment it created stayed on the site. A
+    /// request that already asks for longer keeps its own value.
     ///
     /// The request-observing `delegate` is carried over, so a host that installs
-    /// one observes media uploads and passthroughs like every other request; only
-    /// the REST `requestTimeout` is dropped. Sharing the observer across both
-    /// clients is sound because `EditorHTTPClientDelegate` is `Sendable`.
+    /// one observes media uploads like every other request. Sharing the observer
+    /// across both clients is sound because `EditorHTTPClientDelegate` is `Sendable`.
     public nonisolated func uploadClient() -> any EditorHTTPClientProtocol {
-        EditorHTTPClient(urlSession: urlSession, authHeader: authHeader, delegate: delegate)
+        EditorHTTPClient(
+            urlSession: urlSession,
+            authHeader: authHeader,
+            delegate: delegate,
+            requestTimeout: nil,
+            minimumTimeout: Self.uploadInactivityTimeout
+        )
     }
 
     private func configureRequest(_ request: URLRequest) -> URLRequest {
@@ -264,6 +300,9 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
 
         if let requestTimeout {
             mutableRequest.timeoutInterval = requestTimeout
+        }
+        if let minimumTimeout, mutableRequest.timeoutInterval < minimumTimeout {
+            mutableRequest.timeoutInterval = minimumTimeout
         }
 
         // Prevent wordpress_logged_in cookies from being sent, which could interfere with

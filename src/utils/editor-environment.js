@@ -9,6 +9,8 @@ import { loadEditorAssets } from './editor-loader';
 import { configureAjax } from './ajax';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge';
 import { initializeFetchInterceptor } from './fetch-interceptor';
+import { installFetchWrappers } from './fetch-chain';
+import { createRelayFetchWrapper } from './fetch-relay';
 import EditorLoadError from '../components/editor-load-error';
 import { setLogLevel, error } from './logger';
 import { setUpGlobalErrorHandlers } from './global-error-handler';
@@ -27,6 +29,9 @@ export async function setUpEditorEnvironment() {
 		setBodyClasses();
 		await awaitGBKitGlobal();
 		setLogLevelFromGBKit();
+		// The relay goes in first, so the network log wraps it and records the
+		// request the editor made rather than the relay's rewrite of it.
+		installFetchWrappers( [ createRelayFetchWrapper() ] );
 		initializeFetchInterceptor();
 		const isRTL = await configureLocale();
 		injectEditorStyles( isRTL );

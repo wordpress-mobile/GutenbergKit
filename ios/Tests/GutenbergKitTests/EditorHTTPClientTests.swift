@@ -232,16 +232,27 @@ struct EditorHTTPClientTests {
         _ = try await uploadClient.performRaw(request)
 
         let captured = try #require(spySession.lastCapturedRequest)
-        // The short REST timeout must not bleed into uploads — the request keeps
-        // its own (default) inactivity timeout instead.
+        // The short REST timeout must not bleed into uploads.
         #expect(captured.timeoutInterval != restTimeout)
-        #expect(captured.timeoutInterval == request.timeoutInterval)
         // Auth and the shared session are still used.
         #expect(captured.value(forHTTPHeaderField: "Authorization") == authHeader)
     }
 
-    @Test("uploadClient() preserves an explicit upload request timeout instead of clobbering it")
-    func uploadClientPreservesExplicitTimeout() async throws {
+    @Test("uploadClient() raises URLRequest's 60s default so a slow server response can't orphan the attachment")
+    func uploadClientRaisesDefaultTimeout() async throws {
+        let spySession = SpyURLSession()
+        let client = EditorHTTPClient(urlSession: spySession, authHeader: "Bearer token")
+
+        let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/media")!)
+        #expect(request.timeoutInterval == 60)
+        _ = try await client.uploadClient().performRaw(request)
+
+        let captured = try #require(spySession.lastCapturedRequest)
+        #expect(captured.timeoutInterval == EditorHTTPClient.uploadInactivityTimeout)
+    }
+
+    @Test("uploadClient() keeps an upload request's own timeout when it is longer than the floor")
+    func uploadClientPreservesLongerExplicitTimeout() async throws {
         let spySession = SpyURLSession()
         let client = EditorHTTPClient(
             urlSession: spySession,
@@ -249,16 +260,27 @@ struct EditorHTTPClientTests {
             requestTimeout: 15
         )
 
-        let uploadClient = client.uploadClient()
         var request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/media")!)
-        request.timeoutInterval = 120
+        request.timeoutInterval = EditorHTTPClient.uploadInactivityTimeout * 2
 
-        _ = try await uploadClient.performRaw(request)
+        _ = try await client.uploadClient().performRaw(request)
 
         // On the REST client the requestTimeout (15) would clobber this to 15;
-        // the upload client leaves it alone.
+        // the upload client leaves a longer value alone.
         let captured = try #require(spySession.lastCapturedRequest)
-        #expect(captured.timeoutInterval == 120)
+        #expect(captured.timeoutInterval == EditorHTTPClient.uploadInactivityTimeout * 2)
+    }
+
+    @Test("The REST client leaves the request's timeout alone when it has no requestTimeout")
+    func restClientDoesNotApplyUploadFloor() async throws {
+        let spySession = SpyURLSession()
+        let client = EditorHTTPClient(urlSession: spySession, authHeader: "Bearer token")
+
+        let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/posts")!)
+        _ = try await client.performRaw(request)
+
+        let captured = try #require(spySession.lastCapturedRequest)
+        #expect(captured.timeoutInterval == 60)
     }
 
     @Test("uploadClient() carries the request-observing delegate so uploads are observed too")
