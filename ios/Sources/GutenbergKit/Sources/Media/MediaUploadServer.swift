@@ -441,6 +441,10 @@ class DefaultMediaUploader: @unchecked Sendable {
     /// The WordPress media endpoint URL, built through the shared
     /// ``WordPressRESTURL`` namespacing (so it matches every other REST URL) and
     /// carrying the original request query (e.g. `?_embed`) through to WordPress.
+    ///
+    /// Query-based API roots (plain permalinks, `?rest_route=/`) are not supported
+    /// when the request carries a query: assigning `percentEncodedQuery` replaces
+    /// the root's `rest_route` value instead of merging with it.
     private func mediaEndpointURL(query: String) -> URL {
         let base = WordPressRESTURL.namespaced(apiRoot: siteApiRoot, path: "/wp/v2/media", namespace: siteApiNamespace)
         guard !query.isEmpty else { return base }

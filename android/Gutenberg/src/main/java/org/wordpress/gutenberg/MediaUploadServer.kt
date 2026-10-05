@@ -478,6 +478,10 @@ internal open class DefaultMediaUploader(
      * The WordPress media endpoint URL, built through the shared [RestUrlBuilder]
      * namespacing (so it matches every other REST URL) and carrying the original
      * request query (e.g. `?_embed`) through to WordPress.
+     *
+     * Query-based API roots (plain permalinks, `?rest_route=/`) are not supported
+     * when the request carries a query: [query] is appended verbatim, so it adds a
+     * second `?` to the URL instead of merging with `&`.
      */
     private fun mediaEndpointUrl(query: String): String =
         RestUrlBuilder.namespaced(siteApiRoot, siteApiNamespace.firstOrNull(), "/wp/v2/media") + query
