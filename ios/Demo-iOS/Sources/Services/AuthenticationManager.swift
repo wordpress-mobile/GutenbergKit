@@ -122,13 +122,12 @@ class AuthenticationManager {
         guard let blogId = tokenData.blogId else {
             throw AuthenticationError.missingBlogId
         }
-        let siteApiRoot = "https://public-api.wordpress.com/wp/v2/sites/\(blogId)"
 
         return .wpCom(
             id: 0,
             username: host,
             token: tokenData.accessToken,
-            siteApiRoot: siteApiRoot
+            siteApiRoot: Account.wpComSiteApiRoot(siteId: blogId)
         )
     }
 

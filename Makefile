@@ -217,6 +217,18 @@ serve-dev-force: install-web-deps ## Serve the editor from the Vite development 
 start-devtools: install-web-deps ## Start the React Developer Tools
 	npm run dev:tools
 
+# The token comes from WPCOM_TOKEN or ~/.wpcom-token, never a make variable, so
+# that it stays out of shell history.
+DEMO_APP_LOGIN = ./bin/demo-app-login.sh $(if $(SITE),--site "$(SITE)") $(if $(DEVICE),--device "$(DEVICE)")
+
+.PHONY: login-ios-app
+login-ios-app: ## Sign the iOS demo app into WordPress.com with the token in ~/.wpcom-token (optional: SITE, DEVICE)
+	@$(DEMO_APP_LOGIN) --platform ios
+
+.PHONY: login-android-app
+login-android-app: ## Sign the Android demo app into WordPress.com with the token in ~/.wpcom-token (optional: SITE, DEVICE)
+	@$(DEMO_APP_LOGIN) --platform android
+
 ################################################################################
 # Local WordPress Environment Targets (wp-env)
 ################################################################################

@@ -54,7 +54,7 @@ class AuthenticationManager(
         /// Replaces `wordpressComSiteApiRoot()`, which wordpress-rs removed in 0.6.0. The
         /// format is unchanged, so the site ID remains recoverable by the callers that parse
         /// it back out of the stored account.
-        private fun wordPressComSiteApiRoot(siteId: ULong): String =
+        fun wordPressComSiteApiRoot(siteId: ULong): String =
             "https://public-api.wordpress.com/wp/v2/sites/$siteId"
     }
 
