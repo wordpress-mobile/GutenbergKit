@@ -480,10 +480,13 @@ test-android-library-e2e: build ## Run Android library E2E tests on a device or 
 	$(ENSURE_ANDROID_DEVICE)
 	@echo "--- :android: Running Android Library E2E Tests"
 	@mkdir -p android/Gutenberg/build/outputs/buildkite-logs
-	@adb logcat -c
+# As in test-android-app-e2e: keep the buffers that record why the system
+# kills a process.
+	-@adb logcat -b all -G 16M
+	@adb logcat -b all -c
 	@./android/gradlew -p ./android :Gutenberg:connectedDebugAndroidTest; \
 	EXIT=$$?; \
-	adb logcat -d > android/Gutenberg/build/outputs/buildkite-logs/device-logcat.txt; \
+	adb logcat -b all -d > android/Gutenberg/build/outputs/buildkite-logs/device-logcat.txt; \
 	echo "--- :mag: Buildkite Test Engine collector output"; \
 	if grep -E 'Buildkite|BUILDKITE_ANALYTICS' android/Gutenberg/build/outputs/buildkite-logs/device-logcat.txt; then :; \
 	else \
