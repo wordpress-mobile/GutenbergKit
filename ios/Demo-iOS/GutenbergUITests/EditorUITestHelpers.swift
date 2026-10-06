@@ -24,7 +24,7 @@ enum EditorUITestHelpers {
         // Wait for the WebView to appear in the full-screen editor.
         let webView = app.webViews.firstMatch
         if !webView.waitForExistence(timeout: 30) {
-            attachScreenState(app: app)
+            attachAccessibilityHierarchy(app: app)
             // The crash notice hides the WebView, so name it rather than
             // reporting a WebView that never appeared.
             let message = app.buttons["Reload Editor"].exists
@@ -35,14 +35,11 @@ enum EditorUITestHelpers {
         return webView
     }
 
-    /// Attaches a screenshot and the accessibility hierarchy to the result
-    /// bundle, so a CI failure records what the app showed.
-    private static func attachScreenState(app: XCUIApplication) {
-        XCTContext.runActivity(named: "Screen state") { activity in
-            let screenshot = XCTAttachment(screenshot: app.screenshot())
-            screenshot.lifetime = .keepAlways
-            activity.add(screenshot)
-
+    /// Attaches the accessibility hierarchy to the result bundle as text, so a
+    /// CI failure records what the app showed. XCTest already keeps a failure
+    /// screenshot.
+    private static func attachAccessibilityHierarchy(app: XCUIApplication) {
+        XCTContext.runActivity(named: "Accessibility hierarchy") { activity in
             let hierarchy = XCTAttachment(string: app.debugDescription)
             hierarchy.name = "Accessibility hierarchy"
             hierarchy.lifetime = .keepAlways
