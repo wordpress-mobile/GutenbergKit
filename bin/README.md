@@ -81,7 +81,7 @@ make release VERSION_TYPE=patch DRY_RUN=true
 
 ### `demo-app-login.sh`
 
-Signs a demo app into a WordPress.com site with a bearer token read from `WPCOM_TOKEN` or `~/.wpcom-token`, so no OAuth application is needed. See [WordPress.com OAuth](../docs/code/wpcom-oauth.md#signing-in-with-a-bearer-token).
+Signs a demo app into WordPress sites with credentials stored on your machine: the self-hosted sites listed in `~/.config/wp/sites`, and a WordPress.com site with the bearer token in `WPCOM_TOKEN` or `~/.wpcom-token`. See [Signing In to the Demo Apps](../docs/code/demo-app-login.md).
 
 #### Usage
 
