@@ -450,7 +450,7 @@ test-android-app-e2e: ## Run Android demo app E2E tests against the production b
 	@echo "--- :android: Running Android E2E Tests (production build)"
 # The system intermittently kills the app mid-test. The system and events
 # buffers record why, but the per-test logcat omits them; enlarge the buffers
-# so boot-time entries survive until the dump.
+# so the whole test run survives until the dump.
 	@mkdir -p android/app/build/outputs/buildkite-logs
 	-@adb logcat -b all -G 16M
 	@./android/gradlew -p ./android :app:connectedDebugAndroidTest; \
