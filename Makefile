@@ -448,7 +448,15 @@ test-android-app-e2e: ## Run Android demo app E2E tests against the production b
 	@$(MAKE) copy-android-dist
 	$(ENSURE_ANDROID_DEVICE)
 	@echo "--- :android: Running Android E2E Tests (production build)"
-	./android/gradlew -p ./android :app:connectedDebugAndroidTest
+# The system intermittently kills the app mid-test. The system and events
+# buffers record why, but the per-test logcat omits them; enlarge the buffers
+# so boot-time entries survive until the dump.
+	@mkdir -p android/app/build/outputs/buildkite-logs
+	-@adb logcat -b all -G 16M
+	@./android/gradlew -p ./android :app:connectedDebugAndroidTest; \
+	EXIT=$$?; \
+	adb logcat -b all -d > android/app/build/outputs/buildkite-logs/device-logcat.txt; \
+	exit $$EXIT
 
 .PHONY: test-android-app-e2e-dev
 test-android-app-e2e-dev: ## Run Android demo app E2E tests against the Vite dev server (must be running)

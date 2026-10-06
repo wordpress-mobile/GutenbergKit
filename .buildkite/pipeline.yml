@@ -219,6 +219,7 @@ steps:
       artifact_paths:
           - 'android/app/build/reports/androidTests/connected/**/*'
           - 'android/app/build/outputs/androidTest-results/connected/**/*'
+          - 'android/app/build/outputs/buildkite-logs/**/*'
           - 'android/app/build/outputs/connected_android_test_additional_output/**/*'
 
     - label: ':android: Test Android Library Instrumented'
