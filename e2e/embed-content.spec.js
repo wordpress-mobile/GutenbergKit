@@ -107,7 +107,7 @@ test.describe( 'Embedded Content', () => {
 		expect( blocks[ 0 ].attributes.providerNameSlug ).toBe( 'youtube' );
 	} );
 
-	test( 'should show a fallback link for a non-embeddable URL', async ( {
+	test( 'should store no preview for a non-embeddable URL', async ( {
 		page,
 	} ) => {
 		const editor = new EditorPage( page );
@@ -123,16 +123,13 @@ test.describe( 'Embedded Content', () => {
 		await urlInput.fill( 'https://example.com/not-embeddable' );
 		await page.keyboard.press( 'Enter' );
 
-		// Wait for the embed to resolve (or fall back).
-		// The block should still render with the URL attribute.
+		// The proxy answers 404, so core stores `false` for the preview
+		// rather than a preview object.
 		await page.waitForFunction(
-			() => {
-				const blocks = window.wp.data
-					.select( 'core/block-editor' )
-					.getBlocks();
-				return blocks[ 0 ]?.attributes?.url;
-			},
-			null,
+			( url ) =>
+				window.wp.data.select( 'core' ).getEmbedPreview( url ) ===
+				false,
+			'https://example.com/not-embeddable',
 			{ timeout: 30_000 }
 		);
 
