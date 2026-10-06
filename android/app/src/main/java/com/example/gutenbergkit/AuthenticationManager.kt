@@ -19,6 +19,8 @@ import uniffi.wp_api.AutoDiscoveryAttemptSuccess
 import uniffi.wp_api.DiscoveredAuthenticationMechanism
 import uniffi.wp_api.OAuth2Configuration
 import uniffi.wp_api.TokenRequestParameters
+import uniffi.wp_api.UserCapability
+import uniffi.wp_api.WpAuthentication
 import uniffi.wp_api.WpAuthenticationProvider
 import uniffi.wp_api.WpComOauthScope
 import uniffi.wp_api.WpComSiteIdentifier
@@ -77,7 +79,15 @@ class AuthenticationManager(
                                     launchApplicationPasswordsFlow(success)
                                 }
                                 is DiscoveredAuthenticationMechanism.OAuth2 -> {
-                                    launchOAuthFlow(success)
+                                    val account = withContext(Dispatchers.IO) {
+                                        reuseStoredWpComToken(success)
+                                    }
+                                    if (account != null) {
+                                        currentDiscoverySuccess = null
+                                        callback.onAuthenticationSuccess(account)
+                                    } else {
+                                        launchOAuthFlow(success)
+                                    }
                                 }
                             }
                         }
@@ -114,6 +124,41 @@ class AuthenticationManager(
         uriBuilder.build().let { uri ->
             context.startActivity(Intent(Intent.ACTION_VIEW, uri))
         }
+    }
+
+    /**
+     * Stores an account for a WordPress.com site using a token the app already holds, such as
+     * one stored by `bin/demo-app-login.sh`.
+     *
+     * Returns null when no stored token belongs to a user who can edit the site, leaving the
+     * caller to fall back to OAuth.
+     */
+    private suspend fun reuseStoredWpComToken(success: AutoDiscoveryAttemptSuccess): Account? {
+        val host = success.parsedSiteUrl.toURL().toURI().host
+        val tokens = accountRepository.all().filterIsInstance<Account.WpCom>().map { it.token }.distinct()
+
+        for (token in tokens) {
+            val client = WpComApiClient(
+                authProvider = WpAuthenticationProvider.staticWithAuth(WpAuthentication.Bearer(token = token)),
+                interceptors = emptyList(),
+                networkAvailabilityProvider = networkAvailabilityProvider
+            )
+            val result = client.request { it.sites().getSite(WpComSiteIdentifier.Slug(value = host)) }
+            val site = (result as? WpRequestResult.Success)?.response?.data
+            if (site == null || !site.capabilities.hasCap(UserCapability.EditPosts)) continue
+
+            accountRepository.store(
+                Account.WpCom(
+                    id = 0u,
+                    username = host,
+                    token = token,
+                    siteApiRoot = wordPressComSiteApiRoot(site.id)
+                )
+            )
+            return accountRepository.all().last()
+        }
+
+        return null
     }
 
     private fun launchOAuthFlow(success: AutoDiscoveryAttemptSuccess) {

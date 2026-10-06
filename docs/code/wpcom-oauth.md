@@ -54,6 +54,8 @@ There's deliberately no token flag or `make` variable — a token passed as an a
 
 The demo apps keep one account per site, so the script looks up the site's ID and address from the WordPress.com REST API and passes them to the app along with the token. The app stores them as an account at launch, replacing any account it already holds for that site, so running the command again picks up a new token.
 
+Once the app holds a WordPress.com token, **Add WordPress Site** reuses it. Entering another WordPress.com site that the token's user can edit adds it straight away, with no OAuth application and no login screen. Any other WordPress.com site still goes through OAuth.
+
 To launch with a token by hand:
 
 ```bash
