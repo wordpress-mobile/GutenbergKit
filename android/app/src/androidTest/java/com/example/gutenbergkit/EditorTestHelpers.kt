@@ -386,7 +386,10 @@ private fun AndroidComposeTestRule<*, *>.waitForNode(
     // on an assertion that can never pass.
     // Between activities no Compose root is resumed, and the default
     // `atLeastOneRootRequired` throws there instead of letting the poll retry.
-    waitUntil(timeoutMs) {
+    waitUntil(
+        conditionDescription = "a node matching '${matcher.description}' exists",
+        timeoutMillis = timeoutMs
+    ) {
         onAllNodes(matcher)
             .fetchSemanticsNodes(atLeastOneRootRequired = false)
             .isNotEmpty()
