@@ -453,11 +453,8 @@ function mediaPermissionsMiddleware( options, next ) {
  * Remove the wrapping element from the oEmbed response, as it breaks
  * Gutenberg's sizing styles.
  *
- * A failed request is left to reject. Core stores `false` for it, which the
- * Embed block shows as "could not be embedded" and which blocks that poll for a
- * preview — VideoPress, while WordPress.com is still processing an upload —
- * take as the cue to ask again. Resolving with a link in its place reads as a
- * finished preview, so those blocks stop asking and render the link.
+ * A failed request is left to reject, so core stores `false` and blocks that
+ * poll for a preview (e.g. VideoPress while processing an upload) ask again.
  *
  * @type {APIFetchMiddleware}
  *
