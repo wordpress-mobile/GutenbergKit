@@ -103,8 +103,10 @@ struct RestRelay: Sendable {
     /// upstream response with permissive CORS headers.
     ///
     /// - Parameter request: The page's request to the relay scheme. WebKit
-    ///   delivers a string or `ArrayBuffer` body as `httpBody`; the page reads
-    ///   anything else into one first (`bufferedBody` in `fetch-relay.js`).
+    ///   delivers a string or `ArrayBuffer` body as `httpBody` and drops some
+    ///   others without an error, so the page reads every body that is not a
+    ///   string into an `ArrayBuffer` first (`bufferedBody` in `fetch-relay.js`).
+    ///   The table of what was measured is in `docs/code/media-uploads.md`.
     func handle(_ request: URLRequest) async -> SchemeResponse {
         guard let upstreamURL = request.url.flatMap(upstreamURL(for:)) else {
             Logger.restRelay.error("Refusing to relay a request outside the site API root")

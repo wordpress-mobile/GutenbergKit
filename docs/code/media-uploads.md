@@ -40,15 +40,27 @@ it when a suspended app's device idle-sleeps, which is what broke the loopback s
 after an ordinary screen lock. There is no token either: only this web view can load the
 scheme.
 
-WebKit hands a scheme handler only bodies it has buffered. Measured on iOS 27 with
-Lockdown Mode:
+WebKit hands a scheme handler only bodies it has buffered. Measured:
 
-| `fetch` body                                          | Reaches the handler                            |
-| ----------------------------------------------------- | ---------------------------------------------- |
-| string, `URLSearchParams`, `ArrayBuffer`              | yes, as `httpBody`                             |
-| an in-memory `Blob`/`File`, or `FormData` holding one | **no body at all**, and `fetch` still succeeds |
-| a `File` from the photo picker, in `FormData`         | as `httpBodyStream`                            |
-| a dropped `File`, in `FormData`                       | **no body at all**                             |
+| `fetch` body                                                   | Reaches the handler                            | Measured on       |
+| -------------------------------------------------------------- | ---------------------------------------------- | ----------------- |
+| string, `URLSearchParams`, `ArrayBuffer`, text-only `FormData` | yes, as `httpBody`                             | device, Simulator |
+| typed array, `DataView`                                        | yes, as `httpBody`                             | Simulator         |
+| an in-memory `Blob`/`File`, or `FormData` holding one          | **no body at all**, and `fetch` still succeeds | device, Simulator |
+| the same, made in another window (an iframe's)                 | **no body at all**, and `fetch` still succeeds | Simulator         |
+| a `File` from the photo picker, in `FormData`                  | as `httpBodyStream`                            | device            |
+| a dropped `File`, in `FormData`                                | **no body at all**                             | device            |
+| `ReadableStream`                                               | never sent: `fetch` rejects                    | Simulator         |
+
+The device was an iPhone 15 Pro on iOS 27 with Lockdown Mode on. The Simulator ran iOS 27.0
+and iOS 17.5, each with Lockdown Mode off and with it forced on for the web view, and gave
+the same results every way. No `OPTIONS` preflight reached the handler on any of them.
+
+An object made in another window is not an `instanceof` this window's `Blob` or
+`FormData`, so code that picks out the bodies to convert that way lets it through to be
+dropped. The REST relay (`gbk-rest:`, `src/utils/fetch-relay.js`) meets the same rule for
+every request the page sends the site, and reads every body that is not a string into an
+`ArrayBuffer`.
 
 The streamed case depends on where the file came from, and every failure is silent, so
 the page always sends the file as 4 MB `ArrayBuffer` chunks:

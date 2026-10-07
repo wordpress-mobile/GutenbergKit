@@ -84,32 +84,43 @@ export function createRelayFetch( next, { restRelay, siteApiRoot } ) {
  *
  * WebKit hands a scheme handler a string or an `ArrayBuffer` body, and drops a
  * `Blob` — or a `FormData` holding one — without an error: the request arrives
- * empty and still succeeds. So anything that could carry a `Blob` is read into
- * an `ArrayBuffer` first, which costs the body's size in memory. That suits
- * what reaches here: JSON, and the few-megabyte chunks a block's own uploader
+ * empty and still succeeds. So every body that is not a string is read into an
+ * `ArrayBuffer` first, which costs the body's size in memory. That suits what
+ * reaches here: JSON, and the few-megabyte chunks a block's own uploader
  * sends. Core's media uploads never do — `nativeMediaUploadMiddleware` sends
  * them to native code in chunks before they become a request.
  *
- * Serializing a `FormData` is what gives it a boundary, so the `Content-Type`
- * the browser would have set is set here, as a `Blob`'s own type is.
+ * Every body, rather than those that are an `instanceof Blob` or `FormData`:
+ * one made in another window — an iframe's — is an instance of that window's
+ * class, not this one's, and WebKit drops it all the same. `Response` reads a
+ * body whichever window made it.
+ *
+ * What arrives and what is dropped was measured body by body; the table is in
+ * `docs/code/media-uploads.md`.
+ *
+ * `Response` also names the body's type, as `fetch` would have. It gives way
+ * to a `Content-Type` the caller set, except for a `FormData`: its boundary
+ * exists only in the serialization.
  *
  * @param {unknown} body    The request body, as `fetch` takes it.
  * @param {Headers} headers The request headers, updated in place.
  * @return {Promise<unknown>} The body to send.
  */
 async function bufferedBody( body, headers ) {
-	if ( body instanceof Blob ) {
-		if ( body.type && ! headers.has( 'Content-Type' ) ) {
-			headers.set( 'Content-Type', body.type );
-		}
-		return body.arrayBuffer();
+	if ( body === undefined || body === null || typeof body === 'string' ) {
+		return body;
 	}
-	if ( body instanceof FormData ) {
-		const serialized = new Response( body );
-		headers.set( 'Content-Type', serialized.headers.get( 'Content-Type' ) );
-		return serialized.arrayBuffer();
+
+	const serialized = new Response( body );
+	const contentType = serialized.headers.get( 'Content-Type' );
+	if (
+		contentType &&
+		( contentType.startsWith( 'multipart/form-data' ) ||
+			! headers.has( 'Content-Type' ) )
+	) {
+		headers.set( 'Content-Type', contentType );
 	}
-	return body;
+	return serialized.arrayBuffer();
 }
 
 /**

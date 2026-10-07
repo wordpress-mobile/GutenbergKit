@@ -361,8 +361,9 @@ function loopbackUpload( options, file, query, { port, token } ) {
  *
  * The file goes in chunks, each an `ArrayBuffer`: WebKit hands a URL scheme
  * handler only bodies it has buffered, and drops a `Blob` body — including a
- * `FormData` that holds one — without an error. Chunking also keeps at most one
- * chunk of the file in the page's memory at a time.
+ * `FormData` that holds one — without an error. The table of what was measured
+ * is in `docs/code/media-uploads.md`. Chunking also keeps at most one chunk of
+ * the file in the page's memory at a time.
  *
  * A failure before `finish` means WordPress never saw the file, so the upload
  * falls back to the web view's own path rather than failing: nothing can be

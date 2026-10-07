@@ -8,7 +8,8 @@ import WebKit
 /// The page's `nativeMediaUploadMiddleware` sends a file in chunks rather than as one
 /// request: WebKit hands a scheme handler only bodies it has already buffered, and it
 /// drops a `Blob` body — including a `FormData` that holds one — without an error. An
-/// `ArrayBuffer` of a few megabytes always arrives. The protocol:
+/// `ArrayBuffer` of a few megabytes always arrives. The table of what was measured is in
+/// `docs/code/media-uploads.md`. The protocol:
 ///
 /// | Request | Body | Response |
 /// |---|---|---|
