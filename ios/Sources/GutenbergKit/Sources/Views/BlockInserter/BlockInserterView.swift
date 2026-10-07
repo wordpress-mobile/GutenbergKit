@@ -27,6 +27,11 @@ struct BlockInserterView: View {
     @State private var isShowingCamera = false
     @State private var availableWidth: CGFloat = 0
 
+    /// Whether acknowledging the media-import alert should also close the
+    /// inserter. Set when a partial import inserted something worth keeping; a
+    /// total failure leaves it `false` so the inserter stays open to retry.
+    @State private var shouldDismissAfterError = false
+
     @ScaledMetric(relativeTo: .largeTitle) private var inlinePickerHeight = 116
 
     @Environment(\.dismiss) private var dismiss
@@ -77,7 +82,15 @@ struct BlockInserterView: View {
                 Alert(
                     title: Text(EditorLocalization[.failedToInsertMedia]),
                     message: Text(error.message),
-                    dismissButton: .default(Text(EditorLocalization[.ok]))
+                    dismissButton: .default(Text(EditorLocalization[.ok])) {
+                        // A partial import already inserted what it could and this
+                        // alert reported the rest, so acknowledging it finishes the
+                        // flow. A total failure inserted nothing, so stay open to retry.
+                        if shouldDismissAfterError {
+                            shouldDismissAfterError = false
+                            dismiss()
+                        }
+                    }
                 )
             }
             .animation(.smooth(duration: 2), value: viewModel.isProcessingMedia)
@@ -288,10 +301,23 @@ struct BlockInserterView: View {
 
     private func insertMedia(_ items: [PhotosPickerItem]) {
         Task {
-            let items = await viewModel.processSelectedPhotosPickerItems(items)
-            if !items.isEmpty {
+            let mediaInfo = await viewModel.processSelectedPhotosPickerItems(items)
+
+            guard viewModel.error == nil else {
+                // Some or all items failed to import. Insert whatever succeeded,
+                // then let the alert report the rest. Closing the alert dismisses
+                // the inserter only when something was inserted (a partial
+                // success); a total failure keeps it open so the user can retry.
+                if !mediaInfo.isEmpty {
+                    onSelection(.media(mediaInfo))
+                }
+                shouldDismissAfterError = !mediaInfo.isEmpty
+                return
+            }
+
+            if !mediaInfo.isEmpty {
                 dismiss()
-                onSelection(.media(items))
+                onSelection(.media(mediaInfo))
             }
         }
     }
