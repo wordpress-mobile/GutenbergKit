@@ -43,12 +43,14 @@ class InternalMediaClient: @unchecked Sendable {
         let path = attachmentId.map { "/wp/v2/media/\($0)" } ?? "/wp/v2/media"
         let base = WordPressRESTURL.namespaced(apiRoot: siteApiRoot, path: path, namespace: siteApiNamespace)
         guard !query.isEmpty else { return base }
-        // `query` is the raw request query in wire form (leading "?"). Set it via
-        // `percentEncodedQuery` so a value that isn't URL-safe can't make
-        // `URL(string:)` return nil and silently drop the query.
-        var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
-        components?.percentEncodedQuery = String(query.dropFirst())
-        return components?.url ?? base
+        // `query` is the request query as the page wrote it (leading "?"), which need
+        // not be valid in a URL, and the `percentEncodedQuery` setter traps on a
+        // character that isn't. `URLComponents(string:)` encodes those and keeps the
+        // escapes already there.
+        guard var components = URLComponents(url: base, resolvingAgainstBaseURL: false),
+              let parsed = URLComponents(string: query) else { return base }
+        components.percentEncodedQuery = parsed.percentEncodedQuery
+        return components.url ?? base
     }
 
     /// Uploads a file to `POST /wp/v2/media` as `multipart/form-data`, streaming it
@@ -65,11 +67,11 @@ class InternalMediaClient: @unchecked Sendable {
         let (bodyStream, contentLength, writer) = try Self.multipartBodyStream(
             fileURL: fileURL, boundary: boundary, filename: filename, mimeType: mimeType, extraFields: extraFields
         )
-
-        var request = URLRequest(url: mediaEndpointURL(query: query))
         // Whatever became of the request: a reader that never opened its end of the
         // stream sends the writer no word that it has gone.
         defer { writer.cancel() }
+
+        var request = URLRequest(url: mediaEndpointURL(query: query))
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.setValue("\(contentLength)", forHTTPHeaderField: "Content-Length")

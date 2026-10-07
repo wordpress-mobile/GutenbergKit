@@ -421,6 +421,30 @@ struct InternalMediaClientRelayTests {
     #expect(url.absoluteString == "https://example.com/wp-json/wp/v2/sites/123/media?_embed=wp:featuredmedia")
   }
 
+  // The page sends the query as it wrote it, and `URLComponents.percentEncodedQuery`
+  // traps on a character a URL can't hold: before these were encoded, each of the
+  // first four ended the process.
+  @Test(
+    "encodes a query the page sent raw, and keeps the escapes it already has",
+    arguments: [
+      ("?title=café", "title=caf%C3%A9"),
+      ("?title=a b", "title=a%20b"),
+      ("?title=\"a\"", "title=%22a%22"),
+      ("?title=50%zz", "title=50%25zz"),
+      ("?title=a%20b", "title=a%20b"),
+      ("?include[]=1&include[]=2", "include%5B%5D=1&include%5B%5D=2"),
+    ]
+  )
+  func encodesRawQueries(query: String, expected: String) async throws {
+    let client = URLCapturingHTTPClient()
+    let uploader = InternalMediaClient(httpClient: client, siteApiRoot: URL(string: "https://example.com/wp-json")!)
+
+    _ = try await uploader.deleteMedia(attachmentId: "42", query: query)
+
+    let url = try #require(client.lastURL)
+    #expect(url.absoluteString == "https://example.com/wp-json/wp/v2/media/42?\(expected)")
+  }
+
   @Test("sends the editor's fields ahead of the file, in order, with repeated names intact")
   func sendsFieldsInOrder() async throws {
     let client = BodyCapturingHTTPClient()
