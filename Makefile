@@ -452,7 +452,15 @@ test-android-app-e2e: ## Run Android demo app E2E tests against the production b
 	@$(MAKE) copy-android-dist
 	$(ENSURE_ANDROID_DEVICE)
 	@echo "--- :android: Running Android E2E Tests (production build)"
-	./android/gradlew -p ./android :app:connectedDebugAndroidTest
+# The system intermittently kills the app mid-test. The system and events
+# buffers record why, but the per-test logcat omits them; enlarge the buffers
+# so the whole test run survives until the dump.
+	@mkdir -p android/app/build/outputs/buildkite-logs
+	-@adb logcat -b all -G 16M
+	@./android/gradlew -p ./android :app:connectedDebugAndroidTest; \
+	EXIT=$$?; \
+	adb logcat -b all -d > android/app/build/outputs/buildkite-logs/device-logcat.txt; \
+	exit $$EXIT
 
 .PHONY: test-android-app-e2e-dev
 test-android-app-e2e-dev: ## Run Android demo app E2E tests against the Vite dev server (must be running)
@@ -476,10 +484,13 @@ test-android-library-e2e: build ## Run Android library E2E tests on a device or 
 	$(ENSURE_ANDROID_DEVICE)
 	@echo "--- :android: Running Android Library E2E Tests"
 	@mkdir -p android/Gutenberg/build/outputs/buildkite-logs
-	@adb logcat -c
+# As in test-android-app-e2e: keep the buffers that record why the system
+# kills a process.
+	-@adb logcat -b all -G 16M
+	@adb logcat -b all -c
 	@./android/gradlew -p ./android :Gutenberg:connectedDebugAndroidTest; \
 	EXIT=$$?; \
-	adb logcat -d > android/Gutenberg/build/outputs/buildkite-logs/device-logcat.txt; \
+	adb logcat -b all -d > android/Gutenberg/build/outputs/buildkite-logs/device-logcat.txt; \
 	echo "--- :mag: Buildkite Test Engine collector output"; \
 	if grep -E 'Buildkite|BUILDKITE_ANALYTICS' android/Gutenberg/build/outputs/buildkite-logs/device-logcat.txt; then :; \
 	else \
