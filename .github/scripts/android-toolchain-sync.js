@@ -306,7 +306,7 @@ function buildIssueBody( rows, drifted, context ) {
 	const lines = [
 		`This repository's Android toolchain no longer matches [${ UPSTREAM }](https://github.com/${ UPSTREAM }/blob/${ UPSTREAM_REF }/gradle/libs.versions.toml).`,
 		'',
-		'| Version | GutenbergKit | WordPress-Android | |',
+		'| Tool | Status | GutenbergKit | WordPress-Android |',
 		'| --- | --- | --- | --- |',
 		...rows.map( formatRow ),
 		'',
@@ -348,19 +348,11 @@ function buildIssueBody( rows, drifted, context ) {
 function formatRow( row ) {
 	const cells = [
 		row.name,
+		formatStatus( row ),
 		formatVersion( row.ours ),
 		formatVersion( row.theirs ),
-		formatStatus( row ),
 	];
 	return `| ${ cells.join( ' | ' ) } |`;
-}
-
-/**
- * @param {string|null} version A version, or `null` if unreadable.
- * @return {string} The table cell.
- */
-function formatVersion( version ) {
-	return version ? `\`${ version }\`` : 'unknown';
 }
 
 /**
@@ -372,10 +364,18 @@ function formatVersion( version ) {
  */
 function formatStatus( row ) {
 	if ( ! row.ours || ! row.theirs ) {
-		return 'could not be read';
+		return '⚪ Could not be read';
 	}
 	if ( row.ours === row.theirs ) {
-		return 'in sync';
+		return '🟢 In sync';
 	}
-	return row.blocking ? '**drifted**' : 'differs';
+	return row.blocking ? '🔴 Drifted' : '🟡 Differs';
+}
+
+/**
+ * @param {string|null} version A version, or `null` if unreadable.
+ * @return {string} The table cell.
+ */
+function formatVersion( version ) {
+	return version ? `\`${ version }\`` : 'unknown';
 }
