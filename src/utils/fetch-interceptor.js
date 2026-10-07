@@ -145,22 +145,6 @@ export function initializeFetchInterceptor() {
  *
  * @return {Object} Request details object.
  */
-/**
- * Whether a request goes to the network: `http:` or `https:`, resolved against the
- * page so a relative URL counts as the page's own scheme.
- *
- * @param {string} url The request URL.
- * @return {boolean} Whether to log the request.
- */
-function isNetworkURL( url ) {
-	try {
-		const { protocol } = new URL( url, window.location.href );
-		return protocol === 'http:' || protocol === 'https:';
-	} catch {
-		return true;
-	}
-}
-
 function extractRequestDetails( input, init = {} ) {
 	let url;
 	let method = 'GET';
@@ -196,6 +180,22 @@ function extractRequestDetails( input, init = {} ) {
 		method: method.toUpperCase(),
 		headers,
 	};
+}
+
+/**
+ * Whether a request goes to the network: `http:` or `https:`, resolved against the
+ * page so a relative URL counts as the page's own scheme.
+ *
+ * @param {string} url The request URL.
+ * @return {boolean} Whether to log the request.
+ */
+function isNetworkURL( url ) {
+	try {
+		const { protocol } = new URL( url, window.location.href );
+		return protocol === 'http:' || protocol === 'https:';
+	} catch {
+		return true;
+	}
 }
 
 /**
