@@ -237,6 +237,38 @@ struct MediaUploadSchemeHandlerTests {
     #expect(begin.status == 503)
   }
 
+  @Test("disable() discards the session of a begin that was still waiting on the store")
+  func disableDiscardsALateBegin() async throws {
+    let directory = FileManager.default.temporaryDirectory.appending(component: "scheme-tests-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let store = MediaUploadSessionStore(directory: directory)
+    let handler = MediaUploadSchemeHandler(service: ScriptedUploadService(), store: store)
+
+    // With the store kept busy, the begin and then `disable()`'s clean-up queue up
+    // behind it, which puts the clean-up ahead of the session the begin has yet to make.
+    let release = DispatchSemaphore(value: 0)
+    await withCheckedContinuation { held in
+      Task.detached { await store.hold(until: release) { held.resume() } }
+    }
+
+    var request = URLRequest(url: URL(string: "gbk-upload://upload/sessions")!)
+    request.httpMethod = "POST"
+    request.httpBody = try JSONSerialization.data(withJSONObject: ["filename": "clip.mp4", "mimeType": "video/mp4", "size": 10])
+    let begin = FakeSchemeTask(request: request)
+    handler.start(begin)
+    for _ in 0..<2 { await Task.yield() }
+
+    handler.disable()
+    for _ in 0..<2 { await Task.yield() }
+    release.signal()
+    await begin.waitUntilAnswered()
+
+    #expect(begin.status == 503)
+    #expect(await store.sessionCount == 0, "a session outlived disable()")
+    let staged = (try? FileManager.default.contentsOfDirectory(atPath: directory.path(percentEncoded: false))) ?? []
+    #expect(staged.isEmpty)
+  }
+
   @Test("never answers a request WebKit stopped, and cancels its upload")
   func stoppedRequestsAreNotAnswered() async throws {
     let gate = AsyncGate()
@@ -267,6 +299,14 @@ struct MediaUploadSchemeHandlerTests {
     #expect(sawCancellation.isSet, "the upload kept running for a page that left")
     #expect(finish.response == nil, "answered a stopped task, which WebKit raises on")
     #expect(!finish.finished)
+  }
+}
+
+extension MediaUploadSessionStore {
+  /// Occupies the store, so that whatever else is sent to it queues up behind.
+  fileprivate func hold(until release: DispatchSemaphore, onceHeld: @Sendable () -> Void) {
+    onceHeld()
+    release.wait()
   }
 }
 
