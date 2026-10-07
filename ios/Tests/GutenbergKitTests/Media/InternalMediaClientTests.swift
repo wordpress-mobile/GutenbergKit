@@ -1,3 +1,4 @@
+@preconcurrency import Darwin
 import Foundation
 import Testing
 
@@ -28,7 +29,7 @@ struct MultipartBodyStreamTests {
     expected.append(Data("\r\n--\(boundary)--\r\n".utf8))
 
     // Build streaming output.
-    let (stream, contentLength) = try InternalMediaClient.multipartBodyStream(
+    let (stream, contentLength, _) = try InternalMediaClient.multipartBodyStream(
       fileURL: tempFile, boundary: boundary, filename: filename, mimeType: mimeType, extraFields: []
     )
     #expect(contentLength == expected.count)
@@ -45,7 +46,7 @@ struct MultipartBodyStreamTests {
 
     // Craft a filename, field name, and MIME type that each try to smuggle a CRLF
     // and a fake header into the body relayed to WordPress.
-    let (stream, _) = try InternalMediaClient.multipartBodyStream(
+    let (stream, _, _) = try InternalMediaClient.multipartBodyStream(
       fileURL: tempFile,
       boundary: "boundary",
       filename: "evil\"\r\nX-Injected-File: 1.jpg",
@@ -80,7 +81,7 @@ struct MultipartBodyStreamTests {
     expected.append(fileContent)
     expected.append(Data("\r\n--\(boundary)--\r\n".utf8))
 
-    let (stream, contentLength) = try InternalMediaClient.multipartBodyStream(
+    let (stream, contentLength, _) = try InternalMediaClient.multipartBodyStream(
       fileURL: tempFile, boundary: boundary, filename: filename, mimeType: mimeType,
       extraFields: [("post", Data("123".utf8))]
     )
@@ -112,7 +113,7 @@ struct MultipartBodyStreamTests {
     expected.append(fileContent)
     expected.append(Data("\r\n--\(boundary)--\r\n".utf8))
 
-    let (stream, contentLength) = try InternalMediaClient.multipartBodyStream(
+    let (stream, contentLength, _) = try InternalMediaClient.multipartBodyStream(
       fileURL: tempFile, boundary: boundary, filename: filename, mimeType: mimeType,
       extraFields: [("blob", binaryValue)]
     )
@@ -128,7 +129,7 @@ struct MultipartBodyStreamTests {
     try fileContent.write(to: tempFile)
     defer { try? FileManager.default.removeItem(at: tempFile) }
 
-    let (stream, contentLength) = try InternalMediaClient.multipartBodyStream(
+    let (stream, contentLength, _) = try InternalMediaClient.multipartBodyStream(
       fileURL: tempFile, boundary: "boundary", filename: "big.bin", mimeType: "application/octet-stream", extraFields: []
     )
 
@@ -136,59 +137,173 @@ struct MultipartBodyStreamTests {
     #expect(result.count == contentLength)
   }
 
-  @Test("writeMultipartBody streams the full body and closing boundary when the file reads cleanly")
-  func writeMultipartBodyWritesFullBody() throws {
+  @Test("streams a large file without holding it in memory")
+  func streamsWithoutAccumulating() throws {
+    // A sparse file: 96 MB long without 96 MB being written, or held by this test.
+    let megabyte = 1024 * 1024
+    let fileSize = 96 * megabyte
+    let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("stream-test-\(UUID().uuidString)")
+    #expect(FileManager.default.createFile(atPath: tempFile.path(percentEncoded: false), contents: nil))
+    defer { try? FileManager.default.removeItem(at: tempFile) }
+    let handle = try FileHandle(forWritingTo: tempFile)
+    try handle.truncate(atOffset: UInt64(fileSize))
+    try handle.close()
+
+    let (stream, contentLength, _) = try InternalMediaClient.multipartBodyStream(
+      fileURL: tempFile, boundary: "boundary", filename: "big.bin", mimeType: "application/octet-stream", extraFields: []
+    )
+    stream.open()
+    defer { stream.close() }
+
+    // Sampled while the body is still being produced: whatever the writer was
+    // holding is freed once it finishes, so a measurement afterwards shows nothing.
+    let baseline = memoryFootprint()
+    var peak = baseline
+    var total = 0
+    var sinceSample = 0
+    var buffer = [UInt8](repeating: 0, count: 65_536)
+    while true {
+      let read = stream.read(&buffer, maxLength: buffer.count)
+      if read <= 0 { break }
+      total += read
+      sinceSample += read
+      if sinceSample >= megabyte {
+        sinceSample = 0
+        peak = max(peak, memoryFootprint())
+      }
+    }
+
+    #expect(total == contentLength)
+    // Half the file's size: far above what a 64 KB chunk and other tests running
+    // alongside need, far below what holding the file takes.
+    let growth = peak > baseline ? peak - baseline : 0
+    #expect(growth < UInt64(fileSize / 2), "streaming a \(fileSize / megabyte) MB file grew memory by \(growth / UInt64(megabyte)) MB")
+  }
+
+  @Test("the writer sends the full body and closing boundary when the file reads cleanly")
+  func writerSendsFullBody() async throws {
     let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("wmb-\(UUID().uuidString)")
     let fileContent = Data("the file bytes".utf8)
     try fileContent.write(to: tempFile)
     defer { try? FileManager.default.removeItem(at: tempFile) }
 
-    let fileHandle = try FileHandle(forReadingFrom: tempFile)
-    defer { try? fileHandle.close() }
-
     let output = OutputStream.toMemory()
-    output.open()
-    defer { output.close() }
-
     let preamble = Data("PREAMBLE".utf8)
     let epilogue = Data("EPILOGUE".utf8)
-    let ok = InternalMediaClient.writeMultipartBody(
-      fileHandle: fileHandle, fileSize: fileContent.count,
-      preamble: preamble, epilogue: epilogue, to: output
+    let writer = MultipartBodyWriter(
+      fileHandle: try FileHandle(forReadingFrom: tempFile), fileSize: fileContent.count,
+      preamble: preamble, epilogue: epilogue, output: output
     )
 
-    #expect(ok)
+    let wroteEverything = await finish(writer)
+
+    #expect(wroteEverything)
     let written = output.property(forKey: .dataWrittenToMemoryStreamKey) as? Data
     #expect(written == preamble + fileContent + epilogue)
   }
 
-  @Test("writeMultipartBody aborts without the closing boundary when the file is shorter than measured")
-  func writeMultipartBodyAbortsOnShortFile() throws {
+  @Test("the writer stops without the closing boundary when the file is shorter than measured")
+  func writerStopsOnShortFile() async throws {
     let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("wmb-short-\(UUID().uuidString)")
     let fileContent = Data("only ten!!".utf8) // 10 bytes
     try fileContent.write(to: tempFile)
     defer { try? FileManager.default.removeItem(at: tempFile) }
 
-    let fileHandle = try FileHandle(forReadingFrom: tempFile)
-    defer { try? fileHandle.close() }
-
     let output = OutputStream.toMemory()
-    output.open()
-    defer { output.close() }
-
     let preamble = Data("PREAMBLE".utf8)
     let epilogue = Data("EPILOGUE".utf8)
     // Claim the file is larger than it is, as if it shrank after being measured.
-    let ok = InternalMediaClient.writeMultipartBody(
-      fileHandle: fileHandle, fileSize: fileContent.count + 100,
-      preamble: preamble, epilogue: epilogue, to: output
+    let writer = MultipartBodyWriter(
+      fileHandle: try FileHandle(forReadingFrom: tempFile), fileSize: fileContent.count + 100,
+      preamble: preamble, epilogue: epilogue, output: output
     )
 
-    #expect(!ok)
+    let wroteEverything = await finish(writer)
+
+    #expect(!wroteEverything)
     // The preamble and the real file bytes were written, but NOT the closing
     // boundary — a short body must not masquerade as a complete multipart.
     let written = (output.property(forKey: .dataWrittenToMemoryStreamKey) as? Data) ?? Data()
     #expect(written == preamble + fileContent)
+  }
+
+  @Test("the writer stops when its reader closes the stream")
+  func writerStopsWhenTheReaderLeaves() async throws {
+    let (input, writer) = try pairedWriter(fileSize: 1024 * 1024)
+    input.open()
+
+    async let wroteEverything = finish(writer)
+    // Take part of the body, then go: the request was cancelled, or failed.
+    var buffer = [UInt8](repeating: 0, count: 8192)
+    _ = input.read(&buffer, maxLength: buffer.count)
+    input.close()
+
+    #expect(await wroteEverything == false)
+  }
+
+  @Test("cancel stops a writer whose reader never opened the stream")
+  func cancelStopsAWriterNobodyRead() async throws {
+    // A reader that never opens its end sends the writer no event when it goes, so
+    // without `cancel` the writer would keep the file open for good.
+    let (input, writer) = try pairedWriter(fileSize: 1024 * 1024)
+
+    async let wroteEverything = finish(writer)
+    try await Task.sleep(for: .milliseconds(50))
+    input.close()
+    writer.cancel()
+
+    #expect(await wroteEverything == false)
+  }
+
+  @Test("bodies nobody is reading yet hold no threads")
+  func unreadBodiesHoldNoThreads() async throws {
+    let megabyte = 1024 * 1024
+    let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("stream-test-\(UUID().uuidString)")
+    try Data(repeating: 0x42, count: megabyte).write(to: tempFile)
+    defer { try? FileManager.default.removeItem(at: tempFile) }
+
+    // A hundred uploads waiting for a connection: each has more to send than the
+    // stream will hold, and nobody is taking it.
+    let before = threadCount()
+    var bodies: [(InputStream, MultipartBodyWriter)] = []
+    for _ in 0..<100 {
+      let (stream, _, writer) = try InternalMediaClient.multipartBodyStream(
+        fileURL: tempFile, boundary: "boundary", filename: "big.bin", mimeType: "application/octet-stream", extraFields: []
+      )
+      bodies.append((stream, writer))
+    }
+    try await Task.sleep(for: .milliseconds(300))
+    let during = threadCount()
+
+    for (stream, writer) in bodies {
+      stream.close()
+      writer.cancel()
+    }
+    // Far fewer than one each, with room for whatever else is running alongside.
+    #expect(during - before < 30, "a hundred unread bodies added \(during - before) threads")
+  }
+
+  /// Starts `writer` and waits for it to finish. `true` if it wrote the whole body.
+  private func finish(_ writer: MultipartBodyWriter) async -> Bool {
+    await withCheckedContinuation { continuation in
+      writer.start { continuation.resume(returning: $0) }
+    }
+  }
+
+  /// A writer for a file of `fileSize` zero bytes, and the stream its reader would read.
+  private func pairedWriter(fileSize: Int) throws -> (InputStream, MultipartBodyWriter) {
+    let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("wmb-pair-\(UUID().uuidString)")
+    try Data(count: fileSize).write(to: tempFile)
+    defer { try? FileManager.default.removeItem(at: tempFile) }
+
+    var input: InputStream?
+    var output: OutputStream?
+    Stream.getBoundStreams(withBufferSize: 65_536, inputStream: &input, outputStream: &output)
+    let writer = MultipartBodyWriter(
+      fileHandle: try FileHandle(forReadingFrom: tempFile), fileSize: fileSize,
+      preamble: Data("PREAMBLE".utf8), epilogue: Data("EPILOGUE".utf8), output: try #require(output)
+    )
+    return (try #require(input), writer)
   }
 }
 
@@ -333,4 +448,29 @@ struct InternalMediaClientRelayTests {
     #expect(first.lowerBound < second.lowerBound)
     #expect(second.lowerBound < file.lowerBound)
   }
+}
+
+/// The memory this process is charged for, in bytes.
+private func memoryFootprint() -> UInt64 {
+  var info = task_vm_info_data_t()
+  var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+  let result = withUnsafeMutablePointer(to: &info) {
+    $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+      task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+    }
+  }
+  return result == KERN_SUCCESS ? info.phys_footprint : 0
+}
+
+/// How many threads this process has.
+private func threadCount() -> Int {
+  var threads: thread_act_array_t?
+  var count: mach_msg_type_number_t = 0
+  guard task_threads(mach_task_self_, &threads, &count) == KERN_SUCCESS, let threads else { return 0 }
+  vm_deallocate(
+    mach_task_self_,
+    vm_address_t(UInt(bitPattern: threads)),
+    vm_size_t(Int(count) * MemoryLayout<thread_t>.stride)
+  )
+  return Int(count)
 }
