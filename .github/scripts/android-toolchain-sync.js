@@ -11,15 +11,17 @@ const ISSUE_TITLE = 'Android toolchain drift with WordPress-Android';
 // Starts every tracking issue's body, so the issue is found even if retitled.
 const ISSUE_MARKER = '<!-- android-toolchain-sync';
 
+const LOCAL_CATALOG = 'android/gradle/libs.versions.toml';
+const LOCAL_WRAPPER = 'android/gradle/wrapper/gradle-wrapper.properties';
+
 // `local` and `upstream` name the same version in each repository's catalog;
-// the keys differ between them. `blocking` marks versions the composite build
-// needs to match, and `impact` describes what goes wrong when they don't.
+// the keys differ between them. `impact` describes what goes wrong in the
+// composite build when the versions don't match.
 const TRACKED = [
 	{
 		name: 'AGP',
 		local: 'agp',
 		upstream: 'agp',
-		blocking: true,
 		impact: ( { ours, theirs } ) => [
 			'**AGP:** `./gradlew` in WordPress-Android fails during configuration:',
 			'',
@@ -33,7 +35,6 @@ const TRACKED = [
 		name: 'Kotlin',
 		local: 'kotlin',
 		upstream: 'kotlin-main',
-		blocking: true,
 		impact: () => [
 			'**Kotlin:** the build still configures, but the newer Kotlin Gradle plugin silently wins the classpath for both builds, so one of them compiles with a Kotlin version it is not tested against.',
 		],
@@ -53,10 +54,7 @@ export default async function reportToolchainDrift( {
 	context,
 	core,
 } ) {
-	const localCatalog = await readFile(
-		'android/gradle/libs.versions.toml',
-		'utf8'
-	);
+	const localCatalog = await readFile( LOCAL_CATALOG, 'utf8' );
 	const upstreamCatalog = await fetchUpstream(
 		github,
 		'gradle/libs.versions.toml'
@@ -64,21 +62,23 @@ export default async function reportToolchainDrift( {
 
 	const rows = TRACKED.map( ( entry ) => ( {
 		...entry,
+		file: LOCAL_CATALOG,
 		ours: readCatalogVersion( localCatalog, entry.local, 'GutenbergKit' ),
 		theirs: readCatalogVersion( upstreamCatalog, entry.upstream, UPSTREAM ),
 	} ) );
 
-	// Gradle alone never opens an issue, since a composite build runs on the
-	// root build's wrapper. It is still reported because each AGP release
-	// requires a minimum Gradle version that this repository's build must meet.
+	// The composite build runs this repository's build scripts on
+	// WordPress-Android's Gradle wrapper. Gradle removes deprecated APIs only in
+	// major releases, so only a major mismatch can break those scripts.
 	rows.push( {
 		name: 'Gradle',
-		blocking: false,
+		file: LOCAL_WRAPPER,
+		significant: ( version ) => version.split( '.' )[ 0 ],
+		impact: () => [
+			"**Gradle:** WordPress-Android's Gradle wrapper also runs this repository's build scripts. Gradle removes deprecated APIs in major releases, so scripts that work on one major can fail on the other.",
+		],
 		ours: await readGradleVersion(
-			readFile(
-				'android/gradle/wrapper/gradle-wrapper.properties',
-				'utf8'
-			),
+			readFile( LOCAL_WRAPPER, 'utf8' ),
 			'GutenbergKit',
 			core
 		),
@@ -93,9 +93,7 @@ export default async function reportToolchainDrift( {
 		core.info( `${ row.name }: ours=${ row.ours } theirs=${ row.theirs }` );
 	}
 
-	const drifted = rows.filter(
-		( row ) => row.blocking && row.ours !== row.theirs
-	);
+	const drifted = rows.filter( isDrifted );
 
 	const { owner, repo } = context.repo;
 	// Newest first, so the first match is the most recent tracking issue.
@@ -240,8 +238,8 @@ function readCatalogVersion( toml, key, source ) {
 }
 
 /**
- * Reads the Gradle wrapper version without failing the run. Gradle is only
- * reported, so an unreadable wrapper must not hide AGP or Kotlin drift.
+ * Reads the Gradle wrapper version without failing the run, so an unreadable
+ * wrapper does not hide AGP or Kotlin drift.
  *
  * @param {Promise<string>} properties Wrapper properties contents.
  * @param {string}          source     Repository name for messages.
@@ -275,6 +273,32 @@ function readWrapperVersion( properties, source ) {
 }
 
 /**
+ * @param {Object}      row        Version comparison.
+ * @param {string|null} row.ours   GutenbergKit's version.
+ * @param {string|null} row.theirs WordPress-Android's version.
+ * @return {boolean} Whether the versions differ enough to break the composite build.
+ */
+function isDrifted( row ) {
+	if ( ! row.ours || ! row.theirs ) {
+		return false;
+	}
+	return (
+		significantVersion( row, row.ours ) !==
+		significantVersion( row, row.theirs )
+	);
+}
+
+/**
+ * @param {Object}                       row             Version comparison.
+ * @param {(version: string) => string=} row.significant Reduces a version to the part that must match.
+ * @param {string}                       version         A version from the row.
+ * @return {string} The part of the version that must match.
+ */
+function significantVersion( row, version ) {
+	return row.significant ? row.significant( version ) : version;
+}
+
+/**
  * GitHub stores issue bodies with CRLF line endings.
  *
  * @param {string|null} body Issue body from the API.
@@ -289,8 +313,14 @@ function normalizeBody( body ) {
  * @return {string} A hidden comment identifying the issue and its versions.
  */
 function issueMarker( drifted ) {
+	// Only the significant part, so a deferred issue stays closed across
+	// changes that don't affect the composite build.
 	const versions = drifted.map(
-		( row ) => `${ row.name }=${ row.ours }/${ row.theirs }`
+		( row ) =>
+			`${ row.name }=${ significantVersion(
+				row,
+				row.ours
+			) }/${ significantVersion( row, row.theirs ) }`
 	);
 	return `${ ISSUE_MARKER } ${ versions.join( ' ' ) } -->`;
 }
@@ -303,8 +333,11 @@ function issueMarker( drifted ) {
  */
 function buildIssueBody( rows, drifted, context ) {
 	const { owner, repo } = context.repo;
+	const files = [
+		...new Set( drifted.map( ( row ) => `\`${ row.file }\`` ) ),
+	];
 	const lines = [
-		`This repository's Android toolchain no longer matches [${ UPSTREAM }](https://github.com/${ UPSTREAM }/blob/${ UPSTREAM_REF }/gradle/libs.versions.toml).`,
+		`This repository's Android toolchain no longer matches [${ UPSTREAM }](https://github.com/${ UPSTREAM }/tree/${ UPSTREAM_REF }).`,
 		'',
 		'| Tool | Status | GutenbergKit | WordPress-Android |',
 		'| --- | --- | --- | --- |',
@@ -313,19 +346,25 @@ function buildIssueBody( rows, drifted, context ) {
 		"For anyone who sets `localGutenbergKitPath` in WordPress-Android's `local-builds.gradle`:",
 		'',
 		...drifted.flatMap( ( row ) => [ ...row.impact( row ), '' ] ),
-		'Align `android/gradle/libs.versions.toml` with WordPress-Android. If this repository is ahead, WordPress-Android needs the same upgrade instead.',
+		`Align ${ files.join(
+			' and '
+		) } with WordPress-Android. If this repository is ahead, WordPress-Android needs the same upgrade instead.`,
 	];
 
-	if ( drifted.some( ( row ) => row.name === 'AGP' ) ) {
-		lines.push(
-			'AGP upgrades have needed source changes beyond the version bump.'
-		);
+	const agp = drifted.find( ( row ) => row.name === 'AGP' );
+	if ( agp ) {
+		let note =
+			'AGP upgrades have needed source changes beyond the version bump, and each release requires a minimum Gradle version.';
+		// A newer wrapper here already meets the minimum WordPress-Android's does.
 		const gradle = rows.find( ( row ) => row.name === 'Gradle' );
-		if ( gradle.theirs && gradle.ours !== gradle.theirs ) {
-			lines.push(
-				`Each AGP release also requires a minimum Gradle version, so update \`android/gradle/wrapper/gradle-wrapper.properties\` alongside it; WordPress-Android uses Gradle \`${ gradle.theirs }\`.`
-			);
+		if (
+			gradle.ours &&
+			gradle.theirs &&
+			isOlder( gradle.ours, gradle.theirs )
+		) {
+			note += ` WordPress-Android builds AGP \`${ agp.theirs }\` with Gradle \`${ gradle.theirs }\`, newer than this repository's \`${ gradle.ours }\`.`;
 		}
+		lines.push( note );
 	}
 
 	lines.push(
@@ -338,11 +377,10 @@ function buildIssueBody( rows, drifted, context ) {
 }
 
 /**
- * @param {Object}      row          Version comparison.
- * @param {string}      row.name     Toolchain component.
- * @param {string|null} row.ours     GutenbergKit's version.
- * @param {string|null} row.theirs   WordPress-Android's version.
- * @param {boolean}     row.blocking Whether the composite build needs a match.
+ * @param {Object}      row        Version comparison.
+ * @param {string}      row.name   Toolchain component.
+ * @param {string|null} row.ours   GutenbergKit's version.
+ * @param {string|null} row.theirs WordPress-Android's version.
  * @return {string} The Markdown table row.
  */
 function formatRow( row ) {
@@ -356,10 +394,9 @@ function formatRow( row ) {
 }
 
 /**
- * @param {Object}      row          Version comparison.
- * @param {string|null} row.ours     GutenbergKit's version.
- * @param {string|null} row.theirs   WordPress-Android's version.
- * @param {boolean}     row.blocking Whether the composite build needs a match.
+ * @param {Object}      row        Version comparison.
+ * @param {string|null} row.ours   GutenbergKit's version.
+ * @param {string|null} row.theirs WordPress-Android's version.
  * @return {string} The table status cell.
  */
 function formatStatus( row ) {
@@ -369,7 +406,7 @@ function formatStatus( row ) {
 	if ( row.ours === row.theirs ) {
 		return '🟢 In sync';
 	}
-	return row.blocking ? '🔴 Drifted' : '🟡 Differs';
+	return isDrifted( row ) ? '🔴 Drifted' : '🟢 Compatible';
 }
 
 /**
@@ -378,4 +415,25 @@ function formatStatus( row ) {
  */
 function formatVersion( version ) {
 	return version ? `\`${ version }\`` : 'unknown';
+}
+
+/**
+ * Compares dot-separated numeric parts; a suffix such as `-rc-1` is ignored.
+ *
+ * @param {string} version The version to check.
+ * @param {string} other   The version to compare against.
+ * @return {boolean} Whether `version` is older than `other`.
+ */
+function isOlder( version, other ) {
+	const parse = ( value ) =>
+		value.split( '.' ).map( ( part ) => parseInt( part, 10 ) || 0 );
+	const a = parse( version );
+	const b = parse( other );
+	for ( let i = 0; i < Math.max( a.length, b.length ); i++ ) {
+		const difference = ( a[ i ] ?? 0 ) - ( b[ i ] ?? 0 );
+		if ( difference !== 0 ) {
+			return difference < 0;
+		}
+	}
+	return false;
 }
