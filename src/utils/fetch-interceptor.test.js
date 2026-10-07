@@ -109,6 +109,30 @@ describe( 'initializeFetchInterceptor', () => {
 		);
 	} );
 
+	it( "doesn't log requests to the editor's own URL schemes", async () => {
+		const passThrough = global.fetch;
+		initializeFetchInterceptor();
+
+		await window.fetch(
+			'gbk-upload://upload/sessions/abc/chunks?offset=0',
+			{
+				method: 'POST',
+				body: new ArrayBuffer( 8 ),
+			}
+		);
+		await window.fetch( 'gbk-media-file:///Uploads/a/.preview.jpg' );
+		await window.fetch( '/wp-json/wp/v2/posts' );
+		await waitForAsyncLogging();
+
+		expect( passThrough ).toHaveBeenCalledTimes( 3 );
+		expect( bridge.onNetworkRequest ).toHaveBeenCalledTimes( 1 );
+		expect( bridge.onNetworkRequest ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				url: '/wp-json/wp/v2/posts',
+			} )
+		);
+	} );
+
 	describe( 'request header capture', () => {
 		it( 'should capture headers from plain object with string URL', async () => {
 			initializeFetchInterceptor();

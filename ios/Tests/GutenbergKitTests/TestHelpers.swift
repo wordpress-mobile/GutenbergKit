@@ -59,6 +59,18 @@ func plantBundles(
     return planted
 }
 
+extension Data {
+    /// Whether this holds the same bytes as `other`, for an `#expect`.
+    ///
+    /// Not `==` in the `#expect` itself: Swift Testing describes a failed `==` between two
+    /// collections by working out the difference between them. For megabytes of bytes that takes
+    /// most of an hour on the thread the test runs on — and on the main actor, every other
+    /// main-actor test in the run waits behind it.
+    func hasSameBytes(as other: Data) -> Bool {
+        self == other
+    }
+}
+
 protocol MakesTestFixtures {
     static var testSiteURL: URL { get }
     static var testApiRoot: URL { get }

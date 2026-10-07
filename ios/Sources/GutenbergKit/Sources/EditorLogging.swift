@@ -29,11 +29,14 @@ extension Logger {
     /// Logs editor localization activity
     static let localization = Logger(subsystem: "GutenbergKit", category: "localization")
 
-    /// Logs upload server activity
-    static let uploadServer = Logger(subsystem: "GutenbergKit", category: "upload-server")
+    /// Logs native media upload activity
+    static let mediaUpload = Logger(subsystem: "GutenbergKit", category: "media-upload")
 
     /// Logs calls into the editor's JavaScript bridge
     static let bridge = Logger(subsystem: "GutenbergKit", category: "bridge")
+
+    /// Logs the native REST relay's activity
+    static let restRelay = Logger(subsystem: "GutenbergKit", category: "rest-relay")
 }
 
 public struct SignpostMonitor: Sendable {

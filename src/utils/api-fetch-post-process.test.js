@@ -274,4 +274,92 @@ describe( "core's media upload post-process middleware", () => {
 
 		expect( error ).not.toHaveBeenCalled();
 	} );
+
+	describe( 'over the native upload scheme', () => {
+		const SESSION = '0f8fad5b-d9cb-469f-a165-70867728950e';
+
+		beforeEach( () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: SITE_API_ROOT,
+				authHeader: 'Bearer test-token',
+				siteApiNamespace: [],
+				namespaceExcludedPaths: [],
+				nativeUploadScheme: 'gbk-upload',
+			} );
+		} );
+
+		/**
+		 * A fake scheme whose `finish` relays WordPress's 5xx and attachment ID,
+		 * with `wordpress` answering everything sent straight to the site.
+		 *
+		 * @param {(path: string) => unknown} wordpress Answers direct requests by URL.
+		 */
+		function installScheme( wordpress ) {
+			global.fetch = vi.fn( ( url ) => {
+				const path = String( url );
+				if ( path === 'gbk-upload://upload/sessions' ) {
+					return Promise.resolve(
+						makeResponse( 201, null, { id: SESSION } )
+					);
+				}
+				if ( path.includes( `/sessions/${ SESSION }/chunks` ) ) {
+					return Promise.resolve(
+						makeResponse( 200, null, { received: 4 } )
+					);
+				}
+				if ( path.endsWith( `/sessions/${ SESSION }/finish` ) ) {
+					return Promise.resolve( makeResponse( 500, '42' ) );
+				}
+				return wordpress( path );
+			} );
+		}
+
+		it( 'retries post-process for an upload finished over the scheme', async () => {
+			installScheme( ( path ) =>
+				Promise.resolve(
+					path.includes( 'post-process' )
+						? makeResponse( 200, null, { id: 42 } )
+						: makeResponse( 404, null )
+				)
+			);
+
+			await expect( apiFetch( uploadOptions() ) ).resolves.toEqual( {
+				id: 42,
+			} );
+
+			const paths = global.fetch.mock.calls.map( ( [ url ] ) =>
+				String( url )
+			);
+			expect( paths.at( -1 ) ).toContain(
+				`${ SITE_API_ROOT }wp/v2/media/42/post-process`
+			);
+			expect( error ).not.toHaveBeenCalled();
+		} );
+
+		it( 'relays the orphan cleanup over the scheme', async () => {
+			installScheme( ( path ) =>
+				Promise.resolve(
+					path.includes( '/media/42/delete' )
+						? makeResponse( 200, null, { deleted: true } )
+						: makeResponse( 500, null )
+				)
+			);
+
+			await expect( apiFetch( uploadOptions() ) ).rejects.toBeDefined();
+
+			const calls = global.fetch.mock.calls;
+			const [ lastURL, lastInit ] = calls.at( -1 );
+			expect(
+				calls.filter( ( [ url ] ) =>
+					String( url ).includes( 'post-process' )
+				)
+			).toHaveLength( 5 );
+			expect( String( lastURL ) ).toBe(
+				'gbk-upload://upload/media/42/delete'
+			);
+			expect( JSON.parse( lastInit.body ) ).toEqual( {
+				query: '?force=true',
+			} );
+		} );
+	} );
 } );

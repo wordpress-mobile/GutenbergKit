@@ -183,21 +183,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let editorService: EditorService
     private let httpClient: any EditorHTTPClientProtocol
     private let mediaPicker: MediaPickerController?
+    let nativeFileInput = NativeFileInput()
     private let controller: GutenbergEditorController
     private let bundleProvider: EditorAssetBundleProvider
     private let lockdownModeMonitor: LockdownModeMonitor
-    /// Whether the host supplied anything for the native upload server to route.
-    ///
-    /// Read twice by `startUploadServer()` — once before starting, once after the bind
-    /// returns — and the two reads have to agree. They did not: the first gained
-    /// `mediaUploader` and the second was left checking the processor alone, so an
-    /// uploader-only host bound a listener, immediately stopped it, and fell back to the
-    /// WebView path with nothing logged. One property, so they cannot disagree again.
-    private var hasMediaHandling: Bool {
-        mediaProcessor != nil || mediaUploader != nil
-    }
-
-    private(set) var uploadServer: MediaUploadServer?
+    /// Receives the page's media uploads over `gbk-upload:` and delivers them. Enabled
+    /// when the host supplied a processor or uploader and the site credentials to
+    /// upload with; ``stopMediaHandling()`` disables it.
+    let mediaUploadSchemeHandler: MediaUploadSchemeHandler
 
     // MARK: - Private Properties (UI)
 
@@ -321,6 +314,24 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // Register media file scheme handler for serving local media via gbk-media-file:// URLs
         config.setURLSchemeHandler(MediaFileSchemeHandler(), forURLScheme: MediaFileSchemeHandler.scheme)
 
+        // The page sends the site's REST API requests here for native code to relay.
+        config.setURLSchemeHandler(
+            RestRelaySchemeHandler(relay: RestRelay(configuration: configuration)),
+            forURLScheme: RestRelaySchemeHandler.scheme
+        )
+
+        // Scheme handlers can only be registered before the web view exists, so the
+        // upload handler is built here, from what the host handed over, even though the
+        // page won't use it until it loads.
+        let uploadHandler = MediaUploadSchemeHandler(service: Self.makeMediaUploadService(
+            configuration: configuration,
+            httpClient: httpClient,
+            processor: mediaProcessor,
+            uploader: mediaUploader
+        ))
+        self.mediaUploadSchemeHandler = uploadHandler
+        config.setURLSchemeHandler(uploadHandler, forURLScheme: MediaUploadSchemeHandler.scheme)
+
         config.applicationNameForUserAgent = "GutenbergKit/\(GutenbergKitVersion.version)"
 
         self.webView = GBWebView(frame: .zero, configuration: config)
@@ -392,18 +403,17 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         removeNavigationOverlay()
     }
 
-    /// Releases the editor's media handling: stops the local upload server, drops the
-    /// host's ``mediaProcessor`` and ``mediaUploader``, and withdraws the upload
-    /// endpoint from the page.
+    /// Releases the editor's media handling: stops accepting native uploads, cancels
+    /// the ones in flight, and drops the host's ``mediaProcessor`` and ``mediaUploader``.
     ///
-    /// Most hosts never need this. Releasing the editor runs `deinit`, which does the
-    /// same work. It is only required when a handler holds the editor back — which
-    /// happens if you conformed the object that owns it, the one shape ``mediaProcessor``
-    /// asks you to avoid — because that cycle keeps `deinit` from ever
-    /// running, stranding a bound loopback `NWListener` for every editor opened.
+    /// Most hosts never need this. Releasing the editor releases the handlers with it.
+    /// It is only required when a handler holds the editor back — which happens if you
+    /// conformed the object that owns it, the one shape ``mediaProcessor`` asks you to
+    /// avoid — because that cycle keeps the editor, and the handlers, alive forever.
     ///
-    /// Terminal, not a pause: this editor cannot upload or delete media afterwards, and
-    /// any upload in flight is cancelled — though cancellation is cooperative, so a
+    /// Terminal, not a pause: this editor cannot upload or delete media natively
+    /// afterwards. Uploads the page starts later go straight to WordPress instead. Any
+    /// upload in flight is cancelled — though cancellation is cooperative, so a
     /// `processFile` that ignores it runs to completion and holds the processor until it
     /// returns. Call it when the editor is going away — not
     /// when it is covered, backgrounded, or otherwise coming back. Calling it more than
@@ -428,74 +438,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // What is *not* observable is whether a detachment is permanent. A host may
         // re-present or re-attach the same editor instance later, and at the moment of
         // the callback that is indistinguishable from the last one. Because this call is
-        // terminal — the listener cannot restart and the page is told to stop using it —
-        // guessing wrong permanently disables media in an editor that survived, which is
+        // terminal — the handlers are released and cannot be recovered — guessing wrong
+        // permanently disables native media in an editor that survived, which is
         // strictly worse than the leak it would have prevented.
         //
-        // So this stays the host's call while the action is terminal. Make the endpoint
-        // recoverable (have the page request the port over the bridge instead of baking
-        // it in at document start) and the trade reverses.
-        uploadServer?.stop()
-        uploadServer = nil
+        // So this stays the host's call while the action is terminal.
+        mediaUploadSchemeHandler.disable()
         mediaProcessor = nil
         mediaUploader = nil
-        revokeNativeUploadEndpoint()
-    }
-
-    /// Withdraws the loopback endpoint from the page so media requests fall back to the
-    /// WebView's default path instead of failing against a port nothing is listening on.
-    ///
-    /// `nativeMediaUploadMiddleware` re-reads `nativeUploadPort`/`nativeUploadToken` on
-    /// every request and skips the native path when no port is advertised — but it
-    /// deliberately does *not* retry a failed native upload directly, on the stated
-    /// assumption that an advertised port is a reachable one ("cleared on stop"). Until
-    /// this existed nothing cleared it, so stopping the server left every image insert
-    /// failing with a connection error on a working connection.
-    ///
-    /// Two copies hold the endpoint and both have to go: the live page, and the injected
-    /// user script, which would otherwise restore the dead port verbatim at the next
-    /// document start — including the reload that recovers a terminated WebContent
-    /// process.
-    private func revokeNativeUploadEndpoint() {
-        webView.evaluateJavaScript(
-            """
-            if (window.GBKit) {
-                window.GBKit.nativeUploadPort = null;
-                window.GBKit.nativeUploadToken = null;
-            }
-            """
-        ) { _, error in
-            // Logged rather than surfaced: this runs while the editor is going away, so
-            // there is no one to tell. Silence would be worse than noise — a failure here
-            // leaves the live page pointed at a port nothing is listening on, which is the
-            // exact failure this method exists to prevent.
-            if let error {
-                Logger.uploadServer.error("Failed to withdraw the native upload endpoint from the page: \(error)")
-            }
-        }
-
-        // Rebuilt with `uploadServer` already nil, so the replacement advertises no
-        // endpoint. The load path is the only other `addUserScript` call site, so removing
-        // all of them drops exactly the script being replaced.
-        webView.configuration.userContentController.removeAllUserScripts()
-        guard let dependencies else { return }
-        do {
-            webView.configuration.userContentController.addUserScript(
-                try buildEditorConfiguration(dependencies: dependencies)
-            )
-        } catch {
-            // The load path lets this throw and aborts; here the page is already up, so
-            // the cost is narrower and lands later: the next document start gets no
-            // `window.GBKit` at all rather than one with a stale port.
-            Logger.uploadServer.error("Failed to rebuild the editor configuration after stopping media handling: \(error)")
-        }
-    }
-
-    deinit {
-        // The ordinary path: with no cycle, ARC releases the handlers when the editor
-        // goes and this stops the server. A host that retains the editor from its own
-        // handler never reaches here — `stopMediaHandling()` is its way out.
-        uploadServer?.stop()
     }
 
     // MARK: - Async Flow (EditorDependencyLoaderDelegate)
@@ -527,11 +477,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // MARK: - Shared Loading Path: Load Editor into WebView
 
     /// Runs `loadEditor(dependencies:)` — the step both flows end on.
-    ///
-    /// Not cancellable, and it holds the editor until the load returns: cancelling it
-    /// mid-`startUploadServer()` silently disables native uploads for the session
-    /// (#357). The hold is short — the server bind is capped by
-    /// `HTTPServer.defaultStartTimeout`.
     private func startLoadingEditor(dependencies: EditorDependencies) {
         Task(priority: .userInitiated) { [weak self] in
             do {
@@ -555,9 +500,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         // Set asset bundle for the URL scheme handler to serve cached plugin/theme assets
         self.bundleProvider.set(bundle: dependencies.assetBundle)
-
-        // Start the local upload server for native media processing
-        await startUploadServer()
 
         // Build and inject editor configuration as window.GBKit
         let editorConfig = try buildEditorConfiguration(dependencies: dependencies)
@@ -594,8 +536,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let gbkitGlobal = try GBKitGlobal(
             configuration: self.configuration,
             dependencies: dependencies,
-            nativeUploadPort: uploadServer.map { Int($0.port) },
-            nativeUploadToken: uploadServer?.token
+            nativeUploadScheme: mediaUploadSchemeHandler.isEnabled ? MediaUploadSchemeHandler.scheme : nil,
+            restRelayBaseURL: RestRelaySchemeHandler.baseURL
         )
         return WKUserScript(
             source: Self.configurationScript(gbkitGlobal: try gbkitGlobal.toString()),
@@ -620,65 +562,37 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         """
     }
 
-    /// Starts the local HTTP server for routing file uploads through native processing.
+    /// The service behind the upload scheme handler, or `nil` when the editor has no
+    /// native media handling.
     ///
-    /// The server binds to localhost on a random port. If it fails to start, the editor
-    /// falls back to Gutenberg's default upload behavior (the JS override won't activate
-    /// because `nativeUploadPort` will be nil in GBKit).
-    func startUploadServer() async {
-        // Nothing to route through the native server unless the host provided a
-        // processor or an uploader. The editor owns whichever it was given — both
-        // properties are strong — so there's no released-before-load case to guard
-        // against; they live as long as it does.
-        guard hasMediaHandling else {
-            return
-        }
-
-        // The native upload server relays through InternalMediaClient, which needs a
-        // site root and an auth header (every host provides one — the editor injects
-        // it because the WebView has no auth cookies). Without both there is nothing
-        // to upload through, so leave the server down and let uploads fall to the
-        // default WebView path rather than start a server that could only fail.
-        //
-        // Only a `mediaProcessor` can reach this return: a `mediaUploader` without
-        // usable credentials already trapped in `init`, so by here it has credentials.
-        //
-        // `MediaServerCredentials` owns both the predicate and that trap so they are
-        // reachable from the host test suite — this file is not.
+    /// Native uploads need something to route — a processor or an uploader — and the
+    /// site credentials to deliver with: `InternalMediaClient` needs a site root and an
+    /// auth header (every host provides one; the web view has no auth cookies). Without
+    /// both, uploads go straight from the page to WordPress. Only a processor can be
+    /// missing credentials here: a `mediaUploader` without them already trapped in
+    /// `init`.
+    private static func makeMediaUploadService(
+        configuration: EditorConfiguration,
+        httpClient: any EditorHTTPClientProtocol,
+        processor: (any MediaProcessor)?,
+        uploader: (any MediaUploader)?
+    ) -> MediaUploadService? {
+        guard processor != nil || uploader != nil else { return nil }
         guard MediaServerCredentials.areUsable(
             siteApiRoot: configuration.siteApiRoot,
             authHeader: configuration.authHeader
         ) else {
-            return
+            return nil
         }
-
-        let internalClient = InternalMediaClient(
-            httpClient: httpClient.uploadClient(),
-            siteApiRoot: configuration.siteApiRoot,
-            siteApiNamespace: configuration.siteApiNamespace
-        )
-
-        do {
-            let server = try await MediaUploadServer.start(
-                processor: mediaProcessor,
-                uploader: mediaUploader,
-                internalClient: internalClient
+        return MediaUploadService(
+            processor: processor,
+            uploader: uploader,
+            internalClient: InternalMediaClient(
+                httpClient: httpClient.uploadClient(),
+                siteApiRoot: configuration.siteApiRoot,
+                siteApiNamespace: configuration.siteApiNamespace
             )
-
-            // `stopMediaHandling()` can land while the bind is in flight: it is a
-            // main-actor call and this is suspended. It clears both handlers, so the
-            // entry guard's condition failing here means media handling was stopped after
-            // this started, and storing the server would undo a terminal call — the page
-            // would be handed a port that was just withdrawn, and in the cycle the call
-            // exists for, `deinit` never runs to stop it.
-            guard hasMediaHandling else {
-                server.stop()
-                return
-            }
-            self.uploadServer = server
-        } catch {
-            Logger.uploadServer.error("Failed to start upload server: \(error). Falling back to default upload behavior.")
-        }
+        )
     }
 
     /// Deletes all cached editor data for all sites
@@ -905,16 +819,50 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             return
         }
         do {
-            let object = try makeJavaScriptCompatibleDictionary(with: selection)
-            _ = try await webView.callAsyncJavaScript(
-                "window.blockInserter?.insertMedia(selection)",
-                arguments: ["selection": object],
-                in: nil,
-                contentWorld: .page
-            )
+            var items: [Any] = []
+            var files: [URL] = []
+            for media in selection {
+                let (item, file) = try javaScriptMediaItem(for: media)
+                items.append(item)
+                if let file {
+                    files.append(file)
+                }
+            }
+            try await nativeFileInput.offer(files, to: webView) {
+                _ = try await webView.callAsyncJavaScript(
+                    "return await window.blockInserter?.insertMedia(selection)",
+                    arguments: ["selection": items],
+                    in: nil,
+                    contentWorld: .page
+                )
+            }
         } catch {
             assertionFailure("Failed to serialize or insert media: \(error)")
         }
+    }
+
+    /// The media item as the page's `insertMedia` takes it, and the file to offer the
+    /// page for it.
+    ///
+    /// A file the editor imported is offered through ``NativeFileInput``, and its item
+    /// is marked `nativeFile` so the page asks for it. Anything else — a media library
+    /// item, a remote URL, any file on an OS that can't offer one — goes as it is, and
+    /// the page fetches it.
+    func javaScriptMediaItem(for media: MediaInfo) throws -> (item: Any, file: URL?) {
+        let item = try makeJavaScriptCompatibleDictionary(with: media)
+        guard NativeFileInput.isSupported,
+              media.id == nil,
+              var dictionary = item as? [String: Any],
+              let url = media.url.flatMap(URL.init(string:)),
+              url.scheme == MediaFileSchemeHandler.scheme,
+              let fileURL = MediaFileManager.fileURL(for: url),
+              FileManager.default.fileExists(atPath: fileURL.path(percentEncoded: false)) else {
+            return (item, nil)
+        }
+
+        dictionary["type"] = media.type ?? MediaFileManager.mimeType(forExtension: fileURL.pathExtension)
+        dictionary["nativeFile"] = true
+        return (dictionary, fileURL)
     }
 
     private func insertPatternFromInserter(_ patternName: String) {

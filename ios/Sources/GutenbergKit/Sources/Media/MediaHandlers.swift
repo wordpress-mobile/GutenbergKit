@@ -58,8 +58,8 @@ public enum ProcessedProxyFile: Sendable {
 ///
 /// Deliberately **not** class-bound. ``EditorViewController`` holds its processor
 /// strongly for its own lifetime, so a conformer that holds the view controller back
-/// closes a retain cycle ARC cannot break — neither object is freed, and the editor
-/// stops tearing down its upload server. Dropping the class requirement lets you
+/// closes a retain cycle ARC cannot break — neither object is freed. Dropping the
+/// class requirement lets you
 /// conform with a `struct` capturing only what the transform needs, which is the
 /// shape that avoids this; a class bound invited the opposite. Note a
 /// value type is not automatic protection — a `struct` that stores the view
