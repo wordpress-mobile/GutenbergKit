@@ -2,6 +2,7 @@ package com.example.gutenbergkit
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -47,6 +48,8 @@ import com.example.gutenbergkit.ui.dialogs.AddConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DeleteConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DiscoveringSiteDialog
 import com.example.gutenbergkit.ui.theme.AppTheme
+import org.json.JSONArray
+import org.json.JSONException
 import org.wordpress.gutenberg.BuildConfig
 import uniffi.wp_mobile.Account
 
@@ -63,9 +66,7 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
 
     companion object {
         const val EXTRA_CONFIGURATION = "configuration"
-        private const val WPCOM_TOKEN_EXTRA = "wpcom-token"
-        private const val WPCOM_SITE_ID_EXTRA = "wpcom-site-id"
-        private const val WPCOM_SITE_HOST_EXTRA = "wpcom-site-host"
+        private const val ACCOUNTS_EXTRA = "accounts"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -80,7 +81,7 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
         // Add local WordPress option
         configurations.add(ConfigurationItem.LocalWordPress)
 
-        signInToWpComFromLaunchExtrasIfNeeded()
+        signInFromLaunchExtrasIfNeeded()
 
         // Load saved accounts
         configurations.addAll(
@@ -129,37 +130,55 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
     }
 
     /**
-     * Stores the WordPress.com site named by the `wpcom-token`, `wpcom-site-id` and `wpcom-site-host` launch
-     * extras as an account, replacing any account already stored for that site. Lets an emulator be signed in
-     * without the OAuth flow – see `bin/demo-app-login.sh`.
+     * Stores the sites in the `accounts` launch extra as accounts, replacing any account already stored for the
+     * same site. Lets an emulator be signed in without a login flow – see `bin/demo-app-login.sh`.
      *
-     * The extras are removed once read, so a recreated activity doesn't add back a site that was deleted in
-     * the meantime.
+     * The extra is removed once read, so a recreated activity doesn't add back a site that was deleted in the
+     * meantime.
      */
-    private fun signInToWpComFromLaunchExtrasIfNeeded() {
-        val token = intent.getStringExtra(WPCOM_TOKEN_EXTRA)?.trim()?.takeIf { it.isNotEmpty() }
-        val siteId = intent.getStringExtra(WPCOM_SITE_ID_EXTRA)?.trim()?.toULongOrNull()
-        val siteHost = intent.getStringExtra(WPCOM_SITE_HOST_EXTRA)?.trim()?.takeIf { it.isNotEmpty() }
-        intent.removeExtra(WPCOM_TOKEN_EXTRA)
-        intent.removeExtra(WPCOM_SITE_ID_EXTRA)
-        intent.removeExtra(WPCOM_SITE_HOST_EXTRA)
+    private fun signInFromLaunchExtrasIfNeeded() {
+        val json = intent.getStringExtra(ACCOUNTS_EXTRA) ?: return
+        intent.removeExtra(ACCOUNTS_EXTRA)
 
-        if (token == null || siteId == null || siteHost == null) return
+        for (account in accountsFromJson(json)) {
+            val siteApiRoot = ConfigurationItem.ConfiguredEditor.fromAccount(account).siteApiRoot
+            accountRepository.all()
+                .map { ConfigurationItem.ConfiguredEditor.fromAccount(it) }
+                .filter { it.siteApiRoot == siteApiRoot }
+                .forEach { accountRepository.remove(it.accountId) }
 
-        val siteApiRoot = AuthenticationManager.wordPressComSiteApiRoot(siteId)
-        accountRepository.all()
-            .filterIsInstance<Account.WpCom>()
-            .filter { it.siteApiRoot == siteApiRoot }
-            .forEach { accountRepository.remove(it.id) }
+            accountRepository.store(account)
+        }
+    }
 
-        accountRepository.store(
-            Account.WpCom(
-                id = 0u,
-                username = siteHost,
-                token = token,
-                siteApiRoot = siteApiRoot
-            )
-        )
+    /**
+     * Reads the `accounts` launch extra, which is a JSON array. Each entry is a self-hosted site with its
+     * credentials and REST API root, or a WordPress.com site with a bearer token. Anything else is skipped.
+     */
+    private fun accountsFromJson(json: String): List<Account> = try {
+        val entries = JSONArray(json)
+        (0 until entries.length()).mapNotNull { index ->
+            val entry = entries.getJSONObject(index)
+            when {
+                entry.has("wpcomToken") -> Account.WpCom(
+                    id = 0u,
+                    username = entry.getString("wpcomSiteHost"),
+                    token = entry.getString("wpcomToken"),
+                    siteApiRoot = AuthenticationManager.wordPressComSiteApiRoot(entry.getLong("wpcomSiteId").toULong())
+                )
+                entry.has("siteUrl") -> Account.SelfHostedSite(
+                    id = 0u,
+                    domain = entry.getString("siteUrl"),
+                    username = entry.getString("username"),
+                    password = entry.getString("password"),
+                    siteApiRoot = entry.getString("siteApiRoot")
+                )
+                else -> null
+            }
+        }
+    } catch (e: JSONException) {
+        Log.w("MainActivity", "Ignoring a malformed `accounts` launch extra", e)
+        emptyList()
     }
 
     private fun launchSitePreparation(config: ConfigurationItem) {
