@@ -117,9 +117,18 @@ byte for byte.
 
 ## Background and timeouts
 
--   An upload holds a `performExpiringActivity` assertion, which keeps the app running for
-    about 30 seconds after it leaves the foreground. A longer upload is interrupted when iOS
-    suspends the app.
+-   Uploads in flight share one `performExpiringActivity` assertion, which keeps the app
+    running for about 30 seconds after it leaves the foreground. A longer upload is
+    interrupted when iOS suspends the app.
+-   The assertion is only ever taken in the foreground. iOS counts the 30 seconds once for
+    the app, from when it left the foreground, so a later assertion buys nothing — and one
+    taken after the time is up gets the app terminated instead of suspended (measured on
+    iOS 27). An upload that begins in the background shares the assertion already held, or
+    runs without one.
+-   No part of an upload takes a thread of its own. The assertion is shared, and
+    `MultipartBodyWriter` feeds each request's body from stream events, so an upload waiting
+    for a connection costs a buffer and an open file. How many run at once is up to the
+    network: in the Simulator, 400 started together peaked at 29 threads in the app.
 -   A background `URLSession` would survive suspension. GutenbergKit doesn't use one: when
     WordPress was slow to answer, `nsurlsessiond` re-sent the whole upload about every 100
     seconds, and each copy became an attachment. A host `MediaUploader` that uses one has to
@@ -134,8 +143,8 @@ byte for byte.
     recovery over the scheme), `native-files.test.js`, and
     `api-fetch-upload-middleware.test.js` (the Android loopback transport).
 -   Swift, on the host: `MediaUploadSchemeHandlerTests`, `MediaUploadSessionStoreTests`,
-    `MediaUploadServiceTests`, `InternalMediaClientTests`, `MediaFileSchemeHandlerTests`,
-    `MediaImportTests`, `NativeFileInputTests`.
+    `MediaUploadServiceTests`, `InternalMediaClientTests`, `BackgroundActivityTests`,
+    `MediaFileSchemeHandlerTests`, `MediaImportTests`, `NativeFileInputTests`.
 -   Swift, in the simulator: `EditorViewControllerMediaTeardownTests` runs the upload
     protocol in the editor's own `WKWebView`, and has a page's file input receive a file
     from `NativeFileInput`.

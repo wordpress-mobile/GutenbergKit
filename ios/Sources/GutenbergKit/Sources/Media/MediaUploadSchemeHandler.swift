@@ -47,6 +47,9 @@ final class MediaUploadSchemeHandler: NSObject, WKURLSchemeHandler {
         self.service = service
         self.store = store
         super.init()
+        // The handler is made with the editor, in the foreground: from here the shared
+        // assertion knows when the app leaves it, before any upload asks for one.
+        SharedBackgroundActivity.startObservingApplicationState()
         Task.detached(priority: .utility) {
             MediaUploadSessionStore.removeAbandonedStaging()
         }
