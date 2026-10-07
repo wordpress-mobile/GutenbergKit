@@ -17,8 +17,12 @@ class AuthenticationManager {
     ///
     /// Discovers the site's supported authentication mechanism and presents
     /// the appropriate login flow. Returns the authenticated account on success.
+    ///
+    /// A WordPress.com site skips the login flow when one of `storedAccounts`
+    /// already holds a token that can edit it.
     func startAuthentication(
         siteUrl: String,
+        storedAccounts: [Account],
         presentationContext: ASWebAuthenticationPresentationContextProviding
     ) async throws -> Account {
         let client = WordPressLoginClient(urlSession: URLSession(configuration: .ephemeral))
@@ -37,6 +41,10 @@ class AuthenticationManager {
                 presentationContext: presentationContext
             )
         } else if details.authentication.oauthEndpoints != nil {
+            if let account = await reuseStoredWpComToken(from: storedAccounts, siteUrl: siteUrl) {
+                return account
+            }
+
             return try await authenticateWithOAuth(
                 siteUrl: siteUrl,
                 presentationContext: presentationContext
@@ -78,6 +86,40 @@ class AuthenticationManager {
             password: credentials.password,
             siteApiRoot: apiRootUrl
         )
+    }
+
+    // MARK: - Stored Token (WordPress.com)
+
+    /// Builds an account for a WordPress.com site from a token the app already holds, such as one
+    /// stored by `bin/demo-app-login.sh`.
+    ///
+    /// Returns `nil` when no stored token belongs to a user who can edit the site, leaving the
+    /// caller to fall back to OAuth.
+    private func reuseStoredWpComToken(from accounts: [Account], siteUrl: String) async -> Account? {
+        let host = URL(string: siteUrl)?.host ?? siteUrl
+        let tokens = accounts.compactMap { account -> String? in
+            guard case .wpCom(_, _, let token, _) = account else { return nil }
+            return token
+        }
+
+        for token in Set(tokens) {
+            let client = WPComApiClient(authentication: .bearer(token: token))
+            guard
+                let site = try? await client.sites.getSite(wpComSiteIdentifier: .slug(value: host)).data,
+                site.capabilities.hasCap(capability: .editPosts)
+            else {
+                continue
+            }
+
+            return .wpCom(
+                id: 0,
+                username: host,
+                token: token,
+                siteApiRoot: Account.wpComSiteApiRoot(siteId: site.id)
+            )
+        }
+
+        return nil
     }
 
     // MARK: - OAuth2 (WordPress.com)
@@ -122,13 +164,12 @@ class AuthenticationManager {
         guard let blogId = tokenData.blogId else {
             throw AuthenticationError.missingBlogId
         }
-        let siteApiRoot = "https://public-api.wordpress.com/wp/v2/sites/\(blogId)"
 
         return .wpCom(
             id: 0,
             username: host,
             token: tokenData.accessToken,
-            siteApiRoot: siteApiRoot
+            siteApiRoot: Account.wpComSiteApiRoot(siteId: blogId)
         )
     }
 
