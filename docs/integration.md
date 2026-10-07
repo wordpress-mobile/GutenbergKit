@@ -300,6 +300,32 @@ val configuration = EditorConfiguration.builder()
     .build()
 ```
 
+### Authentication Header Scope
+
+GutenbergKit sends `authHeader` only to the site and its API — the origins of `siteURL` and `siteApiRoot`. Assets and requests on any other host go out without it.
+
+If the site's credentials belong on other hosts, name them with `setAuthHeaderDomains`. An entry is one host exactly (`s0.wp.com`), or with a leading `*.`, a domain and every subdomain of it (`*.wp.com`). Named hosts receive the header over HTTPS only.
+
+A site reached through WordPress.com is served from more than its own address, and GutenbergKit infers none of it:
+
+```swift
+// iOS
+let configuration = EditorConfigurationBuilder(...)
+    .setAuthHeader("Bearer your-token")
+    .setAuthHeaderDomains(["*.wp.com", "*.files.wordpress.com"])
+    .build()
+```
+
+```kotlin
+// Android
+val configuration = EditorConfiguration.builder(...)
+    .setAuthHeader("Bearer your-token")
+    .setAuthHeaderDomains(setOf("*.wp.com", "*.files.wordpress.com"))
+    .build()
+```
+
+See [Authorization Header Scope](./code/authorization.md) for the full rule and its limits.
+
 ### AJAX Support
 
 Some Gutenberg blocks and features use WordPress AJAX (`admin-ajax.php`) for functionality like form submissions. GutenbergKit supports AJAX requests when properly configured.

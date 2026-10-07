@@ -254,6 +254,14 @@ class SitePreparationViewModel(
         } else {
             arrayOf()
         }
+        // A WordPress.com token is good across WordPress.com, which serves a site's assets from
+        // wp.com and its files from files.wordpress.com. An application password is good for
+        // the one site.
+        val authHeaderDomains = if (wpComSiteId != null) {
+            setOf("*.wp.com", "*.files.wordpress.com")
+        } else {
+            emptySet()
+        }
 
         // Fetch the site's post types. Default the picker to `post` when it's
         // available (the typical case); otherwise pick the first type in the
@@ -278,6 +286,7 @@ class SitePreparationViewModel(
             .setSiteApiNamespace(siteApiNamespace)
             .setNamespaceExcludedPaths(arrayOf())
             .setAuthHeader(config.authHeader)
+            .setAuthHeaderDomains(authHeaderDomains)
             .setTitle("")
             .setContent("")
             .setHideTitle(false)

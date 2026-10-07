@@ -115,6 +115,89 @@ describe( 'api-fetch credentials handling', () => {
 		expect( options.headers.Authorization ).toBe( 'Bearer override-token' );
 	} );
 
+	it.each( [
+		[ 'the site', 'https://example.com/wp-admin/admin-ajax.php' ],
+		[ "the site's API", 'https://example.com/wp-json/wp/v2/posts' ],
+	] )(
+		'should send the auth header with a request by URL to %s',
+		async ( _, url ) => {
+			bridge.getGBKit.mockReturnValue( {
+				siteURL: 'https://example.com',
+				siteApiRoot: 'https://example.com/wp-json/',
+				authHeader: 'Bearer test-token',
+				siteApiNamespace: [ 'wp/v2' ],
+				namespaceExcludedPaths: [],
+			} );
+
+			try {
+				await apiFetch( { url } );
+			} catch {
+				// Ignore errors from the actual fetch
+			}
+
+			const [ requestUrl, options ] = global.fetch.mock.calls[ 0 ];
+
+			// api-fetch adds its own query to the URL
+			expect( requestUrl ).toContain( url );
+			expect( options.headers.Authorization ).toBe( 'Bearer test-token' );
+			expect( options.credentials ).toBe( 'omit' );
+		}
+	);
+
+	it.each( [
+		[ "another party's host", 'https://api.vendor.net/v1/things' ],
+		[ 'a lookalike host', 'https://example.com.vendor.net/v1/things' ],
+		[ "the site's host in the clear", 'http://example.com/wp-json/' ],
+	] )(
+		'should not send the auth header with a request by URL to %s',
+		async ( _, url ) => {
+			bridge.getGBKit.mockReturnValue( {
+				siteURL: 'https://example.com',
+				siteApiRoot: 'https://example.com/wp-json/',
+				authHeader: 'Bearer test-token',
+				siteApiNamespace: [ 'wp/v2' ],
+				namespaceExcludedPaths: [],
+			} );
+
+			try {
+				await apiFetch( { url } );
+			} catch {
+				// Ignore errors from the actual fetch
+			}
+
+			const [ requestUrl, options ] = global.fetch.mock.calls[ 0 ];
+
+			// api-fetch adds its own query to the URL
+			expect( requestUrl ).toContain( url );
+			expect( options.headers?.Authorization ).toBeUndefined();
+			expect( options.credentials ).not.toBe( 'omit' );
+		}
+	);
+
+	it( 'should send the auth header to a place the app names', async () => {
+		bridge.getGBKit.mockReturnValue( {
+			siteURL: 'https://example.wordpress.com',
+			siteApiRoot: 'https://public-api.wordpress.com/',
+			authHeader: 'Bearer test-token',
+			authHeaderDomains: [ '*.wp.com' ],
+			siteApiNamespace: [ 'sites/123/' ],
+			namespaceExcludedPaths: [],
+		} );
+
+		try {
+			await apiFetch( { url: 'https://widgets.wp.com/things' } );
+			await apiFetch( { url: 'https://api.vendor.net/v1/things' } );
+		} catch {
+			// Ignore errors from the actual fetch
+		}
+
+		const headers = global.fetch.mock.calls.map(
+			( [ , options ] ) => options.headers?.Authorization
+		);
+
+		expect( headers ).toEqual( [ 'Bearer test-token', undefined ] );
+	} );
+
 	describe( 'filterEndpointsMiddleware', () => {
 		it( 'filters the post endpoint when restBase and restNamespace are provided', async () => {
 			bridge.getGBKit.mockReturnValue( {

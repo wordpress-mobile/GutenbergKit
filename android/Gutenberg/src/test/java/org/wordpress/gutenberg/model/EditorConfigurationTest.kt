@@ -44,6 +44,7 @@ class EditorConfigurationBuilderTest {
         assertEquals(emptyMap<String, String>(), config.cookies)
         assertFalse(config.enableAssetCaching)
         assertEquals(emptySet<String>(), config.cachedAssetHosts)
+        assertEquals(emptySet<String>(), config.authHeaderDomains)
         assertNull(config.editorAssetsEndpoint)
         assertFalse(config.enableNetworkLogging)
         assertFalse(config.enableOfflineMode)
@@ -266,6 +267,25 @@ class EditorConfigurationBuilderTest {
             .build()
 
         assertEquals(hosts, config.cachedAssetHosts)
+    }
+
+    @Test
+    fun `setAuthHeaderDomains updates authHeaderDomains, and toBuilder keeps them`() {
+        val domains = setOf("*.wp.com", "*.files.wordpress.com")
+        val config = builder()
+            .setAuthHeaderDomains(domains)
+            .build()
+
+        assertEquals(domains, config.authHeaderDomains)
+        assertEquals(domains, config.toBuilder().build().authHeaderDomains)
+    }
+
+    @Test
+    fun `Configurations with different authHeaderDomains are not equal`() {
+        val config1 = builder().setAuthHeaderDomains(setOf("*.wp.com")).build()
+        val config2 = builder().setAuthHeaderDomains(setOf("*.files.wordpress.com")).build()
+
+        assertNotEquals(config1, config2)
     }
 
     @Test

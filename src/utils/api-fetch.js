@@ -1,5 +1,6 @@
 import apiFetch from '@wordpress/api-fetch';
 import { __ } from '@wordpress/i18n';
+import { isWithinAuthorizationScope } from './authorization-scope';
 import { getGBKit, POST_FALLBACKS } from './bridge';
 import { info, warn, error as logError } from './logger';
 import { ensureTrailingSlash, stripTrailingSlash } from './url';
@@ -106,12 +107,16 @@ function apiPathModifierMiddleware( options, next ) {
 /**
  * Middleware that handles token-based authentication.
  *
- * When an auth header is present, this middleware:
+ * When an auth header is present, and the request is one the site's
+ * credentials may go with, this middleware:
  * 1. Adds the Authorization header to the request
  * 2. Sets credentials to 'omit' to prevent cookies from interfering with token authentication
  *
  * This prevents authentication conflicts where browser cookies could disrupt
  * token-based authentication by being sent alongside the Authorization header.
+ *
+ * A request to anywhere but the site goes out without the header: the site's
+ * credentials are not for another party's service.
  *
  * @type {APIFetchMiddleware}
  */
@@ -119,12 +124,30 @@ function tokenAuthMiddleware( options, next ) {
 	const { authHeader } = getGBKit();
 	options.headers = options.headers || {};
 
-	if ( authHeader ) {
+	if ( authHeader && isForSite( options ) ) {
 		options.headers.Authorization = authHeader;
 		options.credentials = 'omit'; // Avoid cookies disrupting token authentication
 	}
 
 	return next( options );
+}
+
+/**
+ * Whether a request is one the site's credentials may go with.
+ *
+ * A request by `path` is for the site's API: the root URL middleware, which
+ * runs later, joins the path to the API root and replaces any `url`. A request
+ * by `url` alone can be for anywhere.
+ *
+ * @param {Object} options The api-fetch options.
+ * @return {boolean} Whether the request may carry the site's credentials.
+ */
+function isForSite( options ) {
+	if ( typeof options.path === 'string' ) {
+		return true;
+	}
+
+	return isWithinAuthorizationScope( options.url, getGBKit() );
 }
 
 /**

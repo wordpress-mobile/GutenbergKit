@@ -240,6 +240,7 @@ export function onNetworkRequest( requestData ) {
  * @property {string[]} [siteApiNamespace]       The namespace of the site's API; if multiple namespaces are provided, the first one is used as the default.
  * @property {string[]} [namespaceExcludedPaths] The paths that should not be namespaced.
  * @property {string}   [authHeader]             The authentication header.
+ * @property {string[]} [authHeaderDomains]      Places the authentication header may be sent to, besides the site and its API: a host, or `*.` and a domain for it and its subdomains.
  * @property {string}   [hideTitle]              Whether to hide the title.
  * @property {Post}     [post]                   The post data.
  * @property {boolean}  [enableNetworkLogging]   Enables logging of all network requests/responses to the native host via onNetworkRequest bridge method.
