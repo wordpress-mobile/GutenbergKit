@@ -218,8 +218,11 @@ steps:
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
           echo "--- :robot_face: Starting Android emulator"
+          # No Play services: on a wiped emulator it updates mid-run, and its
+          # restart kills any process using its fonts provider (EmojiCompat,
+          # WebView), failing the tests with "Process crashed".
           start-android-emulator \
-              --system-image "system-images;android-34;google_apis;arm64-v8a" \
+              --system-image "system-images;android-34;default;arm64-v8a" \
               --device "pixel_5"
           echo "--- :android: Running Android instrumented tests"
           make test-android-app-e2e
@@ -238,8 +241,9 @@ steps:
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
           echo "--- :robot_face: Starting Android emulator"
+          # No Play services, as in the Android E2E step.
           start-android-emulator \
-              --system-image "system-images;android-34;google_apis;arm64-v8a" \
+              --system-image "system-images;android-34;default;arm64-v8a" \
               --device "pixel_5"
           make test-android-library-e2e
       agents:
