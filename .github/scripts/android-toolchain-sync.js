@@ -59,6 +59,11 @@ export default async function reportToolchainDrift( {
 		github,
 		'gradle/libs.versions.toml'
 	);
+	const localWrapper = await readFile( LOCAL_WRAPPER, 'utf8' );
+	const upstreamWrapper = await fetchUpstream(
+		github,
+		'gradle/wrapper/gradle-wrapper.properties'
+	);
 
 	const rows = TRACKED.map( ( entry ) => ( {
 		...entry,
@@ -77,16 +82,8 @@ export default async function reportToolchainDrift( {
 		impact: () => [
 			"**Gradle:** WordPress-Android's Gradle wrapper also runs this repository's build scripts. Gradle removes deprecated APIs in major releases, so scripts that work on one major can fail on the other.",
 		],
-		ours: await readGradleVersion(
-			readFile( LOCAL_WRAPPER, 'utf8' ),
-			'GutenbergKit',
-			core
-		),
-		theirs: await readGradleVersion(
-			fetchUpstream( github, 'gradle/wrapper/gradle-wrapper.properties' ),
-			UPSTREAM,
-			core
-		),
+		ours: readWrapperVersion( localWrapper, 'GutenbergKit' ),
+		theirs: readWrapperVersion( upstreamWrapper, UPSTREAM ),
 	} );
 
 	for ( const row of rows ) {
@@ -238,24 +235,6 @@ function readCatalogVersion( toml, key, source ) {
 }
 
 /**
- * Reads the Gradle wrapper version without failing the run, so an unreadable
- * wrapper does not hide AGP or Kotlin drift.
- *
- * @param {Promise<string>} properties Wrapper properties contents.
- * @param {string}          source     Repository name for messages.
- * @param {Object}          core       GitHub Actions toolkit.
- * @return {Promise<string|null>} The Gradle version, or `null` if unreadable.
- */
-async function readGradleVersion( properties, source, core ) {
-	try {
-		return readWrapperVersion( await properties, source );
-	} catch ( error ) {
-		core.warning( error.message );
-		return null;
-	}
-}
-
-/**
  * Reads the Gradle version from a wrapper properties file.
  *
  * @param {string} properties Wrapper properties contents.
@@ -273,15 +252,12 @@ function readWrapperVersion( properties, source ) {
 }
 
 /**
- * @param {Object}      row        Version comparison.
- * @param {string|null} row.ours   GutenbergKit's version.
- * @param {string|null} row.theirs WordPress-Android's version.
+ * @param {Object} row        Version comparison.
+ * @param {string} row.ours   GutenbergKit's version.
+ * @param {string} row.theirs WordPress-Android's version.
  * @return {boolean} Whether the versions differ enough to break the composite build.
  */
 function isDrifted( row ) {
-	if ( ! row.ours || ! row.theirs ) {
-		return false;
-	}
 	return (
 		significantVersion( row, row.ours ) !==
 		significantVersion( row, row.theirs )
@@ -357,11 +333,7 @@ function buildIssueBody( rows, drifted, context ) {
 			'AGP upgrades have needed source changes beyond the version bump, and each release requires a minimum Gradle version.';
 		// A newer wrapper here already meets the minimum WordPress-Android's does.
 		const gradle = rows.find( ( row ) => row.name === 'Gradle' );
-		if (
-			gradle.ours &&
-			gradle.theirs &&
-			isOlder( gradle.ours, gradle.theirs )
-		) {
+		if ( isOlder( gradle.ours, gradle.theirs ) ) {
 			note += ` WordPress-Android builds AGP \`${ agp.theirs }\` with Gradle \`${ gradle.theirs }\`, newer than this repository's \`${ gradle.ours }\`.`;
 		}
 		lines.push( note );
@@ -377,44 +349,33 @@ function buildIssueBody( rows, drifted, context ) {
 }
 
 /**
- * @param {Object}      row        Version comparison.
- * @param {string}      row.name   Toolchain component.
- * @param {string|null} row.ours   GutenbergKit's version.
- * @param {string|null} row.theirs WordPress-Android's version.
+ * @param {Object} row        Version comparison.
+ * @param {string} row.name   Toolchain component.
+ * @param {string} row.ours   GutenbergKit's version.
+ * @param {string} row.theirs WordPress-Android's version.
  * @return {string} The Markdown table row.
  */
 function formatRow( row ) {
 	const cells = [
 		row.name,
 		formatStatus( row ),
-		formatVersion( row.ours ),
-		formatVersion( row.theirs ),
+		`\`${ row.ours }\``,
+		`\`${ row.theirs }\``,
 	];
 	return `| ${ cells.join( ' | ' ) } |`;
 }
 
 /**
- * @param {Object}      row        Version comparison.
- * @param {string|null} row.ours   GutenbergKit's version.
- * @param {string|null} row.theirs WordPress-Android's version.
+ * @param {Object} row        Version comparison.
+ * @param {string} row.ours   GutenbergKit's version.
+ * @param {string} row.theirs WordPress-Android's version.
  * @return {string} The table status cell.
  */
 function formatStatus( row ) {
-	if ( ! row.ours || ! row.theirs ) {
-		return '⚪ Could not be read';
-	}
 	if ( row.ours === row.theirs ) {
 		return '🟢 In sync';
 	}
 	return isDrifted( row ) ? '🔴 Drifted' : '🟢 Compatible';
-}
-
-/**
- * @param {string|null} version A version, or `null` if unreadable.
- * @return {string} The table cell.
- */
-function formatVersion( version ) {
-	return version ? `\`${ version }\`` : 'unknown';
 }
 
 /**
