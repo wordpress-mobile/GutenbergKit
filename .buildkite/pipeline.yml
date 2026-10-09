@@ -13,11 +13,16 @@ env:
 # :android: — and a verb-first, title-case label that stands on its own.
 # Where a step runs or mirrors a make target, key it by that target's name.
 #
-# Labels become GitHub check names, and the trunk ruleset requires several by
-# name, so renaming a label needs a matching ruleset update.
+#
+# Each step reports its GitHub check under an explicit `notify` context — the
+# label minus its emoji — so label tweaks don't rename checks. The trunk ruleset
+# requires several contexts by name, so changing one needs a ruleset update.
 steps:
     - label: ':javascript: Build Web Bundle'
       key: build
+      notify:
+          - github_commit_status:
+                context: 'Build Web Bundle'
       command: |
           # Fail fast if any step (including the backgrounded
           # `fetch-translations`, surfaced via `wait`) returns non-zero,
@@ -54,6 +59,9 @@ steps:
 
     - label: ':ios: Validate Swift Release ${NEW_VERSION:-(no version)}'
       key: validate-release
+      notify:
+          - github_commit_status:
+                context: 'Validate Swift Release'
       if: build.env("NEW_VERSION") != null && build.branch == "trunk" && build.pull_request.id == null
       command: |
           install_gems
@@ -62,21 +70,33 @@ steps:
 
     - label: ':javascript: Lint Web'
       key: lint-web
+      notify:
+          - github_commit_status:
+                context: 'Lint Web'
       command: make lint-web
       plugins: *plugins
 
     - label: ':javascript: Check @wordpress Package Versions'
       key: check-wp-packages
+      notify:
+          - github_commit_status:
+                context: 'Check @wordpress Package Versions'
       command: make check-wp-packages
       plugins: *plugins
 
     - label: ':javascript: Test Web Unit'
       key: test-web-unit
+      notify:
+          - github_commit_status:
+                context: 'Test Web Unit'
       command: make test-web-unit
       plugins: *plugins
 
     - label: ':javascript: Test Web E2E'
       key: test-web-e2e
+      notify:
+          - github_commit_status:
+                context: 'Test Web E2E'
       depends_on: build
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -88,6 +108,9 @@ steps:
       plugins: *plugins
 
     - label: ':android: Publish Android Library'
+      notify:
+          - github_commit_status:
+                context: 'Publish Android Library'
       depends_on: build
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -102,6 +125,9 @@ steps:
 
     - label: ':android: Lint Android'
       key: lint-android
+      notify:
+          - github_commit_status:
+                context: 'Lint Android'
       command: make lint-android
       agents:
           queue: android
@@ -109,12 +135,18 @@ steps:
 
     - label: ':ios: Lint iOS'
       key: lint-ios
+      notify:
+          - github_commit_status:
+                context: 'Lint iOS'
       command: swiftlint
       agents:
           queue: linter
 
     - label: ':android: Test Android Library Unit'
       key: test-android-library-unit
+      notify:
+          - github_commit_status:
+                context: 'Test Android Library Unit'
       depends_on: build
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -126,6 +158,9 @@ steps:
 
     - label: ':ios: Test iOS Library Simulator'
       key: test-ios-library-simulator
+      notify:
+          - github_commit_status:
+                context: 'Test iOS Library Simulator'
       depends_on: build
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -135,6 +170,9 @@ steps:
 
     - label: ':ios: Test iOS Library Host'
       key: test-ios-library-host
+      notify:
+          - github_commit_status:
+                context: 'Test iOS Library Host'
       depends_on: build
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -144,6 +182,9 @@ steps:
 
     - label: ':ios: Build XCFramework'
       key: build-ios-resources-xcframework
+      notify:
+          - github_commit_status:
+                context: 'Build XCFramework'
       depends_on:
           - build
           - test-ios-library-host
@@ -161,6 +202,9 @@ steps:
       plugins: *plugins
 
     - label: ':ios: Publish XCFramework to S3'
+      notify:
+          - github_commit_status:
+                context: 'Publish XCFramework to S3'
       depends_on: build-ios-resources-xcframework
       # This step only covers per-commit trunk uploads keyed by the commit
       # SHA. Releases are handled by `:ios: Publish Swift Release` (gated
@@ -178,12 +222,18 @@ steps:
       plugins: *plugins
 
     - label: ':ios: Publish PR XCFramework'
+      notify:
+          - github_commit_status:
+                context: 'Publish PR XCFramework'
       depends_on: build-ios-resources-xcframework
       if: build.pull_request.id != null
       command: .buildkite/publish-pr-xcframework.sh
       plugins: *plugins
 
     - label: ':ios: Publish Swift Release ${NEW_VERSION:-(Error: No version found!)}'
+      notify:
+          - github_commit_status:
+                context: 'Publish Swift Release'
       depends_on:
           - validate-release
           - build-ios-resources-xcframework
@@ -204,6 +254,9 @@ steps:
 
     - label: ':ios: Test iOS App E2E'
       key: test-ios-app-e2e
+      notify:
+          - github_commit_status:
+                context: 'Test iOS App E2E'
       depends_on: build
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -223,6 +276,9 @@ steps:
 
     - label: ':android: Test Android App E2E'
       key: test-android-app-e2e
+      notify:
+          - github_commit_status:
+                context: 'Test Android App E2E'
       depends_on: build
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -244,6 +300,9 @@ steps:
 
     - label: ':android: Test Android Library E2E'
       key: test-android-library-e2e
+      notify:
+          - github_commit_status:
+                context: 'Test Android Library E2E'
       depends_on: build
       command: |
           buildkite-agent artifact download dist.tar.gz .
@@ -263,6 +322,9 @@ steps:
           - 'android/Gutenberg/build/outputs/connected_android_test_additional_output/**/*'
 
     - label: ':ios: Clean Up `pr-build/*` Branches for Closed PRs'
+      notify:
+          - github_commit_status:
+                context: 'Clean Up pr-build/* Branches for Closed PRs'
       if: build.branch == "trunk"
       command: .buildkite/cleanup-pr-build-branches.sh
       plugins: *plugins
