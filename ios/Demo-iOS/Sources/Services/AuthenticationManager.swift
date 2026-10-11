@@ -102,7 +102,8 @@ class AuthenticationManager {
             return token
         }
 
-        for token in Set(tokens) {
+        var seen = Set<String>()
+        for token in tokens where seen.insert(token).inserted {
             let client = WPComApiClient(authentication: .bearer(token: token))
             guard
                 let site = try? await client.sites.getSite(wpComSiteIdentifier: .slug(value: host)).data,

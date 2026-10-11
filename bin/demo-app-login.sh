@@ -138,7 +138,7 @@ resolve_ios_device() {
         names+=("$(printf '%s\n' "$line" | sed -E 's/^[[:space:]]*//; s/[[:space:]]*\([0-9A-Fa-f-]{36}\).*$//')")
     done < <(xcrun simctl list devices booted | grep -F "(Booted)" || true)
 
-    choose_device "simulator" "Boot one (open Simulator, or 'xcrun simctl boot <udid>'), or pass --device <udid>."
+    choose_device "simulator" "Boot one from Device Hub (Simulator before Xcode 27), or pass --device <udid>."
 }
 
 resolve_android_device() {
@@ -202,6 +202,10 @@ echo "Using the WordPress.com token from $token_source"
 
 if [[ -z "$device" ]]; then
     if [[ "$platform" == ios ]]; then resolve_ios_device; else resolve_android_device; fi
+elif [[ "$platform" == ios ]]; then
+    # Boots the simulator if it isn't running, and waits until it's ready.
+    echo "Booting '$device' if it isn't running…"
+    xcrun simctl bootstatus "$device" -b > /dev/null
 fi
 
 # ---------------------------------------------------------------------------
