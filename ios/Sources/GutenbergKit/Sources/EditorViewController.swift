@@ -1160,7 +1160,7 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
         // External main frame navigation should open in the system browser.
         if let url = navigationAction.request.url {
             Logger.navigation.debug("Opening external URL in system browser: \(url.absoluteString)")
-            await UIApplication.shared.open(url)
+            await webView.window?.windowScene?.open(url, options: nil)
         }
         return .cancel
     }
