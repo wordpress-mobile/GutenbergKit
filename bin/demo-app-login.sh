@@ -60,7 +60,7 @@ Self-hosted sites are read from ~/.config/wp/sites, one per line:
   <url> <username> <application password>
 
 The password is the rest of the line, so an application password can be pasted with its
-spaces. Blank lines and lines starting with # are skipped.
+spaces. Blank lines and lines starting with # are skipped. Each site may be listed once.
 
 The WordPress.com bearer token is read from (in order):
   1. WPCOM_TOKEN environment variable
@@ -92,22 +92,30 @@ site_key() {
 
 read_sites() {
     # Add lines of the sites file to the `site_urls`, `site_usernames` and `site_passwords` arrays:
-    # the one whose URL matches $1, or every line when $1 is empty.
+    # the one whose URL matches $1, or every line when $1 is empty. Exits when the file lists a
+    # site more than once.
     [[ -f "$SITES_FILE" ]] || return 0
 
-    local wanted="" url username password
+    local wanted="" url username password key seen=$'\n'
     [[ -z "$1" ]] || wanted="$(site_key "$1")"
     # `read` gives the last variable the rest of the line, which keeps the spaces in a password.
     # The `||` keeps a final line that has no trailing newline.
     while read -r url username password || [[ -n "$url" ]]; do
         [[ -z "$url" || "$url" == \#* ]] && continue
-        [[ -z "$wanted" || "$(site_key "$url")" == "$wanted" ]] || continue
+        key="$(site_key "$url")"
+        # The demo apps keep one account per site, so a second line could only replace the first.
+        if [[ "$seen" == *$'\n'"$key"$'\n'* ]]; then
+            echo "error: $key is listed more than once in $SITES_FILE." >&2
+            echo "       The demo apps keep one account per site, so list each site once." >&2
+            exit 1
+        fi
+        seen+="$key"$'\n'
+        [[ -z "$wanted" || "$key" == "$wanted" ]] || continue
         # A site listed without a scheme is assumed to be served over HTTPS.
         [[ "$url" == *://* ]] || url="https://$url"
         site_urls+=("${url%/}")
         site_usernames+=("$username")
         site_passwords+=("$password")
-        [[ -z "$wanted" ]] || break
     done < "$SITES_FILE"
 }
 

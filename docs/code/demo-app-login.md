@@ -30,7 +30,7 @@ https://example.com          admin   abcd EFGH 1234 ijkl MNOP 5678
 https://staging.example.com  editor  qrst UVWX 9012 yzab CDEF 3456
 ```
 
-The password is the rest of the line, so it can be pasted with its spaces. Blank lines and lines starting with `#` are skipped, and `$XDG_CONFIG_HOME` is used in place of `~/.config` when it is set. The file holds passwords, so keep it private:
+The password is the rest of the line, so it can be pasted with its spaces. Blank lines and lines starting with `#` are skipped, and `$XDG_CONFIG_HOME` is used in place of `~/.config` when it is set. List each site once: the demo apps keep one account per site, so a site that appears twice is an error. The file holds passwords, so keep it private:
 
 ```bash
 chmod 600 ~/.config/wp/sites
