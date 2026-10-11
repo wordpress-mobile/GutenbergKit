@@ -83,6 +83,7 @@ struct AddSiteView: View {
             do {
                 let account = try await authenticationManager.startAuthentication(
                     siteUrl: trimmedUrl,
+                    storedAccounts: configurationStorage.accountRepository.all(),
                     presentationContext: presentationContextProvider
                 )
                 try onAdd(account)

@@ -79,6 +79,17 @@ make release VERSION_TYPE=patch DRY_RUN=true
 -   `make` - for building the project
 -   Git - for version control operations
 
+### `demo-app-login.sh`
+
+Signs a demo app into a WordPress.com site with a bearer token read from `WPCOM_TOKEN` or `~/.wpcom-token`, so no OAuth application is needed. See [WordPress.com OAuth](../docs/code/wpcom-oauth.md#signing-in-with-a-bearer-token).
+
+#### Usage
+
+```bash
+make login-ios-app
+make login-android-app
+```
+
 ### `fetch-translations.js`
 
 Fetches and caches locale string files for the GutenbergKit project. This script is typically run as part of the build process.

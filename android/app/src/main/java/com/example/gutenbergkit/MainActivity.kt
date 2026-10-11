@@ -63,6 +63,9 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
 
     companion object {
         const val EXTRA_CONFIGURATION = "configuration"
+        private const val WPCOM_TOKEN_EXTRA = "wpcom-token"
+        private const val WPCOM_SITE_ID_EXTRA = "wpcom-site-id"
+        private const val WPCOM_SITE_HOST_EXTRA = "wpcom-site-host"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -76,6 +79,8 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
 
         // Add local WordPress option
         configurations.add(ConfigurationItem.LocalWordPress)
+
+        signInToWpComFromLaunchExtrasIfNeeded()
 
         // Load saved accounts
         configurations.addAll(
@@ -121,6 +126,40 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
                 )
             }
         }
+    }
+
+    /**
+     * Stores the WordPress.com site named by the `wpcom-token`, `wpcom-site-id` and `wpcom-site-host` launch
+     * extras as an account, replacing any account already stored for that site. Lets an emulator be signed in
+     * without the OAuth flow – see `bin/demo-app-login.sh`.
+     *
+     * The extras are removed once read, so a recreated activity doesn't add back a site that was deleted in
+     * the meantime.
+     */
+    private fun signInToWpComFromLaunchExtrasIfNeeded() {
+        val token = intent.getStringExtra(WPCOM_TOKEN_EXTRA)?.trim()?.takeIf { it.isNotEmpty() }
+        val siteId = intent.getStringExtra(WPCOM_SITE_ID_EXTRA)?.trim()?.toULongOrNull()
+        val siteHost = intent.getStringExtra(WPCOM_SITE_HOST_EXTRA)?.trim()?.takeIf { it.isNotEmpty() }
+        intent.removeExtra(WPCOM_TOKEN_EXTRA)
+        intent.removeExtra(WPCOM_SITE_ID_EXTRA)
+        intent.removeExtra(WPCOM_SITE_HOST_EXTRA)
+
+        if (token == null || siteId == null || siteHost == null) return
+
+        val siteApiRoot = AuthenticationManager.wordPressComSiteApiRoot(siteId)
+        accountRepository.all()
+            .filterIsInstance<Account.WpCom>()
+            .filter { it.siteApiRoot == siteApiRoot }
+            .forEach { accountRepository.remove(it.id) }
+
+        accountRepository.store(
+            Account.WpCom(
+                id = 0u,
+                username = siteHost,
+                token = token,
+                siteApiRoot = siteApiRoot
+            )
+        )
     }
 
     private fun launchSitePreparation(config: ConfigurationItem) {
