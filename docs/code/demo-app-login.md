@@ -49,7 +49,7 @@ A WordPress.com bearer token stands in for the OAuth application described in [W
 
 The demo apps keep one account per site, so the script looks up the site's ID and address from the WordPress.com REST API and passes them to the app along with the token.
 
-Once the app holds a WordPress.com token, **Add WordPress Site** reuses it. Entering another WordPress.com site that the token's user can edit adds it straight away, with no OAuth application and no login screen. Any other WordPress.com site still goes through OAuth.
+Once the app holds a WordPress.com token, **Add WordPress Site** reuses it. Entering another WordPress.com site that the token's user can edit adds it straight away, with no OAuth application and no login screen. Any other WordPress.com site still goes through OAuth. To add a site as a different WordPress.com user, first delete the accounts that hold the stored token.
 
 ## Launching by Hand
 
@@ -80,4 +80,4 @@ xcrun simctl launch --terminate-running-process booted org.wordpress.gutenberg.d
 adb shell am start -S -n com.example.gutenbergkit/.MainActivity --es accounts "'<json>'"
 ```
 
-Either way, the credentials briefly appear in the process list while the launch command runs; that's inherent to passing them as launch arguments.
+Either way, the credentials appear in the process list while the launch command runs. On iOS they also stay in the app's arguments for as long as it runs, readable by any process running as your user. That's inherent to passing them as launch arguments.

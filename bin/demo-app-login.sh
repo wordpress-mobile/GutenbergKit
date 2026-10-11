@@ -221,7 +221,7 @@ api_get() {
 add_self_hosted_account() {
     # Look up the self-hosted site at $1, check that it accepts the username $2 and password $3,
     # and add it to `accounts`. Fails, having said why, when the site can't be signed in to.
-    local url="$1" username="$2" password="$3" api_root basic_credentials
+    local url="$1" username="$2" password="$3" api_root basic_credentials site_url
     if [[ -z "$username" || -z "$password" ]]; then
         echo "error: the line for $url in $SITES_FILE needs a URL, a username and a password." >&2
         return 1
@@ -241,8 +241,14 @@ add_self_hosted_account() {
         return 1
     }
 
-    accounts+="self-hosted$FIELD_SEPARATOR$url$FIELD_SEPARATOR$username$FIELD_SEPARATOR$password$FIELD_SEPARATOR$api_root"$'\n'
-    account_names+=("${url#*://}")
+    # Store the address WordPress reports for itself, as the in-app sign-in does. The one in the sites
+    # file may redirect to it, and the Android app uses the stored address as the editor's site URL.
+    site_url="$(api_get "$url" "$api_root" "Basic $basic_credentials" url 2> /dev/null)" || site_url=""
+    [[ "$site_url" == *://* ]] || site_url="$url"
+    site_url="${site_url%/}"
+
+    accounts+="self-hosted$FIELD_SEPARATOR$site_url$FIELD_SEPARATOR$username$FIELD_SEPARATOR$password$FIELD_SEPARATOR$api_root"$'\n'
+    account_names+=("${site_url#*://}")
 }
 
 add_wpcom_account() {
@@ -421,8 +427,12 @@ if [[ "$platform" == ios ]]; then
     xcrun simctl launch --terminate-running-process "$device" "$IOS_BUNDLE_ID" -accounts "$(accounts_json)"
 else
     # `-S` force-stops a running instance first, so the extra is delivered to a fresh `onCreate`.
-    adb -s "$device" shell am start -S -W -n "$ANDROID_ACTIVITY" \
-        --es accounts "$(shell_quote "$(accounts_json)")" > /dev/null
+    # `am` reports its errors on standard output, so that output is shown when it fails.
+    if ! launch_output="$(adb -s "$device" shell am start -S -W -n "$ANDROID_ACTIVITY" \
+        --es accounts "$(shell_quote "$(accounts_json)")")"; then
+        printf '%s\n' "$launch_output" >&2
+        exit 1
+    fi
 fi
 
 echo "Done. Signed in to $signed_in."

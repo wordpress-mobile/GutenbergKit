@@ -14,7 +14,7 @@ class ConfigurationStorage: ObservableObject {
         let transformer = try SecureEnclavePasswordTransformer(applicationName: "gutenbergkit-demo")
         self.accountRepository = try AccountRepository(rootPath: rootPath, passwordTransformer: transformer)
 
-        try self.signInFromLaunchArgumentsIfNeeded()
+        self.signInFromLaunchArgumentsIfNeeded()
     }
 
     /// Stores the sites in the `-accounts` launch argument as accounts, replacing any account already stored for
@@ -22,7 +22,7 @@ class ConfigurationStorage: ObservableObject {
     ///
     /// Only called from `init`, so it runs at most once per process — deleting a site doesn't immediately add it
     /// back from the still-present launch argument.
-    private func signInFromLaunchArgumentsIfNeeded() throws {
+    private func signInFromLaunchArgumentsIfNeeded() {
         guard
             let json = Self.launchArgument("-accounts"),
             let entries = try? JSONDecoder().decode([LaunchAccount].self, from: Data(json.utf8))
@@ -31,11 +31,16 @@ class ConfigurationStorage: ObservableObject {
         }
 
         for account in entries.compactMap(\.account) {
-            for existing in try accountRepository.all() where existing.siteApiRoot == account.siteApiRoot {
-                try accountRepository.remove(id: existing.id())
+            do {
+                // Store the new account before removing the one it replaces, so that a failed store loses nothing.
+                let stale = try accountRepository.all().filter { $0.siteApiRoot == account.siteApiRoot }
+                _ = try accountRepository.store(account: account)
+                for existing in stale {
+                    try accountRepository.remove(id: existing.id())
+                }
+            } catch {
+                print("Couldn't store the launch account for \(account.siteApiRoot): \(error)")
             }
-
-            _ = try accountRepository.store(account: account)
         }
     }
 
