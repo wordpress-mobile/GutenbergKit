@@ -180,6 +180,18 @@ steps:
           make test-ios-library-host
       plugins: *plugins
 
+    - label: ':ios: Build iOS Library for App Extensions'
+      key: build-ios-library-extension-safe
+      notify:
+          - github_commit_status:
+                context: 'Build iOS Library for App Extensions'
+      depends_on: build
+      command: |
+          buildkite-agent artifact download dist.tar.gz .
+          tar -xzf dist.tar.gz
+          make build-ios-library-extension-safe
+      plugins: *plugins
+
     - label: ':ios: Build XCFramework'
       key: build-ios-resources-xcframework
       notify:

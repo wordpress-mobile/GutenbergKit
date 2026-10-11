@@ -47,6 +47,7 @@ define XCODEBUILD_CMD
 		-sdk iphonesimulator \
 		-destination '${SIMULATOR_DESTINATION}' \
 		CODE_SIGNING_ALLOWED=NO \
+		$(3) \
 		| xcbeautify
 endef
 
@@ -182,6 +183,12 @@ copy-android-dist:
 .PHONY: build-ios-library
 build-ios-library: build ## Build the Swift package for iOS
 	$(call XCODEBUILD_CMD, build, GutenbergKit)
+
+# API that is unavailable in app extensions, such as `UIApplication.shared`,
+# fails this build. CI runs it so the library stays usable from an extension.
+.PHONY: build-ios-library-extension-safe
+build-ios-library-extension-safe: build ## Build the Swift package for iOS with app-extension-safe API only
+	$(call XCODEBUILD_CMD, build, GutenbergKit, APPLICATION_EXTENSION_API_ONLY=YES)
 
 .PHONY: build-ios-resources-xcframework
 build-ios-resources-xcframework: build ## Build GutenbergKitResources XCFramework
