@@ -155,12 +155,6 @@ extension LockdownModeMonitor {
                 presentingViewController.dismiss(animated: true) {
                     onDismiss()
                 }
-            },
-            onLearnMore: {
-                // Open support article directly to the exclusion section using text fragment
-                if let url = URL(string: "https://support.apple.com/en-us/105120#:~:text=How%20to%20exclude%20apps%20or%20websites%20from%20Lockdown%20Mode") {
-                    UIApplication.shared.open(url)
-                }
             }
         )
 
