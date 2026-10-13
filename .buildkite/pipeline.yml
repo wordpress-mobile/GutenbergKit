@@ -53,9 +53,17 @@ steps:
           make build REFRESH_JS_BUILD=1
           tar -czf dist.tar.gz dist/
           buildkite-agent artifact upload dist.tar.gz
-      plugins: &plugins
-          - $CI_TOOLKIT_PLUGIN
-          - $NVM_PLUGIN
+      # The steps that only need Node run in a Node container on the Linux
+      # `default` queue, which keeps them off the scarcer Mac agents.
+      agents:
+          queue: default
+      plugins: &node_plugins
+          - $DOCKER_PLUGIN:
+                image: $NODE_DOCKER_IMAGE
+                # The plugin's default `/bin/sh` is dash, which has no `pipefail`.
+                shell: ['/bin/bash', '-e', '-c']
+                propagate-environment: true
+                mount-buildkite-agent: true
 
     - label: ':ios: Validate Swift Release ${NEW_VERSION:-(no version)}'
       key: validate-release
@@ -66,7 +74,9 @@ steps:
       command: |
           install_gems
           bundle exec fastlane validate "version:$NEW_VERSION"
-      plugins: *plugins
+      plugins: &plugins
+          - $CI_TOOLKIT_PLUGIN
+          - $NVM_PLUGIN
 
     - label: ':javascript: Lint Web'
       key: lint-web
@@ -74,7 +84,9 @@ steps:
           - github_commit_status:
                 context: 'Lint Web'
       command: make lint-web
-      plugins: *plugins
+      agents:
+          queue: default
+      plugins: *node_plugins
 
     - label: ':javascript: Check @wordpress Package Versions'
       key: check-wp-packages
@@ -82,7 +94,9 @@ steps:
           - github_commit_status:
                 context: 'Check @wordpress Package Versions'
       command: make check-wp-packages
-      plugins: *plugins
+      agents:
+          queue: default
+      plugins: *node_plugins
 
     - label: ':javascript: Test Web Unit'
       key: test-web-unit
@@ -90,7 +104,9 @@ steps:
           - github_commit_status:
                 context: 'Test Web Unit'
       command: make test-web-unit
-      plugins: *plugins
+      agents:
+          queue: default
+      plugins: *node_plugins
 
     - label: ':javascript: Test Web E2E'
       key: test-web-e2e
