@@ -41,9 +41,17 @@ steps:
           make build REFRESH_JS_BUILD=1
           tar -czf dist.tar.gz dist/
           buildkite-agent artifact upload dist.tar.gz
-      plugins: &plugins
-          - $CI_TOOLKIT_PLUGIN
-          - $NVM_PLUGIN
+      # The steps that only need Node run in a Node container on the Linux
+      # `default` queue, which keeps them off the scarcer Mac agents.
+      agents:
+          queue: default
+      plugins: &node_plugins
+          - $DOCKER_PLUGIN:
+                image: $NODE_DOCKER_IMAGE
+                # The plugin's default `/bin/sh` is dash, which has no `pipefail`.
+                shell: ['/bin/bash', '-e', '-c']
+                propagate-environment: true
+                mount-buildkite-agent: true
 
     - label: ':white_check_mark: Validate Swift release ${NEW_VERSION:-(no version)}'
       key: validate-release
@@ -51,22 +59,30 @@ steps:
       command: |
           install_gems
           bundle exec fastlane validate "version:$NEW_VERSION"
-      plugins: *plugins
+      plugins: &plugins
+          - $CI_TOOLKIT_PLUGIN
+          - $NVM_PLUGIN
 
     - label: ':eslint: Lint React App'
       key: lint-js
       command: make lint-web
-      plugins: *plugins
+      agents:
+          queue: default
+      plugins: *node_plugins
 
     - label: ':npm: Check @wordpress package versions'
       key: check-wp-packages
       command: make check-wp-packages
-      plugins: *plugins
+      agents:
+          queue: default
+      plugins: *node_plugins
 
     - label: ':javascript: Test JavaScript'
       key: test-js
       command: make test-web-unit
-      plugins: *plugins
+      agents:
+          queue: default
+      plugins: *node_plugins
 
     - label: ':performing_arts: Test Web E2E'
       key: test-web-e2e
