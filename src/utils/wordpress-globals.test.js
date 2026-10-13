@@ -17,23 +17,37 @@ const GLOBALS_MODULES = [ './wordpress-globals.js', './wordpress-i18n.js' ];
 const SCRIPT_PACKAGES = getInstalledScriptPackages();
 
 describe( 'WordPress globals', () => {
-	const globals = getAssignedGlobals();
+	const assignments = getAssignments();
+	const exposedPackages = SCRIPT_PACKAGES.filter(
+		( { name } ) => ! EXCLUDED_PACKAGES[ name ]
+	).map( ( scriptPackage ) => [ scriptPackage.name, scriptPackage ] );
 
 	// WordPress builds a `window.wp` global for each package flagged `wpScript`,
 	// so the flag approximates the globals plugins expect. A missing global
 	// breaks every plugin script that reads it.
-	it.each(
-		SCRIPT_PACKAGES.filter( ( name ) => ! EXCLUDED_PACKAGES[ name ] )
-	)( 'exposes %s', ( name ) => {
-		expect( globals ).toContain(
-			camelCaseDash( name.replace( '@wordpress/', '' ) )
-		);
+	it.each( exposedPackages )( 'exposes %s', ( _name, { global } ) => {
+		expect( assignments ).toHaveProperty( global );
 	} );
+
+	// Core exposes the default export of packages flagged
+	// `wpScriptDefaultExport`, and the module namespace of the rest.
+	it.each( exposedPackages )(
+		'exposes %s in the shape core does',
+		( _name, { global, defaultExport } ) => {
+			expect( assignments[ global ] ).toMatch(
+				defaultExport
+					? /^(\w+)\.default \|\| \1$/
+					: /^toCommonJS\( \w+ \)$|^undefined$/
+			);
+		}
+	);
 
 	it.each( Object.keys( EXCLUDED_PACKAGES ) )(
 		'excludes %s only while it is flagged `wpScript`',
 		( name ) => {
-			expect( SCRIPT_PACKAGES ).toContain( name );
+			expect( SCRIPT_PACKAGES ).toContainEqual(
+				expect.objectContaining( { name } )
+			);
 		}
 	);
 } );
@@ -41,7 +55,8 @@ describe( 'WordPress globals', () => {
 /**
  * List the installed `@wordpress` packages that WordPress builds as scripts.
  *
- * @return {string[]} Package names.
+ * @return {Array<{name: string, global: string, defaultExport: boolean}>}
+ *         Packages, with the `window.wp` member core assigns each.
  */
 function getInstalledScriptPackages() {
 	const root = join( import.meta.dirname, '../../node_modules/@wordpress' );
@@ -52,28 +67,39 @@ function getInstalledScriptPackages() {
 		.filter( ( directory ) =>
 			existsSync( join( root, directory, 'package.json' ) )
 		)
-		.filter( ( directory ) => {
-			const packageJson = JSON.parse(
+		.map( ( directory ) => [
+			directory,
+			JSON.parse(
 				readFileSync( join( root, directory, 'package.json' ) )
-			);
-			return packageJson.wpScript;
-		} )
-		.map( ( directory ) => `@wordpress/${ directory }` );
+			),
+		] )
+		.filter( ( [ , packageJson ] ) => packageJson.wpScript )
+		.map( ( [ directory, packageJson ] ) => ( {
+			name: packageJson.name,
+			global: camelCaseDash( directory ),
+			defaultExport: !! packageJson.wpScriptDefaultExport,
+		} ) );
 }
 
 /**
- * List the `window.wp` members the globals modules assign.
+ * Map each `window.wp` member the globals modules assign to its value's source.
  *
- * @return {string[]} Global names, e.g. `blockEditor`.
+ * @return {Object<string, string>} Source keyed by global, e.g.
+ *                                  `{ blockEditor: 'toCommonJS( blockEditor )' }`.
  */
-function getAssignedGlobals() {
-	return GLOBALS_MODULES.flatMap( ( path ) => {
-		const source = readFileSync(
-			join( import.meta.dirname, path ),
-			'utf8'
-		);
-		return [ ...source.matchAll( /window\.wp\.(\w+)\s*=/g ) ].map(
-			( [ , name ] ) => name
-		);
-	} );
+function getAssignments() {
+	return Object.fromEntries(
+		GLOBALS_MODULES.flatMap( ( path ) => {
+			const source = readFileSync(
+				join( import.meta.dirname, path ),
+				'utf8'
+			);
+			return [
+				...source.matchAll( /window\.wp\.(\w+)\s*=\s*([^;]+);/g ),
+			].map( ( [ , global, value ] ) => [
+				global,
+				value.replace( /\s+/g, ' ' ).trim(),
+			] );
+		} )
+	);
 }
