@@ -10,8 +10,14 @@ vi.mock( '@wordpress/components/build-style/style.css?inline', () => ( {
 vi.mock( '@wordpress/block-editor/build-style/style.css?inline', () => ( {
 	default: '.ltr-block-editor{}',
 } ) );
-vi.mock( '@wordpress/block-library/build-style/editor.css?inline', () => ( {
+vi.mock( '@wordpress/block-library/build-style/style.css?inline', () => ( {
 	default: '.ltr-block-library{}',
+} ) );
+vi.mock( '@wordpress/block-editor/build-style/content.css?inline', () => ( {
+	default: '.ltr-block-editor-content{}',
+} ) );
+vi.mock( '@wordpress/block-library/build-style/editor.css?inline', () => ( {
+	default: '.ltr-block-library-editor{}',
 } ) );
 vi.mock( '@wordpress/format-library/build-style/style.css?inline', () => ( {
 	default: '.ltr-format-library{}',
@@ -26,8 +32,14 @@ vi.mock( '@wordpress/components/build-style/style-rtl.css?inline', () => ( {
 vi.mock( '@wordpress/block-editor/build-style/style-rtl.css?inline', () => ( {
 	default: '.rtl-block-editor{}',
 } ) );
-vi.mock( '@wordpress/block-library/build-style/editor-rtl.css?inline', () => ( {
+vi.mock( '@wordpress/block-library/build-style/style-rtl.css?inline', () => ( {
 	default: '.rtl-block-library{}',
+} ) );
+vi.mock( '@wordpress/block-editor/build-style/content-rtl.css?inline', () => ( {
+	default: '.rtl-block-editor-content{}',
+} ) );
+vi.mock( '@wordpress/block-library/build-style/editor-rtl.css?inline', () => ( {
+	default: '.rtl-block-library-editor{}',
 } ) );
 vi.mock( '@wordpress/format-library/build-style/style-rtl.css?inline', () => ( {
 	default: '.rtl-format-library{}',
@@ -81,6 +93,8 @@ describe( 'injectEditorStyles', () => {
 				'.ltr-components{}',
 				'.ltr-block-editor{}',
 				'.ltr-block-library{}',
+				'.ltr-block-editor-content{}',
+				'.ltr-block-library-editor{}',
 				'.ltr-format-library{}',
 				'.ltr-editor{}',
 			].join( '\n' )
@@ -95,6 +109,8 @@ describe( 'injectEditorStyles', () => {
 				'.rtl-components{}',
 				'.rtl-block-editor{}',
 				'.rtl-block-library{}',
+				'.rtl-block-editor-content{}',
+				'.rtl-block-library-editor{}',
 				'.rtl-format-library{}',
 				'.rtl-editor{}',
 			].join( '\n' )
