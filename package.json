@@ -119,7 +119,7 @@
 		"@wordpress/env": "^11.16.0",
 		"@wordpress/eslint-plugin": "^27.0.0",
 		"@wordpress/prettier-config": "^4.55.0",
-		"ajv": "^8.18.0",
+		"ajv": "^8.20.0",
 		"eslint": "^10.10.0",
 		"eslint-import-resolver-typescript": "^4.4.5",
 		"eslint-plugin-react-refresh": "^0.5.7",
