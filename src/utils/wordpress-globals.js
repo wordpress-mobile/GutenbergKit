@@ -47,7 +47,6 @@ import * as router from '@wordpress/router';
 import * as serverSideRender from '@wordpress/server-side-render';
 import * as shortcode from '@wordpress/shortcode';
 import * as styleEngine from '@wordpress/style-engine';
-import * as sync from '@wordpress/sync';
 import * as theme from '@wordpress/theme';
 import * as tokenList from '@wordpress/token-list';
 import * as uploadMedia from '@wordpress/upload-media';
@@ -124,7 +123,6 @@ export async function initializeWordPressGlobals() {
 	window.wp.serverSideRender = serverSideRender.default || serverSideRender;
 	window.wp.shortcode = shortcode.default || shortcode;
 	window.wp.styleEngine = toCommonJS( styleEngine );
-	window.wp.sync = toCommonJS( sync );
 	window.wp.theme = toCommonJS( theme );
 	window.wp.tokenList = tokenList.default || tokenList;
 	window.wp.uploadMedia = toCommonJS( uploadMedia );
