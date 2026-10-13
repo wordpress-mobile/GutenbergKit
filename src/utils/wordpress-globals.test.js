@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { camelCaseDash } from '@wordpress/dependency-extraction-webpack-plugin/lib/util';
@@ -46,7 +46,12 @@ describe( 'WordPress globals', () => {
 function getInstalledScriptPackages() {
 	const root = join( import.meta.dirname, '../../node_modules/@wordpress' );
 
+	// Skip entries that aren't packages, e.g. `.DS_Store` or npm's temporary
+	// directories from an interrupted install.
 	return readdirSync( root )
+		.filter( ( directory ) =>
+			existsSync( join( root, directory, 'package.json' ) )
+		)
 		.filter( ( directory ) => {
 			const packageJson = JSON.parse(
 				readFileSync( join( root, directory, 'package.json' ) )
