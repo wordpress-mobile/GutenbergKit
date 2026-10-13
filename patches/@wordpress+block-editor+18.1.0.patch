@@ -60,7 +60,7 @@ index 1565602..5d01963 100644
  var provider_default = BlockEditorProvider;
  export {
 diff --git a/node_modules/@wordpress/block-editor/package.json b/node_modules/@wordpress/block-editor/package.json
-index 37afd68..4d1b983 100644
+index 29cfb06..9227d87 100644
 --- a/node_modules/@wordpress/block-editor/package.json
 +++ b/node_modules/@wordpress/block-editor/package.json
 @@ -38,7 +38,9 @@
