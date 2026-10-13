@@ -42,6 +42,17 @@ describe( 'WordPress globals', () => {
 		}
 	);
 
+	// A global without a flagged package is one core no longer exposes, like
+	// `wp.sync` after WordPress/gutenberg#81999.
+	it.each( Object.keys( assignments ) )(
+		'exposes window.wp.%s only while a package is flagged `wpScript`',
+		( global ) => {
+			expect( SCRIPT_PACKAGES ).toContainEqual(
+				expect.objectContaining( { global } )
+			);
+		}
+	);
+
 	it.each( Object.keys( EXCLUDED_PACKAGES ) )(
 		'excludes %s only while it is flagged `wpScript`',
 		( name ) => {
