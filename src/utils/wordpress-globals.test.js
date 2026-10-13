@@ -18,22 +18,19 @@ const SCRIPT_PACKAGES = getInstalledScriptPackages();
 
 describe( 'WordPress globals', () => {
 	const assignments = getAssignments();
-	const exposedPackages = SCRIPT_PACKAGES.filter(
-		( { name } ) => ! EXCLUDED_PACKAGES[ name ]
-	).map( ( scriptPackage ) => [ scriptPackage.name, scriptPackage ] );
+	const scriptNames = SCRIPT_PACKAGES.map( ( { name } ) => name );
+	const scriptGlobals = SCRIPT_PACKAGES.map( ( { global } ) => global );
 
 	// WordPress builds a `window.wp` global for each package flagged `wpScript`,
 	// so the flag approximates the globals plugins expect. A missing global
-	// breaks every plugin script that reads it.
-	it.each( exposedPackages )( 'exposes %s', ( _name, { global } ) => {
-		expect( assignments ).toHaveProperty( global );
-	} );
-
-	// Core exposes the default export of packages flagged
-	// `wpScriptDefaultExport`, and the module namespace of the rest.
-	it.each( exposedPackages )(
-		'exposes %s in the shape core does',
-		( _name, { global, defaultExport } ) => {
+	// breaks every plugin script that reads it. Core exposes the default export
+	// of packages flagged `wpScriptDefaultExport`, and the namespace of the rest.
+	it.each(
+		SCRIPT_PACKAGES.filter( ( { name } ) => ! EXCLUDED_PACKAGES[ name ] )
+	)(
+		'exposes $name in the shape core does',
+		( { global, defaultExport } ) => {
+			expect( assignments ).toHaveProperty( global );
 			expect( assignments[ global ] ).toMatch(
 				defaultExport
 					? /^(\w+)\.default \|\| \1$/
@@ -47,18 +44,14 @@ describe( 'WordPress globals', () => {
 	it.each( Object.keys( assignments ) )(
 		'exposes window.wp.%s only while a package is flagged `wpScript`',
 		( global ) => {
-			expect( SCRIPT_PACKAGES ).toContainEqual(
-				expect.objectContaining( { global } )
-			);
+			expect( scriptGlobals ).toContain( global );
 		}
 	);
 
 	it.each( Object.keys( EXCLUDED_PACKAGES ) )(
 		'excludes %s only while it is flagged `wpScript`',
 		( name ) => {
-			expect( SCRIPT_PACKAGES ).toContainEqual(
-				expect.objectContaining( { name } )
-			);
+			expect( scriptNames ).toContain( name );
 		}
 	);
 } );
@@ -72,24 +65,29 @@ describe( 'WordPress globals', () => {
 function getInstalledScriptPackages() {
 	const root = join( import.meta.dirname, '../../node_modules/@wordpress' );
 
-	// Skip entries that aren't packages, e.g. `.DS_Store` or npm's temporary
-	// directories from an interrupted install.
-	return readdirSync( root )
-		.filter( ( directory ) =>
-			existsSync( join( root, directory, 'package.json' ) )
-		)
-		.map( ( directory ) => [
-			directory,
-			JSON.parse(
-				readFileSync( join( root, directory, 'package.json' ) )
-			),
-		] )
-		.filter( ( [ , packageJson ] ) => packageJson.wpScript )
-		.map( ( [ directory, packageJson ] ) => ( {
-			name: packageJson.name,
-			global: camelCaseDash( directory ),
-			defaultExport: !! packageJson.wpScriptDefaultExport,
-		} ) );
+	return readdirSync( root ).flatMap( ( directory ) => {
+		const path = join( root, directory, 'package.json' );
+
+		// Skip entries that aren't packages, e.g. `.DS_Store` or npm's
+		// temporary directories from an interrupted install.
+		if ( ! existsSync( path ) ) {
+			return [];
+		}
+
+		const { name, wpScript, wpScriptDefaultExport } = JSON.parse(
+			readFileSync( path )
+		);
+
+		return wpScript
+			? [
+					{
+						name,
+						global: camelCaseDash( directory ),
+						defaultExport: !! wpScriptDefaultExport,
+					},
+			  ]
+			: [];
+	} );
 }
 
 /**
