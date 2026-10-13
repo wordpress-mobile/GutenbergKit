@@ -118,6 +118,9 @@ steps:
     - label: ':swift: iOS Simulator Tests'
       key: swift-test-swift-package
       depends_on: build-react
+      # A run takes a few minutes. One whose main thread is stuck neither fails
+      # nor finishes, and would otherwise hold its agent for as long as it's stuck.
+      timeout_in_minutes: 20
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
