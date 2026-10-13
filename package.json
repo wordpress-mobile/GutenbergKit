@@ -92,6 +92,7 @@
 		"@wordpress/style-engine": "^2.43.0",
 		"@wordpress/theme": "^2.1.0",
 		"@wordpress/token-list": "^3.38.0",
+		"@wordpress/undo-manager": "^1.57.0",
 		"@wordpress/upload-media": "^0.42.0",
 		"@wordpress/url": "^4.42.0",
 		"@wordpress/viewport": "^6.57.0",

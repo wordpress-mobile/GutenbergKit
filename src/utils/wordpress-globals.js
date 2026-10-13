@@ -49,6 +49,7 @@ import * as shortcode from '@wordpress/shortcode';
 import * as styleEngine from '@wordpress/style-engine';
 import * as theme from '@wordpress/theme';
 import * as tokenList from '@wordpress/token-list';
+import * as undoManager from '@wordpress/undo-manager';
 import * as uploadMedia from '@wordpress/upload-media';
 import * as url from '@wordpress/url';
 import * as viewport from '@wordpress/viewport';
@@ -125,6 +126,7 @@ export async function initializeWordPressGlobals() {
 	window.wp.styleEngine = toCommonJS( styleEngine );
 	window.wp.theme = toCommonJS( theme );
 	window.wp.tokenList = tokenList.default || tokenList;
+	window.wp.undoManager = toCommonJS( undoManager );
 	window.wp.uploadMedia = toCommonJS( uploadMedia );
 	window.wp.url = toCommonJS( url );
 	window.wp.viewport = toCommonJS( viewport );
