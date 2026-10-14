@@ -397,6 +397,25 @@ describe( 'getPost', () => {
 
 			expect( result.id ).toBe( -1 );
 		} );
+
+		it( 'should seed a post without a server ID as an auto-draft', async () => {
+			window.webkit = {
+				messageHandlers: {
+					requestLatestContent: {
+						postMessage: vi
+							.fn()
+							.mockResolvedValue( { title: '', content: '' } ),
+					},
+				},
+			};
+			window.GBKit = {
+				post: { id: -1, type: 'post', status: 'draft' },
+			};
+
+			const result = await getPost();
+
+			expect( result.status ).toBe( 'auto-draft' );
+		} );
 	} );
 
 	describe( 'fallback to GBKit', () => {
@@ -470,6 +489,7 @@ describe( 'getPost', () => {
 			const result = await getPost();
 
 			expect( result.id ).toBe( -1 );
+			expect( result.status ).toBe( 'auto-draft' );
 		} );
 	} );
 
@@ -482,7 +502,7 @@ describe( 'getPost', () => {
 			expect( result ).toEqual( {
 				id: -1,
 				type: 'post',
-				status: 'draft',
+				status: 'auto-draft',
 				title: { raw: '' },
 				content: { raw: '' },
 				restBase: 'posts',
@@ -510,7 +530,7 @@ describe( 'getPost', () => {
 			expect( result ).toEqual( {
 				id: -1,
 				type: 'post',
-				status: 'draft',
+				status: 'auto-draft',
 				title: { raw: 'Title' },
 				content: { raw: 'Content' },
 				restBase: 'posts',
