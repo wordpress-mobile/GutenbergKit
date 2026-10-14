@@ -5,6 +5,7 @@ import { initializeEditor } from './editor';
 import { getGBKit, getPost } from './bridge';
 import { getDefaultEditorSettings } from './editor-settings';
 import { unregisterDisallowedBlocks } from './blocks';
+import { primePostEntity } from './prime-post-entity';
 
 vi.mock( '@wordpress/blocks' );
 vi.mock( '@wordpress/editor' );
@@ -13,6 +14,7 @@ vi.mock( '@wordpress/block-library' );
 vi.mock( './blocks' );
 vi.mock( './bridge' );
 vi.mock( './editor-settings' );
+vi.mock( './prime-post-entity', () => ( { primePostEntity: vi.fn() } ) );
 vi.mock( '../components/layout', () => ( {
 	default: () => null,
 } ) );
@@ -144,5 +146,16 @@ describe( 'initializeEditor', () => {
 		initializeEditor();
 
 		expect( registerCoreBlocks ).toHaveBeenCalled();
+	} );
+
+	it( 'should seed the post entity', async () => {
+		await initializeEditor();
+
+		expect( primePostEntity ).toHaveBeenCalledWith( {
+			id: 1,
+			type: 'post',
+			title: { raw: 'Test Post' },
+			content: { raw: '' },
+		} );
 	} );
 } );
