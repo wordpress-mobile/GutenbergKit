@@ -56,6 +56,10 @@ struct SitePreparationView: View {
             Section("Feature Configuration") {
                 Toggle("Enable Native Inserter", isOn: $viewModel.enableNativeInserter)
                 Toggle("Enable Native Media Upload", isOn: $viewModel.enableNativeMediaUpload)
+                Toggle("Enable Theme Styles", isOn: $viewModel.enableThemeStyles)
+                    .disabled(!viewModel.siteSupportsThemeStyles || viewModel.disableButtons)
+                Toggle("Enable Third-Party Blocks", isOn: $viewModel.enableThirdPartyBlocks)
+                    .disabled(!viewModel.siteSupportsBlockAssets || viewModel.disableButtons)
                 Toggle("Enable Network Logging", isOn: $viewModel.enableNetworkLogging)
 
                 Picker("Network Fallback", selection: $viewModel.networkFallbackMode) {
@@ -75,6 +79,7 @@ struct SitePreparationView: View {
                             Text(postType.name).tag(postType)
                         }
                     }
+                    .disabled(viewModel.disableButtons)
 
                     NavigationLink {
                         if let client = viewModel.client,
@@ -96,8 +101,8 @@ struct SitePreparationView: View {
                 Section("Editor Configuration Details") {
                     KeyValueRow(key: "Site URL", value: editorConfiguration.siteURL.absoluteString)
                     KeyValueRow(key: "API Root", value: editorConfiguration.siteApiRoot.absoluteString)
-                    KeyValueRow(key: "Supports Block Assets", value: editorConfiguration.shouldUsePlugins)
-                    KeyValueRow(key: "Supports Theme Styles", value: editorConfiguration.shouldUseThemeStyles)
+                    KeyValueRow(key: "Supports Block Assets", value: viewModel.siteSupportsBlockAssets)
+                    KeyValueRow(key: "Supports Theme Styles", value: viewModel.siteSupportsThemeStyles)
                     KeyValueRow(key: "Editor Locale", value: localeSummary(for: editorConfiguration))
                 }
             }
@@ -188,6 +193,36 @@ class SitePreparationViewModel {
 
     var enableNativeMediaUpload: Bool = true
 
+    /// Whether the site exposes the editor settings that theme styles load from.
+    private(set) var siteSupportsThemeStyles = false
+
+    var enableThemeStyles: Bool {
+        get { editorConfiguration?.shouldUseThemeStyles ?? false }
+        set {
+            guard siteSupportsThemeStyles, let config = editorConfiguration else { return }
+            editorConfiguration = config.toBuilder()
+                .setShouldUseThemeStyles(newValue)
+                .build()
+            // Discard dependencies prepared under the previous setting.
+            editorDependencies = nil
+        }
+    }
+
+    /// Whether the site exposes the editor assets that third-party blocks load from.
+    private(set) var siteSupportsBlockAssets = false
+
+    var enableThirdPartyBlocks: Bool {
+        get { editorConfiguration?.shouldUsePlugins ?? false }
+        set {
+            guard siteSupportsBlockAssets, let config = editorConfiguration else { return }
+            editorConfiguration = config.toBuilder()
+                .setShouldUsePlugins(newValue)
+                .build()
+            // Discard dependencies prepared under the previous setting.
+            editorDependencies = nil
+        }
+    }
+
     var enableNetworkLogging: Bool {
         get { editorConfiguration?.enableNetworkLogging ?? false }
         set {
@@ -245,6 +280,9 @@ class SitePreparationViewModel {
 
     @MainActor
     func startLoading() {
+        // `.onAppear` fires on every return from Browse; reloading would reset the user's settings.
+        guard editorConfiguration == nil else { return }
+
         self.taskHandle = Task {
             do {
                 switch configurationItem {
@@ -312,6 +350,10 @@ class SitePreparationViewModel {
                         self.editorConfiguration = Self.applyDemoAppDefaults(to: fallback)
                     }
                 }
+
+                // Record support before the toggles can change the configuration's values.
+                self.siteSupportsThemeStyles = self.editorConfiguration?.shouldUseThemeStyles ?? false
+                self.siteSupportsBlockAssets = self.editorConfiguration?.shouldUsePlugins ?? false
             } catch {
                 self.error = error
             }
@@ -368,6 +410,7 @@ class SitePreparationViewModel {
         self.prepareEditor(with: EditorService(configuration: configuration, cachePolicy: .ignore))
     }
 
+    @MainActor
     private func prepareEditor(with editorService: EditorService) {
         self.taskHandle = Task {
             self.disableButtons = true
