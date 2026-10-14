@@ -195,10 +195,14 @@ class SitePreparationViewModel {
     /// Whether the site exposes the editor settings that theme styles load from.
     private(set) var siteSupportsThemeStyles = false
 
+    /// The user's choice, kept apart from `editorConfiguration` so it survives reloads.
+    private var prefersThemeStyles = true
+
     var enableThemeStyles: Bool {
         get { editorConfiguration?.shouldUseThemeStyles ?? false }
         set {
             guard siteSupportsThemeStyles, let config = editorConfiguration else { return }
+            prefersThemeStyles = newValue
             editorConfiguration = config.toBuilder()
                 .setShouldUseThemeStyles(newValue)
                 .build()
@@ -210,10 +214,14 @@ class SitePreparationViewModel {
     /// Whether the site exposes the editor assets that third-party blocks load from.
     private(set) var siteSupportsBlockAssets = false
 
+    /// The user's choice, kept apart from `editorConfiguration` so it survives reloads.
+    private var prefersThirdPartyBlocks = true
+
     var enableThirdPartyBlocks: Bool {
         get { editorConfiguration?.shouldUsePlugins ?? false }
         set {
             guard siteSupportsBlockAssets, let config = editorConfiguration else { return }
+            prefersThirdPartyBlocks = newValue
             editorConfiguration = config.toBuilder()
                 .setShouldUsePlugins(newValue)
                 .build()
@@ -350,6 +358,13 @@ class SitePreparationViewModel {
                 // Record support before the toggles can change the configuration's values.
                 self.siteSupportsThemeStyles = self.editorConfiguration?.shouldUseThemeStyles ?? false
                 self.siteSupportsBlockAssets = self.editorConfiguration?.shouldUsePlugins ?? false
+
+                // `.onAppear` reloads on every return to this screen, so reapply the user's
+                // choices to keep the configuration matching any prepared dependencies.
+                self.editorConfiguration = self.editorConfiguration?.toBuilder()
+                    .setShouldUseThemeStyles(self.siteSupportsThemeStyles && self.prefersThemeStyles)
+                    .setShouldUsePlugins(self.siteSupportsBlockAssets && self.prefersThirdPartyBlocks)
+                    .build()
             } catch {
                 self.error = error
             }
