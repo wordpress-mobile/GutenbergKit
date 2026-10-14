@@ -409,6 +409,7 @@ class SitePreparationViewModel {
         self.prepareEditor(with: EditorService(configuration: configuration, cachePolicy: .ignore))
     }
 
+    @MainActor
     private func prepareEditor(with editorService: EditorService) {
         self.taskHandle = Task {
             self.disableButtons = true
