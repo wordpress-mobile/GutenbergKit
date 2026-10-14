@@ -114,7 +114,8 @@ class SitePreparationViewModel(
     }
 
     fun setPostType(postType: PostTypeDetails) {
-        _uiState.update { it.copy(selectedPostType = postType) }
+        // Discard dependencies prepared for the previous post type.
+        _uiState.update { it.copy(selectedPostType = postType, editorDependencies = null) }
     }
 
     fun prepareEditor() {

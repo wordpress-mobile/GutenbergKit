@@ -554,6 +554,7 @@ private fun FeatureConfigurationCard(
                                 .selectable(
                                     selected = postType == selectedPostType,
                                     onClick = { onPostTypeChange(postType) },
+                                    enabled = !isPreparing,
                                     role = Role.RadioButton
                                 )
                                 .padding(vertical = 4.dp),
@@ -561,7 +562,8 @@ private fun FeatureConfigurationCard(
                         ) {
                             RadioButton(
                                 selected = postType == selectedPostType,
-                                onClick = null
+                                onClick = null,
+                                enabled = !isPreparing
                             )
                             Text(
                                 text = postType.postType.replaceFirstChar { it.uppercase() },
