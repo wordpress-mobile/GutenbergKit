@@ -22,6 +22,10 @@ data class SitePreparationUiState(
     val enableNativeInserter: Boolean = true,
     val enableInserterMediaStrip: Boolean = false,
     val enableNativeMediaUpload: Boolean = true,
+    /** Applied only when the site supports theme styles, per [EditorConfiguration.themeStyles]. */
+    val enableThemeStyles: Boolean = true,
+    /** Applied only when the site supports block assets, per [EditorConfiguration.plugins]. */
+    val enableThirdPartyBlocks: Boolean = true,
     val enableNetworkLogging: Boolean = false,
     /** All viewable post types fetched from the site, or empty while loading. */
     val postTypes: List<PostTypeDetails> = emptyList(),
@@ -95,16 +99,27 @@ class SitePreparationViewModel(
         _uiState.update { it.copy(enableNativeMediaUpload = enabled) }
     }
 
+    fun setEnableThemeStyles(enabled: Boolean) {
+        // Discard dependencies prepared under the previous setting.
+        _uiState.update { it.copy(enableThemeStyles = enabled, editorDependencies = null) }
+    }
+
+    fun setEnableThirdPartyBlocks(enabled: Boolean) {
+        // Discard dependencies prepared under the previous setting.
+        _uiState.update { it.copy(enableThirdPartyBlocks = enabled, editorDependencies = null) }
+    }
+
     fun setEnableNetworkLogging(enabled: Boolean) {
         _uiState.update { it.copy(enableNetworkLogging = enabled) }
     }
 
     fun setPostType(postType: PostTypeDetails) {
-        _uiState.update { it.copy(selectedPostType = postType) }
+        // Discard dependencies prepared for the previous post type.
+        _uiState.update { it.copy(selectedPostType = postType, editorDependencies = null) }
     }
 
     fun prepareEditor() {
-        val configuration = _uiState.value.editorConfiguration ?: return
+        val configuration = buildConfiguration() ?: return
 
         val cacheIntervalSeconds = 86_400L // Cache for one day
         val editorService = EditorService.create(
@@ -117,7 +132,7 @@ class SitePreparationViewModel(
     }
 
     fun prepareEditorFromScratch() {
-        val configuration = _uiState.value.editorConfiguration ?: return
+        val configuration = buildConfiguration() ?: return
 
         val editorService = EditorService.create(
             context = getApplication(),
@@ -350,6 +365,8 @@ class SitePreparationViewModel(
             .setEnableNetworkLogging(_uiState.value.enableNetworkLogging)
             .setEnableNativeBlockInserter(_uiState.value.enableNativeInserter)
             .setEnableInserterMediaStrip(_uiState.value.enableInserterMediaStrip)
+            .setThemeStyles(baseConfig.themeStyles && _uiState.value.enableThemeStyles)
+            .setPlugins(baseConfig.plugins && _uiState.value.enableThirdPartyBlocks)
             .setPostType(selectedPostType)
             .build()
     }

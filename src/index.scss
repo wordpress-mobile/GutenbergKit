@@ -26,11 +26,12 @@ html {
 // selection highlight on Android.
 //
 // Reverting at the container--not on descendants--keeps the inheritance chain
-// intact for Gutenberg's other `::selection` rules. The leading `body` is
-// required; without it this ties upstream's `[data-has-multi-selection]`
-// variant and loses on source order. Excluded on iOS only because WebKit has
-// yet to ship highlight inheritance--if it does, drop `:not(.is-ios)`.
-// https://github.com/WordPress/gutenberg/blob/trunk/packages/block-editor/src/components/block-list/content.scss
+// intact for Gutenberg's other `::selection` rules. The leading `body` outranks
+// upstream's `[data-has-multi-selection]` variant, which would otherwise tie
+// on specificity, so the override holds regardless of stylesheet load order.
+// Excluded on iOS only because WebKit has yet to ship highlight
+// inheritance--if it does, drop `:not(.is-ios)`.
+// https://github.com/WordPress/gutenberg/blob/1ae9352f184e8ab7fa7ebb95f7d45ca265797164/packages/block-editor/src/components/block-list/content.scss#L25-L34
 body.gutenberg-kit:not(.is-ios) .block-editor-block-list__layout::selection {
 	background-color: revert;
 }

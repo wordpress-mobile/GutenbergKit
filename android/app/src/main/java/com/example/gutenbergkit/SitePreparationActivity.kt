@@ -322,6 +322,13 @@ private fun LoadedView(
                 onEnableInserterMediaStripChange = viewModel::setEnableInserterMediaStrip,
                 enableNativeMediaUpload = uiState.enableNativeMediaUpload,
                 onEnableNativeMediaUploadChange = viewModel::setEnableNativeMediaUpload,
+                siteSupportsThemeStyles = uiState.editorConfiguration?.themeStyles == true,
+                enableThemeStyles = uiState.enableThemeStyles,
+                onEnableThemeStylesChange = viewModel::setEnableThemeStyles,
+                siteSupportsBlockAssets = uiState.editorConfiguration?.plugins == true,
+                enableThirdPartyBlocks = uiState.enableThirdPartyBlocks,
+                onEnableThirdPartyBlocksChange = viewModel::setEnableThirdPartyBlocks,
+                isPreparing = uiState.isLoading,
                 enableNetworkLogging = uiState.enableNetworkLogging,
                 onEnableNetworkLoggingChange = viewModel::setEnableNetworkLogging,
                 postTypes = uiState.postTypes,
@@ -410,6 +417,13 @@ private fun FeatureConfigurationCard(
     onEnableInserterMediaStripChange: (Boolean) -> Unit,
     enableNativeMediaUpload: Boolean,
     onEnableNativeMediaUploadChange: (Boolean) -> Unit,
+    siteSupportsThemeStyles: Boolean,
+    enableThemeStyles: Boolean,
+    onEnableThemeStylesChange: (Boolean) -> Unit,
+    siteSupportsBlockAssets: Boolean,
+    enableThirdPartyBlocks: Boolean,
+    onEnableThirdPartyBlocksChange: (Boolean) -> Unit,
+    isPreparing: Boolean,
     enableNetworkLogging: Boolean,
     onEnableNetworkLoggingChange: (Boolean) -> Unit,
     postTypes: List<PostTypeDetails>,
@@ -472,6 +486,38 @@ private fun FeatureConfigurationCard(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
+            // Enable Theme Styles Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Enable Theme Styles")
+                Switch(
+                    checked = siteSupportsThemeStyles && enableThemeStyles,
+                    onCheckedChange = onEnableThemeStylesChange,
+                    enabled = siteSupportsThemeStyles && !isPreparing
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // Enable Third-Party Blocks Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Enable Third-Party Blocks")
+                Switch(
+                    checked = siteSupportsBlockAssets && enableThirdPartyBlocks,
+                    onCheckedChange = onEnableThirdPartyBlocksChange,
+                    enabled = siteSupportsBlockAssets && !isPreparing
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
             // Enable Network Logging Toggle
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -508,6 +554,7 @@ private fun FeatureConfigurationCard(
                                 .selectable(
                                     selected = postType == selectedPostType,
                                     onClick = { onPostTypeChange(postType) },
+                                    enabled = !isPreparing,
                                     role = Role.RadioButton
                                 )
                                 .padding(vertical = 4.dp),
@@ -515,7 +562,8 @@ private fun FeatureConfigurationCard(
                         ) {
                             RadioButton(
                                 selected = postType == selectedPostType,
-                                onClick = null
+                                onClick = null,
+                                enabled = !isPreparing
                             )
                             Text(
                                 text = postType.postType.replaceFirstChar { it.uppercase() },
