@@ -28,6 +28,7 @@ describe( 'initializeEditor', () => {
 	let mockPreferenceDispatch;
 	let mockEditorDispatch;
 	let mockGetEntityRecord;
+	let mockGetPostType;
 
 	beforeEach( () => {
 		vi.clearAllMocks();
@@ -55,9 +56,13 @@ describe( 'initializeEditor', () => {
 		dispatch.mockImplementation( mockDispatch );
 
 		mockGetEntityRecord = vi.fn();
+		mockGetPostType = vi.fn();
 		select.mockImplementation( ( store ) =>
 			store.name === 'core'
-				? { getEntityRecord: mockGetEntityRecord }
+				? {
+						getEntityRecord: mockGetEntityRecord,
+						getPostType: mockGetPostType,
+				  }
 				: {}
 		);
 
@@ -190,9 +195,46 @@ describe( 'initializeEditor', () => {
 		);
 		expect( mockEditorDispatch.setupEditor ).toHaveBeenCalledWith(
 			record,
-			{}
+			{},
+			undefined
 		);
 		expect( render ).toHaveBeenCalled();
+	} );
+
+	it( "should set up an empty post with its type's template", async () => {
+		const record = { id: -1, type: 'post', content: { raw: '' } };
+		const template = [ [ 'core/heading' ] ];
+		mockGetEntityRecord.mockReturnValue( record );
+		mockGetPostType.mockReturnValue( { template } );
+
+		await initializeEditor();
+
+		expect( mockGetPostType ).toHaveBeenCalledWith( 'post' );
+		expect( mockEditorDispatch.setupEditor ).toHaveBeenCalledWith(
+			record,
+			{},
+			template
+		);
+	} );
+
+	it( "should not apply the type's template to a post with content", async () => {
+		const record = {
+			id: -1,
+			type: 'post',
+			content: {
+				raw: '<!-- wp:paragraph --><p>Draft</p><!-- /wp:paragraph -->',
+			},
+		};
+		mockGetEntityRecord.mockReturnValue( record );
+		mockGetPostType.mockReturnValue( { template: [ [ 'core/heading' ] ] } );
+
+		await initializeEditor();
+
+		expect( mockEditorDispatch.setupEditor ).toHaveBeenCalledWith(
+			record,
+			{},
+			undefined
+		);
 	} );
 
 	it( 'should leave the setup to the editor when the post was not seeded', async () => {
