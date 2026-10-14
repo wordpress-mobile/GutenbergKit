@@ -24,6 +24,8 @@ data class SitePreparationUiState(
     val enableNativeMediaUpload: Boolean = true,
     /** Applied only when the site supports theme styles, per [EditorConfiguration.themeStyles]. */
     val enableThemeStyles: Boolean = true,
+    /** Applied only when the site supports block assets, per [EditorConfiguration.plugins]. */
+    val enableThirdPartyBlocks: Boolean = true,
     val enableNetworkLogging: Boolean = false,
     /** All viewable post types fetched from the site, or empty while loading. */
     val postTypes: List<PostTypeDetails> = emptyList(),
@@ -100,6 +102,11 @@ class SitePreparationViewModel(
     fun setEnableThemeStyles(enabled: Boolean) {
         // Prepared dependencies only include editor settings when theme styles are enabled.
         _uiState.update { it.copy(enableThemeStyles = enabled, editorDependencies = null) }
+    }
+
+    fun setEnableThirdPartyBlocks(enabled: Boolean) {
+        // Prepared dependencies only include block assets when third-party blocks are enabled.
+        _uiState.update { it.copy(enableThirdPartyBlocks = enabled, editorDependencies = null) }
     }
 
     fun setEnableNetworkLogging(enabled: Boolean) {
@@ -358,6 +365,7 @@ class SitePreparationViewModel(
             .setEnableNativeBlockInserter(_uiState.value.enableNativeInserter)
             .setEnableInserterMediaStrip(_uiState.value.enableInserterMediaStrip)
             .setThemeStyles(baseConfig.themeStyles && _uiState.value.enableThemeStyles)
+            .setPlugins(baseConfig.plugins && _uiState.value.enableThirdPartyBlocks)
             .setPostType(selectedPostType)
             .build()
     }

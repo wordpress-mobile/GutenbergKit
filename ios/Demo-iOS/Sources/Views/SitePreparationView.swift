@@ -58,6 +58,8 @@ struct SitePreparationView: View {
                 Toggle("Enable Native Media Upload", isOn: $viewModel.enableNativeMediaUpload)
                 Toggle("Enable Theme Styles", isOn: $viewModel.enableThemeStyles)
                     .disabled(!viewModel.siteSupportsThemeStyles)
+                Toggle("Enable Third-Party Blocks", isOn: $viewModel.enableThirdPartyBlocks)
+                    .disabled(!viewModel.siteSupportsBlockAssets)
                 Toggle("Enable Network Logging", isOn: $viewModel.enableNetworkLogging)
 
                 Picker("Network Fallback", selection: $viewModel.networkFallbackMode) {
@@ -98,7 +100,7 @@ struct SitePreparationView: View {
                 Section("Editor Configuration Details") {
                     KeyValueRow(key: "Site URL", value: editorConfiguration.siteURL.absoluteString)
                     KeyValueRow(key: "API Root", value: editorConfiguration.siteApiRoot.absoluteString)
-                    KeyValueRow(key: "Supports Block Assets", value: editorConfiguration.shouldUsePlugins)
+                    KeyValueRow(key: "Supports Block Assets", value: viewModel.siteSupportsBlockAssets)
                     KeyValueRow(key: "Supports Theme Styles", value: viewModel.siteSupportsThemeStyles)
                     KeyValueRow(key: "Editor Locale", value: localeSummary(for: editorConfiguration))
                 }
@@ -201,6 +203,21 @@ class SitePreparationViewModel {
                 .setShouldUseThemeStyles(newValue)
                 .build()
             // Prepared dependencies only include editor settings when theme styles are enabled.
+            editorDependencies = nil
+        }
+    }
+
+    /// Whether the site exposes the editor assets that third-party blocks load from.
+    private(set) var siteSupportsBlockAssets = false
+
+    var enableThirdPartyBlocks: Bool {
+        get { editorConfiguration?.shouldUsePlugins ?? false }
+        set {
+            guard siteSupportsBlockAssets, let config = editorConfiguration else { return }
+            editorConfiguration = config.toBuilder()
+                .setShouldUsePlugins(newValue)
+                .build()
+            // Prepared dependencies only include block assets when third-party blocks are enabled.
             editorDependencies = nil
         }
     }
@@ -330,8 +347,9 @@ class SitePreparationViewModel {
                     }
                 }
 
-                // Record support before the toggle can change the configuration's value.
+                // Record support before the toggles can change the configuration's values.
                 self.siteSupportsThemeStyles = self.editorConfiguration?.shouldUseThemeStyles ?? false
+                self.siteSupportsBlockAssets = self.editorConfiguration?.shouldUsePlugins ?? false
             } catch {
                 self.error = error
             }

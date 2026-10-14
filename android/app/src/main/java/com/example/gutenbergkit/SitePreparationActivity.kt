@@ -325,6 +325,9 @@ private fun LoadedView(
                 siteSupportsThemeStyles = uiState.editorConfiguration?.themeStyles == true,
                 enableThemeStyles = uiState.enableThemeStyles,
                 onEnableThemeStylesChange = viewModel::setEnableThemeStyles,
+                siteSupportsBlockAssets = uiState.editorConfiguration?.plugins == true,
+                enableThirdPartyBlocks = uiState.enableThirdPartyBlocks,
+                onEnableThirdPartyBlocksChange = viewModel::setEnableThirdPartyBlocks,
                 enableNetworkLogging = uiState.enableNetworkLogging,
                 onEnableNetworkLoggingChange = viewModel::setEnableNetworkLogging,
                 postTypes = uiState.postTypes,
@@ -416,6 +419,9 @@ private fun FeatureConfigurationCard(
     siteSupportsThemeStyles: Boolean,
     enableThemeStyles: Boolean,
     onEnableThemeStylesChange: (Boolean) -> Unit,
+    siteSupportsBlockAssets: Boolean,
+    enableThirdPartyBlocks: Boolean,
+    onEnableThirdPartyBlocksChange: (Boolean) -> Unit,
     enableNetworkLogging: Boolean,
     onEnableNetworkLoggingChange: (Boolean) -> Unit,
     postTypes: List<PostTypeDetails>,
@@ -489,6 +495,22 @@ private fun FeatureConfigurationCard(
                     checked = siteSupportsThemeStyles && enableThemeStyles,
                     onCheckedChange = onEnableThemeStylesChange,
                     enabled = siteSupportsThemeStyles
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // Enable Third-Party Blocks Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Enable Third-Party Blocks")
+                Switch(
+                    checked = siteSupportsBlockAssets && enableThirdPartyBlocks,
+                    onCheckedChange = onEnableThirdPartyBlocksChange,
+                    enabled = siteSupportsBlockAssets
                 )
             }
 
