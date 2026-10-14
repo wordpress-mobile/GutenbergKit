@@ -797,6 +797,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// - Parameter force: When true, applies focus even when there is content in the editor.
     public func focus(force: Bool = false) {
         if force || configuration.content.isEmpty {
+            // iOS 27 no longer makes the web view first responder for script
+            // focus, leaving the page without input focus and the keyboard hidden.
+            webView.becomeFirstResponder()
             evaluate("editor.focus();")
         }
     }
