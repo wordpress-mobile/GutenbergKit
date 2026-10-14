@@ -196,6 +196,7 @@ class GutenbergView : FrameLayout {
     private var onFileChooserRequested: ((Intent, Int) -> Unit)? = null
     private var contentChangeListener: ContentChangeListener? = null
     private var historyChangeListener: HistoryChangeListener? = null
+    private var saveAvailabilityListener: SaveAvailabilityListener? = null
     private var featuredImageChangeListener: FeaturedImageChangeListener? = null
     private var openMediaLibraryListener: OpenMediaLibraryListener? = null
     private var editorDidBecomeAvailableListener: EditorAvailableListener? = null
@@ -241,6 +242,10 @@ class GutenbergView : FrameLayout {
 
     fun setHistoryChangeListener(listener: HistoryChangeListener) {
         historyChangeListener = listener
+    }
+
+    fun setSaveAvailabilityListener(listener: SaveAvailabilityListener?) {
+        saveAvailabilityListener = listener
     }
 
     fun setFeaturedImageChangeListener(listener: FeaturedImageChangeListener) {
@@ -862,6 +867,34 @@ class GutenbergView : FrameLayout {
         fun onHistoryChanged(hasUndo: Boolean, hasRedo: Boolean)
     }
 
+    /**
+     * Whether the post can be saved, as reported by the editor.
+     *
+     * @property isSaveable `true` if the post has a title, excerpt, or content
+     * worth saving.
+     * @property isSavingLocked `true` while something in the editor, such as a
+     * media upload, has locked saving.
+     */
+    data class SaveAvailability(
+        val isSaveable: Boolean,
+        val isSavingLocked: Boolean
+    )
+
+    /**
+     * Notified on the main thread once the editor is ready, then each time the
+     * post's save availability changes.
+     *
+     * Hosts should disable their save controls while
+     * [SaveAvailability.isSavingLocked] is `true`, for example while a media
+     * upload is in progress, so they don't persist temporary media URLs.
+     * Disregard the last reported availability after
+     * [EditorUnavailableListener.onEditorUnavailable]; the editor reports it
+     * again once it reloads.
+     */
+    fun interface SaveAvailabilityListener {
+        fun onSaveAvailabilityChanged(availability: SaveAvailability)
+    }
+
     interface FeaturedImageChangeListener {
         fun onFeaturedImageChanged(mediaID: Long)
     }
@@ -1116,6 +1149,14 @@ class GutenbergView : FrameLayout {
     }
 
     @JavascriptInterface
+    fun onEditorSaveAvailabilityChanged(isSaveable: Boolean, isSavingLocked: Boolean) {
+        val availability = SaveAvailability(isSaveable, isSavingLocked)
+        handler.post {
+            saveAvailabilityListener?.onSaveAvailabilityChanged(availability)
+        }
+    }
+
+    @JavascriptInterface
     fun onEditorFeaturedImageChanged(mediaID: Long) {
         featuredImageChangeListener?.onFeaturedImageChanged(mediaID)
     }
@@ -1337,6 +1378,7 @@ class GutenbergView : FrameLayout {
         webView.stopLoading()
         contentChangeListener = null
         historyChangeListener = null
+        saveAvailabilityListener = null
         featuredImageChangeListener = null
         openMediaLibraryListener = null
         logJsExceptionListener = null

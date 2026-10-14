@@ -31,6 +31,8 @@ struct EditorJSMessage {
         case onEditorContentChanged
         /// The editor history (undo, redo) changed.
         case onEditorHistoryChanged
+        /// The post's save availability changed.
+        case onEditorSaveAvailabilityChanged
         /// The editor featured image changed.
         case onEditorFeaturedImageChanged
         /// The editor logged an exception.

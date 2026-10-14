@@ -842,6 +842,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 self.state.hasUndo = body.hasUndo
                 self.state.hasRedo = body.hasRedo
                 delegate?.editor(self, didUpdateHistoryState: state)
+            case .onEditorSaveAvailabilityChanged:
+                let availability = try message.decode(EditorSaveAvailability.self)
+                delegate?.editor(self, didUpdateSaveAvailability: availability)
             case .onEditorFeaturedImageChanged:
                 let body = try message.decode(EditorJSMessage.DidUpdateFeaturedImageBody.self)
                 delegate?.editor(self, didUpdateFeaturedImage: body.mediaID)
