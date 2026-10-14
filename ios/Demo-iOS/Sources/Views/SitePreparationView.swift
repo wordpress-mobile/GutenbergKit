@@ -79,6 +79,7 @@ struct SitePreparationView: View {
                             Text(postType.name).tag(postType)
                         }
                     }
+                    .disabled(viewModel.disableButtons)
 
                     NavigationLink {
                         if let client = viewModel.client,
