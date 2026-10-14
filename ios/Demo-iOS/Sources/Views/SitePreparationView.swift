@@ -57,9 +57,9 @@ struct SitePreparationView: View {
                 Toggle("Enable Native Inserter", isOn: $viewModel.enableNativeInserter)
                 Toggle("Enable Native Media Upload", isOn: $viewModel.enableNativeMediaUpload)
                 Toggle("Enable Theme Styles", isOn: $viewModel.enableThemeStyles)
-                    .disabled(!viewModel.siteSupportsThemeStyles)
+                    .disabled(!viewModel.siteSupportsThemeStyles || viewModel.disableButtons)
                 Toggle("Enable Third-Party Blocks", isOn: $viewModel.enableThirdPartyBlocks)
-                    .disabled(!viewModel.siteSupportsBlockAssets)
+                    .disabled(!viewModel.siteSupportsBlockAssets || viewModel.disableButtons)
                 Toggle("Enable Network Logging", isOn: $viewModel.enableNetworkLogging)
 
                 Picker("Network Fallback", selection: $viewModel.networkFallbackMode) {

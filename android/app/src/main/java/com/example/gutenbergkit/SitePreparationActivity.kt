@@ -328,6 +328,7 @@ private fun LoadedView(
                 siteSupportsBlockAssets = uiState.editorConfiguration?.plugins == true,
                 enableThirdPartyBlocks = uiState.enableThirdPartyBlocks,
                 onEnableThirdPartyBlocksChange = viewModel::setEnableThirdPartyBlocks,
+                isPreparing = uiState.isLoading,
                 enableNetworkLogging = uiState.enableNetworkLogging,
                 onEnableNetworkLoggingChange = viewModel::setEnableNetworkLogging,
                 postTypes = uiState.postTypes,
@@ -422,6 +423,7 @@ private fun FeatureConfigurationCard(
     siteSupportsBlockAssets: Boolean,
     enableThirdPartyBlocks: Boolean,
     onEnableThirdPartyBlocksChange: (Boolean) -> Unit,
+    isPreparing: Boolean,
     enableNetworkLogging: Boolean,
     onEnableNetworkLoggingChange: (Boolean) -> Unit,
     postTypes: List<PostTypeDetails>,
@@ -494,7 +496,7 @@ private fun FeatureConfigurationCard(
                 Switch(
                     checked = siteSupportsThemeStyles && enableThemeStyles,
                     onCheckedChange = onEnableThemeStylesChange,
-                    enabled = siteSupportsThemeStyles
+                    enabled = siteSupportsThemeStyles && !isPreparing
                 )
             }
 
@@ -510,7 +512,7 @@ private fun FeatureConfigurationCard(
                 Switch(
                     checked = siteSupportsBlockAssets && enableThirdPartyBlocks,
                     onCheckedChange = onEnableThirdPartyBlocksChange,
-                    enabled = siteSupportsBlockAssets
+                    enabled = siteSupportsBlockAssets && !isPreparing
                 )
             }
 
