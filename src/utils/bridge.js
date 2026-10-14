@@ -332,12 +332,13 @@ export async function getPost() {
 
 	if ( hostContent ) {
 		debug( 'Using content from native host' );
+		const id = post?.id || POST_FALLBACKS.id;
 		return {
-			id: post?.id || POST_FALLBACKS.id,
+			id,
 			type: post?.type || POST_FALLBACKS.type,
 			restBase: post?.restBase || POST_FALLBACKS.restBase,
 			restNamespace: post?.restNamespace || POST_FALLBACKS.restNamespace,
-			status: post?.status || POST_FALLBACKS.status,
+			status: getPostStatus( id, post?.status ),
 			title: { raw: hostContent.title },
 			content: { raw: hostContent.content },
 		};
@@ -345,12 +346,13 @@ export async function getPost() {
 
 	if ( post ) {
 		debug( 'Native bridge unavailable, using GBKit initial content' );
+		const id = post.id || POST_FALLBACKS.id;
 		return {
-			id: post.id || POST_FALLBACKS.id,
+			id,
 			type: post.type || POST_FALLBACKS.type,
 			restBase: post.restBase || POST_FALLBACKS.restBase,
 			restNamespace: post.restNamespace || POST_FALLBACKS.restNamespace,
-			status: post.status || POST_FALLBACKS.status,
+			status: getPostStatus( id, post.status ),
 			title: { raw: decodeURIComponent( post.title ) },
 			content: { raw: decodeURIComponent( post.content ) },
 		};
@@ -359,9 +361,29 @@ export async function getPost() {
 	// Fallback to default empty post
 	return {
 		...POST_FALLBACKS,
+		status: getPostStatus( POST_FALLBACKS.id ),
 		title: { raw: '' },
 		content: { raw: '' },
 	};
+}
+
+/**
+ * Returns the status to seed the post with.
+ *
+ * A post the server doesn't have yet is an auto-draft, as WP Admin seeds new
+ * posts, so core treats it as new. The status stays local: the editor never
+ * saves the post, and no bridge message sends it to the host.
+ *
+ * @param {number} id       The post ID.
+ * @param {string} [status] The status the host sent.
+ * @return {string} The status.
+ */
+function getPostStatus( id, status ) {
+	if ( id === POST_FALLBACKS.id ) {
+		return 'auto-draft';
+	}
+
+	return status || POST_FALLBACKS.status;
 }
 
 /**

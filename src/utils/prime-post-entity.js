@@ -22,7 +22,10 @@ import { buildPostTypeEntity } from './post-type-entities';
  * @return {Promise<void>} Resolves once the post is seeded.
  */
 export async function primePostEntity( post ) {
-	await registerPostTypeEntity( post );
+	await Promise.all( [
+		registerPostTypeEntity( post ),
+		resolvePostType( post ),
+	] );
 
 	const { receiveEntityRecords, finishResolution } = dispatch( coreStore );
 	receiveEntityRecords( 'postType', post.type, buildPostRecord( post ) );
@@ -47,6 +50,22 @@ async function registerPostTypeEntity( post ) {
 
 	warn( `Post type "${ post.type }" not loaded; using a fallback config` );
 	dispatch( coreStore ).addEntities( [ buildPostTypeEntity( post ) ] );
+}
+
+/**
+ * Loads the post's type, whose template the editor setup applies to new posts.
+ *
+ * A failure is logged rather than thrown, as the editor works without it.
+ *
+ * @param {Post} post The post from the host.
+ * @return {Promise<void>} Resolves once the post type is loaded or failed.
+ */
+async function resolvePostType( post ) {
+	try {
+		await resolveSelect( coreStore ).getPostType( post.type );
+	} catch ( err ) {
+		warn( `Failed to load post type "${ post.type }"`, err );
+	}
 }
 
 /**
