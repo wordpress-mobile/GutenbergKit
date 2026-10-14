@@ -100,12 +100,12 @@ class SitePreparationViewModel(
     }
 
     fun setEnableThemeStyles(enabled: Boolean) {
-        // Prepared dependencies only include editor settings when theme styles are enabled.
+        // Discard dependencies prepared under the previous setting.
         _uiState.update { it.copy(enableThemeStyles = enabled, editorDependencies = null) }
     }
 
     fun setEnableThirdPartyBlocks(enabled: Boolean) {
-        // Prepared dependencies only include block assets when third-party blocks are enabled.
+        // Discard dependencies prepared under the previous setting.
         _uiState.update { it.copy(enableThirdPartyBlocks = enabled, editorDependencies = null) }
     }
 

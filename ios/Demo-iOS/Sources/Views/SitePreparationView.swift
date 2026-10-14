@@ -206,7 +206,7 @@ class SitePreparationViewModel {
             editorConfiguration = config.toBuilder()
                 .setShouldUseThemeStyles(newValue)
                 .build()
-            // Prepared dependencies only include editor settings when theme styles are enabled.
+            // Discard dependencies prepared under the previous setting.
             editorDependencies = nil
         }
     }
@@ -225,7 +225,7 @@ class SitePreparationViewModel {
             editorConfiguration = config.toBuilder()
                 .setShouldUsePlugins(newValue)
                 .build()
-            // Prepared dependencies only include block assets when third-party blocks are enabled.
+            // Discard dependencies prepared under the previous setting.
             editorDependencies = nil
         }
     }
