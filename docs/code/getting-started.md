@@ -46,6 +46,20 @@ Alternatively, you can load a production build of the web app bundled with the G
 
 </details>
 
+#### Launching From the Command Line
+
+To run the demo app without Xcode, build it, install it, and launch it by its bundle ID, `org.wordpress.gutenberg.development`:
+
+```bash
+xcodebuild build -project ./ios/Demo-iOS/Gutenberg.xcodeproj -scheme Gutenberg \
+  -sdk iphonesimulator -destination 'id=<simulator UDID>' -derivedDataPath ./build/DerivedData
+xcrun simctl install <simulator UDID> build/DerivedData/Build/Products/Debug-iphonesimulator/Gutenberg.app
+SIMCTL_CHILD_GUTENBERG_EDITOR_URL=http://localhost:5173/ \
+  xcrun simctl launch <simulator UDID> org.wordpress.gutenberg.development
+```
+
+`simctl launch` doesn't apply the scheme's environment variables, so pass any you need with the `SIMCTL_CHILD_` prefix. `GUTENBERG_EDITOR_URL` loads the editor from the development server; omit it to use the bundled build. To sign the app into sites, see [Signing In to the Demo Apps](./demo-app-login.md).
+
 ### Android
 
 The Android demo app loads the production build of the web app bundled with the GutenbergKit package by default—i.e., the output of the project's `make build` command. It can be configured to load the development server by setting a `GUTENBERG_EDITOR_URL` environment variable in the `android/local.properties` file.
