@@ -56,6 +56,8 @@ struct SitePreparationView: View {
             Section("Feature Configuration") {
                 Toggle("Enable Native Inserter", isOn: $viewModel.enableNativeInserter)
                 Toggle("Enable Native Media Upload", isOn: $viewModel.enableNativeMediaUpload)
+                Toggle("Enable Theme Styles", isOn: $viewModel.enableThemeStyles)
+                    .disabled(!viewModel.siteSupportsThemeStyles)
                 Toggle("Enable Network Logging", isOn: $viewModel.enableNetworkLogging)
 
                 Picker("Network Fallback", selection: $viewModel.networkFallbackMode) {
@@ -97,7 +99,7 @@ struct SitePreparationView: View {
                     KeyValueRow(key: "Site URL", value: editorConfiguration.siteURL.absoluteString)
                     KeyValueRow(key: "API Root", value: editorConfiguration.siteApiRoot.absoluteString)
                     KeyValueRow(key: "Supports Block Assets", value: editorConfiguration.shouldUsePlugins)
-                    KeyValueRow(key: "Supports Theme Styles", value: editorConfiguration.shouldUseThemeStyles)
+                    KeyValueRow(key: "Supports Theme Styles", value: viewModel.siteSupportsThemeStyles)
                     KeyValueRow(key: "Editor Locale", value: localeSummary(for: editorConfiguration))
                 }
             }
@@ -187,6 +189,21 @@ class SitePreparationViewModel {
     }
 
     var enableNativeMediaUpload: Bool = true
+
+    /// Whether the site exposes the editor settings that theme styles load from.
+    private(set) var siteSupportsThemeStyles = false
+
+    var enableThemeStyles: Bool {
+        get { editorConfiguration?.shouldUseThemeStyles ?? false }
+        set {
+            guard siteSupportsThemeStyles, let config = editorConfiguration else { return }
+            editorConfiguration = config.toBuilder()
+                .setShouldUseThemeStyles(newValue)
+                .build()
+            // Prepared dependencies only include editor settings when theme styles are enabled.
+            editorDependencies = nil
+        }
+    }
 
     var enableNetworkLogging: Bool {
         get { editorConfiguration?.enableNetworkLogging ?? false }
@@ -312,6 +329,9 @@ class SitePreparationViewModel {
                         self.editorConfiguration = Self.applyDemoAppDefaults(to: fallback)
                     }
                 }
+
+                // Record support before the toggle can change the configuration's value.
+                self.siteSupportsThemeStyles = self.editorConfiguration?.shouldUseThemeStyles ?? false
             } catch {
                 self.error = error
             }

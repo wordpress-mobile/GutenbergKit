@@ -322,6 +322,9 @@ private fun LoadedView(
                 onEnableInserterMediaStripChange = viewModel::setEnableInserterMediaStrip,
                 enableNativeMediaUpload = uiState.enableNativeMediaUpload,
                 onEnableNativeMediaUploadChange = viewModel::setEnableNativeMediaUpload,
+                siteSupportsThemeStyles = uiState.editorConfiguration?.themeStyles == true,
+                enableThemeStyles = uiState.enableThemeStyles,
+                onEnableThemeStylesChange = viewModel::setEnableThemeStyles,
                 enableNetworkLogging = uiState.enableNetworkLogging,
                 onEnableNetworkLoggingChange = viewModel::setEnableNetworkLogging,
                 postTypes = uiState.postTypes,
@@ -410,6 +413,9 @@ private fun FeatureConfigurationCard(
     onEnableInserterMediaStripChange: (Boolean) -> Unit,
     enableNativeMediaUpload: Boolean,
     onEnableNativeMediaUploadChange: (Boolean) -> Unit,
+    siteSupportsThemeStyles: Boolean,
+    enableThemeStyles: Boolean,
+    onEnableThemeStylesChange: (Boolean) -> Unit,
     enableNetworkLogging: Boolean,
     onEnableNetworkLoggingChange: (Boolean) -> Unit,
     postTypes: List<PostTypeDetails>,
@@ -467,6 +473,22 @@ private fun FeatureConfigurationCard(
                 Switch(
                     checked = enableNativeMediaUpload,
                     onCheckedChange = onEnableNativeMediaUploadChange
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // Enable Theme Styles Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Enable Theme Styles")
+                Switch(
+                    checked = siteSupportsThemeStyles && enableThemeStyles,
+                    onCheckedChange = onEnableThemeStylesChange,
+                    enabled = siteSupportsThemeStyles
                 )
             }
 

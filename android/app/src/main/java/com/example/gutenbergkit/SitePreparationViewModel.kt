@@ -22,6 +22,8 @@ data class SitePreparationUiState(
     val enableNativeInserter: Boolean = true,
     val enableInserterMediaStrip: Boolean = false,
     val enableNativeMediaUpload: Boolean = true,
+    /** Applied only when the site supports theme styles, per [EditorConfiguration.themeStyles]. */
+    val enableThemeStyles: Boolean = true,
     val enableNetworkLogging: Boolean = false,
     /** All viewable post types fetched from the site, or empty while loading. */
     val postTypes: List<PostTypeDetails> = emptyList(),
@@ -95,6 +97,11 @@ class SitePreparationViewModel(
         _uiState.update { it.copy(enableNativeMediaUpload = enabled) }
     }
 
+    fun setEnableThemeStyles(enabled: Boolean) {
+        // Prepared dependencies only include editor settings when theme styles are enabled.
+        _uiState.update { it.copy(enableThemeStyles = enabled, editorDependencies = null) }
+    }
+
     fun setEnableNetworkLogging(enabled: Boolean) {
         _uiState.update { it.copy(enableNetworkLogging = enabled) }
     }
@@ -104,7 +111,7 @@ class SitePreparationViewModel(
     }
 
     fun prepareEditor() {
-        val configuration = _uiState.value.editorConfiguration ?: return
+        val configuration = buildConfiguration() ?: return
 
         val cacheIntervalSeconds = 86_400L // Cache for one day
         val editorService = EditorService.create(
@@ -117,7 +124,7 @@ class SitePreparationViewModel(
     }
 
     fun prepareEditorFromScratch() {
-        val configuration = _uiState.value.editorConfiguration ?: return
+        val configuration = buildConfiguration() ?: return
 
         val editorService = EditorService.create(
             context = getApplication(),
@@ -350,6 +357,7 @@ class SitePreparationViewModel(
             .setEnableNetworkLogging(_uiState.value.enableNetworkLogging)
             .setEnableNativeBlockInserter(_uiState.value.enableNativeInserter)
             .setEnableInserterMediaStrip(_uiState.value.enableInserterMediaStrip)
+            .setThemeStyles(baseConfig.themeStyles && _uiState.value.enableThemeStyles)
             .setPostType(selectedPostType)
             .build()
     }
