@@ -7,6 +7,7 @@ import Layout from '../components/layout';
 import { unregisterDisallowedBlocks } from './blocks';
 import { getGBKit, getPost } from './bridge';
 import { getDefaultEditorSettings } from './editor-settings';
+import { primePostEntity } from './prime-post-entity';
 
 /**
  * Configure editor settings and styles, and render the editor.
@@ -41,6 +42,7 @@ export async function initializeEditor( {
 	unregisterDisallowedBlocks( allowedBlockTypes );
 
 	const post = await getPost();
+	await primePostEntity( post );
 
 	createRoot( document.getElementById( 'root' ) ).render(
 		<StrictMode>
