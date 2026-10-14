@@ -23,8 +23,8 @@ const MEDIA_ATTACHMENT_PATH = /^\/wp\/v2\/media\/(\d+)(\?|$)/;
  */
 export const NATIVE_UPLOAD_CHUNK_SIZE = 4 * 1024 * 1024;
 
-/** Methods safe to repeat because they do not change server state. */
-const RETRYABLE_METHODS = [ 'GET', 'HEAD', 'OPTIONS' ];
+/** Methods that do not change server state, so are safe to repeat. */
+const SAFE_METHODS = [ 'GET', 'HEAD', 'OPTIONS' ];
 
 /** Base delay before each retry; jitter of up to the same amount is added. */
 const RETRY_DELAYS_MS = [ 500, 2000 ];
@@ -49,7 +49,7 @@ export function configureApiFetch() {
 	apiFetch.use( corsMiddleware );
 	apiFetch.use( apiPathModifierMiddleware );
 	apiFetch.use( tokenAuthMiddleware );
-	apiFetch.use( filterEndpointsMiddleware );
+	apiFetch.use( blockPostWritesMiddleware );
 	// `apiFetch.use` unshifts, so the last registration runs first. Core's media
 	// upload middleware is registered after the native one so that it runs
 	// before it, wrapping it: the native middleware handles an upload without
@@ -176,42 +176,55 @@ function tokenAuthMiddleware( options, next ) {
 }
 
 /**
- * Middleware to filter out requests to specific endpoints.
+ * Middleware rejecting writes to the post being edited, including autosaves.
+ *
+ * The host app saves the post, so a save from the editor, e.g. a plugin calling
+ * `savePost()`, would race the host's. Rejecting it, rather than resolving an
+ * empty response, keeps core from treating the post as saved and clearing its
+ * edits.
  *
  * @type {APIFetchMiddleware}
  *
- * @todo Properly seed the post entity and remove this middleware.
- *
- * This was added to prevent re-fetching entity content provided by the native
- * host app, which can lead to content loss. However, we can likely avoid the
- * need for this middleware by ensuring we properly seed the entity content into
- * the store on initialization.
- *
- * This requires hoisting the relevant logic from `useEditorSetup` to occur
- * before we render the editor, and invoking `finishResolution`.
- *
- * See: https://github.com/wordpress-mobile/GutenbergKit/commit/c9b4fc9978a3760ba97f3f5d4359c2bc2155bb80
+ * @todo Remove once the editor saves posts.
  */
-function filterEndpointsMiddleware( options, next ) {
-	const { post } = getGBKit();
+function blockPostWritesMiddleware( options, next ) {
+	const method = ( options.method ?? 'GET' ).toUpperCase();
 
-	if ( ! post || post.id === undefined ) {
+	if ( SAFE_METHODS.includes( method ) || ! isPostPath( options.path ) ) {
 		return next( options );
 	}
 
-	// Apply the same fallback contract as `getPost()` so the filter still
+	warn(
+		`Blocked ${ method } ${ options.path }: the host app saves the post`
+	);
+	return Promise.reject( {
+		code: 'gutenberg_kit_post_write_blocked',
+		message: 'The host app saves the post.',
+	} );
+}
+
+/**
+ * Whether a request path targets the post being edited or one of its
+ * sub-resources, such as autosaves.
+ *
+ * @param {string} [path] The request path, e.g. `/wp/v2/posts/1/autosaves`.
+ * @return {boolean} True for the post's paths.
+ */
+function isPostPath( path ) {
+	const { post } = getGBKit();
+
+	if ( typeof path !== 'string' || ! post || post.id === undefined ) {
+		return false;
+	}
+
+	// Apply the same fallback contract as `getPost()` so the guard still
 	// engages on hosts whose payload omits restBase/restNamespace.
 	const restNamespace = post.restNamespace || POST_FALLBACKS.restNamespace;
 	const restBase = post.restBase || POST_FALLBACKS.restBase;
-	const disabledPath = `/${ restNamespace }/${ restBase }/${ post.id }`;
+	const postPath = `/${ restNamespace }/${ restBase }/${ post.id }`;
+	const pathname = path.split( '?' )[ 0 ];
 
-	if (
-		options.path === disabledPath ||
-		options.path?.startsWith( `${ disabledPath }?` )
-	) {
-		return Promise.resolve( [] );
-	}
-	return next( options );
+	return pathname === postPath || pathname.startsWith( `${ postPath }/` );
 }
 
 /**
@@ -963,7 +976,7 @@ function isRestIndexPath( path ) {
 export function withRateLimitRetry( fetchHandler ) {
 	return async ( options ) => {
 		const method = ( options.method ?? 'GET' ).toUpperCase();
-		if ( ! RETRYABLE_METHODS.includes( method ) ) {
+		if ( ! SAFE_METHODS.includes( method ) ) {
 			return fetchHandler( options );
 		}
 

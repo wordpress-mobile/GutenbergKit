@@ -115,71 +115,72 @@ describe( 'api-fetch credentials handling', () => {
 		expect( options.headers.Authorization ).toBe( 'Bearer override-token' );
 	} );
 
-	describe( 'filterEndpointsMiddleware', () => {
-		it( 'filters the post endpoint when restBase and restNamespace are provided', async () => {
-			bridge.getGBKit.mockReturnValue( {
-				siteApiRoot: 'https://example.com/wp-json/',
-				siteApiNamespace: [ 'wp/v2' ],
-				namespaceExcludedPaths: [],
-				post: {
-					id: 42,
-					restBase: 'posts',
-					restNamespace: 'wp/v2',
-				},
-			} );
+	describe( 'blockPostWritesMiddleware', () => {
+		const gbkit = {
+			siteApiRoot: 'https://example.com/wp-json/',
+			siteApiNamespace: [ 'wp/v2' ],
+			namespaceExcludedPaths: [],
+			post: {
+				id: 42,
+				restBase: 'posts',
+				restNamespace: 'wp/v2',
+			},
+		};
 
-			const result = await apiFetch( { path: '/wp/v2/posts/42' } );
+		it.each( [
+			[ 'PUT', '/wp/v2/posts/42' ],
+			[ 'post', '/wp/v2/posts/42?_locale=user' ],
+			[ 'DELETE', '/wp/v2/posts/42' ],
+			[ 'POST', '/wp/v2/posts/42/autosaves' ],
+		] )( 'rejects %s %s', async ( method, path ) => {
+			bridge.getGBKit.mockReturnValue( gbkit );
 
+			await expect( apiFetch( { path, method } ) ).rejects.toMatchObject(
+				{ code: 'gutenberg_kit_post_write_blocked' }
+			);
 			expect( global.fetch ).not.toHaveBeenCalled();
-			expect( result ).toEqual( [] );
+			expect( logger.warn ).toHaveBeenCalled();
+		} );
+
+		it.each( [
+			[ 'GET', '/wp/v2/posts/42' ],
+			[ 'OPTIONS', '/wp/v2/posts/42' ],
+			[ 'PUT', '/wp/v2/posts/421' ],
+			[ 'POST', '/wp/v2/posts' ],
+			[ 'POST', '/wp/v2/pages/42' ],
+		] )( 'lets %s %s through', async ( method, path ) => {
+			bridge.getGBKit.mockReturnValue( gbkit );
+
+			await apiFetch( { path, method } );
+
+			expect( global.fetch ).toHaveBeenCalled();
 		} );
 
 		it( 'falls back to default restBase and restNamespace when omitted from the payload', async () => {
 			bridge.getGBKit.mockReturnValue( {
-				siteApiRoot: 'https://example.com/wp-json/',
-				siteApiNamespace: [ 'wp/v2' ],
-				namespaceExcludedPaths: [],
+				...gbkit,
 				post: {
 					id: 7,
 					// restBase and restNamespace intentionally omitted
 				},
 			} );
 
-			const result = await apiFetch( { path: '/wp/v2/posts/7' } );
-
+			await expect(
+				apiFetch( { path: '/wp/v2/posts/7', method: 'PUT' } )
+			).rejects.toMatchObject( {
+				code: 'gutenberg_kit_post_write_blocked',
+			} );
 			expect( global.fetch ).not.toHaveBeenCalled();
-			expect( result ).toEqual( [] );
 		} );
 
-		it( 'lets the request through when post id is undefined', async () => {
-			bridge.getGBKit.mockReturnValue( {
-				siteApiRoot: 'https://example.com/wp-json/',
-				siteApiNamespace: [ 'wp/v2' ],
-				namespaceExcludedPaths: [],
-				post: {},
-			} );
-
-			try {
-				await apiFetch( { path: '/wp/v2/posts/99' } );
-			} catch {
-				// Ignore errors from the actual fetch
-			}
-
-			expect( global.fetch ).toHaveBeenCalled();
-		} );
-
-		it( 'lets the request through when no post payload is present', async () => {
+		it( 'lets writes through when no post payload is present', async () => {
 			bridge.getGBKit.mockReturnValue( {
 				siteApiRoot: 'https://example.com/wp-json/',
 				siteApiNamespace: [ 'wp/v2' ],
 				namespaceExcludedPaths: [],
 			} );
 
-			try {
-				await apiFetch( { path: '/wp/v2/posts/99' } );
-			} catch {
-				// Ignore errors from the actual fetch
-			}
+			await apiFetch( { path: '/wp/v2/posts/99', method: 'PUT' } );
 
 			expect( global.fetch ).toHaveBeenCalled();
 		} );

@@ -274,7 +274,7 @@ export function onNetworkRequest( requestData ) {
 
 /**
  * Default values used when the native host omits fields from the post payload.
- * Centralized here so all consumers (getPost, filterEndpointsMiddleware) agree
+ * Centralized here so all consumers (getPost, blockPostWritesMiddleware) agree
  * on the fallback contract.
  */
 export const POST_FALLBACKS = {
