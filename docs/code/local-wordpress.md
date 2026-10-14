@@ -76,6 +76,21 @@ The iOS Simulator shares the host machine's network stack. Requests to `localhos
 
 The Xcode scheme includes a `WP_ENV_CREDENTIALS_PATH` environment variable pointing to the credentials file.
 
+#### Launching From the Command Line
+
+To run the demo app without Xcode, build it, install it, and launch it by its bundle ID, `org.wordpress.gutenberg.development`:
+
+```bash
+xcodebuild build -project ./ios/Demo-iOS/Gutenberg.xcodeproj -scheme Gutenberg \
+  -sdk iphonesimulator -destination 'id=<simulator UDID>' -derivedDataPath ./build/DerivedData
+xcrun simctl install <simulator UDID> build/DerivedData/Build/Products/Debug-iphonesimulator/Gutenberg.app
+SIMCTL_CHILD_GUTENBERG_EDITOR_URL=http://localhost:5173/ \
+SIMCTL_CHILD_WP_ENV_CREDENTIALS_PATH="$PWD/.wp-env.credentials.json" \
+  xcrun simctl launch <simulator UDID> org.wordpress.gutenberg.development
+```
+
+`simctl launch` doesn't apply the scheme's environment variables, so pass them with the `SIMCTL_CHILD_` prefix. `GUTENBERG_EDITOR_URL` loads the editor from the Vite development server (`make serve-dev`); omit it to use the bundled build.
+
 ### Android Emulator
 
 The Android emulator cannot reach `localhost` on the host machine directly. The credentials loader automatically remaps `localhost` to `10.0.2.2` (the emulator's alias for the host). Credentials are read at build time and baked into `BuildConfig` fields, since the emulator cannot access the host filesystem at runtime.
