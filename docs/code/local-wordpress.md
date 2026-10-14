@@ -74,7 +74,7 @@ Both demo apps include a **"Local WordPress"** option that is always visible. Wh
 
 The iOS Simulator shares the host machine's network stack. Requests to `localhost:8888` work directly.
 
-The Xcode scheme includes a `WP_ENV_CREDENTIALS_PATH` environment variable pointing to the credentials file.
+The Xcode scheme includes a `WP_ENV_CREDENTIALS_PATH` environment variable pointing to the credentials file. When [launching the demo app from the command line](./getting-started.md#launching-from-the-command-line), pass it as `SIMCTL_CHILD_WP_ENV_CREDENTIALS_PATH="$PWD/.wp-env.credentials.json"`.
 
 ### Android Emulator
 
