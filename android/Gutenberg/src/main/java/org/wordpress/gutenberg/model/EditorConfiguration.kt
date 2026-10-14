@@ -27,6 +27,13 @@ data class EditorConfiguration(
     val cookies: Map<String, String>,
     val enableAssetCaching: Boolean = false,
     val cachedAssetHosts: Set<String> = emptySet(),
+    /**
+     * Places that [authHeader] may be sent to over HTTPS, besides the site and its API, which
+     * always receive it. A name is one host, exactly: `s0.wp.com`. A name that starts with `*.`
+     * is the domain that follows and every subdomain of it: `*.wp.com`. See
+     * [Builder.setAuthHeaderDomains].
+     */
+    val authHeaderDomains: Set<String> = emptySet(),
     val editorAssetsEndpoint: String? = null,
     val enableNetworkLogging: Boolean = false,
     var enableOfflineMode: Boolean = false,
@@ -85,6 +92,7 @@ data class EditorConfiguration(
         private var cookies: Map<String, String> = mapOf()
         private var enableAssetCaching: Boolean = false
         private var cachedAssetHosts: Set<String> = emptySet()
+        private var authHeaderDomains: Set<String> = emptySet()
         private var editorAssetsEndpoint: String? = null
         private var enableNetworkLogging: Boolean = false
         private var enableOfflineMode: Boolean = false
@@ -104,6 +112,24 @@ data class EditorConfiguration(
         fun setSiteApiNamespace(siteApiNamespace: Array<String>) = apply { this.siteApiNamespace = siteApiNamespace }
         fun setNamespaceExcludedPaths(namespaceExcludedPaths: Array<String>) = apply { this.namespaceExcludedPaths = namespaceExcludedPaths }
         fun setAuthHeader(authHeader: String) = apply { this.authHeader = authHeader }
+
+        /**
+         * Sets the places the auth header may be sent to, besides the site and its API, which
+         * always receive it. Only requests over HTTPS qualify.
+         *
+         * Each name is taken exactly as written:
+         *
+         * - `s0.wp.com` is that one host. It isn't its subdomains, and it isn't `s1.wp.com`.
+         * - `*.wp.com` is `wp.com` and every subdomain of it, however deep.
+         *
+         * A wildcard is only ever the whole first label, and is taken at its word: `*.com` is
+         * every `.com` site. Name the narrowest domain that will do.
+         *
+         * A site reached through WordPress.com is served from more than its own address — its
+         * assets from `wp.com` and its files from `files.wordpress.com`, say — and can name those
+         * here: `setOf("*.wp.com", "*.files.wordpress.com")`.
+         */
+        fun setAuthHeaderDomains(authHeaderDomains: Set<String>) = apply { this.authHeaderDomains = authHeaderDomains }
         fun setEditorSettings(editorSettings: String?) = apply { this.editorSettings = editorSettings }
         /**
          * Stores [locale] verbatim without running the resolver. Reserved for
@@ -168,6 +194,7 @@ data class EditorConfiguration(
             cookies = cookies,
             enableAssetCaching = enableAssetCaching,
             cachedAssetHosts = cachedAssetHosts,
+            authHeaderDomains = authHeaderDomains,
             editorAssetsEndpoint = editorAssetsEndpoint,
             enableNetworkLogging = enableNetworkLogging,
             enableOfflineMode = enableOfflineMode,
@@ -197,6 +224,7 @@ data class EditorConfiguration(
         .setCookies(cookies)
         .setEnableAssetCaching(enableAssetCaching)
         .setCachedAssetHosts(cachedAssetHosts)
+        .setAuthHeaderDomains(authHeaderDomains)
         .setEditorAssetsEndpoint(editorAssetsEndpoint)
         .setEnableNetworkLogging(enableNetworkLogging)
         .setEnableOfflineMode(enableOfflineMode)
@@ -227,6 +255,7 @@ data class EditorConfiguration(
         if (cookies != other.cookies) return false
         if (enableAssetCaching != other.enableAssetCaching) return false
         if (cachedAssetHosts != other.cachedAssetHosts) return false
+        if (authHeaderDomains != other.authHeaderDomains) return false
         if (editorAssetsEndpoint != other.editorAssetsEndpoint) return false
         if (enableNetworkLogging != other.enableNetworkLogging) return false
         if (enableOfflineMode != other.enableOfflineMode) return false
@@ -256,6 +285,7 @@ data class EditorConfiguration(
         result = 31 * result + cookies.hashCode()
         result = 31 * result + enableAssetCaching.hashCode()
         result = 31 * result + cachedAssetHosts.hashCode()
+        result = 31 * result + authHeaderDomains.hashCode()
         result = 31 * result + (editorAssetsEndpoint?.hashCode() ?: 0)
         result = 31 * result + enableNetworkLogging.hashCode()
         result = 31 * result + enableOfflineMode.hashCode()

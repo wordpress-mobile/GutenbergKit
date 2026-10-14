@@ -224,10 +224,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         httpClient: EditorHTTPClient? = nil,
         isWarmupMode: Bool = false
     ) {
-        let httpClient = httpClient ?? EditorHTTPClient(
-            urlSession: URLSession.shared,
-            authHeader: configuration.authHeader
-        )
+        let httpClient = httpClient ?? EditorHTTPClient(configuration: configuration)
 
         self.configuration = configuration
         self.dependencies = dependencies

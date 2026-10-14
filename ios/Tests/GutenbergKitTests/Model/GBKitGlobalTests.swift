@@ -55,6 +55,18 @@ struct GBKitGlobalTests: MakesTestFixtures {
     #expect(global.siteApiRoot == Self.testApiRoot)
   }
 
+  @Test("maps authHeaderDomains from configuration, for the editor's own requests")
+  func mapsAuthHeaderDomains() throws {
+    let configuration = makeConfiguration().toBuilder()
+      .setAuthHeaderDomains(["*.wp.com", "*.files.wordpress.com"])
+      .build()
+
+    let global = try GBKitGlobal(configuration: configuration, dependencies: makeDependencies())
+
+    #expect(global.authHeaderDomains == ["*.wp.com", "*.files.wordpress.com"])
+    #expect(try global.toString().contains(#""authHeaderDomains":["*.wp.com","*.files.wordpress.com"]"#))
+  }
+
   @Test("maps themeStyles from configuration")
   func mapsThemeStyles() throws {
     let withThemeStyles = makeConfiguration(shouldUseThemeStyles: true)

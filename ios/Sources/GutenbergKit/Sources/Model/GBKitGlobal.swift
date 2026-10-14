@@ -56,6 +56,9 @@ public struct GBKitGlobal: Sendable, Codable {
     /// The authorization header value for authenticated API requests.
     let authHeader: String
 
+    /// Domains that `authHeader` may be sent to, besides the site and its API.
+    let authHeaderDomains: [String]
+
     /// Whether to apply theme styles to the editor.
     let themeStyles: Bool
 
@@ -111,6 +114,7 @@ public struct GBKitGlobal: Sendable, Codable {
         self.siteApiNamespace = configuration.siteApiNamespace
         self.namespaceExcludedPaths = configuration.namespaceExcludedPaths
         self.authHeader = configuration.authHeader
+        self.authHeaderDomains = configuration.authHeaderDomains
         self.themeStyles = configuration.shouldUseThemeStyles
         self.plugins = configuration.shouldUsePlugins
         self.enableNativeBlockInserter = configuration.isNativeInserterEnabled
