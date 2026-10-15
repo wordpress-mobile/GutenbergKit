@@ -1976,10 +1976,38 @@ struct EditorAssetLibraryTests {
         #expect(await library.missingAssets(of: bundle).isEmpty)
     }
 
+    /// A site can answer a request for an asset with a web page and still say it went well: one to log in
+    /// on, or one saying what went wrong. Kept, it would be served to every editor in the asset's place.
+    @Test(
+        "a download that's a web page isn't kept, and is missed",
+        arguments: [
+            (isScript: true, contentType: "text/html; charset=UTF-8"),
+            (isScript: true, contentType: "TEXT/HTML"),
+            (isScript: false, contentType: "text/html ;charset=utf-8"),
+        ]
+    )
+    func downloadThatIsAWebPageIsNotKept(isScript: Bool, contentType: String) async throws {
+        let style = URL(string: "https://example.com/style.css?ver=1")!
+        let refused = isScript ? Self.scriptURL : style
+        let kept = isScript ? style : Self.scriptURL
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = Self.responses(
+            forManifest: Self.manifestJSON(scriptVersion: "1", style: style.absoluteString)
+        )
+        mockClient.assetResponseHeaders = { $0 == refused ? ["Content-Type": contentType] : [:] }
+        let library = makeLibrary(httpClient: mockClient)
+
+        let bundle = try await library.downloadAssetBundle()
+
+        #expect(!bundle.hasAssetData(for: refused))
+        #expect(bundle.hasAssetData(for: kept))
+        #expect(await library.missingAssets(of: bundle) == [refused])
+    }
+
     /// What a web view makes of an asset is for the web view to decide, from the type the asset is served
     /// with, as it would if the site had served it.
     @Test(
-        "a download is kept whatever its type is, or when it has none, and keeps the type it came with",
+        "a download is kept whatever else its type is, or when it has none, and keeps the type it came with",
         arguments: [
             (isScript: true, contentType: "application/javascript"),
             (isScript: true, contentType: "text/javascript; charset=utf-8"),
@@ -2012,6 +2040,26 @@ struct EditorAssetLibraryTests {
         #expect(bundle.hasAssetData(for: asset))
         #expect(bundle.contentType(forAssetAt: asset) == contentType)
         #expect(await library.missingAssets(of: bundle).isEmpty)
+    }
+
+    @Test("a refresh that's answered with a web page keeps the copy on disk")
+    func refreshAnsweredWithAWebPageKeepsCopyOnDisk() async throws {
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "1"))
+        mockClient.assetResponseHeaders = { _ in ["Content-Type": "application/javascript"] }
+        let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
+        let first = try await library.downloadAssetBundle()
+
+        mockClient.urlResponseHandler = Self.responses(
+            forManifest: Self.manifestJSON(scriptVersion: "1"),
+            assetContent: "<html>Log in</html>"
+        )
+        mockClient.assetResponseHeaders = { _ in ["Content-Type": "text/html; charset=UTF-8"] }
+        let refreshed = try await library.downloadAssetBundle()
+
+        #expect(try refreshed.assetData(for: Self.scriptURL) == Data("mock content".utf8))
+        #expect(refreshed.contentType(forAssetAt: Self.scriptURL) == "application/javascript")
+        #expect(refreshed == first)
     }
 
     /// WordPress tells one version of a file from another by its query, and one host's file from another's

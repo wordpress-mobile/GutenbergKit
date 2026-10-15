@@ -817,9 +817,39 @@ public actor EditorAssetLibrary {
         defer { try? FileManager.default.removeItem(at: tempUrl) }
 
         let destinationPath = try self.destination(for: url, in: draft)
+        let headers = EditorAssetBundle.AssetHeaders(response: response)
+
+        // A server can answer with a web page and still say the request went well: one to log in on, or one
+        // saying what went wrong. Kept, it would be served in the asset's place for as long as the bundle is.
+        guard !self.isWebPage(headers?.contentType) else {
+            throw UnexpectedContentType(contentType: headers?.contentType ?? "")
+        }
+
         try FileManager.default.moveItem(at: tempUrl, to: destinationPath)
 
-        return EditorAssetBundle.AssetHeaders(response: response)
+        return headers
+    }
+
+    /// Whether a response of `contentType` is a web page, which no script or stylesheet is.
+    ///
+    /// Nothing else about its type is held against a download. The editor is served an asset with the type it
+    /// came with, so a web view decides what to make of it just as it would if the site had served it.
+    private func isWebPage(_ contentType: String?) -> Bool {
+        let mediaType = contentType?
+            .split(separator: ";", omittingEmptySubsequences: false).first?
+            .trimmingCharacters(in: .whitespaces)
+            .lowercased()
+
+        return mediaType == "text/html"
+    }
+
+    /// A download answered with something other than the asset: `contentType` is what the server said it was.
+    struct UnexpectedContentType: LocalizedError {
+        let contentType: String
+
+        var errorDescription: String? {
+            "The server answered with \(self.contentType)"
+        }
     }
 
     /// The request for the asset at `url`. Under `.ignore`, it asks for a stored response not to be used.
