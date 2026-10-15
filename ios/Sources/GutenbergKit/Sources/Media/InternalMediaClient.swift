@@ -62,11 +62,14 @@ class InternalMediaClient: @unchecked Sendable {
         let boundary = UUID().uuidString
         let extraFields = fields.map { (name: $0.name, value: Data($0.value.utf8)) }
 
-        let (bodyStream, contentLength) = try Self.multipartBodyStream(
+        let (bodyStream, contentLength, writer) = try Self.multipartBodyStream(
             fileURL: fileURL, boundary: boundary, filename: filename, mimeType: mimeType, extraFields: extraFields
         )
 
         var request = URLRequest(url: mediaEndpointURL(query: query))
+        // Whatever became of the request: a reader that never opened its end of the
+        // stream sends the writer no word that it has gone.
+        defer { writer.cancel() }
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.setValue("\(contentLength)", forHTTPHeaderField: "Content-Length")
@@ -106,12 +109,10 @@ class InternalMediaClient: @unchecked Sendable {
     /// intentionally don't implement `needNewBodyStream`, or buffer the body to a
     /// replayable file, for that rare case.
     private func performUpload(_ request: URLRequest) async throws -> MediaUploadResponse {
-        // The body is fed by a background writer thread via a bound stream pair
-        // (`multipartBodyStream`). If
-        // the request is cancelled or fails, URLSession may abandon the stream
-        // without draining it, leaving that writer blocked forever on a full buffer
-        // — leaking the thread and its open file handle. Closing the input stream on
-        // every exit breaks the pair so the writer's write() fails and it unwinds.
+        // The body is fed through a bound stream pair (`multipartBodyStream`). If the
+        // request is cancelled or fails, URLSession may abandon the stream without
+        // draining it. Closing it on every exit tells the writer its reader has gone,
+        // so it lets go of the file.
         defer { request.httpBodyStream?.close() }
 
         // Relay WordPress's response verbatim — including non-2xx statuses — so
@@ -149,16 +150,17 @@ class InternalMediaClient: @unchecked Sendable {
     /// Builds a multipart/form-data body as an `InputStream` that streams the
     /// file from disk without loading it into memory.
     ///
-    /// Uses a bound stream pair with a background writer thread.
+    /// Uses a bound stream pair, fed by a ``MultipartBodyWriter``.
     ///
-    /// - Returns: A tuple of the input stream and the total content length.
+    /// - Returns: The input stream, the total content length, and the writer feeding
+    ///   the stream, to cancel once the body is no longer wanted.
     static func multipartBodyStream(
         fileURL: URL,
         boundary: String,
         filename: String,
         mimeType: String,
         extraFields: [(name: String, value: Data)]
-    ) throws -> (InputStream, Int) {
+    ) throws -> (InputStream, Int, MultipartBodyWriter) {
         // The non-file parts (post, additionalData) go into the preamble ahead of the streamed
         // file; they're small, and `contentLength` counts them via `preamble.count`. Their
         // values are appended as raw bytes rather than through `String(data:encoding:)`, which
@@ -196,68 +198,13 @@ class InternalMediaClient: @unchecked Sendable {
             throw UploadError.streamReadFailed
         }
 
-        outputStream.open()
+        let writer = MultipartBodyWriter(
+            fileHandle: fileHandle, fileSize: fileSize,
+            preamble: preamble, epilogue: epilogue, output: outputStream
+        )
+        writer.start()
 
-        // OutputStream is not Sendable but is safely transferred to the
-        // writer thread — only the thread accesses it after this point.
-        nonisolated(unsafe) let output = outputStream
-
-        Thread.detachNewThread { [preamble] in
-            defer {
-                output.close()
-                try? fileHandle.close()
-            }
-            _ = Self.writeMultipartBody(
-                fileHandle: fileHandle, fileSize: fileSize,
-                preamble: preamble, epilogue: epilogue, to: output
-            )
-        }
-
-        return (inputStream, contentLength)
-    }
-
-    /// Writes the multipart body — preamble, then the file's bytes, then the
-    /// closing boundary — to `output`, returning `true` only if all of it was
-    /// written.
-    ///
-    /// Returns `false` **without** writing the closing boundary if the file can't
-    /// be fully read: a mid-stream read error, or the file ending short of the
-    /// `fileSize` the caller measured (it shrank since). The request's
-    /// Content-Length reflects that measured size, so a short body can't be
-    /// dressed up as a complete multipart — it fails the upload rather than
-    /// silently corrupting it, and the real cause is logged instead of swallowed.
-    /// (`false` is also returned on a write failure — e.g. the consumer closing
-    /// the stream — matching the preamble/chunk write checks.)
-    static func writeMultipartBody(
-        fileHandle: FileHandle,
-        fileSize: Int,
-        preamble: Data,
-        epilogue: Data,
-        to output: OutputStream
-    ) -> Bool {
-        guard writeAll(preamble, to: output) else { return false }
-
-        var remaining = fileSize
-        while remaining > 0 {
-            let chunkSize = min(65_536, remaining)
-            let chunk: Data
-            do {
-                chunk = try fileHandle.read(upToCount: chunkSize) ?? Data()
-            } catch {
-                Logger.mediaUpload.error("Reading the upload file failed mid-stream: \(error)")
-                return false
-            }
-            guard !chunk.isEmpty else {
-                // The file ended before `fileSize` bytes — it shrank since we
-                // measured it. Abort rather than emit a truncated multipart.
-                Logger.mediaUpload.error("Upload file ended \(remaining) bytes short of its measured size")
-                return false
-            }
-            guard writeAll(chunk, to: output) else { return false }
-            remaining -= chunk.count
-        }
-
-        return writeAll(epilogue, to: output)
+        return (inputStream, contentLength, writer)
     }
 
     /// Escapes a client-supplied value for a quoted `Content-Disposition`
@@ -269,19 +216,5 @@ class InternalMediaClient: @unchecked Sendable {
             .replacingOccurrences(of: "\r", with: "%0D")
             .replacingOccurrences(of: "\n", with: "%0A")
             .replacingOccurrences(of: "\"", with: "%22")
-    }
-
-    /// Writes all bytes of `data` to the output stream, handling partial writes.
-    private static func writeAll(_ data: Data, to output: OutputStream) -> Bool {
-        data.withUnsafeBytes { buffer in
-            guard let base = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
-            var written = 0
-            while written < data.count {
-                let result = output.write(base.advanced(by: written), maxLength: data.count - written)
-                if result <= 0 { return false }
-                written += result
-            }
-            return true
-        }
     }
 }
