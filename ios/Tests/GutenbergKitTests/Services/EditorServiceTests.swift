@@ -140,6 +140,143 @@ struct EditorServiceTests: MakesTestFixtures {
     _ = try await second.value
   }
 
+  // MARK: - Cache Policy
+
+  @Test("prepare() under .always uses the bundle on disk without checking the manifest")
+  func prepareUnderAlwaysUsesBundleOnDisk() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    let bundle = try await site.service(cachePolicy: .always).prepare().assetBundle
+
+    let again = try await site.service(cachePolicy: .always).prepare().assetBundle
+
+    #expect(again.id == bundle.id)
+    #expect(site.manifestRequestCount == 1)
+    #expect(site.client.downloadCallCount == 1)
+  }
+
+  @Test("prepare() under .maxAge checks the manifest once it's due, and keeps the bundle when it hasn't changed")
+  func prepareUnderMaxAgeKeepsUnchangedBundle() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    let bundle = try await site.service(cachePolicy: .always).prepare().assetBundle
+
+    let checked = try await site.service(cachePolicy: .maxAge(0)).prepare().assetBundle
+
+    #expect(checked.id == bundle.id)
+    #expect(site.manifestRequestCount == 2)
+    #expect(site.client.downloadCallCount == 1)
+  }
+
+  @Test("prepare() under .ignore picks up a changed manifest, which later editors then load")
+  func prepareUnderIgnorePicksUpChangedManifest() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    let bundle = try await site.service(cachePolicy: .always).prepare().assetBundle
+
+    site.manifest = Self.pluginManifest(version: "2")
+    let refreshed = try await site.service(cachePolicy: .ignore).prepare().assetBundle
+    let afterwards = try await site.service(cachePolicy: .always).prepare().assetBundle
+
+    #expect(refreshed.id != bundle.id)
+    #expect(afterwards.id == refreshed.id)
+    #expect(site.client.downloadCallCount == 2)
+  }
+
+  @Test("prepare() uses the bundle on disk without checking the manifest by default")
+  func prepareUsesBundleOnDiskByDefault() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    let bundle = try await site.service(cachePolicy: .always).prepare().assetBundle
+
+    let again = try await EditorService(
+      configuration: site.configuration,
+      httpClient: site.client,
+      storageRoot: site.storageRoot,
+      cacheRoot: site.cacheRoot
+    ).prepare().assetBundle
+
+    #expect(again == bundle)
+    #expect(site.manifestRequestCount == 1)
+  }
+
+  @Test("prepare() under .maxAge checks the manifest only once the last check is older than the age")
+  func prepareUnderMaxAgeChecksOnceExpired() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    let bundle = try await site.service(cachePolicy: .always).prepare().assetBundle
+
+    _ = try await site.service(cachePolicy: .maxAge(3600)).prepare()
+    #expect(site.manifestRequestCount == 1)
+
+    try site.setLastManifestCheck(of: bundle, to: Date(timeIntervalSinceNow: -7200))
+    let checked = try await site.service(cachePolicy: .maxAge(3600)).prepare().assetBundle
+    #expect(site.manifestRequestCount == 2)
+    #expect(checked == bundle)
+
+    // The check started the bundle's age over
+    _ = try await site.service(cachePolicy: .maxAge(3600)).prepare()
+    #expect(site.manifestRequestCount == 2)
+    #expect(site.client.downloadCallCount == 1)
+  }
+
+  @Test("a manifest check that fails fails prepare(), and leaves what's on disk for later editors")
+  func failedManifestCheckLeavesDiskUntouched() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    let bundle = try await site.service(cachePolicy: .always).prepare().assetBundle
+
+    site.isOffline = true
+    await #expect(throws: URLError.self) {
+      try await site.service(cachePolicy: .ignore).prepare()
+    }
+
+    #expect(try await site.service(cachePolicy: .always).prepare().assetBundle == bundle)
+    #expect(try await site.service(cachePolicy: .always).fetchAssetBundleCount() == 1)
+  }
+
+  @Test("cleanup() keeps a superseded bundle that dependencies prepared earlier still use")
+  func cleanupKeepsBundleStillInUse() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    let held = try await site.service(cachePolicy: .always).prepare()
+
+    site.manifest = Self.pluginManifest(version: "2")
+    let refreshed = try await site.service(cachePolicy: .ignore).prepare()
+    try await site.service(cachePolicy: .always).cleanup()
+
+    #expect(refreshed.assetBundle.id != held.assetBundle.id)
+    #expect((try? held.assetBundle.getEditorRepresentation() as EditorAssetBundle.EditorRepresentation) != nil)
+  }
+
+  @Test("with automatic fallback, prepare() returns empty dependencies when offline with nothing on disk")
+  func offlineWithNothingOnDiskReturnsEmptyDependencies() async throws {
+    let configuration = makeConfiguration().toBuilder().setNetworkFallbackMode(.automatic).build()
+    let site = TestSite(configuration: configuration, manifest: Self.pluginManifest(version: "1"))
+    site.isOffline = true
+
+    let dependencies = try await site.service(cachePolicy: .ignore).prepare()
+
+    #expect(dependencies.editorSettings == .undefined)
+    #expect(dependencies.assetBundle.assetCount == 0)
+    #expect(dependencies.preloadList == nil)
+  }
+
+  @Test("without automatic fallback, prepare() for a post that can't reach the site throws, whatever is on disk")
+  func failedPrepareForPostThrowsWithoutFallback() async throws {
+    let site = TestSite(configuration: makeConfiguration(postID: 123), manifest: Self.pluginManifest(version: "1"))
+    _ = try await site.service(cachePolicy: .always).prepare()
+
+    site.isOffline = true
+    await #expect(throws: URLError.self) {
+      try await site.service(cachePolicy: .always).prepare()
+    }
+  }
+
+  @Test("prepare() throws when the manifest check errors and the fallback is disabled")
+  func prepareThrowsWhenManifestCheckErrorsWithoutFallback() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    _ = try await site.service(cachePolicy: .always).prepare()
+
+    site.failure = { $0.absoluteString.contains("editor-assets") ? Self.notFound($0) : nil }
+    await #expect(throws: EditorHTTPClient.ClientError.self) {
+      try await site.service(cachePolicy: .maxAge(0)).prepare()
+    }
+  }
+
   // MARK: - Automatic Cleanup
 
   @Test("a site's old bundles are cleaned up, whichever site was prepared first that day")
@@ -209,6 +346,11 @@ struct EditorServiceTests: MakesTestFixtures {
     }
   }
 
+  /// The error a site answers with when it has nothing at a URL.
+  private static func notFound(_ url: URL) -> any Error {
+    EditorHTTPClient.ClientError.unknown(response: Data(), statusCode: 404, requestURL: url)
+  }
+
   /// A manifest with one plugin script, whose URL carries `version` the way WordPress versions its
   /// assets.
   private static func pluginManifest(version: String) -> String {
@@ -228,6 +370,20 @@ struct EditorServiceTests: MakesTestFixtures {
       didSet { serve() }
     }
 
+    /// Whether every request to the site fails as it would with no connection.
+    var isOffline = false {
+      didSet { serve() }
+    }
+
+    /// The error a request for a URL fails with, for the requests that should fail.
+    var failure: (@Sendable (URL) -> (any Error)?)? {
+      didSet { serve() }
+    }
+
+    var manifestRequestCount: Int {
+      client.requestedURLs.filter { $0.absoluteString.contains("editor-assets") }.count
+    }
+
     init(configuration: EditorConfiguration, manifest: String) {
       self.configuration = configuration
       self.manifest = manifest
@@ -244,9 +400,21 @@ struct EditorServiceTests: MakesTestFixtures {
       )
     }
 
+    /// Makes it look as though the site's manifest was last found to match `bundle` at `date`.
+    func setLastManifestCheck(of bundle: EditorAssetBundle, to date: Date) throws {
+      try EditorAssetBundle(
+        manifest: bundle.manifest,
+        downloadDate: bundle.downloadDate,
+        lastCheckedDate: date,
+        bundleRoot: bundle.bundleRoot
+      ).writeManifest()
+    }
+
     private func serve() {
-      client.urlResponseHandler = { [manifest] url in
-        url.absoluteString.contains("editor-assets")
+      client.urlResponseHandler = { [manifest, isOffline, failure] url in
+        guard !isOffline else { throw URLError(.notConnectedToInternet) }
+        if let error = failure?(url) { throw error }
+        return url.absoluteString.contains("editor-assets")
           ? Data(manifest.utf8) : EditorServiceTests.editorServiceResponseHandler(url)
       }
     }
