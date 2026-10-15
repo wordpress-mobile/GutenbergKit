@@ -140,6 +140,28 @@ struct EditorServiceTests: MakesTestFixtures {
     _ = try await second.value
   }
 
+  // MARK: - Progress Totals
+
+  @Test("prepare() progress never passes its total, and ends on it")
+  func prepareProgressStaysWithinTotal() async throws {
+    let scripts = ["a", "b", "c", "d"]
+      .map { #"<script src=\"https://example.com/\#($0).js\"></script>"# }
+      .joined()
+    let site = TestSite(
+      configuration: makeConfiguration(),
+      manifest: #"{"scripts":"\#(scripts)","styles":"","allowed_block_types":[]}"#
+    )
+    let tracker = ProgressTracker()
+
+    _ = try await site.service(cachePolicy: .always).prepare { tracker.append($0) }
+
+    let completed = tracker.updates.map(\.completed)
+    #expect(site.client.downloadCallCount == 4)
+    #expect(tracker.updates.allSatisfy { $0.completed <= $0.total })
+    #expect(tracker.updates.last?.completed == tracker.updates.last?.total)
+    #expect(completed == completed.sorted())
+  }
+
   // MARK: - Test Helpers
 
   /// URL-based response handler for EditorService.prepare() tests.
@@ -163,6 +185,43 @@ struct EditorServiceTests: MakesTestFixtures {
       return Data(#"{"id":123,"title":{"rendered":"Test"}}"#.utf8)
     default:
       return Data("{}".utf8)
+    }
+  }
+
+  /// One site's server and storage, shared by every service a test makes for it — as a host's
+  /// services for one site share them.
+  private final class TestSite {
+    let configuration: EditorConfiguration
+    let client = EditorAssetLibraryMockHTTPClient()
+    let storageRoot = URL.randomTemporaryDirectory
+    let cacheRoot = URL.randomTemporaryDirectory
+
+    /// What the site's `editor-assets` endpoint answers.
+    var manifest: String {
+      didSet { serve() }
+    }
+
+    init(configuration: EditorConfiguration, manifest: String) {
+      self.configuration = configuration
+      self.manifest = manifest
+      serve()
+    }
+
+    func service(cachePolicy: EditorCachePolicy) -> EditorService {
+      EditorService(
+        configuration: configuration,
+        httpClient: client,
+        cachePolicy: cachePolicy,
+        storageRoot: storageRoot,
+        cacheRoot: cacheRoot
+      )
+    }
+
+    private func serve() {
+      client.urlResponseHandler = { [manifest] url in
+        url.absoluteString.contains("editor-assets")
+          ? Data(manifest.utf8) : EditorServiceTests.editorServiceResponseHandler(url)
+      }
     }
   }
 }

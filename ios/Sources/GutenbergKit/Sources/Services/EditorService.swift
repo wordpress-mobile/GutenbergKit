@@ -24,6 +24,9 @@ public actor EditorService {
     private var progress: EditorProgress?
     private var progressCallback: EditorProgressCallback?
 
+    /// How much of the asset bundle's weight has been counted toward `progress`.
+    private var assetBundleProgress = 0
+
     enum DependencyWeights: CaseIterable {
         case editorSettings
         case assetBundle
@@ -142,6 +145,7 @@ public actor EditorService {
 
         self.progress = EditorProgress(completed: 1, total: 100)
         self.progressCallback = progress
+        self.assetBundleProgress = 0
         defer {
             self.progressCallback = nil
             self.progress = nil
@@ -179,14 +183,32 @@ public actor EditorService {
         try self.restRepository.purge()
     }
 
-    private func incrementProgress(for weight: DependencyWeights, fraction: Double = 1.0) async {
+    private func incrementProgress(for weight: DependencyWeights) async {
+        await self.incrementProgress(by: Int(weight.rawValue))
+    }
+
+    /// Counts an asset bundle download's progress toward the total. The download reports how far
+    /// along it is each time, not how much further than the last time, so only what's new is added.
+    private func incrementProgress(forAssetBundleDownload download: EditorProgress) async {
+        let assetBundleProgress = Int(DependencyWeights.assetBundle.rawValue * download.fractionCompleted)
+        let increase = assetBundleProgress - self.assetBundleProgress
+        guard increase > 0 else { return }
+
+        self.assetBundleProgress = assetBundleProgress
+        await self.incrementProgress(by: increase)
+    }
+
+    private func incrementProgress(by amount: Int) async {
         // Progress can arrive after the `prepare()` it belongs to has returned and cleared it. A
         // bundle build shared with another service may already be calling in when this service
         // gives up on it, and an overlapping `prepare()` on this service is cleared by whichever
         // finishes first. There is nothing left to report to, so drop it.
         guard let current = self.progress else { return }
+
+        // Progress starts at 1, and a post adds its weight to the others', so the weights can add
+        // up to more than the total.
         let progress = EditorProgress(
-            completed: current.completed + Int(weight.rawValue * fraction),
+            completed: min(current.completed + amount, current.total),
             total: current.total)
         self.progress = progress
         await self.progressCallback?(progress)
@@ -238,9 +260,13 @@ public actor EditorService {
             return latestAssetBundle
         }
 
-        return try await self.assetLibrary.downloadAssetBundle { progress in
-            await self.incrementProgress(for: .assetBundle, fraction: progress.fractionCompleted)
+        let assetBundle = try await self.assetLibrary.downloadAssetBundle { progress in
+            await self.incrementProgress(forAssetBundleDownload: progress)
         }
+
+        // A download reports as it goes, but not to a caller that joins a build after its last report
+        await self.incrementProgress(forAssetBundleDownload: EditorProgress(completed: 1, total: 1))
+        return assetBundle
     }
 
     private func preparePreloadList() async throws -> EditorPreloadList {
