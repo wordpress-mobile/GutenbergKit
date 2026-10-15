@@ -257,11 +257,11 @@ An `EditorService`'s cache policy covers plugin and theme assets as well as API 
 
 | Policy                  | API responses                   | Asset bundle                                               |
 | ----------------------- | ------------------------------- | ---------------------------------------------------------- |
-| `.always` (default)     | Fetched only when not cached    | Manifest checked only when no bundle is on disk            |
+| `.always` (default)     | Fetched only when not cached    | Manifest checked only when no bundle has every asset       |
 | `.maxAge(TimeInterval)` | Fetched once older than the age | Manifest checked once the last check is older than the age |
 | `.ignore`               | Always fetched                  | Manifest always checked, and every asset downloaded again  |
 
-Under `.always` and `.maxAge`, a check downloads only what the manifest says has changed. If the manifest hasn't changed, the bundle on disk is kept rather than downloaded again — asset URLs carry their version (`?ver=`), so the same manifest means the same assets — and its age starts over. If the manifest has changed, the new bundle is built beside the old one, and every service for the site uses it once it's complete. An asset whose versioned URL a bundle on disk already has is copied from the latest bundle that has it. An asset whose URL has no `?ver=` is downloaded again, because its URL can't say whether it changed.
+Under `.always` and `.maxAge`, a check downloads only what the manifest says has changed. If the manifest hasn't changed, the bundle on disk is kept rather than downloaded again — asset URLs carry their version (`?ver=`), so the same manifest means the same assets — and its age starts over. Only an asset that failed to download when the bundle was built is asked for again; see [When an asset fails to download](#when-an-asset-fails-to-download). If the manifest has changed, the new bundle is built beside the old one, and every service for the site uses it once it's complete. An asset whose versioned URL a bundle on disk already has is copied from the latest bundle that has it. An asset whose URL has no `?ver=` is downloaded again, because its URL can't say whether it changed.
 
 That trusts the site's versions. WordPress gives an asset registered without a version its own version as `?ver=`, so such a file can change while its URL — and so the manifest — stays the same. Only `.ignore` downloads it again.
 
@@ -270,6 +270,15 @@ Under `.ignore`, nothing on disk is taken to be valid, so every asset is downloa
 The old bundle stays on disk for as long as the app is running, because an open editor — or dependencies the host prepared earlier and still holds — may be reading it. `cleanup()` removes it after the next launch.
 
 Which bundle is a site's latest goes by the date each records, taken from the device's clock when the site's manifest was last found to match it. If that clock was ahead and has been set back since, a bundle built for a changed manifest in the meantime comes behind the earlier one until the clock passes the earlier one's date. `purge()` clears it.
+
+#### When an asset fails to download
+
+An asset fails to download when its request fails, or is answered with an error. It never stops a bundle being built, or `prepare()` returning, and it's handled the same way under every policy:
+
+-   If a bundle on disk has a copy of the asset, the new bundle takes that copy. The bundle has everything an editor loads, so it's used like any other. Nothing records that the copy stood in for a download: the failure isn't reported, and the asset isn't asked for again until it would be anyway — by a refresh under `.ignore`, or, for an asset without a `?ver=`, the next time the manifest changes.
+-   If none does, the bundle goes without it, and the editor loads it from the site. A bundle that's missing an asset isn't settled: every prepare checks the manifest and asks for the asset again, whatever the policy, until it downloads. When the site can't be asked, a bundle the policy still trusts is given as it is, and the prepare doesn't fail: the policy asked for no more than that bundle.
+
+What's asked for again goes into a new bundle beside the old one rather than into it, and a try that changes nothing leaves no second bundle.
 
 To refresh a site's editor data — on pull-to-refresh, for instance — prepare a separate service that ignores the cache, and give its dependencies to the next editor:
 

@@ -278,6 +278,8 @@ struct EditorServiceTests: MakesTestFixtures {
     }
   }
 
+  // MARK: - A Bundle That's Missing an Asset
+
   @Test("prepare() throws when the manifest check errors and the fallback is disabled")
   func prepareThrowsWhenManifestCheckErrorsWithoutFallback() async throws {
     let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
@@ -287,6 +289,67 @@ struct EditorServiceTests: MakesTestFixtures {
     await #expect(throws: EditorHTTPClient.ClientError.self) {
       try await site.service(cachePolicy: .maxAge(0)).prepare()
     }
+  }
+
+  @Test("a bundle that's missing an asset doesn't stop prepare(), even without a fallback")
+  func bundleMissingAssetDoesNotStopPrepare() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    site.failure = { $0.path == Self.pluginScript.path ? Self.notFound($0) : nil }
+
+    let bundle = try await site.service(cachePolicy: .always).prepare().assetBundle
+
+    #expect(bundle.assetCount == 1)
+    #expect(!bundle.hasAssetData(for: Self.pluginScript))
+  }
+
+  /// Whatever the cache policy: under `.always`, nothing else would ever ask the site again.
+  @Test("a bundle that's missing an asset is tried again on every prepare, until it has it")
+  func bundleMissingAssetIsTriedAgainEveryPrepare() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    site.failure = { $0.path == Self.pluginScript.path ? Self.notFound($0) : nil }
+    _ = try await site.service(cachePolicy: .always).prepare()
+
+    let again = try await site.service(cachePolicy: .always).prepare().assetBundle
+    #expect(!again.hasAssetData(for: Self.pluginScript))
+    #expect(site.manifestRequestCount == 2)
+    #expect(site.client.downloadCallCount == 2)
+
+    site.failure = nil
+    let repaired = try await site.service(cachePolicy: .always).prepare().assetBundle
+    #expect(repaired.hasAssetData(for: Self.pluginScript))
+    #expect(site.manifestRequestCount == 3)
+    #expect(site.client.downloadCallCount == 3)
+
+    // And once it has it, there's nothing left to ask for
+    _ = try await site.service(cachePolicy: .always).prepare()
+    #expect(site.manifestRequestCount == 3)
+    #expect(site.client.downloadCallCount == 3)
+  }
+
+  /// The cache policy asks for no more than the bundle on disk. Trying its missing asset again is worth
+  /// asking the site for, but the bundle doesn't depend on the answer, so nothing throws for want of a
+  /// fallback.
+  @Test("a bundle that's missing an asset is still given when the site can't be asked about it, even without a fallback")
+  func bundleMissingAssetIsGivenWhenSiteCannotBeAsked() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    site.failure = { $0.path == Self.pluginScript.path ? Self.notFound($0) : nil }
+    let gapped = try await site.service(cachePolicy: .always).prepare().assetBundle
+
+    site.isOffline = true
+
+    #expect(try await site.service(cachePolicy: .always).prepare().assetBundle == gapped)
+  }
+
+  @Test("a bundle that's missing an asset is still given when the site answers the check with an error")
+  func bundleMissingAssetIsGivenWhenManifestCheckErrors() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    site.failure = { $0.path == Self.pluginScript.path ? Self.notFound($0) : nil }
+    let gapped = try await site.service(cachePolicy: .always).prepare().assetBundle
+
+    // The site no longer has the endpoint that serves its manifest
+    site.failure = { Self.notFound($0) }
+
+    #expect(try await site.service(cachePolicy: .always).prepare().assetBundle == gapped)
   }
 
   // MARK: - Automatic Cleanup
@@ -362,6 +425,8 @@ struct EditorServiceTests: MakesTestFixtures {
   private static func notFound(_ url: URL) -> any Error {
     EditorHTTPClient.ClientError.unknown(response: Data(), statusCode: 404, requestURL: url)
   }
+
+  private static let pluginScript = URL(string: "https://example.com/plugin.js?ver=1")!
 
   /// A manifest with one plugin script, whose URL carries `version` the way WordPress versions its
   /// assets.

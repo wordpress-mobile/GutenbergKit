@@ -132,6 +132,9 @@ public actor EditorService {
     /// This method fetches editor settings, plugin assets, and preload data concurrently,
     /// caching results for future use. If offline mode is enabled, returns empty dependencies.
     ///
+    /// An asset that fails to download doesn't count as a resource that failed, and never stops an
+    /// editor opening: the asset bundle is given without it, or with an earlier copy.
+    ///
     /// - Parameter progress: A callback invoked with progress updates during loading.
     /// - Returns: The complete set of dependencies needed to initialize the editor.
     /// - Throws: An error if any required resource fails to download.
@@ -261,18 +264,38 @@ public actor EditorService {
     }
 
     private func prepareAssetBundle() async throws -> EditorAssetBundle {
-        if let bundle = try await self.assetLibrary.readLatestAssetBundle() {
+        // The bundle on disk, if the cache policy still trusts it, and whether it's missing assets. It's
+        // read once, so that what the policy makes of it is settled before the site is asked anything.
+        let trusted = try await self.assetLibrary.readLatestAssetBundleWithinPolicy()
+
+        // One that's missing assets is still worth going to the site for, to try them again
+        if let trusted, !trusted.isMissingAssets, let bundle = await self.assetLibrary.handOut(trusted.bundle) {
             await self.incrementProgress(for: .assetBundle)
             return bundle
         }
 
-        let assetBundle = try await self.assetLibrary.downloadAssetBundle { progress in
-            await self.incrementProgress(forAssetBundleDownload: progress)
-        }
+        do {
+            let assetBundle = try await self.assetLibrary.downloadAssetBundle { progress in
+                await self.incrementProgress(forAssetBundleDownload: progress)
+            }
 
-        // A download reports as it goes, but not to a caller that joins a build after its last report
-        await self.incrementProgress(forAssetBundleDownload: EditorProgress(completed: 1, total: 1))
-        return assetBundle
+            // A download reports as it goes, but not to a caller that joins a build after its last report
+            await self.incrementProgress(forAssetBundleDownload: EditorProgress(completed: 1, total: 1))
+            return assetBundle
+        } catch {
+            try Task.checkCancellation()
+
+            // If the site couldn't be asked, a bundle the policy trusts is still what the policy asked
+            // for. It's given as it is, without the assets it's missing, which are tried again by the
+            // next prepare.
+            guard let trusted, let bundle = await self.assetLibrary.handOut(trusted.bundle) else {
+                throw error
+            }
+
+            log(.warn, "Failed to try the asset bundle's missing assets again: \(error.localizedDescription)")
+            await self.incrementProgress(forAssetBundleDownload: EditorProgress(completed: 1, total: 1))
+            return bundle
+        }
     }
 
     private func preparePreloadList() async throws -> EditorPreloadList {

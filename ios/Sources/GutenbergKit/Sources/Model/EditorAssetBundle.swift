@@ -42,8 +42,9 @@ public struct EditorAssetBundle: Sendable {
     /// The checksum of the bundle's manifest, which identifies the manifest rather than the bundle.
     ///
     /// More than one bundle on disk can have the same ID: a refresh under `.ignore` whose assets come back
-    /// different builds a new bundle beside the one it replaces. Two bundles with the same ID have identical
-    /// manifests, but their assets can differ. Compare bundles with `==` to tell them apart.
+    /// different, or a retry of an asset that failed to download, builds a new bundle beside the one it
+    /// replaces. Two bundles with the same ID have identical manifests, but their assets can differ. Compare
+    /// bundles with `==` to tell them apart.
     public var id: String {
         manifest.checksum
     }
