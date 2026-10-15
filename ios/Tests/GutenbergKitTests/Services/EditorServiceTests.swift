@@ -154,6 +154,18 @@ struct EditorServiceTests: MakesTestFixtures {
     #expect(site.client.downloadCallCount == 1)
   }
 
+  @Test("prepare() under .ignore downloads the bundle's assets again, even when its manifest hasn't changed")
+  func prepareUnderIgnoreDownloadsUnchangedBundleAgain() async throws {
+    let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
+    let bundle = try await site.service(cachePolicy: .always).prepare().assetBundle
+
+    let refreshed = try await site.service(cachePolicy: .ignore).prepare().assetBundle
+
+    #expect(refreshed.id == bundle.id)
+    #expect(site.manifestRequestCount == 2)
+    #expect(site.client.downloadCallCount == 2)
+  }
+
   @Test("prepare() under .maxAge checks the manifest once it's due, and keeps the bundle when it hasn't changed")
   func prepareUnderMaxAgeKeepsUnchangedBundle() async throws {
     let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
