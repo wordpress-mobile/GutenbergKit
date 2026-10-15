@@ -3,8 +3,8 @@ import Testing
 
 @testable import GutenbergKit
 
-/// One at a time, for the reason `EditorAssetLibraryTests` are: nearly every one of these builds or
-/// reads an asset bundle.
+/// Serialized for the same reason as `EditorAssetLibraryTests`: nearly every test here builds or reads
+/// an asset bundle.
 @Suite(.serialized)
 struct EditorServiceTests: MakesTestFixtures {
 
@@ -208,7 +208,7 @@ struct EditorServiceTests: MakesTestFixtures {
     #expect(site.manifestRequestCount == 1)
   }
 
-  @Test("prepare() under .maxAge checks the manifest only once the last check is older than the age")
+  @Test("prepare() under .maxAge checks the manifest only when the last check is older than the max age")
   func prepareUnderMaxAgeChecksOnceExpired() async throws {
     let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
     let bundle = try await site.service(cachePolicy: .always).prepare().assetBundle
@@ -221,13 +221,13 @@ struct EditorServiceTests: MakesTestFixtures {
     #expect(site.manifestRequestCount == 2)
     #expect(checked == bundle)
 
-    // The check started the bundle's age over
+    // The check reset the bundle's age, so the next prepare doesn't check again
     _ = try await site.service(cachePolicy: .maxAge(3600)).prepare()
     #expect(site.manifestRequestCount == 2)
     #expect(site.client.downloadCallCount == 1)
   }
 
-  @Test("a manifest check that fails fails prepare(), and leaves what's on disk for later editors")
+  @Test("a failed manifest check fails prepare(), and leaves the bundle on disk for later editors")
   func failedManifestCheckLeavesDiskUntouched() async throws {
     let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
     let bundle = try await site.service(cachePolicy: .always).prepare().assetBundle
@@ -267,7 +267,7 @@ struct EditorServiceTests: MakesTestFixtures {
     #expect(dependencies.preloadList == nil)
   }
 
-  @Test("without automatic fallback, prepare() for a post that can't reach the site throws, whatever is on disk")
+  @Test("without automatic fallback, prepare() for a post throws when offline, even with a bundle on disk")
   func failedPrepareForPostThrowsWithoutFallback() async throws {
     let site = TestSite(configuration: makeConfiguration(postID: 123), manifest: Self.pluginManifest(version: "1"))
     _ = try await site.service(cachePolicy: .always).prepare()
@@ -302,8 +302,9 @@ struct EditorServiceTests: MakesTestFixtures {
     #expect(!bundle.hasAssetData(for: Self.pluginScript))
   }
 
-  /// Whatever the cache policy: under `.always`, nothing else would ever ask the site again.
-  @Test("a bundle that's missing an asset is tried again on every prepare, until it has it")
+  /// The retry happens under every cache policy, `.always` included: under `.always`, nothing else would
+  /// ever check the site again, so the asset would stay missing.
+  @Test("a bundle's missing asset is retried on every prepare until it downloads")
   func bundleMissingAssetIsTriedAgainEveryPrepare() async throws {
     let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
     site.failure = { $0.path == Self.pluginScript.path ? Self.notFound($0) : nil }
@@ -320,16 +321,16 @@ struct EditorServiceTests: MakesTestFixtures {
     #expect(site.manifestRequestCount == 3)
     #expect(site.client.downloadCallCount == 3)
 
-    // And once it has it, there's nothing left to ask for
+    // Once the bundle has the asset, prepare() stops checking the site
     _ = try await site.service(cachePolicy: .always).prepare()
     #expect(site.manifestRequestCount == 3)
     #expect(site.client.downloadCallCount == 3)
   }
 
-  /// The cache policy asks for no more than the bundle on disk. Trying its missing asset again is worth
-  /// asking the site for, but the bundle doesn't depend on the answer, so nothing throws for want of a
+  /// The cache policy accepts the bundle on disk as it is. Retrying its missing asset is worth a request,
+  /// but the bundle doesn't depend on it, so a failed request doesn't make prepare() throw, even with no
   /// fallback.
-  @Test("a bundle that's missing an asset is still given when the site can't be asked about it, even without a fallback")
+  @Test("prepare() returns a bundle that's missing an asset when the site can't be reached, even without a fallback")
   func bundleMissingAssetIsGivenWhenSiteCannotBeAsked() async throws {
     let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
     site.failure = { $0.path == Self.pluginScript.path ? Self.notFound($0) : nil }
@@ -340,13 +341,13 @@ struct EditorServiceTests: MakesTestFixtures {
     #expect(try await site.service(cachePolicy: .always).prepare().assetBundle == gapped)
   }
 
-  @Test("a bundle that's missing an asset is still given when the site answers the check with an error")
+  @Test("prepare() returns a bundle that's missing an asset when the manifest check gets an error")
   func bundleMissingAssetIsGivenWhenManifestCheckErrors() async throws {
     let site = TestSite(configuration: makeConfiguration(), manifest: Self.pluginManifest(version: "1"))
     site.failure = { $0.path == Self.pluginScript.path ? Self.notFound($0) : nil }
     let gapped = try await site.service(cachePolicy: .always).prepare().assetBundle
 
-    // The site no longer has the endpoint that serves its manifest
+    // Every request now gets a 404, the manifest check included
     site.failure = { Self.notFound($0) }
 
     #expect(try await site.service(cachePolicy: .always).prepare().assetBundle == gapped)
@@ -354,7 +355,7 @@ struct EditorServiceTests: MakesTestFixtures {
 
   // MARK: - Automatic Cleanup
 
-  @Test("a site's old bundles are cleaned up, whichever site was prepared first that day")
+  @Test("automatic cleanup runs for each site, not only the first site prepared that day")
   func automaticCleanupRunsPerSite() async throws {
     let first = TestSite(
       configuration: makeConfiguration(siteURL: Self.uniqueSiteURL()), manifest: Self.pluginManifest(version: "1"))
@@ -421,7 +422,7 @@ struct EditorServiceTests: MakesTestFixtures {
     }
   }
 
-  /// The error a site answers with when it has nothing at a URL.
+  /// The error for a 404 response to `url`, as `EditorHTTPClient.perform(_:)` throws it.
   private static func notFound(_ url: URL) -> any Error {
     EditorHTTPClient.ClientError.unknown(response: Data(), statusCode: 404, requestURL: url)
   }
@@ -434,25 +435,25 @@ struct EditorServiceTests: MakesTestFixtures {
     #"{"scripts":"<script src=\"https://example.com/plugin.js?ver=\#(version)\"></script>","styles":"","allowed_block_types":[]}"#
   }
 
-  /// One site's server and storage, shared by every service a test makes for it — as a host's
-  /// services for one site share them.
+  /// A mock site: one HTTP client and one pair of storage and cache directories, shared by every
+  /// `EditorService` a test makes for it, as a host app's services for one site share them.
   private final class TestSite {
     let configuration: EditorConfiguration
     let client = EditorAssetLibraryMockHTTPClient()
     let storageRoot = URL.randomTemporaryDirectory
     let cacheRoot = URL.randomTemporaryDirectory
 
-    /// What the site's `editor-assets` endpoint answers.
+    /// The manifest the site's `editor-assets` endpoint returns.
     var manifest: String {
       didSet { serve() }
     }
 
-    /// Whether every request to the site fails as it would with no connection.
+    /// When `true`, every request fails with `URLError(.notConnectedToInternet)`.
     var isOffline = false {
       didSet { serve() }
     }
 
-    /// The error a request for a URL fails with, for the requests that should fail.
+    /// Returns the error a request for a URL should fail with, or `nil` to let it succeed.
     var failure: (@Sendable (URL) -> (any Error)?)? {
       didSet { serve() }
     }
@@ -477,7 +478,7 @@ struct EditorServiceTests: MakesTestFixtures {
       )
     }
 
-    /// Makes it look as though the site's manifest was last found to match `bundle` at `date`.
+    /// Sets `bundle`'s `lastCheckedDate` on disk to `date`, as if the manifest was last checked then.
     func setLastManifestCheck(of bundle: EditorAssetBundle, to date: Date) throws {
       try EditorAssetBundle(
         manifest: bundle.manifest,
@@ -497,13 +498,13 @@ struct EditorServiceTests: MakesTestFixtures {
     }
   }
 
-  /// A site no other test, and no earlier run, has prepared.
+  /// The URL of a site that no other test, and no earlier run, has prepared.
   private static func uniqueSiteURL() -> URL {
     URL(string: "https://\(UUID().uuidString.lowercased()).example")!
   }
 
-  /// Removes the record of when each site's bundles were last cleaned up automatically, which
-  /// would otherwise outlive the test in the user defaults.
+  /// Removes each site's last automatic cleanup time from `UserDefaults`, where it would otherwise
+  /// outlive the test.
   private static func forgetAutomaticCleanups(of sites: [TestSite]) {
     let hosts = sites.compactMap { $0.configuration.siteURL.host() }
     for key in UserDefaults.standard.dictionaryRepresentation().keys

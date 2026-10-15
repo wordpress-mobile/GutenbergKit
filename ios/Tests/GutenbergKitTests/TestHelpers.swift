@@ -33,8 +33,9 @@ func jsonResource(named name: String) throws -> String {
     String(data: try jsonResource(named: name), encoding: .utf8)!
 }
 
-/// Puts a bundle for each manifest under `storageRoot` the way an earlier launch would have left
-/// them: complete on disk, the last the latest, but not handed out by this process.
+/// Puts a bundle for each of `manifests` in `storageRoot`, as an earlier launch would have left them.
+/// Each bundle is complete, the last manifest's bundle is the latest, and none has been handed out by
+/// this process, so `cleanup()` is free to remove all but the latest.
 @discardableResult
 func plantBundles(
     forManifests manifests: [String],

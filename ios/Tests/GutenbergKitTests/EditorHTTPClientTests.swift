@@ -10,7 +10,7 @@ private final class SpyURLSession: URLSessionProtocol, @unchecked Sendable {
 
     var responseData = Data()
 
-    /// The status `download(for:delegate:)` answers with.
+    /// The HTTP status code `download(for:delegate:)` responds with.
     var downloadStatusCode = 200
 
     var capturedRequests: [URLRequest] {
@@ -21,7 +21,7 @@ private final class SpyURLSession: URLSessionProtocol, @unchecked Sendable {
         capturedRequests.last
     }
 
-    /// The file each `download(for:delegate:)` handed back, in order.
+    /// The temporary file each `download(for:delegate:)` call returned, in order.
     var downloadedFiles: [URL] {
         lock.withLock { _downloadedFiles }
     }
@@ -124,7 +124,7 @@ struct EditorHTTPClientTests {
         #expect(capturedRequest.value(forHTTPHeaderField: "Authorization") == authHeader)
     }
 
-    @Test("download() throws for a status that isn't a success")
+    @Test("download() throws for a non-2xx status")
     func downloadThrowsForFailureStatus() async throws {
         let spySession = SpyURLSession()
         spySession.downloadStatusCode = 404
@@ -135,8 +135,9 @@ struct EditorHTTPClientTests {
         }
     }
 
-    /// The file holds the error's body. No caller is handed it, so none can remove it.
-    @Test("download() leaves no file behind for a status that isn't a success")
+    /// The downloaded file holds the error response's body. `download()` throws instead of returning it, so
+    /// no caller can remove it, and `download()` has to.
+    @Test("download() removes the downloaded file for a non-2xx status")
     func downloadRemovesFileForFailureStatus() async throws {
         let spySession = SpyURLSession()
         spySession.downloadStatusCode = 404

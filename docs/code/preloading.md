@@ -225,7 +225,7 @@ try await onceEvery(
 )
 ```
 
-A cleanup keeps the site's latest bundle, and any bundle the app has been handed since it launched — an open editor, or dependencies the host still holds, may be reading it.
+A cleanup keeps the site's latest bundle, and any bundle handed out to the app since it launched, because an open editor, or dependencies the host still holds, may be reading it.
 
 **Kotlin**
 
@@ -253,36 +253,39 @@ try await service.purge()
 
 ### Refreshing
 
-An `EditorService`'s cache policy covers plugin and theme assets as well as API responses. For assets, it decides when to check the site's asset manifest again, and how much to download when it does:
+An `EditorService`'s cache policy applies to plugin and theme assets as well as API responses. For assets, it decides when to check the site's asset manifest again:
 
-| Policy                  | API responses                   | Asset bundle                                               |
-| ----------------------- | ------------------------------- | ---------------------------------------------------------- |
-| `.always` (default)     | Fetched only when not cached    | Manifest checked only when no bundle has every asset       |
-| `.maxAge(TimeInterval)` | Fetched once older than the age | Manifest checked once the last check is older than the age |
-| `.ignore`               | Always fetched                  | Manifest always checked, and every asset downloaded again  |
+| Policy                  | API responses                   | Asset bundle                                                         |
+| ----------------------- | ------------------------------- | -------------------------------------------------------------------- |
+| `.always` (default)     | Fetched only when not cached    | Manifest checked only when there's no bundle, or it's missing assets |
+| `.maxAge(TimeInterval)` | Fetched once older than the age | Manifest checked once the last check is older than the age           |
+| `.ignore`               | Always fetched                  | Manifest always checked, and every asset downloaded again            |
 
-Under `.always` and `.maxAge`, a check downloads only what the manifest says has changed. If the manifest hasn't changed, the bundle on disk is kept rather than downloaded again — asset URLs carry their version (`?ver=`), so the same manifest means the same assets — and its age starts over. Only an asset that failed to download when the bundle was built is asked for again; see [When an asset fails to download](#when-an-asset-fails-to-download). If the manifest has changed, the new bundle is built beside the old one, and every service for the site uses it once it's complete. An asset whose versioned URL a bundle on disk already has is copied from the latest bundle that has it. An asset whose URL has no `?ver=` is downloaded again, because its URL can't say whether it changed.
+Under `.always` and `.maxAge`, a check downloads only what has changed:
 
-That trusts the site's versions. WordPress gives an asset registered without a version its own version as `?ver=`, so such a file can change while its URL — and so the manifest — stays the same. Only `.ignore` downloads it again.
+-   If the manifest hasn't changed, the bundle on disk is kept, and its age starts over. Asset URLs carry their version (`?ver=`), so the same manifest means the same assets. Assets the bundle is missing are retried; see [When an asset fails to download](#when-an-asset-fails-to-download).
+-   If the manifest has changed, a new bundle is built beside the old one. Each asset with a `?ver=` that a bundle on disk already has is copied from it, and the rest are downloaded. Every service for the site uses the new bundle once it's complete.
 
-Under `.ignore`, nothing on disk is taken to be valid, so every asset is downloaded in full whether or not the manifest has changed. That makes it the way to replace an asset that changed without its URL changing, or one that was stored wrong. The assets go into a new bundle beside any the manifest already has: a bundle on disk is never changed, because an editor may be reading it. If the manifest hasn't changed and its assets all come back the same as the bundle on disk has them, that bundle is returned and the new one is discarded, so a host can tell whether a refresh changed anything, and a refresh that changed nothing takes no more disk space. An asset that comes back the same as the copy a bundle on disk holds under the same URL is stored as a clone of that copy. The clone shares the copy's space, so a refresh takes disk space only for the assets that changed. The bundle that's kept still records what the refresh learned: the headers its assets came back with. An asset that comes back with a different `Content-Type` is a change — the editor is served it with that — so the bundle returned isn't equal to the one a host held before.
+This trusts the site's versions. WordPress gives an asset registered without a version `?ver=<WordPress version>`, so that file can change while its URL, and the manifest, stay the same. Only `.ignore` picks up that change.
 
-The old bundle stays on disk for as long as the app is running, because an open editor — or dependencies the host prepared earlier and still holds — may be reading it. `cleanup()` removes it after the next launch.
+Under `.ignore`, every asset is downloaded again, whether or not the manifest has changed. Use it to replace an asset that changed without its URL changing, or one that was stored wrong. The assets go into a new bundle beside the old one, which an editor may still be reading. If the manifest hasn't changed and every asset comes back identical, the old bundle is returned and the new one is discarded, so a host can compare dependencies to tell whether a refresh changed anything. A changed `Content-Type` counts as a change: the old bundle is returned with the new type, and isn't equal to the one the host held. Assets that didn't change share disk space with their old copies, so a refresh only takes space for what changed.
 
-Which bundle is a site's latest goes by the date each records, taken from the device's clock when the site's manifest was last found to match it. If that clock was ahead and has been set back since, a bundle built for a changed manifest in the meantime comes behind the earlier one until the clock passes the earlier one's date. `purge()` clears it.
+An old bundle handed out to the app stays on disk while the app is running, because an open editor, or dependencies the host still holds, may be reading it. `cleanup()` removes it after the next launch.
 
-A bundle holds every link that a `<script src>` or `<link rel="stylesheet">` tag in the manifest loads over HTTP, however the URL ends — `/_static/??a.js,b.js`, `css2?family=Inter` and `/?custom-css=1` are assets like any other. What comes back is kept whatever its type, with one exception: a web page (`text/html`). A site can answer with one and still report success — a page to log in on, say — and kept, it would be served to every editor in the asset's place for as long as the bundle is. An answer like that counts as a failed download. The `Content-Type` an asset came with is stored with it, and the editor is served the asset with it, so the web view decides what to make of an asset just as it would if the site had served it.
+Which bundle is a site's latest depends on when the site's manifest last matched each one, by the device's clock. If the clock was ahead and has since been set back, a bundle built for a changed manifest sorts behind the earlier bundle, which stays the latest until the clock passes its date. `purge()` fixes this, by removing every bundle.
 
-Each asset is one file in the bundle's `assets` directory, named for its URL: `example.com_wp-content_plugins_jetpack_blocks_editor.js_ver=15.2.<digest>.js`. The name spells out the host, the path and the query, so a bundle on disk can be read by eye, and two assets that share a path but differ in their host or their query are stored apart. A bundle stored before assets were named this way kept each one at its URL's path; it reads as missing its assets, and is downloaded again once.
+A bundle stores every HTTP or HTTPS URL in the manifest's `<script src>` and `<link rel="stylesheet">` tags, including ones like `/_static/??a.js,b.js` and `css2?family=Inter`. The editor is served each asset with the `Content-Type` the site sent. Each asset is one file in the bundle's `assets` directory, named after its URL so that a bundle on disk can be read by eye: `example.com_wp-content_plugins_jetpack_blocks_editor.js_ver=15.2.<digest>.js`. Bundles stored by earlier versions of GutenbergKit keep their assets in a different layout, so they're downloaded again once.
 
 #### When an asset fails to download
 
-An asset fails to download when its request fails, or is answered with an error or a web page. It never stops a bundle being built, or `prepare()` returning, and it's handled the same way under every policy:
+A download fails when its request fails, or when the site answers with an error or a web page (`text/html`, such as a login page). A failed download never makes a build or `prepare()` fail, under any policy:
 
--   If a bundle on disk has a copy of the asset, the new bundle takes that copy. The bundle has everything an editor loads, so it's used like any other. Nothing records that the copy stood in for a download: the failure isn't reported, and the asset isn't asked for again until it would be anyway — by a refresh under `.ignore`, or, for an asset without a `?ver=`, the next time the manifest changes.
--   If none does, the bundle goes without it, and the editor loads it from the site. A bundle that's missing an asset isn't settled: every prepare checks the manifest and asks for the asset again, whatever the policy, until it downloads. When the site can't be asked, a bundle the policy still trusts is given as it is, and the prepare doesn't fail: the policy asked for no more than that bundle.
+-   If a bundle on disk has a copy of the asset, the new bundle uses that copy. Nothing records the failure, so the asset isn't asked for again until it would be anyway: on an `.ignore` refresh, or, for an asset without a `?ver=`, when the manifest changes.
+-   Otherwise, the bundle goes without the asset, and the editor loads it from the site. Every prepare then checks the manifest and retries the asset, under any policy, until it downloads. If that check fails, the bundle is still returned without the asset, unless the cache policy requires a check.
 
-What's asked for again goes into a new bundle beside the old one rather than into it, and a try that changes nothing leaves no second bundle.
+A retry goes into a new bundle beside the old one. A retry that changes nothing leaves no new bundle.
+
+#### Pull-to-refresh
 
 To refresh a site's editor data — on pull-to-refresh, for instance — prepare a separate service that ignores the cache, and give its dependencies to the next editor:
 
@@ -292,7 +295,7 @@ To refresh a site's editor data — on pull-to-refresh, for instance — prepare
 let dependencies = try await EditorService(configuration: configuration, cachePolicy: .ignore).prepare()
 ```
 
-Nothing is deleted first, so an editor opened during the refresh still loads straight from what's on disk, and a refresh that fails leaves it all in place. An editor given no dependencies prepares its own with `.always`, so it uses whatever the last refresh left. A refresh downloads every asset again; to check for changes and download only those, use `.maxAge(0)` instead.
+Nothing is deleted first, so an editor opened during the refresh still loads from disk, and a refresh that fails leaves everything in place. An editor given no dependencies prepares its own with `.always`, so it uses whatever the last refresh left. To check for changes and download only those, use `.maxAge(0)` instead of `.ignore`.
 
 A refresh that fails throws, unless the configuration's `networkFallbackMode` is `.automatic`; see [Network Fallback Mode](#network-fallback-mode).
 

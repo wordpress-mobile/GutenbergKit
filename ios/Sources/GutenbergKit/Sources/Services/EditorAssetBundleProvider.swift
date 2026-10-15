@@ -85,8 +85,8 @@ extension EditorAssetBundleProvider: WKURLSchemeHandler {
 
                 let data = try bundle.assetData(for: url)
 
-                // Served as the site's server served it. Without a type, the web view has only the
-                // asset's file name to go by.
+                // Serve the asset with the `Content-Type` the site sent. Without one, the web view
+                // can only go by the URL's file extension.
                 let headers = bundle.contentType(forAssetAt: url).map { ["Content-Type": $0] }
                 let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: headers)!
                 urlSchemeTask.didReceive(response)

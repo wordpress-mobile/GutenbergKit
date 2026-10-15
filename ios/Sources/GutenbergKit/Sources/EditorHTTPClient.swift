@@ -11,7 +11,7 @@ public protocol EditorHTTPClientProtocol: Sendable {
     /// its errors) to the editor unchanged.
     func performRaw(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse)
 
-    /// Downloads the response to a file, which becomes the caller's to move or delete.
+    /// Downloads the response body to a temporary file. The caller owns the file, and must move or delete it.
     func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse)
 
     /// Returns a client tuned for large media uploads. The default returns the
@@ -46,8 +46,8 @@ public protocol EditorHTTPClientDelegate: Sendable {
 public enum EditorResponseData {
     case bytes(Data)
 
-    /// The file a response was downloaded to. It's only sure to be there for as long as the delegate's
-    /// call lasts: afterwards it's moved to where it's kept, or removed if the response was an error.
+    /// The temporary file a response was downloaded to. It's only guaranteed to exist during the delegate
+    /// call: afterwards the caller of `download(_:)` moves or deletes it, or, for an error, the client does.
     case file(URL)
 }
 
@@ -223,7 +223,7 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
             let requestURL = configuredRequest.url!
             Logger.http.error("📡 HTTP error fetching \(requestURL.absoluteString): \(httpResponse.statusCode)")
 
-            // The file holds the error's body, which no caller is handed, so none can remove it
+            // The file holds the error response's body. No caller receives it, so delete it here.
             try? FileManager.default.removeItem(at: url)
 
             throw ClientError.downloadFailed(

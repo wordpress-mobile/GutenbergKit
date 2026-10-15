@@ -3,10 +3,10 @@ import Testing
 
 @testable import GutenbergKit
 
-/// One at a time. A library reads and writes its files on a thread of the pool that every test in the
-/// run shares, and holds a lock that every library shares while it changes storage. Run together,
-/// these tests keep those threads for long enough that a test timing something else — a server's read
-/// timeout, say — sees a delay that isn't the server's.
+/// Serialized because a library does its file I/O on the concurrency thread pool that every test in the
+/// run shares, and holds a lock that every library shares while it changes storage. Run in parallel,
+/// these tests tie up those threads long enough that a test timing something else, such as a server's
+/// read timeout, sees a delay the server didn't cause.
 @Suite(.serialized)
 struct EditorAssetLibraryTests {
 
@@ -120,7 +120,7 @@ struct EditorAssetLibraryTests {
         let mockClient = EditorAssetLibraryMockHTTPClient()
         mockClient.urlResponseHandler = { _ in Data(manifestJSON.utf8) }
 
-        // The policy decides whether to check the manifest at all, not what to make of the answer
+        // The cache policy decides whether to fetch the manifest, not how to use the response
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
 
         // First, fetch the manifest and create a bundle on disk
@@ -128,7 +128,7 @@ struct EditorAssetLibraryTests {
 
         let bundle = try await library.buildBundle(for: originalManifest)
 
-        // Mark the copy on disk, so that it can be told apart from the response parsed again
+        // Change the stored copy, so the test can tell it apart from a freshly parsed response
         let manifestPath = await library.bundleManifestPath(for: bundle)
         var stored = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: manifestPath)) as? [String: Any])
         var storedManifest = try #require(stored["manifest"] as? [String: Any])
@@ -399,7 +399,7 @@ struct EditorAssetLibraryTests {
         #expect(try await library.readAssetBundles().map(\.id) == [changed.id, original.id])
     }
 
-    @Test("downloadAssetBundle makes the bundle for a manifest the site went back to the newest again")
+    @Test("downloadAssetBundle makes a bundle the latest again when the site goes back to its manifest")
     func downloadAssetBundleRestoresReturningBundle() async throws {
         let (library, mockClient) = try await makeLibraryWithBundle(cachePolicy: .maxAge(0))
         let original = try #require(try await library.readAssetBundles().first)
@@ -415,7 +415,7 @@ struct EditorAssetLibraryTests {
     }
 
     @Test(
-        "downloadAssetBundle leaves a bundle exactly as it was when neither its manifest nor its assets have changed",
+        "downloadAssetBundle returns the same bundle, and adds none, when its manifest and assets are unchanged",
         arguments: [EditorCachePolicy.maxAge(0), .ignore]
     )
     func downloadAssetBundleLeavesUnchangedBundleAsItWas(cachePolicy: EditorCachePolicy) async throws {
@@ -424,13 +424,13 @@ struct EditorAssetLibraryTests {
 
         let checked = try await library.downloadAssetBundle()
 
-        // A host comparing dependencies sees no change, and the date still says when it was downloaded
+        // A host comparing dependencies sees no change, and `downloadDate` is still the first download's
         #expect(checked == bundle)
         #expect(checked.downloadDate == bundle.downloadDate)
         #expect(try await library.readAssetBundles() == [bundle])
     }
 
-    @Test("under .ignore, assets that come back different go into a new bundle, and the one on disk is left as it was")
+    @Test("under .ignore, changed assets go into a new bundle, and the bundle on disk is left untouched")
     func downloadAssetBundleBuildsNewBundleForChangedAssetsUnderIgnore() async throws {
         let (library, mockClient) = try await makeLibraryWithBundle(cachePolicy: .ignore)
         let bundle = try #require(try await library.readAssetBundles().first)
@@ -445,7 +445,7 @@ struct EditorAssetLibraryTests {
         #expect(try refreshed.assetData(for: Self.scriptURL) == Data("new content".utf8))
         // An editor may still be reading the bundle it was given
         #expect(try bundle.assetData(for: Self.scriptURL) == Data("mock content".utf8))
-        // Two bundles for one manifest, which a host comparing dependencies can tell apart
+        // Two bundles for one manifest, and `!=` tells them apart for a host comparing dependencies
         #expect(refreshed.id == bundle.id)
         #expect(refreshed != bundle)
         #expect(try await library.readAssetBundles().map(\.bundleRoot) == [refreshed.bundleRoot, bundle.bundleRoot])
@@ -453,7 +453,7 @@ struct EditorAssetLibraryTests {
     }
 
     @Test(
-        "under .ignore, an asset that comes back the same shares its space on disk with the copy it matches",
+        "under .ignore, an unchanged asset shares disk space with the copy already on disk",
         .enabled(if: EditorAssetLibraryTests.storageSupportsClones)
     )
     func unchangedAssetSharesSpaceWithCopyOnDiskUnderIgnore() async throws {
@@ -464,7 +464,7 @@ struct EditorAssetLibraryTests {
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
         let bundle = try await library.downloadAssetBundle()
 
-        // A download shares its space with nothing
+        // A fresh download isn't a clone, so it shares none of its space
         #expect(try Self.unsharedSize(of: bundle.assetDataPath(for: Self.scriptURL)) > 0)
 
         // The stylesheet changes, and the script doesn't
@@ -484,13 +484,13 @@ struct EditorAssetLibraryTests {
         #expect(try Self.unsharedSize(of: refreshed.assetDataPath(for: style)) > 0)
         // The bundle an editor may be reading is left as it was
         #expect(try bundle.assetData(for: style) == Data("mock content".utf8))
-        // Nothing is left over from swapping the download for the copy
+        // Swapping the download for a clone leaves no extra file behind
         let assets = refreshed.assetDataPath(for: style).deletingLastPathComponent()
         #expect(try FileManager.default.contentsOfDirectory(atPath: assets.path).count == 2)
     }
 
     @Test(
-        "under .ignore, an asset of a changed manifest that comes back the same shares its space with another bundle's copy",
+        "under .ignore, an unchanged asset of a changed manifest shares disk space with another bundle's copy",
         .enabled(if: EditorAssetLibraryTests.storageSupportsClones)
     )
     func unchangedAssetOfChangedManifestSharesSpaceUnderIgnore() async throws {
@@ -510,7 +510,7 @@ struct EditorAssetLibraryTests {
         }
         let changed = try await library.downloadAssetBundle()
 
-        // Downloaded again all the same: that's how it's known to be the same
+        // The script is still downloaded: comparing the download is how the library knows it's unchanged
         #expect(mockClient.downloadCallCount == 3)
         #expect(changed.id != bundle.id)
         #expect(try changed.assetData(for: Self.scriptURL) == Data("mock content".utf8))
@@ -518,7 +518,7 @@ struct EditorAssetLibraryTests {
         #expect(try Self.unsharedSize(of: changed.assetDataPath(for: style)) > 0)
     }
 
-    @Test("under .ignore, a new bundle takes the latest bundle's copy of an asset that fails to download again")
+    @Test("under .ignore, an asset that fails to download is copied from the latest bundle")
     func newBundleUnderIgnoreKeepsAssetThatFailsToDownloadAgain() async throws {
         let style = "https://example.com/plugin.css"
         let manifest = Self.manifestJSON(scriptVersion: "1", style: style)
@@ -541,7 +541,7 @@ struct EditorAssetLibraryTests {
         #expect(try refreshed.assetData(for: URL(string: style)!) == Data("mock content".utf8))
     }
 
-    @Test("under .ignore, an asset that fails to download comes from the bundle the site went back to")
+    @Test("under .ignore, an asset that fails to download is copied from an earlier bundle when the latest lacks it")
     func assetThatFailsToDownloadComesFromBundleSiteWentBackTo() async throws {
         let mockClient = EditorAssetLibraryMockHTTPClient()
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
@@ -550,7 +550,7 @@ struct EditorAssetLibraryTests {
         mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "2"))
         _ = try await library.downloadAssetBundle()
 
-        // The site goes back to the earlier manifest, whose script the latest bundle doesn't have
+        // The site goes back to the earlier manifest. Only the earlier bundle has its script, not the latest
         mockClient.urlResponseHandler = { url in
             guard url.path.contains("editor-assets") else { throw URLError(.timedOut) }
             return Data(Self.manifestJSON(scriptVersion: "1").utf8)
@@ -563,7 +563,7 @@ struct EditorAssetLibraryTests {
 
     @Test("under .ignore, assets that share a path and fail to download each keep their copy on disk")
     func assetsSharingAPathKeepTheirCopiesOnDiskWhenDownloadsFail() async throws {
-        // The same file on two hosts, which a bundle stores apart: each under its whole URL
+        // The same path on two hosts. A bundle stores each under its full URL, so they're two assets
         let manifest = """
             {
                 "scripts": "<script src=\\"https://example.com/plugin.js?ver=1\\"></script><script src=\\"https://cdn.example.com/plugin.js?ver=1\\"></script>",
@@ -612,9 +612,9 @@ struct EditorAssetLibraryTests {
         #expect(try refreshed.assetData(for: Self.scriptURL) == Data("mock content".utf8))
     }
 
-    /// The bundle on disk is still right, so it's kept. What the server says about its assets now is still
-    /// what an editor should be served them with.
-    @Test("under .ignore, a bundle whose assets come back the same takes the headers they came back with")
+    /// The assets are unchanged, so the bundle on disk is kept. Its headers are still updated: an editor
+    /// should be served each asset with the type the server sends now.
+    @Test("under .ignore, a kept bundle records the headers its assets came back with")
     func unchangedBundleTakesNewHeadersUnderIgnore() async throws {
         let storageRoot = URL.randomTemporaryDirectory
         let mockClient = EditorAssetLibraryMockHTTPClient()
@@ -623,11 +623,11 @@ struct EditorAssetLibraryTests {
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore, storageRoot: storageRoot)
         let bundle = try await library.downloadAssetBundle()
 
-        // The server is put right: the same file, served as what it is
+        // The server now sends the right type: the same file, served as JavaScript
         mockClient.assetResponseHeaders = { _ in ["Content-Type": "application/javascript"] }
         let refreshed = try await library.downloadAssetBundle()
 
-        // The same bundle on disk, but not one a host comparing dependencies should take for unchanged
+        // The same bundle directory, but `!=`, so a host comparing dependencies sees the change
         #expect(refreshed.bundleRoot == bundle.bundleRoot)
         #expect(refreshed != bundle)
         #expect(refreshed.contentType(forAssetAt: Self.scriptURL) == "application/javascript")
@@ -638,7 +638,7 @@ struct EditorAssetLibraryTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: storageRoot.path).count == 1)
     }
 
-    /// One file to download, however many times it's linked.
+    /// Several links to one asset, over `http` or `https`, mean one file to download.
     @Test("an asset a manifest links more than once is downloaded once, and keeps its headers")
     func assetLinkedMoreThanOnceIsDownloadedOnce() async throws {
         let manifest = """
@@ -660,8 +660,8 @@ struct EditorAssetLibraryTests {
         #expect(await library.missingAssets(of: bundle).isEmpty)
     }
 
-    /// Over `http`, a request may not be allowed at all.
-    @Test("an asset a manifest links over both http and https is asked for over https")
+    /// An `http` request may not be allowed at all, so the library downloads the `https` link.
+    @Test("an asset a manifest links over both http and https is downloaded over https")
     func assetLinkedOverBothSchemesIsAskedForOverHTTPS() async throws {
         let manifest = """
             {
@@ -680,8 +680,8 @@ struct EditorAssetLibraryTests {
         #expect(await library.missingAssets(of: bundle).isEmpty)
     }
 
-    /// A copy that came over `http` isn't one to take in place of asking over `https`.
-    @Test("a changed manifest's bundle asks again for an asset the latest bundle has by another scheme")
+    /// A copy downloaded over `http` isn't reused for an `https` link, so the asset is downloaded again.
+    @Test("a changed manifest's bundle doesn't reuse an asset the latest bundle downloaded over another scheme")
     func changedBundleAsksAgainForAssetLinkedByAnotherScheme() async throws {
         func manifest(scheme: String, blockType: String) -> String {
             """
@@ -707,15 +707,15 @@ struct EditorAssetLibraryTests {
         #expect(try changed.assetData(for: Self.scriptURL) == Data("new content".utf8))
     }
 
-    /// Another library can record something in a bundle between this one reading it and marking it: a
-    /// refresh that found an asset served with another type, here. Marking the bundle mustn't write that away.
-    @Test("a check that keeps a bundle leaves what another library recorded in it meanwhile")
+    /// Another library can update a bundle's `manifest.json` after this library reads the bundle and before it
+    /// marks it as the latest. Here, a refresh records a new type for the script. Marking must not overwrite that.
+    @Test("a check that keeps a bundle preserves headers another library recorded in it meanwhile")
     func checkKeepsWhatAnotherLibraryRecordedInBundle() async throws {
         let (library, _) = try await makeLibraryWithBundle(cachePolicy: .maxAge(0))
         let bundle = try #require(try await library.readAssetBundles().first)
         let scriptKey = EditorAssetBundle.assetKey(for: Self.scriptURL)
 
-        // The check has found the bundle on disk, and hasn't marked it yet
+        // Progress is reported after the check finds the bundle on disk, and before it marks it
         let checked = try await library.downloadAssetBundle { _ in
             try? EditorAssetBundle(
                 manifest: bundle.manifest,
@@ -733,11 +733,11 @@ struct EditorAssetLibraryTests {
         )
     }
 
-    /// The build kept the stylesheet from the bundle on disk without asking for it, so it knows nothing
-    /// new about it. What another library recorded about it while the build ran stands, whether the build
-    /// ends up keeping that bundle or publishing its own.
+    /// The build copies the stylesheet from the bundle on disk without downloading it, so it learns nothing
+    /// new about it. Headers another library records for the stylesheet during the build must survive,
+    /// whether the build keeps that bundle or publishes a new one.
     @Test(
-        "a build records the assets it kept from the bundle on disk as that bundle records them when it finishes",
+        "a build takes a copied asset's headers from the bundle on disk as they are when the build finishes",
         arguments: [true, false]
     )
     func buildRecordsKeptAssetsAsBundleOnDiskRecordsThem(scriptDownloads: Bool) async throws {
@@ -755,8 +755,8 @@ struct EditorAssetLibraryTests {
         let gapped = try await library.downloadAssetBundle()
         #expect(await library.missingAssets(of: gapped) == [Self.scriptURL])
 
-        // While the check asks for the script again, another library's refresh records the type the
-        // stylesheet is served with now
+        // While the check retries the script, another library's refresh records a new type for the
+        // stylesheet
         mockClient.urlResponseHandler = { url in
             if url.path.contains("editor-assets") {
                 return Data(manifest.utf8)
@@ -779,9 +779,9 @@ struct EditorAssetLibraryTests {
         #expect(checked.contentType(forAssetAt: style) == "text/css")
     }
 
-    /// Looking at a bundle isn't handing it out. One that's passed over for missing an asset is as free to
-    /// be cleaned up as it was.
-    @Test("cleanup removes a bundle that was only passed over for missing an asset")
+    /// Reading a bundle doesn't hand it out. `readLatestAssetBundle()` skips one that's missing an asset,
+    /// and `cleanup()` can still remove it.
+    @Test("cleanup removes a bundle that was read but skipped for missing an asset")
     func cleanupRemovesBundlePassedOverForMissingAsset() async throws {
         let storageRoot = URL.randomTemporaryDirectory
         let planted = try await plantBundles(forManifests: [Self.manifestJSON(scriptVersion: "1")], in: storageRoot)
@@ -797,7 +797,7 @@ struct EditorAssetLibraryTests {
         #expect(try await library.readAssetBundles().map(\.bundleRoot) == [repaired.bundleRoot])
     }
 
-    @Test("downloadAssetBundle downloads an asset that an earlier build of the bundle failed to")
+    @Test("downloadAssetBundle retries an asset that an earlier build of the bundle failed to download")
     func downloadAssetBundleRepairsMissingAsset() async throws {
         let mockClient = EditorAssetLibraryMockHTTPClient()
         mockClient.urlResponseHandler = { url in
@@ -817,11 +817,11 @@ struct EditorAssetLibraryTests {
         #expect(try await library.readAssetBundles().first?.bundleRoot == repaired.bundleRoot)
     }
 
-    /// A bundle as the last release left it on disk. Its manifest file holds no more than a manifest and a
-    /// download date, and its assets are at their URLs' paths, where a bundle doesn't look now. So it reads
-    /// as one that's missing them, and is repaired the way one is: they're downloaded once more, into a
+    /// A bundle as the previous release stored it. Its `manifest.json` holds only the manifest and a download
+    /// date, and its assets are at their URLs' paths, where bundles no longer look. So it reads as missing
+    /// every asset, and is repaired like any such bundle: the assets are downloaded once more, into a new
     /// bundle beside it.
-    @Test("a bundle as the last release stored it reads as missing its assets, and they're downloaded again, once")
+    @Test("a bundle stored by the previous release reads as missing its assets, which are downloaded again once")
     func bundleAsLastReleaseStoredItIsDownloadedAgain() async throws {
         let storageRoot = URL.randomTemporaryDirectory
         let script = URL(string: "https://example.com/wp-content/plugins/a-plugin/build/index.js?ver=1.2")!
@@ -857,17 +857,17 @@ struct EditorAssetLibraryTests {
         mockClient.urlResponseHandler = { _ in throw URLError(.notConnectedToInternet) }
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .always, storageRoot: storageRoot)
 
-        // It's still the site's bundle, and as old as it was
+        // It still reads as the site's bundle, with its original download date
         let onDisk = try #require(try await library.readAssetBundles().first)
 
         #expect(onDisk.id == manifest.checksum)
         #expect(onDisk.downloadDate == downloadDate)
         #expect(onDisk.lastCheckedDate == nil)
         #expect(await library.missingAssets(of: onDisk) == [script, concatenated, style])
-        // It's missing assets, so it isn't one to settle for
+        // It's missing assets, so `readLatestAssetBundle()` doesn't return it
         #expect(try await library.readLatestAssetBundle() == nil)
 
-        // Once the site can be reached, everything is asked for
+        // Once the site is reachable, every asset is downloaded
         mockClient.urlResponseHandler = Self.responses(forManifest: manifestJSON, assetContent: "new content")
         let repaired = try await library.downloadAssetBundle()
 
@@ -877,15 +877,15 @@ struct EditorAssetLibraryTests {
         #expect(try repaired.assetData(for: script) == Data("new content".utf8))
         #expect(await library.missingAssets(of: repaired).isEmpty)
 
-        // And once is enough
+        // The repaired bundle is complete, so it's returned without downloading anything again
         #expect(try await library.readLatestAssetBundle() == repaired)
         #expect(mockClient.downloadCallCount == 3)
     }
 
-    /// A refresh that changes a bundle's assets publishes a bundle of its own, which a check of the same
-    /// manifest that was already under way knows nothing about. What that check found or built is older,
-    /// and mustn't go back in front.
-    @Test("a check that's overtaken by a refresh gives the refresh's bundle, rather than putting its own back in front")
+    /// A refresh whose assets change publishes a new bundle. A check of the same manifest that was already
+    /// running doesn't know about it. What that check found or built is older, so it must not be put back
+    /// in front of the refresh's bundle.
+    @Test("a check that's overtaken by a refresh returns the refresh's bundle instead of its own")
     func checkOvertakenByRefreshGivesRefreshedBundle() async throws {
         let storageRoot = URL.randomTemporaryDirectory
         let manifest = Self.manifestJSON(scriptVersion: "1")
@@ -899,8 +899,8 @@ struct EditorAssetLibraryTests {
         let gapped = try await library.downloadAssetBundle()
         #expect(!gapped.hasAssetData(for: Self.scriptURL))
 
-        // The check has asked for the script again, and failed again. Before it settles, a refresh
-        // downloads the script and publishes a bundle that has it.
+        // Progress is reported once the check's retry of the script has failed again. Before the check
+        // finishes, a refresh downloads the script and publishes a bundle that has it.
         let refresh = OnceOnlyAsync {
             mockClient.urlResponseHandler = Self.responses(forManifest: manifest)
             _ = try? await refreshing.downloadAssetBundle()
@@ -912,9 +912,9 @@ struct EditorAssetLibraryTests {
         #expect(try await library.readAssetBundles().first?.bundleRoot == checked.bundleRoot)
     }
 
-    /// A bundle is dated by when the site was found to have its manifest: when the manifest was fetched,
-    /// not when the bundle finished building, which can be a good while later. That's what its age for the
-    /// cache policy counts from, and what decides which bundle is the site's latest.
+    /// A bundle's date is when its manifest was fetched, not when the bundle finished building, which can
+    /// be much later. The cache policy measures the bundle's age from that date, and the bundle with the
+    /// newest date is the site's latest.
     @Test("a bundle is dated by when its manifest was fetched, whether it's built or kept")
     func bundleIsDatedByManifestFetch() async throws {
         let assetRequested = RecordedDate()
@@ -941,8 +941,8 @@ struct EditorAssetLibraryTests {
         #expect(try #require(checked.lastCheckedDate) <= #require(progressReported.date))
     }
 
-    /// The site's manifest changes while its earlier one's bundle is still building, and a refresh builds
-    /// the new one's first. The slower build is of what the site had before, so it stays behind.
+    /// The site's manifest changes while the earlier manifest's bundle is still building, and a refresh
+    /// builds the new manifest's bundle first. The slower build is of the older manifest, so it stays behind.
     @Test("a bundle whose manifest was fetched before another's stays behind it, however late it's built")
     func bundleOfEarlierManifestStaysBehindLaterOne() async throws {
         let storageRoot = URL.randomTemporaryDirectory
@@ -964,9 +964,9 @@ struct EditorAssetLibraryTests {
     }
 
     /// While a refresh downloads, another library checks the manifest and finds the bundle on disk still
-    /// matches it: a more recent look at the site than the refresh's own. The refresh's bundle replaces
-    /// that one all the same, so it has to come ahead of it.
-    @Test("a bundle that replaces its manifest's bundle comes ahead of it, though that one was matched while it built")
+    /// matches it. That match is more recent than the refresh's own fetch, but the refresh's bundle still
+    /// replaces the bundle on disk, so it must come ahead of it.
+    @Test("a replacement bundle comes ahead of the one it replaces, even if that one was matched during the build")
     func bundleThatReplacesAnotherComesAheadOfIt() async throws {
         let (library, mockClient) = try await makeLibraryWithBundle(cachePolicy: .ignore)
         let bundle = try #require(try await library.readAssetBundles().first)
@@ -986,9 +986,9 @@ struct EditorAssetLibraryTests {
         #expect(await library.existingBundle(forManifestChecksum: bundle.id)?.bundleRoot == refreshed.bundleRoot)
     }
 
-    /// Another library may have found the site's manifest to match the bundle more recently than this one
-    /// did, and recorded it first: here, between this check fetching the manifest and marking the bundle.
-    @Test("a check doesn't make a bundle look less recently matched than it's recorded to be")
+    /// Another library may record a more recent match for the bundle than this check's. Here it does so after
+    /// this check fetches the manifest, and before it marks the bundle.
+    @Test("a check never moves a bundle's last-matched date backwards")
     func checkDoesNotMoveBundleBackInTime() async throws {
         let (library, _) = try await makeLibraryWithBundle(cachePolicy: .maxAge(0))
         let bundle = try #require(try await library.readAssetBundles().first)
@@ -1009,8 +1009,8 @@ struct EditorAssetLibraryTests {
         #expect(try await library.readAssetBundles().first?.lastCheckedDate == otherMatch.date)
     }
 
-    /// What a refresh learned is the caller's to be told, whether or not it could be written down.
-    @Test("a bundle kept after a refresh has the headers its assets came back with even when they can't be recorded")
+    /// The caller still gets the headers a refresh found, even when they can't be written to disk.
+    @Test("a bundle kept after a refresh has its assets' new headers even when they can't be saved")
     func keptBundleHasNewHeadersWhenTheyCannotBeRecorded() async throws {
         let (library, mockClient) = try await makeLibraryWithBundle(cachePolicy: .ignore)
         let bundle = try #require(try await library.readAssetBundles().first)
@@ -1026,8 +1026,8 @@ struct EditorAssetLibraryTests {
         #expect(refreshed.contentType(forAssetAt: Self.scriptURL) == "application/javascript")
     }
 
-    /// An editor may be reading the bundle that's missing the asset, so the asset doesn't go into it.
-    @Test("a check that downloads what a bundle is missing leaves that bundle as it was, and builds one beside it")
+    /// An editor may be reading the bundle that's missing the asset, so the retry doesn't write into it.
+    @Test("a check that retries a missing asset builds a new bundle and leaves the old one untouched")
     func repairLeavesBundleOnDiskAsItWas() async throws {
         let mockClient = EditorAssetLibraryMockHTTPClient()
         mockClient.urlResponseHandler = { url in
@@ -1045,7 +1045,7 @@ struct EditorAssetLibraryTests {
         #expect((try? gapped.getEditorRepresentation() as EditorAssetBundle.EditorRepresentation) != nil)
     }
 
-    @Test("a check whose bundle is still missing an asset afterwards keeps that bundle, and adds no other")
+    @Test("a check whose retry of a missing asset fails again keeps the bundle, and adds no other")
     func repairThatGainsNothingKeepsBundle() async throws {
         let storageRoot = URL.randomTemporaryDirectory
         let mockClient = EditorAssetLibraryMockHTTPClient()
@@ -1063,7 +1063,8 @@ struct EditorAssetLibraryTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: storageRoot.path).count == 1)
     }
 
-    /// Nothing is downloaded into the library's storage, so a bundle deleted there stays deleted.
+    /// Assets are downloaded into a temporary directory, never into the library's storage, so a deleted
+    /// bundle stays deleted.
     @Test("a bundle deleted while a check downloads what it's missing doesn't come back as loose files")
     func deletedBundleIsNotRecreatedByDownload() async throws {
         let manifest = Self.manifestJSON(scriptVersion: "1")
@@ -1076,11 +1077,11 @@ struct EditorAssetLibraryTests {
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .maxAge(0), storageRoot: storageRoot)
         let gapped = try await library.downloadAssetBundle()
 
-        // The manifest's bundle, in a directory that building the manifest again wouldn't replace
+        // Move the bundle to a directory that a new build of the manifest wouldn't write to
         let moved = storageRoot.appending(path: "\(gapped.id)-moved")
         try FileManager.default.moveItem(at: gapped.bundleRoot, to: moved)
 
-        // The bundle is deleted while its missing script downloads, the first time that's asked for
+        // Delete the bundle during the first download of its missing script
         let deletion = OnceOnly { try? FileManager.default.removeItem(at: moved) }
         mockClient.urlResponseHandler = { url in
             if url.path.contains("editor-assets") {
@@ -1098,7 +1099,7 @@ struct EditorAssetLibraryTests {
         )
     }
 
-    @Test("an asset that a check downloads for a bundle that was missing it keeps the headers it came with")
+    @Test("a missing asset that a check downloads keeps the headers it came with")
     func repairedAssetKeepsItsHeaders() async throws {
         let style = URL(string: "https://example.com/plugin.css")!
         let manifest = Self.manifestJSON(scriptVersion: "1", style: style.absoluteString)
@@ -1124,7 +1125,7 @@ struct EditorAssetLibraryTests {
     }
 
     @Test(
-        "a changed manifest's bundle takes the assets whose URL hasn't changed from the latest bundle",
+        "a changed manifest's bundle copies the assets whose URL hasn't changed from the latest bundle",
         arguments: [EditorCachePolicy.always, .maxAge(60)]
     )
     func changedBundleCarriesUnchangedAssetsForward(cachePolicy: EditorCachePolicy) async throws {
@@ -1166,7 +1167,7 @@ struct EditorAssetLibraryTests {
     }
 
     @Test(
-        "a changed manifest's bundle downloads again an asset whose URL carries no version",
+        "a changed manifest's bundle downloads an asset again when its URL has no version",
         arguments: [
             "https://example.com/plugin.css",
             "https://example.com/plugin.css?ver=",
@@ -1189,8 +1190,8 @@ struct EditorAssetLibraryTests {
         #expect(try changed.assetData(for: URL(string: style)!) == Data("new content".utf8))
     }
 
-    /// The editor is served an asset with the type its server gave it, so the type has to stay with the file
-    /// however the file gets into a bundle: downloaded, or copied because its URL hasn't changed.
+    /// The editor is served each asset with the `Content-Type` its server sent, so the type must stay with the
+    /// file whether it was downloaded or copied for an unchanged URL.
     @Test("an asset's Content-Type is kept with it, from one bundle to the next")
     func assetContentTypeIsKeptWithAsset() async throws {
         let style = URL(string: "https://example.com/plugin.css")!
@@ -1219,7 +1220,8 @@ struct EditorAssetLibraryTests {
         mockClient.urlResponseHandler = Self.responses(forManifest: manifest(extraScript: false))
         let first = try await library.downloadAssetBundle()
 
-        // A changed manifest: the script is copied for its unchanged URL, the stylesheet downloaded again
+        // A changed manifest: the script is copied for its unchanged URL, and the unversioned stylesheet is
+        // downloaded again
         mockClient.urlResponseHandler = Self.responses(forManifest: manifest(extraScript: true))
         let second = try await library.downloadAssetBundle()
 
@@ -1228,11 +1230,11 @@ struct EditorAssetLibraryTests {
             #expect(bundle.contentType(forAssetAt: style) == "text/css; charset=utf-8")
             #expect(bundle.contentType(forAssetAt: script) == "application/javascript")
         }
-        // Its server sent no type, so there is none to serve it with
+        // Its server sent no `Content-Type`, so none is recorded
         #expect(second.contentType(forAssetAt: secondScript) == nil)
     }
 
-    @Test("a changed manifest's bundle keeps the copy on disk of an asset without a version that fails to download")
+    @Test("a changed manifest's bundle keeps the earlier copy of an unversioned asset that fails to download")
     func changedBundleKeepsUnversionedAssetThatFailsToDownload() async throws {
         let style = URL(string: "https://example.com/plugin.css")!
         let mockClient = EditorAssetLibraryMockHTTPClient()
@@ -1243,7 +1245,7 @@ struct EditorAssetLibraryTests {
         )
         _ = try await library.downloadAssetBundle()
 
-        // The server would send it as something else now, but it can't be downloaded
+        // The server now sends the stylesheet with another type, but the download fails
         mockClient.assetResponseHeaders = { $0.path == style.path ? ["Content-Type": "text/plain"] : [:] }
         mockClient.urlResponseHandler = { url in
             if url.path.contains("editor-assets") {
@@ -1255,7 +1257,7 @@ struct EditorAssetLibraryTests {
         let changed = try await library.downloadAssetBundle()
 
         #expect(try changed.assetData(for: style) == Data("mock content".utf8))
-        // It's the earlier copy, so it's the earlier copy's headers that go with it
+        // It's the earlier copy, so it keeps the earlier copy's headers
         #expect(changed.contentType(forAssetAt: style) == "text/css")
         #expect(await library.missingAssets(of: changed).isEmpty)
         // It has everything an editor loads, so it's used until the manifest is next checked
@@ -1283,7 +1285,7 @@ struct EditorAssetLibraryTests {
         #expect(changed.hasAssetData(for: URL(string: style)!))
     }
 
-    @Test("a changed manifest's bundle whose assets are all carried forward still reports that it's complete")
+    @Test("a changed manifest's bundle still reports completion when every asset is copied from disk")
     func changedBundleReportsProgressWhenNothingIsDownloaded() async throws {
         let (library, mockClient) = try await makeLibraryWithBundle(cachePolicy: .maxAge(60))
         let changedManifest = Self.manifestJSON(scriptVersion: "1").replacing("core/paragraph", with: "core/heading")
@@ -1334,8 +1336,8 @@ struct EditorAssetLibraryTests {
         let library = makeLibrary(httpClient: mockClient, cachePolicy: .maxAge(0), storageRoot: storageRoot)
         let other = makeLibrary(storageRoot: storageRoot)
 
-        // The site is back on the older manifest. Another service's cleanup removes that manifest's
-        // bundle — not yet the latest — after the check has found it on disk.
+        // The site goes back to the older manifest. After the check finds that manifest's bundle on disk,
+        // and before the bundle is the latest again, another service's cleanup removes it.
         mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "1"))
         let restored = try await library.downloadAssetBundle { _ in try? await other.cleanup() }
 
@@ -1358,13 +1360,13 @@ struct EditorAssetLibraryTests {
         #expect(try await library.readAssetBundles().map(\.id) == [bundle.id])
     }
 
-    @Test("a bundle stored before checks were recorded is as old as its download")
+    @Test("a bundle stored without a lastCheckedDate is aged from its download date")
     func bundleWithoutLastCheckedDateUsesDownloadDate() async throws {
         let (library, _) = try await makeLibraryWithBundle(cachePolicy: .maxAge(3600))
         let bundle = try #require(try await library.readAssetBundles().first)
         let manifestPath = await library.bundleManifestPath(for: bundle)
 
-        // What an earlier version wrote: the manifest and a download date, and nothing else
+        // Writes what an earlier version stored: only the manifest and a download date
         func store(downloadedAgo interval: TimeInterval) throws {
             let stored: [String: Any] = [
                 "manifest": try JSONSerialization.jsonObject(with: JSONEncoder().encode(bundle.manifest)),
@@ -1397,7 +1399,7 @@ struct EditorAssetLibraryTests {
         #expect(try await library.readAssetBundles().map(\.id) == [planted[2].id])
     }
 
-    @Test("cleanup keeps the bundle the site's manifest last matched, though another was downloaded later")
+    @Test("cleanup keeps the bundle the site's manifest last matched, even if another was downloaded later")
     func cleanupKeepsLatestBundleWhateverItsDownloadDate() async throws {
         let storageRoot = URL.randomTemporaryDirectory
         let planted = try await plantBundles(
@@ -1470,21 +1472,21 @@ struct EditorAssetLibraryTests {
     /// The script in ``manifestJSON(scriptVersion:)`` with version `1`.
     private static let scriptURL = URL(string: "https://example.com/plugin.js?ver=1")!
 
-    /// Whether the volume tests keep their bundles on can clone a file. APFS, which every Apple platform
-    /// uses, can.
+    /// Whether the volume that holds the tests' bundles supports file clones. APFS, which every Apple
+    /// platform uses, does.
     static var storageSupportsClones: Bool {
         let values = try? URL.temporaryDirectory.resourceValues(forKeys: [.volumeSupportsFileCloningKey])
         return values?.volumeSupportsFileCloning == true
     }
 
-    /// How much of its space on disk the file at `url` shares with no other file. A clone shares all of it
-    /// with the file it was cloned from, until either changes, so this is zero for both.
+    /// The disk space of the file at `url` that no other file shares. A clone shares all of its space with
+    /// the original until either changes, so this is zero for both.
     private static func unsharedSize(of url: URL) throws -> Int64 {
         var request = attrlist()
         request.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)
         request.forkattr = attrgroup_t(ATTR_CMNEXT_PRIVATESIZE)
 
-        // The length of what's returned, then the size
+        // `getattrlist` writes the returned length as a `UInt32`, then the size as an `off_t`
         var buffer = [UInt8](repeating: 0, count: MemoryLayout<UInt32>.size + MemoryLayout<off_t>.size)
         let result = buffer.withUnsafeMutableBytes { buffer in
             getattrlist(
@@ -1503,7 +1505,7 @@ struct EditorAssetLibraryTests {
         return buffer.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: MemoryLayout<UInt32>.size, as: off_t.self) }
     }
 
-    /// Makes it `interval` seconds since the site's manifest was last found to match `bundle`.
+    /// Sets `bundle`'s `lastCheckedDate` on disk to `interval` seconds ago.
     private func backdate(_ bundle: EditorAssetBundle, by interval: TimeInterval) throws {
         try EditorAssetBundle(
             manifest: bundle.manifest,
@@ -1977,7 +1979,7 @@ struct EditorAssetLibraryTests {
         #expect(try await library.readAssetBundles().isEmpty)
     }
 
-    @Test("a manifest's links that aren't HTTP are the only ones a bundle doesn't hold")
+    @Test("linksLeftOut(of:) returns only the manifest's links that aren't HTTP or HTTPS")
     func linksLeftOutAreTheOnesThatAreNotHTTP() async throws {
         let manifestJSON = """
             {
@@ -1995,14 +1997,15 @@ struct EditorAssetLibraryTests {
         #expect(leftOut.map(\.absoluteString) == ["ftp://example.com/old.js", "data:text/css,a%7Bcolor:red%7D"])
     }
 
-    /// A manifest is whatever the site sends. An asset is stored under a name made from its URL, never at
-    /// its path, so `..` in one takes it nowhere.
+    /// The manifest is whatever the site sends. An asset's file name is made from its URL and its path is
+    /// never followed, so `..` in a URL can't put a file outside the bundle.
     @Test(
-        "an asset whose path climbs out of the site is stored inside the bundle like any other",
+        "an asset whose path climbs above the site's root is stored inside the bundle like any other",
         arguments: ["/wp-content/../../", "/wp-content/%2e%2e/%2e%2e/"]
     )
     func assetWhosePathClimbsIsStoredInsideBundle(pathOutOfSite: String) async throws {
-        // Where it would land if its path were followed: beside the directory the bundle is assembled in
+        // Where the file would land if its path were followed: in the temporary directory, beside the
+        // directory the bundle is assembled in
         let name = "escaped-\(UUID().uuidString).js"
         let landing = URL.temporaryDirectory.appending(path: name)
         defer { try? FileManager.default.removeItem(at: landing) }
@@ -2036,7 +2039,7 @@ struct EditorAssetLibraryTests {
 
     // MARK: - Which links are assets
 
-    /// What makes a link an asset is the tag it's on, not how its URL ends.
+    /// A link is an asset because it's on a script or stylesheet tag, not because of how its URL ends.
     @Test("every script and stylesheet link in a manifest is stored, however its URL ends")
     func everyScriptAndStylesheetLinkIsStored() async throws {
         let scripts = [
@@ -2075,10 +2078,10 @@ struct EditorAssetLibraryTests {
         #expect(await library.missingAssets(of: bundle).isEmpty)
     }
 
-    /// A site can answer a request for an asset with a web page and still say it went well: one to log in
-    /// on, or one saying what went wrong. Kept, it would be served to every editor in the asset's place.
+    /// A site can answer an asset request with a web page, such as a login or error page, and a success
+    /// status. If it were kept, every editor would be served that page in place of the asset.
     @Test(
-        "a download that's a web page isn't kept, and is missed",
+        "a download that's a web page isn't kept, and the asset counts as missing",
         arguments: [
             (isScript: true, contentType: "text/html; charset=UTF-8"),
             (isScript: true, contentType: "TEXT/HTML"),
@@ -2103,10 +2106,10 @@ struct EditorAssetLibraryTests {
         #expect(await library.missingAssets(of: bundle) == [refused])
     }
 
-    /// What a web view makes of an asset is for the web view to decide, from the type the asset is served
-    /// with, as it would if the site had served it.
+    /// The library rejects no other type. The editor's web view gets the asset with the type the server
+    /// sent, and decides what to do with it, as it would if the site had served the asset.
     @Test(
-        "a download is kept whatever else its type is, or when it has none, and keeps the type it came with",
+        "a download with any type other than HTML, or none, is kept with the type it came with",
         arguments: [
             (isScript: true, contentType: "application/javascript"),
             (isScript: true, contentType: "text/javascript; charset=utf-8"),
@@ -2161,8 +2164,8 @@ struct EditorAssetLibraryTests {
         #expect(refreshed == first)
     }
 
-    /// WordPress tells one version of a file from another by its query, and one host's file from another's
-    /// by its host.
+    /// WordPress versions a file in its query, and the same path can be on more than one host, so assets
+    /// that share a path are still different files.
     @Test("assets that share a path are each stored, with their own content")
     func assetsSharingAPathAreEachStored() async throws {
         let assets = [
@@ -2191,7 +2194,7 @@ struct EditorAssetLibraryTests {
         }
     }
 
-    /// The library writes an asset and the bundle reads it, so the two have to agree on where.
+    /// `EditorAssetLibrary` writes each asset and `EditorAssetBundle` reads it, so both must use the same path.
     @Test(
         "an asset is read from where it was written, whatever characters its path has",
         arguments: [
@@ -2286,8 +2289,8 @@ struct EditorAssetLibraryTests {
         #expect(buildsLeftInTemporaryDirectory(ofManifest: manifest.checksum).isEmpty)
     }
 
-    /// The bundles for the manifest with `checksum` that are in the temporary directory itself, which is where a
-    /// build assembles one before putting it in the library's storage.
+    /// The bundles for the manifest with `checksum` left directly in the temporary directory, where a build
+    /// assembles a bundle before moving it into the library's storage.
     private func buildsLeftInTemporaryDirectory(ofManifest checksum: String) -> [URL] {
         let directories = try? FileManager.default.contentsOfDirectory(
             at: .temporaryDirectory,
@@ -2328,8 +2331,8 @@ struct EditorAssetLibraryTests {
         #expect(session.requestCount == 1)
     }
 
-    /// The build is the library's that started it, and so is the date it gives the bundle. A library that
-    /// joins it fetched the manifest later, and so has found the site to match more recently.
+    /// The library that starts a build dates the bundle by its own manifest fetch. A library that joins the
+    /// build fetched the manifest later, so it found the site to match more recently.
     @Test("a library that joins a build dates the bundle by its own, later fetch of the manifest")
     func joinerDatesBundleByItsOwnFetch() async throws {
         let manifestJSON = uniqueManifestJSON(
@@ -2424,7 +2427,7 @@ private actor OnceOnlyAsync {
     }
 }
 
-/// The moment a test asks it to record, for comparing with a date the library records.
+/// The time of the last `recordNow()` call, for comparing with a date the library records.
 private final class RecordedDate: @unchecked Sendable {
     private let lock = NSLock()
     private var _date: Date?
@@ -2466,7 +2469,7 @@ final class EditorAssetLibraryMockHTTPClient: EditorHTTPClientProtocol, @uncheck
     var downloadedURLs: [URL] = []
     /// Requests made via `download(_:)`, in order.
     var downloadRequests: [URLRequest] = []
-    /// The file each `download(_:)` handed back, in order.
+    /// The temporary file each `download(_:)` call returned, in order.
     var downloadedFiles: [URL] = []
     private let lock = NSLock()
 
@@ -2486,7 +2489,7 @@ final class EditorAssetLibraryMockHTTPClient: EditorHTTPClientProtocol, @uncheck
     /// Used by both `perform()` and `download()` methods.
     var urlResponseHandler: ((URL) throws -> Data) = { _ in Data() }
 
-    /// The headers the server sends with the asset at a URL: a `Content-Type`, or none.
+    /// The response headers sent with the asset at a URL, such as a `Content-Type`. None by default.
     var assetResponseHeaders: ((URL) -> [String: String]) = { _ in [:] }
 
     func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {

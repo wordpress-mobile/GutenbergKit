@@ -59,9 +59,9 @@ public actor EditorService {
     ///     Use `.ignore` to always fetch fresh data, `.maxAge(_:)` to expire entries after
     ///     a time interval, or `.always` (the default) to use cached data regardless of age.
     ///     This policy applies to both API responses and plugin and theme assets. For assets, it
-    ///     decides when to check the site's asset manifest again; an unchanged manifest keeps the
-    ///     bundle already on disk rather than downloading its assets again. `.ignore` is the
-    ///     exception: it downloads every asset again whether or not the manifest has changed.
+    ///     decides when to check the site's asset manifest again. If the manifest hasn't changed,
+    ///     the bundle on disk is kept. `.ignore` is the exception: it downloads every asset again,
+    ///     whether or not the manifest has changed.
     public init(
         configuration: EditorConfiguration,
         httpClient: (any EditorHTTPClientProtocol)? = nil,
@@ -132,8 +132,8 @@ public actor EditorService {
     /// This method fetches editor settings, plugin assets, and preload data concurrently,
     /// caching results for future use. If offline mode is enabled, returns empty dependencies.
     ///
-    /// An asset that fails to download doesn't count as a resource that failed, and never stops an
-    /// editor opening: the asset bundle is given without it, or with an earlier copy.
+    /// A failed asset download doesn't make this throw. The asset bundle is returned without that
+    /// asset, or with a copy of it from an earlier bundle.
     ///
     /// - Parameter progress: A callback invoked with progress updates during loading.
     /// - Returns: The complete set of dependencies needed to initialize the editor.
@@ -176,7 +176,7 @@ public actor EditorService {
     /// Clear unused on-disk resources associated with this service's configuration.
     ///
     /// Calling this method will preserve the most recent cache entries, ensuring that the editor still loads quickly without continuing to use unnecessary disk space.
-    /// It also preserves any asset bundle the app has been handed since it launched, which an open editor or dependencies the host is holding may still be using.
+    /// It also keeps every asset bundle handed out to the app since it launched, because an open editor, or dependencies the host is holding, may still be reading it.
     /// Use this method to regularly clean up unused editor assets.
     public func cleanup() async throws {
         try await self.assetLibrary.cleanup()
@@ -194,8 +194,8 @@ public actor EditorService {
         await self.incrementProgress(by: Int(weight.rawValue))
     }
 
-    /// Counts an asset bundle download's progress toward the total. The download reports how far
-    /// along it is each time, not how much further than the last time, so only what's new is added.
+    /// Adds an asset bundle download's progress to the total. A download reports its progress so far,
+    /// not the change since its last report, so only the increase is added.
     private func incrementProgress(forAssetBundleDownload download: EditorProgress) async {
         let assetBundleProgress = Int(DependencyWeights.assetBundle.rawValue * download.fractionCompleted)
         let increase = assetBundleProgress - self.assetBundleProgress
@@ -212,8 +212,8 @@ public actor EditorService {
         // finishes first. There is nothing left to report to, so drop it.
         guard let current = self.progress else { return }
 
-        // Progress starts at 1, and a post adds its weight to the others', so the weights can add
-        // up to more than the total.
+        // Progress starts at 1, and the weights add up to 100, or 110 with a post, so the sum can
+        // pass the total.
         let progress = EditorProgress(
             completed: min(current.completed + amount, current.total),
             total: current.total)
@@ -264,11 +264,12 @@ public actor EditorService {
     }
 
     private func prepareAssetBundle() async throws -> EditorAssetBundle {
-        // The bundle on disk, if the cache policy still trusts it, and whether it's missing assets. It's
-        // read once, so that what the policy makes of it is settled before the site is asked anything.
+        // The latest bundle on disk, if it's recent enough for the cache policy. It's read once, before
+        // any request, so the fallback below returns the same bundle this decision was based on.
         let trusted = try await self.assetLibrary.readLatestAssetBundleWithinPolicy()
 
-        // One that's missing assets is still worth going to the site for, to try them again
+        // A trusted bundle with every asset is used as it is. If it's missing assets, check the
+        // manifest and retry them.
         if let trusted, !trusted.isMissingAssets, let bundle = await self.assetLibrary.handOut(trusted.bundle) {
             await self.incrementProgress(for: .assetBundle)
             return bundle
@@ -279,15 +280,15 @@ public actor EditorService {
                 await self.incrementProgress(forAssetBundleDownload: progress)
             }
 
-            // A download reports as it goes, but not to a caller that joins a build after its last report
+            // A caller that joined a build already in progress can miss the build's last report
             await self.incrementProgress(forAssetBundleDownload: EditorProgress(completed: 1, total: 1))
             return assetBundle
         } catch {
             try Task.checkCancellation()
 
-            // If the site couldn't be asked, a bundle the policy trusts is still what the policy asked
-            // for. It's given as it is, without the assets it's missing, which are tried again by the
-            // next prepare.
+            // The check threw: the site couldn't be reached, say. The cache policy didn't require a
+            // check, so return the trusted bundle without its missing assets. The next prepare retries
+            // them.
             guard let trusted, let bundle = await self.assetLibrary.handOut(trusted.bundle) else {
                 throw error
             }

@@ -191,9 +191,10 @@ struct EditorAssetBundleTests {
         #expect(loaded.headers(for: asset) == headers)
     }
 
-    /// The editor asks for an asset under a scheme of its own, and is served it as the site's server would.
+    /// The editor requests an asset as `gbk-cache-https://…`, and is served it with the type the site's
+    /// server sent.
     @Test(
-        "contentType(forAssetAt:) gives the type the server sent, for the asset's URL or the editor's request for it",
+        "contentType(forAssetAt:) returns the server's type for the asset's URL or the editor's request",
         arguments: [
             "https://example.com/wp-content/app.js?ver=1",
             "gbk-cache-https://example.com/wp-content/app.js?ver=1",
@@ -215,7 +216,7 @@ struct EditorAssetBundleTests {
         #expect(bundle.contentType(forAssetAt: try #require(URL(string: url))) == "application/javascript; charset=utf-8")
     }
 
-    @Test("contentType(forAssetAt:) gives none for an asset whose server sent none, or one the bundle doesn't have")
+    @Test("contentType(forAssetAt:) returns nil when the bundle has no type recorded for the asset")
     func contentTypeIsNilWhenNotRecorded() throws {
         let manifest = try createManifest(scripts: "<script src=\"https://example.com/app.js\"></script>")
         let bundle = try EditorAssetBundle(
@@ -230,7 +231,7 @@ struct EditorAssetBundleTests {
         #expect(bundle.contentType(forAssetAt: try #require(URL(string: "gbk-cache-https://cdn.example.com/app.js"))) == nil)
     }
 
-    @Test("Bundle stored before its assets' headers were recorded has none")
+    @Test("Bundle stored without asset headers decodes with none")
     func bundleStoredWithoutAssetHeadersHasNone() throws {
         let manifest = try createManifest(scripts: "<script src=\"https://example.com/app.js\"></script>")
         let stored = try JSONEncoder().encode(["manifest": manifest])
@@ -321,7 +322,7 @@ struct EditorAssetBundleTests {
 
     // MARK: - Asset location Tests
 
-    /// The bundle's own directory is there, and it isn't an asset.
+    /// The bundle's directory exists, so a root-path link that resolved to it would look like a stored asset.
     @Test("hasAssetData returns false for a link to a site's root")
     func hasAssetDataReturnsFalseForRootPathLink() throws {
         let tempDir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
@@ -333,7 +334,7 @@ struct EditorAssetBundleTests {
     }
 
     @Test(
-        "hasAssetData returns false for a link to a directory an asset is under",
+        "hasAssetData returns false for a link to a directory that contains an asset",
         arguments: ["https://example.com/wp-content/plugins/", "https://example.com/wp-content"]
     )
     func hasAssetDataReturnsFalseForDirectoryOfAnAsset(url: String) throws {
@@ -362,10 +363,10 @@ struct EditorAssetBundleTests {
         #expect(bundle.assetDataPath(for: try #require(URL(string: other))) != bundle.assetDataPath(for: asset))
     }
 
-    /// A name that's percent-encoded but isn't UTF-8 — a directory named in Latin-1, say — decodes to
-    /// nothing at all. Its URL is told apart as it's written instead.
+    /// Percent-encoding that isn't UTF-8, such as a directory named in Latin-1, can't be decoded. Instead,
+    /// `assetKey(for:)` keeps such a URL as it's written, so these URLs still get different files.
     @Test(
-        "assets whose URLs are encoded as something other than text are stored apart",
+        "assets whose URLs have percent-encoding that isn't UTF-8 are stored apart",
         arguments: [
             ("https://example.com/caf%E9/a.js", "https://example.com/caf%E9/b.css"),
             ("https://example.com/caf%E9/a.js", "https://example.com/th%E9/a.js"),
@@ -382,10 +383,10 @@ struct EditorAssetBundleTests {
         )
     }
 
-    /// A character that divides a URL up means something else when it's encoded: `a%2Fb.js` is one file's
+    /// An encoded delimiter means something different from the delimiter itself: `a%2Fb.js` is one file's
     /// name, and `a/b.js` is a file in a directory.
     @Test(
-        "assets whose URLs differ in whether a dividing character is encoded are stored apart",
+        "assets whose URLs differ in whether a delimiter or `%` is encoded are stored apart",
         arguments: [
             ("https://example.com/a%2Fb/app.js", "https://example.com/a/b/app.js"),
             ("https://example.com/a%3Fb.js", "https://example.com/a?b.js"),
@@ -403,9 +404,10 @@ struct EditorAssetBundleTests {
         )
     }
 
-    /// However else a URL is written, it's the same asset: a web view may write it another way.
+    /// A web view may write an asset's URL differently when it requests it, so every spelling of one URL
+    /// must lead to the same file.
     @Test(
-        "assets whose URLs differ only in how they're written are stored together",
+        "URLs that differ only in how they're written lead to the same file",
         arguments: [
             ("https://example.com/my%20plugin/app.js", "https://example.com/my plugin/app.js"),
             ("https://example.com/caf%C3%A9/app.js", "https://example.com/café/app.js"),
@@ -414,11 +416,11 @@ struct EditorAssetBundleTests {
             ("https://example.com/%61pp.js", "https://example.com/app.js"),
             ("https://example.com/a/%2E%2E/app.js", "https://example.com/app.js"),
             ("https://example.com/a/%2e/app.js", "https://example.com/a/app.js"),
-            // What can't be decoded is still the same bytes, whichever case they're written in
+            // Encoding that can't be decoded is still the same bytes: `%e9` and `%E9` are one byte
             ("https://example.com/caf%e9/app.js", "https://example.com/caf%E9/app.js"),
-            // The whole of a file's name comes of what the URL leads to, its extension included
+            // The whole file name, extension included, comes from the resolved path, not the URL as written
             ("https://example.com/caf%E9/../app.js", "https://example.com/app.js"),
-            // Nothing is above a site's root, so going back from there goes nowhere
+            // `..` at the root stays at the root, as it does in a browser
             ("https://example.com/a/../../app.js", "https://example.com/app.js"),
             ("https://example.com/%2E%2E/%2E%2E/app.js", "https://example.com/app.js"),
         ]
@@ -432,7 +434,7 @@ struct EditorAssetBundleTests {
         )
     }
 
-    /// A bundle on disk can be read by someone looking for an asset.
+    /// File names are readable, so someone browsing a bundle on disk can find an asset by its URL.
     @Test("an asset's file is named for its URL")
     func assetFileIsNamedForItsURL() throws {
         let bundle = makeBundle()
@@ -444,7 +446,7 @@ struct EditorAssetBundleTests {
         #expect(name.hasSuffix(".js"))
     }
 
-    /// Only a path leads to a file with an extension. A query can have a `/` and a `.` in it too.
+    /// The extension comes from the URL's path only. A query can contain `/` and `.` too.
     @Test("an asset's file takes no extension from its URL's query")
     func assetFileTakesNoExtensionFromQuery() throws {
         let asset = try #require(URL(string: "https://example.com?load=a/b.js"))
@@ -452,7 +454,7 @@ struct EditorAssetBundleTests {
         #expect(!EditorAssetBundle.assetFileName(for: asset).hasSuffix(".js"))
     }
 
-    @Test("an asset's file name fits the file system however long its URL is, and still tells assets apart")
+    @Test("an asset's file name stays within 255 bytes for a long URL, and is still unique")
     func assetFileNameFitsFileSystem() throws {
         let bundle = makeBundle()
         let concatenated = String(repeating: "/wp-content/plugins/a-plugin/build/block.js,", count: 40)
@@ -467,8 +469,8 @@ struct EditorAssetBundleTests {
         #expect(firstName != secondName)
     }
 
-    /// A manifest is whatever the site sends. No name in it is used as a path, so none can put an asset
-    /// anywhere else, and nothing among the assets is a directory.
+    /// The manifest is whatever the site sends. No part of an asset's URL is used as a path, so no URL can
+    /// put a file outside the `assets` directory, or make an asset that's a directory.
     @Test(
         "every asset is a file directly inside the bundle's assets directory",
         arguments: [
@@ -496,7 +498,7 @@ struct EditorAssetBundleTests {
         #expect(!location.lastPathComponent.contains("/"))
     }
 
-    /// The editor asks for an asset under a scheme of its own, with the URL written the way a web view writes it.
+    /// The editor requests an asset as `gbk-cache-https://…`, with the URL written the way a web view writes it.
     @Test(
         "the editor's request for an asset finds the asset",
         arguments: [
@@ -568,8 +570,9 @@ struct EditorAssetBundleTests {
         #expect(bundle1 != bundle2)
     }
 
-    /// An editor is served each asset with the headers its bundle holds for it.
-    @Test("Bundles that hold different headers for their assets are not equal")
+    /// An editor is served each asset with the `Content-Type` its bundle records, so a different type makes
+    /// a different bundle.
+    @Test("Bundles with different types for their assets are not equal")
     func bundlesWithDifferentAssetHeadersNotEqual() throws {
         let manifest = try createManifest(scripts: "<script src=\"https://example.com/app.js\"></script>")
         let key = EditorAssetBundle.assetKey(for: URL(string: "https://example.com/app.js")!)
@@ -593,8 +596,8 @@ struct EditorAssetBundleTests {
         #expect(plain.hashValue != script.hashValue)
     }
 
-    /// A server can write the same type differently from one answer to the next.
-    @Test("Bundles that differ only in how their assets' types are written are equal")
+    /// A server can send the same type with different capitals or spacing from one response to the next.
+    @Test("Bundles whose asset types differ only in capitals and spacing are equal")
     func bundlesWithDifferentlyWrittenContentTypesAreEqual() throws {
         let manifest = try createManifest(scripts: "<script src=\"https://example.com/app.js\"></script>")
         let key = EditorAssetBundle.assetKey(for: URL(string: "https://example.com/app.js")!)
