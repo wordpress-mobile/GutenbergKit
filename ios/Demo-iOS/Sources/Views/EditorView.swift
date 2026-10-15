@@ -106,6 +106,12 @@ struct EditorView: View {
     private var moreMenu: some View {
         Menu {
             Button(action: {
+                viewModel.perform(.find)
+            }, label: {
+                Label("Find in Post", systemImage: "magnifyingglass")
+            })
+
+            Button(action: {
                 viewModel.isCodeEditorEnabled.toggle()
             }, label: {
                 Label(
@@ -163,6 +169,7 @@ private struct _EditorView: UIViewControllerRepresentable {
             switch $0 {
             case .redo: viewController?.redo()
             case .undo: viewController?.undo()
+            case .find: viewController?.presentFindNavigator()
             case .triggerCrash:
                 viewController?.webView.evaluateJavaScript(triggerEditorCrashScript, completionHandler: nil)
             }
@@ -425,6 +432,7 @@ private final class EditorViewModel {
     enum Action {
         case undo
         case redo
+        case find
         case triggerCrash
     }
 
