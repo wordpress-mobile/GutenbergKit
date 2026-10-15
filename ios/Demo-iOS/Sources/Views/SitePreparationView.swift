@@ -503,6 +503,7 @@ class SitePreparationViewModel {
         .setShouldUseThemeStyles(canUseEditorStyles)
         .setShouldUsePlugins(canUsePlugins)
         .setSiteApiNamespace(siteApiNamespace)
+        .setNamespaceExcludedPaths(["/wpcom/v2/following/recommendations", "/wpcom/v2/following/mine"])
         .setAuthHeader(account.authHeader)
         .setLogLevel(.debug)
         .build()
