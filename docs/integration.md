@@ -357,8 +357,8 @@ final class PostEditorCoordinator {
 ```
 
 If your design genuinely requires the retaining shape, call `stopMediaHandling()` when you
-are finished with the editor. It is terminal — your handlers are released, and the page
-sends later uploads and deletes itself — so call it when the editor is going away, not when
+are finished with the editor. It is terminal — your handlers are released, later uploads
+fail, and the page sends deletes itself — so call it when the editor is going away, not when
 it is merely covered or backgrounded.
 
 ### How uploads reach native code
@@ -381,8 +381,8 @@ lock, error notices, and recovery of a failed server-side resize all behave as t
 any upload.
 
 On iOS, uploads are native whether or not you supply a handler: GutenbergKit's own client
-delivers whatever you don't take over. Only an editor without site credentials, or one after
-`stopMediaHandling()`, uploads from the page, which holds the whole file in memory. On
+delivers whatever you don't take over. Only an editor without site credentials uploads from
+the page, which holds the whole file in memory. After `stopMediaHandling()`, uploads fail. On
 Android, uploads are native only when you supply a handler; without one, or without site
 credentials, the page uploads straight to WordPress.
 

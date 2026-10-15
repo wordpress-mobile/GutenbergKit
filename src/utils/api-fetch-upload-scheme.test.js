@@ -4,7 +4,6 @@ import {
 	NATIVE_UPLOAD_CHUNK_SIZE,
 } from './api-fetch';
 import { getGBKit } from './bridge';
-import { warn } from './logger';
 
 vi.mock( './bridge', () => ( {
 	getGBKit: vi.fn( () => ( {} ) ),
@@ -226,52 +225,97 @@ describe( 'nativeMediaUploadMiddleware over the native upload scheme', () => {
 		} );
 	} );
 
-	describe( 'falling back before finish', () => {
-		it( 'uploads through the web view when native uploads are unavailable', async () => {
+	describe( 'native code refusing or failing the upload', () => {
+		it( 'reports native uploads being unavailable, without uploading through the web view', async () => {
 			const requests = installScheme( {
 				'/sessions': () =>
-					json( 503, { code: 'native_upload_unavailable' } ),
+					json( 503, {
+						code: 'native_upload_unavailable',
+						message:
+							'Native media uploads are not available in this editor.',
+					} ),
 			} );
 			const next = makeNext();
-			const options = makeOptions( new File( [ 'x' ], 'a.jpg' ) );
 
-			const result = await nativeMediaUploadMiddleware( options, next );
-
-			expect( result ).toEqual( { passthrough: true } );
-			expect( next ).toHaveBeenCalledWith( options );
+			await expect(
+				nativeMediaUploadMiddleware(
+					makeOptions( new File( [ 'x' ], 'a.jpg' ) ),
+					next
+				)
+			).rejects.toEqual( {
+				code: 'native_upload_unavailable',
+				message:
+					'Native media uploads are not available in this editor.',
+			} );
+			expect( next ).not.toHaveBeenCalled();
 			expect( requests.map( ( r ) => r.path ) ).toEqual( [
 				'/sessions',
 			] );
-			expect( warn ).toHaveBeenCalled();
 		} );
 
-		it( 'falls back when the scheme cannot be reached at all', async () => {
+		it( 'reports a scheme that cannot be reached, without uploading through the web view', async () => {
 			global.fetch = vi.fn( () =>
 				Promise.reject( new TypeError( 'Load failed' ) )
 			);
 			const next = makeNext();
 
-			await nativeMediaUploadMiddleware(
-				makeOptions( new File( [ 'x' ], 'a.jpg' ) ),
-				next
-			);
-
-			expect( next ).toHaveBeenCalledTimes( 1 );
+			await expect(
+				nativeMediaUploadMiddleware(
+					makeOptions( new File( [ 'x' ], 'a.jpg' ) ),
+					next
+				)
+			).rejects.toMatchObject( { code: 'fetch_error' } );
+			expect( next ).not.toHaveBeenCalled();
 		} );
 
-		it( 'cancels the session and falls back when a chunk fails', async () => {
-			const requests = installScheme( {
-				[ `/sessions/${ SESSION }/chunks` ]: () =>
-					json( 409, { code: 'native_upload_offset_mismatch' } ),
+		it( 'reports a file native code refuses to begin', async () => {
+			installScheme( {
+				'/sessions': () =>
+					json( 413, {
+						code: 'upload_file_too_big',
+						message:
+							'The file is too large to upload in the editor.',
+						data: { status: 413 },
+					} ),
 			} );
 			const next = makeNext();
 
-			await nativeMediaUploadMiddleware(
-				makeOptions( new File( [ 'x' ], 'a.jpg' ) ),
-				next
-			);
+			await expect(
+				nativeMediaUploadMiddleware(
+					makeOptions( new File( [ 'x' ], 'a.mp4' ) ),
+					next
+				)
+			).rejects.toEqual( {
+				code: 'upload_file_too_big',
+				message: 'The file is too large to upload in the editor.',
+				data: { status: 413 },
+			} );
+			expect( next ).not.toHaveBeenCalled();
+		} );
 
-			expect( next ).toHaveBeenCalledTimes( 1 );
+		it( 'cancels the session and reports a chunk native code refuses', async () => {
+			const requests = installScheme( {
+				[ `/sessions/${ SESSION }/chunks` ]: () =>
+					json( 500, {
+						code: 'upload_error',
+						message: 'Disk full.',
+					} ),
+			} );
+			const next = makeNext();
+			const options = {
+				...makeOptions( new File( [ 'x' ], 'a.mp4' ) ),
+				parse: false,
+			};
+
+			const rejection = await nativeMediaUploadMiddleware(
+				options,
+				next
+			).catch( ( error ) => error );
+
+			// Under `parse: false`, core's upload middleware parses the error.
+			expect( rejection ).toBeInstanceOf( Response );
+			expect( rejection.status ).toBe( 500 );
+			expect( next ).not.toHaveBeenCalled();
 			expect( requests.map( ( r ) => r.path ) ).toContain(
 				`/sessions/${ SESSION }/cancel`
 			);
@@ -280,7 +324,7 @@ describe( 'nativeMediaUploadMiddleware over the native upload scheme', () => {
 			);
 		} );
 
-		it( 'surfaces an abort during the chunks as the cancellation, without falling back', async () => {
+		it( 'surfaces an abort during the chunks as the cancellation', async () => {
 			const controller = new AbortController();
 			const reason = new DOMException( 'stop', 'AbortError' );
 			const requests = installScheme( {
@@ -304,7 +348,7 @@ describe( 'nativeMediaUploadMiddleware over the native upload scheme', () => {
 			);
 		} );
 
-		it( 'does not fall back once finish may have reached WordPress', async () => {
+		it( 'reports a finish that gets no answer, since WordPress may have the file', async () => {
 			installScheme( {
 				[ `/sessions/${ SESSION }/finish` ]: () =>
 					Promise.reject( new TypeError( 'Load failed' ) ),

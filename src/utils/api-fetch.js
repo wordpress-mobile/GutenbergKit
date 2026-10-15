@@ -2,7 +2,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { getQueryArg } from '@wordpress/url';
 import { __ } from '@wordpress/i18n';
 import { getGBKit, POST_FALLBACKS } from './bridge';
-import { info, warn, error as logError } from './logger';
+import { info, error as logError } from './logger';
 import { ensureTrailingSlash, stripTrailingSlash } from './url';
 
 /**
@@ -243,7 +243,7 @@ export function nativeMediaUploadMiddleware( options, next ) {
 	// unhandled request falls through to the default path.
 	return (
 		nativeMediaDelete( options, transport, next ) ??
-		nativeMediaUpload( options, transport, next ) ??
+		nativeMediaUpload( options, transport ) ??
 		next( options )
 	);
 }
@@ -285,12 +285,11 @@ function nativeUploadTransport( gbkit ) {
  * WordPress's response so the existing Gutenberg upload pipeline (blob previews,
  * save locking, entity caching, `post-process` recovery) works unchanged.
  *
- * @param {Object}                                options   The api-fetch options.
- * @param {NativeUploadTransport}                 transport How to reach native code.
- * @param {(options: Object) => Promise<unknown>} next      The next middleware.
+ * @param {Object}                options   The api-fetch options.
+ * @param {NativeUploadTransport} transport How to reach native code.
  * @return {?Promise} The relayed upload, or `null` if not applicable.
  */
-function nativeMediaUpload( options, transport, next ) {
+function nativeMediaUpload( options, transport ) {
 	if (
 		! options.method ||
 		options.method.toUpperCase() !== 'POST' ||
@@ -317,16 +316,14 @@ function nativeMediaUpload( options, transport, next ) {
 	const query = requestQuery( options.path );
 
 	const upload = transport.schemeBase
-		? schemeUpload( options, file, query, transport.schemeBase, next )
+		? schemeUpload( options, file, query, transport.schemeBase )
 		: loopbackUpload( options, file, query, transport );
 
 	// Use the two-argument form of `.then()` so the rejection handler catches
 	// *only* a failure to reach native code — not errors thrown while handling
 	// a response (those must surface as real failures).
 	return upload.then(
-		( outcome ) =>
-			outcome.fallback ??
-			relayUploadResponse( outcome.response, options ),
+		( response ) => relayUploadResponse( response, options ),
 		( connectionError ) =>
 			rejectUnreachableUpload( connectionError, options )
 	);
@@ -340,7 +337,7 @@ function nativeMediaUpload( options, transport, next ) {
  * @param {File}                  file      The file being uploaded.
  * @param {string}                query     The request's query string.
  * @param {NativeUploadTransport} transport The loopback server's port and token.
- * @return {Promise<{response: Response}>} The server's response.
+ * @return {Promise<Response>} The server's response.
  */
 function loopbackUpload( options, file, query, { port, token } ) {
 	info(
@@ -353,7 +350,7 @@ function loopbackUpload( options, file, query, { port, token } ) {
 		},
 		body: options.body,
 		signal: options.signal,
-	} ).then( ( response ) => ( { response } ) );
+	} );
 }
 
 /**
@@ -365,19 +362,19 @@ function loopbackUpload( options, file, query, { port, token } ) {
  * is in `docs/code/media-uploads.md`. Chunking also keeps at most one chunk of
  * the file in the page's memory at a time.
  *
- * A failure before `finish` means WordPress never saw the file, so the upload
- * falls back to the web view's own path rather than failing: nothing can be
- * duplicated. From `finish` on, native code may already have sent the file, so a
- * failure there is reported, not retried.
+ * When native code refuses the upload — the file is too large, staging it
+ * failed, or `stopMediaHandling()` has run — that refusal is the upload's error.
+ * Nothing falls back to the web view's own path: on iOS that goes through the
+ * REST relay, which holds the whole file in memory, enough to get the web view
+ * killed over a large video.
  *
- * @param {Object}                                options    The api-fetch options.
- * @param {File}                                  file       The file being uploaded.
- * @param {string}                                query      The request's query string.
- * @param {string}                                schemeBase The native upload scheme's base URL.
- * @param {(options: Object) => Promise<unknown>} next       The next middleware, for the fallback.
- * @return {Promise<{response?: Response, fallback?: Promise}>} The outcome.
+ * @param {Object} options    The api-fetch options.
+ * @param {File}   file       The file being uploaded.
+ * @param {string} query      The request's query string.
+ * @param {string} schemeBase The native upload scheme's base URL.
+ * @return {Promise<Response>} WordPress's response, or native code's refusal.
  */
-async function schemeUpload( options, file, query, schemeBase, next ) {
+async function schemeUpload( options, file, query, schemeBase ) {
 	const { signal } = options;
 
 	info( `Routing upload of ${ file.name } through the native upload scheme` );
@@ -404,25 +401,19 @@ async function schemeUpload( options, file, query, schemeBase, next ) {
 		if ( sessionId ) {
 			cancelNativeUpload( schemeBase, sessionId );
 		}
-		if ( signal?.aborted ) {
-			throw sendError;
+		if ( sendError instanceof Response && ! signal?.aborted ) {
+			return sendError;
 		}
-		warn(
-			'Native upload unavailable; uploading through the web view instead',
-			sendError
-		);
-		return { fallback: next( options ) };
+		throw sendError;
 	}
 
-	return {
-		response: await finishNativeUpload(
-			schemeBase,
-			sessionId,
-			uploadFields( options.body ),
-			query,
-			signal
-		),
-	};
+	return finishNativeUpload(
+		schemeBase,
+		sessionId,
+		uploadFields( options.body ),
+		query,
+		signal
+	);
 }
 
 /**
@@ -484,7 +475,7 @@ function cancelNativeUpload( schemeBase, sessionId ) {
 }
 
 /**
- * Resolves with the response when it is a 2xx, and rejects otherwise.
+ * Resolves with the response when it is a 2xx, and rejects with it otherwise.
  *
  * @param {Promise<Response>} request The request.
  * @return {Promise<Response>} The successful response.
@@ -492,9 +483,7 @@ function cancelNativeUpload( schemeBase, sessionId ) {
 async function expectOk( request ) {
 	const response = await request;
 	if ( ! response.ok ) {
-		throw new Error(
-			`Native upload request failed with status ${ response.status }`
-		);
+		throw response;
 	}
 	return response;
 }
@@ -612,8 +601,7 @@ function rejectUnreachableUpload( connectionError, options ) {
 	// Otherwise native code could not be reached, or dropped the request,
 	// once it may already have sent the file to WordPress. We deliberately do
 	// NOT fall back to a direct re-upload: retrying a non-idempotent
-	// POST /wp/v2/media could duplicate the attachment. (The scheme transport
-	// falls back itself, earlier, while that is still safe.)
+	// POST /wp/v2/media could duplicate the attachment.
 	logError( 'Native upload failed at the transport layer', connectionError );
 	// Normalize to the same `{ code, message }` shape
 	// `@wordpress/api-fetch`'s default handler produces for a failed fetch,

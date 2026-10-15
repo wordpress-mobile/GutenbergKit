@@ -262,7 +262,7 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
     }
 
     @MainActor
-    @Test("after stopMediaHandling the page is told to upload through the web view")
+    @Test("after stopMediaHandling native code refuses uploads")
     func stoppedEditorAnswers503() async throws {
         let editor = EditorViewController(configuration: makeConfiguration(), mediaUploader: InertUploader())
         try await loadBlankPage(in: editor)

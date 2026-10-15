@@ -71,8 +71,8 @@ final class MediaUploadSchemeHandler: NSObject, WKURLSchemeHandler {
     }
 
     /// Stops accepting uploads, cancels the ones in flight, and deletes every staged
-    /// file. Requests after this get a `503`: an upload that hasn't reached `finish`, or
-    /// a delete, goes through the web view instead, and a `finish` fails.
+    /// file. Requests after this get a `503`: an upload fails, and a delete goes through
+    /// the web view instead.
     func disable() {
         isDisabled = true
         service = nil

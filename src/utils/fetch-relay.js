@@ -321,10 +321,10 @@ function splitQueryPair( pair ) {
  * empty and still succeeds. So every body that is not a string is read into an
  * `ArrayBuffer` first, which costs the body's size in memory. That suits what
  * reaches here: JSON, and the few-megabyte chunks a block's own uploader
- * sends. Core's media uploads reach here only when native code can't take
- * them: no site credentials, after `stopMediaHandling()`, or a native failure
- * before `finish`. Otherwise `nativeMediaUploadMiddleware` sends them to
- * native code in chunks before they become a request.
+ * sends. Core's media uploads reach here only from an editor without site
+ * credentials, which doesn't offer native uploads. Otherwise
+ * `nativeMediaUploadMiddleware` sends them to native code in chunks before they
+ * become a request.
  *
  * Every body, rather than those that are an `instanceof Blob` or `FormData`:
  * one made in another window — an iframe's — is an instance of that window's

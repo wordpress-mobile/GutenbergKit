@@ -416,9 +416,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// conformed the object that owns it, the one shape ``mediaProcessor`` asks you to
     /// avoid — because that cycle keeps the editor, and the handlers, alive forever.
     ///
-    /// Terminal, not a pause: the editor's upload handling is gone for good. Uploads and
-    /// deletes the page starts later go through the REST relay instead, which holds each
-    /// uploaded file in memory. Any upload in flight is cancelled — though
+    /// Terminal, not a pause: the editor's upload handling is gone for good. Uploads the
+    /// page starts later fail, and deletes go through the REST relay instead. Any upload
+    /// in flight is cancelled — though
     /// cancellation is cooperative, so a `processFile` that ignores it runs to
     /// completion and holds the processor until it returns. Call it when the editor is
     /// going away — not when it is covered, backgrounded, or otherwise coming back.

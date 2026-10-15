@@ -91,17 +91,17 @@ the page always sends the file as 4 MB `ArrayBuffer` chunks:
 `MediaUploadSessionStore` writes each chunk straight to a staging file and refuses one at
 the wrong offset. A 1.1 GB upload peaked at 44 MB of app memory.
 
--   **Fallback.** A failure before `finish` means WordPress never saw the file, so the page
-    uploads through the web view instead. From `finish` on it doesn't retry: native code
-    may already have sent the file.
+-   **No fallback.** When native code refuses an upload, or can't be reached, that is the
+    upload's error. The page's only other path is the REST relay, which holds the whole
+    file in memory: on an iPhone SE (2nd gen), a 158 MB video sent that way got the web
+    view killed. From `finish` on, a retry could also duplicate the attachment.
 -   **Stopped tasks.** A task WebKit stops (the page aborted, or went away) is never
     answered — answering one raises — and its upload to WordPress is cancelled.
 -   **Holding `finish`.** `finish` stays open while WordPress processes the upload. WebKit
     held one for 26 minutes in the foreground, and for hours across app suspension, and
     delivered the result.
--   **Disabled.** After `stopMediaHandling()` every request gets a `503`. An upload that
-    hasn't reached `finish` falls back through the web view, and so does a delete, which
-    the REST relay then sends; a `finish` fails.
+-   **Disabled.** After `stopMediaHandling()` every request gets a `503`. An upload fails.
+    A delete goes through the web view instead, and the REST relay sends it.
 
 ### Native inserter media
 
