@@ -3,6 +3,11 @@ import Testing
 
 @testable import GutenbergKit
 
+/// One at a time. A library reads and writes its files on a thread of the pool that every test in the
+/// run shares, and holds a lock that every library shares while it changes storage. Run together,
+/// these tests keep those threads for long enough that a test timing something else — a server's read
+/// timeout, say — sees a delay that isn't the server's.
+@Suite(.serialized)
 struct EditorAssetLibraryTests {
 
     // MARK: - Test Fixtures
