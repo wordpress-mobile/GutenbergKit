@@ -51,7 +51,7 @@ final class ParkedURLSession: URLSessionProtocol, @unchecked Sendable {
         throw URLError(.networkConnectionLost)
     }
 
-    func waitUntilStarted(timeout: Duration = .seconds(10)) async throws {
+    func waitUntilStarted(timeout: Duration = patientTimeout) async throws {
         let clock = ContinuousClock()
         let deadline = clock.now + timeout
         while clock.now < deadline {
