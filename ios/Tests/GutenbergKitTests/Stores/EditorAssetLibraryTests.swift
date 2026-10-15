@@ -439,6 +439,35 @@ struct EditorAssetLibraryTests {
         #expect(mockClient.getCallCount == 3)
     }
 
+    /// A manifest with one script, whose URL carries `scriptVersion` the way WordPress versions its assets.
+    private static func manifestJSON(scriptVersion: String) -> String {
+        """
+        {
+            "scripts": "<script src=\\"https://example.com/plugin.js?ver=\(scriptVersion)\\"></script>",
+            "styles": "",
+            "allowed_block_types": ["core/paragraph"]
+        }
+        """
+    }
+
+    /// The manifest from ``manifestJSON(scriptVersion:)``, with the stylesheet at `style` as well.
+    private static func manifestJSON(scriptVersion: String, style: String) -> String {
+        """
+        {
+            "scripts": "<script src=\\"https://example.com/plugin.js?ver=\(scriptVersion)\\"></script>",
+            "styles": "<link rel=\\"stylesheet\\" href=\\"\(style)\\">",
+            "allowed_block_types": ["core/paragraph"]
+        }
+        """
+    }
+
+    private static func responses(
+        forManifest manifestJSON: String,
+        assetContent: String = "mock content"
+    ) -> (URL) throws -> Data {
+        { url in url.path.contains("editor-assets") ? Data(manifestJSON.utf8) : Data(assetContent.utf8) }
+    }
+
     // MARK: - Bundle Fetching Tests with Real Manifest Data
 
     @Test("fetchManifest parses real manifest test case with many block types")
@@ -911,6 +940,27 @@ struct EditorAssetLibraryTests {
         #expect(try await library.readAssetBundles().isEmpty)
     }
 
+    @Test("a download's file is moved into the bundle, not left where the download put it")
+    func downloadedFilesAreNotLeftBehind() async throws {
+        let style = URL(string: "https://example.com/plugin.css")!
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        let library = makeLibrary(httpClient: mockClient, cachePolicy: .maxAge(60))
+        mockClient.urlResponseHandler = Self.responses(
+            forManifest: Self.manifestJSON(scriptVersion: "1", style: style.absoluteString)
+        )
+        _ = try await library.downloadAssetBundle()
+
+        // A changed manifest, whose stylesheet has no version and is downloaded again
+        mockClient.urlResponseHandler = Self.responses(
+            forManifest: Self.manifestJSON(scriptVersion: "2", style: style.absoluteString),
+            assetContent: "new content"
+        )
+        _ = try await library.downloadAssetBundle()
+
+        #expect(mockClient.downloadedFiles.count == 4)
+        #expect(mockClient.downloadedFiles.allSatisfy { !FileManager.default.fileExists(at: $0) })
+    }
+
     @Test("builds of one bundle share one build, whichever library runs them")
     func buildsOfOneBundleShareOneBuild() async throws {
         let manifestJSON = """
@@ -968,6 +1018,8 @@ final class EditorAssetLibraryMockHTTPClient: EditorHTTPClientProtocol, @uncheck
     var getCallCount = 0
     var downloadCallCount = 0
     var downloadedURLs: [URL] = []
+    /// The file each `download(_:)` handed back, in order.
+    var downloadedFiles: [URL] = []
     private let lock = NSLock()
 
     /// URLs requested via `perform(_:)`. Use this to verify which endpoints were called.
@@ -1013,6 +1065,7 @@ final class EditorAssetLibraryMockHTTPClient: EditorHTTPClientProtocol, @uncheck
 
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try data.write(to: tempURL)
+        lock.withLock { downloadedFiles.append(tempURL) }
 
         let response = HTTPURLResponse(
             url: url,

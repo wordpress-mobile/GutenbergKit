@@ -176,7 +176,7 @@ public actor EditorAssetLibrary {
         return try bundle.copy(to: self.bundleRoot(for: bundle))
     }
 
-    /// Downloads a single asset and copies it into the temporary bundle directory.
+    /// Downloads a single asset and moves it into the temporary bundle directory.
     ///
     @discardableResult
     private func fetchAsset(url: URL, into bundle: EditorAssetBundle) async throws -> URL {
@@ -184,13 +184,17 @@ public actor EditorAssetLibrary {
             try await httpClient.download(URLRequest(method: .GET, url: url)).0
         }
 
+        // The download's file is this method's to deal with. It's moved into the bundle below; when it
+        // isn't, because something fails first, it's removed.
+        defer { try? FileManager.default.removeItem(at: tempUrl) }
+
         let destinationPath = bundle.bundleRoot.appending(path: url.path(percentEncoded: false))
         let destinationParent = destinationPath.deletingLastPathComponent()
 
         // Ensure the destination directory exists
         try FileManager.default.createDirectory(at: destinationParent, withIntermediateDirectories: true)
 
-        try FileManager.default.copyItem(at: tempUrl, to: destinationPath)
+        try FileManager.default.moveItem(at: tempUrl, to: destinationPath)
 
         return destinationPath
     }
