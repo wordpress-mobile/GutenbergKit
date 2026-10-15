@@ -1,8 +1,9 @@
 # Media Uploads
 
-How a media upload gets from the editor to WordPress when the host supplies a
-`MediaProcessor` or `MediaUploader`. See [Integration](../integration.md#media-handling)
-for the host-facing API.
+How a media upload gets from the editor to WordPress through native code: on iOS for every
+editor with site credentials, on Android when the host supplies a `MediaProcessor` or
+`MediaUploader`. See [Integration](../integration.md#media-handling) for the host-facing
+API.
 
 ## Where uploads come from
 
@@ -28,17 +29,31 @@ itself.
 The middleware picks one from what the host advertises in `GBKit`:
 
 -   **iOS: `nativeUploadScheme`** (`gbk-upload`), served by `MediaUploadSchemeHandler`.
+    Advertised whenever the site credentials are usable. With no processor or uploader,
+    `InternalMediaClient` delivers the file.
 -   **Android: `nativeUploadPort` and `nativeUploadToken`**, a loopback HTTP server
-    (`HttpServer.kt`).
+    (`HttpServer.kt`). Advertised only when the host supplies a handler.
 
-With neither, requests pass through and the page uploads straight to WordPress.
+With neither, requests pass through. On iOS the page's upload then goes through the REST
+relay, which reads the whole file into memory, in the page and again in the app. That is
+why iOS doesn't wait for a handler. On Android the page uploads straight to WordPress.
+
+Measured in the Simulator (iOS 27.0) against wp-env, with the real editor and no handler:
+
+| Upload | App peak, through the relay | App peak, over the scheme |
+| ------ | --------------------------- | ------------------------- |
+| 64 MB  | 234 MB                      | 54 MB                     |
+| 128 MB | 426 MB                      | 54 MB                     |
+
+The app started at 42 MB each time. Through the relay it grew by three times the file, and
+still held 170 MB after the 64 MB upload ended.
 
 ### iOS: the `gbk-upload:` scheme
 
 A `WKURLSchemeHandler` in the editor's own web view. It has no socket, so iOS can't reclaim
 it when a suspended app's device idle-sleeps, which is what broke the loopback server
-after an ordinary screen lock. There is no token either: every frame in the editor's web
-view can load the scheme, not only the editor page.
+after an ordinary screen lock. It has no token either; see
+[Who can use the schemes](#who-can-use-the-schemes).
 
 WebKit hands a scheme handler only bodies it has buffered. Measured on iOS 27 with
 Lockdown Mode:
@@ -103,6 +118,46 @@ byte for byte.
     `tmp/WKFileUploadPanel-…` (a clone) and never deletes it. `MediaFileManager` removes
     the ones older than two days, along with its own imports.
 
+## Who can use the schemes
+
+`gbk-upload:` and the REST relay's `gbk-rest:` don't check who is calling. A scheme
+handler serves every frame in the editor's web view, not only the editor page, and native
+code adds the site credential to what it sends on. So any frame can act as the user through
+them.
+
+The editor's frames fall into two groups:
+
+| Frames                                                   | Origin       | Reads `window.GBKit` |
+| -------------------------------------------------------- | ------------ | -------------------- |
+| The editor page; embed previews                          | the editor's | yes                  |
+| The Custom HTML preview; embeds from untrusted providers | `null`       | no                   |
+
+Gutenberg's `SandBox` runs embed previews with `allowSameOrigin`. Core reduces an embed from
+a provider it doesn't trust to a `sandbox="allow-scripts"` iframe.
+
+The first group already has the credential through `GBKit.authHeader`, so the schemes give
+it nothing new. The second group had no way to use the credential before the schemes, and
+now it does. Measured on iOS 27.0 in the Simulator, with Lockdown Mode on and off: a
+sandboxed `srcdoc` frame's `POST` through `gbk-rest:` reached the site with the credential,
+and the frame read the reply.
+
+A check on each request would shut out the second group:
+
+-   **A token** in `GBKit`, sent as a header. A frame that can't read `GBKit` can't send it.
+    WebKit sends a scheme handler no preflight, so the header costs nothing.
+-   **An `Origin` check** that allows only what the editor page sends: no `Origin` with
+    Lockdown Mode off, `file://` with it on. The second group's `fetch` says `null`. Loads
+    that send no `Origin`, such as an image or a navigation, still get through, but they are
+    `GET`s whose reply the frame can't read.
+
+Neither check reaches the first group. Code at the editor's origin can call the editor's own
+functions, so nothing on the request tells it apart from the editor. Its scripts come from
+the providers core trusts with their embed HTML (`wp_filter_oembed_result`), and they have
+the same reach in wp-admin.
+
+Neither check is in place. It was left out of the scheme transports because it would close
+the second group only, while the first stays as it was before the schemes.
+
 ## Background and timeouts
 
 -   An upload holds a `performExpiringActivity` assertion, which keeps the app running for
@@ -115,6 +170,11 @@ byte for byte.
 -   Uploads get a 10-minute inactivity timeout (`EditorHTTPClient.uploadInactivityTimeout`).
     URLRequest's 60-second default fired while WordPress generated image sizes, and left
     the attachment behind.
+-   Requests through the REST relay get the same 10-minute inactivity timeout. Without the
+    relay, WebKit sends them, and on iOS it gives them no practical timeout (`INT_MAX`
+    seconds per request). Against a server that never answered, the page's own `fetch` was
+    still waiting after 11 minutes, where a 120-second limit on the relay had already
+    answered `502`.
 
 ## Tests
 

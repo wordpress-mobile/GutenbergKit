@@ -62,13 +62,16 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
 
     // MARK: - Which handlers enable native uploads
 
-    /// Android pins the same gate (`GutenbergViewUploadServerTest`, "the upload server
-    /// starts for an uploader with no processor"). An uploader-only host once had its
-    /// native upload path silently disabled on iOS, so each combination is pinned.
+    /// An uploader-only host once had its native upload path silently disabled on iOS, so
+    /// each combination is pinned. With neither, GutenbergKit's own client delivers: the
+    /// page's path holds the whole file in memory. Android differs here, starting its
+    /// loopback server only for a handler (`GutenbergViewUploadServerTest`): its page path
+    /// streams.
     @MainActor
     @Test(
-        "native uploads are enabled for whichever handler the host supplied",
+        "native uploads are enabled whichever handlers the host supplied, including none",
         arguments: [
+            ("neither", false, false),
             ("uploader only", false, true),
             ("processor only", true, false),
             ("both", true, true)
@@ -82,23 +85,18 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         )
         defer { editor.stopMediaHandling() }
 
-        #expect(editor.mediaUploadSchemeHandler.isEnabled, "\(label): the host's media handling would never run")
+        #expect(editor.mediaUploadSchemeHandler.isEnabled, "\(label): uploads would take the page's path")
         #expect(editor.webView.configuration.urlSchemeHandler(forURLScheme: MediaUploadSchemeHandler.scheme) != nil)
     }
 
     @MainActor
-    @Test("no handler leaves native uploads disabled")
-    func noHandlerLeavesNativeUploadsDisabled() {
-        let editor = EditorViewController(configuration: makeConfiguration())
-
-        #expect(!editor.mediaUploadSchemeHandler.isEnabled, "enabled native uploads with nothing to route them through")
-    }
-
-    @MainActor
-    @Test("a processor without site credentials leaves native uploads disabled")
-    func processorWithoutCredentials() {
+    @Test("without site credentials native uploads stay disabled", arguments: [false, true])
+    func noCredentialsLeavesNativeUploadsDisabled(processor: Bool) {
         let configuration = makeConfigurationBuilder().setAuthHeader("").build()
-        let editor = EditorViewController(configuration: configuration, mediaProcessor: StandaloneProcessor())
+        let editor = EditorViewController(
+            configuration: configuration,
+            mediaProcessor: processor ? StandaloneProcessor() : nil
+        )
 
         #expect(!editor.mediaUploadSchemeHandler.isEnabled)
     }
@@ -143,6 +141,26 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         #expect(!editor.mediaUploadSchemeHandler.isEnabled)
     }
 
+    @MainActor
+    @Test("the REST relay follows a configuration updated before the page loads")
+    func relayFollowsUpdatedConfiguration() throws {
+        let editor = EditorViewController(configuration: makeConfiguration())
+        defer { editor.stopMediaHandling() }
+        let updated = EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: URL(string: "https://updated.example.com")!,
+            siteApiRoot: URL(string: "https://updated.example.com/wp-json/")!
+        )
+        .setAuthHeader("Bearer updated")
+        .build()
+
+        editor.updateConfiguration(updated)
+        editor.prepareNativeHandlers()
+
+        let relayURL = try #require(URL(string: "gbk-rest://relay/proxy/wp/v2/posts"))
+        #expect(editor.restRelaySchemeHandler.relay.upstreamURL(for: relayURL)?.host() == "updated.example.com")
+    }
+
     // MARK: - Uploads from the editor's own web view
 
     @MainActor
@@ -164,6 +182,31 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         #expect(uploader.received?.filename == "clip.bin")
         #expect(uploader.received?.fields == [MediaUploadField(name: "post", value: "7")])
         #expect(uploader.received?.query == "?_embed")
+    }
+
+    @MainActor
+    @Test("with no handler, the page's upload reaches the site through GutenbergKit's own client")
+    func pageUploadsWithoutHandler() async throws {
+        let session = RelayingURLSession(statusCode: 201, headers: [:])
+        let editor = EditorViewController(
+            configuration: makeConfiguration(),
+            httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token")
+        )
+        defer { editor.stopMediaHandling() }
+        try await loadBlankPage(in: editor)
+
+        // Larger than one chunk, so the reassembled file is what reaches the site.
+        let size = 5 * 1024 * 1024 + 123
+        let result = try await runUpload(in: editor, size: size)
+
+        #expect(result["status"] as? Int == 201)
+        #expect(session.requestCount == 1)
+        let request = try #require(session.lastRequest)
+        #expect(request.url?.host() == Self.testApiRoot.host())
+        #expect(request.url?.path().hasSuffix("/wp/v2/media") == true)
+        #expect(request.url?.query() == "_embed")
+        let body = try #require(session.lastBody)
+        #expect(body.contains(Self.pattern(count: size)), "the file didn't reach the site intact")
     }
 
     @MainActor
@@ -408,14 +451,18 @@ private struct InertUploader: MediaUploader {
 }
 
 /// Answers every request with a canned status and headers, draining the body first as
-/// URLSession would.
+/// URLSession would, and keeps the last request and its body.
 private final class RelayingURLSession: URLSessionProtocol, @unchecked Sendable {
     private let statusCode: Int
     private let headers: [String: String]
     private let lock = NSLock()
     private var count = 0
+    private var _lastRequest: URLRequest?
+    private var _lastBody: Data?
 
     var requestCount: Int { lock.withLock { count } }
+    var lastRequest: URLRequest? { lock.withLock { _lastRequest } }
+    var lastBody: Data? { lock.withLock { _lastBody } }
 
     init(statusCode: Int, headers: [String: String]) {
         self.statusCode = statusCode
@@ -423,10 +470,12 @@ private final class RelayingURLSession: URLSessionProtocol, @unchecked Sendable 
     }
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-        if let stream = request.httpBodyStream {
-            _ = readAllFromStream(stream)
+        let body = request.httpBodyStream.map(readAllFromStream)
+        lock.withLock {
+            count += 1
+            _lastRequest = request
+            _lastBody = body
         }
-        lock.withLock { count += 1 }
         let response = HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: "HTTP/1.1", headerFields: headers)!
         return (Data(#"{"code":"rest_upload_sideload_error"}"#.utf8), response)
     }

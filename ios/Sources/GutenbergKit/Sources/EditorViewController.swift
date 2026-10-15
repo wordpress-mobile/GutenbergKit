@@ -188,9 +188,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let bundleProvider: EditorAssetBundleProvider
     private let lockdownModeMonitor: LockdownModeMonitor
     /// Receives the page's media uploads over `gbk-upload:` and delivers them. Enabled
-    /// when the host supplied a processor or uploader and the site credentials to
-    /// upload with; ``stopMediaHandling()`` disables it.
+    /// whenever the site credentials are usable, with or without a processor or
+    /// uploader; ``stopMediaHandling()`` disables it.
     let mediaUploadSchemeHandler: MediaUploadSchemeHandler
+    /// Relays the page's REST API requests over `gbk-rest:`.
+    let restRelaySchemeHandler: RestRelaySchemeHandler
 
     // MARK: - Private Properties (UI)
 
@@ -314,6 +316,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // Register media file scheme handler for serving local media via gbk-media-file:// URLs
         config.setURLSchemeHandler(MediaFileSchemeHandler(), forURLScheme: MediaFileSchemeHandler.scheme)
 
+        // The page sends the site's REST API requests here for native code to relay.
+        let relayHandler = RestRelaySchemeHandler(relay: RestRelay(configuration: configuration))
+        self.restRelaySchemeHandler = relayHandler
+        config.setURLSchemeHandler(relayHandler, forURLScheme: RestRelaySchemeHandler.scheme)
+
         // Scheme handlers can only be registered before the web view exists, so the
         // upload handler is built here, from what the host handed over, even though the
         // page won't use it until it loads.
@@ -406,12 +413,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// avoid — because that cycle keeps the editor, and the handlers, alive forever.
     ///
     /// Terminal, not a pause: this editor cannot upload or delete media natively
-    /// afterwards. Uploads the page starts later go straight to WordPress instead. Any
-    /// upload in flight is cancelled — though cancellation is cooperative, so a
-    /// `processFile` that ignores it runs to completion and holds the processor until it
-    /// returns. Call it when the editor is going away — not
-    /// when it is covered, backgrounded, or otherwise coming back. Calling it more than
-    /// once is safe.
+    /// afterwards. Uploads the page starts later go through the REST relay instead,
+    /// which holds each file in memory. Any upload in flight is cancelled — though
+    /// cancellation is cooperative, so a `processFile` that ignores it runs to
+    /// completion and holds the processor until it returns. Call it when the editor is
+    /// going away — not when it is covered, backgrounded, or otherwise coming back.
+    /// Calling it more than once is safe.
     ///
     /// Scoped to this editor. It drops this editor's reference, so a handler you share
     /// across editors keeps working for the others.
@@ -510,11 +517,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
-    /// Rebuilds the upload service from the configuration the page is about to load with,
-    /// so native code uploads for the site, and with the credential, that the page is
-    /// given. ``updateConfiguration(_:)`` can change both after `init`, which is where
-    /// the handler was made.
+    /// Rebuilds the REST relay and the upload service from the configuration the page is
+    /// about to load with, so native code relays and uploads for the site, and with the
+    /// credential, that the page is given. ``updateConfiguration(_:)`` can change both
+    /// after `init`, which is where the handlers were made.
     func prepareNativeHandlers() {
+        restRelaySchemeHandler.relay = RestRelay(configuration: configuration)
         mediaUploadSchemeHandler.reconfigure(service: Self.makeMediaUploadService(
             configuration: configuration,
             httpClient: httpClient,
@@ -545,7 +553,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         let gbkitGlobal = try GBKitGlobal(
             configuration: self.configuration,
             dependencies: dependencies,
-            nativeUploadScheme: mediaUploadSchemeHandler.isEnabled ? MediaUploadSchemeHandler.scheme : nil
+            nativeUploadScheme: mediaUploadSchemeHandler.isEnabled ? MediaUploadSchemeHandler.scheme : nil,
+            restRelayBaseURL: RestRelaySchemeHandler.baseURL
         )
         return WKUserScript(
             source: Self.configurationScript(gbkitGlobal: try gbkitGlobal.toString()),
@@ -570,22 +579,23 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         """
     }
 
-    /// The service behind the upload scheme handler, or `nil` when the editor has no
-    /// native media handling.
+    /// The service behind the upload scheme handler, or `nil` when the site credentials
+    /// aren't usable.
     ///
-    /// Native uploads need something to route — a processor or an uploader — and the
-    /// site credentials to deliver with: `InternalMediaClient` needs a site root and an
-    /// auth header (every host provides one; the web view has no auth cookies). Without
-    /// both, uploads go straight from the page to WordPress. Only a processor can be
-    /// missing credentials here: a `mediaUploader` without them already trapped in
-    /// `init`.
+    /// Uploads go native whether or not the host supplied a processor or an uploader:
+    /// `InternalMediaClient` delivers whatever neither takes over. The page's own path
+    /// goes through the REST relay, which reads the whole file into memory, in the page
+    /// and again in the app, so a large video there can get the app killed.
+    ///
+    /// `InternalMediaClient` needs a site root and an auth header (every host provides
+    /// one; the web view has no auth cookies). Without them, uploads stay on the page's
+    /// path. A `mediaUploader` without them already trapped in `init`.
     private static func makeMediaUploadService(
         configuration: EditorConfiguration,
         httpClient: any EditorHTTPClientProtocol,
         processor: (any MediaProcessor)?,
         uploader: (any MediaUploader)?
     ) -> MediaUploadService? {
-        guard processor != nil || uploader != nil else { return nil }
         guard MediaServerCredentials.areUsable(
             siteApiRoot: configuration.siteApiRoot,
             authHeader: configuration.authHeader

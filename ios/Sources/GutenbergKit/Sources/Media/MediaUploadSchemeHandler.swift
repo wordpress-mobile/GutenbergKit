@@ -19,7 +19,8 @@ import WebKit
 /// | `POST …/media/<attachmentId>/delete` | JSON `{query}` | WordPress's response, verbatim |
 ///
 /// The scheme doesn't check who is calling: every frame in the editor's web view can load
-/// it, not only the editor page.
+/// it, not only the editor page. Why that is left as it is: "Who can use the schemes" in
+/// `docs/code/media-uploads.md`.
 ///
 /// Every response carries CORS headers: under Lockdown Mode WebKit enforces CORS on
 /// scheme responses too, and core's upload middleware reads
@@ -55,7 +56,7 @@ final class MediaUploadSchemeHandler: NSObject, WKURLSchemeHandler {
     }
 
     /// Whether uploads are accepted. `false` once ``disable()`` has run, or when the
-    /// editor had no media handling to begin with.
+    /// editor had no usable site credentials to begin with.
     var isEnabled: Bool { service != nil }
 
     /// Replaces the service with one built from the configuration the page loads with.

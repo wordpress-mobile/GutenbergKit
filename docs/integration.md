@@ -324,8 +324,13 @@ own client, whichever way the file arrived:
 
 Either way the block uploads through Gutenberg's own pipeline, so its placeholder, saving
 lock, error notices, and recovery of a failed server-side resize all behave as they do for
-any upload. If native uploads are unavailable — no handler, no site credentials, or after
-`stopMediaHandling()` — the page uploads straight to WordPress instead.
+any upload.
+
+On iOS, uploads are native whether or not you supply a handler: GutenbergKit's own client
+delivers whatever you don't take over. Only an editor without site credentials, or one after
+`stopMediaHandling()`, uploads from the page, which holds the whole file in memory. On
+Android, uploads are native only when you supply a handler; without one, or without site
+credentials, the page uploads straight to WordPress.
 
 An upload keeps running for about 30 seconds after the app moves to the background. One
 that takes longer is interrupted when iOS suspends the app. A `MediaUploader` that needs to
