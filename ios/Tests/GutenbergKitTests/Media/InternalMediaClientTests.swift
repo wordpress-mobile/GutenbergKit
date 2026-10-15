@@ -212,7 +212,7 @@ struct InternalMediaClientRelayTests {
     // so WordPress's 403 + body flow through verbatim. A revert to perform() would
     // throw on the non-2xx (RelayStubHTTPClient.perform mirrors that), failing here.
     let response = try await uploader.upload(
-      fileURL: tempFile, mimeType: "image/jpeg", filename: "photo.jpg", extraParts: [], query: ""
+      fileURL: tempFile, mimeType: "image/jpeg", filename: "photo.jpg", fields: [], query: ""
     )
 
     #expect(response.statusCode == 403)
@@ -238,7 +238,7 @@ struct InternalMediaClientRelayTests {
     defer { try? FileManager.default.removeItem(at: tempFile) }
 
     let response = try await uploader.upload(
-      fileURL: tempFile, mimeType: "image/jpeg", filename: "photo.jpg", extraParts: [], query: ""
+      fileURL: tempFile, mimeType: "image/jpeg", filename: "photo.jpg", fields: [], query: ""
     )
 
     #expect(response.statusCode == 500)
@@ -261,7 +261,7 @@ struct InternalMediaClientRelayTests {
     defer { try? FileManager.default.removeItem(at: tempFile) }
 
     let response = try await uploader.upload(
-      fileURL: tempFile, mimeType: "image/jpeg", filename: "photo.jpg", extraParts: [], query: ""
+      fileURL: tempFile, mimeType: "image/jpeg", filename: "photo.jpg", fields: [], query: ""
     )
 
     #expect(response.headers.isEmpty)
@@ -297,7 +297,7 @@ struct InternalMediaClientRelayTests {
 
     _ = try await uploader.upload(
       fileURL: tempFile, mimeType: "image/jpeg", filename: "photo.jpg",
-      extraParts: [], query: "?_embed=wp:featuredmedia"
+      fields: [], query: "?_embed=wp:featuredmedia"
     )
 
     // Namespace inserted via the shared builder, and the query preserved verbatim —
@@ -305,75 +305,32 @@ struct InternalMediaClientRelayTests {
     let url = try #require(client.lastURL)
     #expect(url.absoluteString == "https://example.com/wp-json/wp/v2/sites/123/media?_embed=wp:featuredmedia")
   }
-}
 
-/// An HTTP client whose `performRaw` relays a canned response without validating
-/// status, while `perform` throws on a non-2xx — mirroring the real
-/// `EditorHTTPClient`. Lets a test prove `InternalMediaClient` routes uploads
-/// through `performRaw` (relay) rather than `perform` (throw).
-private struct RelayStubHTTPClient: EditorHTTPClientProtocol {
-  let statusCode: Int
-  let body: Data
-  var headerFields: [String: String]?
+  @Test("sends the editor's fields ahead of the file, in order, with repeated names intact")
+  func sendsFieldsInOrder() async throws {
+    let client = BodyCapturingHTTPClient()
+    let uploader = InternalMediaClient(httpClient: client, siteApiRoot: URL(string: "https://example.com/wp-json/")!)
+    let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("fields-\(UUID().uuidString).jpg")
+    try Data("img".utf8).write(to: tempFile)
+    defer { try? FileManager.default.removeItem(at: tempFile) }
 
-  func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
-    let response = HTTPURLResponse(
-      url: urlRequest.url!, statusCode: statusCode, httpVersion: nil, headerFields: headerFields)!
-    guard (200...299).contains(statusCode) else {
-      throw NSError(domain: "RelayStubHTTPClient", code: statusCode)
-    }
-    return (body, response)
+    _ = try await uploader.upload(
+      fileURL: tempFile, mimeType: "image/jpeg", filename: "photo.jpg",
+      fields: [
+        MediaUploadField(name: "post", value: "7"),
+        MediaUploadField(name: "field[]", value: "a"),
+        MediaUploadField(name: "field[]", value: "日本語"),
+      ],
+      query: ""
+    )
+
+    let body = String(decoding: try #require(client.lastBody), as: UTF8.self)
+    let post = try #require(body.range(of: "name=\"post\"\r\n\r\n7\r\n"))
+    let first = try #require(body.range(of: "name=\"field[]\"\r\n\r\na\r\n"))
+    let second = try #require(body.range(of: "name=\"field[]\"\r\n\r\n日本語\r\n"))
+    let file = try #require(body.range(of: "name=\"file\"; filename=\"photo.jpg\""))
+    #expect(post.lowerBound < first.lowerBound)
+    #expect(first.lowerBound < second.lowerBound)
+    #expect(second.lowerBound < file.lowerBound)
   }
-
-  func performRaw(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
-    let response = HTTPURLResponse(
-      url: urlRequest.url!, statusCode: statusCode, httpVersion: nil, headerFields: headerFields)!
-    return (body, response)
-  }
-
-  func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse) {
-    let response = HTTPURLResponse(url: urlRequest.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
-    return (FileManager.default.temporaryDirectory, response)
-  }
-}
-
-/// Captures the URL of the last request so a test can assert the media endpoint
-/// URL (namespace + query) the uploader built.
-private final class URLCapturingHTTPClient: EditorHTTPClientProtocol, @unchecked Sendable {
-  private let lock = NSLock()
-  private var _lastURL: URL?
-  var lastURL: URL? { lock.withLock { _lastURL } }
-
-  private func ok(_ urlRequest: URLRequest) -> (Data, HTTPURLResponse) {
-    lock.withLock { _lastURL = urlRequest.url }
-    return (Data("{}".utf8), HTTPURLResponse(url: urlRequest.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
-  }
-
-  func perform(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) { ok(urlRequest) }
-  func performRaw(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) { ok(urlRequest) }
-  func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse) {
-    let (_, response) = ok(urlRequest)
-    return (FileManager.default.temporaryDirectory, response)
-  }
-}
-
-// MARK: - Helpers
-
-/// Reads all bytes from an InputStream using `read()` return value as
-/// the sole termination signal (not `hasBytesAvailable`, which is
-/// unreliable for piped/bound streams).
-private func readAllFromStream(_ stream: InputStream) -> Data {
-  stream.open()
-  defer { stream.close() }
-
-  var data = Data()
-  let bufferSize = 8192
-  let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
-  defer { buffer.deallocate() }
-  while true {
-    let read = stream.read(buffer, maxLength: bufferSize)
-    if read <= 0 { break }
-    data.append(buffer, count: read)
-  }
-  return data
 }

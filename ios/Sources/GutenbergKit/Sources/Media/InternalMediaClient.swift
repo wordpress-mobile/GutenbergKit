@@ -1,5 +1,4 @@
 import Foundation
-import GutenbergKitHTTP
 import OSLog
 
 // MARK: - Errors
@@ -8,13 +7,11 @@ import OSLog
 enum UploadError: Error, LocalizedError {
     case noUploader
     case streamReadFailed
-    case streamWriteFailed
 
     var errorDescription: String? {
         switch self {
         case .noUploader: "No media uploader or internal media client configured"
         case .streamReadFailed: "Failed to read upload stream"
-        case .streamWriteFailed: "Failed to write upload to disk"
         }
     }
 }
@@ -54,15 +51,16 @@ class InternalMediaClient: @unchecked Sendable {
         return components?.url ?? base
     }
 
-    func upload(fileURL: URL, mimeType: String, filename: String, extraParts: [MultipartPart], query: String) async throws -> MediaUploadResponse {
+    /// Uploads a file to `POST /wp/v2/media` as `multipart/form-data`, streaming it
+    /// from disk, and relays WordPress's response verbatim — non-2xx included.
+    ///
+    /// - Parameters:
+    ///   - fields: The editor's other form fields (e.g. `post`), sent ahead of the file
+    ///     in the order given.
+    ///   - query: The editor's request query in wire form (leading `?`), or empty.
+    func upload(fileURL: URL, mimeType: String, filename: String, fields: [MediaUploadField], query: String) async throws -> MediaUploadResponse {
         let boundary = UUID().uuidString
-
-        // Read the (small, text) non-file parts up front so the body builder
-        // stays synchronous — the file itself is still streamed from disk.
-        var extraFields: [(name: String, value: Data)] = []
-        for part in extraParts {
-            extraFields.append((part.name, try await part.body.data))
-        }
+        let extraFields = fields.map { (name: $0.name, value: Data($0.value.utf8)) }
 
         let (bodyStream, contentLength) = try Self.multipartBodyStream(
             fileURL: fileURL, boundary: boundary, filename: filename, mimeType: mimeType, extraFields: extraFields
@@ -73,20 +71,6 @@ class InternalMediaClient: @unchecked Sendable {
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.setValue("\(contentLength)", forHTTPHeaderField: "Content-Length")
         request.httpBodyStream = bodyStream
-
-        return try await performUpload(request)
-    }
-
-    /// Forwards the original request body to WordPress without re-encoding.
-    ///
-    /// Used when the processor's `processFile` returned the file unchanged —
-    /// the incoming multipart body is already valid for WordPress.
-    func passthroughUpload(body: RequestBody, contentType: String, query: String) async throws -> MediaUploadResponse {
-        var request = URLRequest(url: mediaEndpointURL(query: query))
-        request.httpMethod = "POST"
-        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
-        request.setValue("\(body.count)", forHTTPHeaderField: "Content-Length")
-        request.httpBodyStream = try body.makeInputStream()
 
         return try await performUpload(request)
     }
@@ -111,7 +95,7 @@ class InternalMediaClient: @unchecked Sendable {
     /// Sends the assembled upload request to WordPress and relays the response.
     ///
     /// The request body is a **one-shot** stream (a bound-pair pipe for the
-    /// multipart re-encode and file-slice paths), so it can't be replayed. That
+    /// multipart body), so it can't be replayed. That
     /// only matters if URLSession has to resend the body — i.e. a `307`/`308`
     /// redirect that preserves the `POST`. `301`/`302`/`303` downgrade to a
     /// bodyless GET, and a Bearer-token `401` doesn't trigger a resend, so those
@@ -122,14 +106,12 @@ class InternalMediaClient: @unchecked Sendable {
     /// intentionally don't implement `needNewBodyStream`, or buffer the body to a
     /// replayable file, for that rare case.
     private func performUpload(_ request: URLRequest) async throws -> MediaUploadResponse {
-        // The body may be fed by a background writer thread via a bound stream pair
-        // (multipartBodyStream, or RequestBody.makeInputStream for file slices). If
+        // The body is fed by a background writer thread via a bound stream pair
+        // (`multipartBodyStream`). If
         // the request is cancelled or fails, URLSession may abandon the stream
         // without draining it, leaving that writer blocked forever on a full buffer
         // — leaking the thread and its open file handle. Closing the input stream on
         // every exit breaks the pair so the writer's write() fails and it unwinds.
-        // (For in-memory/whole-file bodies there is no writer thread and this is a
-        // harmless no-op.)
         defer { request.httpBodyStream?.close() }
 
         // Relay WordPress's response verbatim — including non-2xx statuses — so
@@ -167,8 +149,7 @@ class InternalMediaClient: @unchecked Sendable {
     /// Builds a multipart/form-data body as an `InputStream` that streams the
     /// file from disk without loading it into memory.
     ///
-    /// Uses a bound stream pair with a background writer thread — the same
-    /// pattern as `RequestBody.makePipedFileSliceStream`.
+    /// Uses a bound stream pair with a background writer thread.
     ///
     /// - Returns: A tuple of the input stream and the total content length.
     static func multipartBodyStream(
@@ -182,8 +163,7 @@ class InternalMediaClient: @unchecked Sendable {
         // file; they're small, and `contentLength` counts them via `preamble.count`. Their
         // values are appended as raw bytes rather than through `String(data:encoding:)`, which
         // returns nil on bad UTF-8 — and the `?? ""` you'd reach for behind it would quietly
-        // drop a whole field. Raw bytes also keep this re-encode byte-for-byte identical to
-        // the plain passthrough it replaces. (Bad bytes can't get here; see `formFields`.)
+        // drop a whole field.
         var preamble = Data()
         for field in extraFields {
             preamble.append(Data("--\(boundary)\r\n".utf8))
@@ -264,13 +244,13 @@ class InternalMediaClient: @unchecked Sendable {
             do {
                 chunk = try fileHandle.read(upToCount: chunkSize) ?? Data()
             } catch {
-                Logger.uploadServer.error("Reading the upload file failed mid-stream: \(error)")
+                Logger.mediaUpload.error("Reading the upload file failed mid-stream: \(error)")
                 return false
             }
             guard !chunk.isEmpty else {
                 // The file ended before `fileSize` bytes — it shrank since we
                 // measured it. Abort rather than emit a truncated multipart.
-                Logger.uploadServer.error("Upload file ended \(remaining) bytes short of its measured size")
+                Logger.mediaUpload.error("Upload file ended \(remaining) bytes short of its measured size")
                 return false
             }
             guard writeAll(chunk, to: output) else { return false }
