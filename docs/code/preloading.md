@@ -221,6 +221,8 @@ try await onceEvery(.seconds(86_400)) {
 }
 ```
 
+A cleanup keeps the site's latest bundle, and any bundle the app has been handed since it launched — an open editor, or dependencies the host still holds, may be reading it.
+
 **Kotlin**
 
 ```kotlin

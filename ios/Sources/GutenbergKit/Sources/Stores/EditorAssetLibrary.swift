@@ -13,17 +13,22 @@ public actor EditorAssetLibrary {
     /// service builds its own library, so this is shared across all of them.
     static let inFlightBuilds = InFlightTasks<URL, EditorAssetBundle>()
 
-    /// Guards every change to a library's storage. Every service builds
+    /// Guards every change to a library's storage, along with `handedOut`. Every service builds
     /// its own library, so an actor's isolation doesn't order these between libraries.
     ///
     /// Storage changes in two ways and no others, each one step taken with this lock held:
     ///
-    /// - ``publish(_:)`` moves a finished bundle in.
+    /// - ``publish(_:)`` moves a finished bundle in, already handed out.
     /// - ``cleanup()`` and ``purge()`` remove whole bundles.
     ///
-    /// So a bundle in storage is always complete and never gains or loses a file. Assets are
+    /// So a bundle in storage is always complete and never gains or loses a file, and one that a
+    /// build puts there is never without the protection that being handed out gives it. Assets are
     /// only ever written into a ``Draft``, in a temporary directory that none of this can see.
     private static let storageLock = NSLock()
+
+    /// The directory of every bundle this process has handed to a caller. An editor, or
+    /// dependencies a host is holding, may still be reading one, so `cleanup()` leaves them be.
+    nonisolated(unsafe) private static var handedOut: Set<URL> = []
 
     /// Creates a new `EditorAssetLibrary` instance.
     ///
@@ -93,6 +98,16 @@ public actor EditorAssetLibrary {
             .sorted { $0.downloadDate > $1.downloadDate }
     }
 
+    /// Records that `bundle` is being handed to a caller, so that `cleanup()` leaves it be. Returns `nil` if
+    /// it's no longer on disk.
+    func handOut(_ bundle: EditorAssetBundle) -> EditorAssetBundle? {
+        Self.storageLock.withLock {
+            guard self.hasBundle(at: bundle.bundleRoot) else { return nil }
+            Self.handedOut.insert(bundle.bundleRoot.standardizedFileURL)
+            return bundle
+        }
+    }
+
     /// Fetches the latest manifest from the server and downloads all of its resources, caching them on-disk.
     ///
     /// - Parameter progress: An optional callback that receives progress updates as assets are downloaded.
@@ -107,10 +122,17 @@ public actor EditorAssetLibrary {
     }
 
     /// Checks whether a complete bundle with the given manifest checksum exists on disk.
-    ///
-    /// A bundle is considered complete only if both `manifest.json` and `editor-representation.json` exist.
     func hasBundle(forManifestChecksum checksum: String) -> Bool {
         self.existingBundle(forManifestChecksum: checksum) != nil
+    }
+
+    /// Checks whether there is a complete bundle at `bundleRoot`.
+    ///
+    /// A bundle is considered complete only if both `manifest.json` and `editor-representation.json` exist.
+    private func hasBundle(at bundleRoot: URL) -> Bool {
+        let manifestExists = FileManager.default.fileExists(atPath: bundleRoot.appending(path: "manifest.json").path)
+        let editorRepExists = FileManager.default.fileExists(atPath: bundleRoot.appending(path: "editor-representation.json").path)
+        return manifestExists && editorRepExists
     }
 
     /// Retrieves an existing bundle from disk if one exists for the given manifest checksum.
@@ -172,10 +194,11 @@ public actor EditorAssetLibrary {
         }
     }
 
-    /// Moves `draft` into the library's storage — unless a bundle for its manifest is there already, which is
-    /// kept and given instead.
+    /// Moves `draft` into the library's storage, as a bundle that's been handed out — unless a bundle for its
+    /// manifest is there already, which is kept and given instead.
     ///
-    /// It's all one step for anything else that changes storage. And it's a move, into a directory that didn't
+    /// It's all one step for anything else that changes storage: there is no moment when the bundle is there
+    /// and a `cleanup()` could take it for one nobody is using. And it's a move, into a directory that didn't
     /// exist, so nothing sees the bundle half there and no bundle on disk is written over.
     private func publish(_ draft: Draft) throws -> EditorAssetBundle {
         do {
@@ -184,10 +207,14 @@ public actor EditorAssetLibrary {
                 // editor may be reading it.
                 if let existingBundle = self.existingBundle(forManifestChecksum: draft.bundle.id) {
                     draft.discard()
+                    Self.handedOut.insert(existingBundle.bundleRoot.standardizedFileURL)
                     return existingBundle
                 }
 
-                return try self.place(draft)
+                let bundle = try self.place(draft)
+                Self.handedOut.insert(bundle.bundleRoot.standardizedFileURL)
+
+                return bundle
             }
         } catch {
             draft.discard()
@@ -332,12 +359,15 @@ public actor EditorAssetLibrary {
     /// Cleans up outdated library entries for this site.
     ///
     /// This method removes all asset bundles except the most recent one, freeing disk space
-    /// while ensuring the editor can still load quickly with cached assets.
+    /// while ensuring the editor can still load quickly with cached assets. It also keeps any
+    /// bundle the app has been handed since it launched: an open editor, or dependencies the
+    /// host is still holding, may be reading it. Those are removed by a cleanup after the next launch.
     ///
     /// - Throws: An error if the list of bundles cannot be read, or any bundle cannot be removed.
     public func cleanup() throws {
         try Self.storageLock.withLock {
-            for bundle in try self.readAssetBundles().dropFirst() {
+            for bundle in try self.readAssetBundles().dropFirst()
+            where !Self.handedOut.contains(bundle.bundleRoot.standardizedFileURL) {
                 try FileManager.default.removeItem(at: bundle.bundleRoot)
             }
         }

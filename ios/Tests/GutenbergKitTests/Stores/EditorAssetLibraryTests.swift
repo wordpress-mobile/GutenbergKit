@@ -439,6 +439,46 @@ struct EditorAssetLibraryTests {
         #expect(mockClient.getCallCount == 3)
     }
 
+    // MARK: - cleanup Tests
+
+    @Test("cleanup removes the bundles an earlier launch left behind, except the newest")
+    func cleanupRemovesBundlesFromEarlierLaunch() async throws {
+        let storageRoot = URL.randomTemporaryDirectory
+        let planted = try await plantBundles(
+            forManifests: ["1", "2", "3"].map(Self.manifestJSON(scriptVersion:)),
+            in: storageRoot
+        )
+        let library = makeLibrary(storageRoot: storageRoot)
+
+        try await library.cleanup()
+
+        #expect(try await library.readAssetBundles().map(\.id) == [planted[2].id])
+    }
+
+    @Test("cleanup keeps a bundle handed out since launch, and purge removes it anyway")
+    func cleanupKeepsHandedOutBundles() async throws {
+        let (library, mockClient) = try await makeLibraryWithBundle(cachePolicy: .ignore)
+        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "2"))
+        _ = try await library.downloadAssetBundle()
+
+        try await library.cleanup()
+        #expect(try await library.readAssetBundles().count == 2)
+
+        try await library.purge()
+        #expect(try await library.readAssetBundles().isEmpty)
+    }
+
+    /// A library whose storage holds one bundle, built from ``manifestJSON(scriptVersion:)`` with version `1`.
+    private func makeLibraryWithBundle(
+        cachePolicy: EditorCachePolicy
+    ) async throws -> (EditorAssetLibrary, EditorAssetLibraryMockHTTPClient) {
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "1"))
+        let library = makeLibrary(httpClient: mockClient, cachePolicy: cachePolicy)
+        _ = try await library.downloadAssetBundle()
+        return (library, mockClient)
+    }
+
     /// A manifest with one script, whose URL carries `scriptVersion` the way WordPress versions its assets.
     private static func manifestJSON(scriptVersion: String) -> String {
         """

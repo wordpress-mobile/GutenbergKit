@@ -170,6 +170,7 @@ public actor EditorService {
     /// Clear unused on-disk resources associated with this service's configuration.
     ///
     /// Calling this method will preserve the most recent cache entries, ensuring that the editor still loads quickly without continuing to use unnecessary disk space.
+    /// It also preserves any asset bundle the app has been handed since it launched, which an open editor or dependencies the host is holding may still be using.
     /// Use this method to regularly clean up unused editor assets.
     public func cleanup() async throws {
         try await self.assetLibrary.cleanup()
@@ -255,9 +256,10 @@ public actor EditorService {
     }
 
     private func prepareAssetBundle() async throws -> EditorAssetBundle {
-        if let latestAssetBundle = try await self.assetLibrary.readAssetBundles().first {
+        if let latestAssetBundle = try await self.assetLibrary.readAssetBundles().first,
+            let bundle = await self.assetLibrary.handOut(latestAssetBundle) {
             await self.incrementProgress(for: .assetBundle)
-            return latestAssetBundle
+            return bundle
         }
 
         let assetBundle = try await self.assetLibrary.downloadAssetBundle { progress in
