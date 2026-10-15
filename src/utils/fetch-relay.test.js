@@ -1,3 +1,4 @@
+import { Blob as NodeBlob } from 'node:buffer';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createRelayFetch, createRelayFetchWrapper } from './fetch-relay';
 import { getGBKit } from './bridge';
@@ -62,6 +63,9 @@ describe( 'createRelayFetch', () => {
 		} );
 
 		describe( 'bodies', () => {
+			// jsdom's `Blob` and Node's `Response` don't interoperate, so these
+			// use Node's own `Blob`. A browser has one family of both.
+
 			/** The init `next` was called with. */
 			function calledInit() {
 				return next.mock.calls[ 0 ][ 1 ];
@@ -84,7 +88,7 @@ describe( 'createRelayFetch', () => {
 						headers: {
 							'Content-Type': 'application/offset+octet-stream',
 						},
-						body: new Blob( [ 'chunk bytes' ] ),
+						body: new NodeBlob( [ 'chunk bytes' ] ),
 					}
 				);
 
@@ -146,12 +150,37 @@ describe( 'createRelayFetch', () => {
 			it( 'gives a Blob without a Content-Type its own type', async () => {
 				await relayFetch()( 'https://example.com/wp-json/wp/v2/posts', {
 					method: 'POST',
-					body: new Blob( [ '{}' ], { type: 'application/json' } ),
+					body: new NodeBlob( [ '{}' ], {
+						type: 'application/json',
+					} ),
 				} );
 
 				expect(
 					new Headers( calledInit().headers ).get( 'Content-Type' )
 				).toBe( 'application/json' );
+			} );
+
+			it( 'reads a Blob another window made, which is not an instance of this one', async () => {
+				// Here Node's `Blob` is what an iframe's is in a browser: a
+				// `Blob` that the global `Blob` does not recognize.
+				const foreign = new NodeBlob( [ 'chunk bytes' ], {
+					type: 'video/mp4',
+				} );
+				expect( foreign ).not.toBeInstanceOf( Blob );
+
+				await relayFetch()( 'https://example.com/wp-json/wp/v2/posts', {
+					method: 'POST',
+					body: foreign,
+				} );
+
+				const { body, headers } = calledInit();
+				expect( body ).toBeInstanceOf( ArrayBuffer );
+				expect( new TextDecoder().decode( body ) ).toBe(
+					'chunk bytes'
+				);
+				expect( new Headers( headers ).get( 'Content-Type' ) ).toBe(
+					'video/mp4'
+				);
 			} );
 
 			it( 'leaves a request without a body without one', async () => {
